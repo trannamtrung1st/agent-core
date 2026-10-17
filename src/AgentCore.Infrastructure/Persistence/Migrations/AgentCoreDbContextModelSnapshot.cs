@@ -2289,16 +2289,35 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AgentInstanceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("AgentRunId")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ExecutorPrincipalId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Json")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LeaseSessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnedRunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("SessionId")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("TenantId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ToolCallId")
@@ -2307,10 +2326,21 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LeaseSessionId");
+
+                    b.HasIndex("OwnedRunId", "SessionId");
+
                     b.HasIndex("SessionId", "AgentRunId", "ToolCallId")
                         .IsUnique();
 
-                    b.ToTable("SandboxExecutions", (string)null);
+                    b.HasIndex("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId");
+
+                    b.HasIndex("TenantId", "SessionId", "AgentRunId", "ToolCallId");
+
+                    b.ToTable("SandboxExecutions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SandboxExecution_TenantJson", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND AgentInstanceId IS NULL AND OwnedRunId IS NULL AND LeaseSessionId IS NULL AND Revision = 0 AND json_extract(Json, '$.tenantId') IS NULL AND json_extract(Json, '$.executorPrincipalId') IS NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND AgentInstanceId IS NOT NULL AND OwnedRunId IS NOT NULL AND OwnedRunId = AgentRunId AND LeaseSessionId IS NOT NULL AND LeaseSessionId = SessionId AND Revision > 0 AND json_type(Json, '$.tenantId') IS 'text' AND lower(json_extract(Json, '$.tenantId')) = lower(TenantId) AND json_type(Json, '$.executorPrincipalId') IS 'text' AND lower(json_extract(Json, '$.executorPrincipalId')) = lower(ExecutorPrincipalId) AND json_type(Json, '$.agentInstanceId') IS 'text' AND lower(json_extract(Json, '$.agentInstanceId')) = lower(AgentInstanceId) AND json_extract(Json, '$.revision') IS Revision)");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxInstanceVerificationRow", b =>
@@ -2339,12 +2369,21 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("ExecutorPrincipalId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("ExpiresAt")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Json")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ProfileRevision")
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("Revision")
                         .IsConcurrencyToken()
@@ -2353,11 +2392,25 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("State")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("SessionId");
 
                     b.HasIndex("AgentInstanceId", "ExpiresAt");
 
-                    b.ToTable("SandboxSessionLeases", (string)null);
+                    b.HasIndex("ProfileId", "ProfileRevision");
+
+                    b.HasIndex("TenantId", "ProfileId");
+
+                    b.HasIndex("TenantId", "AgentInstanceId", "ExpiresAt");
+
+                    b.HasIndex("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId");
+
+                    b.ToTable("SandboxSessionLeases", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SandboxLease_TenantJson", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NULL AND ProfileRevision IS NULL AND json_extract(Json, '$.tenantId') IS NULL AND json_extract(Json, '$.executorPrincipalId') IS NULL AND json_extract(Json, '$.profile.tenantId') IS NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NOT NULL AND ProfileRevision IS NOT NULL AND ProfileRevision > 0 AND json_type(Json, '$.tenantId') IS 'text' AND lower(json_extract(Json, '$.tenantId')) = lower(TenantId) AND json_type(Json, '$.executorPrincipalId') IS 'text' AND lower(json_extract(Json, '$.executorPrincipalId')) = lower(ExecutorPrincipalId) AND json_type(Json, '$.profile.tenantId') IS 'text' AND lower(json_extract(Json, '$.profile.tenantId')) = lower(TenantId) AND json_extract(Json, '$.profile.id') IS ProfileId AND json_extract(Json, '$.profile.revision') IS ProfileRevision)");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxProfileRow", b =>
@@ -3967,6 +4020,46 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxExecutionRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.SandboxLeaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("LeaseSessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
+                        .WithMany()
+                        .HasForeignKey("OwnedRunId", "SessionId")
+                        .HasPrincipalKey("AgentRunId", "SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxLeaseRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.SandboxProfileRow", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId", "ProfileRevision")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSandboxProfileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ProfileId")
+                        .HasPrincipalKey("TenantId", "ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxProfileRow", b =>

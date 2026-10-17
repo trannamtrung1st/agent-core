@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Tenant Session Sandbox observation boundary
+
+The backend now exposes protected bounded stored generation/receipt observations with `liveAuthorityConfirmed=false`; [ownership evidence](reports/tenant-sandbox-runtime-ownership-verification-2026-10-18.md) owns that prerequisite. No tenant Sandbox screen or command/reset/process/cleanup interaction is accepted by this change. Future presentation must distinguish stored state and bounded outcomes from current provider readiness or permission, preserve independent Session/agent/profile read scopes and recover explicitly from stale or retired original-human reads. The existing Ant Design v6 component and layout owners remain authoritative.
+
 ## Tenant Instance Resources
 
 `/t/{tenantId}/admin/agents/{instanceId}/resources` uses the scoped paged metadata editor, exact item read and existing resource mutation owners. The shared Instance heading, bounded panels, native search/pagination and wrapping rows show full readable paths, origin/kind/size, effective availability versus stored choices, readable dependencies and copy provenance. `InstanceResourceFields` and `InstanceResourceInspector` own the resource fields/details for both this page and the existing administrative consumer. Resource file/folder selection and import review retain their shared owners. No alternate control kit, theme or page spacing system is added.

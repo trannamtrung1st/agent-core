@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Session Sandbox stored observations HTTP
+
+Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These endpoints perform no SDK inspection or mutation and expose no command/reset/process operation.
+
+The environment projection contains stored generation/revision/state (`storedState`), safe profile/image identity, lifetime, active/last receipt pointers, bounded initialization evidence and stored cleanup indication. The execution projection contains exact receipt/Run/generation identity, state, profile revision, bounded command/output, timings, exit and effect/termination facts. Provider identities, mount authority/host paths and registry authorization are omitted. `liveAuthorityConfirmed=false` prevents stored Ready or Completed facts from implying current dispatch permission or provider liveness.
+
+Cookie authentication and no-store apply. Reads require the original live Account/session/tenant Principal, exact `sessions.read`, agent `sandbox.read` and each referenced profile's `sandbox.read`, independently. Post-I/O original human/security/Session checks reject captured output after logout, relogin or changed witnesses. Anonymous and legacy owner capabilities return 401; unavailable/unauthorized scopes return canonical 403; changed witnesses return 409. [Focused evidence](reports/tenant-sandbox-runtime-ownership-verification-2026-10-18.md).
+
 ## Tenant effective Instance Sandbox verification HTTP
 
 Under `/api/v2/tenants/{tenantId}/agents/{instanceId}/sandbox`:

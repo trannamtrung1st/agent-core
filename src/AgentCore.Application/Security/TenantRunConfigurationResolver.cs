@@ -8,8 +8,9 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantRunConfigurationResolver(ITenantAgentStore agents, ITenantDefinitionStore definitions,
-    IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, ITenantCredentialBindingStore bindings)
+public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore agents, ITenantDefinitionStore definitions,
+    IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, ITenantCredentialBindingStore bindings,
+    ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null, IamAuthorizer? authorizer = null)
 {
     public async ValueTask<(TenantAgent Agent, AgentDefinition Definition)> BaselineAsync(Guid tenant, Guid instance, CancellationToken ct)
     {
@@ -49,6 +50,7 @@ public sealed class TenantRunConfigurationResolver(ITenantAgentStore agents, ITe
             .Concat(manifest.Where(r => r.Key.StartsWith("instance:", StringComparison.Ordinal) && r.Kind == AgentDefinitionResourceKind.Knowledge)
                 .Select(r => new KnowledgeSourceRef(r.Key, r.LogicalPath, r.VirtualPath, r.LogicalPath))).ToArray();
         effective = effective with { Environment = environment with { KnowledgeSources = knowledge } };
+        effective = await BindSandboxProfilesAsync(tenant, state.Agent, effective, ct).ConfigureAwait(false);
         var configuration = new AgentRunConfiguration(effective, owner.Revision, owner.PersonaRevision, manifest,
             bound.Bindings.Select(b => b.Binding).ToArray(), InstanceSettingsResolver.Sources(baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision));
         return (state.Agent, new(configuration, owner.Persona, EffectiveSkillCatalogResolver.Resolve(effective, state.Skills), owner.ExecutionBudgets));

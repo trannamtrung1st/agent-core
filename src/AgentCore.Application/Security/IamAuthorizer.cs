@@ -67,6 +67,15 @@ public sealed class IamAuthorizer(IIamStore store)
 
     internal async ValueTask<AccessDecision> CheckTenantAsync(TenantSecurityState state, Guid principalId,
         PermissionDefinition permission, AccessScope target, CancellationToken ct)
+        => await CheckTenantCoreAsync(state, principalId, permission, target, false, ct).ConfigureAwait(false);
+
+    // Owning transactional stores have already resolved this exact resource in their snapshot.
+    // Keep principal, typed permission and role evaluation in the same central engine.
+    internal ValueTask<AccessDecision> CheckOwnedTenantAsync(TenantSecurityState state, Guid principalId,
+        PermissionDefinition permission, AccessScope target, CancellationToken ct) => CheckTenantCoreAsync(state, principalId, permission, target, true, ct);
+
+    private async ValueTask<AccessDecision> CheckTenantCoreAsync(TenantSecurityState state, Guid principalId,
+        PermissionDefinition permission, AccessScope target, bool owned, CancellationToken ct)
     {
         if (state.Tenant.Status != IdentityStatus.Active || state.Tenant.TenantId != target.TenantId
             || target.Kind == AccessScopeKind.System || permission.SystemOnly || !ValidScope(target))
@@ -84,7 +93,7 @@ public sealed class IamAuthorizer(IIamStore store)
             return AccessDecision.Deny("identity_unavailable");
         if (target.Kind == AccessScopeKind.Resource)
         {
-            if (!IamResourceScopes.Exists(state, target) && !await store.OwnsResourceAsync(target, ct).ConfigureAwait(false))
+            if (!owned && !IamResourceScopes.Exists(state, target) && !await store.OwnsResourceAsync(target, ct).ConfigureAwait(false))
                 return AccessDecision.Deny("resource_unavailable");
             if (!permission.AppliesToResource(target.ResourceType)) return AccessDecision.Deny("resource_type_mismatch");
         }

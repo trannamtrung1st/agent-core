@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant Session Sandbox ownership implementation
+
+Both IAM adapters now implement `ITenantSandboxRuntimeStore` over their actual Session/Run/Instance/profile backing. The SQLite implementation uses per-operation transactions, ownership FKs, JSON scope checks and lease/receipt revision CAS. InMemory shares the same backing and guards; legacy exclusion reads retained immutable Session ownership without reversing backing-store locks. New reservations revalidate claim/security/Run witnesses and central scoped IAM; execution receipt creation and lease pointers commit together. Factual retirement remains possible after initiating authority ends without a new effect.
+
+Run configuration pins executor-readable exact effective profiles, observed compatibility/readiness and source epochs. Human stored-fact inspection has independent Session/agent/profile authority and original-login post-I/O fences. Thin GET handlers expose bounded projections without provider IDs or mount authority. No tenant command dispatch or cleanup loop is enabled by these metadata ports. The remaining SDK/current-policy/typed-approval/mount/reset/cleanup/UI integration is open. [Evidence](reports/tenant-sandbox-runtime-ownership-verification-2026-10-18.md).
+
 ## Tenant Sandbox profile catalog
 
 `TenantSandboxProfileService` owns human catalog reads and explicit saves through `ITenantSandboxProfileStore`. Generated stable IDs use `p-` plus a lowercase 32-hex identifier. Creation requires tenant-wide `sandbox.read/manage`; updates and historical inspection use the exact owned profile scope. Item grants cannot create sibling profiles, and profile access never authorizes `sandbox.execute` on an agent. Authorized metadata filters precede search/count/paging; exact read and write preparation recheck original human/session and current security witnesses after I/O. Current command permissions are checked before reporting stale revisions.

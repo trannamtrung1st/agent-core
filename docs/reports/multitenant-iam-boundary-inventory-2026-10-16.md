@@ -2,6 +2,12 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Session Sandbox ownership successor — 2026-10-18
+
+The [ownership evidence](tenant-sandbox-runtime-ownership-verification-2026-10-18.md) advances actual tenant Session/Instance/executor/Run/profile relational ownership and exact admission pins over the existing lease/receipt tables. Current claimed Run/security witnesses and scoped central IAM guard reservations; receipt/lease pointers commit together. CAS factual settlement remains available after retirement without dispatch/replay, and legacy adapters exclude actual owned roots with stripped markers. Protected stored-fact reads fence independent Session/agent/profile grants and the original human after I/O.
+
+This supersedes only the storage/admission/inspection prerequisite. SDK dispatch and current-definition/typed-approval integration, physical mounts, process/reset/cleanup, Sandbox UI, other resource/effect families and final authority/schema consolidation remain open. The full proposal remains active; no live tenant Sandbox or milestone acceptance is claimed.
+
 ## Effective Instance Sandbox verification successor — 2026-10-18
 
 The [effective verification evidence](tenant-instance-sandbox-verification-2026-10-18.md) advances explicit saved setup verification and exact/latest human reads over the existing disposable receipt/SDK runner. It resolves actual tenant-owned Instance/profile and immutable Definition source, pins saved script/limits and independent original-human/agent/profile/Credential authority, and fences current evidence by Instance/profile/source/host revisions. Optional Instance receipt/FK/JSON/active indexes separate scope and block reusable or sibling evidence reuse. Exact technical cleanup carries Instance scope and never reruns initialization.

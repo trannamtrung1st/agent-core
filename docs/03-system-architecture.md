@@ -1,5 +1,13 @@
 # System Architecture
 
+## Tenant Session Sandbox ownership prerequisite
+
+Canonical Session Sandbox storage reuses the existing lease and execution receipt tables. `ITenantSandboxRuntimeStore` resolves actual tenant Session, Instance, executor and Run roots; new reservations require the current claimed Run generation, Run/security revisions, active owners, exact admitted setup and central IAM agent `sandbox.execute`, profile `sandbox.read` and independent private-source `credentials.use`. A Run pins readable exact effective profiles and compatibility/source observations at admission. Later verification cannot expand that saved admission. A reservation owns a durable record; it is insufficient to dispatch an SDK effect.
+
+Execution reservation atomically advances the matching lease and creates one Session/Run/tool-call receipt. CAS factual settlement preserves the original generation/action/owner after cancellation or logical Session deletion, without reviving a generation or repeating initialization. Legacy stores hide/reject actual tenant Session/Instance records even when input markers are stripped. Protected human inspection checks independent Session, agent and profile reads and fences original login/security/Session witnesses after storage I/O. Its result explicitly reports stored facts with `liveAuthorityConfirmed=false`.
+
+The [ownership evidence](reports/tenant-sandbox-runtime-ownership-verification-2026-10-18.md) advances this storage/admission/inspection prerequisite. Tenant SDK dispatch, current-definition and typed approval integration, physical mounts, process/reset/cleanup workers and Sandbox UI remain open. This does not establish production multi-tenant Sandbox acceptance.
+
 ## Tenant effective Instance Sandbox verification
 
 Effective setup verification extends the existing disposable `SandboxVerificationAttempt` with actual tenant-owned Instance identity/revision. `TenantSandboxSetupResolver` binds only the exact owned or immutable shipped Definition, current Instance sparse settings and an exact owned allowed profile. `TenantSandboxInstanceVerificationService` checks the original live human, independent agent read/Sandbox read/manage, exact profile read and protected Credential read/bind/use. It reserves the exact resolved setup before the existing SDK adapter checks mounts and Profile/Instance initialization in a disposable owner. It adds no job engine, Session environment or execution grant.

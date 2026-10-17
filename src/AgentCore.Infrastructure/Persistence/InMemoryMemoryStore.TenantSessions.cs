@@ -17,6 +17,9 @@ public sealed partial class InMemoryMemoryStore
         }
     }
     private readonly Dictionary<Guid, TenantSessionRoot> tenantSessions = [];
+    private System.Collections.Immutable.ImmutableDictionary<Guid, TenantSessionRoot> tenantSessionOwnership = System.Collections.Immutable.ImmutableDictionary<Guid, TenantSessionRoot>.Empty;
+    // Retained immutable ownership only, used by legacy exclusion without reversing backing-store locks.
+    internal TenantSessionRoot? RetainedTenantSessionOwnerSnapshot(Guid session) => Volatile.Read(ref tenantSessionOwnership).GetValueOrDefault(session);
     private IEnumerable<AgentCore.Domain.Conversation.SessionSnapshot> LegacySessions => _sessions.Values.Where(s => !tenantSessions.ContainsKey(s.SessionId));
     internal bool OwnsTenantSession(Guid tenant, Guid id)
     { lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot) && snapshot.DurablyDeletedAt is null; }
@@ -42,7 +45,8 @@ public sealed partial class InMemoryMemoryStore
         {
             if (tenantSessions.ContainsKey(owner.SessionId) || _sessions.ContainsKey(owner.SessionId)) return false;
             snapshot = snapshot with { Definition = AgentDefinitionAdminSnapshots.Freeze(snapshot.Definition) };
-            Store(snapshot); tenantSessions.Add(owner.SessionId, owner); return true;
+            Store(snapshot); tenantSessions.Add(owner.SessionId, owner);
+            Volatile.Write(ref tenantSessionOwnership, tenantSessionOwnership.Add(owner.SessionId, owner)); return true;
         }
     }
     internal TenantSession? ChangeTenantSession(Guid tenant, TenantSessionChange change, DateTimeOffset at)

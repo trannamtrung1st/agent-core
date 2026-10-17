@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Session Sandbox ownership regression
+
+Admit and claim an actual tenant Run with executor-readable, verified effective profiles using both real InMemory and temporary SQLite adapters. Reserve a generation, save controlled Ready facts, atomically reserve one execution receipt, settle bounded output and reopen. Assert duplicate/hash conflicts, stale CAS, exact owner/generation/action, terminal evidence preservation and independent Session/agent/profile human read scopes. Legacy reads/list/state and writes must not expose/adopt actual tenant Session/Instance records with stripped markers.
+
+Check current security/Run revision, expired/replaced claims, revocation, exact admitted setup and bounded command deadlines. Later verification cannot expand an older Run's saved pin. Cancel the Run and logically delete its Session: new reservations remain denied while exact factual retirement persists. Retire/relogin the original human or mutate security during storage I/O; captured projection must fail and explicit fresh recovery succeed. Exercise actual SQLite ownership/Run/profile/JSON constraints, upgrade retained pre-migration rows without changing their JSON bytes, and keep affected Sandbox stores, Run admission, profile/Instance verification and HTTP regressions. [Recorded evidence](reports/tenant-sandbox-runtime-ownership-verification-2026-10-18.md) separates these metadata boundaries from unexecuted live SDK commands, mounts, reset and cleanup.
+
 ## Tenant effective Instance Sandbox verification regression
 
 Exercise canonical explicit saved-setup verification and exact/latest reads through both actual stores and HTTP. Pin an authorized alternate profile, Profile/Instance scripts, sparse limits and exact Instance/profile revisions. Prove reusable and Instance evidence remain separate in both directions, sibling/profile-only history denies, configuration/source/host changes invalidate current setup, and no verification creates an agent execution grant. Use an exact Instance manager with profile read but no profile manage; protected sources independently require Credential read/bind/use. Rotation during dispatch retires captured evidence and explicit current recovery uses the new epoch.

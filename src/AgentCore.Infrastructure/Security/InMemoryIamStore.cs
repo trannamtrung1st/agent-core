@@ -8,10 +8,10 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null) : IIamStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     private readonly InMemoryMemoryStore sessionBacking = definitionReferences.BindTenantInstances(instances);
-    private readonly InMemorySandboxStore sandboxBacking = sandboxProfiles ?? new();
+    private readonly InMemorySandboxStore sandboxBacking = (sandboxProfiles ?? new()).BindTenantAuthority(definitionReferences, instances);
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
     private readonly Dictionary<Guid, TenantSecurityState> _tenants = [];

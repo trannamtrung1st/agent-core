@@ -11,20 +11,20 @@ public sealed partial class InMemorySandboxStore(InMemoryAdminEventStore? events
 {
     public ValueTask<ResourceStateObservation> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, DateTimeOffset observedAt, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested();
+        ct.ThrowIfCancellationRequested(); if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         lock (_gate)
         {
             var lease = _leases.GetValueOrDefault(sessionId);
-            return ValueTask.FromResult(SandboxStateProjection.Observe(lease is not null && lease.AgentInstanceId == owner.AgentInstanceId
+            return ValueTask.FromResult(SandboxStateProjection.Observe(lease is not null && lease.TenantId is null && !OwnedSession(sessionId) && !OwnedInstance(lease.AgentInstanceId) && lease.AgentInstanceId == owner.AgentInstanceId
                 && lease.State != SandboxLeaseState.Terminated ? [lease] : [], observedAt));
         }
     }
     public ValueTask<ResourceStateObservation> ReadStateAsync(AgentRunOwner owner, DateTimeOffset observedAt, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested();
+        ct.ThrowIfCancellationRequested(); if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         lock (_gate)
         {
-            var leases = _leases.Values.Where(l => l.AgentInstanceId == owner.AgentInstanceId && l.State != SandboxLeaseState.Terminated).ToArray();
+            var leases = _leases.Values.Where(l => l.TenantId is null && !OwnedSession(l.SessionId) && !OwnedInstance(l.AgentInstanceId) && l.AgentInstanceId == owner.AgentInstanceId && l.State != SandboxLeaseState.Terminated).ToArray();
             return ValueTask.FromResult(SandboxStateProjection.Observe(leases, observedAt));
         }
     }
@@ -63,17 +63,18 @@ public sealed partial class InMemorySandboxStore(InMemoryAdminEventStore? events
         return ValueTask.CompletedTask;
     }
     public ValueTask<SandboxInstanceVerification?> GetInstanceVerificationAsync(Guid id, long revision, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_instanceVerifications.GetValueOrDefault((id, revision))); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(OwnedInstance(id) ? null : _instanceVerifications.GetValueOrDefault((id, revision))); }
     public ValueTask SaveInstanceVerificationAsync(SandboxInstanceVerification verification, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) _instanceVerifications[(verification.InstanceId, verification.InstanceRevision)] = verification.Merge(_instanceVerifications.GetValueOrDefault((verification.InstanceId, verification.InstanceRevision))); return ValueTask.CompletedTask; }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) { if (OwnedInstance(verification.InstanceId) || verification.Result.TenantId is not null || verification.Result.InstanceId is not null || verification.Observations?.Any(v => v.TenantId is not null || v.InstanceId is not null) == true) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required"); _instanceVerifications[(verification.InstanceId, verification.InstanceRevision)] = verification.Merge(_instanceVerifications.GetValueOrDefault((verification.InstanceId, verification.InstanceRevision))); } return ValueTask.CompletedTask; }
     public ValueTask<SandboxLease?> GetLeaseAsync(Guid sessionId, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_leases.GetValueOrDefault(sessionId)); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(!OwnedSession(sessionId) && _leases.GetValueOrDefault(sessionId) is { TenantId: null } lease && !OwnedInstance(lease.AgentInstanceId) ? lease : null); }
     public ValueTask<IReadOnlyList<SandboxLease>> ListLeasesAsync(CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<SandboxLease>>(_leases.Values.Where(l => l.State != SandboxLeaseState.Terminated).ToArray()); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<SandboxLease>>(_leases.Values.Where(l => l.TenantId is null && !OwnedSession(l.SessionId) && !OwnedInstance(l.AgentInstanceId) && l.State != SandboxLeaseState.Terminated).ToArray()); }
     public ValueTask SaveLeaseAsync(SandboxLease lease, long expectedRevision, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
+            if (lease.TenantId is not null || lease.ExecutorPrincipalId is not null || lease.Profile.TenantId is not null || _tenantProfiles.ContainsKey(lease.Profile.Id) || OwnedSession(lease.SessionId) || OwnedInstance(lease.AgentInstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             var old = _leases.GetValueOrDefault(lease.SessionId);
             if ((old?.Revision ?? 0) != expectedRevision || lease.Revision != expectedRevision + 1 || old is not null && old.AgentInstanceId != lease.AgentInstanceId)
                 throw AgentCoreErrors.Conflict("Sandbox generation changed.");
@@ -81,13 +82,14 @@ public sealed partial class InMemorySandboxStore(InMemoryAdminEventStore? events
         } return ValueTask.CompletedTask;
     }
     public ValueTask<SandboxExecution?> GetExecutionAsync(Guid sessionId, Guid executionId, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_executions.TryGetValue(executionId, out var e) && e.SessionId == sessionId ? e : null); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(!OwnedSession(sessionId) && _executions.TryGetValue(executionId, out var e) && e.TenantId is null && !OwnedInstance(e.AgentInstanceId) && e.SessionId == sessionId ? e : null); }
     public ValueTask<SandboxExecution?> GetOperationAsync(Guid sessionId, Guid agentRunId, string toolCallId, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_executions.Values.SingleOrDefault(e => e.SessionId == sessionId && e.AgentRunId == agentRunId && e.ToolCallId == toolCallId)); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(OwnedSession(sessionId) ? null : _executions.Values.SingleOrDefault(e => e.TenantId is null && !OwnedInstance(e.AgentInstanceId) && e.SessionId == sessionId && e.AgentRunId == agentRunId && e.ToolCallId == toolCallId)); }
     public ValueTask SaveExecutionAsync(SandboxExecution execution, bool create, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
+            if (execution.TenantId is not null || execution.ExecutorPrincipalId is not null || execution.Revision != 0 || OwnedSession(execution.SessionId) || OwnedInstance(execution.AgentInstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             var old = _executions.GetValueOrDefault(execution.Id);
             if (create ? old is not null || _executions.Values.Any(e => e.SessionId == execution.SessionId && e.AgentRunId == execution.AgentRunId && e.ToolCallId == execution.ToolCallId)
                 : old is null || old.SessionId != execution.SessionId || old.Generation != execution.Generation || old.ActionHash != execution.ActionHash)

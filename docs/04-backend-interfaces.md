@@ -1,5 +1,13 @@
 # Backend Interfaces
 
+## Tenant Session Sandbox runtime ports
+
+`TenantRunConfigurationResolver` pins only executor-readable profiles from `ITenantSandboxProfileStore`, resolves effective Instance limits/scripts and records current compatibility/readiness and registry epochs in `ExecutionSandboxProfiles`. Missing integration dependencies yield no execution profiles. `AdmittedForExecution` is a compatibility ceiling for that Run, never an IAM or SDK dispatch grant.
+
+`ITenantSandboxRuntimeStore` reads an owned Session snapshot and exact/latest receipt, finds one Session/Run/tool-call operation, reserves an initial generation or execution, and saves exact CAS factual updates. `TenantSandboxRuntimeWrite` binds the trusted `TenantRuntimeFrame`, expected security revision and Run revision. Reservations re-resolve actual ownership, active claim and executor, exact admitted setup, current enabled source/credential epochs and central scoped IAM. Execution reservation also advances the exact Ready generation to Executing and stores active/last receipt pointers atomically. Duplicate same-hash operations never acquire another reservation; changed hashes conflict.
+
+Factual writes retain exact owner/generation/action, use increasing revisions, cannot mint reset authority or start execution, and may retire evidence after Run/Session authority ends. `TenantSandboxRuntimeReadService` returns bounded `TenantSandboxRuntimeView` under original human plus independent Session/agent/profile read scopes, with post-I/O security and Session witnesses. Stored state is not a live provider assertion. SDK command/reset/process/cleanup integration remains pending; [focused evidence](reports/tenant-sandbox-runtime-ownership-verification-2026-10-18.md).
+
 ## Tenant effective Sandbox verification ports
 
 `TenantSandboxSetupResolver` resolves actual owned Instance revision, its exact owned/shipped Definition policy, one exact tenant profile and saved sparse script/limits without image auth or SDK work. `SandboxImageAuthorization` can additionally pin Instance ID/revision; that mode requires exact profile read plus agent read/Sandbox read/manage, independently of protected Credential read/bind/use. It does not require reusable profile management or agent configuration update. Original human evidence compares the exact Account/session/Principal fields; a different DTO/record shape grants no authority and cannot reject an otherwise matching identity.

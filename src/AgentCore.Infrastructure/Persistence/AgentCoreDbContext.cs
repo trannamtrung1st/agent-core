@@ -261,6 +261,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
                 .HasPrincipalKey(r => new { r.TenantId, r.ProfileId }).OnDelete(DeleteBehavior.Restrict); });
         modelBuilder.Entity<SandboxLeaseRow>(e => { e.ToTable("SandboxSessionLeases"); e.HasKey(r => r.SessionId); e.Property(r => r.Revision).IsConcurrencyToken(); e.HasIndex(r => new { r.AgentInstanceId, r.ExpiresAt }); });
         modelBuilder.Entity<SandboxExecutionRow>(e => { e.ToTable("SandboxExecutions"); e.HasKey(r => r.Id); e.HasIndex(r => new { r.SessionId, r.AgentRunId, r.ToolCallId }).IsUnique(); });
+        SandboxRuntimePersistence.Configure(modelBuilder);
         modelBuilder.Entity<EmailWatchRecord>(e =>
         {
             e.HasKey(r => r.AccountId);
