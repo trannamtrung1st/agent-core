@@ -28,8 +28,35 @@ public static class TenantRunContinuationRules
 }
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
-    TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null)
+    TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
+    TenantCredentialCheckService? credentialChecks = null)
 {
+    // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
+    public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
+    {
+        var run = await Current(dispatched, ct).ConfigureAwait(false);
+        if (run.ApprovalRequestId is not { } requestId) return;
+        var tenant = run.Owner.TenantId!.Value;
+        var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
+        var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
+        TenantRunContinuationRules.Require(run, request, source);
+        ValidateAuthorizationCheckpoint(run, request!, request!.Operation.Kind == TenantOperationKind.CredentialConnectionCheck
+            && run.Admission.ApprovalResume is not null && run.SideEffect.ToolCallId != "operation:" + request.Operation.OperationId.ToString("D"));
+        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind != TenantOperationKind.CredentialConnectionCheck) return;
+        if (credentialChecks is null) throw new AccessDeniedException("tenant_effect_unavailable");
+        var remaining = run.Checkpoint?.PauseBudgetClock(time.GetUtcNow()).RemainingOverallBudgetMs
+            ?? (run.Admission.ExecutionBudget?.Profile.DurationSeconds ?? 180) * 1000;
+        if (remaining <= 0) throw new AccessDeniedException("execution_budget_exhausted");
+        using var budget = new CancellationTokenSource(TimeSpan.FromMilliseconds(remaining), time);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, budget.Token);
+        try
+        {
+            await credentialChecks.ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
+                run.Claim!.Generation, request.Operation.ActionHash, linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested && !ct.IsCancellationRequested) { }
+    }
+
     public async ValueTask<(AgentRun Run, TenantApprovalOutcome? Outcome)> ResumeAsync(AgentRun dispatched, CancellationToken ct = default)
     {
         var tenant = dispatched.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
@@ -63,8 +90,9 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                 if (runtimeStore is null || ids is null)
                     throw new SecurityConflictException("approval_continuation_mismatch");
                 var text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
-                    reasonCode = reason, operationId = outcome.OperationId, applied = outcome.Outcome == TenantOperationOutcome.Completed });
-                var resumed = AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, pending[0], text);
+                    reasonCode = reason, operationId = outcome.OperationId, applied = outcome.Outcome switch {
+                        TenantOperationOutcome.Completed => (bool?)true, TenantOperationOutcome.Denied => false, _ => null } });
+                var resumed = AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint.PauseBudgetClock(time.GetUtcNow()), pending[0], text);
                 run = await runtimeStore.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
                     new AgentRunCommand.Checkpoint(run.Revision, time.GetUtcNow(), run.Claim!.Generation, resumed, null), ids.NewId(), ct, run.Claim.Generation).ConfigureAwait(false);
             }

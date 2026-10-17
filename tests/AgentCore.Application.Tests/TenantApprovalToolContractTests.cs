@@ -2,11 +2,56 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Credentials;
+using AgentCore.Domain.Security;
+using AgentCore.Application.Security;
 
 namespace AgentCore.Application.Tests;
 
 public sealed class TenantApprovalToolContractTests
 {
+    [Fact]
+    public void Credential_authorization_accepts_only_a_bound_reference_and_matches_only_that_operation_kind()
+    {
+        const string arguments = """{"operation":"check_credential_connection","reference":" Work-Drive "}""";
+        var intent = TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, arguments));
+        Assert.Equal("work-drive", intent.CredentialReference); Assert.Null(intent.Persona); Assert.Null(intent.Preferences);
+        var saved = TenantApprovalRules.PrepareCredentialCheck(Guid.NewGuid(), Guid.NewGuid(), new(Guid.NewGuid(), Guid.NewGuid(), "work-drive", 1, 1, 1, 1), 1, 1);
+        Assert.True(intent.Matches(saved)); Assert.False(new TenantAuthorizationIntent(null, null).Matches(saved));
+        Assert.False((intent with { CredentialReference = "another" }).Matches(saved));
+        Assert.False((intent with { Persona = Persona }).Matches(saved));
+        foreach (var key in new[] { "tenantId", "credentialId", "bindingId", "runId", "permission", "expectedRevision", "grantId", "persona", "preferences" })
+        {
+            var input = JsonNode.Parse(arguments)!.AsObject(); input[key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, input.ToJsonString())));
+        }
+        Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, arguments.Replace(" Work-Drive ", "bad/reference"))));
+        Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, arguments[..^1] + ",\"reference\":\"other\"}")));
+    }
+
+    [Fact]
+    public async Task Credential_offering_is_independent_of_Settings_and_restricts_its_schema_without_authorizing_other_operations()
+    {
+        var definition = await CapabilityProjectionTests.Definition();
+        definition = definition with { SelfManagement = HarnessManagementPolicy.Disabled,
+            Environment = definition.Environment! with { Capabilities = null, ToolAllowlist = [ToolCatalog.DriveAccounts] } };
+        var instance = Guid.NewGuid(); var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var at = DateTimeOffset.UtcNow;
+        var context = CapabilityProjectionTests.Context(definition) with {
+            AgentInstanceId = instance, OwnedSessionId = session,
+            Configuration = new(definition, 1, 1, [], [new(Guid.NewGuid(), instance, Guid.NewGuid(), "work-drive", 1, at, at)]),
+            ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage) };
+        var offered = Assert.Single(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.Contains("check_credential_connection", offered.ParametersJson); Assert.DoesNotContain("update_persona", offered.ParametersJson); Assert.DoesNotContain("update_preferences", offered.ParametersJson);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context with { Configuration = new(definition, 1, 1, []) }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        var unavailable = definition with { Environment = definition.Environment with { ToolAllowlist = [] } };
+        Assert.DoesNotContain(ToolCatalog.For(unavailable, context with { Definition = unavailable }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        var uncertain = new TenantApprovalOutcome(context.ExecutionContext.TenantId, context.ExecutionContext.RunId, Guid.NewGuid(), Guid.NewGuid(), instance,
+            activation, TenantApprovalStatus.Approved, TenantOperationOutcome.Indeterminate, "credential_check_uncertain", 1, 1);
+        Assert.Empty(ToolCatalog.For(definition, context with { ApprovalOutcome = uncertain }, ToolConfigurationGates.AllowAll));
+    }
+
     private static readonly AgentIdentity Persona = new("Persona", "Assistant", "Description", "Clear");
     private static string Arguments(AgentIdentity? persona = null) => JsonSerializer.Serialize(new { operation = "update_persona", persona = persona ?? Persona }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     [Fact]

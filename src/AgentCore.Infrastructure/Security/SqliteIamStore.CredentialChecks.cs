@@ -59,7 +59,7 @@ public sealed partial class SqliteIamStore : ITenantCredentialCheckStore
             TenantCredentialBinding? binding = null;
             try { binding = await CredentialOperationTarget(db, request, ct).ConfigureAwait(false); }
             catch (AccessDeniedException e) { reason = e.ReasonCode; }
-            reason ??= TenantCredentialCheckRules.TargetReason(request, run, agent, binding);
+            reason ??= TenantCredentialCheckRules.TargetReason(request, run, agent, binding, source);
         }
         if (reason is null && await db.Set<TenantCredentialCheckDispatchRecord>().AnyAsync(d => d.TenantId == request.TenantId
             && d.CredentialId == request.Operation.CredentialCheck!.CredentialId.ToString("D") && d.CompletedAt == null, ct).ConfigureAwait(false)) reason = "credential_check_in_progress";

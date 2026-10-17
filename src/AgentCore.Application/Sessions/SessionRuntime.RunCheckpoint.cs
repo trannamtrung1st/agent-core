@@ -60,8 +60,10 @@ public sealed partial class SessionRuntime
         // instead of diagnosing an expected ownership loss as a provider failure.
         ct.ThrowIfCancellationRequested();
         if (run is null) throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
+        var recordedTenantUncertainty = _tenantApprovalOutcome is { Outcome: AgentCore.Domain.Security.TenantOperationOutcome.Indeterminate } outcome
+            && outcome.RunId == run.AgentRunId && run.SideEffect.ToolCallId == "operation:" + outcome.OperationId.ToString("D");
         var observationRequired = run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
-            && run.SideEffect.ActionHash is not null;
+            && run.SideEffect.ActionHash is not null && !recordedTenantUncertainty;
         AgentRunToolCallCheckpoint.TryReadState(run.Checkpoint, out _, out _, out var blockedActionHash);
         if (observationRequired && AgentRunActionHash.MatchesBrowserInteraction(run.Checkpoint?.PayloadJson, run.SideEffect.ActionHash))
             blockedActionHash ??= run.SideEffect.ActionHash;

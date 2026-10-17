@@ -39,6 +39,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly ConcurrentDictionary<Guid, ScheduleScratch> _scheduleScratchByKey = new();
     public const string AuthorizationAuditMarker = "synthetic authorization audit:";
     public const string ApprovalReviewMarker = "synthetic approval review";
+    public const string CredentialCheckMarker = "synthetic credential check";
     private const string DiagnosticFailureMarker = "synthetic-fail-turn";
 
     private sealed class ScheduleScratch
@@ -390,6 +391,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (CredentialCheckResult(request) is { } credentialResult)
+        {
+            using var saved = JsonDocument.Parse(credentialResult.Text);
+            var outcome = saved.RootElement.TryGetProperty("outcome", out var result) ? result.GetString() : null;
+            yield return new ModelTextDelta(outcome switch {
+                "completed" => "The credential connection check completed. See the recorded result for connection health.",
+                "indeterminate" => "The credential check outcome is uncertain. It will not run again; reconnect before another check.",
+                _ => "The credential connection check was not applied. See the recorded decision or denial." });
+            yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+        }
+
         if (HasSessionTools(request) && (_alwaysToolCall || ShouldScriptTools(request)))
         {
             await foreach (var item in GenerateToolScriptAsync(request, cancellationToken).ConfigureAwait(false))
@@ -489,6 +501,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var lastTool = currentResults.LastOrDefault()?.Text ?? string.Empty;
         var scheduleLastTool = LastToolTextSinceLastUser(request.Messages);
         var lastToolMessage = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool);
+        if (lastUser.Contains(CredentialCheckMarker, StringComparison.OrdinalIgnoreCase)
+            && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) == true)
+        {
+            string? reference = lastUser[(lastUser.IndexOf(CredentialCheckMarker, StringComparison.OrdinalIgnoreCase) + CredentialCheckMarker.Length)..].Trim();
+            try { reference = AgentCore.Domain.Credentials.CredentialRules.Reference(reference); }
+            catch (ArgumentException) { reference = null; }
+            if (reference is null)
+            {
+                yield return new ModelTextDelta("Supply one bound credential reference after synthetic credential check.");
+                yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+            }
+            yield return new ModelToolCallEvent(new("synthetic-credential-check", ToolCatalog.RequestAuthorization,
+                JsonSerializer.Serialize(new { operation = "check_credential_connection", reference })));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+        }
         if (lastToolMessage?.Parts?.OfType<ModelImageContent>().Any() == true)
         {
             yield return new ModelTextDelta(HistoricalImageRereadAnswer);
@@ -1212,11 +1239,22 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             && tool.Name != ToolCatalog.AppMessageSend
             && tool.Name != ToolCatalog.SkillsLoad) == true;
 
+    private static ModelMessage? CredentialCheckResult(ModelRequest request)
+    {
+        var result = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization);
+        if (result is null) return null;
+        var call = request.Messages.SelectMany(m => m.ToolCalls ?? []).LastOrDefault(c => c.Id == result.ToolCallId && c.Name == result.Name);
+        if (call is null) return null;
+        try { return TenantApprovalToolContract.Parse(call).CredentialReference is not null ? result : null; }
+        catch (Exception ex) when (ex is ArgumentException or JsonException) { return null; }
+    }
+
     private bool ShouldScriptTools(ModelRequest request)
     {
         var lastUser = SyntheticTaskContext.Text(request);
         if (_chunks.Any(c => c.Contains("[[speech:", StringComparison.Ordinal))) return false;
         return lastUser.Contains(AuthorizationAuditMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(CredentialCheckMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(ApprovalReviewMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("order 91", StringComparison.OrdinalIgnoreCase)

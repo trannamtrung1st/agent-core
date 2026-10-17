@@ -312,6 +312,9 @@ public sealed partial class SessionRuntime
                 EntryStatus.Failed when assistant.Failure?.FailureReason == "runDeadline" => new AgentRunCommand.DeadlineExceeded(run.Revision, now, claim.Generation),
                 EntryStatus.Failed => new AgentRunCommand.Fail(run.Revision, now, claim.Generation,
                     AgentRunFailureCode(_agentRunProviderFailure), AgentRunFailureSummary(_agentRunProviderFailure), false, null, assistant.Failure?.DiagnosticId),
+                EntryStatus.Completed when _tenantApprovalOutcome?.Outcome == AgentCore.Domain.Security.TenantOperationOutcome.Indeterminate
+                    => new AgentRunCommand.Fail(run.Revision, now, claim.Generation, "side-effect-indeterminate",
+                        "The approved credential check outcome is uncertain and will not be repeated.", false, null, _ids.NewId()),
                 _ => new AgentRunCommand.Complete(run.Revision, now, claim.Generation,
                     string.IsNullOrWhiteSpace(assistant.Text) ? "Response completed." : assistant.Text[..Math.Min(assistant.Text.Length, AgentRunLimits.MaxResultCharacters)],
                     AgentRunOutcomeKind.Response, assistant.EntryId)

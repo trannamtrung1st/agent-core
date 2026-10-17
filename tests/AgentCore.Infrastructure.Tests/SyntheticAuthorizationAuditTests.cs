@@ -6,6 +6,24 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SyntheticAuthorizationAuditTests
 {
+    [Theory]
+    [InlineData("work-drive", true)] [InlineData("bad/reference", true)] [InlineData("work-drive", false)]
+    public async Task Synthetic_credential_fixture_uses_only_an_offered_valid_reference_and_reports_saved_uncertainty(string reference, bool offered)
+    {
+        var model = new ScriptedLanguageModel(["fallback"]);
+        var request = new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, ScriptedLanguageModel.CredentialCheckMarker + " " + reference)],
+            Tools: offered ? [TenantApprovalToolContract.Descriptor(false, true).ModelDefinition] : []);
+        var events = new List<ModelGenerationEvent>(); await foreach (var e in model.GenerateAsync(request)) events.Add(e);
+        if (!offered || reference != "work-drive") { Assert.Empty(events.OfType<ModelToolCallEvent>()); return; }
+        var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
+        Assert.Equal(reference, TenantApprovalToolContract.Parse(call).CredentialReference);
+        Assert.DoesNotContain("credentialId", call.ArgumentsJson); Assert.DoesNotContain("tenant", call.ArgumentsJson); Assert.DoesNotContain("grant", call.ArgumentsJson);
+        request = request with { Tools = [], Messages = [.. request.Messages, new(ModelRole.Assistant, "", ToolCalls: [call]),
+            new(ModelRole.Tool, """{"outcome":"indeterminate","applied":null}""", ToolCallId: call.Id, Name: call.Name)] };
+        events.Clear(); await foreach (var e in model.GenerateAsync(request)) events.Add(e);
+        Assert.Empty(events.OfType<ModelToolCallEvent>()); Assert.Contains(events.OfType<ModelTextDelta>(), e => e.Text.Contains("outcome is uncertain"));
+    }
+
     [Fact]
     public async Task Synthetic_review_fixture_requests_only_an_offered_exact_action_without_caller_authority()
     {

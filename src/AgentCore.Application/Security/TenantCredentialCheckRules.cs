@@ -30,12 +30,12 @@ public static class TenantCredentialCheckRules
             throw new SecurityConflictException("operation_mismatch");
     }
 
-    public static string? TargetReason(TenantApprovalRequest request, AgentRun run, TenantAgent? agent, TenantCredentialBinding? binding)
+    public static string? TargetReason(TenantApprovalRequest request, AgentRun run, TenantAgent? agent, TenantCredentialBinding? binding, AgentRun? source = null)
     {
         if (agent is null || agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) return "executor_unavailable";
         try
         {
-            TenantApprovalRules.Validate(request, run, agent);
+            TenantApprovalRules.Validate(request, run, agent, source: source);
             if (binding is null) return "credential_binding_changed";
             TenantCredentialOperationRules.RequireRequest(request, run, agent, binding);
             return null;

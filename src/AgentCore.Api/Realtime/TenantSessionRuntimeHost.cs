@@ -11,7 +11,7 @@ namespace AgentCore.Api.Realtime;
 // Canonical runtimes never enter SessionHost's legacy connection/control lookup or SignalR output path.
 public sealed class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITenantRuntimeStore storage, ITenantRunStore runs,
     TenantRunExecutionAuthority authority, TenantToolAuthorization tools, SessionHost capacity, IIdGenerator ids, TimeProvider time,
-    ILogger<TenantSessionRuntimeHost> logger) : ITenantRunDispatcher, IAsyncDisposable
+    ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations) : ITenantRunDispatcher, IAsyncDisposable
 {
     private sealed class Live(AgentRun run, SessionRuntime runtime)
     {
@@ -104,6 +104,22 @@ public sealed class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITen
         try
         {
             using var dispatch = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, live.Lifetime.Token);
+            try { await continuations.PrepareExternalEffectAsync(run, dispatch.Token).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
+            {
+                var current = await runs.FindTenantRunAsync(run.Owner.TenantId!.Value, run.AgentRunId, dispatch.Token).ConfigureAwait(false);
+                if (current is { Status: AgentRunStatus.Running, Claim: { } currentClaim } && currentClaim.Generation == claim.Generation)
+                {
+                    var reason = ex is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)ex).ReasonCode;
+                    AgentRunCommand command = current.CancellationRequested
+                        ? new AgentRunCommand.CommitCancellation(current.Revision, time.GetUtcNow(), claim.Generation, null)
+                        : new AgentRunCommand.Fail(current.Revision, time.GetUtcNow(), claim.Generation,
+                            reason == "execution_budget_exhausted" ? "execution-budget-exhausted" : "approval-effect-unavailable",
+                            "The saved approval operation could not be consumed safely.", false, null, ids.NewId());
+                    await storage.ApplyTenantRuntimeCommandAsync(current.Owner, current.AgentRunId, command, ids.NewId(), dispatch.Token, claim.Generation).ConfigureAwait(false);
+                }
+                live.Accepted.TrySetResult(true); return true;
+            }
             var accepted = await live.Runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true, dispatch.Token).ConfigureAwait(false);
             live.Accepted.TrySetResult(accepted); return accepted;
         }

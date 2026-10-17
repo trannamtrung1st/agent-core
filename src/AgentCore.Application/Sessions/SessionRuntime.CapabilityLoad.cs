@@ -33,7 +33,8 @@ public sealed partial class SessionRuntime
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
             ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
-            { ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome };
+            { ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
+                Configuration = _boundAgentRun?.Admission.Configuration };
 
     private async Task<CapabilityLoadMailboxResult> RequestCapabilityLoadAsync(EventContext cause, Guid responseId,
         string json, AgentContext context, CancellationToken ct, bool dialogRecovery = false)

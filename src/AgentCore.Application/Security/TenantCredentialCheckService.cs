@@ -67,7 +67,7 @@ public sealed class TenantCredentialCheckService(IIamStore security, ITenantRunS
             if (reason is null)
             {
                 var (agent, binding) = await targets.ResolveAsync(run, request.Operation.CredentialCheck!.Reference, ct).ConfigureAwait(false);
-                TenantApprovalRules.Validate(request, run, agent); TenantCredentialOperationRules.RequireWitness(request.Operation, binding); bound = binding;
+                TenantApprovalRules.Validate(request, run, agent, source: source); TenantCredentialOperationRules.RequireWitness(request.Operation, binding); bound = binding;
                 descriptor = verifier.Describe(binding.Credential.Value.Purpose);
                 reason = !descriptor.Configured ? "oauth_not_configured" : !descriptor.HostEnabled ? "oauth_host_disabled"
                     : descriptor.Synthetic != (binding.Credential.Value.EmailAccount?.Synthetic ?? binding.Credential.Value.DriveAccount?.Synthetic ?? false) ? "oauth_client_changed" : null;

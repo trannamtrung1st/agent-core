@@ -131,7 +131,7 @@ public static class ToolCatalog
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
-        if (context is not null && !context.ModelSupportsTools)
+        if (context is not null && (!context.ModelSupportsTools || context.ApprovalOutcome?.Outcome == AgentCore.Domain.Security.TenantOperationOutcome.Indeterminate))
         {
             return [];
         }
@@ -199,7 +199,9 @@ public static class ToolCatalog
         foreach (var authority in ToolRegistry.All)
             if (authority.OfferRule is ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority or ToolOfferRule.TenantExecutionAuthority
                 && ToolPolicy.IsOffered(authority, definition, context, configurationGate) && seen.Add(authority.Name))
-                offered.Add(authority.ModelDefinition);
+                offered.Add(authority.Name == RequestAuthorization ? TenantApprovalToolContract.Descriptor(
+                    definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == true,
+                    TenantApprovalToolContract.AllowsCredentialCheck(definition, context)).ModelDefinition : authority.ModelDefinition);
         foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate, AgentCore.Application.Experience.ExperienceService.SourceTool, AgentCore.Application.Experience.ExperienceService.RecordTool })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))
