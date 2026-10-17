@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Current tenant execution policy resolution
+
+`TenantRunConfigurationResolver.CurrentPolicyAsync` resolves only actual current Instance, exact owned or immutable shipped publication and sparse settings/self-management policy. It deliberately does not refresh execution resources, credential bindings or image eligibility. `TenantRunExecutionAuthority.CurrentDefinitionAsync` uses that result between fresh exact claimed Run/requester/security checks and fails closed when the captured security witness changes. Callers retain the separate admitted Definition; they must apply both admitted and current ceilings rather than replace the Run payload.
+
+`ITenantSandboxRuntimeStore` reservations additionally re-resolve current policy within their existing transaction/gates. `TenantSandboxRuntimeRules.RequireCurrentPolicy` rejects removed capability/profile, admitted limits above current ceilings, changed Instance setup script or a mount home policy incompatible with the restriction of admitted/current isolation. This extends reservation eligibility only, without SDK dispatch or one-time command approval authority. [Evidence](reports/tenant-current-execution-policy-verification-2026-10-18.md).
+
 ## Tenant Session Sandbox runtime ports
 
 `TenantRunConfigurationResolver` pins only executor-readable profiles from `ITenantSandboxProfileStore`, resolves effective Instance limits/scripts and records current compatibility/readiness and registry epochs in `ExecutionSandboxProfiles`. Missing integration dependencies yield no execution profiles. `AdmittedForExecution` is a compatibility ceiling for that Run, never an IAM or SDK dispatch grant.

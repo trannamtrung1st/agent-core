@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant current execution policy regression
+
+Admit and claim an owned Run, publish/adopt a different Definition with removed execution capability and tighter isolation, then resolve current authority. Assert the actual current policy is returned while saved Run instructions/version/capabilities stay unchanged. Through the real Synthetic HTTP/Runtime path, complete text after adoption and inspect model context for only admitted instructions. Change tenant security or cancel the Run during source I/O: captured policy must be discarded, and only an explicit fresh still-authorized lookup may recover. Keep affected requester, direct-preference, approval and text-dispatch checks.
+
+In both stores, reserve a controlled Ready generation, tighten current Instance limits or home access, refresh security witnesses and attempt another receipt reservation. It must deny without changing generation revision or creating a receipt. Explicit compatible recovery may resume the original admission. A later home-policy relaxation cannot grant a broader mount than that admitted to the Run. [Recorded evidence](reports/tenant-current-execution-policy-verification-2026-10-18.md) does not establish actual SDK command, mount or cleanup execution.
+
 ## Tenant Session Sandbox ownership regression
 
 Admit and claim an actual tenant Run with executor-readable, verified effective profiles using both real InMemory and temporary SQLite adapters. Reserve a generation, save controlled Ready facts, atomically reserve one execution receipt, settle bounded output and reopen. Assert duplicate/hash conflicts, stale CAS, exact owner/generation/action, terminal evidence preservation and independent Session/agent/profile human read scopes. Legacy reads/list/state and writes must not expose/adopt actual tenant Session/Instance records with stripped markers.

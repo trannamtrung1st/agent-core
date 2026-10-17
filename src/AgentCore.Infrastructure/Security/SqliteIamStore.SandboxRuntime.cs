@@ -3,6 +3,7 @@ using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Definitions;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Security;
@@ -34,7 +35,8 @@ public sealed partial class SqliteIamStore
         var row = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleOrDefaultAsync(s => s.SessionId == root.SessionId && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false);
         return row is null ? null : new(root.Domain(), SqliteMemoryStore.ToSnapshot(row, []));
     }
-    private async ValueTask<AgentRun> RequireSandboxReservation(AgentCoreDbContext db, TenantSandboxRuntimeWrite write, SandboxProfile source, DateTimeOffset at, CancellationToken ct)
+    private async ValueTask<AgentRun> RequireSandboxReservation(AgentCoreDbContext db, TenantSandboxRuntimeWrite write, SandboxProfile source,
+        SandboxMountAuthority? mounted, DateTimeOffset at, CancellationToken ct)
     {
         var tenant = write.Runtime.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var session = await ReadSandboxSession(db, tenant, write.Runtime.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
@@ -44,9 +46,19 @@ public sealed partial class SqliteIamStore
         var state = await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var agent = Owned(parent); TenantSessionRules.RequireExecutor(state, agent);
         TenantSandboxRuntimeRules.RequireReservation(write, session, run, agent, state.Tenant.Revision, at);
-        if (!await OwnedSandboxProfiles(db, tenant).AnyAsync(p => p.Id == source.Id && p.Revision == source.Revision, ct).ConfigureAwait(false)) throw new AccessDeniedException("resource_unavailable");
+        var savedSource = await OwnedSandboxProfiles(db, tenant).SingleOrDefaultAsync(p => p.Id == source.Id && p.Revision == source.Revision, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("resource_unavailable");
         var latest = await OwnedSandboxProfiles(db, tenant).Where(p => p.Id == source.Id).OrderByDescending(p => p.Revision).FirstAsync(ct).ConfigureAwait(false);
         if (!SandboxValue(latest).Enabled) throw new AccessDeniedException("resource_unavailable");
+        AgentDefinition? baseline;
+        if (Guid.TryParse(agent.Instance.DefinitionId, out var definition))
+        {
+            var publication = await Publication(db, tenant, definition, agent.Instance.ActiveVersion).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false);
+            baseline = publication is null ? null : AgentDefinitionAdminMapping.MapPublication(publication).Payload;
+        }
+        else baseline = builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
+        if (baseline is null) throw new AccessDeniedException("definition_unavailable");
+        TenantSandboxRuntimeRules.RequireCurrentPolicy(run, agent, baseline, source, SandboxValue(savedSource), mounted);
         if (source.RegistryCredentialId is { } credential)
         {
             var value = await OwnedCredentials(db, tenant).SingleOrDefaultAsync(c => c.CredentialId == credential.ToString("D"), ct).ConfigureAwait(false);
@@ -59,7 +71,7 @@ public sealed partial class SqliteIamStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-        var run = await RequireSandboxReservation(db, write, lease.Profile, at, ct).ConfigureAwait(false);
+        var run = await RequireSandboxReservation(db, write, lease.Profile, lease.MountAuthority, at, ct).ConfigureAwait(false);
         var row = await db.Set<SandboxLeaseRow>().SingleOrDefaultAsync(l => l.SessionId == lease.SessionId.ToString("D"), ct).ConfigureAwait(false);
         if ((row?.Revision ?? 0) != expectedRevision || row is not null && row.TenantId != write.Runtime.Owner.TenantId) return false;
         if (await db.Set<SandboxExecutionRow>().AnyAsync(e => e.SessionId == lease.SessionId.ToString("D") && e.AgentRunId == write.Runtime.RunId.ToString("D")
@@ -74,7 +86,7 @@ public sealed partial class SqliteIamStore
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var tenant = write.Runtime.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var row = await db.Set<SandboxLeaseRow>().SingleOrDefaultAsync(l => l.TenantId == tenant && l.SessionId == execution.SessionId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        var lease = SandboxRuntimePersistence.Value(row); var run = await RequireSandboxReservation(db, write, lease.Profile, at, ct).ConfigureAwait(false);
+        var lease = SandboxRuntimePersistence.Value(row); var run = await RequireSandboxReservation(db, write, lease.Profile, lease.MountAuthority, at, ct).ConfigureAwait(false);
         var previous = await db.Set<SandboxExecutionRow>().AsNoTracking().SingleOrDefaultAsync(e => e.SessionId == execution.SessionId.ToString("D") && e.AgentRunId == execution.AgentRunId.ToString("D") && e.ToolCallId == execution.ToolCallId, ct).ConfigureAwait(false);
         if (previous is not null)
         {

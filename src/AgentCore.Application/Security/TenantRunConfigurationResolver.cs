@@ -21,6 +21,16 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
             : await builtIns.GetAsync(owner.DefinitionId, owner.ActiveVersion, ct).ConfigureAwait(false);
         return (agent, baseline ?? throw new AccessDeniedException("definition_unavailable"));
     }
+    // Current policy only: do not reread resources, secrets or image availability just to
+    // constrain an already admitted Run. Its original instructions and payload stay pinned.
+    public async ValueTask<(TenantAgent Agent, AgentDefinition Definition)> CurrentPolicyAsync(Guid tenant, Guid instance, CancellationToken ct = default)
+    {
+        var (agent, baseline) = await BaselineAsync(tenant, instance, ct).ConfigureAwait(false);
+        var effective = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides) with {
+            SelfManagement = ManagementPolicyResolver.Resolve(baseline, agent.Instance)
+        };
+        return (agent, effective);
+    }
     public async ValueTask<(TenantAgent Agent, ResolvedAgentRunConfiguration Configuration)> ResolveAsync(Guid tenant, Guid instance, CancellationToken ct)
     {
         var state = await agents.ReadTenantAgentConfigurationAsync(tenant, instance, ct).ConfigureAwait(false)

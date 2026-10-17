@@ -2,6 +2,12 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Current execution policy correction — 2026-10-18
+
+The [current policy evidence](tenant-current-execution-policy-verification-2026-10-18.md) corrects tenant Runtime authority to resolve current owned/shipped publication and sparse Instance policy through fresh claimed Run/requester/security fences, while preserving immutable admission and instructions. Sandbox reservations also enforce current capability/allowed profile, resource/script ceilings and restricted admitted/current home access under their existing backing transaction/gates. Refreshed security witnesses alone cannot authorize an obsolete setup; later relaxation cannot expand an admitted mount.
+
+This closes the identified current-policy lookup/reservation gap only. Tenant SDK dispatch and exact command approval consumption, physical mounts/process/reset/cleanup, Sandbox UI and other resource/effect/voice/autonomous/consolidation obligations remain open. No production multi-tenant Sandbox or full proposal acceptance is claimed.
+
 ## Session Sandbox ownership successor — 2026-10-18
 
 The [ownership evidence](tenant-sandbox-runtime-ownership-verification-2026-10-18.md) advances actual tenant Session/Instance/executor/Run/profile relational ownership and exact admission pins over the existing lease/receipt tables. Current claimed Run/security witnesses and scoped central IAM guard reservations; receipt/lease pointers commit together. CAS factual settlement remains available after retirement without dispatch/replay, and legacy adapters exclude actual owned roots with stripped markers. Protected stored-fact reads fence independent Session/agent/profile grants and the original human after I/O.

@@ -3,6 +3,7 @@ using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 using Microsoft.Extensions.Time.Testing;
 using Fixture = AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.Fixture;
@@ -12,7 +13,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantRunAdmissionTests
 {
     private static TenantRunExecutionAuthority RequesterAuthority(Fixture f) => new(new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam,
-        f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), f.Iam, f.Clock);
+        f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), f.Iam, f.Clock, f.RunConfiguration());
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
@@ -133,4 +134,31 @@ public sealed partial class TenantRunAdmissionTests
         await Assert.ThrowsAsync<AccessDeniedException>(() => source.CurrentRequesterAsync(run).AsTask());
         Assert.Equal(context.Execution, (await source.CurrentRequesterAsync(replacement)).Execution);
     }
+    private sealed class CurrentPolicyBuiltinHook(IBuiltInAgentDefinitionStore inner, Func<Task> during) : IBuiltInAgentDefinitionStore
+    {
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
+        public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default)
+        { var value = await inner.GetAsync(id, version, ct); await during(); return value; }
+    }
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Current_policy_read_discards_captured_source_after_security_change_or_Run_cancellation(bool sqlite, bool cancel)
+    {
+        await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
+        var tenant = setup.Tenant; var security = (await f.Iam.ReadTenantAsync(tenant))!;
+        var receipt = await f.RunService().SubmitTextAsync(tenant, setup.Session, setup.Owner, f.Ids.NewId(), "Current policy source fence", security.Tenant.Revision, 1);
+        var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, receipt.RunId))!;
+        run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+            new AgentRunCommand.Claim(run.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
+        var hook = new CurrentPolicyBuiltinHook(f.BuiltIns, async () => {
+            if (cancel) await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                new AgentRunCommand.RequestCancellation(run.Revision, f.Clock.GetUtcNow(), null), f.Ids.NewId());
+            else await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, tenant, null, "Policy I/O mutation", ["agents.read"], (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
+        });
+        var authority = new TenantRunExecutionAuthority(new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer,
+            new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), f.Iam, f.Clock, f.RunConfiguration(hook));
+        Assert.Null(await authority.CurrentDefinitionAsync(run));
+        if (cancel) Assert.Null(await RequesterAuthority(f).CurrentDefinitionAsync(run));
+        else Assert.NotNull(await RequesterAuthority(f).CurrentDefinitionAsync(run));
+    }
+
 }

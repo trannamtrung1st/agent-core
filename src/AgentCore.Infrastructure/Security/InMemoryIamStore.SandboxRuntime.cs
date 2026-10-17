@@ -23,7 +23,8 @@ public sealed partial class InMemoryIamStore
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (sandboxBacking.TenantGate)
             return ValueTask.FromResult(sessionBacking.ReadTenantSession(tenant, session) is null ? null : sandboxBacking.TenantOperation(tenant, session, run, toolCallId));
     }
-    private (TenantSession Session, AgentRun Run) RequireSandboxReservation(TenantSandboxRuntimeWrite write, SandboxProfile source, DateTimeOffset at, CancellationToken ct)
+    private (TenantSession Session, AgentRun Run) RequireSandboxReservation(TenantSandboxRuntimeWrite write, SandboxProfile source,
+        SandboxMountAuthority? mounted, DateTimeOffset at, CancellationToken ct)
     {
         var tenant = write.Runtime.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var session = sessionBacking.ReadTenantSession(tenant, write.Runtime.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
@@ -31,8 +32,14 @@ public sealed partial class InMemoryIamStore
         var agent = FindTenantAgentAsync(tenant, session.Owner.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
         var state = _tenants[tenant]; TenantSessionRules.RequireExecutor(state, agent);
         TenantSandboxRuntimeRules.RequireReservation(write, session, run, agent, state.Tenant.Revision, at);
-        if (sandboxBacking.TenantProfile(tenant, source.Id, source.Revision) is null || sandboxBacking.TenantProfile(tenant, source.Id)?.Enabled != true)
+        var savedSource = sandboxBacking.TenantProfile(tenant, source.Id, source.Revision);
+        if (savedSource is null || sandboxBacking.TenantProfile(tenant, source.Id)?.Enabled != true)
             throw new AccessDeniedException("resource_unavailable");
+        var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
+            ? definitions.TenantPublication(tenant, definition, agent.Instance.ActiveVersion)?.Payload
+            : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).GetAwaiter().GetResult();
+        if (baseline is null) throw new AccessDeniedException("definition_unavailable");
+        TenantSandboxRuntimeRules.RequireCurrentPolicy(run, agent, baseline, source, savedSource, mounted);
         if (source.RegistryCredentialId is { } credential)
             TenantSandboxProfileRules.RequireCredential(source, credentials?.ReadTenantCredential(tenant, credential)?.Value, at);
         TenantSandboxRuntimeRules.RequirePermissionsAsync(state, run, source, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
@@ -40,9 +47,9 @@ public sealed partial class InMemoryIamStore
     }
     public ValueTask<bool> TryReserveTenantSandboxLeaseAsync(TenantSandboxRuntimeWrite write, SandboxLease lease, long expectedRevision, DateTimeOffset at, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (sandboxBacking.TenantGate)
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate)
         {
-            var (_, run) = RequireSandboxReservation(write, lease.Profile, at, ct);
+            var (_, run) = RequireSandboxReservation(write, lease.Profile, lease.MountAuthority, at, ct);
             var previous = sandboxBacking.TenantLease(write.Runtime.Owner.TenantId!.Value, lease.SessionId);
             if ((previous?.Revision ?? 0) != expectedRevision || previous is null && sandboxBacking.HasLease(lease.SessionId)) return ValueTask.FromResult(false);
             if (sandboxBacking.TenantOperation(write.Runtime.Owner.TenantId.Value, lease.SessionId, write.Runtime.RunId, lease.AdmissionToolCallId ?? "") is not null)
@@ -53,11 +60,11 @@ public sealed partial class InMemoryIamStore
     }
     public ValueTask<bool> TryReserveTenantSandboxExecutionAsync(TenantSandboxRuntimeWrite write, SandboxExecution execution, DateTimeOffset at, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (sandboxBacking.TenantGate)
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate)
         {
             var tenant = write.Runtime.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
             var lease = sandboxBacking.TenantLease(tenant, execution.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
-            var (_, run) = RequireSandboxReservation(write, lease.Profile, at, ct);
+            var (_, run) = RequireSandboxReservation(write, lease.Profile, lease.MountAuthority, at, ct);
             var old = sandboxBacking.TenantOperation(tenant, execution.SessionId, execution.AgentRunId, execution.ToolCallId);
             if (old is not null)
             {

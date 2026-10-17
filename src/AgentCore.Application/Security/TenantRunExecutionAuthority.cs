@@ -5,11 +5,21 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time) : IAgentRunAuthority, ITenantRunContext
+public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
+    TenantRunConfigurationResolver configurations) : IAgentRunAuthority, ITenantRunContext
 {
     public async ValueTask<AgentDefinition?> CurrentDefinitionAsync(AgentRun run, CancellationToken cancellationToken = default)
     {
-        try { return (await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false)).Run.Admission.Configuration?.Definition; }
+        try
+        {
+            var before = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
+            var current = await configurations.CurrentPolicyAsync(before.State.Tenant.TenantId, run.AgentInstanceId, cancellationToken).ConfigureAwait(false);
+            var after = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
+            if (before.State.Tenant.Revision != after.State.Tenant.Revision || current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
+                || current.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || current.Agent.Instance.DefinitionId != run.DefinitionId)
+                return null;
+            return current.Definition;
+        }
         catch (AccessDeniedException) { return null; }
     }
 

@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Current Sandbox policy at reservation
+
+Lease and execution reservation now resolves the actual current publication and sparse Instance policy inside the existing store operation. SQLite reads the owned publication through the transaction's tenant/Definition relation; InMemory holds the existing Definition gate with its other backing gates. The shared rule requires current execution capability/allowed profile, admitted resource values within current effective ceilings, unchanged Instance initialization script and compatible admitted/current home access for any recorded mount. A new security witness cannot bypass those checks. No schema or serialized Run payload changes are introduced; factual settlement after authority retirement remains available. [Focused evidence](reports/tenant-current-execution-policy-verification-2026-10-18.md).
+
 ## Tenant Session Sandbox durable ownership
 
 Migration `TenantSandboxRuntimeOwnership` extends existing `SandboxSessionLeases` with tenant/executor and exact profile revision columns and `SandboxExecutions` with tenant/executor/Instance, owned Run/lease references and receipt revision. Canonical leases reference the exact `(tenant, Session, Instance, executor)` root and owned profile revision; canonical executions reference that Session root, existing lease and exact Run/Session key. JSON scope checks reject missing or mismatched canonical ownership, and receipt revision is a concurrency token. Existing global rows retain null ownership and revision-zero receipts without implicit tenant adoption or JSON rewriting.

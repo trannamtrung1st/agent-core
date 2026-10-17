@@ -103,7 +103,8 @@ public sealed partial class TenantCredentialIntegrationTests
         public TenantRunService RunService(ITenantRunStore? runs = null) => new(Iam, (ITenantSessionStore)Iam, runs ?? (ITenantRunStore)Iam,
             RunConfiguration(),
             Identity, Authorizer, ModelCatalogFactory.Synthetic(), Ids, Clock);
-        public TenantRunConfigurationResolver RunConfiguration() => new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam);
+        public TenantRunConfigurationResolver RunConfiguration(IBuiltInAgentDefinitionStore? currentBuiltIns = null) =>
+            new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, currentBuiltIns ?? BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam);
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);
@@ -124,7 +125,7 @@ public sealed partial class TenantCredentialIntegrationTests
             return new(new InMemoryAgentDefinitionResourceAdminStore(new InMemoryAgentDefinitionAdminStore(Ids), RunContent, Ids),
                 BuiltIns, new FileApprovedKnowledgeCatalog(root), RunContent);
         }
-        private IBuiltInAgentDefinitionStore BuiltIns => _builtIns ??= LoadBuiltIns();
+        internal IBuiltInAgentDefinitionStore BuiltIns => _builtIns ??= LoadBuiltIns();
         private static IBuiltInAgentDefinitionStore LoadBuiltIns()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);

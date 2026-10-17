@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant current-policy enforcement
+
+The tenant Runtime authority now reads actual current publication/Instance policy rather than returning the Run's admitted Definition as its current authority. Fresh exact Run/requester/security checks surround source lookup. Context and model execution still use immutable admitted instructions and payload. The existing per-tool current Definition checks therefore see later capability removal without expanding the original admission.
+
+Sandbox reservations perform current publication, allowed-profile, setup ceiling/script and home-policy checks in the same SQLite transaction or shared InMemory ownership gates as receipt/lease reservation. They reject refreshed witnesses that still describe an incompatible saved setup. Compatible policy recovery permits the original bounded admission, while technical factual settlement stays separate from new reservation. [Evidence](reports/tenant-current-execution-policy-verification-2026-10-18.md). No tenant SDK dispatch, exact command review consumption, physical mount or cleanup loop is enabled by this correction.
+
 ## Tenant Session Sandbox ownership implementation
 
 Both IAM adapters now implement `ITenantSandboxRuntimeStore` over their actual Session/Run/Instance/profile backing. The SQLite implementation uses per-operation transactions, ownership FKs, JSON scope checks and lease/receipt revision CAS. InMemory shares the same backing and guards; legacy exclusion reads retained immutable Session ownership without reversing backing-store locks. New reservations revalidate claim/security/Run witnesses and central scoped IAM; execution receipt creation and lease pointers commit together. Factual retirement remains possible after initiating authority ends without a new effect.

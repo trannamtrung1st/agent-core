@@ -18,7 +18,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     private sealed record RuntimeSandboxSetup(Guid Tenant, HumanSessionReference Human, TenantSessionRoot Session, AgentRun Run,
         SandboxLease Lease, TenantSandboxRuntimeWrite Write, Guid ExecutionGrant, TenantRunConfigurationResolver Resolver);
 
-    private static async Task<RuntimeSandboxSetup> PrepareRuntimeSandbox(Fixture f, bool verify = true)
+    private static async Task<RuntimeSandboxSetup> PrepareRuntimeSandbox(Fixture f, bool verify = true, HomeAccess? home = null)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var human = await SetupHuman(f, owner.AccountId, owner.OwnerPrincipalId); var p = SetupProfiles(f);
@@ -27,7 +27,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         if (verify) await p.Verify.VerifyAsync(owner.TenantId, profile.Id, human, await Revision(), 1);
         var draft = await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, "Tenant runtime", await Revision());
         draft = await f.Service.UpdateAsync(human.PrincipalId, owner.TenantId, draft.DraftId, draft.Candidate with {
-            SandboxPolicy = new(profile.Id, [profile.Id]), Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec]))
+            SandboxPolicy = new(profile.Id, [profile.Id]), Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec])),
+            StateIsolationPolicy = home is { } access ? new(HomeAccess: access) : draft.Candidate.StateIsolationPolicy
         }, await Revision(), draft.Revision);
         await f.Service.PublishAsync(human.PrincipalId, owner.TenantId, draft.DraftId, await Revision(), draft.Revision);
         var builtIns = new SessionNoBuiltinFallback();

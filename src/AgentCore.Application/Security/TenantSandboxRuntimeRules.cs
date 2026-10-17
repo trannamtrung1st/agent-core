@@ -11,6 +11,24 @@ namespace AgentCore.Application.Security;
 
 public static class TenantSandboxRuntimeRules
 {
+    public static void RequireCurrentPolicy(AgentRun run, TenantAgent agent, AgentDefinition baseline, SandboxProfile admitted,
+        SandboxProfile source, SandboxMountAuthority? mounted)
+    {
+        var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        if (agent.Instance.DefinitionId != run.DefinitionId || !RolePermissions.AllowsTool(current, ToolCatalog.SandboxExec)
+            || current.SandboxPolicy?.AllowedProfileIds.Contains(admitted.Id, StringComparer.Ordinal) != true)
+            throw new AccessDeniedException("sandbox_policy_changed");
+        var setup = SandboxSetupResolver.Resolve(source, agent.Instance.SettingsOverrides, agent.Instance.Revision);
+        if (admitted.Cpu > setup.Cpu || admitted.MemoryMiB > setup.MemoryMiB || admitted.Pids > setup.Pids
+            || admitted.MaxCommandSeconds > setup.MaxCommandSeconds || admitted.StorageBytes > setup.StorageBytes
+            || admitted.IdleTtlSeconds > setup.IdleTtlSeconds || admitted.MaxLifetimeSeconds > setup.MaxLifetimeSeconds
+            || admitted.InstanceInitializationScript != setup.InstanceInitializationScript)
+            throw new AccessDeniedException("sandbox_setup_changed");
+        var isolation = StateIsolationPolicy.Restrict(run.Admission.Configuration!.Definition.StateIsolationPolicy ?? StateIsolationPolicy.Default,
+            current.StateIsolationPolicy ?? StateIsolationPolicy.Default);
+        if (mounted is not null && mounted.HomeAccess != isolation.HomeAccess)
+            throw new AccessDeniedException("sandbox_mount_policy_changed");
+    }
     public static async ValueTask RequirePermissionsAsync(TenantSecurityState state, AgentRun run, SandboxProfile profile, IamAuthorizer authorizer, CancellationToken ct)
     {
         var actor = run.Owner.ExecutorPrincipalId!.Value;

@@ -1,5 +1,11 @@
 # System Architecture
 
+## Current tenant execution policy and Sandbox reservations
+
+`TenantRunExecutionAuthority` now resolves the actual current owned/shipped publication and sparse Instance policy between fresh Run/requester/security checks. Its current Definition result constrains effects; the admitted Run remains the immutable source of instructions, persona, selected capabilities and setup. No current policy lookup rereads resource bytes, credential bindings or image availability. A policy relaxation never substitutes a larger Run admission.
+
+Sandbox lease/receipt reservation also resolves current publication and Instance policy inside its existing owning transaction/shared gates. Removed execution capability or allowed profile, tighter resource ceilings, changed Instance setup script and incompatible admitted/current home access reject a new reservation even with refreshed security witnesses. Existing lease facts and historical receipts remain available for exact retirement. Returning policy to a compatible state can permit the saved admission again; it cannot enlarge it. [Focused evidence](reports/tenant-current-execution-policy-verification-2026-10-18.md) includes actual Synthetic Runtime execution without rewriting its admitted instructions. SDK dispatch, exact command approval consumption, mounts/process/reset/cleanup and Sandbox UI remain open.
+
 ## Tenant Session Sandbox ownership prerequisite
 
 Canonical Session Sandbox storage reuses the existing lease and execution receipt tables. `ITenantSandboxRuntimeStore` resolves actual tenant Session, Instance, executor and Run roots; new reservations require the current claimed Run generation, Run/security revisions, active owners, exact admitted setup and central IAM agent `sandbox.execute`, profile `sandbox.read` and independent private-source `credentials.use`. A Run pins readable exact effective profiles and compatibility/source observations at admission. Later verification cannot expand that saved admission. A reservation owns a durable record; it is insufficient to dispatch an SDK effect.
