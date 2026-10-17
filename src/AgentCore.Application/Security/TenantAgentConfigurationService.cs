@@ -19,7 +19,8 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, IamAuthorizer authorizer,
     IModelCatalog models, IToolConfigurationGate tools, InstanceAutomationPolicy automationPolicy,
     IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null, SandboxPolicyEnforcement? sandbox = null,
-    ProviderAliasSet? aliases = null, IBrowser? browser = null, IDefinitionResourceContentStore? content = null, IdentityService? identity = null)
+    ProviderAliasSet? aliases = null, IBrowser? browser = null, IDefinitionResourceContentStore? content = null, IdentityService? identity = null,
+    ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null)
 {
     public async ValueTask<TenantAgentEffectiveConfiguration> ReadAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {

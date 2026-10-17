@@ -29,6 +29,9 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
     public ValueTask<TenantAgentSettings> ReadSettingsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSettingsAsync(human.PrincipalId, tenant, instance, token), ct);
 
+    public ValueTask<TenantAgentSandboxSetup> ReadSandboxAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSandboxAsync(human.PrincipalId, tenant, instance, token), ct);
+
     public ValueTask<TenantAgentBudgets> ReadBudgetsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadBudgetsAsync(human.PrincipalId, tenant, instance, token), ct);
 
@@ -93,7 +96,7 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
             var canUpdate = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.update"), Scope(tenant, instance), token).ConfigureAwait(false)).Allowed;
             if (settings.SecurityRevision != state.Tenant.Revision || settings.Items.Any(item => item.InstanceRevision != agent!.Instance.Revision))
                 throw new SecurityConflictException("stale_revision");
-            // Its tenant profile catalog/effects have not been cut over. Never use a global catalog fallback.
+            // Sandbox has a separate scoped read; UI/setup verification and runtime effects remain pending.
             return new(agent!, settings.Items.Where(item => item.Section != "sandboxPolicy").ToArray(), state.Tenant.Revision, canUpdate, ["sandboxPolicy"]);
         }, ct);
 

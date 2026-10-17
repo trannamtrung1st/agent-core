@@ -1,5 +1,13 @@
 # Backend Interfaces
 
+## Tenant Instance Sandbox configuration reads and writes
+
+`TenantAgentConfigurationService.ReadSandboxAsync` returns `TenantAgentSandboxSetup`: Instance ID/revision/lifecycle, optional shared `InstanceSettingsSection`, safe readable profile metadata/current availability, `completeCatalog`, agent-level `canManage` and security revision. The original-human `TenantAgentReadService.ReadSandboxAsync` fences this entire projection. Exact profile lookup uses only `ITenantSandboxProfileStore`; `ISandboxImageAuthority` and `ISandboxReadiness` supply compatibility and server observations without dispatch.
+
+A partial Definition catalog omits inaccessible profile metadata and hides the settings section until all effective allowed choices are readable. After narrowing to a readable set, the section may be inspected with inaccessible inherited defaults and constraint choices redacted; `completeCatalog` remains false. No hidden profile script, source Credential, epoch or verification output is included in this setup projection.
+
+`PatchSettingsAsync` now supports `sandboxPolicy` under current agent read/update and Sandbox read/manage, independently requiring exact profile read. It reuses sparse set/clear, Definition subset rules, bounded script/limit validation and the existing Instance/security/audit transaction. All effective profiles cap overrides, independently of the default. New allowed profiles and any changed/explicit default require current eligibility and Ready server state. Reset to an unavailable default fails; removal/narrowing can repair unavailable configuration. Saving selection never verifies a script, dispatches an SDK command or grants execution authority.
+
 ## Tenant Sandbox profile ports
 
 `ITenantSandboxProfileStore` reads exact owned historical/current revisions, filters a bounded metadata page by authorized IDs and search, and saves a prepared revision with `TenantSecurityState`, expected security/profile revisions, original `HumanSessionReference` and audit in one transaction. It operates on the existing Sandbox profile rows with authoritative `TenantSandboxProfileRoot` ownership; it supplies no execution or disposable-verification operation. Global `ISandboxStore` profile/verification operations exclude or reject owned IDs.

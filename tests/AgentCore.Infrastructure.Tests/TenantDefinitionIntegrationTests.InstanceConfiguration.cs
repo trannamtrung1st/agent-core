@@ -164,7 +164,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     }
 
     private static (TenantAgentService Agents, TenantAgentConfigurationService Configuration) ConfigurationServices(Fixture f, IIamStore? reopened = null, IDefinitionResourceContentStore? content = null,
-        Func<IBuiltInAgentDefinitionStore, IBuiltInAgentDefinitionStore>? wrapBuiltIns = null)
+        Func<IBuiltInAgentDefinitionStore, IBuiltInAgentDefinitionStore>? wrapBuiltIns = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
@@ -177,6 +177,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var resources = new InheritedDefinitionResourceCatalog(f.Resources, builtIns, new FileApprovedKnowledgeCatalog(root), f.Content);
         return (new(store, (ITenantAgentStore)store, builtIns, authorizer, f.Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)store),
             new(store, (ITenantAgentStore)store, (ITenantDefinitionStore)store, builtIns, resources, authorizer,
-                ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, new(triggers, f.SessionStore), f.Ids, TimeProvider.System, aliases: SyntheticProviderAliases.Default, content: content ?? f.Content, identity: f.Identity));
+                ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, new(triggers, f.SessionStore), f.Ids, TimeProvider.System, aliases: SyntheticProviderAliases.Default, content: content ?? f.Content, identity: f.Identity,
+                sandboxProfiles: (ITenantSandboxProfileStore)store, sandboxImages: sandboxImages, sandboxReadiness: sandboxReadiness));
     }
 }

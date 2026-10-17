@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Instance Sandbox configuration HTTP
+
+`GET /api/v2/tenants/{tenantId}/agents/{instanceId}/sandbox` uses the original-human read facade and exact agent `agents.read` plus `sandbox.read`. It returns `{instanceId, instanceRevision, lifecycle, section, profiles, completeCatalog, canManage, securityRevision}`. `profiles` contains only exact readable Definition-authorized tenant entries (`id`, `revision`, `name`, `description`, `imageReference`, current safe `availability`/`message`). The optional section is the shared settings projection. It is absent when an effective allowed choice is inaccessible; after narrowing to readable choices it can return with hidden inherited defaults/constraint choices redacted and `completeCatalog: false`. `canManage` describes current agent-level read/update/Sandbox manage and active lifecycle, not a grant over profiles or execution.
+
+Existing `PATCH .../settings/sandboxPolicy` now supports the strict existing `{expectedRevision, expectedInstanceRevision, set, clear}` sparse command. Agent read/update and Sandbox read/manage, plus exact profile read, apply independently. Allowed IDs only narrow the Definition set. Explicit/changed default or newly allowed profiles require current full verification and Ready host. All allowed profiles cap overrides; reset to a different unavailable default fails. Removing unavailable choices or narrowing limits remains possible. Unknown fields, global/foreign IDs, stale witnesses and revoked authority fail without a settings/security/audit write. Save/reset never executes scripts or verifies a setup. Cookie/CSRF/no-store and canonical safe errors remain unchanged. [Focused evidence](reports/tenant-instance-sandbox-selection-verification-2026-10-18.md).
+
 ## Tenant Sandbox profile catalog HTTP
 
 Canonical cookie/CSRF routes under `/api/v2/tenants/{tenantId}/sandbox-profiles`:

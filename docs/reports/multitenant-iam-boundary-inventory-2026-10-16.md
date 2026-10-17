@@ -2,6 +2,12 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Instance Sandbox configuration successor — 2026-10-18
+
+The [selection evidence](tenant-instance-sandbox-selection-verification-2026-10-18.md) advances canonical exact setup reads and sparse selection/script/limit/reset writes through the existing original-human facade and actual Instance/security/audit store transaction. Exact agent and profile scopes, Definition subset, full source eligibility/host readiness, every profile's ceilings and captured security/Instance witnesses protect configuration. Partial readers cannot recover hidden defaults or metadata; narrowing permits a safe readable setup. No command, verification or script is dispatched by configuration.
+
+This supersedes the previous Instance **configuration selection** obligation only. Effective Instance setup verification, Session generation/execution/process/reset/mount/cleanup, runtime tools, Sandbox UI and obsolete global authority/schema removal remain open. No full tenant isolation or proposal acceptance is claimed.
+
 ## Sandbox disposable verification successor — 2026-10-18
 
 The [focused verification evidence](tenant-sandbox-verification-2026-10-18.md) extends the reusable catalog with canonical exact/latest attempt reads and explicit full/image-only checks. Actual IAM/profile stores own durable reservation, original-human/source/host/lease acceptance and technical nonce/revision cleanup. The existing SDK runner reuses bounded disposable checks with combined tenant/attempt metadata; an independent worker cleans exact receipts without rerunning initialization. Global verification cannot consume owned profiles or supply their accepted evidence.

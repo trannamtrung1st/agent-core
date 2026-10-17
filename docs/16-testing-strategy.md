@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Instance Sandbox configuration regression
+
+Through real Synthetic HTTP create a tenant profile/Definition/Instance, reject unverified selection, provide explicit reusable verification, select/save bounded sparse setup, reject stale replay, and reset to inherited values. Assert no verification/script replay during save/reset and deny anonymous/legacy/foreign access. Use both actual stores for allowed-set narrowing, inherited sources/defaults, SQLite reopen and every allowed profile's ceilings, including a non-default smaller profile. Reset to an unavailable inherited default must fail; removing unavailable choices remains usable.
+
+An exact agent manager with only one profile read grant sees no hidden metadata/default/constraint IDs. Narrowing to that readable profile permits a safe settings read but grants no `sandbox.execute`; revocation denies before stale target witnesses. Check unverified/private-server unavailable and foreign/global references without fallback. Retire the original human during profile availability I/O on read and write, and change a profile after captured eligibility: deny captured release/commit, keep the Instance unchanged and recover through an explicit current session/reverified source. Keep affected generic settings, adoption, editor read-witness and HTTP regressions. [Observed evidence](reports/tenant-instance-sandbox-selection-verification-2026-10-18.md) distinguishes configuration success from unexecuted live setup/runtime behavior.
+
 ## Tenant Sandbox disposable verification regression
 
 Through actual Synthetic HTTP create a saved profile, reject stale revision and unknown mode fields without a receipt/security write, verify with the actual disabled-host adapter, then read exact/latest facts and current availability. Anonymous, foreign, legacy/global, exact read-only and revoked callers must fail at their own boundary; result projections omit internal human, Credential epoch, host and cleanup proof. Image-only stays distinct from full verification.

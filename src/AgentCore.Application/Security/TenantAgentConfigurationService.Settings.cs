@@ -27,13 +27,15 @@ public sealed partial class TenantAgentConfigurationService
     public ValueTask<TenantAgent> PatchSettingsAsync(Guid actor, Guid tenant, Guid id, string section,
         long securityRevision, long instanceRevision, IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
+        if (section == "sandboxPolicy")
+            foreach (var key in new[] { "sandbox.read", "sandbox.manage" })
+                await authorizer.RequireAsync(actor, key, Scope(tenant, id), token).ConfigureAwait(false);
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(set); ArgumentNullException.ThrowIfNull(clear);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
         RequireWritable(current, instanceRevision);
-        // A configured Definition ID is not ownership of a catalog entry. No global Sandbox read fallback.
-        if (section == "sandboxPolicy") throw new AccessDeniedException("resource_unavailable");
         var (definition, _, _) = await Definition(tenant, current.DefinitionId, current.ActiveVersion, token).ConfigureAwait(false);
+        if (section == "sandboxPolicy") definition = await PrepareSandboxPatch(actor, tenant, current, definition, set, clear, token).ConfigureAwait(false);
         if (aliases is null) throw AgentCoreErrors.Validation("Configured provider choices are unavailable.");
         var (next, effective) = AgentInstanceSettingsService.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
         AgentInstanceSettingsService.ValidateBrowser(effective, browser);
