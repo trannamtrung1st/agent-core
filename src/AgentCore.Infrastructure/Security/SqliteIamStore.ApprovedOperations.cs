@@ -20,14 +20,14 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         return (await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenantId && r.OperationId == operationId, ct).ConfigureAwait(false))?.Domain();
     }
 
-    public async ValueTask<TenantOperationReceipt?> TryCommitPersonaEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantPersonaEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+    public async ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantLocalEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var existing = await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.OperationId == commit.OperationId, ct).ConfigureAwait(false);
-        if (existing is not null) return TenantPersonaEffectRules.MatchingReceipt(existing.Domain(), next.Tenant.TenantId, commit);
+        if (existing is not null) return TenantLocalEffectRules.MatchingReceipt(existing.Domain(), next.Tenant.TenantId, commit);
         var tenant = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == next.Tenant.TenantId, ct).ConfigureAwait(false);
         if (tenant is null || tenant.Revision != expectedSecurityRevision) return null;
         var before = (await ReadTenantAsync(db, tenant.TenantId, ct).ConfigureAwait(false))!;
@@ -37,13 +37,13 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         if (requestRow is null || decision is null || row is null || row.Revision != commit.ExpectedRunRevision) return null;
         var request = requestRow.Domain(); var run = AgentRunStoreMapping.ToDomain(row);
         var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
-        TenantPersonaEffectRules.Validate(request, decision, grant, run, commit);
+        TenantLocalEffectRules.Validate(request, decision, grant, run, commit);
         var owned = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
         if (owned is null) return null;
         var target = Owned(owned); TenantSessionRules.RequireExecutor(before, target);
         await ValidateTenantActorAsync(db, before, request.ExecutorPrincipalId, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow();
-        commit = TenantPersonaEffectRules.AtCommit(commit, request, grant, run, target, at);
+        commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
         if (commit.Outcome == TenantOperationOutcome.Completed)
         {
             try { await ValidateTenantActorAsync(db, before, decision.HumanPrincipalId, ct).ConfigureAwait(false); }
@@ -53,20 +53,25 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
                 catch (AccessDeniedException) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = "requester_unavailable" }; }
         }
         audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
-        TenantPersonaEffectRules.ValidateTransaction(next, expectedSecurityRevision, request, audit);
+        TenantLocalEffectRules.ValidateTransaction(next, expectedSecurityRevision, request, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         at = (clock ?? TimeProvider.System).GetUtcNow();
-        commit = TenantPersonaEffectRules.AtCommit(commit, request, grant, run, target, at);
+        commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
         audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
         var updated = complete ? TenantAgentConfigurationRules.Apply(target.Instance,
-            new(target.Instance.InstanceId, request.Operation.ExpectedInstanceRevision, request.Operation.Persona, request.Operation.ExpectedPersonaRevision), at) : target.Instance;
+            TenantLocalEffectRules.Change(request, target.Instance), at) : target.Instance;
         var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
         if (complete)
         {
             db.Attach(owned.Instance);
-            owned.Instance.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            owned.Instance.PersonaRevision = updated.PersonaRevision; owned.Instance.Revision = updated.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
+            if (request.Operation.Kind == TenantLocalOperationKind.Persona)
+            {
+                owned.Instance.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                owned.Instance.PersonaRevision = updated.PersonaRevision;
+            }
+            else owned.Instance.SettingsOverridesJson = JsonSerializer.Serialize(updated.SettingsOverrides, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            owned.Instance.Revision = updated.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
         }
         AgentRunStoreMapping.Apply(row, savedRun);
         if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });

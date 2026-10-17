@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
@@ -10,7 +11,7 @@ namespace AgentCore.Application.Security;
 
 public static class TenantApprovalRules
 {
-    public static PreparedPersonaOperation Prepare(Guid operationId, Guid instance, AgentIdentity persona, long instanceRevision, long personaRevision)
+    public static PreparedTenantOperation Prepare(Guid operationId, Guid instance, AgentIdentity persona, long instanceRevision, long personaRevision)
     {
         AgentDefinitionValidator.ValidateIdentity(persona);
         if (operationId == Guid.Empty || instance == Guid.Empty || instanceRevision < 1 || personaRevision < 1) throw new ArgumentException("Invalid prepared persona operation.");
@@ -20,6 +21,24 @@ public static class TenantApprovalRules
         if (Encoding.UTF8.GetByteCount(json) > 32768) throw new ArgumentException("Prepared operation exceeds its content bound.");
         return new(operationId, instance, persona, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))));
     }
+
+    public static PreparedTenantOperation PreparePreferences(Guid operationId, Guid instance, PreparedConversationPreferences preferences, long instanceRevision, long personaRevision)
+    {
+        var normalized = TenantPreferenceToolContract.Parameters(TenantPreferenceToolContract.Patch(preferences));
+        if (operationId == Guid.Empty || instance == Guid.Empty || instanceRevision < 1 || personaRevision < 1 || normalized != preferences)
+            throw new ArgumentException("Invalid prepared preference operation.");
+        var json = JsonSerializer.Serialize(new { operation = "agents.preferences.update", permission = TenantApprovalRequest.Permission,
+            resourceType = TenantApprovalRequest.ResourceType, resourceId = instance.ToString("D"), expectedInstanceRevision = instanceRevision,
+            expectedPersonaRevision = personaRevision, preferences = normalized });
+        return new(operationId, instance, null, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), normalized);
+    }
+
+    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => (op.Persona, op.Preferences) switch
+    {
+        ({ } persona, null) => Prepare(op.OperationId, op.InstanceId, persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        (null, { } preferences) => PreparePreferences(op.OperationId, op.InstanceId, preferences, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        _ => throw new ArgumentException("Exactly one supported operation payload is required.")
+    };
 
     public static void Validate(TenantApprovalRequest request, AgentRun run, TenantAgent target, bool requireCurrentWitness = true)
     {
@@ -32,7 +51,7 @@ public static class TenantApprovalRules
             || !Enum.IsDefined(request.Kind) || !Enum.IsDefined(request.Status) || request.Revision < 1
             || request.CreatedAt.Offset != TimeSpan.Zero || request.ExpiresAt.Offset != TimeSpan.Zero
             || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
-            || Prepare(op.OperationId, op.InstanceId, op.Persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision) != op)
+            || Rebuild(op) != op)
             throw new ArgumentException("Approval does not match its exact prepared operation and owning Run.");
         if (requireCurrentWitness && (target.Instance.Revision != op.ExpectedInstanceRevision || target.Instance.PersonaRevision != op.ExpectedPersonaRevision))
             throw new SecurityConflictException("operation_witness_changed");

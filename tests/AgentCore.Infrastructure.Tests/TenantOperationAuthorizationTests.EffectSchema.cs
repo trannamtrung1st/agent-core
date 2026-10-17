@@ -12,7 +12,7 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Local_effect_receipt_schema_binds_exact_operation_hash_executor_and_root_without_weakening_the_saved_result()
     {
         await using var f = await Fixture.Create(true); var setup = await EffectSetup(f); var request = setup.Request;
-        var receipt = await Effects(f).ExecutePersonaAsync(new(request.TenantId, setup.Run.AgentRunId), request.RequestId,
+        var receipt = await Effects(f).ExecuteAsync(new(request.TenantId, setup.Run.AgentRunId), request.RequestId,
             request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
         foreach (var boundary in new[] { "hash", "executor", "root" })
         {

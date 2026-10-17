@@ -46,7 +46,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(current.Instance.Revision, result.InstanceRevision);
         var grant = await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(tenant, request.RequestId);
         if (boundary == "executor") Assert.Null(grant); else Assert.Equal(OperationGrantStatus.Revoked, grant!.Status);
-        var replay = await Effects(f).ExecutePersonaAsync(new(tenant, setup.Run.AgentRunId), request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
+        var replay = await Effects(f).ExecuteAsync(new(tenant, setup.Run.AgentRunId), request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
         Assert.Equal(result, replay); Assert.Single(await f.Iam.ReadAuditAsync(tenant, 200), a => a.Action == "operations.persona.apply" && a.Decision == "denied");
     }
 
@@ -56,13 +56,13 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite); var setup = await EffectSetup(f); var request = setup.Request; var service = Effects(f);
         var reference = new TenantRunReference(request.TenantId, setup.Run.AgentRunId);
-        await Assert.ThrowsAsync<SecurityConflictException>(() => service.ExecutePersonaAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, new string('0', 64)).AsTask());
-        await Assert.ThrowsAsync<SecurityConflictException>(() => service.ExecutePersonaAsync(reference, request.RequestId, f.Ids.NewId(), setup.Generation, request.Operation.ActionHash).AsTask());
-        await Assert.ThrowsAsync<SecurityConflictException>(() => service.ExecutePersonaAsync(reference, request.RequestId, request.Operation.OperationId, f.Ids.NewId(), request.Operation.ActionHash).AsTask());
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ExecutePersonaAsync(new(f.Ids.NewId(), setup.Run.AgentRunId), request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash).AsTask());
+        await Assert.ThrowsAsync<SecurityConflictException>(() => service.ExecuteAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, new string('0', 64)).AsTask());
+        await Assert.ThrowsAsync<SecurityConflictException>(() => service.ExecuteAsync(reference, request.RequestId, f.Ids.NewId(), setup.Generation, request.Operation.ActionHash).AsTask());
+        await Assert.ThrowsAsync<SecurityConflictException>(() => service.ExecuteAsync(reference, request.RequestId, request.Operation.OperationId, f.Ids.NewId(), request.Operation.ActionHash).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.ExecuteAsync(new(f.Ids.NewId(), setup.Run.AgentRunId), request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash).AsTask());
         Assert.Null(await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId));
         Assert.Equal(OperationGrantStatus.Available, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(request.TenantId, request.RequestId))!.Status);
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(request.TenantId, 200), a => a.Action == "operations.persona.apply");
-        Assert.Equal(TenantOperationOutcome.Completed, (await service.ExecutePersonaAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash)).Outcome);
+        Assert.Equal(TenantOperationOutcome.Completed, (await service.ExecuteAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash)).Outcome);
     }
 }

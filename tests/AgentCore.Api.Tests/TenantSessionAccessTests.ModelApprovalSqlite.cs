@@ -31,8 +31,9 @@ public sealed partial class TenantSessionAccessTests
         }
     }
 
-    [Fact]
-    public async Task Model_approval_and_exact_checkpoint_survive_SQLite_host_recreation_before_human_decision()
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Model_approval_and_exact_checkpoint_survive_SQLite_host_recreation_before_human_decision(bool preferences)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-model-approval-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         Guid tenant = default, instance = default, runId = default, requestId = default; AgentIdentity? desired = null;
@@ -53,7 +54,9 @@ public sealed partial class TenantSessionAccessTests
                     overrides = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } }
                 })).StatusCode);
                 var actual = (await first.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
-                firstModel.ProposedPersona = desired = actual.Instance.Persona with { Name = "Durable model-requested persona" };
+                desired = actual.Instance.Persona with { Name = "Durable model-requested persona" };
+                if (preferences) firstModel.ProposedPreferenceAuthorization = """{"set":{"language":"vi"},"clear":[]}""";
+                else firstModel.ProposedPersona = desired;
                 var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
                 var sessionId = session.GetProperty("sessionId").GetGuid();
                 runId = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Persist the requested persona approval", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
@@ -71,13 +74,16 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(ToolCatalog.RequestAuthorization, Assert.Single(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.PendingCalls(pending!)).Name);
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/v2/auth/logout", null)).StatusCode);
             }
-            var secondModel = new ApprovalRecordingModel { ProposedPersona = desired };
+            var secondModel = new ApprovalRecordingModel { ProposedPersona = preferences ? null : desired,
+                ProposedPreferenceAuthorization = preferences ? """{"set":{"language":"vi"},"clear":[]}""" : null };
             await using (var second = new TenantApprovalSqliteFactory(root, secondModel))
             {
                 using var owner = second.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
                 await Login(owner, "owner@example.test", "explicit-synthetic-test-password"); var api = $"/api/v2/tenants/{tenant}";
                 var request = (await second.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, requestId))!;
-                Assert.Equal(TenantApprovalStatus.Pending, request.Status); Assert.Equal(desired, request.Operation.Persona);
+                Assert.Equal(TenantApprovalStatus.Pending, request.Status);
+                if (preferences) { Assert.Null(request.Operation.Persona); Assert.Equal("vi", request.Operation.Preferences!.Language); }
+                else Assert.Equal(desired, request.Operation.Persona);
                 Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{requestId}/decision", new
                 {
                     decision = "approve", actionHash = request.Operation.ActionHash, expectedRevision = await Revision(owner, tenant), expectedRequestRevision = request.Revision
@@ -91,10 +97,11 @@ public sealed partial class TenantSessionAccessTests
                     await Task.Delay(25, deadline.Token);
                 }
                 Assert.NotNull(completed); Assert.True(completed.Status == AgentRunStatus.Completed, $"{completed.Status}: {completed.Failure?.Code}: {completed.Failure?.Summary}");
-                Assert.Equal(desired, (await second.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance.Persona);
+                var after = (await second.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance;
+                if (preferences) Assert.Equal("vi", after.SettingsOverrides!.Language!.Value); else Assert.Equal(desired, after.Persona);
                 Assert.Equal(OperationGrantStatus.Consumed, (await second.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, requestId))!.Status);
                 Assert.Single(await second.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "approvals.request");
-                Assert.Single(await second.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "operations.persona.apply");
+                Assert.Single(await second.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == (preferences ? "operations.preferences.apply" : "operations.persona.apply"));
                 Assert.NotEmpty(secondModel.Requests);
                 Assert.All(secondModel.Requests, r => Assert.Contains(r.Context!.Sections, s => s.Id == AgentCore.Application.Context.ContextSectionId.ApprovalOutcome));
             }

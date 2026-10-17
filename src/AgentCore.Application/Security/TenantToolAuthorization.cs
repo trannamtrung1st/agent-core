@@ -79,19 +79,21 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         catch (AccessDeniedException ex) { return Error("forbidden", ex.ReasonCode); }
         catch (SecurityConflictException ex) { return Error("conflict", ex.ReasonCode); }
     }
-    public async ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(Guid session, ModelToolCall call, ToolExecutionAdmission admission, CancellationToken ct)
+    public async ValueTask<TenantApprovalPreparationResult> PrepareAsync(Guid session, ModelToolCall call, ToolExecutionAdmission admission, CancellationToken ct)
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
         if (!boundary.Tenant || !boundary.Allowed || call.Name != ToolCatalog.RequestAuthorization || boundary.Reference is null || approvals is null || configuration is null)
             throw new AccessDeniedException("tenant_context_required");
-        var persona = TenantApprovalToolContract.Parse(call);
+        var intent = TenantApprovalToolContract.Parse(call);
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
         var current = await configuration.ResolveAsync(boundary.Reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
-        if (TenantPersonaEffectRules.Eligibility(run, current.Agent, current.Configuration.Configuration.Definition) is { } denied)
+        if (TenantLocalEffectRules.Eligibility(run, current.Agent, current.Configuration.Configuration.Definition) is { } denied)
             throw new AccessDeniedException(denied);
-        return await approvals.PreparePersonaAsync(boundary.Reference, persona, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+        return intent.Preferences is { } preferences
+            ? await approvals.PreparePreferencesAsync(boundary.Reference, preferences, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false)
+            : await approvals.PreparePersonaAsync(boundary.Reference, intent.Persona!, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
     }
     private static bool IsTenantTool(string name) => IamToolContracts.IsInspection(name) || name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name;
     private static object Project(OperationAuthorizationDecision decision) => new { decision = JsonNamingPolicy.CamelCase.ConvertName(decision.Decision.ToString()),

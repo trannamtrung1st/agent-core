@@ -19,7 +19,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite); var setup = await EffectSetup(f, review);
         var service = Effects(f); var request = setup.Request;
-        var result = await service.ExecutePersonaAsync(new(setup.Environment.Tenant, setup.Run.AgentRunId), request.RequestId,
+        var result = await service.ExecuteAsync(new(setup.Environment.Tenant, setup.Run.AgentRunId), request.RequestId,
             request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
         Assert.Equal(TenantOperationOutcome.Completed, result.Outcome); Assert.Equal("operation_completed", result.ReasonCode);
         Assert.Equal(3, result.InstanceRevision); Assert.Equal(2, result.PersonaRevision);
@@ -32,7 +32,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var grant = await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(request.TenantId, request.RequestId);
         if (review) Assert.Null(grant); else Assert.Equal(OperationGrantStatus.Consumed, grant!.Status);
         IIamStore reopened = sqlite ? new SqliteIamStore(f.Contexts!, clock: f.Clock) : f.Iam;
-        var replay = await Effects(f, reopened).ExecutePersonaAsync(new(request.TenantId, setup.Run.AgentRunId), request.RequestId,
+        var replay = await Effects(f, reopened).ExecuteAsync(new(request.TenantId, setup.Run.AgentRunId), request.RequestId,
             request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
         Assert.Equal(result, replay);
         Assert.Equal(3, (await ((ITenantAgentStore)reopened).FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId))!.Instance.Revision);
@@ -87,6 +87,6 @@ public sealed partial class TenantOperationAuthorizationTests
         var current = store ?? f.Iam; var authorizer = new IamAuthorizer(current);
         return new(current, (ITenantRunStore)current, (ITenantAgentStore)current, (ITenantApprovalStore)current,
             effects ?? (ITenantApprovedOperationStore)current, new(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer),
-            f.RunConfiguration(), f.Ids, f.Clock);
+            f.RunConfiguration(), f.Ids, f.Clock, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), AgentCore.Application.Ports.SyntheticProviderAliases.Default);
     }
 }

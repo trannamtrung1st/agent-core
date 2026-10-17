@@ -52,7 +52,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-17T08:00:00Z"));
         await using var f = await Fixture.Create(sqlite, clock); var setup = await EffectSetup(f);
-        var persona = boundary == "args" ? setup.Request.Operation.Persona with { Name = "Different model proposal" } : setup.Request.Operation.Persona;
+        var persona = boundary == "args" ? setup.Request.Operation.Persona! with { Name = "Different model proposal" } : setup.Request.Operation.Persona;
         var call = new ModelToolCall("authorization", ToolCatalog.RequestAuthorization,
             JsonSerializer.Serialize(new { operation = "update_persona", persona }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         ModelToolCall[] batch = boundary == "batch" ? [call, new("other", ToolCatalog.IamEffectivePermissions, "{}")] : [call];

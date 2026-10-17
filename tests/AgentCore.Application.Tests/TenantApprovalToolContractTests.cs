@@ -12,7 +12,7 @@ public sealed class TenantApprovalToolContractTests
     [Fact]
     public void Exact_persona_contract_accepts_only_its_typed_operation_and_rejects_caller_authority()
     {
-        Assert.Equal(Persona, TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, Arguments())));
+        Assert.Equal(Persona, TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, Arguments())).Persona);
         foreach (var key in new[] { "tenantId", "runId", "principalId", "permission", "grantId", "resourceId", "expectedRevision" })
         {
             var input = JsonNode.Parse(Arguments())!.AsObject(); input[key] = "untrusted";
@@ -22,6 +22,20 @@ public sealed class TenantApprovalToolContractTests
         Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, Arguments()[..^1] + ",\"operation\":\"update_persona\"}")));
         Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, Arguments(Persona with { Name = new('x', 81) }))));
         Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, Arguments(Persona with { Description = new('x', 1025) }))));
+    }
+
+    [Fact]
+    public void Preference_authorization_accepts_only_its_exact_typed_payload_and_rejects_mixed_or_selected_authority()
+    {
+        const string arguments = """{"operation":"update_preferences","preferences":{"set":{"language":"vi"},"clear":[]}}""";
+        var intent = TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, arguments));
+        Assert.Null(intent.Persona); Assert.Equal("vi", intent.Preferences!.Language);
+        foreach (var key in new[] { "tenantId", "runId", "permission", "expectedRevision", "persona" })
+        {
+            var json = JsonNode.Parse(arguments)!.AsObject(); json[key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, json.ToJsonString())));
+        }
+        Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("call", ToolCatalog.RequestAuthorization, arguments.Replace("language", "maxOutputTokens", StringComparison.Ordinal))));
     }
 
     [Fact]

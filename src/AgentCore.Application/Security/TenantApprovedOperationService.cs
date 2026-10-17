@@ -1,4 +1,7 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Admin;
+using AgentCore.Application.Tools;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 
@@ -6,10 +9,10 @@ namespace AgentCore.Application.Security;
 
 public sealed class TenantApprovedOperationService(IIamStore security, ITenantRunStore runs, ITenantAgentStore agents,
     ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantOperationAuthorizer operations,
-    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time)
+    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases)
 {
-    // Trusted server frame only. The saved request supplies every action parameter; callers cannot replace its persona or target.
-    public async ValueTask<TenantOperationReceipt> ExecutePersonaAsync(TenantRunReference reference, Guid requestId, Guid operationId,
+    // Trusted server frame only. The saved request supplies every action parameter and target.
+    public async ValueTask<TenantOperationReceipt> ExecuteAsync(TenantRunReference reference, Guid requestId, Guid operationId,
         Guid generation, string actionHash, CancellationToken ct = default)
     {
         var run = await runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
@@ -27,9 +30,9 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         if (existing is not null) return Existing(existing, request, run);
         var decision = await effects.FindApprovalDecisionAsync(reference.TenantId, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var grant = await approvals.FindOperationGrantAsync(reference.TenantId, requestId, ct).ConfigureAwait(false);
-        var commit = new TenantPersonaEffectCommit(requestId, operationId, run.AgentRunId, generation, run.Revision, request.Revision,
+        var commit = new TenantLocalEffectCommit(requestId, operationId, run.AgentRunId, generation, run.Revision, request.Revision,
             decision.DecisionId, grant?.Revision, actionHash, TenantOperationOutcome.Completed, "operation_completed");
-        TenantPersonaEffectRules.Validate(request, decision, grant, run, commit);
+        TenantLocalEffectRules.Validate(request, decision, grant, run, commit);
         var at = time.GetUtcNow();
         if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
         if (run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
@@ -55,15 +58,23 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         {
             var current = await configuration.ResolveAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
             if (current.Agent.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
-            reason = TenantPersonaEffectRules.Eligibility(run, agent, current.Configuration.Configuration.Definition);
+            reason = TenantLocalEffectRules.Eligibility(run, agent, current.Configuration.Configuration.Definition);
+            if (reason is null && request.Operation.Preferences is { } preferences)
+            {
+                var (latest, baseline) = await configuration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
+                if (latest.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
+                var patch = TenantPreferenceToolContract.Patch(preferences);
+                try { _ = AgentInstanceSettingsService.ResolvePatch(baseline, latest.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases); }
+                catch (AgentCoreException) { reason = "operation_configuration_changed"; }
+            }
         }
         if (reason is null && (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision))
             reason = "operation_witness_changed";
         if (reason is not null) commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = reason };
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
-        var audit = new AuthorizationAudit(ids.NewId(), reference.TenantId, context.AgentPrincipalId, "operations.persona.apply", request.ResourceId,
+        var audit = new AuthorizationAudit(ids.NewId(), reference.TenantId, context.AgentPrincipalId, TenantLocalEffectRules.AuditAction(request.Operation), request.ResourceId,
             reason is null ? "allowed" : "denied", commit.ReasonCode, at);
-        var receipt = await effects.TryCommitPersonaEffectAsync(next, state.Tenant.Revision, commit, audit, ct).ConfigureAwait(false);
+        var receipt = await effects.TryCommitLocalEffectAsync(next, state.Tenant.Revision, commit, audit, ct).ConfigureAwait(false);
         if (receipt is not null) return receipt;
         // Another exact caller may have committed while this caller was checking current authority.
         await operations.ResolveAsync(reference, ct).ConfigureAwait(false);

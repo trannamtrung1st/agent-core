@@ -44,12 +44,21 @@ public sealed partial class TenantSessionAccessTests
         private readonly ScriptedLanguageModel _inner = new();
         public AgentCore.Domain.Definitions.AgentIdentity? ProposedPersona { get; set; }
         public string? ProposedPreferences { get; set; }
+        public string? ProposedPreferenceAuthorization { get; set; }
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public ModelCapabilities Capabilities => _inner.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            if (ProposedPreferenceAuthorization is { } authorizedPreferences && request.Context?.Sections.All(s => s.Id != ContextSectionId.ApprovalOutcome) == true
+                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization) == true)
+            {
+                using var parameters = System.Text.Json.JsonDocument.Parse(authorizedPreferences);
+                yield return new ModelToolCallEvent(new("durable-preference-request", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization,
+                    System.Text.Json.JsonSerializer.Serialize(new { operation = "update_preferences", preferences = parameters.RootElement })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
             if (ProposedPreferences is { } preferences && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.TenantPreferenceToolContract.Name)
                 && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.TenantPreferenceToolContract.Name) == true)
             {

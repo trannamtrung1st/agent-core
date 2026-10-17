@@ -76,7 +76,7 @@ public sealed partial class SessionRuntime
         var text = "{\"error\":\"unavailable\"}";
         try
         {
-            var prepared = await _tools.RequestTenantPersonaApprovalAsync(sessionId, input.Call, admission, ct).ConfigureAwait(false);
+            var prepared = await _tools.RequestTenantAuthorizationAsync(sessionId, input.Call, admission, ct).ConfigureAwait(false);
             text = JsonSerializer.Serialize(new { decision = JsonNamingPolicy.CamelCase.ConvertName(prepared.Decision.ToString()), reasonCode = prepared.ReasonCode,
                 requestId = prepared.Request?.RequestId, applied = false });
         }

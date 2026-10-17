@@ -1,14 +1,16 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public static class TenantPersonaEffectRules
+public static class TenantLocalEffectRules
 {
     public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
-        AgentRun run, TenantPersonaEffectCommit commit)
+        AgentRun run, TenantLocalEffectCommit commit)
     {
         var context = run.Admission.ExecutionContext;
         if (context is null || request.TenantId != context.TenantId || request.RunId != run.AgentRunId || request.RootActivationId != context.RootActivationId
@@ -22,7 +24,7 @@ public static class TenantPersonaEffectRules
             || run.Claim?.Generation != commit.Generation || run.CancellationRequested || !Enum.IsDefined(commit.Outcome))
             throw new SecurityConflictException("operation_mismatch");
         var op = request.Operation;
-        if (TenantApprovalRules.Prepare(op.OperationId, op.InstanceId, op.Persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision) != op)
+        if (TenantApprovalRules.Rebuild(op) != op)
             throw new SecurityConflictException("operation_mismatch");
         if (request.Kind == ApprovalKind.ExceptionalGrant)
         {
@@ -44,7 +46,7 @@ public static class TenantPersonaEffectRules
         return null;
     }
 
-    public static TenantPersonaEffectCommit AtCommit(TenantPersonaEffectCommit commit, TenantApprovalRequest request, TenantOperationGrant? grant,
+    public static TenantLocalEffectCommit AtCommit(TenantLocalEffectCommit commit, TenantApprovalRequest request, TenantOperationGrant? grant,
         AgentRun run, TenantAgent target, DateTimeOffset at)
     {
         if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
@@ -60,16 +62,28 @@ public static class TenantPersonaEffectRules
     { "approval_expired", "grant_expired", "grantor_authority_lost", "operation_authority_changed", "operation_witness_changed",
         "management_unavailable", "operation_configuration_changed", "requester_unavailable" };
 
-    public static TenantOperationReceipt MatchingReceipt(TenantOperationReceipt receipt, Guid tenant, TenantPersonaEffectCommit commit)
+    public static TenantOperationReceipt MatchingReceipt(TenantOperationReceipt receipt, Guid tenant, TenantLocalEffectCommit commit)
     {
         if (receipt.TenantId != tenant || receipt.RequestId != commit.RequestId || receipt.OperationId != commit.OperationId
             || receipt.RunId != commit.RunId || receipt.ActionHash != commit.ActionHash) throw new SecurityConflictException("operation_mismatch");
         return receipt;
     }
+    public static TenantAgentConfigurationChange Change(TenantApprovalRequest request, AgentInstance current)
+    {
+        var operation = request.Operation;
+        if (TenantApprovalRules.Rebuild(operation) != operation) throw new SecurityConflictException("operation_mismatch");
+        if (operation.Persona is { } persona)
+            return new(current.InstanceId, operation.ExpectedInstanceRevision, persona, operation.ExpectedPersonaRevision);
+        var patch = TenantPreferenceToolContract.Patch(operation.Preferences!);
+        return new(current.InstanceId, operation.ExpectedInstanceRevision, SetSettingsOverrides: true,
+            SettingsOverrides: InstanceSettingsResolver.Patch(current.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear), AutomationPolicyChanges: []);
+    }
+    public static string AuditAction(PreparedTenantOperation operation) => operation.Kind == TenantLocalOperationKind.Persona ? "operations.persona.apply" : "operations.preferences.apply";
+
     public static void ValidateTransaction(TenantSecurityState next, long expected, TenantApprovalRequest request, AuthorizationAudit audit)
     {
         if (next.Tenant.TenantId != request.TenantId || next.Tenant.Revision != checked(expected + 1) || audit.TenantId != request.TenantId
-            || audit.ActorPrincipalId != request.ExecutorPrincipalId || audit.Action != "operations.persona.apply" || audit.Target != request.ResourceId)
-            throw new ArgumentException("Invalid exact persona effect transaction.");
+            || audit.ActorPrincipalId != request.ExecutorPrincipalId || audit.Action != AuditAction(request.Operation) || audit.Target != request.ResourceId)
+            throw new ArgumentException("Invalid exact local effect transaction.");
     }
 }

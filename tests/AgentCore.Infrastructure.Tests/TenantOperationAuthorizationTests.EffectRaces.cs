@@ -20,7 +20,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite, clock); var setup = await EffectSetup(f, independentGrantor: true);
         var request = setup.Request; var store = (ITenantApprovedOperationStore)f.Iam; var gate = new PersonaEffectGate(store); using var cancellation = new CancellationTokenSource();
         var reference = new TenantRunReference(request.TenantId, setup.Run.AgentRunId);
-        var pending = Effects(f, effects: gate).ExecutePersonaAsync(reference, request.RequestId, request.Operation.OperationId,
+        var pending = Effects(f, effects: gate).ExecuteAsync(reference, request.RequestId, request.Operation.OperationId,
             setup.Generation, request.Operation.ActionHash, cancellation.Token).AsTask();
         await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         TenantOperationReceipt? winning = null;
@@ -40,7 +40,7 @@ public sealed partial class TenantOperationAuthorizationTests
             }
             if (boundary == "lease") clock.Advance(TimeSpan.FromMinutes(5));
             if (boundary == "cancel") cancellation.Cancel();
-            if (boundary == "compete") winning = await Effects(f).ExecutePersonaAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
+            if (boundary == "compete") winning = await Effects(f).ExecuteAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
         }
         finally { gate.Proceed.TrySetResult(); }
         if (boundary == "cancel") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
@@ -50,7 +50,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var grant = (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(request.TenantId, request.RequestId))!;
         var receipt = await store.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId);
         var target = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId))!;
-        Assert.Equal(boundary == "compete" ? request.Operation.Persona.Name : setup.Environment.Agent.Instance.Persona.Name, target.Instance.Persona.Name);
+        Assert.Equal(boundary == "compete" ? request.Operation.Persona!.Name : setup.Environment.Agent.Instance.Persona.Name, target.Instance.Persona.Name);
         if (boundary == "compete")
         { Assert.Equal(OperationGrantStatus.Consumed, grant.Status); Assert.NotNull(receipt); Assert.Single(await f.Iam.ReadAuditAsync(request.TenantId, 200), a => a.Action == "operations.persona.apply"); }
         else if (boundary == "account")
@@ -61,7 +61,7 @@ public sealed partial class TenantOperationAuthorizationTests
             Assert.DoesNotContain(await f.Iam.ReadAuditAsync(request.TenantId, 200), a => a.Action == "operations.persona.apply");
             if (boundary == "role")
             {
-                var denied = await Effects(f).ExecutePersonaAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
+                var denied = await Effects(f).ExecuteAsync(reference, request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
                 Assert.Equal(TenantOperationOutcome.Denied, denied.Outcome); Assert.Equal("grantor_authority_lost", denied.ReasonCode);
                 Assert.Equal(OperationGrantStatus.Revoked, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(request.TenantId, request.RequestId))!.Status);
             }
@@ -78,7 +78,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var recovered = setup.Run.RecoverExpiredClaim(at).TakeClaim(generation, at, at.AddMinutes(5));
         await SaveEffectTestRun(f, recovered);
         var gate = new PersonaEffectGate((ITenantApprovedOperationStore)f.Iam);
-        var pending = Effects(f, effects: gate).ExecutePersonaAsync(new(request.TenantId, recovered.AgentRunId), request.RequestId,
+        var pending = Effects(f, effects: gate).ExecuteAsync(new(request.TenantId, recovered.AgentRunId), request.RequestId,
             request.Operation.OperationId, generation, request.Operation.ActionHash).AsTask();
         await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10)); clock.Advance(TimeSpan.FromMinutes(2)); gate.Proceed.TrySetResult();
         var receipt = await pending; Assert.Equal(TenantOperationOutcome.Denied, receipt.Outcome); Assert.Equal("grant_expired", receipt.ReasonCode);
@@ -93,7 +93,7 @@ public sealed partial class TenantOperationAuthorizationTests
         internal TaskCompletionSource Proceed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ValueTask<TenantApprovalDecision?> FindApprovalDecisionAsync(Guid tenant, Guid request, CancellationToken ct = default) => inner.FindApprovalDecisionAsync(tenant, request, ct);
         public ValueTask<TenantOperationReceipt?> FindOperationReceiptAsync(Guid tenant, Guid operation, CancellationToken ct = default) => inner.FindOperationReceiptAsync(tenant, operation, ct);
-        public async ValueTask<TenantOperationReceipt?> TryCommitPersonaEffectAsync(TenantSecurityState next, long expected, TenantPersonaEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
-        { Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); return await inner.TryCommitPersonaEffectAsync(next, expected, commit, audit, ct); }
+        public async ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expected, TenantLocalEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+        { Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); return await inner.TryCommitLocalEffectAsync(next, expected, commit, audit, ct); }
     }
 }

@@ -1,31 +1,54 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
+using AgentCore.Application.Admin;
+using AgentCore.Application.Agents;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
 public sealed record TenantApprovalPreparationResult(OperationDecisionKind Decision, string ReasonCode,
-    PreparedPersonaOperation Operation, TenantApprovalRequest? Request);
+    PreparedTenantOperation Operation, TenantApprovalRequest? Request);
 public sealed record TenantApprovalView(TenantApprovalRequest Request, long SecurityRevision,
     TenantOperationReceipt? OperationResult = null, TenantApprovalDecision? Decision = null);
 
 public sealed class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
+    TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
     ITenantApprovedOperationStore? effects = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
-    public async ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
-        long expectedRunRevision, Guid? generation = null, CancellationToken ct = default)
+    public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
+        long expectedRunRevision, Guid? generation = null, CancellationToken ct = default) => PrepareAsync(reference, persona, null, expectedRunRevision, generation, ct);
+
+    public ValueTask<TenantApprovalPreparationResult> PreparePreferencesAsync(TenantRunReference reference, PreparedConversationPreferences preferences,
+        long expectedRunRevision, Guid? generation = null, CancellationToken ct = default) => PrepareAsync(reference, null, preferences, expectedRunRevision, generation, ct);
+
+    private async ValueTask<TenantApprovalPreparationResult> PrepareAsync(TenantRunReference reference, AgentIdentity? persona, PreparedConversationPreferences? preferences,
+        long expectedRunRevision, Guid? generation, CancellationToken ct)
     {
         var (run, state) = await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
         var agent = await agents.FindTenantAgentAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("executor_unavailable");
-        var operation = TenantApprovalRules.Prepare(ids.NewId(), agent.Instance.InstanceId, persona, agent.Instance.Revision, agent.Instance.PersonaRevision);
+        var operation = preferences is null ? TenantApprovalRules.Prepare(ids.NewId(), agent.Instance.InstanceId, persona ?? throw new ArgumentException("Missing operation."), agent.Instance.Revision, agent.Instance.PersonaRevision)
+            : TenantApprovalRules.PreparePreferences(ids.NewId(), agent.Instance.InstanceId, preferences, agent.Instance.Revision, agent.Instance.PersonaRevision);
+        var pinned = run.Admission.Configuration!.Definition;
+        var managementReview = pinned.SelfManagement?.Allows(HarnessManagementScope.Settings) == true;
+        if (preferences is not null)
+        {
+            var (current, baseline) = await configuration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
+            if (current.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
+            var effective = InstanceSettingsResolver.Resolve(baseline, current.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, current.Instance) };
+            if (TenantLocalEffectRules.Eligibility(run, current, effective) is { } unavailable) return new(OperationDecisionKind.Denied, unavailable, operation, null);
+            var patch = TenantPreferenceToolContract.Patch(preferences);
+            _ = AgentInstanceSettingsService.ResolvePatch(baseline, current.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
+            managementReview = !TenantPreferenceToolContract.Allows(pinned) || !TenantPreferenceToolContract.Allows(effective);
+        }
         var existing = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId, agent.PrincipalId, operation.ActionHash, ct).ConfigureAwait(false);
         if (existing is not null) return new(existing.Status == TenantApprovalStatus.Pending ? OperationDecisionKind.RequiresApproval : OperationDecisionKind.Denied,
             TenantApprovalRules.DuplicateReason(existing), existing.Operation, existing);
         var decision = await operations.Check(state, run.Admission.ExecutionContext!, TenantApprovalRequest.Permission,
-            AccessScope.ForResource(reference.TenantId, TenantApprovalRequest.ResourceType, operation.InstanceId.ToString("D")), ct).ConfigureAwait(false);
+            AccessScope.ForResource(reference.TenantId, TenantApprovalRequest.ResourceType, operation.InstanceId.ToString("D")), ct, managementReview).ConfigureAwait(false);
         if (decision.Decision != OperationDecisionKind.RequiresApproval) return new(decision.Decision, decision.ReasonCode, operation, null);
         var at = time.GetUtcNow();
         var request = new TenantApprovalRequest(ids.NewId(), reference.TenantId, run.AgentRunId, run.SessionId, run.Admission.Activation.RootActivationId,

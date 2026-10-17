@@ -39,7 +39,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         ValidateAuthorizationCheckpoint(run, request!);
         TenantOperationReceipt? receipt = null;
         if (request!.Status == TenantApprovalStatus.Approved)
-            receipt = await effects.ExecutePersonaAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
+            receipt = await effects.ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
                 run.Claim!.Generation, request.Operation.ActionHash, ct).ConfigureAwait(false);
         run = await Current(dispatched, ct).ConfigureAwait(false);
         var reason = receipt?.ReasonCode ?? request.Status switch
@@ -77,7 +77,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         if (!pending.Any(c => c.Name == ToolCatalog.RequestAuthorization)) return;
         try
         {
-            if (pending.Count != 1 || TenantApprovalToolContract.Parse(pending[0]) != request.Operation.Persona)
+            if (pending.Count != 1 || !TenantApprovalToolContract.Parse(pending[0]).Matches(request.Operation))
                 throw new ArgumentException("Pending authorization differs from the saved operation.");
         }
         catch (Exception ex) when (ex is ArgumentException or JsonException) { throw new SecurityConflictException("approval_continuation_mismatch"); }

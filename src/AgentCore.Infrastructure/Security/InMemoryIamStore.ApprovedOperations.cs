@@ -12,25 +12,25 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
     public ValueTask<TenantOperationReceipt?> FindOperationReceiptAsync(Guid tenantId, Guid operationId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_operationReceipts.GetValueOrDefault(operationId) is { } r && r.TenantId == tenantId ? r : null); }
 
-    public ValueTask<TenantOperationReceipt?> TryCommitPersonaEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantPersonaEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+    public ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantLocalEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)
         {
             if (_operationReceipts.GetValueOrDefault(commit.OperationId) is { } previous)
-                return ValueTask.FromResult<TenantOperationReceipt?>(TenantPersonaEffectRules.MatchingReceipt(previous, next.Tenant.TenantId, commit));
+                return ValueTask.FromResult<TenantOperationReceipt?>(TenantLocalEffectRules.MatchingReceipt(previous, next.Tenant.TenantId, commit));
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantOperationReceipt?>(null);
             var request = _approvals.GetValueOrDefault(commit.RequestId); var decision = _approvalDecisions.GetValueOrDefault(commit.RequestId);
             var run = sessionBacking.ReadTenantRun(next.Tenant.TenantId, commit.RunId);
             if (request is null || decision is null || run is null || run.Revision != commit.ExpectedRunRevision) return ValueTask.FromResult<TenantOperationReceipt?>(null);
             var grant = _operationGrants.GetValueOrDefault(commit.RequestId);
-            TenantPersonaEffectRules.Validate(request, decision, grant, run, commit);
+            TenantLocalEffectRules.Validate(request, decision, grant, run, commit);
             var target = FindTenantAgentAsync(next.Tenant.TenantId, request.Operation.InstanceId, ct).Result;
             if (target is null) return ValueTask.FromResult<TenantOperationReceipt?>(null);
             TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, request.ExecutorPrincipalId);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
-            commit = TenantPersonaEffectRules.AtCommit(commit, request, grant, run, target, at);
+            commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
             if (commit.Outcome == TenantOperationOutcome.Completed)
             {
                 try { ValidateAgentActor(before, decision.HumanPrincipalId); }
@@ -40,18 +40,19 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                     catch (AccessDeniedException) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = "requester_unavailable" }; }
             }
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
-            TenantPersonaEffectRules.ValidateTransaction(next, expectedSecurityRevision, request, audit);
+            TenantLocalEffectRules.ValidateTransaction(next, expectedSecurityRevision, request, audit);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
             at = (clock ?? TimeProvider.System).GetUtcNow();
-            commit = TenantPersonaEffectRules.AtCommit(commit, request, grant, run, target, at);
+            commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
-            var change = new TenantAgentConfigurationChange(target.Instance.InstanceId, request.Operation.ExpectedInstanceRevision, request.Operation.Persona, request.Operation.ExpectedPersonaRevision);
-            if (complete) _ = TenantAgentConfigurationRules.Apply(target.Instance, change, at);
+            var change = complete ? TenantLocalEffectRules.Change(request, target.Instance) : null;
+            if (complete) _ = TenantAgentConfigurationRules.Apply(target.Instance, change!, at);
             ct.ThrowIfCancellationRequested();
             var updated = complete ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
-                Persona: request.Operation.Persona, ExpectedPersonaRevision: request.Operation.ExpectedPersonaRevision), at, ct).Result : target.Instance;
+                Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
+                SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).Result : target.Instance;
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()));

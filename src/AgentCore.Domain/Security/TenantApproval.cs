@@ -5,13 +5,22 @@ namespace AgentCore.Domain.Security;
 public enum TenantApprovalStatus { Pending, Approved, Rejected, Expired, Cancelled }
 public enum OperationGrantStatus { Available, Claimed, Consumed, Revoked, Indeterminate }
 
-// Core prepares this closed action shape; it contains no credential or bearer authority.
-public sealed record PreparedPersonaOperation(Guid OperationId, Guid InstanceId, AgentIdentity Persona,
-    long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash);
+public enum TenantLocalOperationKind { Persona, ConversationPreferences }
+public sealed record PreparedConversationPreferences(string? ResponseLength, string? Language, bool? AskOneQuestionAtATime,
+    bool ClearResponseLength = false, bool ClearLanguage = false, bool ClearAskOneQuestionAtATime = false);
+
+// Exactly one typed payload is allowed. No credential or bearer authority is part of this shape.
+public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, AgentIdentity? Persona,
+    long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
+    PreparedConversationPreferences? Preferences = null)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public TenantLocalOperationKind Kind => Preferences is null ? TenantLocalOperationKind.Persona : TenantLocalOperationKind.ConversationPreferences;
+}
 
 public sealed record TenantApprovalRequest(Guid RequestId, Guid TenantId, Guid RunId, Guid SessionId,
     Guid RootActivationId, Guid ExecutorPrincipalId, Guid? OriginalInitiatorPrincipalId,
-    ApprovalKind Kind, PreparedPersonaOperation Operation, TenantApprovalStatus Status,
+    ApprovalKind Kind, PreparedTenantOperation Operation, TenantApprovalStatus Status,
     long Revision, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt)
 {
     public const string Permission = "agents.update";

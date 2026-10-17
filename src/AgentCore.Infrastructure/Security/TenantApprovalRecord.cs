@@ -40,8 +40,12 @@ public sealed class TenantApprovalRecord
     {
         var r = JsonSerializer.Deserialize<TenantApprovalRequest>(PayloadJson) ?? throw new InvalidOperationException("Approval payload is missing.");
         var op = r.Operation;
-        if (AgentCore.Application.Security.TenantApprovalRules.Prepare(op.OperationId, op.InstanceId, op.Persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision) != op)
-            throw new InvalidOperationException("Approval prepared action hash or canonical content is inconsistent.");
+        try
+        {
+            if (AgentCore.Application.Security.TenantApprovalRules.Rebuild(op) != op)
+                throw new InvalidOperationException("Approval prepared action hash or canonical content is inconsistent.");
+        }
+        catch (ArgumentException ex) { throw new InvalidOperationException("Approval prepared operation shape is invalid.", ex); }
         var n = From(r);
         if (n.RequestId != RequestId || n.TenantId != TenantId || n.RunId != RunId || n.SessionId != SessionId || n.InstanceId != InstanceId
             || n.RootActivationId != RootActivationId || n.ExecutorPrincipalId != ExecutorPrincipalId || n.OriginalInitiatorPrincipalId != OriginalInitiatorPrincipalId

@@ -54,7 +54,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             }
         return (run, state);
     }
-    internal async ValueTask<OperationAuthorizationDecision> Check(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct)
+    internal async ValueTask<OperationAuthorizationDecision> Check(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct, bool managementReviewRequired = false)
     {
         OperationAuthorizationDecision Deny(string code) => new(OperationDecisionKind.Denied, code, key, target);
         if (!PermissionCatalog.TryGet(key, out var permission)) return Deny("unknown_permission");
@@ -68,7 +68,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             if (!permission.Delegatable) return Deny("nondelegatable");
             kind = ApprovalKind.ExceptionalGrant;
         }
-        else if (policy.Mode == OperationApprovalMode.Always) kind = ApprovalKind.Review;
+        else if (policy.Mode == OperationApprovalMode.Always || managementReviewRequired) kind = ApprovalKind.Review;
         else if (policy.Mode == OperationApprovalMode.WhenRequesterLacksPermission && context.OriginalInitiatorPrincipalId is { } requester
             && !(await authorizer.CheckTenantAsync(state, requester, permission, target, ct).ConfigureAwait(false)).Allowed) kind = ApprovalKind.Review;
         if (kind is null) return new(OperationDecisionKind.Allowed, "allowed", key, target);

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Tools;
 
@@ -39,6 +40,24 @@ public static class TenantPreferenceToolContract
         var canonical = JsonSerializer.Serialize(new { set = copy, clear = sorted });
         return new(canonical, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Name + "\n" + canonical))), copy, sorted);
     }
+    public static PreparedConversationPreferences Parameters(TenantPreferencePatch patch) => new(
+        patch.Set.TryGetValue("responseLength", out var length) ? length.GetString() : null,
+        patch.Set.TryGetValue("language", out var language) ? language.GetString() : null,
+        patch.Set.TryGetValue("askOneQuestionAtATime", out var question) ? question.GetBoolean() : null,
+        patch.Clear.Contains("responseLength"), patch.Clear.Contains("language"), patch.Clear.Contains("askOneQuestionAtATime"));
+
+    public static TenantPreferencePatch Patch(PreparedConversationPreferences parameters)
+    {
+        var set = new Dictionary<string, object>(); var clear = new List<string>();
+        if (parameters.ResponseLength is { } length) set.Add("responseLength", length);
+        if (parameters.Language is { } language) set.Add("language", language);
+        if (parameters.AskOneQuestionAtATime is { } question) set.Add("askOneQuestionAtATime", question);
+        if (parameters.ClearResponseLength) clear.Add("responseLength");
+        if (parameters.ClearLanguage) clear.Add("language");
+        if (parameters.ClearAskOneQuestionAtATime) clear.Add("askOneQuestionAtATime");
+        return Parse(JsonSerializer.Serialize(new { set, clear }));
+    }
+
     public static bool Allows(AgentDefinition definition) => definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == true
         && definition.SelfManagement.AutoApplies(ManagementAutoApply.ConversationPreferences);
     public static string ActionHash(Guid instance, long revision, string parametersHash) => Convert.ToHexStringLower(SHA256.HashData(
