@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App, Button, Flex, Tag, Typography } from 'antd';
+import { Alert, App, Button, Flex, Typography } from 'antd';
 import { identityRequest, tenantApi, type TenantContext } from '../../services/identity';
 import { tenantAgentApi, readTenantAgentEditor, patchTenantAgentSettings, type TenantAgentEditor } from '../../services/tenantAgentConfiguration';
 import type { listModels } from '../../services/api';
@@ -9,6 +9,7 @@ import { InstancePersonaFields } from '../admin/InstancePersonaFields';
 import { InstanceSettingsSection } from '../admin/InstanceSettingsSection';
 import type { InstanceSettingsTransport } from '../admin/useInstanceSettingsController';
 import { isPersonaDraftDirty, parsePersonaJson, personaFieldsToJson, syncPersonaOnTabChange, type PersonaFields } from '../admin/instanceManagedControls';
+import { TenantAgentHeading } from './TenantAgentHeading';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { tenantAccessPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
@@ -17,10 +18,6 @@ import { useTenantCommand } from './useTenantCommand';
 
 export function TenantAgentConfiguration({ context, id, page }: { context: TenantContext; id: string; page: 'profile' | 'settings' }) {
   return page === 'profile' ? <TenantAgentProfile context={context} id={id} /> : <TenantAgentSettings context={context} id={id} />;
-}
-function InstanceHeading({ view }: { view: TenantAgentEditor }) {
-  return <><Flex wrap align="center" gap="var(--ac-space-compact)" className="admin-draft-section-heading"><Typography.Title level={4}>{view.agent.instance.persona.name}</Typography.Title><Tag>{view.agent.instance.lifecycle}</Tag><Typography.Text type="secondary">Definition v{view.agent.instance.activeVersion}</Typography.Text></Flex>
-    {view.agent.instance.lifecycle !== 'Active' ? <Alert type="info" showIcon title="Archived instance" description="Configuration remains readable. Restore this instance before editing." /> : !view.canUpdate && <Alert type="info" showIcon title="Read-only configuration" description="Changing this instance requires update access on this exact agent." />}</>;
 }
 function TenantAgentProfile({ context, id }: { context: TenantContext; id: string }) {
   const tenant = context.tenant.tenantId; const { message } = App.useApp(); const command = useTenantCommand();
@@ -43,7 +40,7 @@ function TenantAgentProfile({ context, id }: { context: TenantContext; id: strin
     <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button disabled={command.busy} onClick={reload}>Reload profile</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && persona && <>
-      <InstanceHeading view={view} />
+      <TenantAgentHeading view={view} />
       <AgentConfigurationPanel title="Persona" label="Persona editor" description="Persona guides this agent’s behavior. Core permissions and approvals remain independent." bodyGap="section">
         <InstancePersonaFields persona={persona} onChange={value => { setPersona(value); setError(undefined); }} tab={tab} onTabChange={next => { const result = syncPersonaOnTabChange(tab, next, persona, json); if (!result.ok) { setError(result.error); return; } setPersona(result.persona); setJson(result.personaJsonDraft); setTab(next); setError(undefined); }} json={json} onJsonChange={value => { setJson(value); setError(undefined); }} disabled={!writable || command.busy || command.requiresReload} />
         {error && <Alert type="error" showIcon title={error} />}
@@ -63,7 +60,7 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
   }), [tenant, id]);
   return <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">{guard.holder}
     <Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link>
-    {view && <InstanceHeading view={view} />}
+    {view && <TenantAgentHeading view={view} />}
     <Typography.Paragraph type="secondary">Settings define behavior and capability eligibility. The agent’s own roles and approval policy still control execution.</Typography.Paragraph>
     <InstanceSettingsSection confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
     {!!view?.unavailableSettings.length && <Alert type="info" showIcon title="Sandbox configuration is unavailable" description="The tenant Sandbox catalog and effects are not available yet. Other settings retain their normal inheritance and permission checks." />}

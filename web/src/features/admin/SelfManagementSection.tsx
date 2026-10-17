@@ -7,16 +7,8 @@ import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import { confirmAction } from '../../app/confirmAction';
 import { getSelfManagement, saveSelfManagement, type SelfManagementView } from '../../services/adminApi';
 
-import { SelfManagementFields, inheritedManagement as inherited, type SelfManagementDraft as Draft } from './SelfManagementFields';
+import { SelfManagementFields, inheritedManagement as inherited, managementDraftOf as draftOf, type SelfManagementDraft as Draft } from './SelfManagementFields';
 
-function draftOf(view: SelfManagementView): Draft {
-  const o = view.overrides;
-  return o ? { mode: o.mode?.value ?? null, scopes: o.scopes?.value ?? null, managedAutoApply: o.autoApply?.value ?? null,
-    configurationAssistance: o.configurationAssistance?.value ?? null, harnessAuthoring: o.harnessAuthoring?.value ?? null }
-    : view.source === 'definition' ? inherited : { mode: view.effective.mode, scopes: view.effective.scopes,
-      managedAutoApply: view.effective.managedAutoApply ?? [], configurationAssistance: view.effective.builtInSkills?.configurationAssistance ?? true,
-      harnessAuthoring: view.effective.builtInSkills?.harnessAuthoring ?? true };
-}
 export function SelfManagementSection({ instanceId, archived, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; onDirtyChange?: (dirty: boolean) => void; onUpdated: () => void }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [view, setView] = useState<SelfManagementView | null>(null); const [draft, setDraft] = useState<Draft>(inherited);

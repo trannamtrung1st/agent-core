@@ -7,6 +7,8 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantAgentEditorState(TenantAgent Agent, IReadOnlyList<InstanceSettingsSection> Settings,
     long SecurityRevision, bool CanUpdate, IReadOnlyList<string> UnavailableSettings);
+public sealed record TenantAgentControlsState(TenantAgent Agent, TenantAgentBudgets Budgets, TenantAgentManagement Management,
+    long SecurityRevision, bool CanUpdate);
 
 // Current original-human boundary over the existing owning services, including post-I/O read fences.
 public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore agents, TenantAgentConfigurationService configuration,
@@ -41,6 +43,18 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
 
     public ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourceContentAsync(human.PrincipalId, tenant, instance, key, token), ct);
+
+    public ValueTask<TenantAgentControlsState> ReadControlsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced<TenantAgentControlsState>(tenant, instance, human, async (state, agent, token) =>
+        {
+            var budgets = await configuration.ReadBudgetsAsync(human.PrincipalId, tenant, instance, token).ConfigureAwait(false);
+            var management = await configuration.ReadManagementAsync(human.PrincipalId, tenant, instance, token).ConfigureAwait(false);
+            if (budgets.SecurityRevision != state.Tenant.Revision || management.SecurityRevision != state.Tenant.Revision
+                || budgets.InstanceRevision != agent!.Instance.Revision || management.Policy.InstanceRevision != agent.Instance.Revision)
+                throw new SecurityConflictException("stale_revision");
+            var canUpdate = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.update"), Scope(tenant, instance), token).ConfigureAwait(false)).Allowed;
+            return new(agent, budgets, management, state.Tenant.Revision, canUpdate);
+        }, ct);
 
     public ValueTask<TenantAgentEditorState> ReadEditorAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
         Fenced<TenantAgentEditorState>(tenant, instance, human, async (state, agent, token) =>

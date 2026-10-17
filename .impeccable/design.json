@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-17T16:38:28.111923+00:00",
+  "generatedAt": "2026-10-17T17:32:43.759919+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -423,6 +423,32 @@
           "docs/reports/tenant-agent-access-ui-verification-2026-10-17.md",
           "docs/reports/tenant-agent-connections-ui-verification-2026-10-17.md"
         ]
+      },
+      "executionControlsDocumentationRefresh": {
+        "refreshedAt": "2026-10-17T17:32:43.759919+00:00",
+        "scope": "Bounded October 18 merge of observed tenant Instance Execution budgets, Self-management and Unattended model presentation into incumbent context. Normative tokens, fonts, policies and component previews are unchanged. Prior inspection, documentationRefresh and build-path provenance remain historical; this is no broad re-extraction or runtime acceptance.",
+        "sourceSha256": {
+          ".agents/context/DESIGN.md": "a6a351d31d4858571d58400312efdb34a2981299e126ea4d29dae424d912d2cc",
+          ".agents/context/PRODUCT.md": "eb7f512ac138bd6819ebb2b3f929d92f366df226eff469a3524f6c8e5e76c966",
+          ".impeccable/surfaces/web-src-features-access-tenantagentcontrols-tsx.md": "b515d2b8a5aa9ac4820d1be269e3f2f8f9c5f230bb9b94e61f846ec50bdd33cd",
+          "docs/13-frontend-implementation-spec.md": "16562fc33e5a2b2a1c48f6074beae3de50a83b3994f417c126dd53daa185f490",
+          "docs/19-multi-tenant-iam-ux.md": "89cdf18008cf587dee53f51652f8777a158cc898acfe52a6c5c0c0cbd926e36d",
+          "web/src/features/access/TenantAgentControls.tsx": "4fcce7578736152689954267db8f0fed7bcdcac7e2554a7492febfee5f753f9a",
+          "web/src/features/access/TenantAgentHeading.tsx": "0139d069f8516c078c4a6ae608a92f0b26cebe4ae57abd8eedc56745e6c27904",
+          "web/src/features/access/TenantAgentConfiguration.tsx": "ea981eb1bd34a861041345a93e6e4f1afc4c2e04c0ab4bd68b0c5431ecdc2878",
+          "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
+          "web/src/features/admin/ExecutionBudgetsSection.tsx": "acfdbcb98f9177d3152c95c684e17848179a39e3cc2d6599caa644a3f19ab03b",
+          "web/src/features/admin/SelfManagementFields.tsx": "cfc21bcb447e0248795b58edba32725b89a36e8f6cae5d98c4a08d669eb8ca58",
+          "web/src/features/admin/ExecutionModelFields.tsx": "279a0f7b1bd93f0963bf6e8a2682ce2c9a267f138f1c9aa679c5b71cdbf43a29",
+          "web/src/app.css": "3b86dd330de8b074f0bc2f5231e8caac428147e8e9d1a56a2485495a46b63a5f"
+        },
+        "evidenceRecords": [
+          "docs/reports/tenant-instance-controls-ui-verification-2026-10-18.md"
+        ],
+        "captureDirectory": ".playwright-mcp/tenant-controls-20261018",
+        "captureReview": "Parent implementation reviewer and fresh finish reviewer each individually opened all 18 current captures. Three canonical pages, shared heading and native field/layout reuse, 16px parent section gap/48rem bound, responsive wrapping through 320px. Report owns exact runtime and verification outcomes; documentation pass took no captures and ran no app checks.",
+        "visualAcceptanceLimits": "Loading, denied, archived, error and stale states were not visually accepted from the current captures. Functional recovery and authority boundaries are separately scoped by the verification report.",
+        "openScope": "Version adoption, Skills/resources, tenant Sandbox cutover, other resource/effect families, voice/rich delivery, autonomous origins and final obsolete-authority/schema consolidation."
       }
     }
   },

@@ -21,6 +21,12 @@ public sealed partial class TenantDefinitionIntegrationTests
         var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         var editor = new TenantAgentReadService(f.Iam, (ITenantAgentStore)f.Iam, configuration, f.Identity, f.Authorizer, agents);
         var view = await editor.ReadEditorAsync(owner.TenantId, id, human);
+        var controls = await editor.ReadControlsAsync(owner.TenantId, id, human);
+        Assert.Equal(view.SecurityRevision, controls.SecurityRevision); Assert.True(controls.CanUpdate);
+        Assert.Equal(view.Agent.Instance.Revision, controls.Budgets.InstanceRevision);
+        Assert.Equal(view.Agent.Instance.Revision, controls.Management.Policy.InstanceRevision);
+        Assert.Equal(view.SecurityRevision, controls.Budgets.SecurityRevision);
+        Assert.Equal(view.SecurityRevision, controls.Management.SecurityRevision);
         Assert.True(view.CanUpdate); Assert.Equal(await Revision(), view.SecurityRevision);
         Assert.Equal("Alex", view.Agent.Instance.Persona.Name); Assert.NotEmpty(view.Settings);
         Assert.All(view.Settings, section => Assert.Equal(view.Agent.Instance.Revision, section.InstanceRevision));
@@ -38,6 +44,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var grant = await f.Access.AssignRoleAsync(owner.OwnerPrincipalId, owner.TenantId, user.PrincipalId, role.RoleId, AccessScope.ForResource(owner.TenantId, "agent", id.ToString("D")), await Revision());
         login = (await f.Identity.SignInAsync("reader@example.test", "strong-reader-password"))!.Session;
         human = new(account.AccountId, login.SessionId, user.PrincipalId);
+        Assert.False((await editor.ReadControlsAsync(owner.TenantId, id, human)).CanUpdate);
         Assert.False((await editor.ReadEditorAsync(owner.TenantId, id, human)).CanUpdate);
         await f.Access.RevokeAssignmentAsync(owner.OwnerPrincipalId, owner.TenantId, grant.AssignmentId, await Revision());
         await Assert.ThrowsAsync<AccessDeniedException>(() => editor.ReadEditorAsync(owner.TenantId, id, human).AsTask());

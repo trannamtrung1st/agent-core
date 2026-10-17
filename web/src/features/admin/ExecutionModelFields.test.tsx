@@ -17,6 +17,13 @@ describe("shared unattended and Automation model controls", () => {
     await screen.findByRole("listbox");
     expect([...document.querySelectorAll(".ant-select-item-option-content")].map(option => option.textContent)).toEqual(["Model default", "low", "medium", "high"]);
   });
+  it("exposes reasoning for an inherited execution default without forcing a model override", async () => {
+    const onChange = vi.fn();
+    render(<ExecutionModelFields {...props} modelKey="" defaultModelKey="alpha" onChange={onChange} />);
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Execution reasoning" }));
+    fireEvent.click(await screen.findByText("low", { selector: '.ant-select-item-option-content' }));
+    expect(onChange).toHaveBeenCalledWith("", "low");
+  });
   it("preserves valid effort when switching models", async () => {
     const onChange = vi.fn();
     render(<ExecutionModelFields {...props} onChange={onChange} />);

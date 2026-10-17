@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Button, Checkbox, Flex, Form, Select, Switch, Typography, theme } from 'antd';
-import type { HarnessMode, HarnessScope, ManagementAutoApply, SelfManagementPolicy } from '../../services/adminApi';
+import type { HarnessMode, HarnessScope, ManagementAutoApply, SelfManagementPolicy, SelfManagementView, ManagementOverrides } from '../../services/adminApi';
 
 export const managementAreas = [
   { label: 'Settings', value: 'Settings' }, { label: 'Skills', value: 'Skills' }, { label: 'Resources', value: 'Resources' },
@@ -23,6 +23,20 @@ export const defaultManagement: SelfManagementPolicy = {
   mode: 'Disabled', scopes: [], sources: [], eligibleTools: [], frozen: false,
   managedAutoApply: [], builtInSkills: { configurationAssistance: true, harnessAuthoring: true }
 };
+
+export function managementDraftOf(view: SelfManagementView): SelfManagementDraft {
+  const o = view.overrides;
+  return o ? { mode: o.mode?.value ?? null, scopes: o.scopes?.value ?? null, managedAutoApply: o.autoApply?.value ?? null,
+    configurationAssistance: o.configurationAssistance?.value ?? null, harnessAuthoring: o.harnessAuthoring?.value ?? null }
+    : view.source === 'definition' ? inheritedManagement : { mode: view.effective.mode, scopes: view.effective.scopes,
+      managedAutoApply: view.effective.managedAutoApply ?? [], configurationAssistance: view.effective.builtInSkills?.configurationAssistance ?? true,
+      harnessAuthoring: view.effective.builtInSkills?.harnessAuthoring ?? true };
+}
+export function managementOverridesOf(draft: SelfManagementDraft): ManagementOverrides {
+  const field = <T,>(value: T | null) => value === null ? null : { value };
+  return { mode: field(draft.mode), scopes: field(draft.scopes), autoApply: field(draft.managedAutoApply),
+    configurationAssistance: field(draft.configurationAssistance), harnessAuthoring: field(draft.harnessAuthoring) };
+}
 
 /** Shared policy fields; owners supply persistence, inheritance defaults and lock actions. */
 export function SelfManagementFields({ value, defaults, disabled, definition = false, onChange }: {

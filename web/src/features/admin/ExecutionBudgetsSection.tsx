@@ -34,7 +34,7 @@ export function validExecutionBudgets(policy: ExecutionBudgetPolicy, limits: Exe
     && Number.isInteger(p.perToolSeconds) && p.perToolSeconds >= 1 && p.perToolSeconds <= limits.perToolSeconds
     && Number.isInteger(p.sandboxCommandSeconds ?? 120) && (p.sandboxCommandSeconds ?? 120) >= 1 && (p.sandboxCommandSeconds ?? 120) <= (limits.sandboxCommandSeconds ?? 180); });
 }
-const BudgetFields = memo(function BudgetFields({ value, inherited, instance, disabled, limits, onChange }: {
+export const BudgetFields = memo(function BudgetFields({ value, inherited, instance, disabled, limits, onChange }: {
   limits: ExecutionBudgetLimits; value: ExecutionBudgetPolicy; inherited?: ExecutionBudgetPolicy; instance?: boolean; disabled?: boolean; onChange: (v: ExecutionBudgetPolicy) => void;
 }) {
   const { token } = theme.useToken();

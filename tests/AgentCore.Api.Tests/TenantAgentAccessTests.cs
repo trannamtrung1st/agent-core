@@ -48,7 +48,7 @@ public sealed partial class TenantAgentAccessTests
         Assert.Equal(HttpStatusCode.Created, assigned.StatusCode);
         var assignmentId = (await Json(assigned)).GetProperty("assignmentId").GetGuid();
         Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
-        foreach (var suffix in new[] { "editor", "settings", "execution-budgets", "self-management" })
+        foreach (var suffix in new[] { "editor", "configuration-controls", "settings", "execution-budgets", "self-management" })
         {
             Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/{suffix}")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{secondId}/{suffix}")).StatusCode);
@@ -83,7 +83,7 @@ public sealed partial class TenantAgentAccessTests
         Assert.Equal(0, (await Json(await member.GetAsync($"/api/v2/tenants/{a}/agents"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
-        foreach (var suffix in new[] { "editor", "settings", "execution-budgets", "self-management" })
+        foreach (var suffix in new[] { "editor", "configuration-controls", "settings", "execution-budgets", "self-management" })
             Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/{suffix}")).StatusCode);
     }
 

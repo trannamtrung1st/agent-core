@@ -5,18 +5,18 @@ import type { ModelDescriptor } from "../../services/api";
 
 /** Shared catalog selection for unattended and registration execution. */
 export function ExecutionModelFields({ models, modelKey, reasoningEffort, disabled, modelLabel, effortLabel,
-  defaultLabel, showLabels = false, onChange }: { models: ModelDescriptor[]; modelKey: string; reasoningEffort: string;
+  defaultLabel, defaultModelKey, showLabels = false, onChange }: { models: ModelDescriptor[]; modelKey: string; reasoningEffort: string; defaultModelKey?: string;
   disabled: boolean; modelLabel: string; effortLabel: string; defaultLabel: string;
   showLabels?: boolean; onChange: (modelKey: string, reasoningEffort: string) => void }) {
   const { token } = theme.useToken();
   const modelId = useId();
   const effortId = useId();
-  const selected = models.find(model => model.key === modelKey);
+  const selected = models.find(model => model.key === (modelKey || defaultModelKey));
   return <Flex vertical gap={token.paddingXS}>
     {showLabels ? <label htmlFor={modelId}>{modelLabel}</label> : null}
     <Select id={modelId} aria-label={modelLabel} value={modelKey} disabled={disabled} showSearch optionFilterProp="label"
       options={[{ value: "", label: defaultLabel }, ...models.map(model => ({ value: model.key, label: model.displayName }))]}
-      onChange={key => onChange(key, retainedReasoningEffort(models.find(model => model.key === key), reasoningEffort))} />
+      onChange={key => onChange(key, retainedReasoningEffort(models.find(model => model.key === (key || defaultModelKey)), reasoningEffort))} />
     {selected && selected.supportedReasoningEfforts.length > 0 ? <Flex vertical gap={token.paddingXS}>
       <label htmlFor={effortId}>{effortLabel}</label>
       <Select id={effortId} aria-label={effortLabel} value={reasoningEffort} disabled={disabled}

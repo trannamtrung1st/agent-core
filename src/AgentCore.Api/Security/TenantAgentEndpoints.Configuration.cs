@@ -15,6 +15,12 @@ public static partial class TenantAgentEndpoints
     {
         MapSettings(group);
         MapChildren(group);
+        group.MapGet("/agents/{instanceId:guid}/configuration-controls", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var a = IdentityHttp.TenantContext(http);
+            var value = await service.ReadControlsAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false);
+            return Results.Json(new { agent = Safe(value.Agent), value.Budgets, value.Management, value.SecurityRevision, value.CanUpdate });
+        }));
         group.MapGet("/agents/{instanceId:guid}/editor", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);

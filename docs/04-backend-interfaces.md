@@ -1,5 +1,9 @@
 # Backend Interfaces
 
+## Tenant Instance execution controls read
+
+`TenantAgentReadService.ReadControlsAsync(tenant, instance, human, ct)` returns `TenantAgentControlsState`: safe agent identity, existing budgets (overrides, Definition defaults, effective values and host ceilings), existing management projection, one security revision and exact `CanUpdate`. Both child security/Instance witnesses must match the parent capture; the common original-human post-I/O fence then validates the whole result. Exact `agents.read` is sufficient to inspect, independently of IAM inspection; `agents.update` is an advisory action hint. Existing mutation owners still authorize and commit writes.
+
 ## Original-human agent mutation witness
 
 `TenantAgentConfigurationChange.Initiator` carries an optional trusted `HumanSessionReference` for canonical human commands; `TryCreateTenantAgentAsync` and `TrySetTenantAgentLifecycleAsync` receive the same optional reference. It is not client input, a grant, an authentication credential or persisted authority. Canonical HTTP mutations always supply the original server-authenticated tuple. Existing trusted non-HTTP execution uses its existing actor/IAM/management checks without fabricating a human session. Stores require any supplied human Principal to equal the audit actor, then validate its Account/session/stamp/expiry/membership in the same atomic write boundary. Configuration services also revalidate before store submission and before returning a no-op Skill reset. A later same-Account login cannot substitute for a retired session.

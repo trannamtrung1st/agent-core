@@ -1,5 +1,9 @@
 # Backend Implementation Specification
 
+## Tenant Instance execution controls composition
+
+`ReadControlsAsync` uses the existing original-human facade to compose budgets and management with the exact safe Instance. It compares each child Instance/security witness against the captured parent before the common final human/security/identity fence. No alternate resolver, authority snapshot or storage schema is added. The API maps this no-store composition only after success. Budget, management/freeze and unattended-model commands retain their existing service/store ownership and original-human atomic commit fences.
+
 ## Atomic original-human agent writes
 
 Agent HTTP creation (template/publication), lifecycle, persona/version, settings/budgets/unattended-model, self-management/freeze and Skill/resource mutation endpoints derive the original human from cookie/tenant context and pass it through existing services. The configuration Commit helper puts the reference into the typed transaction command; child save helpers retain it. Existing service authorization, policy preparation, revision checks and audit actions remain unchanged. A no-op inherited Skill reset performs an explicit current-human check even though it creates no transaction. InMemory checks the original human under its existing IAM/Instance locks just before mutation; SQLite checks immediately before SaveChanges inside the existing write transaction. The check uses the existing Account/session/stamp/expiry/User/Principal validation and exposes safe `initiator_unavailable` on rejected references. No failed human check advances tenant/Instance/child state or appends an allowed audit.

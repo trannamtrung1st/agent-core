@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Instance execution controls focused regression
+
+Exercise the composed controls read under both InMemory and SQLite with matching parent/child witnesses, exact scoped read/update hints, concurrent persona/security changes and original-session logout during Definition I/O. HTTP regressions include logout/relogin, exact reader and revoked access. Frontend checks cover staged inheritance, stale-draft recovery, saved-policy locks with unrelated edits, confirmed malformed acknowledgements without replay, catalog failure/retry and read-only inspection; shared field consumers remain covered.
+
+Run `pnpm run test:e2e:tenant-instance-controls` with free `TENANT_CHAT_API_PORT`/`TENANT_CHAT_WEB_PORT`. Its disposable Synthetic scenarios exercise 320px native keyboard controls, stale budget save/reload, explicit reset, policy freeze/draft guard, model save/reset and scoped reader/revocation. Playwright MCP separately exercises mouse interactions and responsive shared heading/form consumers. [Executed evidence](reports/tenant-instance-controls-ui-verification-2026-10-18.md) records the actual outcome and remaining gaps; it is not full proposal or milestone acceptance.
+
 ## Agent original-human mutation races
 
 For every canonical agent mutation endpoint, intercept the specialized store call after the Application precheck, revoke the original login, optionally log in again as the same Account, and require a safe denial with byte-identical prior Instance/inventory/Skill/resource projections and unchanged security revision. Explicit recovery with the current login and still-current witnesses must succeed once. Keep the separate preparation-time settings regression and no-op inherited Skill reset case. Both stores must reject logout, replacement-login, password-stamp rotation and mismatched-Principal references for configuration, creation and lifecycle, without partial allowed audit; SQLite reopen verifies only the successful explicit recovery persisted. Gate the test callback after the owning port releases its locks; an asynchronous nested HTTP callback inside a synchronous locked catalog lookup is not a valid race fixture. [Executed evidence](reports/tenant-agent-write-fence-verification-2026-10-18.md).

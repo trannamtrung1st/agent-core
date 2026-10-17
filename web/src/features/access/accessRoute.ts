@@ -1,6 +1,6 @@
 import { draftPages, type DraftPage } from '../admin/adminNavigation';
 export type AccessPage = 'access' | 'members' | 'roles' | 'audit' | 'definitions' | 'credentials' | 'approvals' | 'agents';
-export type TenantInstancePage = 'profile' | 'settings' | 'access' | 'connections';
+export type TenantInstancePage = 'profile' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'access' | 'connections';
 export type AccessRoute = { area: 'access' } & (
   | { view: 'sign-in' }
   | { view: 'account'; page: 'organizations' | 'profile' }
@@ -14,7 +14,7 @@ export function parseAccessRoute(path: string): AccessRoute | null {
   if (path === '/account/profile') return { area: 'access', view: 'account', page: 'profile' };
   const credentials = new RegExp(`^/t/(${uuid})/integrations/credentials/?$`, 'i').exec(path);
   if (credentials) return { area: 'access', view: 'tenant', tenantId: credentials[1].toLowerCase(), page: 'credentials' };
-  const agent = new RegExp(`^/t/(${uuid})/admin/agents(?:/(${uuid})/(profile|settings|access|connections))?/?$`, 'i').exec(path);
+  const agent = new RegExp(`^/t/(${uuid})/admin/agents(?:/(${uuid})/(profile|settings|execution-budgets|self-management|unattended-model|access|connections))?/?$`, 'i').exec(path);
   if (agent) return { area: 'access', view: 'tenant', tenantId: agent[1].toLowerCase(), page: 'agents', instanceId: agent[2]?.toLowerCase(), instancePage: agent[3]?.toLowerCase() as TenantInstancePage | undefined };
   const approval = new RegExp(`^/t/(${uuid})/admin/approvals(?:/(${uuid}))?/?$`, 'i').exec(path);
   if (approval) return { area: 'access', view: 'tenant', tenantId: approval[1].toLowerCase(), page: 'approvals', requestId: approval[2]?.toLowerCase() };
