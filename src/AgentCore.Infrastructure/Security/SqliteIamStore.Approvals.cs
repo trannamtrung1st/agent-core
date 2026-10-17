@@ -15,13 +15,20 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         return (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenantId && r.RequestId == requestId, ct).ConfigureAwait(false))?.Domain();
     }
-    public async ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, string fingerprint, CancellationToken ct = default)
+    public async ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, PreparedTenantOperation operation, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return (await RootApproval(db, tenantId, rootId.ToString("D"), executorId, fingerprint).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false))?.Domain();
+        return (await RootApproval(db, tenantId, rootId.ToString("D"), executorId, operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false))?.Domain();
     }
-    private static IQueryable<TenantApprovalRecord> RootApproval(AgentCoreDbContext db, Guid tenant, string root, Guid executor, string fingerprint) =>
-        db.Set<TenantApprovalRecord>().Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == fingerprint);
+    private static IQueryable<TenantApprovalRecord> RootApproval(AgentCoreDbContext db, Guid tenant, string root, Guid executor, PreparedTenantOperation operation) =>
+        SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
+            .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
+            .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) =>
+        db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests
+            WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision') = {operation.SemanticActionJson}
+            """);
     public async ValueTask<IReadOnlyList<TenantApprovalRequest>> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, int limit, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -46,7 +53,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         TenantApprovalRequest? result = null;
         var written = await WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
-            var duplicate = await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Fingerprint).SingleOrDefaultAsync(ct).ConfigureAwait(false);
+            var duplicate = await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation).FirstOrDefaultAsync(ct).ConfigureAwait(false);
             if (duplicate is not null) { result = duplicate.Domain(); return false; }
             if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
             var row = await OwnedRuns(db, request.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
@@ -57,9 +64,17 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
             TenantSessionRules.RequireExecutor(state, agent);
             if (request.OriginalInitiatorPrincipalId is { } requester) await ValidateTenantActorAsync(db, state, requester, ct).ConfigureAwait(false);
-            var cutoff = request.CreatedAt.AddMinutes(-1).ToUnixTimeMilliseconds();
-            if (await db.Set<TenantApprovalRecord>().CountAsync(r => r.TenantId == request.TenantId && r.ExecutorPrincipalId == request.ExecutorPrincipalId
-                && (r.Status == (int)TenantApprovalStatus.Pending || r.CreatedAt >= cutoff), ct).ConfigureAwait(false) >= 32) throw new SecurityConflictException("approval_rate_limited");
+            var cutoff = (ApprovalNow - TenantApprovalLimits.Window).ToUnixTimeMilliseconds();
+            var recent = db.Set<TenantApprovalRecord>().Where(r => r.TenantId == request.TenantId
+                && (r.Status == (int)TenantApprovalStatus.Pending || r.CreatedAt >= cutoff));
+            var counts = await recent.GroupBy(r => r.TenantId).Select(g => new { Tenant = g.Count(),
+                Executor = g.Count(r => r.ExecutorPrincipalId == request.ExecutorPrincipalId),
+                Requester = g.Count(r => r.OriginalInitiatorPrincipalId == request.OriginalInitiatorPrincipalId) }).SingleOrDefaultAsync(ct).ConfigureAwait(false);
+            var operationCount = await SemanticApprovals(db, request.Operation).CountAsync(r => r.TenantId == request.TenantId
+                && (r.Status == (int)TenantApprovalStatus.Pending || r.CreatedAt >= cutoff), ct).ConfigureAwait(false);
+            var rootCount = await db.Set<TenantApprovalRecord>().CountAsync(r => r.TenantId == request.TenantId
+                && r.RootActivationId == request.RootActivationId.ToString("D"), ct).ConfigureAwait(false);
+            TenantApprovalLimits.Require(counts?.Tenant ?? 0, counts?.Executor ?? 0, counts?.Requester ?? 0, operationCount, rootCount);
             if (run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= ApprovalNow) throw new SecurityConflictException("execution_claim_expired");
             var saved = run.WaitForDurableApproval(expectedRunRevision, request.RequestId, generation, request.CreatedAt);
             AgentRunStoreMapping.Apply(row, saved); db.Add(TenantApprovalRecord.From(request)); result = request; return true;

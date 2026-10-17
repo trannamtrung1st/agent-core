@@ -2,6 +2,8 @@
 
 Owner request: implement the final proposal at `local/proposals/agent-core-multitenant-iam-approval-final-proposal.md` with the develop skill. Baseline: `38b8288230854b9044b69100c4f99bb4c259d2d1`; clean checkout. No CI requested. Existing Real application/data are not disposable and must remain untouched. No application milestone acceptance is implied.
 
+The [approval-loop correction](tenant-approval-loop-verification-2026-10-17.md) separates semantic same-root refusal from exact effect witnesses, closes direct-preference refusal bypass after permission changes, and bounds current durable inbox admission per tenant/executor/requester/operation plus root lifetime. The full delivery goal remains active; broader revocation, notification delivery and remaining cutover boundaries are still open.
+
 ## Status and sequence
 
 The [cross-Run approval successor](tenant-cross-run-approval-verification-2026-10-17.md) now records and executes an exact successor Run for model-originated persona/preference decisions. Source retirement, successor admission, signal acknowledgement and audit are atomic; response, requester/root, pins, budget and accounting are retained. Actual hosted/restart, both-store collision/replay/cancellation, checkpoint and receipt recovery evidence closes this original-Run-only gap for the supported kinds. Other families, external effect reconciliation, complete audit/revocation/storm handling, UI/transport and final removal remain open.

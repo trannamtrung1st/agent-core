@@ -62,7 +62,7 @@ public static class TenantLocalEffectRules
 
     private static readonly HashSet<string> DenialReasons = new(StringComparer.Ordinal)
     { "approval_expired", "grant_expired", "grantor_authority_lost", "operation_authority_changed", "operation_witness_changed",
-        "management_unavailable", "operation_configuration_changed", "requester_unavailable" };
+        "management_unavailable", "operation_configuration_changed", "requester_unavailable", "root_operation_conflict" };
 
     public static TenantOperationReceipt MatchingReceipt(TenantOperationReceipt receipt, Guid tenant, TenantLocalEffectCommit commit)
     {

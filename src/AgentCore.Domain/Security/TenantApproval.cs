@@ -1,3 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Security;
@@ -14,8 +18,22 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
     long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
     PreparedConversationPreferences? Preferences = null)
 {
-    [System.Text.Json.Serialization.JsonIgnore]
+    [JsonIgnore]
     public TenantLocalOperationKind Kind => Preferences is null ? TenantLocalOperationKind.Persona : TenantLocalOperationKind.ConversationPreferences;
+
+    // Root correlation excludes mutable witnesses; grants still bind ActionHash exactly.
+    [JsonIgnore]
+    public string SemanticActionJson => (Persona, Preferences) switch
+    {
+        ({ } persona, null) => JsonSerializer.Serialize(new { operation = "agents.persona.update", permission = TenantApprovalRequest.Permission,
+            resourceType = TenantApprovalRequest.ResourceType, resourceId = InstanceId.ToString("D"),
+            persona = new { persona.Name, persona.Role, persona.Description, persona.Tone } }),
+        (null, { } preferences) => JsonSerializer.Serialize(new { operation = "agents.preferences.update", permission = TenantApprovalRequest.Permission,
+            resourceType = TenantApprovalRequest.ResourceType, resourceId = InstanceId.ToString("D"), preferences }),
+        _ => throw new ArgumentException("Exactly one supported operation payload is required.")
+    };
+    [JsonIgnore]
+    public string OperationFingerprint => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(SemanticActionJson)));
 }
 
 public sealed record TenantApprovalRequest(Guid RequestId, Guid TenantId, Guid RunId, Guid SessionId,
@@ -26,7 +44,7 @@ public sealed record TenantApprovalRequest(Guid RequestId, Guid TenantId, Guid R
     public const string Permission = "agents.update";
     public const string ResourceType = "agent";
     public string ResourceId => Operation.InstanceId.ToString("D");
-    public string Fingerprint => Operation.ActionHash;
+    public string Fingerprint => Operation.OperationFingerprint;
 
     public TenantApprovalRequest Decide(TenantApprovalStatus decision, long expectedRevision, DateTimeOffset at)
     {

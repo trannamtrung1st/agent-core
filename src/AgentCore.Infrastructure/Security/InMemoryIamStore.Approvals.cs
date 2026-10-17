@@ -13,9 +13,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     private DateTimeOffset ApprovalNow => (clock ?? TimeProvider.System).GetUtcNow();
     public ValueTask<TenantApprovalRequest?> FindApprovalAsync(Guid tenantId, Guid requestId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_approvals.GetValueOrDefault(requestId) is { } r && r.TenantId == tenantId ? r : null); }
-    public ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, string fingerprint, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(RootApproval(tenantId, rootId, executorId, fingerprint)); }
-    private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.SingleOrDefault(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash);
+    public ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, PreparedTenantOperation operation, CancellationToken ct = default)
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(RootApproval(tenantId, rootId, executorId, operation.OperationFingerprint)); }
+    private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash)
+        .OrderBy(r => r.Status is TenantApprovalStatus.Rejected or TenantApprovalStatus.Expired or TenantApprovalStatus.Cancelled ? 0 : r.Status == TenantApprovalStatus.Pending ? 1 : 2)
+        .ThenBy(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId).FirstOrDefault();
     public ValueTask<IReadOnlyList<TenantApprovalRequest>> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, int limit, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<TenantApprovalRequest>>(_approvals.Values.Where(r => r.TenantId == tenantId
         && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId)))
@@ -44,8 +46,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (request.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
             if (_approvals.ContainsKey(request.RequestId) || _approvals.Values.Any(r => r.Operation.OperationId == request.Operation.OperationId)) throw new SecurityConflictException("identity_conflict");
-            if (_approvals.Values.Count(r => r.TenantId == request.TenantId && r.ExecutorPrincipalId == request.ExecutorPrincipalId
-                && (r.Status == TenantApprovalStatus.Pending || r.CreatedAt >= request.CreatedAt.AddMinutes(-1))) >= 32) throw new SecurityConflictException("approval_rate_limited");
+            var recent = _approvals.Values.Where(r => r.TenantId == request.TenantId
+                && (r.Status == TenantApprovalStatus.Pending || r.CreatedAt >= ApprovalNow - TenantApprovalLimits.Window)).ToArray();
+            TenantApprovalLimits.Require(recent.Length, recent.Count(r => r.ExecutorPrincipalId == request.ExecutorPrincipalId),
+                recent.Count(r => r.OriginalInitiatorPrincipalId == request.OriginalInitiatorPrincipalId), recent.Count(r => r.Fingerprint == request.Fingerprint),
+                _approvals.Values.Count(r => r.TenantId == request.TenantId && r.RootActivationId == request.RootActivationId));
             if (run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= ApprovalNow)
                 throw new SecurityConflictException("execution_claim_expired");
             ct.ThrowIfCancellationRequested();

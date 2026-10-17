@@ -26,6 +26,11 @@ public sealed partial class InMemoryIamStore : ITenantPreferenceOperationStore
             TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, target.PrincipalId);
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
+            var prepared = TenantApprovalRules.PreparePreferences(commit.OperationId, run.AgentInstanceId,
+                AgentCore.Application.Tools.TenantPreferenceToolContract.Parameters(AgentCore.Application.Tools.TenantPreferenceToolContract.Parse(commit.ArgumentsJson)),
+                target.Instance.Revision, target.Instance.PersonaRevision);
+            var previous = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, target.PrincipalId, prepared.OperationFingerprint);
+            if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous));
             var candidate = TenantPreferenceOperationRules.Apply(run, target, commit, at);
             TenantPreferenceOperationRules.Transaction(next, expectedSecurityRevision, run, audit);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);

@@ -19,7 +19,7 @@ public sealed partial class TenantPreferenceOperationTests
     {
         var current = store ?? f.Iam;
         return new(effects ?? (ITenantPreferenceOperationStore)current, new(current, (ITenantRunStore)current, (ITenantAgentStore)current, new(current)),
-            f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, f.Ids, f.Clock);
+            f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, f.Ids, f.Clock, (ITenantApprovalStore)current);
     }
     private static async Task<Environment> Setup(Fixture f, bool permissions = true, bool update = true,
         HarnessManagementMode mode = HarnessManagementMode.Managed, bool autoApply = true, bool restrictedRequester = false)

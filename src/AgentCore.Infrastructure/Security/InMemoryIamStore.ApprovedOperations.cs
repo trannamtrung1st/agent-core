@@ -32,6 +32,9 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, request.ExecutorPrincipalId);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
             commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
+            var correlated = RootApproval(request.TenantId, request.RootActivationId, request.ExecutorPrincipalId, request.Fingerprint);
+            if (correlated is not null && correlated.RequestId != request.RequestId)
+                commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = "root_operation_conflict" };
             if (commit.Outcome == TenantOperationOutcome.Completed)
             {
                 try { ValidateAgentActor(before, decision.HumanPrincipalId); }

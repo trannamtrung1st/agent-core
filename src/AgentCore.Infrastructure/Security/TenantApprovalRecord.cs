@@ -31,7 +31,8 @@ public sealed class TenantApprovalRecord
     {
         RequestId = r.RequestId, TenantId = r.TenantId, RunId = r.RunId.ToString("D"), SessionId = r.SessionId.ToString("D"), InstanceId = r.Operation.InstanceId.ToString("D"),
         RootActivationId = r.RootActivationId.ToString("D"), ExecutorPrincipalId = r.ExecutorPrincipalId, OriginalInitiatorPrincipalId = r.OriginalInitiatorPrincipalId,
-        OperationId = r.Operation.OperationId, Fingerprint = r.Fingerprint, Permission = TenantApprovalRequest.Permission,
+        // This legacy column is the exact grant/receipt FK witness, not semantic root correlation.
+        OperationId = r.Operation.OperationId, Fingerprint = r.Operation.ActionHash, Permission = TenantApprovalRequest.Permission,
         ResourceType = TenantApprovalRequest.ResourceType, ResourceId = r.ResourceId, Kind = (int)r.Kind, Status = (int)r.Status, Revision = r.Revision,
         CreatedAt = r.CreatedAt.ToUnixTimeMilliseconds(), ExpiresAt = r.ExpiresAt.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(r)
     };

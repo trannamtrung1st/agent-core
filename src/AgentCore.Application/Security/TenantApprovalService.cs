@@ -44,7 +44,7 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
             _ = AgentInstanceSettingsService.ResolvePatch(baseline, current.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
             managementReview = !TenantPreferenceToolContract.Allows(pinned) || !TenantPreferenceToolContract.Allows(effective);
         }
-        var existing = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId, agent.PrincipalId, operation.ActionHash, ct).ConfigureAwait(false);
+        var existing = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId, agent.PrincipalId, operation, ct).ConfigureAwait(false);
         if (existing is not null) return new(existing.Status == TenantApprovalStatus.Pending ? OperationDecisionKind.RequiresApproval : OperationDecisionKind.Denied,
             TenantApprovalRules.DuplicateReason(existing), existing.Operation, existing);
         var decision = await operations.Check(state, run.Admission.ExecutionContext!, TenantApprovalRequest.Permission,
@@ -57,13 +57,16 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
         TenantApprovalRules.Validate(request, run, agent);
         var next = Next(state);
         var audit = new AuthorizationAudit(ids.NewId(), reference.TenantId, agent.PrincipalId, "approvals.request", request.RequestId.ToString("D"), "allowed", "approval_pending", at);
-        var saved = await approvals.TryCreateApprovalAsync(next, state.Tenant.Revision, request, expectedRunRevision, generation, audit, ct).ConfigureAwait(false);
+        TenantApprovalRequest? saved;
+        try { saved = await approvals.TryCreateApprovalAsync(next, state.Tenant.Revision, request, expectedRunRevision, generation, audit, ct).ConfigureAwait(false); }
+        catch (SecurityConflictException ex) when (ex.ReasonCode is "approval_rate_limited" or "approval_root_limit")
+        { return new(OperationDecisionKind.Denied, ex.ReasonCode, operation, null); }
         if (saved is null)
         {
             // A concurrent same-root preparer may have won security/Run CAS. Return its durable request after fresh identity checks.
             var (current, _) = await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
             saved = await approvals.FindRootApprovalAsync(reference.TenantId, current.Admission.Activation.RootActivationId,
-                current.Admission.ExecutionContext!.AgentPrincipalId, operation.ActionHash, ct).ConfigureAwait(false)
+                current.Admission.ExecutionContext!.AgentPrincipalId, operation, ct).ConfigureAwait(false)
                 ?? throw new SecurityConflictException("stale_revision");
         }
         return new(saved.Status == TenantApprovalStatus.Pending ? OperationDecisionKind.RequiresApproval : OperationDecisionKind.Denied,

@@ -46,6 +46,9 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         await ValidateTenantActorAsync(db, before, request.ExecutorPrincipalId, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow();
         commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
+        var correlated = await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (correlated is not null && correlated.RequestId != request.RequestId)
+            commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = "root_operation_conflict" };
         if (commit.Outcome == TenantOperationOutcome.Completed)
         {
             try { await ValidateTenantActorAsync(db, before, decision.HumanPrincipalId, ct).ConfigureAwait(false); }

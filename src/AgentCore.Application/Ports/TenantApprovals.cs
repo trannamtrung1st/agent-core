@@ -7,7 +7,7 @@ public sealed record TenantApprovalContinuationIds(Guid ActivationId, Guid RunId
 public interface ITenantApprovalStore
 {
     ValueTask<TenantApprovalRequest?> FindApprovalAsync(Guid tenantId, Guid requestId, CancellationToken ct = default);
-    ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, string fingerprint, CancellationToken ct = default);
+    ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, PreparedTenantOperation operation, CancellationToken ct = default);
     ValueTask<IReadOnlyList<TenantApprovalRequest>> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests,
         IReadOnlyList<Guid>? allowedInstances, int limit, CancellationToken ct = default);
     ValueTask<TenantApprovalRequest?> TryCreateApprovalAsync(TenantSecurityState next, long expectedSecurityRevision,
