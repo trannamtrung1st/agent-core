@@ -10,12 +10,13 @@ using Microsoft.AspNetCore.SignalR;
 namespace AgentCore.Api.Realtime;
 
 // Recipient transport state only. Mutable conversation state remains in the owning Runtime mailbox.
-public sealed class TenantSessionLiveDelivery(TenantConversationService access, ITenantRunStore runs,
+public sealed partial class TenantSessionLiveDelivery(TenantConversationService access, ITenantRunStore runs,
     IHubContext<SessionHub> hubs, IIdGenerator ids, TimeProvider time, ILogger<TenantSessionLiveDelivery> logger)
 {
     private sealed class Connection
     {
         public SemaphoreSlim Gate { get; } = new(1, 1);
+        public SemaphoreSlim Commands { get; } = new(1, 1);
         public volatile bool Closed;
         public volatile Subscription? Current;
     }
@@ -26,6 +27,16 @@ public sealed class TenantSessionLiveDelivery(TenantConversationService access, 
         public TenantSessionInitiator Human { get; } = human;
         public Guid Attachment { get; } = attachment;
         public long Sequence;
+        public long LastCommand;
+        public Dictionary<Guid, CommandRecord> Dedupe { get; } = [];
+        public Queue<Guid> DedupeOrder { get; } = [];
+        public ConcurrentDictionary<Guid, Guid> KnownRuns { get; } = new();
+        public Queue<Guid> ResponseOrder { get; } = [];
+        public void ObserveRun(Guid response, Guid run)
+        {
+            if (KnownRuns.TryAdd(response, run)) ResponseOrder.Enqueue(response); else KnownRuns[response] = run;
+            while (ResponseOrder.Count > 128) KnownRuns.TryRemove(ResponseOrder.Dequeue(), out _);
+        }
     }
     private readonly ConcurrentDictionary<string, Connection> _connections = new();
     private readonly ConcurrentDictionary<(Guid Tenant, Guid Session), Source> _sources = new();
@@ -106,6 +117,7 @@ public sealed class TenantSessionLiveDelivery(TenantConversationService access, 
                     mapped.Payload["sessionRevision"] = recipient.SessionRevision;
                     if (connection.Closed) throw new AccessDeniedException("tenant_connection_unavailable");
                     await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", mapped, ct).ConfigureAwait(false);
+                    if (active is { } response) subscription.ObserveRun(response, source!.Run.AgentRunId);
                     return;
                 }
                 catch { connection.Current = null; throw; }
@@ -159,6 +171,7 @@ public sealed class TenantSessionLiveDelivery(TenantConversationService access, 
             if (recipient.Mode != SessionMode.Text) { state.Current = null; return; }
             if (state.Closed || state.Current != subscription) return;
             await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence), bounded.Token).ConfigureAwait(false);
+            if (output.Payload is ResponseStartedOutput && output.ResponseId is { } response) subscription.ObserveRun(response, source.Run.AgentRunId);
         }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException or OperationCanceledException)
         { if (entered) state.Current = null; }

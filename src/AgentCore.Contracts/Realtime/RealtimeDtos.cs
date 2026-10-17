@@ -13,6 +13,9 @@ public sealed class CommandAck
 
     [Key("error")]
     public CommandError? Error { get; set; }
+
+    [Key("result")]
+    public Dictionary<string, object?>? Result { get; set; }
 }
 
 [MessagePackObject]
@@ -114,6 +117,10 @@ public sealed class AttachPayload
 [MessagePackObject]
 public sealed class UserTextPayload
 {
+    [Key("expectedRevision")]
+    public long? ExpectedRevision { get; set; }
+    [Key("expectedSessionRevision")]
+    public long? ExpectedSessionRevision { get; set; }
     [Key("parts")]
     public UserMessagePartDto[]? Parts { get; set; }
     [Key("text")]
@@ -230,6 +237,10 @@ public sealed class EndPayload
 [MessagePackObject]
 public sealed class CancelResponsePayload
 {
+    [Key("expectedRevision")]
+    public long? ExpectedRevision { get; set; }
+    [Key("expectedRunRevision")]
+    public long? ExpectedRunRevision { get; set; }
 }
 
 [MessagePackObject]

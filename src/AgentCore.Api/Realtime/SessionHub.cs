@@ -8,7 +8,8 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace AgentCore.Api.Realtime;
 
-public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenants, IdentityService identity, IdentityHttpOptions policy, TimeProvider time) : Hub
+public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenants, IdentityService identity, IdentityHttpOptions policy, TimeProvider time,
+    TenantRunService runs, IamAuthorizer authorizer) : Hub
 {
     [Authorize]
     public async Task<CommandAck> AttachTenant(ClientCommand<TenantAttachPayload> command)
@@ -57,12 +58,16 @@ public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenan
     }
 
     public Task<CommandAck> SendText(ClientCommand<UserTextPayload> command) =>
-        Complete(host.SendTextAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.SendTextAsync(Context.ConnectionId, command, runs, Context.ConnectionAborted)
+            : host.SendTextAsync(Context.ConnectionId, command, Context.ConnectionAborted));
 
     public Task<CommandAck> CancelResponse(ClientCommand<CancelResponsePayload> command)
     {
         command.Payload ??= new CancelResponsePayload();
-        return Complete(host.CancelResponseAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+        return Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.CancelResponseAsync(Context.ConnectionId, command, runs, authorizer, Context.ConnectionAborted)
+            : host.CancelResponseAsync(Context.ConnectionId, command, Context.ConnectionAborted));
     }
 
     public Task<CommandAck> RespondApproval(ClientCommand<ApprovalResponsePayload> command)

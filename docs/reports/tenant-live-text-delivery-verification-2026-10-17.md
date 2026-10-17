@@ -48,3 +48,5 @@ All hosts/data/key roots are disposable and Synthetic. JavaScript wire evidence 
 ## Remaining scope
 
 Tenant frontend/tenant-switch UI and live controls, Hub message/receipt integration, durable recipient acknowledgements, voice, approval links/notifications, richer resource-aware events and complete continuation/recovery delivery remain required. No browser/Playwright UI acceptance is claimed. Other effect/resource families, trusted autonomous admissions, proactive authority propagation and final obsolete-authority/schema removal remain in the proposal. No CI, provider network, Real-host operation, deployment or installed-data migration/reset was performed. The full goal stays active.
+
+Subsequent [tenant Hub command verification](tenant-hub-commands-verification-2026-10-17.md) adds bound SendText/CancelResponse, safe result acknowledgements and current-authority replay. Its updated JavaScript journey now sends the primary messages through the Hub; this report retains its historical subscription checkpoint counts. Recipient receipts and frontend/voice remain separate.

@@ -47,7 +47,10 @@ try {
   const firstReady=await until(()=>live.events.find(e=>e.type==='session.ready'));
   assert.equal(firstReady.payload.tenantId,tenant);assert.equal(firstReady.payload.pendingMode,null);assert.deepEqual(firstReady.payload.history,[]);
   assert.equal(firstReady.sequence,1);assert.ok(firstReady.attachmentId);
-  const receipt=await human.send(tenant,session,'Hello tenant MessagePack');
+  const sendCommand={protocolVersion:1,sessionId:session,eventId:crypto.randomUUID(),sequence:1,timestamp:new Date().toISOString(),
+    attachmentId:firstReady.attachmentId,type:'user.text',payload:{text:'Hello tenant MessagePack',expectedRevision:await human.revision(tenant),expectedSessionRevision:firstReady.payload.sessionRevision,
+      principalId:crypto.randomUUID(),tenantId:crypto.randomUUID(),rootActivationId:crypto.randomUUID()}};
+  const sent=await live.hub.invoke('SendText',sendCommand);assert.equal(sent.accepted,true);assert.equal(sent.result.created,true);const receipt=sent.result;
   const terminal=await until(()=>live.events.find(e=>e.type==='agent.response.completed'&&e.responseId===receipt.responseId));
   assert.equal(terminal.payload.status,'completed');
   const deltas=live.events.filter(e=>e.type==='agent.text.delta'&&e.responseId===receipt.responseId); assert.ok(deltas.length>0);
@@ -57,24 +60,43 @@ try {
   assert.ok(live.events.every(e=>e.attachmentId===firstReady.attachmentId));
   assert.equal(live.events.find(e=>e.type==='agent.response.started').payload.agentRunId,receipt.runId);
   assert.equal((await human.finished(tenant,receipt.runId)).status,'completed');
+  const repeat=await live.hub.invoke('SendText',{...sendCommand,timestamp:new Date().toISOString()});assert.equal(repeat.accepted,true);assert.equal(repeat.result.runId,receipt.runId);
+  const changed=await live.hub.invoke('SendText',{...sendCommand,payload:{...sendCommand.payload,text:'Different command'}});assert.equal(changed.accepted,false);assert.equal(changed.error.code,'ProtocolError');assert.equal(changed.error.category,'Protocol');
+  const gap=await live.hub.invoke('SendText',{...sendCommand,eventId:crypto.randomUUID(),sequence:3});assert.equal(gap.accepted,false);assert.equal(gap.error.code,'StaleCommand');
+  const staleLease=await live.hub.invoke('SendText',{...sendCommand,eventId:crypto.randomUUID(),sequence:2,attachmentId:crypto.randomUUID()});assert.equal(staleLease.accepted,false);assert.equal(staleLease.error.code,'StaleAttachment');
+  const stale=await live.hub.invoke('SendText',{...sendCommand,eventId:crypto.randomUUID(),sequence:2});assert.equal(stale.accepted,false);assert.equal(stale.error.code,'stale_revision');
+  const context=await human.json(`/api/v2/tenants/${tenant}/agent-runs/${receipt.runId}`);
+  assert.equal(context.context.originalInitiatorPrincipalId,(await human.json(`/api/v2/tenants/${tenant}/access/me`)).principalId);
   const page=await until(async()=>{const r=await human.request(`/api/v2/tenants/${tenant}/sessions/${session}/messages`);return r.ok?r.json():null;});
   assert.equal(page.items.find(e=>e.responseId===receipt.responseId).receivedTextEndExclusive,0);
   const before=live.events.length;
   assert.equal((await live.hub.invoke('AttachTenant',attach(session,tenant))).accepted,true);
   const secondReady=await until(()=>live.events.slice(before).find(e=>e.type==='session.ready'));
   assert.notEqual(secondReady.attachmentId,firstReady.attachmentId);assert.equal(secondReady.sequence,1);assert.equal(secondReady.payload.history.length,2);
+  const replay=await live.hub.invoke('SendText',{...sendCommand,attachmentId:secondReady.attachmentId,payload:{text:sendCommand.payload.text,expectedRevision:await human.revision(tenant),expectedSessionRevision:secondReady.payload.sessionRevision}});
+  assert.equal(replay.accepted,true);assert.equal(replay.result.created,false);assert.equal(replay.result.runId,receipt.runId);
   const beta=(await human.json('/api/v2/system/tenants',{name:'Live beta',slug:'live-beta'})).tenantId;
   const second=await human.session(beta);
   assert.equal((await live.hub.invoke('AttachTenant',attach(second,beta))).accepted,true);
   const switchAt=live.events.length;
   const old=await human.send(tenant,session,'A later Alpha turn');assert.equal((await human.finished(tenant,old.runId)).status,'completed');
-  const next=await human.send(beta,second,'A Beta turn');await until(()=>live.events.slice(switchAt).some(e=>e.type==='agent.response.completed'&&e.responseId===next.responseId));
+  const betaReady=[...live.events].reverse().find(e=>e.type==='session.ready');
+  const nextCommand={protocolVersion:1,sessionId:second,eventId:crypto.randomUUID(),sequence:1,attachmentId:betaReady.attachmentId,type:'user.text',payload:{text:'A Beta turn',expectedRevision:await human.revision(beta),expectedSessionRevision:betaReady.payload.sessionRevision}};
+  const betaAck=await live.hub.invoke('SendText',nextCommand);assert.equal(betaAck.accepted,true);const next=betaAck.result;await until(()=>live.events.slice(switchAt).some(e=>e.type==='agent.response.completed'&&e.responseId===next.responseId));
   assert.ok(live.events.slice(switchAt).every(e=>e.sessionId===second));
+  const betaContext=await human.json(`/api/v2/tenants/${beta}/agent-runs/${next.runId}`);assert.notEqual(betaContext.context.originalInitiatorPrincipalId,context.context.originalInitiatorPrincipalId);
+  const foreignCommand=await live.hub.invoke('SendText',{...sendCommand,eventId:crypto.randomUUID(),sequence:2});assert.equal(foreignCommand.accepted,false);assert.equal(foreignCommand.error.code,'StaleAttachment');
   const foreign=await live.hub.invoke('AttachTenant',attach(session,beta));assert.equal(foreign.accepted,false);
   assert.equal((await live.hub.invoke('AttachTenant',attach(second,beta))).accepted,true);
+  const resumedBeta=[...live.events].reverse().find(e=>e.type==='session.ready');
+  const cacheCommand={...nextCommand,eventId:crypto.randomUUID(),attachmentId:resumedBeta.attachmentId,payload:{text:'A cached Beta admission',expectedRevision:await human.revision(beta),expectedSessionRevision:resumedBeta.payload.sessionRevision}};
+  const cached=await live.hub.invoke('SendText',cacheCommand);assert.equal(cached.accepted,true);
+  await until(()=>live.events.some(e=>e.type==='agent.response.completed'&&e.responseId===cached.result.responseId));await human.finished(beta,cached.result.runId);
   const logoutAt=live.events.length;assert.equal((await human.request('/api/v2/auth/logout',{})).status,204);
+  const revokedReplay=await live.hub.invoke('SendText',cacheCommand);assert.equal(revokedReplay.accepted,false);assert.equal(revokedReplay.error.category,'Authorization');
   const fresh=new Human();await fresh.login();const after=await fresh.send(beta,second,'After old browser logout');await fresh.finished(beta,after.runId);
   assert.equal(live.events.length,logoutAt);
+  const deniedCommand=await live.hub.invoke('SendText',{...nextCommand,eventId:crypto.randomUUID(),sequence:1});assert.equal(deniedCommand.accepted,false);
   assert.ok(!JSON.stringify(firstReady.payload).match(/ownerCapability|summary|definition|protectedPayload|permissionSnapshot/i));
   console.log('Tenant live wire passed');
 } finally {await Promise.allSettled(connections.map(connection=>connection.stop()));}

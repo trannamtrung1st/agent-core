@@ -66,6 +66,7 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "revoke")] [InlineData(true, "revoke")]
     [InlineData(false, "logout")] [InlineData(true, "logout")]
     [InlineData(false, "cancel")] [InlineData(true, "cancel")]
+    [InlineData(false, "cancel-revoke")] [InlineData(true, "cancel-revoke")]
     public async Task Tenant_live_reconnect_and_authority_boundaries_preserve_contiguous_prefix_and_exclude_late_output(bool sqlite, string boundary)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-live-boundary-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
@@ -85,7 +86,8 @@ public sealed partial class TenantSessionAccessTests
                 var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
                 var identity = factory.Services.GetRequiredService<IdentityService>(); var access = factory.Services.GetRequiredService<TenantAccessService>();
                 var account = await identity.RegisterAsync("recipient@example.test", "Recipient", "strong-recipient-password");
-                var role = await access.SaveRoleAsync(principal, tenant, null, "Read current conversation", ["sessions.read", "agents.chat"], await Revision(owner, tenant));
+                var role = await access.SaveRoleAsync(principal, tenant, null, "Read current conversation", boundary == "cancel-revoke"
+                    ? ["sessions.read", "agents.chat", "agent-runs.read", "agent-runs.cancel"] : ["sessions.read", "agents.chat"], await Revision(owner, tenant));
                 var invitation = await access.InviteAsync(principal, tenant, account.LoginKey, role.RoleId, await Revision(owner, tenant));
                 await access.AcceptInvitationAsync(account.AccountId, tenant, invitation.Invitation.InvitationId, invitation.Token);
                 var recipientCookies = new CookieContainer(); using var recipient = new HttpClient(new HttpClientHandler { CookieContainer = recipientCookies }) { BaseAddress = ready.BaseAddress };
@@ -109,11 +111,28 @@ public sealed partial class TenantSessionAccessTests
                 }
                 if (boundary == "revoke") await access.SaveRoleAsync(principal, tenant, role.RoleId, role.Name, ["sessions.read"], await Revision(owner, tenant));
                 if (boundary == "logout") Assert.Equal(HttpStatusCode.NoContent, (await recipient.PostAsync("/api/v2/auth/logout", null)).StatusCode);
-                if (boundary == "cancel")
+                if (boundary is "cancel" or "cancel-revoke")
                 {
                     var active = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!;
-                    Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/agent-runs/{runId}/cancel", new {
-                        expectedRevision = await Revision(owner, tenant), expectedRunRevision = active.Revision })).StatusCode);
+                    ClientCommand<CancelResponsePayload> Stop(string attachment) => new() { ProtocolVersion = 1, SessionId = session.ToString("D"),
+                        EventId = Guid.NewGuid().ToString("D"), Sequence = 1, AttachmentId = attachment, ResponseId = response.ToString("D"), Type = "agent.response.cancel",
+                        Payload = new() { ExpectedRunRevision = active.Revision } };
+                    var unauthorized = Stop(first.AttachmentId!); unauthorized.Payload.ExpectedRevision = await Revision(owner, tenant);
+                    if (boundary == "cancel") Assert.False((await hub.InvokeAsync<CommandAck>("CancelResponse", unauthorized)).Accepted);
+                    var ownerEvents = new ConcurrentQueue<ServerEvent>(); await using var controller = TenantSocket(ready.BaseAddress!, ownerCookies, ownerEvents);
+                    await controller.StartAsync(); Assert.True((await controller.InvokeAsync<CommandAck>("AttachTenant", TenantAttach(tenant, session))).Accepted);
+                    var attached = await AwaitTenantWire(() => ownerEvents.LastOrDefault(e => e.Type == "session.ready"));
+                    var stop = Stop(boundary == "cancel" ? attached.AttachmentId! : first.AttachmentId!); stop.Payload.ExpectedRevision = await Revision(owner, tenant);
+                    var actualController = boundary == "cancel" ? controller : hub;
+                    var cancelled = await actualController.InvokeAsync<CommandAck>("CancelResponse", stop);
+                    Assert.True(cancelled.Accepted, cancelled.Error?.Code); Assert.Equal("cancelled", cancelled.Result!["status"]);
+                    Assert.True((await actualController.InvokeAsync<CommandAck>("CancelResponse", stop)).Accepted);
+                    if (boundary == "cancel-revoke")
+                    {
+                        await access.SaveRoleAsync(principal, tenant, role.RoleId, role.Name, ["sessions.read", "agents.chat", "agent-runs.read"], await Revision(owner, tenant));
+                        Assert.False((await actualController.InvokeAsync<CommandAck>("CancelResponse", stop)).Accepted);
+                    }
+                    Assert.Single(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 100), a => a.Action == "agent-runs.cancel");
                     await AwaitTenantWire(() => events.FirstOrDefault(e => e.Type == "agent.response.interrupted" && e.ResponseId == response.ToString("D")));
                     var saved = await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(tenant, session, null, null, 50);
                     var interrupted = Assert.Single(saved!.History.Items, e => e.ResponseId == response && e.Role == ConversationRole.Assistant);
@@ -123,7 +142,7 @@ public sealed partial class TenantSessionAccessTests
                 }
                 model.Release.TrySetResult(); await model.Returned.Task.WaitAsync(TimeSpan.FromSeconds(15));
                 var final = await AwaitCancelledTenantRun(factory.Services.GetRequiredService<ITenantRunStore>(), tenant, runId);
-                Assert.Equal(boundary == "cancel" ? AgentRunStatus.Cancelled : AgentRunStatus.Completed, final.Status);
+                Assert.Equal(boundary is "cancel" or "cancel-revoke" ? AgentRunStatus.Cancelled : AgentRunStatus.Completed, final.Status);
                 if (boundary == "resume")
                 {
                     await AwaitTenantWire(() => events.FirstOrDefault(e => e.Type == "agent.response.completed" && e.ResponseId == response.ToString("D")));
