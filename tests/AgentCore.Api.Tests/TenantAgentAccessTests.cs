@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class TenantAgentAccessTests
+public sealed partial class TenantAgentAccessTests
 {
     [Fact]
     public async Task Creation_scoped_inventory_and_archive_restore_use_current_tenant_authority()

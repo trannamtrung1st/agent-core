@@ -15,6 +15,13 @@ public static partial class TenantAgentEndpoints
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}").RequireAuthorization();
         MapConfiguration(group);
+        group.MapGet("/agents/{instanceId:guid}/access", (Guid instanceId, int? audiencePage, int? executionPage, int? principalPage,
+            string? q, string? authorityScope, HttpContext http, TenantAgentAccessService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
+            return Results.Json(await service.ReadAsync(actor.TenantId, instanceId, human, audiencePage ?? 0, executionPage ?? 0, principalPage ?? 0, q, authorityScope ?? "agent", ct).ConfigureAwait(false));
+        }));
         group.MapGet("/chat/models", (HttpContext http, TenantChatService service, IModelCatalog catalog, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

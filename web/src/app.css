@@ -2805,6 +2805,7 @@ body,
   .admin-brand-divider { display: none; }
   .admin-header .admin-title { font-size: 14px !important; }
   .admin-brand { gap: var(--ac-space-tight) !important; }
+  .admin-brand-area { display: none; }
   .instance-settings-field-label { min-height: 40px; }
   .admin-breadcrumbs { grid-column: 1 / -1; grid-row: 2; }
   .admin-breadcrumbs-scoped li:first-child,

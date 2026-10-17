@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalAppUrl, parseAppRoute } from '../../app/appRoute';
-import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantApprovalPath } from './accessRoute';
+import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantApprovalPath, tenantAgentPath } from './accessRoute';
 const tenant = '11111111-1111-4111-8111-111111111111';
 describe('canonical access navigation', () => {
+  it('pins agent Access to the exact organization and rejects incomplete or extra subroutes', () => {
+    expect(parseAppRoute(`/t/${tenant}/admin/agents`)).toMatchObject({ area: 'access', view: 'tenant', page: 'agents', tenantId: tenant });
+    expect(parseAccessRoute(tenantAgentPath(tenant, tenant))).toMatchObject({ page: 'agents', tenantId: tenant, instanceId: tenant });
+    expect(canonicalAppUrl(tenantAgentPath(tenant, tenant))).toBe(tenantAgentPath(tenant, tenant));
+    for (const path of [`/t/${tenant}/admin/agents/${tenant}`, `/t/${tenant}/admin/agents/invalid/access`, `${tenantAgentPath(tenant, tenant)}/other`]) expect(parseAccessRoute(path)?.view).toBe('not-found');
+  });
   it('opens the OAuth return destination as a tenant Credential page and preserves its exact item query', () => {
     const path = tenantCredentialPath(tenant, tenant);
     expect(parseAppRoute(path.split('?')[0])).toMatchObject({ area: 'access', view: 'tenant', tenantId: tenant, page: 'credentials' });

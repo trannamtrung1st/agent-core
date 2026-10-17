@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:tenant-chat": "playwright test --config playwright.tenant-chat.config.ts"
+    "test:e2e:tenant-chat": "playwright test --config playwright.tenant-chat.config.ts",
+    "test:e2e:tenant-agent-access": "playwright test --config playwright.tenant-agent-access.config.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
