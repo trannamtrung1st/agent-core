@@ -23,7 +23,9 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         if (state.Tenant.Status != IdentityStatus.Active || agent.PrincipalId != context.AgentPrincipalId) throw new AccessDeniedException("executor_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
         var request = await approvals.FindApprovalAsync(reference.TenantId, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
-        if (request.Operation.OperationId != operationId || request.Operation.ActionHash != actionHash || request.RunId != run.AgentRunId
+        var source = request.RunId != run.AgentRunId ? await runs.FindTenantRunAsync(reference.TenantId, request.RunId, ct).ConfigureAwait(false) : null;
+        TenantApprovalContinuationRules.Require(request, run, source);
+        if (request.Operation.OperationId != operationId || request.Operation.ActionHash != actionHash
             || request.ExecutorPrincipalId != context.AgentPrincipalId || request.RootActivationId != context.RootActivationId)
             throw new SecurityConflictException("operation_mismatch");
         var existing = await effects.FindOperationReceiptAsync(reference.TenantId, operationId, ct).ConfigureAwait(false);
@@ -32,7 +34,7 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         var grant = await approvals.FindOperationGrantAsync(reference.TenantId, requestId, ct).ConfigureAwait(false);
         var commit = new TenantLocalEffectCommit(requestId, operationId, run.AgentRunId, generation, run.Revision, request.Revision,
             decision.DecisionId, grant?.Revision, actionHash, TenantOperationOutcome.Completed, "operation_completed");
-        TenantLocalEffectRules.Validate(request, decision, grant, run, commit);
+        TenantLocalEffectRules.Validate(request, decision, grant, run, commit, source);
         var at = time.GetUtcNow();
         if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
         if (run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)

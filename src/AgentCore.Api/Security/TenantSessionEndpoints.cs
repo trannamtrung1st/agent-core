@@ -75,7 +75,8 @@ public static class TenantSessionEndpoints
         var c = result.Context;
         return new { context = new { c.TenantId, c.AgentPrincipalId, c.OriginalInitiatorPrincipalId, c.SessionId, c.RunId,
             c.ActivationId, c.RootActivationId, c.ParentRunId, c.ParentActivationId, origin = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(c.Origin.ToString()) },
-            result.AgentInstanceId, status = result.Status.ToString().ToLowerInvariant(), result.Revision, result.CreatedAt, result.UpdatedAt };
+            result.AgentInstanceId, status = result.Status.ToString().ToLowerInvariant(), result.Revision, result.CreatedAt, result.UpdatedAt, result.ContinuationRunId,
+            outcomeKind = result.OutcomeKind is { } outcome ? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()) : null };
     }
     private static object Safe(TenantSessionMetadata item) => new { item.Owner.TenantId, item.Owner.SessionId, item.Owner.AgentInstanceId,
         item.Owner.ExecutorPrincipalId, item.Owner.CreatedByPrincipalId, item.Title, mode = item.Mode.ToString().ToLowerInvariant(),

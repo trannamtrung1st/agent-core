@@ -54,7 +54,7 @@ internal static class AgentRunStoreMapping
 
     public static void ValidateGenericAdmission(AgentRun run)
     {
-        if (run.Admission.Activation.Kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted)
+        if (run.Admission.Activation.Kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ApprovalContinuation)
             throw AgentCoreErrors.Validation("This Activation requires its atomic, fenced admission method.");
     }
 

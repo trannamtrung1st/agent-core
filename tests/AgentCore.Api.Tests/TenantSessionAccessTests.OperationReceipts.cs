@@ -45,12 +45,16 @@ public sealed partial class TenantSessionAccessTests
         public AgentCore.Domain.Definitions.AgentIdentity? ProposedPersona { get; set; }
         public string? ProposedPreferences { get; set; }
         public string? ProposedPreferenceAuthorization { get; set; }
+        public TaskCompletionSource? ApprovalResponseGate { get; set; }
+        public TaskCompletionSource ApprovalResponseEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public ModelCapabilities Capabilities => _inner.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            if (ApprovalResponseGate is { } gate && request.Context?.Sections.Any(s => s.Id == ContextSectionId.ApprovalOutcome) == true)
+            { ApprovalResponseEntered.TrySetResult(); await gate.Task.WaitAsync(cancellationToken); }
             if (ProposedPreferenceAuthorization is { } authorizedPreferences && request.Context?.Sections.All(s => s.Id != ContextSectionId.ApprovalOutcome) == true
                 && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization) == true)
             {

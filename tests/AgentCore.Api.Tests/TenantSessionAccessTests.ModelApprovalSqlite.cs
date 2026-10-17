@@ -16,6 +16,18 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantSessionAccessTests
 {
+    private static async ValueTask<AgentRun?> CurrentApprovalExecution(ITenantRunStore runs, Guid tenant, Guid runId)
+    {
+        var seen = new HashSet<Guid>();
+        while (seen.Add(runId))
+        {
+            var run = await runs.FindTenantRunAsync(tenant, runId);
+            if (run?.Result?.ContinuationRunId is not { } next) return run;
+            runId = next;
+        }
+        throw new InvalidOperationException("Approval continuation cycle.");
+    }
+
     private sealed class TenantApprovalSqliteFactory(string root, ILanguageModel model)
         : DurableSqliteHostFactory(Path.Combine(root, "store.db"), languageModel: model)
     {
@@ -92,11 +104,15 @@ public sealed partial class TenantSessionAccessTests
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
                 while (!deadline.IsCancellationRequested)
                 {
-                    completed = await runs.FindTenantRunAsync(tenant, runId);
+                    completed = await CurrentApprovalExecution(runs, tenant, runId);
                     if (completed?.IsTerminal == true) break;
                     await Task.Delay(25, deadline.Token);
                 }
                 Assert.NotNull(completed); Assert.True(completed.Status == AgentRunStatus.Completed, $"{completed.Status}: {completed.Failure?.Code}: {completed.Failure?.Summary}");
+                Assert.NotEqual(runId, completed.AgentRunId); Assert.Equal(ActivationKind.ApprovalContinuation, completed.Admission.Activation.Kind);
+                Assert.Equal(request.Operation.OperationId, completed.Admission.ApprovalResume!.OperationId);
+                var sourceMetadata = await Json(await owner.GetAsync(api + $"/agent-runs/{runId}"));
+                Assert.Equal("continued", sourceMetadata.GetProperty("outcomeKind").GetString()); Assert.Equal(completed.AgentRunId, sourceMetadata.GetProperty("continuationRunId").GetGuid());
                 var after = (await second.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance;
                 if (preferences) Assert.Equal("vi", after.SettingsOverrides!.Language!.Value); else Assert.Equal(desired, after.Persona);
                 Assert.Equal(OperationGrantStatus.Consumed, (await second.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, requestId))!.Status);

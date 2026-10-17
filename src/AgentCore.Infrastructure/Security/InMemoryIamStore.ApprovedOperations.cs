@@ -24,13 +24,14 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var request = _approvals.GetValueOrDefault(commit.RequestId); var decision = _approvalDecisions.GetValueOrDefault(commit.RequestId);
             var run = sessionBacking.ReadTenantRun(next.Tenant.TenantId, commit.RunId);
             if (request is null || decision is null || run is null || run.Revision != commit.ExpectedRunRevision) return ValueTask.FromResult<TenantOperationReceipt?>(null);
+            var source = request.RunId != run.AgentRunId ? sessionBacking.ReadTenantRun(request.TenantId, request.RunId) : null;
             var grant = _operationGrants.GetValueOrDefault(commit.RequestId);
-            TenantLocalEffectRules.Validate(request, decision, grant, run, commit);
+            TenantLocalEffectRules.Validate(request, decision, grant, run, commit, source);
             var target = FindTenantAgentAsync(next.Tenant.TenantId, request.Operation.InstanceId, ct).Result;
             if (target is null) return ValueTask.FromResult<TenantOperationReceipt?>(null);
             TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, request.ExecutorPrincipalId);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
-            commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
+            commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
             if (commit.Outcome == TenantOperationOutcome.Completed)
             {
                 try { ValidateAgentActor(before, decision.HumanPrincipalId); }
@@ -43,7 +44,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             TenantLocalEffectRules.ValidateTransaction(next, expectedSecurityRevision, request, audit);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
             at = (clock ?? TimeProvider.System).GetUtcNow();
-            commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
+            commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);

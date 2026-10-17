@@ -36,14 +36,16 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         var row = await OwnedRuns(db, tenant.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == commit.RunId.ToString("D"), ct).ConfigureAwait(false);
         if (requestRow is null || decision is null || row is null || row.Revision != commit.ExpectedRunRevision) return null;
         var request = requestRow.Domain(); var run = AgentRunStoreMapping.ToDomain(row);
+        var sourceRow = request.RunId != run.AgentRunId ? await OwnedRuns(db, request.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false) : null;
+        var source = sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow);
         var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
-        TenantLocalEffectRules.Validate(request, decision, grant, run, commit);
+        TenantLocalEffectRules.Validate(request, decision, grant, run, commit, source);
         var owned = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
         if (owned is null) return null;
         var target = Owned(owned); TenantSessionRules.RequireExecutor(before, target);
         await ValidateTenantActorAsync(db, before, request.ExecutorPrincipalId, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow();
-        commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
+        commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
         if (commit.Outcome == TenantOperationOutcome.Completed)
         {
             try { await ValidateTenantActorAsync(db, before, decision.HumanPrincipalId, ct).ConfigureAwait(false); }
@@ -56,7 +58,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         TenantLocalEffectRules.ValidateTransaction(next, expectedSecurityRevision, request, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         at = (clock ?? TimeProvider.System).GetUtcNow();
-        commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at);
+        commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
         audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
         var updated = complete ? TenantAgentConfigurationRules.Apply(target.Instance,

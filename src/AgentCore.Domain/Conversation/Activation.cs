@@ -13,7 +13,8 @@ public enum ActivationKind
     ManualBackground,
     BackgroundCompleted,
     CoreEvent,
-    ConfigurationContinuation
+    ConfigurationContinuation,
+    ApprovalContinuation
 }
 
 /// <summary>Immutable admission of one effective turn, including its ordered input batch.</summary>
@@ -50,7 +51,7 @@ public sealed class Activation
         AgentRunText.RequireOptionalId(sourceSessionId, "Source Session");
         AgentRunText.RequireOptionalId(sourceAgentRunId, "Source AgentRun");
         AgentRunText.RequireOptionalId(parentActivationId, "Parent Activation");
-        var continuation = kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ConfigurationContinuation;
+        var continuation = kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ConfigurationContinuation or ActivationKind.ApprovalContinuation;
         if (rootActivationId == Guid.Empty || continuation && (parentActivationId is null || parentActivationId == activationId
                 || rootActivationId == activationId || sourceAgentRunId is null || sourceSessionId is null)
             || !continuation && (rootActivationId != activationId || parentActivationId is not null || sourceAgentRunId is not null || sourceSessionId is not null))
@@ -58,6 +59,8 @@ public sealed class Activation
         if (kind == ActivationKind.ConfigurationContinuation && (sourceSessionId != sessionId || sourceAgentRunId is null
             || sourceEventId is null || entries.Length != 0 || evidenceJson is null))
             throw new ArgumentException("Configuration continuation requires its source Run in the same Session, bounded task evidence and no newly owned inputs.");
+        if (kind == ActivationKind.ApprovalContinuation && (sourceSessionId != sessionId || sourceEventId is null || entries.Length != 0 || evidenceJson is null))
+            throw new ArgumentException("Approval continuation requires a decision signal, same Session source and no newly owned inputs.");
         if (kind == ActivationKind.ScheduledWork && triggerOccurrenceId is null)
             throw new ArgumentException("Scheduled work requires its admitted occurrence.");
         if (kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted

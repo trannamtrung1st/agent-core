@@ -14,15 +14,18 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantSessionAccessTests
 {
     [Theory]
-    [InlineData(false, false, "approve", false)] [InlineData(true, false, "approve", false)]
-    [InlineData(false, true, "approve", false)] [InlineData(true, true, "approve", false)]
-    [InlineData(false, false, "reject", false)] [InlineData(true, false, "reject", false)]
-    [InlineData(false, true, "reject", false)] [InlineData(true, true, "reject", false)]
-    [InlineData(false, false, "cancel", false)] [InlineData(true, false, "cancel", false)]
-    [InlineData(false, false, "approve", true)] [InlineData(true, false, "approve", true)]
-    public async Task Model_preference_authorization_persists_exact_parameters_and_resumes_the_saved_effect(bool sqlite, bool review, string decision, bool freeze)
+    [InlineData(false, false, "approve", false, false)] [InlineData(true, false, "approve", false, false)]
+    [InlineData(false, true, "approve", false, false)] [InlineData(true, true, "approve", false, false)]
+    [InlineData(false, false, "reject", false, false)] [InlineData(true, false, "reject", false, false)]
+    [InlineData(false, true, "reject", false, false)] [InlineData(true, true, "reject", false, false)]
+    [InlineData(false, false, "cancel", false, false)] [InlineData(true, false, "cancel", false, false)]
+    [InlineData(false, false, "approve", true, false)] [InlineData(true, false, "approve", true, false)]
+    [InlineData(false, false, "approve", false, true)]
+    [InlineData(true, false, "approve", false, true)]
+    public async Task Model_preference_authorization_persists_exact_parameters_and_resumes_the_saved_effect(bool sqlite, bool review, string decision, bool freeze, bool busy)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-preference-approval-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        AgentCore.Api.Realtime.SessionHost? reservedCapacity = null; var capacityHeld = false;
         try
         {
             var model = new ApprovalRecordingModel();
@@ -30,6 +33,7 @@ public sealed partial class TenantSessionAccessTests
             if (factory is ApprovalExecutionFactory memory) model = memory.Model;
             using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+            factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentCore.Api.Realtime.AgentCoreOptions>>().Value.MaxActiveSessions = 1;
             var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
             var created = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid();
@@ -46,6 +50,7 @@ public sealed partial class TenantSessionAccessTests
                 await access.AssignRoleAsync(actor, tenant, before.PrincipalId, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));
             }
             model.ProposedPreferenceAuthorization = """{"set":{"language":"vi","responseLength":"concise"},"clear":[]}""";
+            if (busy) model.ApprovalResponseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
             var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
             var sessionId = session.GetProperty("sessionId").GetGuid();
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Request authorization for concise Vietnamese responses", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
@@ -72,6 +77,14 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/agents/{instance}/self-management/freeze", new {
                     expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2
                 })).StatusCode);
+            if (busy)
+            {
+                reservedCapacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>();
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                while (!capacityHeld && !deadline.IsCancellationRequested)
+                { capacityHeld = reservedCapacity.TryReserveTenantRuntime(); if (!capacityHeld) await Task.Delay(25, deadline.Token); }
+                Assert.True(capacityHeld);
+            }
             var decided = await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/" + (decision == "cancel" ? "cancel" : "decision"), new {
                 decision, actionHash = request.Operation.ActionHash, expectedRevision = await Revision(owner, tenant), expectedRequestRevision = request.Revision
             });
@@ -84,15 +97,50 @@ public sealed partial class TenantSessionAccessTests
                 return;
             }
             Assert.Equal(HttpStatusCode.OK, decided.StatusCode);
+            if (busy)
+            {
+                AgentRun? deferred = null; using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                try
+                {
+                    while (!deadline.IsCancellationRequested)
+                    {
+                        deferred = await CurrentApprovalExecution(runs, tenant, runId);
+                        if (deferred?.Status == AgentRunStatus.WaitingToRetry) break;
+                        await Task.Delay(25, deadline.Token);
+                    }
+                }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
+                Assert.True(deferred?.Status == AgentRunStatus.WaitingToRetry, $"Expected a known-unaccepted successor to defer; observed {deferred?.Status}.");
+                Assert.NotNull(deferred);
+                Assert.Equal(waiting.AttemptCount, deferred.AttemptCount); Assert.Equal(waiting.Checkpoint!.RemainingOverallBudgetMs, deferred.Checkpoint!.RemainingOverallBudgetMs);
+                Assert.Equal(2, (await agents.FindTenantAgentAsync(tenant, instance))!.Instance.Revision);
+                reservedCapacity!.ReleaseTenantRuntime(); capacityHeld = false;
+                await model.ApprovalResponseEntered.Task.WaitAsync(TimeSpan.FromSeconds(15));
+                var active = (await CurrentApprovalExecution(runs, tenant, runId))!; Assert.Equal(AgentRunStatus.Running, active.Status);
+                var dispatcher = factory.Services.GetRequiredService<ITenantRunDispatcher>();
+                Assert.All(await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => dispatcher.DispatchAsync(active).AsTask())), accepted => Assert.True(accepted));
+                var stale = new AgentRun(active.AgentRunId, active.Owner, active.Admission, active.PinnedModel, active.Status, active.Revision, active.AttemptCount, active.MaxAttempts,
+                    active.NextRetryAtUtc, new(Guid.NewGuid(), active.Claim!.ClaimedAtUtc, active.Claim.LeaseExpiresAtUtc), active.CancellationRequested, active.CancellationRequestedAtUtc,
+                    active.KnownEffectSummary, active.Progress, active.Checkpoint, active.Result, active.Failure, active.SideEffect, active.Approval, active.CreatedAtUtc, active.UpdatedAtUtc,
+                    active.PinnedSkillCatalog, active.ActiveSkillKeys, active.SkillLoadCount, active.LoadedCapabilityIds, active.CapabilityLoadCount, active.Wait, active.WaitCount, active.TotalWaitSeconds, active.ApprovalRequestId);
+                Assert.False(await dispatcher.DispatchAsync(stale));
+                Assert.Equal(active.Claim.Generation, (await runs.FindTenantRunAsync(tenant, active.AgentRunId))!.Claim!.Generation);
+                Assert.Single(model.Requests, r => r.Context?.Sections.Any(s => s.Id == AgentCore.Application.Context.ContextSectionId.ApprovalOutcome) == true);
+                model.ApprovalResponseGate!.TrySetResult();
+            }
             AgentRun? completed = null;
             using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
                 while (!deadline.IsCancellationRequested)
                 {
-                    completed = await runs.FindTenantRunAsync(tenant, runId);
+                    completed = await CurrentApprovalExecution(runs, tenant, runId);
                     if (completed?.IsTerminal == true) break;
                     await Task.Delay(25, deadline.Token);
                 }
             Assert.NotNull(completed); Assert.True(completed.Status == AgentRunStatus.Completed, $"{completed.Status}: {completed.Failure?.Code}: {completed.Failure?.Summary}");
+            Assert.NotEqual(runId, completed.AgentRunId); Assert.Equal(request.Operation.OperationId, completed.Admission.ApprovalResume!.OperationId);
+            var sourceMetadata = await Json(await owner.GetAsync(api + $"/agent-runs/{runId}"));
+            Assert.Equal(completed.AgentRunId, sourceMetadata.GetProperty("continuationRunId").GetGuid());
+            Assert.Equal("continued", sourceMetadata.GetProperty("outcomeKind").GetString());
             var after = (await agents.FindTenantAgentAsync(tenant, instance))!.Instance;
             Assert.Equal(decision == "approve" || freeze ? 3 : 2, after.Revision); Assert.Equal(before.Instance.Persona, after.Persona);
             if (decision == "approve" && !freeze) { Assert.Equal("vi", after.SettingsOverrides!.Language!.Value); Assert.Equal("concise", after.SettingsOverrides.ResponseLength!.Value); }
@@ -105,6 +153,6 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(decision == "approve" ? 1 : 0, (await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200)).Count(a => a.Action == "operations.preferences.apply"));
             Assert.Null(completed.Owner.ProfileIdOrNull);
         }
-        finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+        finally { if (capacityHeld) reservedCapacity!.ReleaseTenantRuntime(); SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
 }

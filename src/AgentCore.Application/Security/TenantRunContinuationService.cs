@@ -14,15 +14,16 @@ public sealed record TenantApprovalOutcome(Guid TenantId, Guid RunId, Guid Reque
 
 public static class TenantRunContinuationRules
 {
-    public static void Require(AgentRun run, TenantApprovalRequest? request)
+    public static void Require(AgentRun run, TenantApprovalRequest? request, AgentRun? source = null)
     {
         var context = run.Admission.ExecutionContext;
         if (request is null || context is null || !Enum.IsDefined(request.Status) || request.Status == TenantApprovalStatus.Pending
-            || request.RequestId != run.ApprovalRequestId || request.RunId != run.AgentRunId || request.SessionId != run.SessionId
+            || request.RequestId != run.ApprovalRequestId || request.SessionId != run.SessionId
             || request.TenantId != context.TenantId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || request.RootActivationId != context.RootActivationId
             || request.Operation.InstanceId != run.AgentInstanceId)
             throw new SecurityConflictException("approval_continuation_unavailable");
+        TenantApprovalContinuationRules.Require(request, run, source);
     }
 }
 
@@ -35,7 +36,8 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         var run = await Current(dispatched, ct).ConfigureAwait(false);
         if (run.ApprovalRequestId is not { } requestId) return (run, null);
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
-        TenantRunContinuationRules.Require(run, request);
+        var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
+        TenantRunContinuationRules.Require(run, request, source);
         ValidateAuthorizationCheckpoint(run, request!);
         TenantOperationReceipt? receipt = null;
         if (request!.Status == TenantApprovalStatus.Approved)
@@ -70,11 +72,19 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         return (run, outcome);
     }
 
-    private static void ValidateAuthorizationCheckpoint(AgentRun run, TenantApprovalRequest request)
+    internal static void ValidateAuthorizationCheckpoint(AgentRun run, TenantApprovalRequest request, bool requirePending = false)
     {
-        if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var transcript)) return;
+        if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var transcript))
+        {
+            if (requirePending) throw new SecurityConflictException("approval_continuation_mismatch");
+            return;
+        }
         var pending = AgentRunToolCallCheckpoint.PendingCalls(transcript!);
-        if (!pending.Any(c => c.Name == ToolCatalog.RequestAuthorization)) return;
+        if (!pending.Any(c => c.Name == ToolCatalog.RequestAuthorization))
+        {
+            if (requirePending) throw new SecurityConflictException("approval_continuation_mismatch");
+            return;
+        }
         try
         {
             if (pending.Count != 1 || !TenantApprovalToolContract.Parse(pending[0]).Matches(request.Operation))

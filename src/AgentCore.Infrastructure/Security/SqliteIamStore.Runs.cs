@@ -28,7 +28,7 @@ public sealed partial class SqliteIamStore
             if (await db.Sessions.AnyAsync(s => s.SessionId == row.SessionId && (s.Status == nameof(SessionStatus.Attached) || s.Status == nameof(SessionStatus.Ending)), ct).ConfigureAwait(false))
                 throw new SecurityConflictException("session_in_use");
             var run = AgentRunStoreMapping.ToDomain(row);
-            if (run.Status != AgentRunStatus.Queued) throw new SecurityConflictException("run_in_use");
+            if (run.Status is not (AgentRunStatus.Queued or AgentRunStatus.WaitingToRetry)) throw new SecurityConflictException("run_in_use");
             saved = run.RequestCancellation(run.Revision, null, at); AgentRunStoreMapping.Apply(row, saved); return true;
         }, ct).ConfigureAwait(false);
         return written ? saved : null;

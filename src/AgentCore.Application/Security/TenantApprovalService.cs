@@ -184,7 +184,7 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
                 new(ids.NewId(), request.TenantId, request.RequestId, request.RunId, checked(request.Revision + 1), 1, at, null), at, ct).ConfigureAwait(false);
         var count = 0;
         foreach (var signal in await approvals.PendingApprovalSignalsAsync(100, ct).ConfigureAwait(false))
-            if (await approvals.TryResumeApprovalAsync(signal, time.GetUtcNow(), ct).ConfigureAwait(false)) count++;
+            if (await approvals.TryResumeApprovalAsync(signal, time.GetUtcNow(), ct, new(ids.NewId(), ids.NewId())).ConfigureAwait(false)) count++;
         return count;
     }
 

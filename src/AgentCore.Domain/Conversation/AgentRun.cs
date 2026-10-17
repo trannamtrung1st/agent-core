@@ -416,7 +416,7 @@ public sealed partial class AgentRun
             CancellationRequestedAtUtc,
             KnownEffectSummary,
             Progress,
-            Checkpoint,
+            Checkpoint?.AwaitingRuntimeAdmission == true ? Checkpoint.WithRuntimeAdmissionPending(false) : Checkpoint,
             Result,
             Failure,
             SideEffect,
@@ -1178,7 +1178,7 @@ public sealed partial class AgentRun
         checkpoint?.PayloadJson.Contains("\"ObservationRequired\":true", StringComparison.Ordinal) == true;
 
     private bool IsApprovalResume =>
-        Status == AgentRunStatus.Queued
+        (Status == AgentRunStatus.Queued || Status == AgentRunStatus.WaitingToRetry && Admission.ApprovalResume is not null && Checkpoint?.AwaitingRuntimeAdmission == true)
         && (Owner.TenantId is not null && ApprovalRequestId is not null && AttemptCount > 0 || Approval is
         {
             Decision: AgentRunApprovalDecision.Approved or AgentRunApprovalDecision.Rejected or AgentRunApprovalDecision.Expired

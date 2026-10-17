@@ -7,11 +7,12 @@ public enum AgentRunOutputContract { ConversationResponse, BackgroundOutcome, Co
 
 public enum AgentRunTaskSource { Automation, AgentRun }
 public sealed record AgentRunTaskIntent(string Text, AgentRunTaskSource Source, string? SourceRevision = null);
+public sealed record TenantApprovalResume(Guid SourceRunId, Guid RequestId, Guid OperationId, string ActionHash, IReadOnlyList<Guid> SourceInputEntryIds);
 
 public sealed class AgentRunAdmission
 {
     public AgentRunAdmission(Activation activation, string definitionId, int definitionVersion,
-        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null, TrustedExecutionContext? executionContext = null)
+        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null, TrustedExecutionContext? executionContext = null, TenantApprovalResume? approvalResume = null)
     {
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(pinnedPersona);
@@ -34,6 +35,14 @@ public sealed class AgentRunAdmission
             throw new ArgumentException("Run task intent is invalid.");
         TaskIntent = taskIntent;
         ExecutionContext = executionContext;
+        if ((activation.Kind == ActivationKind.ApprovalContinuation) != (approvalResume is not null)
+            || approvalResume is not null && (new[] { approvalResume.SourceRunId, approvalResume.RequestId, approvalResume.OperationId }.Any(id => id == Guid.Empty)
+                || approvalResume.SourceRunId != activation.SourceAgentRunId || executionContext?.Origin != ExecutionOrigin.ApprovalContinuation
+                || approvalResume.ActionHash.Length != AgentRunLimits.ActionHashCharacters || responseId is null
+                || approvalResume.SourceInputEntryIds.Count is < 1 or > Activation.MaxSourceEntries
+                || approvalResume.SourceInputEntryIds.Any(id => id == Guid.Empty) || approvalResume.SourceInputEntryIds.Distinct().Count() != approvalResume.SourceInputEntryIds.Count))
+            throw new ArgumentException("Approval continuation requires its exact trusted operation and original input references.");
+        ApprovalResume = approvalResume is null ? null : approvalResume with { SourceInputEntryIds = Array.AsReadOnly(approvalResume.SourceInputEntryIds.ToArray()) };
         Configuration = configuration;
         ExecutionBudget = executionBudget;
         OutputContract = outputContract;
@@ -45,6 +54,7 @@ public sealed class AgentRunAdmission
     }
 
     public AgentRunTaskIntent? TaskIntent { get; }
+    public TenantApprovalResume? ApprovalResume { get; }
     public TrustedExecutionContext? ExecutionContext { get; }
     public ComposerRunInput? ComposerInput { get; }
     public AgentRunConfiguration? Configuration { get; }

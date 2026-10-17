@@ -24,6 +24,20 @@ public sealed partial class InMemoryMemoryStore
             var next = run.WaitForDurableApproval(revision, requestId, generation, at); AgentRuns.Runs[runId] = next; return next;
         }
     }
+    internal void AdmitTenantApprovalContinuation(AgentRun source, AgentRun next, Guid requestId, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            if (ReadTenantRun(source.Owner.TenantId!.Value, source.AgentRunId)?.Revision != source.Revision
+                || AgentRuns.Runs.ContainsKey(next.AgentRunId) || AgentRuns.Activations.ContainsKey(next.ActivationId)
+                || AgentRuns.ByAdmission.ContainsKey((next.SessionId, next.Admission.Activation.DedupeKey))) throw new SecurityConflictException("stale_revision");
+            var retired = source.HandoffApprovalContinuation(source.Revision, requestId, next.AgentRunId, at);
+            var activation = AgentRunStoreMapping.ToActivationRecord(_sessions[source.SessionId], next);
+            AgentRuns.Runs[source.AgentRunId] = retired; AgentRuns.Runs.Add(next.AgentRunId, next);
+            AgentRuns.Activations.Add(next.ActivationId, activation); AgentRuns.ByAdmission.Add((next.SessionId, next.Admission.Activation.DedupeKey), next.AgentRunId);
+        }
+    }
+
     internal bool ResumeTenantApproval(Guid tenant, Guid runId, Guid requestId, DateTimeOffset at)
     {
         lock (_gate)
@@ -40,7 +54,7 @@ public sealed partial class InMemoryMemoryStore
         {
             var run = ReadTenantRun(tenant, runId); if (run is null || run.Revision != expectedRunRevision) return null;
             if (_sessions[run.SessionId].Status is SessionStatus.Attached or SessionStatus.Ending) throw new SecurityConflictException("session_in_use");
-            if (run.Status != AgentRunStatus.Queued) throw new SecurityConflictException("run_in_use");
+            if (run.Status is not (AgentRunStatus.Queued or AgentRunStatus.WaitingToRetry)) throw new SecurityConflictException("run_in_use");
             var saved = run.RequestCancellation(run.Revision, null, at); AgentRuns.Runs[runId] = saved; return saved;
         }
     }

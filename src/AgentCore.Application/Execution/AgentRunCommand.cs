@@ -9,6 +9,8 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
     public sealed record ResumeWait(long Revision, DateTimeOffset At, Guid Generation, DateTimeOffset LeaseExpiresAt) : AgentRunCommand(Revision, At);
     public sealed record DeferDispatch(long Revision, DateTimeOffset At, Guid Generation, DateTimeOffset RetryAt)
         : AgentRunCommand(Revision, At);
+    public sealed record DeferApprovalDispatch(long Revision, DateTimeOffset At, Guid Generation, DateTimeOffset RetryAt)
+        : AgentRunCommand(Revision, At);
 
     public sealed record Claim(long Revision, DateTimeOffset At, Guid Generation, DateTimeOffset LeaseExpiresAt)
         : AgentRunCommand(Revision, At);
@@ -64,6 +66,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             SuspendWait c => run.SuspendForSignal(c.ExpectedRevision, c.Generation, c.Value, c.Wait, c.AtUtc),
             ResumeWait => throw new ArgumentException("Wait wakeup requires store condition validation and checkpoint append."),
             DeferDispatch c => run.DeferUnstartedDispatch(c.ExpectedRevision, c.Generation, c.AtUtc, c.RetryAt),
+            DeferApprovalDispatch c => run.DeferUnacceptedApprovalDispatch(c.ExpectedRevision, c.Generation, c.AtUtc, c.RetryAt),
             Claim c => run.TakeClaim(c.Generation, c.AtUtc, c.LeaseExpiresAt),
             Renew c => run.RenewClaim(c.ExpectedRevision, c.Generation, c.LeaseExpiresAt, c.AtUtc),
             Checkpoint c => run.SaveCheckpoint(c.ExpectedRevision, c.Generation, c.Value, c.Progress, c.AtUtc),

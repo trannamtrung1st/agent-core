@@ -9,7 +9,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Guid ResponseId, Guid ActivationId, Guid RootActivationId, long SessionRevision, long SecurityRevision);
-public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null);
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
     TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time)
@@ -58,7 +58,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var run = await runs.FindTenantRunAsync(tenant, runId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         await Require(state, initiator.PrincipalId, "agent-runs.read", TenantRunRules.Scope(tenant, runId), ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, run.SessionId), ct).ConfigureAwait(false);
-        return new(run.Admission.ExecutionContext!, run.AgentInstanceId, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc);
+        return new(run.Admission.ExecutionContext!, run.AgentInstanceId, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc, run.Result?.ContinuationRunId, run.Result?.OutcomeKind);
     }
     public async ValueTask<TenantRunMetadata> CancelAsync(Guid tenant, Guid runId, TenantSessionInitiator initiator, long expectedSecurityRevision, long expectedRunRevision, CancellationToken ct = default)
     {
@@ -69,7 +69,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, run.SessionId), ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
         if (state.Tenant.Revision != expectedSecurityRevision || run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
-        if (run.Status != AgentRunStatus.Queued) throw new SecurityConflictException("run_in_use");
+        if (run.Status is not (AgentRunStatus.Queued or AgentRunStatus.WaitingToRetry)) throw new SecurityConflictException("run_in_use");
         var at = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
         var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, "agent-runs.cancel", runId.ToString("D"), "allowed", "queued_run_cancelled", at);

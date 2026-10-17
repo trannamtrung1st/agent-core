@@ -36,6 +36,9 @@ public sealed partial class TenantOperationAuthorizationTests
             (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, request.Revision);
         await approval.DispatchPendingAsync();
         var queued = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, run.AgentRunId))!;
+        Assert.Equal(AgentRunOutcomeKind.Continued, queued.Result!.OutcomeKind);
+        queued = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, queued.Result.ContinuationRunId!.Value))!;
+        Assert.Equal(run.AttemptCount, queued.AttemptCount); Assert.Equal(run.ResponseId, queued.ResponseId);
         var claimed = await storage.ApplyTenantRuntimeCommandAsync(queued.Owner, queued.AgentRunId,
             new AgentRunCommand.Claim(queued.Revision, clock.GetUtcNow(), f.Ids.NewId(), clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
         var resumed = await Continuations(f).ResumeAsync(claimed);

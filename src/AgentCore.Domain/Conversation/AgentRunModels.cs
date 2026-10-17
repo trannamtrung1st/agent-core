@@ -188,7 +188,7 @@ public sealed class AgentRunProgress
 
 public sealed class AgentRunCheckpoint
 {
-    public AgentRunCheckpoint(string payloadJson, int stepCount, long outputBytes, int remainingOverallBudgetMs, int? activeExecutionMs = null, DateTimeOffset? budgetRecordedAtUtc = null)
+    public AgentRunCheckpoint(string payloadJson, int stepCount, long outputBytes, int remainingOverallBudgetMs, int? activeExecutionMs = null, DateTimeOffset? budgetRecordedAtUtc = null, bool awaitingRuntimeAdmission = false)
     {
         if (stepCount < 0 || outputBytes < 0 || remainingOverallBudgetMs < 0 || activeExecutionMs < 0)
         {
@@ -202,6 +202,7 @@ public sealed class AgentRunCheckpoint
         AgentRunTime.RequireUtc(budgetRecordedAtUtc, "Budget clock");
         ActiveExecutionMs = activeExecutionMs;
         BudgetRecordedAtUtc = budgetRecordedAtUtc;
+        AwaitingRuntimeAdmission = awaitingRuntimeAdmission;
     }
 
     public string PayloadJson { get; }
@@ -213,12 +214,14 @@ public sealed class AgentRunCheckpoint
     public int RemainingOverallBudgetMs { get; }
     public int? ActiveExecutionMs { get; }
     public DateTimeOffset? BudgetRecordedAtUtc { get; }
+    public bool AwaitingRuntimeAdmission { get; }
+    public AgentRunCheckpoint WithRuntimeAdmissionPending(bool pending) => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, BudgetRecordedAtUtc, pending);
     public AgentRunCheckpoint StampBudgetClock(DateTimeOffset? atUtc) => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, atUtc);
     public AgentRunCheckpoint PauseBudgetClock(DateTimeOffset atUtc)
     {
         if (BudgetRecordedAtUtc is not { } recorded || ActiveExecutionMs is not { } active) return this;
         var elapsed = (int)Math.Clamp((atUtc - recorded).TotalMilliseconds, 0, RemainingOverallBudgetMs);
-        return new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs - elapsed, checked(active + elapsed));
+        return new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs - elapsed, checked(active + elapsed), awaitingRuntimeAdmission: AwaitingRuntimeAdmission);
     }
 }
 
@@ -226,17 +229,22 @@ public enum AgentRunOutcomeKind
 {
     Response,
     NoAction,
-    NeedsAttention
+    NeedsAttention,
+    Continued
 }
 
 public sealed class AgentRunResult
 {
-    public AgentRunResult(string text, DateTimeOffset completedAtUtc, bool attentionRequired = false, AgentRunOutcomeKind outcomeKind = AgentRunOutcomeKind.Response, Guid? outcomeEntryId = null)
+    public AgentRunResult(string text, DateTimeOffset completedAtUtc, bool attentionRequired = false, AgentRunOutcomeKind outcomeKind = AgentRunOutcomeKind.Response, Guid? outcomeEntryId = null, Guid? continuationRunId = null)
     {
         AgentRunTime.RequireUtc(completedAtUtc, "Result");
         if (!Enum.IsDefined(outcomeKind) || (attentionRequired && outcomeKind == AgentRunOutcomeKind.NoAction))
             throw new ArgumentException("Outcome classification is not valid.");
         AgentRunText.RequireOptionalId(outcomeEntryId, "Outcome entry");
+        AgentRunText.RequireOptionalId(continuationRunId, "Continuation Run");
+        if ((outcomeKind == AgentRunOutcomeKind.Continued) != (continuationRunId is not null) || continuationRunId is not null && (outcomeEntryId is not null || attentionRequired))
+            throw new ArgumentException("A continued outcome links exactly one successor and no fabricated response.");
+        ContinuationRunId = continuationRunId;
         if (outcomeKind == AgentRunOutcomeKind.NoAction && outcomeEntryId is not null)
             throw new ArgumentException("Quiet outcomes have no fabricated conversation entry.");
         if (outcomeKind == AgentRunOutcomeKind.Response && outcomeEntryId is null)
@@ -250,6 +258,7 @@ public sealed class AgentRunResult
     }
 
     public AgentRunOutcomeKind OutcomeKind { get; }
+    public Guid? ContinuationRunId { get; }
 
     public Guid? OutcomeEntryId { get; }
 

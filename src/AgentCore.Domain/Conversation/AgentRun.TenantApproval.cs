@@ -2,6 +2,40 @@ namespace AgentCore.Domain.Conversation;
 
 public sealed partial class AgentRun
 {
+    public AgentRun ForkApprovalContinuation(Guid id, AgentRunAdmission admission, Guid requestId, DateTimeOffset at)
+    {
+        if (Status != AgentRunStatus.WaitingForApproval || CancellationRequested || Owner.TenantId is null || ApprovalRequestId != requestId || AttemptCount == 0
+            || admission.Activation.Kind != ActivationKind.ApprovalContinuation || admission.Activation.SourceAgentRunId != AgentRunId
+            || admission.ApprovalResume?.RequestId != requestId || admission.ResponseId != ResponseId || Checkpoint is null
+            || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "An exact saved approval checkpoint is required for continuation.");
+        return new(id, Owner, admission, PinnedModel, AgentRunStatus.Queued, 1, AttemptCount, MaxAttempts, null, null, false, null,
+            KnownEffectSummary, Progress, Checkpoint, null, null, SideEffect, null, at, at, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount,
+            LoadedCapabilityIds, CapabilityLoadCount, null, WaitCount, TotalWaitSeconds, requestId);
+    }
+
+    public AgentRun DeferUnacceptedApprovalDispatch(long revision, Guid generation, DateTimeOffset at, DateTimeOffset retryAt)
+    {
+        RequireOperational(revision, generation);
+        AgentRunTime.RequireUtc(retryAt, "Approval dispatch retry");
+        if (Admission.ApprovalResume is null || Admission.Activation.Kind != ActivationKind.ApprovalContinuation || Owner.TenantId is null || ApprovalRequestId is null || AttemptCount == 0
+            || Checkpoint is null || retryAt <= at || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Only a known unaccepted approval continuation can defer with its checkpoint.");
+        var checkpoint = Checkpoint.PauseBudgetClock(Claim!.ClaimedAtUtc).WithRuntimeAdmissionPending(true);
+        return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, retryAt, null, false, null, KnownEffectSummary,
+            Progress, checkpoint, Result, Failure, SideEffect, Approval, at);
+    }
+
+    public AgentRun HandoffApprovalContinuation(long revision, Guid requestId, Guid nextRunId, DateTimeOffset at)
+    {
+        RequireRevision(revision);
+        if (Status != AgentRunStatus.WaitingForApproval || CancellationRequested || ApprovalRequestId != requestId || nextRunId == AgentRunId)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "Approval handoff requires its waiting source.");
+        var result = new AgentRunResult("Exact approval operation continues in the linked Run.", at, outcomeKind: AgentRunOutcomeKind.Continued, continuationRunId: nextRunId);
+        return Copy(AgentRunStatus.Completed, checked(Revision + 1), AttemptCount, null, null, false, null, KnownEffectSummary,
+            Progress, Checkpoint, result, null, SideEffect, null, at);
+    }
+
     public AgentRun RecordDirectLocalEffect(long revision, Guid generation, Guid operationId, string actionHash, DateTimeOffset at)
     {
         RequireOperational(revision, generation);

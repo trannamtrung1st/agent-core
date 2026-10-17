@@ -10,10 +10,12 @@ namespace AgentCore.Application.Security;
 public static class TenantLocalEffectRules
 {
     public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
-        AgentRun run, TenantLocalEffectCommit commit)
+        AgentRun run, TenantLocalEffectCommit commit, AgentRun? source = null)
     {
         var context = run.Admission.ExecutionContext;
-        if (context is null || request.TenantId != context.TenantId || request.RunId != run.AgentRunId || request.RootActivationId != context.RootActivationId
+        TenantApprovalContinuationRules.Require(request, run, source);
+        if (request.RunId != run.AgentRunId) TenantRunContinuationService.ValidateAuthorizationCheckpoint(run, request, requirePending: true);
+        if (context is null || request.TenantId != context.TenantId || request.RootActivationId != context.RootActivationId
             || request.ExecutorPrincipalId != context.AgentPrincipalId || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId
             || request.Status != TenantApprovalStatus.Approved || request.Revision != commit.ExpectedRequestRevision
             || run.ApprovalRequestId != request.RequestId || request.RequestId != commit.RequestId || request.Operation.OperationId != commit.OperationId
@@ -47,10 +49,10 @@ public static class TenantLocalEffectRules
     }
 
     public static TenantLocalEffectCommit AtCommit(TenantLocalEffectCommit commit, TenantApprovalRequest request, TenantOperationGrant? grant,
-        AgentRun run, TenantAgent target, DateTimeOffset at)
+        AgentRun run, TenantAgent target, DateTimeOffset at, AgentRun? source = null)
     {
         if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
-        TenantApprovalRules.Validate(request, run, target, requireCurrentWitness: false);
+        TenantApprovalRules.Validate(request, run, target, requireCurrentWitness: false, source: source);
         if (commit.Outcome == TenantOperationOutcome.Denied) return commit;
         var reason = grant is not null && grant.ExpiresAt <= at ? "grant_expired" : request.ExpiresAt <= at ? "approval_expired"
             : ManagementPolicyResolver.Resolve(run.Admission.Configuration!.Definition, target.Instance).Allows(HarnessManagementScope.Settings) != true ? "management_unavailable"

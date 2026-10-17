@@ -31,9 +31,9 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var (root, run) = await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
         var row = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
-        var sources = run.Admission.Activation.SourceEntryIds.Select(id => id.ToString("D")).ToArray();
+        var sources = TenantApprovalContinuationRules.Inputs(run).Select(id => id.ToString("D")).ToArray();
         var boundary = await TenantInputBoundaryAsync(db, run, ct).ConfigureAwait(false);
-        var entries = await db.Entries.AsNoTracking().Where(e => e.SessionId == root.SessionId && (e.Role != nameof(ConversationRole.User) || e.EntrySequence <= boundary)).OrderByDescending(e => e.EntrySequence).Take(40).ToArrayAsync(ct).ConfigureAwait(false);
+        var entries = await db.Entries.AsNoTracking().Where(e => e.SessionId == root.SessionId && (e.EntrySequence <= boundary || e.ResponseId == run.ResponseId!.Value.ToString("D"))).OrderByDescending(e => e.EntrySequence).Take(40).ToArrayAsync(ct).ConfigureAwait(false);
         var current = await db.Entries.AsNoTracking().Where(e => e.SessionId == root.SessionId && sources.Contains(e.EntryId)).ToArrayAsync(ct).ConfigureAwait(false);
         return SqliteMemoryStore.ToSnapshot(row, entries.Concat(current).DistinctBy(e => e.EntryId).OrderBy(e => e.EntrySequence).ToArray());
     }
@@ -51,16 +51,19 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var (root, run) = await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false); limit = Math.Clamp(limit, 1, 1000);
         var boundary = await TenantInputBoundaryAsync(db, run, ct).ConfigureAwait(false);
-        var query = db.Entries.AsNoTracking().Where(e => e.SessionId == root.SessionId && (e.Role != nameof(ConversationRole.User) || e.EntrySequence <= boundary));
+        var query = db.Entries.AsNoTracking().Where(e => e.SessionId == root.SessionId && (e.EntrySequence <= boundary || e.ResponseId == run.ResponseId!.Value.ToString("D")));
         if (after is { } sequence) return HistoryPaging.FromForward((await query.Where(e => e.EntrySequence > sequence).OrderBy(e => e.EntrySequence).Take(limit).ToArrayAsync(ct).ConfigureAwait(false)).Select(SqliteMemoryStore.ToEntry).ToArray(), sequence, limit);
         var rows = await query.Where(e => before == null || e.EntrySequence < before).OrderByDescending(e => e.EntrySequence).Take(limit).ToArrayAsync(ct).ConfigureAwait(false);
         return HistoryPaging.FromNewestFirst(rows.Select(SqliteMemoryStore.ToEntry).ToArray(), limit);
     }
     private static async Task<long> TenantInputBoundaryAsync(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
     {
-        var sources = run.Admission.Activation.SourceEntryIds.Select(id => id.ToString("D")).ToArray();
-        return await db.Entries.Where(e => e.SessionId == run.SessionId.ToString("D") && sources.Contains(e.EntryId))
-            .MaxAsync(e => (long?)e.EntrySequence, ct).ConfigureAwait(false) ?? long.MaxValue;
+        var sources = TenantApprovalContinuationRules.Inputs(run).Select(id => id.ToString("D")).ToArray();
+        var inputs = await db.Entries.Where(e => e.SessionId == run.SessionId.ToString("D") && sources.Contains(e.EntryId))
+            .Select(e => new { e.EntrySequence, e.Role, e.Status }).ToArrayAsync(ct).ConfigureAwait(false);
+        if (inputs.Length == 0 || inputs.Length != sources.Length || inputs.Any(e => e.Role != nameof(ConversationRole.User) || e.Status != nameof(EntryStatus.Completed)))
+            throw new AccessDeniedException("tenant_runtime_inputs_unavailable");
+        return inputs.Max(e => e.EntrySequence);
     }
     public async ValueTask<IReadOnlyList<AgentRun>> ListRunnableTenantRunsAsync(DateTimeOffset at, int limit, CancellationToken ct = default)
     {
@@ -71,9 +74,9 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null)
             && (r.Status == (int)AgentRunStatus.Queued || r.Status == (int)AgentRunStatus.WaitingToRetry && r.NextRetryAtUtc <= millis
                 || r.Status == (int)AgentRunStatus.Running && r.LeaseExpiresAtUtc <= millis))
-            .OrderBy(r => r.CreatedAtUtc).ThenBy(r => db.ActivationSourceEntries.Where(e => e.ActivationId == r.ActivationId).Join(db.Entries, source => source.EntryId, entry => entry.EntryId, (source, entry) => (long?)entry.EntrySequence).Min())
+            .OrderBy(r => r.CreatedAtUtc).ThenBy(r => db.ActivationSourceEntries.Where(e => e.ActivationId == r.ActivationId).Join(db.Entries, source => source.EntryId, entry => entry.EntryId, (source, entry) => (long?)entry.EntrySequence).Min() ?? long.MaxValue)
             .ThenBy(r => r.AgentRunId).Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(ct).ConfigureAwait(false);
-        return rows.Select(AgentRunStoreMapping.ToDomain).Where(r => r.Admission.Activation.Kind == ActivationKind.UserTurn).ToArray();
+        return rows.Select(AgentRunStoreMapping.ToDomain).Where(r => r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation).ToArray();
     }
     public async ValueTask<AgentRun> ApplyTenantRuntimeCommandAsync(AgentRunOwner owner, Guid runId, AgentRunCommand command, Guid diagnosticId, CancellationToken ct = default, Guid? runtimeGeneration = null)
     {
@@ -84,11 +87,12 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (command is AgentRunCommand.Claim)
         {
-            if (run.Admission.Activation.Kind != ActivationKind.UserTurn) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
             if (run.ApprovalRequestId is { } approvalId)
             {
                 var request = await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(a => a.RequestId == approvalId && a.TenantId == owner.TenantId, ct).ConfigureAwait(false);
-                TenantRunContinuationRules.Require(run, request?.Domain());
+                var parentRow = run.Admission.ApprovalResume is { } resume ? await OwnedRuns(db, owner.TenantId!.Value).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == resume.SourceRunId.ToString("D"), ct).ConfigureAwait(false) : null;
+                TenantRunContinuationRules.Require(run, request?.Domain(), parentRow is null ? null : AgentRunStoreMapping.ToDomain(parentRow));
             }
             if (!await db.Set<Tenant>().AnyAsync(t => t.TenantId == owner.TenantId && t.Status == IdentityStatus.Active, ct).ConfigureAwait(false)
                 || !await db.Set<Principal>().AnyAsync(p => p.PrincipalId == owner.ExecutorPrincipalId && p.TenantId == owner.TenantId && p.Status == IdentityStatus.Active, ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Executor unavailable.");

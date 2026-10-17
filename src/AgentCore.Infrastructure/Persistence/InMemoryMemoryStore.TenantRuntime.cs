@@ -7,10 +7,12 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryMemoryStore
 {
-    private HashSet<Guid> FutureTenantInputs(AgentRun run)
+    private HashSet<Guid> FutureTenantEntries(AgentRun run)
     {
-        var boundary = run.Admission.Activation.SourceEntryIds.Select(id => FindEntry(run.SessionId, id)?.Sequence ?? long.MaxValue).DefaultIfEmpty(long.MaxValue).Max();
-        return _entries.GetValueOrDefault(run.SessionId, []).Where(e => e.Role == ConversationRole.User && e.Sequence > boundary).Select(e => e.EntryId).ToHashSet();
+        var inputs = TenantApprovalContinuationRules.Inputs(run).Select(id => FindEntry(run.SessionId, id)).ToArray();
+        if (inputs.Length == 0 || inputs.Any(e => e is not { Role: ConversationRole.User, Status: EntryStatus.Completed })) throw new AccessDeniedException("tenant_runtime_inputs_unavailable");
+        var boundary = inputs.Max(e => e!.Sequence);
+        return _entries.GetValueOrDefault(run.SessionId, []).Where(e => e.Sequence > boundary && e.ResponseId != run.ResponseId).Select(e => e.EntryId).ToHashSet();
     }
     internal SessionSnapshot? LoadTenantRuntime(TenantRuntimeFrame frame, DateTimeOffset at)
     {
@@ -19,9 +21,9 @@ public sealed partial class InMemoryMemoryStore
             var run = ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId);
             if (run is null || !tenantSessions.TryGetValue(frame.SessionId, out var root)) return null;
             TenantRuntimeRules.Require(frame, root, run, at);
-            var hidden = FutureTenantInputs(run);
+            var hidden = FutureTenantEntries(run);
             var entries = _entries.GetValueOrDefault(frame.SessionId, []).Where(e => !hidden.Contains(e.EntryId)).OrderByDescending(e => e.Sequence).Take(40)
-                .Concat(_entries.GetValueOrDefault(frame.SessionId, []).Where(e => run.Admission.Activation.SourceEntryIds.Contains(e.EntryId))).DistinctBy(e => e.EntryId).OrderBy(e => e.Sequence).ToArray();
+                .Concat(_entries.GetValueOrDefault(frame.SessionId, []).Where(e => TenantApprovalContinuationRules.Inputs(run).Contains(e.EntryId))).DistinctBy(e => e.EntryId).OrderBy(e => e.Sequence).ToArray();
             return _sessions[frame.SessionId] with { Entries = entries };
         }
     }
@@ -43,7 +45,7 @@ public sealed partial class InMemoryMemoryStore
         lock (_gate)
         {
             if (LoadTenantRuntime(frame, at) is null) return null;
-            var hidden = FutureTenantInputs(ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId)!);
+            var hidden = FutureTenantEntries(ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId)!);
             var entries = _entries.GetValueOrDefault(frame.SessionId, []).Where(e => !hidden.Contains(e.EntryId));
             return after is { } sequence ? HistoryPaging.FromForward(entries.Where(e => e.Sequence > sequence).OrderBy(e => e.Sequence).Take(limit).ToArray(), sequence, limit)
                 : HistoryPaging.FromNewestFirst(entries.Where(e => before is null || e.Sequence < before).OrderByDescending(e => e.Sequence).Take(limit).ToArray(), limit);

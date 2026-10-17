@@ -64,7 +64,7 @@ public sealed partial class TenantSessionAccessTests
         using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
             while (!deadline.IsCancellationRequested)
             {
-                completed = await runs.FindTenantRunAsync(tenant, runId);
+                completed = await CurrentApprovalExecution(runs, tenant, runId);
                 if (completed?.IsTerminal == true) break;
                 await Task.Delay(25, deadline.Token);
             }

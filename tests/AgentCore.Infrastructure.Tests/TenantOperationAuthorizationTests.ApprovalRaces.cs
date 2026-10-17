@@ -112,7 +112,7 @@ public sealed partial class TenantOperationAuthorizationTests
         public async ValueTask<TenantApprovalRequest?> TryCreateApprovalAsync(TenantSecurityState next, long expected, TenantApprovalRequest request, long revision, Guid? generation, AuthorizationAudit audit, CancellationToken ct = default)
         { if (gateCreation) { Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); } return await inner.TryCreateApprovalAsync(next, expected, request, revision, generation, audit, ct); }
         public ValueTask<IReadOnlyList<ApprovalProcessedSignal>> PendingApprovalSignalsAsync(int limit, CancellationToken ct = default) => inner.PendingApprovalSignalsAsync(limit, ct);
-        public ValueTask<bool> TryResumeApprovalAsync(ApprovalProcessedSignal signal, DateTimeOffset at, CancellationToken ct = default) => inner.TryResumeApprovalAsync(signal, at, ct);
+        public ValueTask<bool> TryResumeApprovalAsync(ApprovalProcessedSignal signal, DateTimeOffset at, CancellationToken ct = default, TenantApprovalContinuationIds? continuation = null) => inner.TryResumeApprovalAsync(signal, at, ct, continuation);
         public ValueTask<TenantOperationGrant?> FindOperationGrantAsync(Guid tenant, Guid id, CancellationToken ct = default) => inner.FindOperationGrantAsync(tenant, id, ct);
         public ValueTask<IReadOnlyList<TenantApprovalRequest>> DueApprovalsAsync(DateTimeOffset at, int limit, CancellationToken ct = default) => inner.DueApprovalsAsync(at, limit, ct);
         public ValueTask<bool> TryExpireApprovalAsync(Guid tenant, Guid id, long revision, ApprovalProcessedSignal signal, DateTimeOffset at, CancellationToken ct = default) => inner.TryExpireApprovalAsync(tenant, id, revision, signal, at, ct);

@@ -98,7 +98,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         return await db.Set<ApprovalProcessedSignal>().AsNoTracking().Where(s => s.ProcessedAt == null).OrderBy(s => s.CreatedAt).ThenBy(s => s.SignalId).Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(ct).ConfigureAwait(false);
     }
-    public async ValueTask<bool> TryResumeApprovalAsync(ApprovalProcessedSignal signal, DateTimeOffset at, CancellationToken ct = default)
+    public async ValueTask<bool> TryResumeApprovalAsync(ApprovalProcessedSignal signal, DateTimeOffset at, CancellationToken ct = default, TenantApprovalContinuationIds? continuation = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -113,11 +113,22 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         if (!run.IsTerminal)
         {
             if (run.Status != AgentRunStatus.WaitingForApproval) return false;
-            AgentRunStoreMapping.Apply(row, run.ResumeDurableApproval(run.Revision, signal.RequestId, at));
+            if (run.Checkpoint is not null)
+            {
+                if (continuation is null) return false;
+                var next = TenantApprovalContinuationRules.Create(run, request.Domain(), signal, continuation, at);
+                var session = await db.Sessions.AsNoTracking().SingleAsync(s => s.SessionId == row.SessionId, ct).ConfigureAwait(false);
+                db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(SqliteMemoryStore.ToSnapshot(session, []), next));
+                db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(next));
+                db.Add(new AuthorizationAudit(signal.SignalId, signal.TenantId, request.ExecutorPrincipalId, "agent-runs.approval-continuation", next.AgentRunId.ToString("D"), "allowed", "approval_continued", at));
+                AgentRunStoreMapping.Apply(row, run.HandoffApprovalContinuation(run.Revision, signal.RequestId, next.AgentRunId, at));
+            }
+            else AgentRunStoreMapping.Apply(row, run.ResumeDurableApproval(run.Revision, signal.RequestId, at));
         }
         db.Entry(saved).CurrentValues.SetValues(saved with { Revision = checked(saved.Revision + 1), ProcessedAt = at });
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return true; }
         catch (DbUpdateConcurrencyException) { return false; }
+        catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
     }
     public async ValueTask<IReadOnlyList<TenantApprovalRequest>> DueApprovalsAsync(DateTimeOffset at, int limit, CancellationToken ct = default)
     {

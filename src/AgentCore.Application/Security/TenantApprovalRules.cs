@@ -40,11 +40,12 @@ public static class TenantApprovalRules
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")
     };
 
-    public static void Validate(TenantApprovalRequest request, AgentRun run, TenantAgent target, bool requireCurrentWitness = true)
+    public static void Validate(TenantApprovalRequest request, AgentRun run, TenantAgent target, bool requireCurrentWitness = true, AgentRun? source = null)
     {
         var context = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var op = request.Operation;
-        if (request.RequestId == Guid.Empty || request.TenantId != context.TenantId || request.RunId != run.AgentRunId || request.SessionId != run.SessionId
+        TenantApprovalContinuationRules.Require(request, run, source);
+        if (request.RequestId == Guid.Empty || request.TenantId != context.TenantId || request.SessionId != run.SessionId
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || op.InstanceId != run.AgentInstanceId
             || target.TenantId != request.TenantId || target.Instance.InstanceId != op.InstanceId || target.PrincipalId != context.AgentPrincipalId

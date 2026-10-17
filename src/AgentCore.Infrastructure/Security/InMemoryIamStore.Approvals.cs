@@ -101,14 +101,23 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             _approvals[requestId] = next; _approvalSignals.Add(signal.SignalId, signal); return ValueTask.FromResult(true);
         }
     }
-    public ValueTask<bool> TryResumeApprovalAsync(ApprovalProcessedSignal signal, DateTimeOffset at, CancellationToken ct = default)
+    public ValueTask<bool> TryResumeApprovalAsync(ApprovalProcessedSignal signal, DateTimeOffset at, CancellationToken ct = default, TenantApprovalContinuationIds? continuation = null)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate)
         {
             if (!_approvalSignals.TryGetValue(signal.SignalId, out var saved) || saved != signal || saved.ProcessedAt is not null || at < saved.CreatedAt
                 || !_approvals.TryGetValue(signal.RequestId, out var request) || request.TenantId != signal.TenantId || request.Revision != signal.DecisionRevision
                 || request.Status == TenantApprovalStatus.Pending) return ValueTask.FromResult(false);
-            if (!sessionBacking.ResumeTenantApproval(signal.TenantId, signal.RunId, signal.RequestId, at)) return ValueTask.FromResult(false);
+            var source = sessionBacking.ReadTenantRun(signal.TenantId, signal.RunId);
+            if (source is null || request.RunId != source.AgentRunId || source.ApprovalRequestId != request.RequestId) return ValueTask.FromResult(false);
+            if (!source.IsTerminal && source.Checkpoint is not null)
+            {
+                if (continuation is null) return ValueTask.FromResult(false);
+                var next = TenantApprovalContinuationRules.Create(source, request, signal, continuation, at);
+                ct.ThrowIfCancellationRequested(); sessionBacking.AdmitTenantApprovalContinuation(source, next, request.RequestId, at);
+                _audit.Add(new(signal.SignalId, signal.TenantId, request.ExecutorPrincipalId, "agent-runs.approval-continuation", next.AgentRunId.ToString("D"), "allowed", "approval_continued", at));
+            }
+            else if (!sessionBacking.ResumeTenantApproval(signal.TenantId, signal.RunId, signal.RequestId, at)) return ValueTask.FromResult(false);
             _approvalSignals[signal.SignalId] = signal with { Revision = checked(signal.Revision + 1), ProcessedAt = at }; return ValueTask.FromResult(true);
         }
     }
