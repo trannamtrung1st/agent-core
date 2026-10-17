@@ -165,7 +165,8 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(HttpStatusCode.BadRequest, badForm.StatusCode); Assert.DoesNotContain(new string('x', 300), await badForm.Content.ReadAsStringAsync());
         Assert.Equal(0, factory.Outbound); Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
-    private sealed class OAuthFactory(string? existingRoot = null, bool sqlite = false, bool preserve = false, bool driveEnabled = true) : AgentCoreApiFactory
+    private sealed class OAuthFactory(string? existingRoot = null, bool sqlite = false, bool preserve = false, bool driveEnabled = true,
+        ITenantCredentialOAuthVerifier? checkOverride = null) : AgentCoreApiFactory
     {
         public string Root { get; } = existingRoot ?? Path.Combine(Path.GetTempPath(), "tenant-oauth-api-" + Guid.NewGuid().ToString("N"));
         public int Outbound;
@@ -195,6 +196,7 @@ public sealed partial class TenantCredentialAccessTests
                     services.RemoveAll<IAgentCredentialBindingStore>(); services.AddSingleton<IAgentCredentialBindingStore, SqliteCredentialStore>();
                 }
                 services.AddHttpClient(TenantGoogleOAuthProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoOAuthNetwork(this));
+                if (checkOverride is not null) { services.RemoveAll<ITenantCredentialOAuthVerifier>(); services.AddSingleton(checkOverride); }
             });
         }
         public override async ValueTask DisposeAsync()

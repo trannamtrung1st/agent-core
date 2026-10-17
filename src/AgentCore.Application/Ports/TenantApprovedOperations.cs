@@ -2,7 +2,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantLocalEffectCommit(Guid RequestId, Guid OperationId, Guid RunId, Guid Generation,
+public sealed record TenantOperationCommit(Guid RequestId, Guid OperationId, Guid RunId, Guid Generation,
     long ExpectedRunRevision, long ExpectedRequestRevision, Guid ExpectedDecisionId, long? ExpectedGrantRevision,
     string ActionHash, TenantOperationOutcome Outcome, string ReasonCode);
 
@@ -12,5 +12,5 @@ public interface ITenantApprovedOperationStore
     ValueTask<TenantOperationReceipt?> FindOperationReceiptAsync(Guid tenantId, Guid operationId, CancellationToken ct = default);
     // Existing Instance, exact receipt, grant consume/revoke, Run effect checkpoint, security revision and audit are one transaction.
     ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantLocalEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default);
+        TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default);
 }

@@ -33,6 +33,15 @@ public static class TenantOperationAuditRules
             null, ExecutionAuthorizationPurpose.EffectResult, requestId, operationId, grantId)
     };
 
+    public static AuthorizationAudit WithEffectResult(AuthorizationAudit audit, TenantSecurityState state, AgentRun run,
+        TenantApprovalRequest request, Guid? grantId) => audit with
+    {
+        Execution = new(run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required"), run.Revision,
+            state.Tenant.Revision, run.Claim?.Generation, request.Permission,
+            AccessScope.ForResource(state.Tenant.TenantId, request.ResourceType, request.ResourceId),
+            null, ExecutionAuthorizationPurpose.EffectResult, request.RequestId, request.Operation.OperationId, grantId)
+    };
+
     public static bool Matches(AuthorizationAudit audit, AgentRun run, long securityRevision) =>
         audit.Execution is { } e && e.Context == run.Admission.ExecutionContext && e.RunRevision == run.Revision
         && e.ClaimGeneration == run.Claim?.Generation && e.SecurityRevision == securityRevision;

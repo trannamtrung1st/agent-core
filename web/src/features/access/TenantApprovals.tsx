@@ -16,7 +16,7 @@ export interface TenantApproval {
   requestId: string; tenantId: string; runId: string; sessionId: string; rootActivationId: string;
   kind: 'review' | 'exceptionalGrant'; status: Status; requestRevision: number; securityRevision: number;
   summary: string; createdAt: string; expiresAt: string;
-  preparedAction: { actionHash: string; operationId: string; expectedInstanceRevision: number; expectedPersonaRevision: number };
+  preparedAction: { actionHash: string; operationId: string; operation?: string; expectedInstanceRevision: number; expectedPersonaRevision: number };
   decision: { principalId: string; status: Status; decidedAt: string } | null;
   operationResult: { outcome: string; reasonCode: string; recordedAt: string } | null;
   review: { agentName: string; requesterName: string | null; reviewerName: string | null;
@@ -25,11 +25,11 @@ export interface TenantApproval {
 }
 interface ApprovalPage { items: TenantApproval[]; total: number; page: number; pageSize: number }
 const statuses: Record<Status, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', expired: 'Expired' };
-const fields: Record<string, string> = { name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time' };
+const fields: Record<string, string> = { name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check' };
 const reasons: Record<string, string> = {
   approval_expired: 'This request has expired. Ask the agent to prepare a new action.',
   executor_unavailable: 'The agent is unavailable.', run_unavailable: 'The source work can no longer accept this decision.',
-  operation_witness_changed: 'The agent configuration changed. Ask the agent to prepare a new action.',
+  operation_witness_changed: 'The saved target or configuration changed. Ask the agent to prepare a new action.',
   operation_configuration_changed: 'The current configuration no longer supports this action.',
   requester_unavailable: 'The original requester no longer has the required access.',
   independent_reviewer_required: 'A different qualified person must review your request.',
@@ -38,8 +38,19 @@ const reasons: Record<string, string> = {
   approval_authority_changed: 'Current authority no longer supports this saved request.',
   management_unavailable: 'The current agent management policy does not permit this change.',
   operation_completed: 'The exact change was applied.', operation_authority_changed: 'Authority changed before the action could be applied.',
-  grantor_authority_lost: 'The approver no longer has the required authority.'
+  grantor_authority_lost: 'The approver no longer has the required authority.',
+  executor_read_required: 'The agent no longer has the required credential read permission.',
+  credential_binding_changed: 'The saved credential binding changed. Prepare a new action with the current binding.',
+  credential_connection_checked: 'The bound connection check completed. This result does not authorize another credential use.',
+  credential_reconnect_required: 'The check completed and the credential requires reconnection.',
+  credential_check_in_progress: 'Another check already reserved this credential. This request did not run a provider check.',
+  credential_check_uncertain: 'The provider outcome is uncertain. This operation will not run again. Reconnect the credential before another check.',
+  credential_check_target_changed: 'The credential changed while the check was in progress. The newer credential was retained. This operation will not run again.'
 };
+function resultLabel(item: TenantApproval) {
+  return item.operationResult?.outcome === 'completed' ? item.preparedAction.operation === 'check_credential_connection' ? 'Check completed' : 'Applied'
+    : item.operationResult?.outcome === 'denied' ? 'Not applied' : 'Outcome uncertain';
+}
 const date = (value: string) => <time dateTime={value}>{new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value))}</time>;
 function StatusTag({ status }: { status: Status }) { return <Tag color={status === 'pending' ? 'warning' : status === 'approved' ? 'success' : status === 'rejected' ? 'error' : undefined}>{statuses[status]}</Tag>; }
 const kindLabel = (kind: TenantApproval['kind']) => kind === 'exceptionalGrant' ? 'One-time authorization' : 'Review';
@@ -57,7 +68,7 @@ export function TenantApprovals({ context, requestId }: { context: TenantContext
       </Flex>
       <Button icon={<ReloadOutlined aria-hidden />} onClick={state.reload}>Refresh inbox</Button>
     </Flex>
-    <Typography.Text type="secondary">Requests you can read and whose underlying action you can manage. A decision and its execution result are recorded separately.</Typography.Text>
+    <Typography.Text type="secondary">Requests you can read and whose underlying action you can authorize. A decision and its execution result are recorded separately.</Typography.Text>
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : <Table<TenantApproval> rowKey="requestId" className="admin-collection-table" dataSource={state.data?.items}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matching requests available to you. Try another status or type." /> }}
       pagination={{ ...adminCollectionPagination, current: page, pageSize, total: state.data?.total, showTotal: total => `${total} visible requests`, onChange: (next, size) => { setPage(size === pageSize ? next : 1); setPageSize(size); } }}
@@ -65,7 +76,7 @@ export function TenantApprovals({ context, requestId }: { context: TenantContext
         { title: 'Action', render: (_, item) => <Flex vertical align="start" gap="var(--ac-space-tight)">
           <Typography.Link href={tenantApprovalPath(tenant, item.requestId)} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateToAppPath(tenantApprovalPath(tenant, item.requestId)); } }}>{item.summary}</Typography.Link>
           <Typography.Text>{item.review.agentName}</Typography.Text><Typography.Text type="secondary">{kindLabel(item.kind)} · {date(item.createdAt)}</Typography.Text>
-          <Flex wrap gap="var(--ac-space-tight)"><StatusTag status={item.status} />{item.operationResult && <Tag>{item.operationResult.outcome === 'completed' ? 'Applied' : 'Not applied'}</Tag>}</Flex>
+          <Flex wrap gap="var(--ac-space-tight)"><StatusTag status={item.status} />{item.operationResult && <Tag>{resultLabel(item)}</Tag>}</Flex>
         </Flex> },
         { title: 'Requested by', responsive: ['md'], render: (_, item) => item.review.requesterName ?? 'No original person' }
       ]} />}
@@ -145,7 +156,7 @@ function ApprovalDetail({ tenant, organization, id, onChanged }: { tenant: strin
           {(expired || data.review.decisionUnavailableReason) && <Alert type="warning" showIcon title="Decision unavailable" description={expired ? reasons.approval_expired : reasons[data.review.decisionUnavailableReason!] ?? 'Current authority or configuration does not permit this decision. Refresh details or ask an owner.'} />}
           {!fresh && <Typography.Text role="status" type="secondary">Refresh details before deciding. A saved decision is never submitted again automatically.</Typography.Text>}
         </>}
-        <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={data.operationResult.outcome === 'completed' ? 'Applied' : 'Not applied'} description={<>{reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {date(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
+        <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={resultLabel(data)} description={<>{reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {date(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
         <Collapse items={[{ key: 'technical', label: 'Technical references', children: <Descriptions {...layout} column={1} size="small" items={[
           { key: 'request', label: 'Request', children: data.requestId }, { key: 'run', label: 'Source Run', children: data.runId }, { key: 'session', label: 'Session', children: data.sessionId }, { key: 'root', label: 'Execution root', children: data.rootActivationId },
           { key: 'hash', label: 'Exact action hash', children: data.preparedAction.actionHash }, { key: 'revision', label: 'Request revision', children: data.requestRevision }, { key: 'access', label: 'Access revision', children: data.securityRevision }

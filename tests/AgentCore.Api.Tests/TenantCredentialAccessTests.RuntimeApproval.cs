@@ -6,6 +6,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Credentials;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
@@ -13,10 +14,12 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantCredentialAccessTests
 {
     [Theory]
-    [InlineData(false)] [InlineData(true)]
-    public async Task Credential_approval_HTTP_projects_the_exact_credential_action_and_rejects_without_using_the_grant(bool sqlite)
+    [InlineData(false, "reject")] [InlineData(true, "reject")]
+    [InlineData(false, "approve")] [InlineData(true, "approve")]
+    [InlineData(false, "uncertain")] [InlineData(true, "uncertain")]
+    public async Task Credential_approval_HTTP_projects_exact_consent_and_distinguishes_completed_and_uncertain_effects(bool sqlite, string choice)
     {
-        await using var factory = new OAuthFactory(sqlite: sqlite); using var owner = Client(factory);
+        await using var factory = new OAuthFactory(sqlite: sqlite, checkOverride: choice == "uncertain" ? new UncertainRuntimeVerifier() : null); using var owner = Client(factory);
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var api = $"/api/v2/tenants/{tenant}";
@@ -54,10 +57,36 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(System.Text.Json.JsonValueKind.Null, action.GetProperty("persona").ValueKind); Assert.Equal(System.Text.Json.JsonValueKind.Null, action.GetProperty("preferences").ValueKind);
         Assert.True(detail.GetProperty("review").GetProperty("canDecide").GetBoolean());
         Assert.Single((await Json(await owner.GetAsync(api + "/approvals"))).GetProperty("items").EnumerateArray());
-        var rejected = await owner.PostAsJsonAsync(route + "/decision", new { decision = "reject", actionHash = request.Operation.ActionHash,
+        var decided = await owner.PostAsJsonAsync(route + "/decision", new { decision = choice == "reject" ? "reject" : "approve", actionHash = request.Operation.ActionHash,
             expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision });
-        Assert.Equal(HttpStatusCode.OK, rejected.StatusCode); Assert.Equal("rejected", (await Json(rejected)).GetProperty("status").GetString());
-        Assert.Null(await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId));
+        Assert.Equal(HttpStatusCode.OK, decided.StatusCode); Assert.Equal(choice == "reject" ? "rejected" : "approved", (await Json(decided)).GetProperty("status").GetString());
+        if (choice == "reject") Assert.Null(await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId));
+        else
+        {
+            await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
+            var queued = (await runs.FindTenantRunAsync(tenant, runId))!; at = time.GetUtcNow();
+            run = await factory.Services.GetRequiredService<ITenantRuntimeStore>().ApplyTenantRuntimeCommandAsync(queued.Owner, runId,
+                new AgentRunCommand.Claim(queued.Revision, at, ids.NewId(), at.AddMinutes(5)), ids.NewId());
+            var service = factory.Services.GetRequiredService<TenantCredentialCheckService>();
+            var result = await service.ExecuteAsync(new(tenant, runId), request.RequestId, request.Operation.OperationId, run.Claim!.Generation, request.Operation.ActionHash);
+            Assert.Equal(choice == "uncertain" ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Completed, result.Outcome);
+            Assert.Equal(result, await service.ExecuteAsync(new(tenant, runId), request.RequestId, request.Operation.OperationId, run.Claim.Generation, request.Operation.ActionHash));
+            var projected = await Json(await owner.GetAsync(route)); Safe(projected);
+            Assert.Equal(choice == "uncertain" ? "indeterminate" : "completed", projected.GetProperty("operationResult").GetProperty("outcome").GetString());
+            Assert.Equal(choice == "uncertain" ? "credential_check_uncertain" : "credential_connection_checked", projected.GetProperty("operationResult").GetProperty("reasonCode").GetString());
+            var grant = (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId))!;
+            Assert.Equal(choice == "uncertain" ? OperationGrantStatus.Indeterminate : OperationGrantStatus.Consumed, grant.Status);
+            Assert.False(projected.GetProperty("review").GetProperty("canDecide").GetBoolean());
+            var audit = await Json(await owner.GetAsync(api + "/audit?limit=100")); Safe(audit);
+            Assert.Contains(audit.GetProperty("items").EnumerateArray(), entry => entry.GetProperty("action").GetString() == TenantCredentialCheckRules.Action
+                && entry.GetProperty("decision").GetString() == (choice == "uncertain" ? "indeterminate" : "allowed"));
+        }
         Assert.Equal(0, factory.Outbound); Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
+    }
+
+    private sealed class UncertainRuntimeVerifier : ITenantCredentialOAuthVerifier
+    {
+        public CredentialOAuthDescriptor Describe(CredentialPurpose purpose) => new("synthetic", "https://localhost/callback", true, true);
+        public ValueTask<CredentialOAuthCheck> CheckAsync(Credential current, CancellationToken ct) => ValueTask.FromException<CredentialOAuthCheck>(new IOException("private-provider-body"));
     }
 }

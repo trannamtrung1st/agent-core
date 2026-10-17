@@ -2,6 +2,17 @@ namespace AgentCore.Domain.Conversation;
 
 public sealed partial class AgentRun
 {
+    public AgentRun BeginApprovedExternalEffect(long revision, Guid generation, Guid requestId, Guid operationId, string actionHash, DateTimeOffset at)
+    {
+        RequireOperational(revision, generation);
+        if (Owner.TenantId is null || ApprovalRequestId != requestId || requestId == Guid.Empty || operationId == Guid.Empty || Claim!.LeaseExpiresAtUtc <= at
+            || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
+            || SideEffect.ToolCallId == "operation:" + operationId.ToString("D"))
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "A live unused exact external operation is required.");
+        return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null, KnownEffectSummary,
+            Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.InFlight, "operation:" + operationId.ToString("D"), actionHash, at), null, at);
+    }
+
     public AgentRun ForkApprovalContinuation(Guid id, AgentRunAdmission admission, Guid requestId, DateTimeOffset at)
     {
         if (Status != AgentRunStatus.WaitingForApproval || CancellationRequested || Owner.TenantId is null || ApprovalRequestId != requestId || AttemptCount == 0

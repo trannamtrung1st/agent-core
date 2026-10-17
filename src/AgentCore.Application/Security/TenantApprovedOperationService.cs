@@ -46,7 +46,7 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         if (!request.Operation.IsLocalConfiguration) throw new AccessDeniedException("tenant_effect_unavailable");
         var decision = await effects.FindApprovalDecisionAsync(reference.TenantId, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var grant = await approvals.FindOperationGrantAsync(reference.TenantId, requestId, ct).ConfigureAwait(false);
-        var commit = new TenantLocalEffectCommit(requestId, operationId, run.AgentRunId, generation, run.Revision, request.Revision,
+        var commit = new TenantOperationCommit(requestId, operationId, run.AgentRunId, generation, run.Revision, request.Revision,
             decision.DecisionId, grant?.Revision, actionHash, TenantOperationOutcome.Completed, "operation_completed");
         TenantLocalEffectRules.Validate(request, decision, grant, run, commit, source);
         var at = time.GetUtcNow();

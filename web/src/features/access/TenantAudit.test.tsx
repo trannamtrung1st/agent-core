@@ -76,6 +76,23 @@ it('labels only a committed successful effect Applied and shows its exact operat
   expect(screen.getByText('completed-operation')).toBeVisible();
 });
 
+it('shows uncertain credential outcomes independently of permission denial and preserves the exact effect reference', async () => {
+  fetchMock.mockResolvedValueOnce(response({ items: [{ ...review, action: 'operations.credentials.check', decision: 'indeterminate', reasonCode: 'credential_check_uncertain',
+    execution: { ...execution, purpose: 'EffectResult', permission: 'credentials.use', operationId: 'uncertain-operation' } }] }));
+  render(<TenantAudit context={context} />);
+  expect(await screen.findByText('Outcome uncertain', { exact: true })).toBeVisible();
+  expect(screen.queryByText('Not applied', { exact: true })).not.toBeInTheDocument(); expect(screen.queryByText('Denied', { exact: true })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'View details: Credential connection check' }));
+  expect(screen.getByText('uncertain-operation')).toBeVisible(); expect(screen.getByText('Recorded effect result')).toBeVisible();
+});
+
+it('labels a confirmed connection check without claiming a configuration change', async () => {
+  fetchMock.mockResolvedValueOnce(response({ items: [{ ...review, action: 'operations.credentials.check', decision: 'allowed', reasonCode: 'credential_reconnect_required',
+    execution: { ...execution, purpose: 'EffectResult' } }] }));
+  render(<TenantAudit context={context} />);
+  expect(await screen.findByText('Check completed', { exact: true })).toBeVisible(); expect(screen.queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+});
+
 
 it('refreshes through an exactly named action and closes the previous disclosure', async () => {
   fetchMock.mockResolvedValueOnce(response({ items: [review] })).mockResolvedValueOnce(response({ items: [review] }));

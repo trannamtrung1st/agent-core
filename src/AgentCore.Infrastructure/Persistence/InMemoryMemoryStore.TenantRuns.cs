@@ -6,6 +6,13 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryMemoryStore
 {
+    // Only factual completion/recovery may inspect retained ownership after logical deletion; this is not runtime admission.
+    internal AgentRun? ReadRetainedTenantOperationRun(Guid tenant, Guid runId)
+    {
+        lock (_gate) return AgentRuns.Runs.TryGetValue(runId, out var run) && run.Owner.TenantId == tenant
+            && tenantSessions.TryGetValue(run.SessionId, out var owner) && owner.TenantId == tenant
+            && owner.AgentInstanceId == run.AgentInstanceId && owner.ExecutorPrincipalId == run.Admission.ExecutionContext?.AgentPrincipalId ? run : null;
+    }
     internal TenantSessionRoot? ResolveTenantSessionOwner(Guid sessionId)
     { lock (_gate) return tenantSessions.GetValueOrDefault(sessionId); }
     internal void SaveTenantOperationRun(AgentRun run, long expectedRevision)

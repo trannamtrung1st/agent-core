@@ -10,12 +10,22 @@ namespace AgentCore.Application.Security;
 public static class TenantLocalEffectRules
 {
     public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
-        AgentRun run, TenantLocalEffectCommit commit, AgentRun? source = null)
+        AgentRun run, TenantOperationCommit commit, AgentRun? source = null)
+    {
+        ValidateApproval(request, decision, grant, run, commit, source);
+        if (!request.Operation.IsLocalConfiguration || commit.Outcome is not (TenantOperationOutcome.Completed or TenantOperationOutcome.Denied))
+            throw new SecurityConflictException("operation_mismatch");
+        if (commit.Outcome == TenantOperationOutcome.Completed ? commit.ReasonCode != "operation_completed" : !DenialReasons.Contains(commit.ReasonCode))
+            throw new ArgumentException("Invalid local operation outcome.");
+    }
+
+    public static void ValidateApproval(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
+        AgentRun run, TenantOperationCommit commit, AgentRun? source = null)
     {
         var context = run.Admission.ExecutionContext;
         TenantApprovalContinuationRules.Require(request, run, source);
         if (request.RunId != run.AgentRunId) TenantRunContinuationService.ValidateAuthorizationCheckpoint(run, request, requirePending: true);
-        if (!request.Operation.IsLocalConfiguration || context is null || request.TenantId != context.TenantId || request.RootActivationId != context.RootActivationId
+        if (context is null || request.TenantId != context.TenantId || request.RootActivationId != context.RootActivationId
             || request.ExecutorPrincipalId != context.AgentPrincipalId || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId
             || request.Status != TenantApprovalStatus.Approved || request.Revision != commit.ExpectedRequestRevision
             || run.ApprovalRequestId != request.RequestId || request.RequestId != commit.RequestId || request.Operation.OperationId != commit.OperationId
@@ -36,8 +46,6 @@ public static class TenantLocalEffectRules
                 throw new SecurityConflictException("grant_unavailable");
         }
         else if (grant is not null || commit.ExpectedGrantRevision is not null) throw new SecurityConflictException("grant_mismatch");
-        if (commit.Outcome == TenantOperationOutcome.Completed ? commit.ReasonCode != "operation_completed" : !DenialReasons.Contains(commit.ReasonCode))
-            throw new ArgumentException("Invalid local operation outcome.");
     }
 
     public static string? Eligibility(AgentRun run, TenantAgent target, AgentDefinition currentDefinition)
@@ -48,7 +56,7 @@ public static class TenantLocalEffectRules
         return null;
     }
 
-    public static TenantLocalEffectCommit AtCommit(TenantLocalEffectCommit commit, TenantApprovalRequest request, TenantOperationGrant? grant,
+    public static TenantOperationCommit AtCommit(TenantOperationCommit commit, TenantApprovalRequest request, TenantOperationGrant? grant,
         AgentRun run, TenantAgent target, DateTimeOffset at, AgentRun? source = null)
     {
         if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
@@ -64,7 +72,7 @@ public static class TenantLocalEffectRules
     { "approval_expired", "grant_expired", "grantor_authority_lost", "operation_authority_changed", "operation_witness_changed",
         "management_unavailable", "operation_configuration_changed", "requester_unavailable", "root_operation_conflict" };
 
-    public static TenantOperationReceipt MatchingReceipt(TenantOperationReceipt receipt, Guid tenant, TenantLocalEffectCommit commit)
+    public static TenantOperationReceipt MatchingReceipt(TenantOperationReceipt receipt, Guid tenant, TenantOperationCommit commit)
     {
         if (receipt.TenantId != tenant || receipt.RequestId != commit.RequestId || receipt.OperationId != commit.OperationId
             || receipt.RunId != commit.RunId || receipt.ActionHash != commit.ActionHash) throw new SecurityConflictException("operation_mismatch");

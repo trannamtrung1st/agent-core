@@ -20,7 +20,7 @@ public sealed record TenantOperationReceiptRecord(Guid OperationId, Guid? Reques
         var e = model.Entity<TenantOperationReceiptRecord>();
         e.ToTable("TenantOperationReceipts", t =>
         {
-            t.HasCheckConstraint("CK_TenantOperationReceipt_Values", "Outcome IN (0,1) AND InstanceRevision >= 1 AND PersonaRevision >= 1 AND length(ActionHash) = 64 AND length(ReasonCode) BETWEEN 1 AND 128");
+            t.HasCheckConstraint("CK_TenantOperationReceipt_Values", "Outcome IN (0,1,2) AND InstanceRevision >= 1 AND PersonaRevision >= 1 AND length(ActionHash) = 64 AND length(ReasonCode) BETWEEN 1 AND 128");
             t.HasCheckConstraint("CK_TenantOperationReceipt_Source", "(RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL) OR (RequestId IS NULL AND SourceCallId IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200 AND ParametersHash IS NOT NULL AND length(ParametersHash) = 64)");
         });
         e.HasKey(r => r.OperationId); e.HasIndex(r => r.RequestId).IsUnique(); e.HasIndex(r => new { r.TenantId, r.RunId, r.RecordedAt });

@@ -3249,6 +3249,79 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantCredentialCheckDispatchRecord", b =>
+                {
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActionHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("CompletedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CredentialId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ExecutorPrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("Generation")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RootActivationId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RunId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("StartedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("StartedRunRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("OperationId");
+
+                    b.HasIndex("CompletedAt", "StartedAt");
+
+                    b.HasIndex("RunId", "RootActivationId");
+
+                    b.HasIndex("RunId", "SessionId");
+
+                    b.HasIndex("TenantId", "CredentialId")
+                        .IsUnique()
+                        .HasFilter("CompletedAt IS NULL");
+
+                    b.HasIndex("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId");
+
+                    b.HasIndex("TenantId", "RequestId", "ExecutorPrincipalId", "OperationId", "ActionHash");
+
+                    b.ToTable("TenantCredentialCheckDispatches", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TenantCredentialCheckDispatch_Values", "StartedRunRevision >= 1 AND length(ActionHash) = 64 AND (CompletedAt IS NULL OR CompletedAt >= StartedAt)");
+                        });
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantCredentialRecord", b =>
                 {
                     b.Property<string>("CredentialId")
@@ -3371,7 +3444,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Source", "(RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL) OR (RequestId IS NULL AND SourceCallId IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200 AND ParametersHash IS NOT NULL AND length(ParametersHash) = 64)");
 
-                            t.HasCheckConstraint("CK_TenantOperationReceipt_Values", "Outcome IN (0,1) AND InstanceRevision >= 1 AND PersonaRevision >= 1 AND length(ActionHash) = 64 AND length(ReasonCode) BETWEEN 1 AND 128");
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_Values", "Outcome IN (0,1,2) AND InstanceRevision >= 1 AND PersonaRevision >= 1 AND length(ActionHash) = 64 AND length(ReasonCode) BETWEEN 1 AND 128");
                         });
                 });
 
@@ -3933,6 +4006,44 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId")
                         .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantCredentialCheckDispatchRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "RootActivationId")
+                        .HasPrincipalKey("AgentRunId", "RootActivationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "SessionId")
+                        .HasPrincipalKey("AgentRunId", "SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CredentialId")
+                        .HasPrincipalKey("TenantId", "CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId")
+                        .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantApprovalRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RequestId", "ExecutorPrincipalId", "OperationId", "ActionHash")
+                        .HasPrincipalKey("TenantId", "RequestId", "ExecutorPrincipalId", "OperationId", "Fingerprint")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

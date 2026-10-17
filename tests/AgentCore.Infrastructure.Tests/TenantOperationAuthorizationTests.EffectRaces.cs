@@ -93,7 +93,7 @@ public sealed partial class TenantOperationAuthorizationTests
         internal TaskCompletionSource Proceed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ValueTask<TenantApprovalDecision?> FindApprovalDecisionAsync(Guid tenant, Guid request, CancellationToken ct = default) => inner.FindApprovalDecisionAsync(tenant, request, ct);
         public ValueTask<TenantOperationReceipt?> FindOperationReceiptAsync(Guid tenant, Guid operation, CancellationToken ct = default) => inner.FindOperationReceiptAsync(tenant, operation, ct);
-        public async ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expected, TenantLocalEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+        public async ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expected, TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
         { Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); return await inner.TryCommitLocalEffectAsync(next, expected, commit, audit, ct); }
     }
 }

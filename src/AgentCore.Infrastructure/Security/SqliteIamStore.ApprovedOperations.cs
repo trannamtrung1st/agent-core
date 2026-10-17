@@ -21,7 +21,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
     }
 
     public async ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantLocalEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+        TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

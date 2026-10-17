@@ -13,7 +13,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_operationReceipts.GetValueOrDefault(operationId) is { } r && r.TenantId == tenantId ? r : null); }
 
     public ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantLocalEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+        TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)

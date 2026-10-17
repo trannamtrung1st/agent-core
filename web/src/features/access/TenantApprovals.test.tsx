@@ -88,3 +88,25 @@ it('shows Applied only for a completed receipt, and clears private details on or
   rendered.rerender(<App><TenantApprovals context={{ ...context, tenant: { ...context.tenant, tenantId: 'tenant-b' } }} requestId="request-b" /></App>);
   expect(screen.queryByText('Safe <script> name')).not.toBeInTheDocument(); expect(screen.queryByText('vi', { exact: true })).not.toBeInTheDocument();
 });
+
+it('separates an uncertain credential check from denial and refreshes the saved result without another decision', async () => {
+  const uncertain: TenantApproval = { ...request, status: 'approved', preparedAction: { ...request.preparedAction, operation: 'check_credential_connection' },
+    operationResult: { outcome: 'indeterminate', reasonCode: 'credential_check_uncertain', recordedAt: request.createdAt } };
+  view(uncertain); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Outcome uncertain', { exact: true })).toBeVisible();
+  expect(within(dialog).getByText(/This operation will not run again/)).toBeVisible();
+  expect(within(dialog).queryByText('Not applied', { exact: true })).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Authorize once' })).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Refresh details' }));
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Refresh details' })).toBeEnabled());
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+
+it('describes a completed credential health check without claiming a configuration change', async () => {
+  view({ ...request, status: 'approved', preparedAction: { ...request.preparedAction, operation: 'check_credential_connection' },
+    operationResult: { outcome: 'completed', reasonCode: 'credential_reconnect_required', recordedAt: request.createdAt } });
+  const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Check completed', { exact: true })).toBeVisible();
+  expect(within(dialog).getByText(/credential requires reconnection/)).toBeVisible();
+  expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+});

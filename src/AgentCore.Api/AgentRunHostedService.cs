@@ -22,12 +22,14 @@ public sealed class AgentRunHostedService : BackgroundService
         IDiagnosticIdSource diagnostics,
         AgentCore.Application.Experience.ExperienceService experience,
         AgentCore.Application.Security.TenantApprovalService approvals,
+        AgentCore.Application.Security.TenantCredentialCheckService credentialChecks,
         ITenantRunExecution tenantExecution)
         : this(
             async cancellationToken =>
             {
                 await experience.ReconcileAsync(cancellationToken).ConfigureAwait(false);
                 await approvals.DispatchPendingAsync(cancellationToken).ConfigureAwait(false);
+                await credentialChecks.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await tenantExecution.ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken).ConfigureAwait(false);
                 var executed = await coordinator
                     .ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken)
