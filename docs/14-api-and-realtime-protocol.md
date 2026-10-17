@@ -1,5 +1,9 @@
 # HTTP API and Realtime Protocol
 
+## Agent mutation original-session commit fence
+
+Canonical human agent mutations retain the original cookie-derived Account/session/Principal through preparation and the atomic commit: template/publication creation, lifecycle, persona, active version, settings, execution budgets, unattended model, self-management/freeze, Skill commands and resource upload/copy/choice/delete. The session reference is not accepted as a request body/query field. An unavailable original session is rejected with `403 initiator_unavailable`, even if the same Account has logged in again; existing validation/concurrency failures retain their normal precedence. Rejected writes apply no change or allowed audit. A new explicit request under current authentication and still-current revisions can succeed. This does not replay a mutation or grant authority. Existing request/response shapes and concurrency contracts stay unchanged.
+
 ## Canonical agent GET freshness
 
 All canonical agent reads derive the original human from the authenticated cookie and tenant context, then revalidate that same Account/session/Principal after protected I/O. This applies to `/agent-templates`, `/agents`, `/agents/{id}`, and the exact Instance `/effective-config`, `/settings`, `/execution-budgets`, `/self-management`, `/skills`, `/resources`, `/resources/{key}/content` and `/editor` suffixes under `/api/v2/tenants/{tenantId}`. Logout or replacement of the original session during a read returns `403 initiator_unavailable`; concurrent security/Instance changes return `409 stale_revision` rather than a mixed snapshot. Clients recover with an explicit new read using current authentication. Existing JSON/file shapes, paging, no-store headers and permission requirements are preserved. The fence does not authorize a write or retry a mutation.

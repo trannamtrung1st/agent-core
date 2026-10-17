@@ -78,6 +78,7 @@ public sealed partial class SqliteIamStore
         db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
         // Tenant events need a tenant-aware owner; never fabricate the legacy LocalUserProfile attribution.
+        await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, change.Initiator, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
         catch (DbUpdateConcurrencyException) { return null; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }

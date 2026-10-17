@@ -13,7 +13,8 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
     bool SetUnattendedModel = false, string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
-    HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null);
+    HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null,
+    HumanSessionReference? Initiator = null);
 
 // Specialized transaction boundary: the existing Instance, its identity, security revision and audit
 // are committed together. Reads filter authoritative identity ownership before ordering/pagination.
@@ -26,8 +27,8 @@ public interface ITenantAgentStore
     ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedInstanceIds,
         int page, int pageSize, CancellationToken ct = default);
     ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long expectedSecurityRevision,
-        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default);
+        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long expectedSecurityRevision,
         Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at,
-        AuthorizationAudit audit, CancellationToken ct = default);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
 }

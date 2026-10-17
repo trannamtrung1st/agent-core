@@ -161,6 +161,6 @@ public sealed partial class TenantDefinitionIntegrationTests
         var resources = new InheritedDefinitionResourceCatalog(f.Resources, builtIns, new FileApprovedKnowledgeCatalog(root), f.Content);
         return (new(store, (ITenantAgentStore)store, builtIns, authorizer, f.Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)store),
             new(store, (ITenantAgentStore)store, (ITenantDefinitionStore)store, builtIns, resources, authorizer,
-                ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, new(triggers, f.SessionStore), f.Ids, TimeProvider.System, aliases: SyntheticProviderAliases.Default, content: content ?? f.Content));
+                ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, new(triggers, f.SessionStore), f.Ids, TimeProvider.System, aliases: SyntheticProviderAliases.Default, content: content ?? f.Content, identity: f.Identity));
     }
 }

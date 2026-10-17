@@ -50,6 +50,8 @@ public sealed partial class InMemoryIamStore
                 var content = definitions.ResourceStore?.TenantContent ?? throw new AccessDeniedException("resource_content_unavailable");
                 _ = AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(content, binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).GetAwaiter().GetResult();
             }
+            RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, change.Initiator);
+            if (_tenants[next.Tenant.TenantId].Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
             if (change.Skill is not null || change.Resource is not null)
             {
                 if (change.Skill is { } skill) instances.MutateTenantSkillsAsync(skill, at, ct).GetAwaiter().GetResult();

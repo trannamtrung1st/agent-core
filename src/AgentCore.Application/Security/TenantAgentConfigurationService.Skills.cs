@@ -28,7 +28,7 @@ public sealed partial class TenantAgentConfigurationService
 
     public ValueTask<TenantAgentSkillSaved> WriteSkillAsync(Guid actor, Guid tenant, Guid id, string operation,
         long securityRevision, long instanceRevision, string? key = null, long? expectedSkillRevision = null,
-        InstanceSkillInput? input = null, bool? enabled = null, CancellationToken ct = default) => WithChildGate<TenantAgentSkillSaved>(id, async token =>
+        InstanceSkillInput? input = null, bool? enabled = null, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithChildGate<TenantAgentSkillSaved>(id, async token =>
     {
         var state = await ChildChangeState(actor, tenant, id, "skills.manage", "skills.read", securityRevision, token,
             operation is "create" or "customize" ? null : key ?? throw new AccessDeniedException("resource_unavailable")).ConfigureAwait(false);
@@ -55,16 +55,20 @@ public sealed partial class TenantAgentConfigurationService
                 _ => throw AgentCoreErrors.Validation("Unknown Built-in Skill.") };
             // The existing Skills-area check above authorizes only these two choices; it cannot enable or unfreeze policy.
             var policy = SelfManagementService.Prepare(owner, baseline, overrides, null, false);
-            var updated = await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: policy), "skills.choice.update", token).ConfigureAwait(false);
+            var updated = await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: policy), "skills.choice.update", token, initiator).ConfigureAwait(false);
             var written = AgentInstanceSkillService.BuiltIns(definition, ManagementPolicyResolver.Resolve(baseline, updated.Instance), updated.Instance).Single(s => s.Key == key);
             return new(written, null, updated.Instance.Revision, state.Tenant.Revision + 1, true);
         }
         var prepared = AgentInstanceSkillService.Prepare(owner, definition, snapshot.Skills, operation, key, expectedSkillRevision, input, enabled,
             agent ? SkillAuthor.Agent : SkillAuthor.Admin, time.GetUtcNow());
-        if (prepared.Mutation is null) return new(prepared.Skill, prepared.DefinitionSkill, owner.Revision, state.Tenant.Revision, false);
+        if (prepared.Mutation is null)
+        {
+            await RequireOriginalHuman(actor, tenant, initiator, token).ConfigureAwait(false);
+            return new(prepared.Skill, prepared.DefinitionSkill, owner.Revision, state.Tenant.Revision, false);
+        }
         _ = EffectiveSkillCatalogResolver.Resolve(definition, prepared.Next);
         _ = AgentInstanceResourceService.Resolve(definition, await Resources(tenant, baseline, token).ConfigureAwait(false), snapshot.Resources, prepared.Next);
-        var saved = await Commit(actor, tenant, state, new(id, instanceRevision, Skill: prepared.Mutation), "skills." + operation, token).ConfigureAwait(false);
+        var saved = await Commit(actor, tenant, state, new(id, instanceRevision, Skill: prepared.Mutation), "skills." + operation, token, initiator).ConfigureAwait(false);
         return new(prepared.Skill with { InstanceRevision = saved.Instance.Revision }, prepared.DefinitionSkill, saved.Instance.Revision, state.Tenant.Revision + 1, true);
     }, ct);
 

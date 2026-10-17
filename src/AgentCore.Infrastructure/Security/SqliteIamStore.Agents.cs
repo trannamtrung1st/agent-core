@@ -33,7 +33,7 @@ public sealed partial class SqliteIamStore
     }
 
     public async ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long expectedSecurityRevision,
-        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default)
+        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instance.InstanceId, instance.Lifecycle, audit);
         if (instance.Revision != 1 || instance.Lifecycle != AgentInstanceLifecycle.Active) throw new ArgumentException("A new active Instance is required.");
@@ -50,13 +50,14 @@ public sealed partial class SqliteIamStore
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, instance.InstanceId, skills, instance.UpdatedAt, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
+        await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, initiator, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return true; }
         catch (DbUpdateConcurrencyException) { return false; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
     }
 
     public async ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instanceId, lifecycle, audit);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -77,6 +78,7 @@ public sealed partial class SqliteIamStore
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
         var updated = SqliteAgentInstanceStore.Map(row);
         foreach (var e in CoreEventPersistence.Instance(old, updated)) CoreEventPersistence.Stage(db, e);
+        await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, initiator, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
         catch (DbUpdateConcurrencyException) { return null; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
@@ -105,4 +107,12 @@ public sealed partial class SqliteIamStore
         if (actor.Kind == PrincipalKind.User && !await db.Set<Account>().AnyAsync(a => a.AccountId == actor.AccountId && a.Status == IdentityStatus.Active, ct).ConfigureAwait(false))
             throw new AccessDeniedException("account_unavailable");
     }
+    private async Task RequireAgentHumanAsync(AgentCoreDbContext db, Guid tenant, Guid actor, HumanSessionReference? initiator, CancellationToken ct)
+    {
+        if (initiator is null) return;
+        if (initiator.PrincipalId != actor) throw new AccessDeniedException("initiator_unavailable");
+        try { await RequireHumanSessionAsync(db, tenant, initiator, ct).ConfigureAwait(false); }
+        catch (AccessDeniedException) { throw new AccessDeniedException("initiator_unavailable"); }
+    }
+
 }

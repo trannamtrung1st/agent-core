@@ -37,13 +37,13 @@ public static partial class TenantAgentEndpoints
         {
             var a = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.UpdatePersonaAsync(a.PrincipalId, a.TenantId, instanceId, body.Persona,
-                body.ExpectedRevision, body.ExpectedInstanceRevision, body.ExpectedPersonaRevision, ct).ConfigureAwait(false)));
+                body.ExpectedRevision, body.ExpectedInstanceRevision, body.ExpectedPersonaRevision, ct, Human(http)).ConfigureAwait(false)));
         }));
         group.MapPut("/agents/{instanceId:guid}/active-version", (Guid instanceId, VersionRequest body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.AdoptVersionAsync(a.PrincipalId, a.TenantId, instanceId, body.Version,
-                body.ExpectedRevision, body.ExpectedInstanceRevision, ct).ConfigureAwait(false)));
+                body.ExpectedRevision, body.ExpectedInstanceRevision, ct, Human(http)).ConfigureAwait(false)));
         }));
     }
 }

@@ -35,7 +35,7 @@ public sealed partial class InMemoryIamStore
     }
 
     public ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long expectedSecurityRevision,
-        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default)
+        AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instance.InstanceId, instance.Lifecycle, audit);
@@ -47,6 +47,7 @@ public sealed partial class InMemoryIamStore
             ValidateAgentActor(before, audit.ActorPrincipalId);
             EnsureReferences(next, audit, instance.InstanceId, ct);
             if (instances.FindTenantBackingAsync(instance.InstanceId, ct).Result is not null) return ValueTask.FromResult(false);
+            RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, initiator);
             instances.InsertAsync(instance, ct, skills).GetAwaiter().GetResult();
             _tenants[next.Tenant.TenantId] = next; MarkOwnedAgents(next); _audit.Add(audit);
             return ValueTask.FromResult(true);
@@ -54,7 +55,7 @@ public sealed partial class InMemoryIamStore
     }
 
     public ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long expectedSecurityRevision,
-        Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        Guid instanceId, long expectedInstanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instanceId, lifecycle, audit);
@@ -65,11 +66,19 @@ public sealed partial class InMemoryIamStore
             ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var current = instances.FindTenantBackingAsync(instanceId, ct).Result;
             if (!before.SystemIdentities.Any(i => i.AgentInstanceId == instanceId) || current is null || current.Revision != expectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
+            RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, initiator);
             var updated = instances.SetTenantLifecycleAsync(instanceId, expectedInstanceRevision, lifecycle, at, ct).Result;
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
             var identity = next.SystemIdentities.Single(i => i.AgentInstanceId == instanceId);
             return ValueTask.FromResult<TenantAgent?>(new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, updated));
         }
+    }
+    private void RequireAgentHuman(Guid tenant, Guid actor, HumanSessionReference? initiator)
+    {
+        if (initiator is null) return;
+        if (initiator.PrincipalId != actor) throw new AccessDeniedException("initiator_unavailable");
+        try { RequireHumanSession(tenant, initiator); }
+        catch (AccessDeniedException) { throw new AccessDeniedException("initiator_unavailable"); }
     }
     private void ValidateAgentActor(TenantSecurityState before, Guid actorId)
     {

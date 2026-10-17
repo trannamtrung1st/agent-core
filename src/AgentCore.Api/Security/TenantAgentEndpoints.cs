@@ -49,14 +49,14 @@ public static partial class TenantAgentEndpoints
         group.MapPost("/agents", (CreateRequest body, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            var agent = await service.CreateAsync(actor.PrincipalId, actor.TenantId, body.TemplateId, body.Version, body.ExpectedRevision, body.Persona, ct).ConfigureAwait(false);
+            var agent = await service.CreateAsync(actor.PrincipalId, actor.TenantId, body.TemplateId, body.Version, body.ExpectedRevision, body.Persona, ct, Human(http)).ConfigureAwait(false);
             return Results.Json(Safe(agent), statusCode: 201);
         }));
         group.MapPost("/agents/from-publication", (PublicationCreateRequest body, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.CreateFromPublicationAsync(actor.PrincipalId, actor.TenantId, body.DefinitionId,
-                body.Version, body.ExpectedRevision, body.Persona, ct).ConfigureAwait(false)), statusCode: 201);
+                body.Version, body.ExpectedRevision, body.Persona, ct, Human(http)).ConfigureAwait(false)), statusCode: 201);
         }));
         group.MapGet("/agents", (int? page, int? pageSize, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -73,7 +73,7 @@ public static partial class TenantAgentEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.SetLifecycleAsync(actor.PrincipalId, actor.TenantId, instanceId,
-                body.Lifecycle, body.ExpectedRevision, body.ExpectedInstanceRevision, ct).ConfigureAwait(false)));
+                body.Lifecycle, body.ExpectedRevision, body.ExpectedInstanceRevision, ct, Human(http)).ConfigureAwait(false)));
         }));
     }
     private static object Safe(TenantAgent agent) => new { agent.TenantId, agent.SystemIdentityId, agent.PrincipalId,

@@ -16,7 +16,7 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
     }
 
     public async ValueTask<TenantAgent> CreateAsync(Guid actorId, Guid tenantId, string templateId, int version,
-        long expectedRevision, AgentIdentity? persona = null, CancellationToken ct = default)
+        long expectedRevision, AgentIdentity? persona = null, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         var state = await ReadForChangeAsync(actorId, tenantId, "agents.create", AccessScope.ForTenant(tenantId), expectedRevision, ct).ConfigureAwait(false);
         if (version < 1 || string.IsNullOrWhiteSpace(templateId)) throw new ArgumentException("An exact template version is required.");
@@ -24,21 +24,21 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
         // own converted ownership store; the old composite/global catalog is never a fallback here.
         var template = await templates.GetAsync(templateId, version, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("definition_unavailable");
         if (version < 1 || template.Version != version) throw new ArgumentException("An exact template version is required.");
-        return await CreateOwnedAsync(actorId, tenantId, expectedRevision, state, template, persona, ct).ConfigureAwait(false);
+        return await CreateOwnedAsync(actorId, tenantId, expectedRevision, state, template, persona, ct, initiator).ConfigureAwait(false);
     }
 
     public async ValueTask<TenantAgent> CreateFromPublicationAsync(Guid actorId, Guid tenantId, Guid definitionId, int version,
-        long expectedRevision, AgentIdentity? persona = null, CancellationToken ct = default)
+        long expectedRevision, AgentIdentity? persona = null, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         var state = await ReadForChangeAsync(actorId, tenantId, "agents.create", AccessScope.ForTenant(tenantId), expectedRevision, ct).ConfigureAwait(false);
         await authorizer.RequireAsync(actorId, "agent-definitions.read", AccessScope.ForResource(tenantId, "definition", definitionId.ToString("D")), ct).ConfigureAwait(false);
         var publication = ownedDefinitions is null ? null : await ownedDefinitions.FindDefinitionPublicationAsync(tenantId, definitionId, version, ct).ConfigureAwait(false);
         if (publication?.Status != DefinitionPublicationStatus.Active) throw new AccessDeniedException("definition_unavailable");
-        return await CreateOwnedAsync(actorId, tenantId, expectedRevision, state, publication.Payload, persona, ct).ConfigureAwait(false);
+        return await CreateOwnedAsync(actorId, tenantId, expectedRevision, state, publication.Payload, persona, ct, initiator).ConfigureAwait(false);
     }
 
     private async ValueTask<TenantAgent> CreateOwnedAsync(Guid actorId, Guid tenantId, long expectedRevision,
-        TenantSecurityState state, AgentDefinition template, AgentIdentity? persona, CancellationToken ct)
+        TenantSecurityState state, AgentDefinition template, AgentIdentity? persona, CancellationToken ct, HumanSessionReference? initiator)
     {
         var identity = persona ?? template.Identity;
         AgentDefinitionValidator.ValidateIdentity(identity);
@@ -50,7 +50,7 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
             SystemIdentities = state.SystemIdentities.Append(new(systemId, tenantId, principalId, SystemIdentityKind.Agent, instanceId, IdentityStatus.Active)).ToArray()
         });
         if (!await agents.TryCreateTenantAgentAsync(next, expectedRevision, instance, template.SkillList,
-            Audit(tenantId, actorId, "agents.create", instanceId, now), ct).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
+            Audit(tenantId, actorId, "agents.create", instanceId, now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
         return new(tenantId, systemId, principalId, instance);
     }
 
@@ -77,13 +77,13 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
     }
 
     public ValueTask<TenantAgent> SetLifecycleAsync(Guid actorId, Guid tenantId, Guid instanceId, AgentInstanceLifecycle lifecycle,
-        long expectedRevision, long expectedInstanceRevision, CancellationToken ct = default) => lifecycleGate is null
-        ? ChangeLifecycleAsync(actorId, tenantId, instanceId, lifecycle, expectedRevision, expectedInstanceRevision, ct)
+        long expectedRevision, long expectedInstanceRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) => lifecycleGate is null
+        ? ChangeLifecycleAsync(actorId, tenantId, instanceId, lifecycle, expectedRevision, expectedInstanceRevision, ct, initiator)
         : lifecycleGate.WithInstanceAsync(instanceId, token => ChangeLifecycleAsync(actorId, tenantId, instanceId, lifecycle,
-            expectedRevision, expectedInstanceRevision, token), ct);
+            expectedRevision, expectedInstanceRevision, token, initiator), ct);
 
     private async ValueTask<TenantAgent> ChangeLifecycleAsync(Guid actorId, Guid tenantId, Guid instanceId, AgentInstanceLifecycle lifecycle,
-        long expectedRevision, long expectedInstanceRevision, CancellationToken ct)
+        long expectedRevision, long expectedInstanceRevision, CancellationToken ct, HumanSessionReference? initiator)
     {
         if (!Enum.IsDefined(lifecycle)) throw new ArgumentException("Unknown agent lifecycle.");
         var state = await ReadForChangeAsync(actorId, tenantId, "agents.update", Scope(tenantId, instanceId), expectedRevision, ct).ConfigureAwait(false);
@@ -96,7 +96,7 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
         });
         var now = time.GetUtcNow();
         var updated = await agents.TrySetTenantAgentLifecycleAsync(next, expectedRevision, instanceId, expectedInstanceRevision, lifecycle,
-            now, Audit(tenantId, actorId, lifecycle == AgentInstanceLifecycle.Active ? "agents.restore" : "agents.archive", instanceId, now), ct).ConfigureAwait(false)
+            now, Audit(tenantId, actorId, lifecycle == AgentInstanceLifecycle.Active ? "agents.restore" : "agents.archive", instanceId, now), ct, initiator).ConfigureAwait(false)
             ?? throw new SecurityConflictException("stale_revision");
         if (reconciliation is not null) await reconciliation.ReconcileAgentInstanceAsync(instanceId, now, ct).ConfigureAwait(false);
         if (sandbox is not null) await sandbox.EnforceAsync(instanceId, ct).ConfigureAwait(false);

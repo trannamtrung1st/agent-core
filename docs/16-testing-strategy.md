@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Agent original-human mutation races
+
+For every canonical agent mutation endpoint, intercept the specialized store call after the Application precheck, revoke the original login, optionally log in again as the same Account, and require a safe denial with byte-identical prior Instance/inventory/Skill/resource projections and unchanged security revision. Explicit recovery with the current login and still-current witnesses must succeed once. Keep the separate preparation-time settings regression and no-op inherited Skill reset case. Both stores must reject logout, replacement-login, password-stamp rotation and mismatched-Principal references for configuration, creation and lifecycle, without partial allowed audit; SQLite reopen verifies only the successful explicit recovery persisted. Gate the test callback after the owning port releases its locks; an asynchronous nested HTTP callback inside a synchronous locked catalog lookup is not a valid race fixture. [Executed evidence](reports/tenant-agent-write-fence-verification-2026-10-18.md).
+
 ## Original-human agent read races
 
 Use one-shot test-store interception after actual Definition, directory or byte I/O. Across all canonical agent GETs, logout during I/O must release no protected result; a new same-Account login cannot substitute for the request’s retired session. A subsequent explicit read with the new session succeeds. For effective configuration/settings/budgets/management/Skills/resources/editor, execute persona and security changes during Definition resolution against InMemory and SQLite: reject mixed captures, then explicitly recover a current read. Resource download tests inspect actual captured bytes but require a safe denial/conflict response containing no sentinel, and separately verify authorized recovery returns the original bytes. No sleeps or public debug endpoints are needed. [Executed evidence](reports/tenant-agent-read-fence-verification-2026-10-17.md).

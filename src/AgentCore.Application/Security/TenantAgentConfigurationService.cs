@@ -19,7 +19,7 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, IamAuthorizer authorizer,
     IModelCatalog models, IToolConfigurationGate tools, InstanceAutomationPolicy automationPolicy,
     IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null, SandboxPolicyEnforcement? sandbox = null,
-    ProviderAliasSet? aliases = null, IBrowser? browser = null, IDefinitionResourceContentStore? content = null)
+    ProviderAliasSet? aliases = null, IBrowser? browser = null, IDefinitionResourceContentStore? content = null, IdentityService? identity = null)
 {
     public async ValueTask<TenantAgentEffectiveConfiguration> ReadAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {
@@ -50,14 +50,14 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
     }
 
     public ValueTask<TenantAgent> UpdatePersonaAsync(Guid actor, Guid tenant, Guid id, AgentIdentity persona,
-        long securityRevision, long instanceRevision, long personaRevision, CancellationToken ct = default) => WithGate(id, async token =>
+        long securityRevision, long instanceRevision, long personaRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
-        return await Commit(actor, tenant, state, new(id, instanceRevision, persona, personaRevision), "agents.persona.update", token).ConfigureAwait(false);
+        return await Commit(actor, tenant, state, new(id, instanceRevision, persona, personaRevision), "agents.persona.update", token, initiator).ConfigureAwait(false);
     }, ct);
 
     public ValueTask<TenantAgent> AdoptVersionAsync(Guid actor, Guid tenant, Guid id, int version,
-        long securityRevision, long instanceRevision, CancellationToken ct = default) => WithGate(id, async token =>
+        long securityRevision, long instanceRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
@@ -75,13 +75,15 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, target, token).ConfigureAwait(false), snapshot.Resources, skills);
         var policy = await automationPolicy.PlanAsync(current, effective, time.GetUtcNow(), token).ConfigureAwait(false);
         var updated = await Commit(actor, tenant, state, new(id, instanceRevision, ActiveVersion: version,
-            ExpectedPublicationRevision: metadataRevision, DefinitionSkills: target.SkillList, AutomationPolicyChanges: policy), "agents.version.adopt", token).ConfigureAwait(false);
+            ExpectedPublicationRevision: metadataRevision, DefinitionSkills: target.SkillList, AutomationPolicyChanges: policy), "agents.version.adopt", token, initiator).ConfigureAwait(false);
         if (sandbox is not null) await sandbox.EnforceAsync(id, token).ConfigureAwait(false);
         return updated;
     }, ct);
 
-    private async ValueTask<TenantAgent> Commit(Guid actor, Guid tenant, TenantSecurityState state, TenantAgentConfigurationChange change, string action, CancellationToken ct)
+    private async ValueTask<TenantAgent> Commit(Guid actor, Guid tenant, TenantSecurityState state, TenantAgentConfigurationChange change, string action, CancellationToken ct, HumanSessionReference? initiator)
     {
+        await RequireOriginalHuman(actor, tenant, initiator, ct).ConfigureAwait(false);
+        change = change with { Initiator = initiator };
         var now = time.GetUtcNow(); var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
         if (state.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId)))
         {
@@ -94,6 +96,13 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
             new(ids.NewId(), tenant, actor, action, change.InstanceId.ToString("D"), "allowed", "authorized", now), ct).ConfigureAwait(false)
             ?? throw new SecurityConflictException("stale_revision");
     }
+    private async ValueTask RequireOriginalHuman(Guid actor, Guid tenant, HumanSessionReference? initiator, CancellationToken ct)
+    {
+        if (initiator is null) return; // Trusted non-HTTP callers retain their existing actor authority checks.
+        if (initiator.PrincipalId != actor) throw new AccessDeniedException("initiator_unavailable");
+        await TenantHumanSessionAuthority.RequireAsync(security, identity ?? throw new InvalidOperationException("Human-bound mutations require identity services."), tenant, initiator, ct).ConfigureAwait(false);
+    }
+
     private async ValueTask<TenantSecurityState> ChangeState(Guid actor, Guid tenant, Guid id, long revision, CancellationToken ct)
     {
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");

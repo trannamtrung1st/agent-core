@@ -25,7 +25,7 @@ public sealed partial class TenantAgentConfigurationService
     }
 
     public ValueTask<TenantAgent> PatchSettingsAsync(Guid actor, Guid tenant, Guid id, string section,
-        long securityRevision, long instanceRevision, IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, CancellationToken ct = default) => WithGate(id, async token =>
+        long securityRevision, long instanceRevision, IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(set); ArgumentNullException.ThrowIfNull(clear);
@@ -41,7 +41,7 @@ public sealed partial class TenantAgentConfigurationService
         _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, definition, token).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
         var plan = await automationPolicy.PlanAsync(current, effective, time.GetUtcNow(), token).ConfigureAwait(false);
         var updated = await Commit(actor, tenant, state, new(id, instanceRevision, SetSettingsOverrides: true,
-            SettingsOverrides: next, AutomationPolicyChanges: plan), "agents.settings.update", token).ConfigureAwait(false);
+            SettingsOverrides: next, AutomationPolicyChanges: plan), "agents.settings.update", token, initiator).ConfigureAwait(false);
         if (sandbox is not null) await sandbox.EnforceAsync(id, token).ConfigureAwait(false);
         return updated;
     }, ct);
@@ -53,20 +53,20 @@ public sealed partial class TenantAgentConfigurationService
             Enum.GetValues<ExecutionBudgetClass>().ToDictionary(kind => kind, kind => ExecutionBudgetPolicy.Resolve(kind, definition.ExecutionBudgets, current.ExecutionBudgets)), ExecutionBudgetCeilings.Default);
     }
     public ValueTask<TenantAgent> UpdateBudgetsAsync(Guid actor, Guid tenant, Guid id, long securityRevision,
-        long instanceRevision, ExecutionBudgetPolicy? budgets, CancellationToken ct = default) => WithGate(id, async token =>
+        long instanceRevision, ExecutionBudgetPolicy? budgets, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         budgets?.Validate();
-        return await Commit(actor, tenant, state, new(id, instanceRevision, SetExecutionBudgets: true, ExecutionBudgets: budgets), "agents.budgets.update", token).ConfigureAwait(false);
+        return await Commit(actor, tenant, state, new(id, instanceRevision, SetExecutionBudgets: true, ExecutionBudgets: budgets), "agents.budgets.update", token, initiator).ConfigureAwait(false);
     }, ct);
 
     public ValueTask<TenantAgent> UpdateUnattendedModelAsync(Guid actor, Guid tenant, Guid id, long securityRevision,
-        long instanceRevision, string? catalogKey, string? reasoningEffort, CancellationToken ct = default) => WithGate(id, async token =>
+        long instanceRevision, string? catalogKey, string? reasoningEffort, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         ExecutionModelPolicy.RequireSelectable(models, catalogKey, reasoningEffort);
         return await Commit(actor, tenant, state, new(id, instanceRevision, SetUnattendedModel: true,
-            UnattendedModelCatalogKey: catalogKey, UnattendedReasoningEffort: reasoningEffort), "agents.unattended-model.update", token).ConfigureAwait(false);
+            UnattendedModelCatalogKey: catalogKey, UnattendedReasoningEffort: reasoningEffort), "agents.unattended-model.update", token, initiator).ConfigureAwait(false);
     }, ct);
 
     public async ValueTask<TenantAgentManagement> ReadManagementAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
@@ -75,7 +75,7 @@ public sealed partial class TenantAgentConfigurationService
         return new(SelfManagementService.View(snapshot.Agent.Instance, definition), await ReadRevision(actor, tenant, id, ct).ConfigureAwait(false));
     }
     public ValueTask<TenantAgent> UpdateManagementAsync(Guid actor, Guid tenant, Guid id, long securityRevision, long instanceRevision,
-        ManagementPolicyOverrides overrides, bool? frozen = null, CancellationToken ct = default) => WithGate(id, async token =>
+        ManagementPolicyOverrides overrides, bool? frozen = null, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
@@ -83,7 +83,7 @@ public sealed partial class TenantAgentConfigurationService
         var (definition, _, _) = await Definition(tenant, current.DefinitionId, current.ActiveVersion, token).ConfigureAwait(false);
         var agent = state.Principals.Single(p => p.PrincipalId == actor).Kind == PrincipalKind.SystemIdentity;
         var next = SelfManagementService.Prepare(current, definition, overrides, frozen, agent);
-        return await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: next), "agents.self-management.update", token).ConfigureAwait(false);
+        return await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: next), "agents.self-management.update", token, initiator).ConfigureAwait(false);
     }, ct);
 
     private async ValueTask<(TenantAgentConfigurationSnapshot Snapshot, AgentDefinition Definition)> BoundForRead(Guid actor, Guid tenant, Guid id, CancellationToken ct)
@@ -94,14 +94,14 @@ public sealed partial class TenantAgentConfigurationService
         return (snapshot, definition);
     }
     public ValueTask<TenantAgent> FreezeManagementAsync(Guid actor, Guid tenant, Guid id, long securityRevision, long instanceRevision,
-        CancellationToken ct = default) => WithGate(id, async token =>
+        CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
         RequireWritable(current, instanceRevision);
         var (definition, _, _) = await Definition(tenant, current.DefinitionId, current.ActiveVersion, token).ConfigureAwait(false);
         return await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: SelfManagementService.PrepareFreeze(current, definition)),
-            "agents.self-management.freeze", token).ConfigureAwait(false);
+            "agents.self-management.freeze", token, initiator).ConfigureAwait(false);
     }, ct);
     private async ValueTask<long> ReadRevision(Guid actor, Guid tenant, Guid id, CancellationToken ct)
     {

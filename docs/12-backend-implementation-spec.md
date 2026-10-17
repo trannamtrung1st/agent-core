@@ -1,5 +1,9 @@
 # Backend Implementation Specification
 
+## Atomic original-human agent writes
+
+Agent HTTP creation (template/publication), lifecycle, persona/version, settings/budgets/unattended-model, self-management/freeze and Skill/resource mutation endpoints derive the original human from cookie/tenant context and pass it through existing services. The configuration Commit helper puts the reference into the typed transaction command; child save helpers retain it. Existing service authorization, policy preparation, revision checks and audit actions remain unchanged. A no-op inherited Skill reset performs an explicit current-human check even though it creates no transaction. InMemory checks the original human under its existing IAM/Instance locks just before mutation; SQLite checks immediately before SaveChanges inside the existing write transaction. The check uses the existing Account/session/stamp/expiry/User/Principal validation and exposes safe `initiator_unavailable` on rejected references. No failed human check advances tenant/Instance/child state or appends an allowed audit.
+
 ## Original-human agent reads
 
 Canonical agent GETs use singleton `TenantAgentReadService`, extending the former editor-only fence across directory, configuration and child-resource reads. Its private helper captures current original-human security plus optional exact Instance identity, delegates to the typed existing owner, then reads current identity and revalidates the same authentication session before returning a payload. A new login cannot replace the request’s original session. Current membership/account/session/read checks take precedence over stale-result release; matching revisions are required after I/O. The API maps no response until this completes, including materialized resource bytes. This leaves existing write services, per-item scope decisions and wire shapes intact; it adds no storage table or alternate IAM engine.

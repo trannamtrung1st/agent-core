@@ -1,5 +1,9 @@
 # Backend Interfaces
 
+## Original-human agent mutation witness
+
+`TenantAgentConfigurationChange.Initiator` carries an optional trusted `HumanSessionReference` for canonical human commands; `TryCreateTenantAgentAsync` and `TrySetTenantAgentLifecycleAsync` receive the same optional reference. It is not client input, a grant, an authentication credential or persisted authority. Canonical HTTP mutations always supply the original server-authenticated tuple. Existing trusted non-HTTP execution uses its existing actor/IAM/management checks without fabricating a human session. Stores require any supplied human Principal to equal the audit actor, then validate its Account/session/stamp/expiry/membership in the same atomic write boundary. Configuration services also revalidate before store submission and before returning a no-op Skill reset. A later same-Account login cannot substitute for a retired session.
+
 ## Canonical agent human read boundary
 
 `TenantAgentReadService` is the single original-human facade over the existing directory/configuration owners for canonical agent GETs. Typed entry points cover inventory, shipped templates, exact metadata, effective configuration, settings, budgets, management, Skills, resource catalog/content and the composed editor. The HTTP caller supplies the authenticated Account/session/Principal; the facade validates that exact tuple before I/O and again after all protected storage/content I/O. Exact Instance reads require current `agents.read` and matching Instance/Principal identity; collections retain their owning service’s filter/create rules. Tenant revision changes reject the whole captured result with `stale_revision`. Child permissions, byte checks and read projections remain in the existing owners; the facade grants no authority and accepts no client-selected actor.
