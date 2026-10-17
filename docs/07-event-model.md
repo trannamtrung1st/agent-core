@@ -2,6 +2,8 @@
 
 ## Three separate contracts
 
+Canonical tenant approvals use a dedicated durable `ApprovalProcessedSignal` receipt referencing the exact request, Run and terminal request revision. A human decision commits the signal with request/decision/grant/audit; Core expiry commits its terminal status and signal atomically. The existing Run worker acknowledges that signal together with requeue of the saved waiting Run. Repeated delivery cannot requeue again. This is an internal continuation receipt, not a new authored Automation event, subscription family, scheduler or broker. The resumed executor must load the stored exact operation/outcome and revalidate before any effect; tenant effect consumption remains pending. See [durable approval verification](reports/tenant-durable-approval-verification-2026-10-17.md).
+
 Authored Automation Schedule/Event/manual occurrences enter durable intake, where their frozen target selects the exact existing Session or a new background Session. Attached-tab count never selects an authored destination. Source-owned occurrences without an Automation retain native routing: exactly one compatible runtime can reserve and begin live evaluation; zero or multiple runtimes use durable fallback, and an unavailable single runtime releases its claim. Native quiet evaluation settles without a Run; speaking commits the existing snapshot, Activation, Run and receipt atomically. Native repair returns only to the accepted exact Session. Background fallback uses SourceOccurrence origin; authored background uses AutomationOccurrence origin. Both use the shared SessionRuntime/SessionHost execution path.
 
 | Family | Owner | Purpose |

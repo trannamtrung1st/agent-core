@@ -99,7 +99,7 @@ internal static class AgentRunStoreMapping
         AgentRunFailure? Failure, AgentRunSideEffect SideEffect, AgentRunApproval? Approval,
         IReadOnlyList<EffectiveSkill> PinnedSkillCatalog, IReadOnlyList<string> ActiveSkillKeys,
         int SkillLoadCount, IReadOnlyList<string> LoadedCapabilityIds, int CapabilityLoadCount,
-        AgentRunWait? Wait = null, int WaitCount = 0, double TotalWaitSeconds = 0);
+        AgentRunWait? Wait = null, int WaitCount = 0, double TotalWaitSeconds = 0, Guid? ApprovalRequestId = null);
 
     public static AgentRunRecord ToRecord(AgentRun run)
     {
@@ -150,7 +150,7 @@ internal static class AgentRunStoreMapping
             run.AttemptCount, run.MaxAttempts, run.Claim, run.CancellationRequested,
             run.CancellationRequestedAtUtc, run.KnownEffectSummary, run.Progress, run.Checkpoint,
             run.Result, run.Failure, run.SideEffect, run.Approval, run.PinnedSkillCatalog,
-            run.ActiveSkillKeys, run.SkillLoadCount, run.LoadedCapabilityIds, run.CapabilityLoadCount, run.Wait, run.WaitCount, run.TotalWaitSeconds), Json);
+            run.ActiveSkillKeys, run.SkillLoadCount, run.LoadedCapabilityIds, run.CapabilityLoadCount, run.Wait, run.WaitCount, run.TotalWaitSeconds, run.ApprovalRequestId), Json);
     }
 
     public static AgentRun ToDomain(AgentRunRecord row)
@@ -171,7 +171,7 @@ internal static class AgentRunStoreMapping
             p.Claim, p.CancellationRequested, p.CancellationRequestedAtUtc, p.KnownEffectSummary,
             p.Progress, p.Checkpoint, p.Result, p.Failure, p.SideEffect, p.Approval,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
-            p.PinnedSkillCatalog, p.ActiveSkillKeys, p.SkillLoadCount, p.LoadedCapabilityIds, p.CapabilityLoadCount, p.Wait, p.WaitCount, p.TotalWaitSeconds);
+            p.PinnedSkillCatalog, p.ActiveSkillKeys, p.SkillLoadCount, p.LoadedCapabilityIds, p.CapabilityLoadCount, p.Wait, p.WaitCount, p.TotalWaitSeconds, p.ApprovalRequestId);
     }
 
     public static ActivationRecord ToActivationRecord(SessionSnapshot snapshot, AgentRun run) => new()

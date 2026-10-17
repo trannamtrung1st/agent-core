@@ -20,11 +20,13 @@ public sealed class AgentRunHostedService : BackgroundService
         TimeProvider time,
         ILogger<AgentRunHostedService> logger,
         IDiagnosticIdSource diagnostics,
-        AgentCore.Application.Experience.ExperienceService experience)
+        AgentCore.Application.Experience.ExperienceService experience,
+        AgentCore.Application.Security.TenantApprovalService approvals)
         : this(
             async cancellationToken =>
             {
                 await experience.ReconcileAsync(cancellationToken).ConfigureAwait(false);
+                await approvals.DispatchPendingAsync(cancellationToken).ConfigureAwait(false);
                 var executed = await coordinator
                     .ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken)
                     .ConfigureAwait(false);

@@ -120,6 +120,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantApprovalRules.TryApprovalId(a.Scope, out var id) && _approvals.GetValueOrDefault(id)?.TenantId != state.Tenant.TenantId))
+            throw new ArgumentException("An Approval assignment requires its actual owned request.");
         if (state.Assignments.Any(a => TenantRunRules.TryId(a.Scope, out var run) && sessionBacking.ReadTenantRun(state.Tenant.TenantId, run) is null))
             throw new ArgumentException("A Run assignment requires a current owned Run.");
         if (state.Assignments.Any(a => TenantSessionRules.TryId(a.Scope, out var session) && !sessionBacking.OwnsTenantSession(state.Tenant.TenantId, session)))

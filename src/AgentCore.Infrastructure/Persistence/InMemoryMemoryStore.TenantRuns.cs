@@ -8,6 +8,24 @@ public sealed partial class InMemoryMemoryStore
 {
     internal TenantSessionRoot? ResolveTenantSessionOwner(Guid sessionId)
     { lock (_gate) return tenantSessions.GetValueOrDefault(sessionId); }
+    internal AgentRun? WaitTenantApproval(Guid tenant, Guid runId, long revision, Guid requestId, Guid? generation, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            var run = ReadTenantRun(tenant, runId); if (run is null || run.Revision != revision) return null;
+            var next = run.WaitForDurableApproval(revision, requestId, generation, at); AgentRuns.Runs[runId] = next; return next;
+        }
+    }
+    internal bool ResumeTenantApproval(Guid tenant, Guid runId, Guid requestId, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            var run = ReadTenantRun(tenant, runId); if (run is null || run.ApprovalRequestId != requestId) return false;
+            if (run.IsTerminal) return true;
+            if (run.Status != AgentRunStatus.WaitingForApproval) return false;
+            AgentRuns.Runs[runId] = run.ResumeDurableApproval(run.Revision, requestId, at); return true;
+        }
+    }
     internal AgentRun? CancelTenantRun(Guid tenant, Guid runId, long expectedRunRevision, DateTimeOffset at)
     {
         lock (_gate)

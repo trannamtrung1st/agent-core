@@ -156,6 +156,7 @@ TenantCredentialOAuthEndpoints.Map(app);
 TenantCredentialBindingEndpoints.Map(app);
 TenantSessionEndpoints.Map(app);
 TenantOperationPolicyEndpoints.Map(app);
+TenantApprovalEndpoints.Map(app);
 TenantDefinitionEndpoints.Map(app);
 
 

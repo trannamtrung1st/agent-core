@@ -2,7 +2,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Conversation;
 
-public sealed class AgentRun
+public sealed partial class AgentRun
 {
     public AgentRun(
         Guid agentRunId,
@@ -31,7 +31,7 @@ public sealed class AgentRun
         int skillLoadCount = 0,
         IReadOnlyList<string>? loadedCapabilityIds = null,
         int capabilityLoadCount = 0,
-        AgentRunWait? wait = null, int waitCount = 0, double totalWaitSeconds = 0)
+        AgentRunWait? wait = null, int waitCount = 0, double totalWaitSeconds = 0, Guid? approvalRequestId = null)
     {
         if (agentRunId == Guid.Empty)
         {
@@ -148,7 +148,10 @@ public sealed class AgentRun
             throw new ArgumentException("Approval belongs to a different agent run.");
         }
 
-        var pending = approval is { Decision: AgentRunApprovalDecision.Pending };
+        if (approvalRequestId == Guid.Empty || owner.TenantId is null && approvalRequestId is not null
+            || owner.TenantId is not null && approval is not null)
+            throw new ArgumentException("Tenant approval references and legacy approval state cannot be mixed.");
+        var pending = owner.TenantId is null ? approval is { Decision: AgentRunApprovalDecision.Pending } : approvalRequestId is not null && status == AgentRunStatus.WaitingForApproval;
         if ((status == AgentRunStatus.WaitingForApproval) != pending)
         {
             throw new ArgumentException("Waiting for approval requires one pending approval.");
@@ -195,6 +198,7 @@ public sealed class AgentRun
         Failure = failure;
         SideEffect = sideEffect;
         Approval = approval;
+        ApprovalRequestId = approvalRequestId;
         CreatedAtUtc = createdAtUtc;
         UpdatedAtUtc = updatedAtUtc;
         PinnedSkillCatalog = SkillPolicy.FreezeCatalog(pinnedSkillCatalog ?? []);
@@ -213,6 +217,7 @@ public sealed class AgentRun
     }
 
     public Guid AgentRunId { get; }
+    public Guid? ApprovalRequestId { get; }
 
     public AgentRunOwner Owner { get; }
 
@@ -362,7 +367,7 @@ public sealed class AgentRun
         return new AgentRun(AgentRunId, Owner, Admission, PinnedModel, Status, Revision + 1, AttemptCount,
             MaxAttempts, NextRetryAtUtc, Claim, CancellationRequested, CancellationRequestedAtUtc,
             KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, Approval, CreatedAtUtc,
-            updatedAtUtc, PinnedSkillCatalog, activeSkillKeys, skillLoadCount, loadedCapabilityIds, capabilityLoadCount, Wait, WaitCount, TotalWaitSeconds);
+            updatedAtUtc, PinnedSkillCatalog, activeSkillKeys, skillLoadCount, loadedCapabilityIds, capabilityLoadCount, Wait, WaitCount, TotalWaitSeconds, ApprovalRequestId);
     }
 
     public AgentRun SuspendForSignal(long revision, Guid generation, AgentRunCheckpoint checkpoint, AgentRunWait wait, DateTimeOffset now)
@@ -781,6 +786,7 @@ public sealed class AgentRun
         DateTimeOffset expiresAtUtc,
         DateTimeOffset updatedAtUtc)
     {
+        if (Owner.TenantId is not null) throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "Tenant Runs require a durable approval request.");
         if (Status == AgentRunStatus.WaitingForApproval
             && Approval!.ApprovalId == approvalId
             && string.Equals(Approval.ActionHash, actionHash, StringComparison.Ordinal))
@@ -1173,10 +1179,10 @@ public sealed class AgentRun
 
     private bool IsApprovalResume =>
         Status == AgentRunStatus.Queued
-        && Approval is
+        && (Owner.TenantId is not null && ApprovalRequestId is not null && AttemptCount > 0 || Approval is
         {
             Decision: AgentRunApprovalDecision.Approved or AgentRunApprovalDecision.Rejected or AgentRunApprovalDecision.Expired
-        };
+        });
 
     private AgentRunSideEffect SideEffectForDecision(AgentRunApprovalDecision decision, string? actionHash)
     {
@@ -1244,7 +1250,7 @@ public sealed class AgentRun
         AgentRunFailure? failure,
         AgentRunSideEffect sideEffect,
         AgentRunApproval? approval,
-        DateTimeOffset updatedAtUtc, AgentRunWait? wait = null, int? waitCount = null, double? totalWaitSeconds = null)
+        DateTimeOffset updatedAtUtc, AgentRunWait? wait = null, int? waitCount = null, double? totalWaitSeconds = null, Guid? approvalRequestId = null)
     {
         if (updatedAtUtc < UpdatedAtUtc)
         {
@@ -1281,6 +1287,6 @@ public sealed class AgentRun
             approval,
             CreatedAtUtc,
             updatedAtUtc, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount, LoadedCapabilityIds, CapabilityLoadCount,
-            status == AgentRunStatus.WaitingForSignal ? wait ?? Wait : null, waitCount ?? WaitCount, totalWaitSeconds ?? TotalWaitSeconds);
+            status == AgentRunStatus.WaitingForSignal ? wait ?? Wait : null, waitCount ?? WaitCount, totalWaitSeconds ?? TotalWaitSeconds, approvalRequestId ?? ApprovalRequestId);
     }
 }

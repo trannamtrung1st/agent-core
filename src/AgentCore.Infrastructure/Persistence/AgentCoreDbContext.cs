@@ -357,7 +357,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<AgentRunRecord>(entity =>
         {
-            entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 2, 7)").HasDatabaseName("IX_AgentRuns_SessionExecution");
+            entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 7) OR (Status = 2 AND TenantId IS NULL)").HasDatabaseName("IX_AgentRuns_SessionExecution");
             entity.ToTable("AgentRuns");
             entity.HasKey(row => row.AgentRunId);
             entity.HasIndex(row => new { row.RootActivationId, row.CreatedAtUtc, row.AgentRunId });

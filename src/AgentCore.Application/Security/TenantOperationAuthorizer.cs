@@ -54,7 +54,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             }
         return (run, state);
     }
-    private async ValueTask<OperationAuthorizationDecision> Check(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct)
+    internal async ValueTask<OperationAuthorizationDecision> Check(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct)
     {
         OperationAuthorizationDecision Deny(string code) => new(OperationDecisionKind.Denied, code, key, target);
         if (!PermissionCatalog.TryGet(key, out var permission)) return Deny("unknown_permission");
@@ -74,11 +74,21 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
         if (kind is null) return new(OperationDecisionKind.Allowed, "allowed", key, target);
         foreach (var user in state.Users.Where(u => u.Status == IdentityStatus.Active && (!policy.IndependentReview || u.PrincipalId != context.OriginalInitiatorPrincipalId)))
         {
-            if (!(await authorizer.CheckTenantAsync(state, user.PrincipalId, permission, target, ct).ConfigureAwait(false)).Allowed) continue;
-            if (!(await authorizer.CheckTenantAsync(state, user.PrincipalId, PermissionCatalog.Get("approvals.approve"), target, ct).ConfigureAwait(false)).Allowed) continue;
-            if (kind == ApprovalKind.ExceptionalGrant && !(await authorizer.CheckTenantAsync(state, user.PrincipalId, PermissionCatalog.Get("approvals.grant_exception"), target, ct).ConfigureAwait(false)).Allowed) continue;
+            if (!await QualifiesAsync(state, context.OriginalInitiatorPrincipalId, user.PrincipalId, permission, target, kind.Value, ct).ConfigureAwait(false)) continue;
             return new(OperationDecisionKind.RequiresApproval, kind == ApprovalKind.Review ? "review_required" : "agent_missing_delegatable_permission", key, target, kind);
         }
         return Deny("no_eligible_approver");
+    }
+
+    internal async ValueTask<bool> QualifiesAsync(TenantSecurityState state, Guid? requester, Guid human,
+        PermissionDefinition permission, AccessScope target, ApprovalKind kind, CancellationToken ct)
+    {
+        if (!state.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)
+            || EffectiveIndependent() && human == requester) return false;
+        foreach (var key in kind == ApprovalKind.ExceptionalGrant
+            ? new[] { permission.Key, "approvals.approve", "approvals.grant_exception" } : new[] { permission.Key, "approvals.approve" })
+            if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get(key), target, ct).ConfigureAwait(false)).Allowed) return false;
+        return true;
+        bool EffectiveIndependent() => TenantOperationPolicyService.Effective(state, permission).IndependentReview;
     }
 }

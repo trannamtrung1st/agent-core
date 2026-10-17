@@ -162,6 +162,9 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     }
     private async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
+        foreach (var assignment in state.Assignments.Where(a => TenantApprovalRules.TryApprovalId(a.Scope, out _)))
+            if (!await db.Set<TenantApprovalRecord>().AnyAsync(r => r.TenantId == state.Tenant.TenantId && r.RequestId == Guid.Parse(assignment.Scope.ResourceId!), ct).ConfigureAwait(false))
+                throw new ArgumentException("An Approval assignment requires its actual owned request.");
         foreach (var assignment in state.Assignments.Where(a => TenantRunRules.TryId(a.Scope, out _)))
             if (!await OwnedRuns(db, state.Tenant.TenantId).AnyAsync(r => r.AgentRunId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
                 throw new ArgumentException("A Run assignment requires a current owned Run.");
