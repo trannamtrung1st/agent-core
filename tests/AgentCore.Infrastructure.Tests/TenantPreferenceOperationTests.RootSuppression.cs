@@ -38,7 +38,7 @@ public sealed partial class TenantPreferenceOperationTests
         Assert.Equal(outcome == "pending" ? OperationDecisionKind.RequiresApproval : OperationDecisionKind.Denied, retry.Decision);
         Assert.Equal(outcome switch { "reject" => "previously_rejected", "cancel" => "previously_cancelled", "expire" => "previously_expired", _ => "already_pending" }, retry.ReasonCode);
         Assert.Equal(request.RequestId, retry.Request!.RequestId);
-        Assert.Single(await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, 100));
+        Assert.Single((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, new(0, 100))).Items);
         Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "approvals.request");
     }
 

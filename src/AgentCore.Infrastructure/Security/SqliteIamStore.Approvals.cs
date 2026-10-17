@@ -29,14 +29,21 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests
             WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<IReadOnlyList<TenantApprovalRequest>> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, int limit, CancellationToken ct = default)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default)
     {
+        page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var query = db.Set<TenantApprovalRecord>().AsNoTracking().Where(r => r.TenantId == tenantId);
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
         if (allowedInstances is not null)
         { var ids = allowedInstances.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => ids.Contains(r.InstanceId)); }
-        return (await query.OrderByDescending(r => r.CreatedAt).ThenBy(r => r.RequestId).Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(ct).ConfigureAwait(false)).Select(r => r.Domain()).ToArray();
+        if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);
+        if (page.Kind is { } kind) query = query.Where(r => r.Kind == (int)kind);
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var rows = await query.OrderByDescending(r => r.CreatedAt).ThenBy(r => r.RequestId).Skip(page.Page * page.PageSize).Take(page.PageSize).ToArrayAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        return new(rows.Select(r => r.Domain()).ToArray(), total, page.Page, page.PageSize);
     }
     public async ValueTask<TenantOperationGrant?> FindOperationGrantAsync(Guid tenantId, Guid requestId, CancellationToken ct = default)
     {

@@ -73,6 +73,15 @@ public sealed partial class TenantSessionAccessTests
             var projected = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
             Assert.Equal("update_preferences", projected.GetProperty("preparedAction").GetProperty("operation").GetString());
             Assert.Contains("conversation preferences", projected.GetProperty("summary").GetString());
+            var reviewProjection = projected.GetProperty("review"); Assert.True(reviewProjection.GetProperty("canDecide").GetBoolean());
+            Assert.True(reviewProjection.GetProperty("canCancel").GetBoolean());
+            var languagePreview = reviewProjection.GetProperty("changes").EnumerateArray().Single(c => c.GetProperty("field").GetString() == "language");
+            Assert.Equal("en", languagePreview.GetProperty("before").GetString()); Assert.Equal("vi", languagePreview.GetProperty("after").GetString());
+            var inbox = await Json(await owner.GetAsync(api + "/approvals?page=0&pageSize=1&status=pending&kind=" + (review ? "review" : "exceptionalGrant")));
+            Assert.Equal(1, inbox.GetProperty("total").GetInt32()); Assert.Equal(request.RequestId, Assert.Single(inbox.GetProperty("items").EnumerateArray()).GetProperty("requestId").GetGuid());
+            Assert.Empty((await Json(await owner.GetAsync(api + "/approvals?page=1&pageSize=1"))).GetProperty("items").EnumerateArray());
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(api + "/approvals?status=0")).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(api + "/approvals?pageSize=101")).StatusCode);
             if (freeze)
                 Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/agents/{instance}/self-management/freeze", new {
                     expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2
@@ -167,6 +176,11 @@ public sealed partial class TenantSessionAccessTests
                 if (grant is not null) Assert.Equal(grant.GrantId, effectAudit.GetProperty("grantId").GetGuid());
             }
             Assert.Null(completed.Owner.ProfileIdOrNull);
+            var finalView = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
+            Assert.False(finalView.GetProperty("review").GetProperty("canDecide").GetBoolean());
+            Assert.False(finalView.GetProperty("review").GetProperty("canCancel").GetBoolean());
+            Assert.Equal(reviewProjection.GetProperty("changes").GetRawText(), finalView.GetProperty("review").GetProperty("changes").GetRawText());
+            if (decision == "approve") Assert.Equal("completed", finalView.GetProperty("operationResult").GetProperty("outcome").GetString());
         }
         finally { if (capacityHeld) reservedCapacity!.ReleaseTenantRuntime(); SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }

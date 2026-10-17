@@ -45,6 +45,7 @@ public sealed class TenantApprovalRecord
         {
             if (AgentCore.Application.Security.TenantApprovalRules.Rebuild(op) != op)
                 throw new InvalidOperationException("Approval prepared action hash or canonical content is inconsistent.");
+            AgentCore.Application.Security.TenantApprovalSnapshotRules.Shape(r);
         }
         catch (ArgumentException ex) { throw new InvalidOperationException("Approval prepared operation shape is invalid.", ex); }
         var n = From(r);

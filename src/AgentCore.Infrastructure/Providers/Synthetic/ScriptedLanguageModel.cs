@@ -38,6 +38,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly Queue<IReadOnlyList<MemoryProposal>> _memoryTurns;
     private readonly ConcurrentDictionary<Guid, ScheduleScratch> _scheduleScratchByKey = new();
     public const string AuthorizationAuditMarker = "synthetic authorization audit:";
+    public const string ApprovalReviewMarker = "synthetic approval review";
     private const string DiagnosticFailureMarker = "synthetic-fail-turn";
 
     private sealed class ScheduleScratch
@@ -493,6 +494,20 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelTextDelta(HistoricalImageRereadAnswer);
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
+        }
+
+        if (lastUser.Contains(ApprovalReviewMarker, StringComparison.OrdinalIgnoreCase)
+            && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) == true)
+        {
+            if (toolRounds == 0)
+            {
+                // Fixed bounded offline fixture; Core still derives every authority and target witness.
+                yield return new ModelToolCallEvent(new("synthetic-approval-review", ToolCatalog.RequestAuthorization,
+                    """{"operation":"update_preferences","preferences":{"set":{"language":"vi","askOneQuestionAtATime":true},"clear":[]}}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            yield return new ModelTextDelta("Synthetic exact-action review finished. Check the recorded operation result for whether the change was applied.");
+            yield return new ModelCompleted(ModelStopReason.Completed); yield break;
         }
 
         if (lastUser.Contains(AuthorizationAuditMarker, StringComparison.OrdinalIgnoreCase)
@@ -1202,6 +1217,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var lastUser = SyntheticTaskContext.Text(request);
         if (_chunks.Any(c => c.Contains("[[speech:", StringComparison.Ordinal))) return false;
         return lastUser.Contains(AuthorizationAuditMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(ApprovalReviewMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("order 91", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)

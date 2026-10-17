@@ -71,7 +71,7 @@ public sealed partial class TenantOperationAuthorizationTests
             setup.Agent.Instance.Persona with { Name = "Expired generation action" }, claimed.Revision, generation).AsTask();
         await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10)); clock.Advance(TimeSpan.FromMinutes(1)); gate.Proceed.TrySetResult();
         var error = await Assert.ThrowsAsync<SecurityConflictException>(() => pending); Assert.Equal("execution_claim_expired", error.ReasonCode);
-        Assert.Empty(await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, 100));
+        Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, new(0, 100))).Items);
         var retained = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, claimed.AgentRunId))!;
         Assert.Equal(AgentRunStatus.Running, retained.Status); Assert.Equal(claimed.Revision, retained.Revision);
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(setup.Tenant, 100), a => a.Action == "approvals.request");
@@ -96,7 +96,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(OperationDecisionKind.RequiresApproval, repeated.Decision);
         Assert.Equal(revision, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "approvals.request");
-        Assert.Single(await store.ListApprovalsAsync(setup.Tenant, null, null, 100)); Assert.Empty(await store.PendingApprovalSignalsAsync(100));
+        Assert.Single((await store.ListApprovalsAsync(setup.Tenant, null, null, new(0, 100))).Items); Assert.Empty(await store.PendingApprovalSignalsAsync(100));
     }
 
     private sealed class ApprovalDecisionGate(ITenantApprovalStore inner, bool gateCreation = false) : ITenantApprovalStore
@@ -108,7 +108,7 @@ public sealed partial class TenantOperationAuthorizationTests
         { if (!gateCreation) { Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); } return await inner.TryDecideApprovalAsync(next, expected, request, revision, decision, grant, signal, human, audit, ct); }
         public ValueTask<TenantApprovalRequest?> FindApprovalAsync(Guid tenant, Guid id, CancellationToken ct = default) => inner.FindApprovalAsync(tenant, id, ct);
         public ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenant, Guid root, Guid executor, PreparedTenantOperation operation, CancellationToken ct = default) => inner.FindRootApprovalAsync(tenant, root, executor, operation, ct);
-        public ValueTask<IReadOnlyList<TenantApprovalRequest>> ListApprovalsAsync(Guid tenant, IReadOnlyList<Guid>? requests, IReadOnlyList<Guid>? instances, int limit, CancellationToken ct = default) => inner.ListApprovalsAsync(tenant, requests, instances, limit, ct);
+        public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenant, IReadOnlyList<Guid>? requests, IReadOnlyList<Guid>? instances, TenantApprovalQuery query, CancellationToken ct = default) => inner.ListApprovalsAsync(tenant, requests, instances, query, ct);
         public async ValueTask<TenantApprovalRequest?> TryCreateApprovalAsync(TenantSecurityState next, long expected, TenantApprovalRequest request, long revision, Guid? generation, AuthorizationAudit audit, CancellationToken ct = default)
         { if (gateCreation) { Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); } return await inner.TryCreateApprovalAsync(next, expected, request, revision, generation, audit, ct); }
         public ValueTask<IReadOnlyList<ApprovalProcessedSignal>> PendingApprovalSignalsAsync(int limit, CancellationToken ct = default) => inner.PendingApprovalSignalsAsync(limit, ct);

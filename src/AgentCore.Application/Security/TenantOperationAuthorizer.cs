@@ -12,6 +12,8 @@ public sealed record OperationAuthorizationDecision(OperationDecisionKind Decisi
 // Decisions are current inspection results, not capabilities or operation grants. Effects must revalidate at commit.
 public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore runs, ITenantAgentStore agents, IamAuthorizer authorizer, TenantOperationAudit audit)
 {
+    internal ValueTask<AgentRun?> FindRunAsync(TenantRunReference reference, CancellationToken ct) =>
+        runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct);
     public async ValueTask<OperationAuthorizationDecision> CheckAsync(TenantRunReference reference, string permission, string resourceType, string resourceId, CancellationToken ct = default)
     {
         var (run, state) = await ResolveForDecisionAsync(reference, permission, ExecutionAuthorizationPurpose.Inspection, ct).ConfigureAwait(false);
@@ -96,7 +98,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
     internal ValueTask RecordAsync(TenantSecurityState state, AgentRun run, OperationAuthorizationDecision decision,
         ExecutionAuthorizationPurpose purpose, CancellationToken ct) => audit.RecordAsync(state, run, decision, purpose, ct);
 
-    private async ValueTask<OperationAuthorizationDecision> Evaluate(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct, bool managementReviewRequired)
+    internal async ValueTask<OperationAuthorizationDecision> Evaluate(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct, bool managementReviewRequired = false)
     {
         OperationAuthorizationDecision Deny(string code) => new(OperationDecisionKind.Denied, code, key, target);
         if (!PermissionCatalog.TryGet(key, out var permission)) return Deny("unknown_permission");

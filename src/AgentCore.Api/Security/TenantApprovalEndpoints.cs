@@ -1,6 +1,8 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Contracts.Http;
+using AgentCore.Domain.Security;
 
 namespace AgentCore.Api.Security;
 
@@ -11,11 +13,12 @@ public static class TenantApprovalEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/approvals").RequireAuthorization();
-        group.MapGet("/", (int? limit, HttpContext http, TenantApprovalService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/", (int? page, int? pageSize, string? status, string? kind, HttpContext http, TenantApprovalService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            var items = await service.ListAsync(actor.TenantId, Initiator(http, actor), Math.Clamp(limit ?? 50, 1, 100), ct).ConfigureAwait(false);
-            return Results.Json(new { items = items.Select(Project).ToArray() });
+            var query = new TenantApprovalQuery(page ?? 0, pageSize ?? 20, Parse<TenantApprovalStatus>(status), Parse<ApprovalKind>(kind));
+            var result = await service.ListAsync(actor.TenantId, Initiator(http, actor), query, ct).ConfigureAwait(false);
+            return Results.Json(new TenantApprovalPageDto(result.Items.Select(Project).ToArray(), result.Total, result.Page, result.PageSize));
         }));
         group.MapGet("/{requestId:guid}", (Guid requestId, HttpContext http, TenantApprovalService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -38,18 +41,24 @@ public static class TenantApprovalEndpoints
     }
     private static TenantSessionInitiator Initiator(HttpContext http, AuthenticatedTenant actor) => new(actor.AccountId,
         IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
-    private static object Project(TenantApprovalView view)
+    private static TenantApprovalDto Project(TenantApprovalView view)
     {
         var r = view.Request; var op = r.Operation;
-        return new { r.RequestId, r.TenantId, r.RunId, r.SessionId, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
-            kind = Camel(r.Kind), status = Camel(r.Status), requestRevision = r.Revision, view.SecurityRevision, r.CreatedAt, r.ExpiresAt,
-            summary = op.Kind == AgentCore.Domain.Security.TenantLocalOperationKind.Persona ? "Update this Agent Instance persona" : "Update this Agent Instance conversation preferences", permission = AgentCore.Domain.Security.TenantApprovalRequest.Permission,
-            targetResource = new { type = AgentCore.Domain.Security.TenantApprovalRequest.ResourceType, id = r.ResourceId },
-            preparedAction = new { op.OperationId, operation = op.Kind == AgentCore.Domain.Security.TenantLocalOperationKind.Persona ? "update_persona" : "update_preferences",
-                op.Persona, op.Preferences, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision, op.ActionHash },
-            decision = view.Decision is { } d ? new { principalId = d.HumanPrincipalId, status = Camel(d.Status), d.DecidedAt } : null,
-            operationResult = view.OperationResult is { } result ? new { result.OperationId, outcome = Camel(result.Outcome), result.ReasonCode,
-                result.InstanceRevision, result.PersonaRevision, result.RecordedAt } : null };
+        var p = op.Persona; var pref = op.Preferences; var review = view.Review;
+        return new(r.RequestId, r.TenantId, r.RunId, r.SessionId, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
+            Camel(r.Kind), Camel(r.Status), r.Revision, view.SecurityRevision, r.CreatedAt, r.ExpiresAt,
+            op.Kind == TenantLocalOperationKind.Persona ? "Update agent persona" : "Update conversation preferences", TenantApprovalRequest.Permission,
+            new(TenantApprovalRequest.ResourceType, r.ResourceId), new(op.OperationId, op.Kind == TenantLocalOperationKind.Persona ? "update_persona" : "update_preferences",
+                p is null ? null : new(p.Name, p.Role, p.Description, p.Tone), pref is null ? null : new(pref.ResponseLength, pref.Language, pref.AskOneQuestionAtATime,
+                    pref.ClearResponseLength, pref.ClearLanguage, pref.ClearAskOneQuestionAtATime), op.ExpectedInstanceRevision, op.ExpectedPersonaRevision, op.ActionHash),
+            view.Decision is { } d ? new(d.HumanPrincipalId, Camel(d.Status), d.DecidedAt) : null,
+            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt) : null,
+            review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,
+                review.Changes.Select(c => new TenantApprovalChangeDto(c.Field, c.Before, c.After, c.BeforeAvailable, c.AfterAvailable, c.RestoresDefault)).ToArray(),
+                review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState));
     }
+    private static T? Parse<T>(string? value) where T : struct, Enum => value is null ? null
+        : Enum.TryParse<T>(value, true, out var parsed) && Enum.IsDefined(parsed) && !int.TryParse(value, out _) ? parsed
+        : throw new ArgumentException("Unknown approval filter.");
     private static string Camel<T>(T value) where T : Enum => JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
 }

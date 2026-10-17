@@ -7,6 +7,18 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class SyntheticAuthorizationAuditTests
 {
     [Fact]
+    public async Task Synthetic_review_fixture_requests_only_an_offered_exact_action_without_caller_authority()
+    {
+        var model = new ScriptedLanguageModel(["fallback"]);
+        var request = new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, ScriptedLanguageModel.ApprovalReviewMarker)], Tools: [TenantApprovalToolContract.Descriptor().ModelDefinition]);
+        var events = new List<ModelGenerationEvent>(); await foreach (var e in model.GenerateAsync(request)) events.Add(e);
+        var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
+        var intent = TenantApprovalToolContract.Parse(call); Assert.Equal("vi", intent.Preferences!.Language);
+        Assert.DoesNotContain("principal", call.ArgumentsJson); Assert.DoesNotContain("tenant", call.ArgumentsJson); Assert.DoesNotContain("grant", call.ArgumentsJson);
+        events.Clear(); await foreach (var e in model.GenerateAsync(request with { Tools = [] })) events.Add(e);
+        Assert.Empty(events.OfType<ModelToolCallEvent>());
+    }
+    [Fact]
     public async Task Synthetic_audit_fixture_emits_only_the_offered_readonly_inspection_with_a_resource_argument_and_no_caller_authority()
     {
         var resource = Guid.NewGuid(); var model = new ScriptedLanguageModel(["fallback"]);

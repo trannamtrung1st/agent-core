@@ -13,9 +13,9 @@ export interface ConfirmActionOptions {
 }
 
 /** Centered confirmation modal — use instead of Popconfirm for destructive or high-friction actions. */
-export function confirmAction(modal: HookAPI, options: ConfirmActionOptions): void {
+export function confirmAction(modal: HookAPI, options: ConfirmActionOptions): ReturnType<HookAPI["confirm"]> {
   const { title, content, okText, cancelText, danger, onOk, onCancel, afterClose } = options;
-  modal.confirm({
+  return modal.confirm({
     title,
     content,
     okText: okText ?? "Confirm",

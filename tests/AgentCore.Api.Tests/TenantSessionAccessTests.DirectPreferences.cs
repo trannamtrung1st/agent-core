@@ -63,7 +63,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(allowed ? 3 : 2, current.Revision); Assert.Equal(before.Instance.Persona, current.Persona);
             if (allowed) { Assert.Equal("vi", current.SettingsOverrides!.Language!.Value); Assert.Equal("concise", current.SettingsOverrides.ResponseLength!.Value); }
             else Assert.Equal(before.Instance.SettingsOverrides, current.SettingsOverrides);
-            Assert.Empty(await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, 100));
+            Assert.Empty((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(0, 100))).Items);
             var receipt = await factory.Services.GetRequiredService<ITenantPreferenceOperationStore>().FindPreferenceReceiptAsync(tenant, runId, "direct-preferences");
             if (allowed) { Assert.NotNull(receipt); Assert.Null(receipt.RequestId); } else Assert.Null(receipt);
             Assert.Null(completed.Owner.ProfileIdOrNull);

@@ -39,7 +39,7 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
 public sealed record TenantApprovalRequest(Guid RequestId, Guid TenantId, Guid RunId, Guid SessionId,
     Guid RootActivationId, Guid ExecutorPrincipalId, Guid? OriginalInitiatorPrincipalId,
     ApprovalKind Kind, PreparedTenantOperation Operation, TenantApprovalStatus Status,
-    long Revision, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt)
+    long Revision, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, TenantApprovalSnapshot? Snapshot = null)
 {
     public const string Permission = "agents.update";
     public const string ResourceType = "agent";

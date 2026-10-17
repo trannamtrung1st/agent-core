@@ -69,7 +69,7 @@ public sealed partial class TenantPreferenceOperationTests
         var current = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!;
         Assert.Equal(3, current.Instance.Revision); Assert.Equal(setup.Agent.Instance.Persona, current.Instance.Persona);
         Assert.Equal("vi", current.Instance.SettingsOverrides!.Language!.Value); Assert.Equal("concise", current.Instance.SettingsOverrides.ResponseLength!.Value);
-        Assert.Empty(await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, 100));
+        Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, new(0, 100))).Items);
         IIamStore reopened = sqlite ? new SqliteIamStore(f.Contexts!, clock: f.Clock) : f.Iam;
         var replay = await Service(f, reopened).ExecuteAsync(reference, setup.Run.Claim.Generation, "preference-call", """{"clear":[],"set":{"responseLength":"concise","language":"vi"}}""");
         Assert.Equal(result.Receipt, replay.Receipt);

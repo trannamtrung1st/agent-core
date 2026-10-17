@@ -93,14 +93,19 @@ public sealed partial class TenantOperationAuthorizationTests
         var receipt = await f.RunService().SubmitTextAsync(setup.Tenant, setup.Run.SessionId, setup.Owner, f.Ids.NewId(), "Another independent request", await Revision(), 2);
         var second = (await service.PreparePersonaAsync(new(setup.Tenant, receipt.RunId), setup.Agent.Instance.Persona with { Name = "Hidden newer action" }, 1)).Request!;
         var viewer = await User(f, setup, "viewer@example.test", ["agents.update"]);
-        Assert.Empty(await service.ListAsync(setup.Tenant, viewer, 1));
+        Assert.Empty((await service.ListAsync(setup.Tenant, viewer, new(0, 1))).Items);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Exact approval viewer", ["approvals.read"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, viewer.PrincipalId, role.RoleId,
             AccessScope.ForResource(setup.Tenant, "approval", first.RequestId.ToString("D")), await Revision());
-        var visible = Assert.Single(await service.ListAsync(setup.Tenant, viewer, 1)); Assert.Equal(first, visible.Request);
+        var filtered = await service.ListAsync(setup.Tenant, viewer, new(0, 1, TenantApprovalStatus.Pending, first.Kind));
+        var visible = Assert.Single(filtered.Items); Assert.Equal(first, visible.Request); Assert.Equal(1, filtered.Total);
+        var next = await service.ListAsync(setup.Tenant, viewer, new(1, 1)); Assert.Empty(next.Items); Assert.Equal(1, next.Total);
+        Assert.Equal(0, (await service.ListAsync(setup.Tenant, viewer, new(0, 1, TenantApprovalStatus.Approved))).Total);
+        var all = await service.ListAsync(setup.Tenant, setup.Owner, new(0, 1)); Assert.Equal(2, all.Total); Assert.Equal(second.RequestId, Assert.Single(all.Items).Request.RequestId);
+        Assert.Equal(first.RequestId, Assert.Single((await service.ListAsync(setup.Tenant, setup.Owner, new(1, 1))).Items).Request.RequestId);
         await Assert.ThrowsAsync<AccessDeniedException>(() => service.ReadAsync(setup.Tenant, second.RequestId, viewer).AsTask());
         var underlying = (await f.Iam.ReadTenantAsync(setup.Tenant))!.Assignments.Single(a => a.PrincipalId == viewer.PrincipalId && a.Scope.Kind == AccessScopeKind.Tenant);
         await f.Access.RevokeAssignmentAsync(setup.Owner.PrincipalId, setup.Tenant, underlying.AssignmentId, await Revision());
-        Assert.Empty(await service.ListAsync(setup.Tenant, viewer, 1));
+        Assert.Empty((await service.ListAsync(setup.Tenant, viewer, new(0, 1))).Items);
     }
 }

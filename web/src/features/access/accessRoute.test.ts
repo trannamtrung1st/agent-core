@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalAppUrl, parseAppRoute } from '../../app/appRoute';
-import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath } from './accessRoute';
+import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantApprovalPath } from './accessRoute';
 const tenant = '11111111-1111-4111-8111-111111111111';
 describe('canonical access navigation', () => {
   it('opens the OAuth return destination as a tenant Credential page and preserves its exact item query', () => {
@@ -15,9 +15,13 @@ describe('canonical access navigation', () => {
     expect(canonicalAppUrl(`/t/${tenant}/admin/roles`)).toBe(`/t/${tenant}/admin/roles`);
   });
   it('fails closed for malformed tenant routes and unsupported future screens', () => {
-    for (const route of ['/t/invalid/admin/members', `/t/${tenant}/admin/approvals`, '/account/unknown']) expect(parseAccessRoute(route)?.view).toBe('not-found');
+    for (const route of ['/t/invalid/admin/members', `/t/${tenant}/admin/approvals/invalid`, '/account/unknown']) expect(parseAccessRoute(route)?.view).toBe('not-found');
     expect(parseAccessRoute('/c/session')).toBeNull();
     expect(parseAppRoute('/admin/instances').area).toBe('admin');
+  });
+  it('opens exact organization approval deep links', () => {
+    expect(parseAccessRoute(tenantApprovalPath(tenant, tenant))).toMatchObject({ view: 'tenant', tenantId: tenant, page: 'approvals', requestId: tenant });
+    expect(canonicalAppUrl(tenantApprovalPath(tenant, tenant))).toBe(tenantApprovalPath(tenant, tenant));
   });
   it('retains exact tenant, Definition and draft ownership in deep links', () => {
     const definition = '22222222-2222-4222-8222-222222222222';

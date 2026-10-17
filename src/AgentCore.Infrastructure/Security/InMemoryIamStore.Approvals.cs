@@ -18,10 +18,18 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash)
         .OrderBy(r => r.Status is TenantApprovalStatus.Rejected or TenantApprovalStatus.Expired or TenantApprovalStatus.Cancelled ? 0 : r.Status == TenantApprovalStatus.Pending ? 1 : 2)
         .ThenBy(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId).FirstOrDefault();
-    public ValueTask<IReadOnlyList<TenantApprovalRequest>> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, int limit, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<TenantApprovalRequest>>(_approvals.Values.Where(r => r.TenantId == tenantId
-        && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId)))
-        .OrderByDescending(r => r.CreatedAt).ThenBy(r => r.RequestId).Take(Math.Clamp(limit, 1, 100)).ToArray()); }
+    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested(); page.Validate();
+        lock (_gate)
+        {
+            var rows = _approvals.Values.Where(r => r.TenantId == tenantId
+                && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId))
+                && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();
+            return ValueTask.FromResult(new TenantApprovalPage(rows.OrderByDescending(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId)
+                .Skip(page.Page * page.PageSize).Take(page.PageSize).ToArray(), rows.Length, page.Page, page.PageSize));
+        }
+    }
     public ValueTask<TenantOperationGrant?> FindOperationGrantAsync(Guid tenantId, Guid requestId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_operationGrants.GetValueOrDefault(requestId) is { } g && g.TenantId == tenantId ? g : null); }
 

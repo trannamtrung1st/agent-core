@@ -95,6 +95,6 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(ToolPolicyDecision.Deny, await gate.PolicyAsync(run.SessionId, call, null, default));
         var direct = await executor.ExecuteAsync(run.Admission.Configuration!.Definition, run.SessionId, call, 4000, admission: frame);
         Assert.Contains("authorization_requires_runtime_suspension", direct.Text);
-        Assert.Empty(await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, 100));
+        Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, new(0, 100))).Items);
     }
 }

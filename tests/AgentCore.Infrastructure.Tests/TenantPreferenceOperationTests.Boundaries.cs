@@ -177,7 +177,7 @@ public sealed partial class TenantPreferenceOperationTests
     {
         Assert.Equal(revision, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!.Instance.Revision);
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "operations.preferences.apply");
-        Assert.Empty(await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, 100));
+        Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, new(0, 100))).Items);
         Assert.Null(await ((ITenantPreferenceOperationStore)f.Iam).FindPreferenceReceiptAsync(setup.Tenant, setup.Run.AgentRunId, "race-call"));
     }
     private sealed class PreferenceGate(ITenantPreferenceOperationStore inner) : ITenantPreferenceOperationStore

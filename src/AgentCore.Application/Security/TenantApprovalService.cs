@@ -9,10 +9,11 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantApprovalPreparationResult(OperationDecisionKind Decision, string ReasonCode,
     PreparedTenantOperation Operation, TenantApprovalRequest? Request);
+public sealed record TenantApprovalViewPage(IReadOnlyList<TenantApprovalView> Items, int Total, int Page, int PageSize);
 public sealed record TenantApprovalView(TenantApprovalRequest Request, long SecurityRevision,
-    TenantOperationReceipt? OperationResult = null, TenantApprovalDecision? Decision = null);
+    TenantOperationReceipt? OperationResult = null, TenantApprovalDecision? Decision = null, TenantApprovalReview? Review = null);
 
-public sealed class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
+public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
     ITenantApprovedOperationStore? effects = null)
@@ -33,12 +34,14 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
         var operation = preferences is null ? TenantApprovalRules.Prepare(ids.NewId(), agent.Instance.InstanceId, persona ?? throw new ArgumentException("Missing operation."), agent.Instance.Revision, agent.Instance.PersonaRevision)
             : TenantApprovalRules.PreparePreferences(ids.NewId(), agent.Instance.InstanceId, preferences, agent.Instance.Revision, agent.Instance.PersonaRevision);
         var pinned = run.Admission.Configuration!.Definition;
+        var snapshot = preferences is null ? TenantApprovalSnapshotRules.Persona(agent) : null;
         var managementReview = pinned.SelfManagement?.Allows(HarnessManagementScope.Settings) == true;
         if (preferences is not null)
         {
             var (current, baseline) = await configuration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
             if (current.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
             var effective = InstanceSettingsResolver.Resolve(baseline, current.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, current.Instance) };
+            snapshot = TenantApprovalSnapshotRules.Preferences(current, baseline);
             if (TenantLocalEffectRules.Eligibility(run, current, effective) is { } unavailable) return await PreparationOutcome(state, run, operation, OperationDecisionKind.Denied, unavailable, null, ct).ConfigureAwait(false);
             var patch = TenantPreferenceToolContract.Patch(preferences);
             _ = AgentInstanceSettingsService.ResolvePatch(baseline, current.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
@@ -64,7 +67,7 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
         var at = time.GetUtcNow();
         var request = new TenantApprovalRequest(ids.NewId(), reference.TenantId, run.AgentRunId, run.SessionId, run.Admission.Activation.RootActivationId,
             agent.PrincipalId, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, decision.ApprovalKind!.Value,
-            operation, TenantApprovalStatus.Pending, 1, at, at.AddHours(1));
+            operation, TenantApprovalStatus.Pending, 1, at, at.AddHours(1), snapshot);
         TenantApprovalRules.Validate(request, run, agent);
         var next = Next(state);
         var audit = new AuthorizationAudit(ids.NewId(), reference.TenantId, agent.PrincipalId, "approvals.request", request.RequestId.ToString("D"), "allowed", "approval_pending", at);
@@ -107,25 +110,41 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var metadata = await Metadata(request, ct).ConfigureAwait(false); request = metadata.Request;
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
-        await RequireRead(state, human.PrincipalId, request, ct).ConfigureAwait(false); return metadata with { SecurityRevision = state.Tenant.Revision };
+        await RequireRead(state, human.PrincipalId, request, ct).ConfigureAwait(false);
+        var review = await ReviewAsync(metadata, state, human, ct).ConfigureAwait(false);
+        await RequireUnchangedAuthority(state, human, ct).ConfigureAwait(false);
+        return metadata with { SecurityRevision = state.Tenant.Revision, Review = review };
     }
 
-    public async ValueTask<IReadOnlyList<TenantApprovalView>> ListAsync(Guid tenant, TenantSessionInitiator human, int limit, CancellationToken ct = default)
+    public async ValueTask<TenantApprovalViewPage> ListAsync(Guid tenant, TenantSessionInitiator human, TenantApprovalQuery query, CancellationToken ct = default)
     {
+        query.Validate();
         var before = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var requestIds = await VisibleIds(before, human.PrincipalId, "approvals.read", "approval", ct).ConfigureAwait(false);
         var instanceIds = await VisibleIds(before, human.PrincipalId, TenantApprovalRequest.Permission, TenantApprovalRequest.ResourceType, ct).ConfigureAwait(false);
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, limit, ct).ConfigureAwait(false);
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
-        foreach (var request in requests) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
+        foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (state.Tenant.Revision != before.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         var result = new List<TenantApprovalView>();
         foreach (var view in metadata)
         {
-            try { await RequireRead(state, human.PrincipalId, view.Request, ct).ConfigureAwait(false); result.Add(view with { SecurityRevision = state.Tenant.Revision }); }
+            try
+            {
+                await RequireRead(state, human.PrincipalId, view.Request, ct).ConfigureAwait(false);
+                result.Add(view with { SecurityRevision = state.Tenant.Revision, Review = await ReviewAsync(view, state, human, ct).ConfigureAwait(false) });
+            }
             catch (AccessDeniedException) { }
         }
-        return result;
+        await RequireUnchangedAuthority(state, human, ct).ConfigureAwait(false);
+        return new(result, requests.Total, requests.Page, requests.PageSize);
+    }
+
+    private async ValueTask RequireUnchangedAuthority(TenantSecurityState state, TenantSessionInitiator human, CancellationToken ct)
+    {
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, state.Tenant.TenantId, human, ct).ConfigureAwait(false);
+        if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
     }
 
     private async ValueTask<TenantApprovalView> Metadata(TenantApprovalRequest request, CancellationToken ct)

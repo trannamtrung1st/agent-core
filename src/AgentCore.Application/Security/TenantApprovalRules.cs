@@ -57,6 +57,8 @@ public static class TenantApprovalRules
         if (requireCurrentWitness && (target.Instance.Revision != op.ExpectedInstanceRevision || target.Instance.PersonaRevision != op.ExpectedPersonaRevision))
             throw new SecurityConflictException("operation_witness_changed");
         if (requireCurrentWitness && target.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("executor_unavailable");
+        TenantApprovalSnapshotRules.Shape(request);
+        if (requireCurrentWitness) TenantApprovalSnapshotRules.RequireCurrent(request, target);
     }
 
     public static string DuplicateReason(TenantApprovalRequest request) => request.Status switch
