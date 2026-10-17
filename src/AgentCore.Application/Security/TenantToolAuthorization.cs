@@ -7,6 +7,17 @@ namespace AgentCore.Application.Security;
 
 public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer)
 {
+    // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
+    public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (admission?.TenantId is not null || await runs.ResolveTenantSessionOwnerAsync(session, ct).ConfigureAwait(false) is not null
+            || admission?.OwnedSessionId is { } owned && owned != session
+                && await runs.ResolveTenantSessionOwnerAsync(owned, ct).ConfigureAwait(false) is not null)
+            return Error("forbidden", "tenant_effect_unavailable");
+        return null;
+    }
+
     private sealed record Boundary(bool Tenant, bool Allowed, TenantRunReference? Reference, string Reason);
     private async ValueTask<Boundary> Resolve(Guid session, ToolExecutionAdmission? admission, string tool, CancellationToken ct)
     {

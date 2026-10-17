@@ -34,10 +34,12 @@ public static class ToolActionPreparation
         Guid sessionId = default,
         ToolExecutionAdmission? admission = null)
     {
+        if (await tools.LegacyApprovalPreparationErrorAsync(sessionId, admission, cancellationToken).ConfigureAwait(false) is { } denied)
+            return (null, denied);
         if (AgentCore.Application.Drive.DriveMutationArguments.RequiresApproval(call.Name))
             return await tools.PrepareDriveApprovalAsync(call, args, sessionId, admission, cancellationToken);
         if (ConfigurationTools.IsTool(call.Name) || InstanceSkillTools.IsManagement(call.Name))
-            return await tools.PrepareManagementApprovalAsync(call, args, admission, cancellationToken);
+            return await tools.PrepareManagementApprovalAsync(call, args, admission, cancellationToken, sessionId);
         if (call.Name is ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch)
         {
             try

@@ -58,6 +58,8 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<AutomationCommandPreparation> PrepareAutomationAsync(AgentDefinition definition, ModelToolCall call,
         JsonElement args, TriggerCommandContext command, bool verify, CancellationToken ct)
     {
+        if (await LegacyApprovalPreparationErrorAsync(command.SessionId, null, ct).ConfigureAwait(false) is { } denied)
+            return new(null, denied);
         var prepared = await TriggerScheduleCommands.PrepareAsync(definition, triggerRegistrations, call.Name, args, command, ct);
         return prepared.Request is null || !verify ? prepared
             : prepared with { Verdict = await _triggerAuthorizer.AuthorizeAsync(prepared.Request, ct) };
@@ -156,6 +158,8 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<(ToolApprovalPreparation? Preparation, string? ErrorJson)> PrepareIdentityMaintenanceApprovalAsync(
         AgentDefinition? definition, Guid sessionId, ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
+        if (await LegacyApprovalPreparationErrorAsync(sessionId, admission, ct).ConfigureAwait(false) is { } denied)
+            return (null, denied);
         if (identityMaintenance is null || definition is null || admission is null)
             return (null, Error("forbidden", "Trusted identity maintenance context is required."));
         try
@@ -1306,6 +1310,8 @@ public sealed partial class SessionToolExecutor(
         JsonElement args,
         CancellationToken cancellationToken = default, ToolExecutionAdmission? admission = null, Guid sessionId = default)
     {
+        if (await LegacyApprovalPreparationErrorAsync(sessionId, admission, cancellationToken).ConfigureAwait(false) is { } denied)
+            return new(null, denied);
         if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
         {
             return new EmailSendApprovalPrepareResult(null, Error("unavailable", "Email is not configured."));

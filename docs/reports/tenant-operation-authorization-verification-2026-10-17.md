@@ -29,6 +29,24 @@ IAM tool descriptors are context-only and conditionally offered for trusted matc
 
 An early persistence test attempted to rename a Session with queued work and correctly hit the existing `session_in_use` guard. The test now verifies policy retention through a separate Instance creation; production lifecycle guards were preserved. Inspection uses the canonical owning-resource/IAM paths and no hosted provider. All runtime/store execution used disposable fixtures.
 
+## Follow-up consistency review
+
+Review baseline: `fdf3ca961f281b34af6656ebacc1bc13ed150f59`. The review found that legacy approval preparation could run before the shared execution gate. A regression reproduced the defect with both stores: an actual tenant Session received a legacy Synthetic email preview containing a private draft recipient. Both cases failed before the correction (`/private/tmp/tenant-approval-preparation-repro.log`).
+
+The common preparation dispatcher and direct Email, Drive, management and maintenance preparation methods now check tenant ownership before preview/service/provider reads. Automation preparation uses the same fence. Missing tenant frames still resolve the actual retained Session owner; explicit tenant frames deny even without the boundary service. The management dispatcher carries its actual Session ID to the direct method. No tenant approval record or effect authority is created.
+
+The corrected integrated regression passed for both stores. Missing, matching, tenant-less and forged tenant frames produced `forbidden` / `tenant_effect_unavailable`, no preparation and zero observed provider draft reads. Drive, management, maintenance, generic filesystem and Automation paths reached that fence before their service-specific checks. The same draft still prepared through the legacy path with exactly one observed draft read. This is preparation-boundary evidence, not tenant execution or durable approval acceptance.
+
+Final focused checks (all `dotnet test`, `--no-restore --nologo`):
+
+| Project and `FullyQualifiedName~` filters | Result |
+| --- | --- |
+| Infrastructure: `TenantOperationAuthorizationTests\|EmailAccountIntegrationTests` | 35 passed, including 2 new both-store preparation cases; `/private/tmp/tenant-approval-preparation-regression.log`. The command also named `DriveToolApprovalTests`, which matches no current test class; actual Drive coverage is the API journey below. |
+| Application: `ToolActionPreparationTests\|EmailToolTests\|ToolRegistryPolicyTests\|AgentRunDurabilityTests\|SessionRuntimeCompletionTests\|BackgroundCompletion` | 88 passed; `/private/tmp/tenant-approval-review-application.log`. |
+| API: `TenantSessionAccessTests\|SelfManagementOperationTests\|SelfManagementRemediationTests\|SelfManagementCompletionTests\|DriveApprovalJourneyTests\|IdentityMaintenanceJourneyTests` | 40 passed; `/private/tmp/tenant-approval-review-api.log`. Synthetic HTTP journeys preserve legacy exact approval, management/remediation, Drive target validation and identity-maintenance workflows alongside canonical tenant policy/Run/lifecycle checks. |
+
+Documentation checks passed for the four changed Markdown files: 237 local links, 66 fragment anchors, balanced fences and two complete JSON examples. `git diff --check` passed. No application UI changed in this correction. No milestone acceptance or full-proposal completion is claimed.
+
 ## Remaining full goal
 
 Tenant worker claim/dispatch/recovery, Runtime mailbox/Hub/audio and trusted requester judgment wiring, typed per-effect target/capability/credential/recipient revalidation, autonomous/continuation ingress and other owning resource/effect families remain required. First-class durable ApprovalRequest/Decision/OperationGrant, outbox/continuation, exact action/hash/witness binding, claim/consume/reconciliation and root-level storm suppression remain pending. The current eligibility check creates no pending approval and executes no protected operation. Governance UI, complete tenant Chat/Access/Approval UI, Sandbox/decommission, old-authority/schema removal, reset/bootstrap consolidation and complete security/browser/visual acceptance remain open.

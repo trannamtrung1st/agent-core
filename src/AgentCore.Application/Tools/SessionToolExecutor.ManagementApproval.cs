@@ -9,8 +9,10 @@ namespace AgentCore.Application.Tools;
 public sealed partial class SessionToolExecutor
 {
     public async ValueTask<(ToolApprovalPreparation? Preparation, string? ErrorJson)> PrepareManagementApprovalAsync(
-        ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
+        ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct, Guid sessionId = default)
     {
+        if (await LegacyApprovalPreparationErrorAsync(sessionId, admission, ct).ConfigureAwait(false) is { } denied)
+            return (null, denied);
         if (admission?.AgentInstanceId is not Guid id || selfManagement is null)
             return (null, Error("forbidden", "Trusted Instance context is required."));
         try

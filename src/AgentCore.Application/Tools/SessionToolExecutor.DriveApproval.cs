@@ -11,6 +11,8 @@ public sealed partial class SessionToolExecutor
     public async ValueTask<(ToolApprovalPreparation? Preparation, string? ErrorJson)> PrepareDriveApprovalAsync(
         ModelToolCall call, JsonElement args, Guid sessionId, ToolExecutionAdmission? admission, CancellationToken ct)
     {
+        if (await LegacyApprovalPreparationErrorAsync(sessionId, admission, ct).ConfigureAwait(false) is { } denied)
+            return (null, denied);
         if (driveService is null || agentWorkspace is null || admission?.AgentInstanceId is not Guid owner
             || await agentWorkspace.SessionOwnerAsync(sessionId, ct) != owner)
             return (null, Error("forbidden", "Drive approval requires the current owned Session/Instance."));
