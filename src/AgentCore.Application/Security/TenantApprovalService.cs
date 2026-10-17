@@ -6,10 +6,12 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantApprovalPreparationResult(OperationDecisionKind Decision, string ReasonCode,
     PreparedPersonaOperation Operation, TenantApprovalRequest? Request);
-public sealed record TenantApprovalView(TenantApprovalRequest Request, long SecurityRevision);
+public sealed record TenantApprovalView(TenantApprovalRequest Request, long SecurityRevision,
+    TenantOperationReceipt? OperationResult = null, TenantApprovalDecision? Decision = null);
 
 public sealed class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
-    TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time)
+    TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
+    ITenantApprovedOperationStore? effects = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public async ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -52,8 +54,9 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
     {
         await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
+        var metadata = await Metadata(request, ct).ConfigureAwait(false); request = metadata.Request;
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
-        await RequireRead(state, human.PrincipalId, request, ct).ConfigureAwait(false); return new(request, state.Tenant.Revision);
+        await RequireRead(state, human.PrincipalId, request, ct).ConfigureAwait(false); return metadata with { SecurityRevision = state.Tenant.Revision };
     }
 
     public async ValueTask<IReadOnlyList<TenantApprovalView>> ListAsync(Guid tenant, TenantSessionInitiator human, int limit, CancellationToken ct = default)
@@ -62,14 +65,26 @@ public sealed class TenantApprovalService(IIamStore security, ITenantApprovalSto
         var requestIds = await VisibleIds(before, human.PrincipalId, "approvals.read", "approval", ct).ConfigureAwait(false);
         var instanceIds = await VisibleIds(before, human.PrincipalId, TenantApprovalRequest.Permission, TenantApprovalRequest.ResourceType, ct).ConfigureAwait(false);
         var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, limit, ct).ConfigureAwait(false);
+        var metadata = new List<TenantApprovalView>();
+        foreach (var request in requests) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var result = new List<TenantApprovalView>();
-        foreach (var request in requests)
+        foreach (var view in metadata)
         {
-            try { await RequireRead(state, human.PrincipalId, request, ct).ConfigureAwait(false); result.Add(new(request, state.Tenant.Revision)); }
+            try { await RequireRead(state, human.PrincipalId, view.Request, ct).ConfigureAwait(false); result.Add(view with { SecurityRevision = state.Tenant.Revision }); }
             catch (AccessDeniedException) { }
         }
         return result;
+    }
+
+    private async ValueTask<TenantApprovalView> Metadata(TenantApprovalRequest request, CancellationToken ct)
+    {
+        if (effects is null) return new(request, 0);
+        var receipt = await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
+        var decision = await effects.FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false);
+        if (request.Status == TenantApprovalStatus.Pending && (receipt is not null || decision is not null))
+            request = await approvals.FindApprovalAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
+        return new(request, 0, receipt, decision);
     }
 
     private async ValueTask<IReadOnlyList<Guid>?> VisibleIds(TenantSecurityState state, Guid human, string permission, string type, CancellationToken ct)

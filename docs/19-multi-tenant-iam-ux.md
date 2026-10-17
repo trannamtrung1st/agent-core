@@ -6,7 +6,9 @@ The owner-prioritized foundation UI now implements sign-in, Account/organization
 
 ## Purpose and audience
 
-The [durable approval verification](reports/tenant-durable-approval-verification-2026-10-17.md) now supplies backend typed persona request/read/list/decision/cancel and durable expiry/wakeup evidence. The Approvals inbox, exact action review cards, original Chat integration, safe return navigation and final browser/visual journeys below are still required. Approval success must not be presented as a completed operation: protected effect execution remains pending.
+The [approved persona effect verification](reports/tenant-approved-persona-effect-verification-2026-10-17.md) supplies backend decision attribution and an operation result for the original Run, including precise denied outcomes after an earlier human approval. The eventual inbox and Chat must show consent and execution result separately, retain exact target/witness details and offer fresh planning rather than adapting a failed old grant. No approval UI/browser acceptance is claimed by this backend successor.
+
+The [durable approval verification](reports/tenant-durable-approval-verification-2026-10-17.md) now supplies backend typed persona request/read/list/decision/cancel and durable expiry/wakeup evidence. The Approvals inbox, exact action review cards, original Chat integration, safe return navigation and final browser/visual journeys below are still required. Approval success must not be presented as a completed operation without an operation receipt; the internal typed persona successor now supplies that result, while production runtime/UI integration remains pending.
 
 The subsequent [tenant Definition UI slice](reports/tenant-definition-ui-verification-2026-10-16.md) implements canonical owned inventories, drafts, resources/evaluations and publication lifecycle. Exact-resource access controls its actions and supports resource-only readers. This adds observed authoring evidence to the foundation above; complete resource/Agent Access panels, Sandbox catalog, tenant-aware Chat/runtime and durable approval journeys remain pending.
 

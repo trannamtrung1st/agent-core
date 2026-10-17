@@ -45,7 +45,10 @@ public static class TenantApprovalEndpoints
             kind = Camel(r.Kind), status = Camel(r.Status), requestRevision = r.Revision, view.SecurityRevision, r.CreatedAt, r.ExpiresAt,
             summary = "Update this Agent Instance persona", permission = AgentCore.Domain.Security.TenantApprovalRequest.Permission,
             targetResource = new { type = AgentCore.Domain.Security.TenantApprovalRequest.ResourceType, id = r.ResourceId },
-            preparedAction = new { op.OperationId, op.Persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision, op.ActionHash } };
+            preparedAction = new { op.OperationId, op.Persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision, op.ActionHash },
+            decision = view.Decision is { } d ? new { principalId = d.HumanPrincipalId, status = Camel(d.Status), d.DecidedAt } : null,
+            operationResult = view.OperationResult is { } result ? new { result.OperationId, outcome = Camel(result.Outcome), result.ReasonCode,
+                result.InstanceRevision, result.PersonaRevision, result.RecordedAt } : null };
     }
     private static string Camel<T>(T value) where T : Enum => JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
 }

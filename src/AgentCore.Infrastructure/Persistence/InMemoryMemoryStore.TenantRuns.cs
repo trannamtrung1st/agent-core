@@ -8,6 +8,14 @@ public sealed partial class InMemoryMemoryStore
 {
     internal TenantSessionRoot? ResolveTenantSessionOwner(Guid sessionId)
     { lock (_gate) return tenantSessions.GetValueOrDefault(sessionId); }
+    internal void SaveTenantOperationRun(AgentRun run, long expectedRevision)
+    {
+        lock (_gate)
+        {
+            if (ReadTenantRun(run.Owner.TenantId!.Value, run.AgentRunId)?.Revision != expectedRevision) throw new SecurityConflictException("stale_revision");
+            AgentRuns.Runs[run.AgentRunId] = run;
+        }
+    }
     internal AgentRun? WaitTenantApproval(Guid tenant, Guid runId, long revision, Guid requestId, Guid? generation, DateTimeOffset at)
     {
         lock (_gate)

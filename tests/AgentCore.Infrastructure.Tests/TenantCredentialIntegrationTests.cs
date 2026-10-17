@@ -98,8 +98,9 @@ public sealed partial class TenantCredentialIntegrationTests
             Identity, Authorizer, ModelCatalogFactory.Create("Synthetic", null, null), new(), Ids, Clock);
         public IDefinitionResourceContentStore RunContent { get; } = new InMemoryDefinitionResourceContentStore();
         public TenantRunService RunService(ITenantRunStore? runs = null) => new(Iam, (ITenantSessionStore)Iam, runs ?? (ITenantRunStore)Iam,
-            new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam),
+            RunConfiguration(),
             Identity, Authorizer, ModelCatalogFactory.Synthetic(), Ids, Clock);
+        public TenantRunConfigurationResolver RunConfiguration() => new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam);
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);

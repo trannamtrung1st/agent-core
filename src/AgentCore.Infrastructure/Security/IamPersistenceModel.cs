@@ -20,6 +20,7 @@ internal static class IamPersistenceModel
         TenantCredentialRecord.Configure(model);
         TenantSessionRecord.Configure(model);
         TenantApprovalRecord.Configure(model);
+        TenantOperationReceiptRecord.Configure(model);
         var policies = model.Entity<TenantOperationPolicy>();
         policies.ToTable("TenantOperationPolicies", table => table.HasCheckConstraint("CK_TenantOperationPolicies_Values", "Mode IN (0,1,2) AND IndependentReview IN (0,1) AND Revision >= 1 AND length(PermissionKey) BETWEEN 1 AND 128"));
         policies.HasKey(p => new { p.TenantId, p.PermissionKey });

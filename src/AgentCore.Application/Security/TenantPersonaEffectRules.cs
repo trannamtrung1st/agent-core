@@ -1,0 +1,75 @@
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
+
+namespace AgentCore.Application.Security;
+
+public static class TenantPersonaEffectRules
+{
+    public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
+        AgentRun run, TenantPersonaEffectCommit commit)
+    {
+        var context = run.Admission.ExecutionContext;
+        if (context is null || request.TenantId != context.TenantId || request.RunId != run.AgentRunId || request.RootActivationId != context.RootActivationId
+            || request.ExecutorPrincipalId != context.AgentPrincipalId || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId
+            || request.Status != TenantApprovalStatus.Approved || request.Revision != commit.ExpectedRequestRevision
+            || run.ApprovalRequestId != request.RequestId || request.RequestId != commit.RequestId || request.Operation.OperationId != commit.OperationId
+            || request.Operation.InstanceId != run.AgentInstanceId || request.Operation.ActionHash != commit.ActionHash
+            || decision.DecisionId != commit.ExpectedDecisionId || decision.RequestId != request.RequestId || decision.TenantId != request.TenantId
+            || decision.Status != TenantApprovalStatus.Approved || decision.ActionHash != commit.ActionHash || decision.RequestRevision != request.Revision
+            || run.AgentRunId != commit.RunId || run.Revision != commit.ExpectedRunRevision || run.Status != AgentRunStatus.Running
+            || run.Claim?.Generation != commit.Generation || run.CancellationRequested || !Enum.IsDefined(commit.Outcome))
+            throw new SecurityConflictException("operation_mismatch");
+        var op = request.Operation;
+        if (TenantApprovalRules.Prepare(op.OperationId, op.InstanceId, op.Persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision) != op)
+            throw new SecurityConflictException("operation_mismatch");
+        if (request.Kind == ApprovalKind.ExceptionalGrant)
+        {
+            if (grant is null || grant.RequestId != request.RequestId || grant.TenantId != request.TenantId || grant.ExecutorPrincipalId != context.AgentPrincipalId
+                || grant.OperationId != commit.OperationId || grant.ActionHash != commit.ActionHash || grant.Revision != commit.ExpectedGrantRevision
+                || grant.Status != OperationGrantStatus.Available || grant.EffectIdempotencyKey != "operation:" + commit.OperationId.ToString("D"))
+                throw new SecurityConflictException("grant_unavailable");
+        }
+        else if (grant is not null || commit.ExpectedGrantRevision is not null) throw new SecurityConflictException("grant_mismatch");
+        if (commit.Outcome == TenantOperationOutcome.Completed ? commit.ReasonCode != "operation_completed" : !DenialReasons.Contains(commit.ReasonCode))
+            throw new ArgumentException("Invalid local operation outcome.");
+    }
+
+    public static string? Eligibility(AgentRun run, TenantAgent target, AgentDefinition currentDefinition)
+    {
+        if (run.Admission.Configuration?.Definition.SelfManagement?.Allows(HarnessManagementScope.Settings) != true
+            || currentDefinition.SelfManagement?.Allows(HarnessManagementScope.Settings) != true)
+            return "management_unavailable";
+        return null;
+    }
+
+    public static TenantPersonaEffectCommit AtCommit(TenantPersonaEffectCommit commit, TenantApprovalRequest request, TenantOperationGrant? grant,
+        AgentRun run, TenantAgent target, DateTimeOffset at)
+    {
+        if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
+        TenantApprovalRules.Validate(request, run, target, requireCurrentWitness: false);
+        if (commit.Outcome == TenantOperationOutcome.Denied) return commit;
+        var reason = grant is not null && grant.ExpiresAt <= at ? "grant_expired" : request.ExpiresAt <= at ? "approval_expired"
+            : ManagementPolicyResolver.Resolve(run.Admission.Configuration!.Definition, target.Instance).Allows(HarnessManagementScope.Settings) != true ? "management_unavailable"
+            : target.Instance.Revision != request.Operation.ExpectedInstanceRevision || target.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision ? "operation_witness_changed" : null;
+        return reason is null ? commit : commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = reason };
+    }
+
+    private static readonly HashSet<string> DenialReasons = new(StringComparer.Ordinal)
+    { "approval_expired", "grant_expired", "grantor_authority_lost", "operation_authority_changed", "operation_witness_changed",
+        "management_unavailable", "operation_configuration_changed", "requester_unavailable" };
+
+    public static TenantOperationReceipt MatchingReceipt(TenantOperationReceipt receipt, Guid tenant, TenantPersonaEffectCommit commit)
+    {
+        if (receipt.TenantId != tenant || receipt.RequestId != commit.RequestId || receipt.OperationId != commit.OperationId
+            || receipt.RunId != commit.RunId || receipt.ActionHash != commit.ActionHash) throw new SecurityConflictException("operation_mismatch");
+        return receipt;
+    }
+    public static void ValidateTransaction(TenantSecurityState next, long expected, TenantApprovalRequest request, AuthorizationAudit audit)
+    {
+        if (next.Tenant.TenantId != request.TenantId || next.Tenant.Revision != checked(expected + 1) || audit.TenantId != request.TenantId
+            || audit.ActorPrincipalId != request.ExecutorPrincipalId || audit.Action != "operations.persona.apply" || audit.Target != request.ResourceId)
+            throw new ArgumentException("Invalid exact persona effect transaction.");
+    }
+}

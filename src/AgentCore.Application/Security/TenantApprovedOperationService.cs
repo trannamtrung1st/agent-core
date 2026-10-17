@@ -1,0 +1,82 @@
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
+
+namespace AgentCore.Application.Security;
+
+public sealed class TenantApprovedOperationService(IIamStore security, ITenantRunStore runs, ITenantAgentStore agents,
+    ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantOperationAuthorizer operations,
+    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time)
+{
+    // Trusted server frame only. The saved request supplies every action parameter; callers cannot replace its persona or target.
+    public async ValueTask<TenantOperationReceipt> ExecutePersonaAsync(TenantRunReference reference, Guid requestId, Guid operationId,
+        Guid generation, string actionHash, CancellationToken ct = default)
+    {
+        var run = await runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+        var context = run.Admission.ExecutionContext;
+        if (context is null || context.TenantId != reference.TenantId || run.IsTerminal) throw new AccessDeniedException("run_unavailable");
+        var state = await security.ReadTenantAsync(reference.TenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        var agent = await agents.FindTenantAgentAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
+        if (state.Tenant.Status != IdentityStatus.Active || agent.PrincipalId != context.AgentPrincipalId) throw new AccessDeniedException("executor_unavailable");
+        TenantSessionRules.RequireExecutor(state, agent);
+        var request = await approvals.FindApprovalAsync(reference.TenantId, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
+        if (request.Operation.OperationId != operationId || request.Operation.ActionHash != actionHash || request.RunId != run.AgentRunId
+            || request.ExecutorPrincipalId != context.AgentPrincipalId || request.RootActivationId != context.RootActivationId)
+            throw new SecurityConflictException("operation_mismatch");
+        var existing = await effects.FindOperationReceiptAsync(reference.TenantId, operationId, ct).ConfigureAwait(false);
+        if (existing is not null) return Existing(existing, request, run);
+        var decision = await effects.FindApprovalDecisionAsync(reference.TenantId, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
+        var grant = await approvals.FindOperationGrantAsync(reference.TenantId, requestId, ct).ConfigureAwait(false);
+        var commit = new TenantPersonaEffectCommit(requestId, operationId, run.AgentRunId, generation, run.Revision, request.Revision,
+            decision.DecisionId, grant?.Revision, actionHash, TenantOperationOutcome.Completed, "operation_completed");
+        TenantPersonaEffectRules.Validate(request, decision, grant, run, commit);
+        var at = time.GetUtcNow();
+        if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
+        if (run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new SecurityConflictException("run_effect_uncertain");
+        if (run.SideEffect.ToolCallId == "operation:" + operationId.ToString("D") && run.SideEffect.Disposition == AgentRunSideEffectDisposition.Succeeded)
+            throw new SecurityConflictException("operation_receipt_missing");
+        string? reason = grant is not null && grant.ExpiresAt <= at ? "grant_expired" : request.ExpiresAt <= at ? "approval_expired" : null;
+        var target = AccessScope.ForResource(reference.TenantId, TenantApprovalRequest.ResourceType, request.ResourceId);
+        if (reason is null && !await operations.QualifiesAsync(state, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId,
+            PermissionCatalog.Get(TenantApprovalRequest.Permission), target, request.Kind, ct).ConfigureAwait(false)) reason = "grantor_authority_lost";
+        if (reason is null)
+        {
+            try { await operations.ResolveAsync(reference, ct).ConfigureAwait(false); }
+            catch (AccessDeniedException ex) when (ex.ReasonCode == "requester_unavailable") { reason = ex.ReasonCode; }
+        }
+        if (reason is null)
+        {
+            var eligibility = await operations.Check(state, context, TenantApprovalRequest.Permission, target, ct).ConfigureAwait(false);
+            if (eligibility.Decision == OperationDecisionKind.Denied || request.Kind == ApprovalKind.Review && eligibility.ApprovalKind == ApprovalKind.ExceptionalGrant)
+                reason = "operation_authority_changed";
+        }
+        if (reason is null)
+        {
+            var current = await configuration.ResolveAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
+            if (current.Agent.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
+            reason = TenantPersonaEffectRules.Eligibility(run, agent, current.Configuration.Configuration.Definition);
+        }
+        if (reason is null && (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision))
+            reason = "operation_witness_changed";
+        if (reason is not null) commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = reason };
+        var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
+        var audit = new AuthorizationAudit(ids.NewId(), reference.TenantId, context.AgentPrincipalId, "operations.persona.apply", request.ResourceId,
+            reason is null ? "allowed" : "denied", commit.ReasonCode, at);
+        var receipt = await effects.TryCommitPersonaEffectAsync(next, state.Tenant.Revision, commit, audit, ct).ConfigureAwait(false);
+        if (receipt is not null) return receipt;
+        // Another exact caller may have committed while this caller was checking current authority.
+        await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
+        existing = await effects.FindOperationReceiptAsync(reference.TenantId, operationId, ct).ConfigureAwait(false);
+        return existing is not null ? Existing(existing, request, run) : throw new SecurityConflictException("stale_revision");
+    }
+
+    private static TenantOperationReceipt Existing(TenantOperationReceipt receipt, TenantApprovalRequest request, AgentRun run)
+    {
+        if (receipt.TenantId != request.TenantId || receipt.RequestId != request.RequestId || receipt.OperationId != request.Operation.OperationId
+            || receipt.ExecutorPrincipalId != run.Admission.ExecutionContext!.AgentPrincipalId || receipt.RunId != run.AgentRunId || receipt.ActionHash != request.Operation.ActionHash
+            || receipt.SessionId != run.SessionId || receipt.RootActivationId != run.Admission.Activation.RootActivationId || receipt.InstanceId != request.Operation.InstanceId)
+            throw new SecurityConflictException("operation_mismatch");
+        return receipt;
+    }
+}
