@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> contexts, TimeProvider time) : IMemoryStore
+public sealed partial class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> contexts, TimeProvider time) : IMemoryStore
 {
     public async ValueTask<DurableSessionState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default)
     {
@@ -826,7 +826,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? throw AgentCoreErrors.Persistence("Pending agent input intent is missing."));
     }
 
-    private static ConversationEntry ToEntry(EntryRecord row) =>
+    internal static ConversationEntry ToEntry(EntryRecord row) =>
         new(
             Guid.Parse(row.EntryId),
             row.EntrySequence,

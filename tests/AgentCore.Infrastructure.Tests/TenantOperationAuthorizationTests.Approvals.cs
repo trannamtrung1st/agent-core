@@ -57,6 +57,9 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.False(await store.TryResumeApprovalAsync(signal, f.Clock.GetUtcNow()));
         var resumed = (await runs.FindTenantRunAsync(setup.Tenant, setup.Run.AgentRunId))!;
         Assert.Equal(AgentRunStatus.Queued, resumed.Status); Assert.Equal(request.RequestId, resumed.ApprovalRequestId); Assert.Equal(3, resumed.Revision);
+        Assert.DoesNotContain(await ((ITenantRuntimeStore)reopened).ListRunnableTenantRunsAsync(f.Clock.GetUtcNow(), 100), r => r.AgentRunId == resumed.AgentRunId);
+        await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => ((ITenantRuntimeStore)reopened).ApplyTenantRuntimeCommandAsync(resumed.Owner, resumed.AgentRunId,
+            new AgentCore.Application.Execution.AgentRunCommand.Claim(resumed.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId()).AsTask());
         await Assert.ThrowsAsync<SecurityConflictException>(() => service.DecideAsync(setup.Tenant, request.RequestId, reviewer,
             approve, request.Operation.ActionHash, expectedSecurityRevision: 0, expectedRequestRevision: request.Revision).AsTask());
         var suppressed = await service.PreparePersonaAsync(new(setup.Tenant, setup.Run.AgentRunId), persona, resumed.Revision);

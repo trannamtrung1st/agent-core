@@ -26,6 +26,27 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         _factory = factory;
     }
 
+    [Fact]
+    public async Task Tenant_reservations_and_legacy_runtime_share_the_same_capacity_limit()
+    {
+        await using var factory = new AgentCoreApiFactory(); using var client = TestOwnerCapability.CreateOwnerClient(factory);
+        factory.Services.GetRequiredService<IOptions<AgentCoreOptions>>().Value.MaxActiveSessions = 1;
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        created.EnsureSuccessStatusCode(); var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        var host = factory.Services.GetRequiredService<SessionHost>();
+        Assert.True(host.TryReserveTenantRuntime()); Assert.False(host.TryReserveTenantRuntime());
+        var command = Attach(session.SessionId); command.Payload!.OwnerCapability = TestOwnerCapability.Token(factory.Services);
+        try
+        {
+            var denied = await host.AttachAsync("capacity-check", command, CancellationToken.None);
+            Assert.False(denied.Accepted); Assert.Equal("SessionCapacityExceeded", denied.Error!.Code);
+        }
+        finally { host.ReleaseTenantRuntime(); }
+        var retry = Attach(session.SessionId); retry.Payload!.OwnerCapability = TestOwnerCapability.Token(factory.Services);
+        Assert.True((await host.AttachAsync("capacity-check", retry, CancellationToken.None)).Accepted);
+        Assert.False(host.TryReserveTenantRuntime());
+    }
+
     [Fact(Timeout = 30_000)]
     public async Task Restart_repairs_accepted_input_intent_into_one_registered_run_without_requiring_attach()
     {

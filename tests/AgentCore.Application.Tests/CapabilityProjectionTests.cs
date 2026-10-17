@@ -11,6 +11,22 @@ namespace AgentCore.Application.Tests;
 
 public sealed class CapabilityProjectionTests
 {
+    [Fact]
+    public async Task Tenant_context_offers_only_implemented_IAM_inspection_even_with_loaded_legacy_capabilities()
+    {
+        var definition = await Definition(ToolRegistry.All.Select(t => t.Name).ToArray());
+        var session = Guid.NewGuid(); var activation = Guid.NewGuid();
+        var context = Context(definition) with
+        {
+            AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session, ModelSupportsTools = true, ModelSupportsVision = true,
+            LoadedCapabilityIds = ToolRegistry.All.Select(t => t.Name).ToArray(),
+            ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage)
+        };
+        var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order().ToArray();
+        Assert.Equal(new[] { ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions }.Order(), offered);
+        Assert.Empty(ToolCatalog.For(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll));
+    }
+
     [Theory]
     [InlineData("console errors", "browser.console_messages")]
     [InlineData("network requests", "browser.network_requests")]

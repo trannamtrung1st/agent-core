@@ -3,11 +3,19 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.TestHost;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Application.Ports;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Api.Tests;
 
 public class AgentCoreApiFactory : WebApplicationFactory<Program>
 {
+    protected virtual bool EnableTenantRunExecution => false;
+    private sealed class NoTenantExecution : ITenantRunExecution
+    {
+        public ValueTask<int> ExecuteRunnableAsync(int limit, CancellationToken ct = default) => ValueTask.FromResult(0);
+    }
     protected virtual IReadOnlyDictionary<string, string?> ExtraConfiguration =>
         new Dictionary<string, string?>();
 
@@ -48,6 +56,8 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
         // Minimal-host test configuration is applied after early application option binding.
         builder.ConfigureTestServices(services =>
         {
+            // Admission/approval fixtures control their Run claims. Execution fixtures opt into the production worker.
+            if (!EnableTenantRunExecution) services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution, NoTenantExecution>());
             var options = (PersistenceOptions)services.Single(d => d.ServiceType == typeof(PersistenceOptions)).ImplementationInstance!;
             options.WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agent-core-api-isolated", Guid.NewGuid().ToString("N"), "workspaces");
             options.CredentialProtectionKeyRoot = Path.Combine(Path.GetTempPath(), "agent-core-api-isolated", Guid.NewGuid().ToString("N"), "credential-keys");

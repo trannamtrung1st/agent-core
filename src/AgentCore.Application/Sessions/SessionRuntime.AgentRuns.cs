@@ -38,7 +38,8 @@ public sealed partial class SessionRuntime
     private Guid? _pendingTerminalResponseId;
     private bool _agentRunAdmissionPending;
     private readonly ConcurrentDictionary<Guid, byte> _admittedAgentInputs = new();
-    private AgentRunOwner RunOwner => new(_snapshot.AgentInstanceId, _snapshot.ProfileId
+    private readonly AgentRunOwner? _runtimeOwner;
+    private AgentRunOwner RunOwner => _runtimeOwner ?? new(_snapshot.AgentInstanceId, _snapshot.ProfileId
         ?? throw AgentCoreErrors.Validation("AgentRun requires a trusted Session owner."));
 
     public Task<bool> RepairPendingAgentInputsAsync(bool headless, CancellationToken ct = default) =>
@@ -156,6 +157,7 @@ public sealed partial class SessionRuntime
 
     private async Task<bool> TryStartPendingUserBatchAsync(EventContext cause, CancellationToken ct)
     {
+        if (_runtimeOwner is not null) return false; // Canonical ingress already admitted each exact attributed Run.
         if (!CanStartUserConversationBatch()) return false;
         var users = PendingUserBatch();
         if (users.Count == 0) return await TryStartConfigurationContinuationAsync(cause, ct).ConfigureAwait(false);

@@ -1,5 +1,7 @@
 # Implementation Plan
 
+The [tenant Runtime checkpoint](reports/tenant-runtime-execution-verification-2026-10-17.md) advances Phase 5 with actual private text execution through existing coordinator/Runtime components, claim-bound owned persistence, current authority and shared capacity. It supersedes worker-pending statements in earlier checkpoints only for this bounded path. Live mailbox ingress, authorized tenant Hub/history/output/audio, trusted continuation/autonomous admission, judgment context, complete tools/effects, summary/Core Event lifecycle and the full UI/obsolete-authority/schema cutover remain required. This is not milestone acceptance or permission to deploy the intermediate source.
+
 ## Account, tenant IAM and durable approvals cutover (authorized 2026-10-16)
 
 The [approved persona effect verification](reports/tenant-approved-persona-effect-verification-2026-10-17.md) advances Phase 6 from durable management to an actual typed local effect: exact saved persona parameters, current authority/eligibility and live claim, atomic Instance mutation/grant consumption/Run receipt/checkpoint/audit, stable denial/revocation and retry suppression. Canonical reads distinguish approval from operation outcome. This is not the complete effect cutover: production tenant worker/Runtime/tool integration, trusted continuation consumption, direct Allowed execution, other resource/effect families, authority-change revocation propagation and external reconciliation remain required.

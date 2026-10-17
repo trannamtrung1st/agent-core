@@ -65,8 +65,9 @@ public sealed class TenantSessionIntegrationTests
             Assert.Equal(1, await db.Set<TenantSessionRecord>().CountAsync());
             await ((SqliteMemoryStore)f.Memory).EnsureCreatedAsync();
             var root = await db.Set<TenantSessionRecord>().SingleAsync();
-            db.Entry(root).CurrentValues.SetValues(root with { ExecutorPrincipalId = owner.OwnerPrincipalId });
-            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync()); db.ChangeTracker.Clear();
+            var invalidExecutor = owner.OwnerPrincipalId;
+            await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantSessions SET ExecutorPrincipalId = {invalidExecutor} WHERE SessionId = {root.SessionId}"));
+            db.ChangeTracker.Clear();
             var foreignInstance = Guid.NewGuid().ToString("D"); var key = id.ToString("D");
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Sessions SET AgentInstanceId = {foreignInstance} WHERE SessionId = {key}"));
             var foreignCreator = beta.Users.Single().PrincipalId; root = await db.Set<TenantSessionRecord>().SingleAsync();

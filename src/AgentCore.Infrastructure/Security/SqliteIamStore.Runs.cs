@@ -78,6 +78,7 @@ public sealed partial class SqliteIamStore
                     throw new SecurityConflictException("message_id_conflict");
                 result = new(false, saved, Guid.Parse(inputId), current.Revision); return false;
             }
+            if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status == (int)AgentRunStatus.Running, ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
             if (await db.AgentRuns.CountAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false) >= 100)
                 throw new SecurityConflictException("session_queue_full");
             SqliteMemoryStore.ApplySession(row, value); db.Entries.Add(SqliteMemoryStore.ToRecord(root.SessionId, admission.Input));

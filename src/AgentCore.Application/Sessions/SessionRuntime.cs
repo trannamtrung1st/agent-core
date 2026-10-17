@@ -216,10 +216,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
-        ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null)
+        ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
+        _runtimeOwner = runtimeOwner;
+        if (runtimeOwner is { } tenantOwner)
+        {
+            AgentCore.Application.Security.TenantRuntimeRules.RequireOwner(tenantOwner);
+            if (snapshot.ProfileId is not null || snapshot.AgentInstanceId != tenantOwner.AgentInstanceId || runAuthority is null)
+                throw new InvalidOperationException("Tenant Runtime requires its owned snapshot and current execution authority.");
+        }
         _runAuthority = runAuthority;
         _triggerOccurrences = triggerOccurrences;
         _composer = composer;
@@ -2374,6 +2381,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         int turn,
         IReadOnlyList<AttachmentProcessResult>? attachments = null)
     {
+        if (_runtimeOwner is not null && _boundAgentRun is not { Status: AgentRunStatus.Running, Claim: not null }) return;
         if (trigger.Kind == TriggerKind.UserTurn)
         {
             RefreshScheduleDraftForUserTurn();
@@ -2414,6 +2422,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             try
             {
                 var resolved = capturedRun is null ? await _tools.ResolveRunConfigurationAsync(capturedSnapshot, evaluationToken).ConfigureAwait(false) : null;
+                if (_runtimeOwner is not null && (capturedRun is null || await _runAuthority!.CurrentDefinitionAsync(capturedRun, evaluationToken).ConfigureAwait(false) is null))
+                    throw AgentCoreErrors.Forbidden("Tenant execution authority is unavailable.");
                 var executionDefinition = boundDefinition ?? resolved!.Configuration.Definition;
                 executionDefinition = await _tools.RestrictExecutionDefinitionAsync(executionDefinition, capturedSnapshot.AgentInstanceId, evaluationToken);
                 var persona = boundPersona ?? resolved!.Persona;
@@ -2481,6 +2491,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
                     Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
+                    ExecutionContext = capturedRun?.Admission.ExecutionContext,
                     RunTaskIntent = capturedRun?.Admission.TaskIntent,
                     CurrentUserEntryIds = trigger.Kind == TriggerKind.UserTurn ? capturedRun?.Admission.Activation.SourceEntryIds : null
                 };
@@ -2842,6 +2853,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 repairingTerminal = false;
 
                 BrowserSnapshotCompaction.Compact(messages);
+                if (_runtimeOwner is not null && (_boundAgentRun is not { } tenantRun || await _runAuthority!.CurrentDefinitionAsync(tenantRun, generateToken).ConfigureAwait(false) is null))
+                    throw AgentCoreErrors.Forbidden("Tenant execution authority is unavailable.");
                 var restrictedDefinition = await _tools.RestrictExecutionDefinitionAsync(ExecutionDefinition, _snapshot.AgentInstanceId, generateToken);
                 var projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
                 projectionContext = projectionContext with { Definition = restrictedDefinition };
@@ -3471,7 +3484,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
-                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings, ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun)), overallCts.Token);
+                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings, ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun), AgentRunId: _boundAgentRun?.AgentRunId, TenantId: _boundAgentRun?.Owner.TenantId), overallCts.Token);
                             if (_runAuthority is not null && _boundAgentRun is { } authorizedRun)
                             {
                                 var currentDefinition = await _runAuthority.CurrentDefinitionAsync(authorizedRun, overallCts.Token).ConfigureAwait(false);
@@ -3635,7 +3648,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             args,
                                             overallCts.Token,
                                             ExecutionDefinition, SessionId,
-                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings))
+                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings, AgentRunId: _boundAgentRun?.AgentRunId, TenantId: _boundAgentRun?.Owner.TenantId))
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
                                     {
@@ -3804,7 +3817,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 SupportsTools: model.Capabilities.Tools,
                                                 Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
                                                 WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings,
-                                                ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun)))
+                                                ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun), TenantId: _boundAgentRun?.Owner.TenantId))
                                         .ConfigureAwait(false);
                                     if (executionResult.WorkspaceCwd is { } nextCwd)
                                     {

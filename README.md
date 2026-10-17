@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Canonical tenant text Runs now execute through the existing coordinator and Session Runtime using claim-bound tenant storage, current IAM and no global Profile. [Runtime verification](docs/reports/tenant-runtime-execution-verification-2026-10-17.md) covers authenticated HTTP admission, Synthetic completion, authority loss, both-store isolation/recovery and shared host capacity. This is private persisted execution: live tenant messaging/output, audio, continuations and complete effect/UI integration remain pending.
+
 An [approved persona effect](docs/reports/tenant-approved-persona-effect-verification-2026-10-17.md) now applies saved exact parameters once through a trusted internal service, with current authority/eligibility, atomic grant consumption, Run checkpoint and durable receipt. Denials revoke the exact grant; replay returns the saved outcome. Canonical approval reads distinguish human consent from effect result. Production tenant worker/model/tool wiring and the broader effect/UI cutover remain pending.
 
 First-class [durable approval management](docs/reports/tenant-durable-approval-verification-2026-10-17.md) now saves exact typed persona operations with actual Run waits, qualified human decisions, bound exceptional grant rows and durable continuation signals. Both-store/reopen, expiry/cancellation, root dedupe and authenticated HTTP evidence distinguish this progress from pending tenant runtime dispatch, complete protected effect integration and approval UI. The full cutover remains active.

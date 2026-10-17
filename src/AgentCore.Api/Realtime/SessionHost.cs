@@ -305,7 +305,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                                 return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
                             }
 
-                            if (_live.Count >= Math.Max(1, _options.MaxActiveSessions))
+                            if (_live.Count + _tenantRuntimeReservations >= Math.Max(1, _options.MaxActiveSessions))
                             {
                                 return Reject(
                                     command.EventId,

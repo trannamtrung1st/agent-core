@@ -1024,6 +1024,21 @@ public sealed class SessionRuntimeFactory(
 {
     private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
 
+    public SessionRuntime CreateTenant(SessionSnapshot snapshot, ISessionOutput output, TenantRuntimeFrame frame,
+        ITenantRuntimeStore runtimeStorage, ITenantRunStore tenantRuns, AgentCore.Application.Security.TenantRunExecutionAuthority authority,
+        AgentCore.Application.Security.TenantToolAuthorization tenantTools)
+    {
+        if (snapshot.SessionId != frame.SessionId || snapshot.AgentInstanceId != frame.Owner.AgentInstanceId || snapshot.ProfileId is not null)
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_runtime_scope_mismatch");
+        return new(snapshot, languageModel, brain, new AgentCore.Application.Security.TenantRuntimeMemoryStore(runtimeStorage, frame), output, ids, time,
+            loggers.CreateLogger(typeof(SessionRuntime).FullName!), new AgentCore.Application.Security.TenantAgentRunStore(runtimeStorage, tenantRuns, ids, frame),
+            classifier, policy: policy, tools: new SessionToolExecutor(configurationGate: tools.ConfigurationGate, tenantAuthorization: tenantTools),
+            modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: new TenantUnavailableArtifacts(),
+            runAuthority: authority, runtimeOwner: frame.Owner);
+    }
+    private sealed class TenantUnavailableArtifacts : IArtifactReferenceAuthorizer
+    { public bool IsAuthorized(Guid sessionId, string artifactId) => false; }
+
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
             snapshot,

@@ -92,6 +92,7 @@ public sealed partial class SessionRuntime
 
     private void LaunchCompaction(EventContext cause)
     {
+        if (_runtimeOwner is not null) return;
         if (_compactionFlight is not null
             || _deactivated
             || _headlessTransportDetached

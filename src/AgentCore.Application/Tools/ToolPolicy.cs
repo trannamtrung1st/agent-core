@@ -170,6 +170,7 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is not null && descriptor.OfferRule != ToolOfferRule.TenantExecutionAuthority) return false;
         if (descriptor.OfferRule == ToolOfferRule.TenantExecutionAuthority)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
                 && execution.SessionId == context.OwnedSessionId;
