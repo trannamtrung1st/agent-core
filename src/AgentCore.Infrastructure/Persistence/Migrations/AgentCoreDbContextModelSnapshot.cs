@@ -3155,6 +3155,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("CreatedAt")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CredentialId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("ExecutorPrincipalId")
                         .HasColumnType("TEXT");
 
@@ -3225,6 +3228,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RunId", "SessionId");
 
+                    b.HasIndex("TenantId", "CredentialId");
+
                     b.HasIndex("TenantId", "OriginalInitiatorPrincipalId");
 
                     b.HasIndex("Status", "ExpiresAt", "RequestId");
@@ -3240,7 +3245,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantApprovalRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", "Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64 AND Permission = 'agents.update' AND ResourceType = 'agent' AND ResourceId = InstanceId AND length(PayloadJson) <= 131072");
+                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", "Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64 AND ((Permission = 'agents.update' AND ResourceType = 'agent' AND ResourceId = InstanceId AND CredentialId IS NULL) OR (Permission = 'credentials.use' AND ResourceType = 'credential' AND CredentialId IS NOT NULL AND ResourceId = CredentialId)) AND length(PayloadJson) <= 131072");
                         });
                 });
 
@@ -3911,6 +3916,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AgentRunId", "SessionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CredentialId")
+                        .HasPrincipalKey("TenantId", "CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgentCore.Domain.Security.TenantUser", null)
                         .WithMany()

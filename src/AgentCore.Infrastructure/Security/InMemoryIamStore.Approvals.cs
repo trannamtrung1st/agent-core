@@ -18,13 +18,14 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash)
         .OrderBy(r => r.Status is TenantApprovalStatus.Rejected or TenantApprovalStatus.Expired or TenantApprovalStatus.Cancelled ? 0 : r.Status == TenantApprovalStatus.Pending ? 1 : 2)
         .ThenBy(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId).FirstOrDefault();
-    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default)
+    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null)
     {
         ct.ThrowIfCancellationRequested(); page.Validate();
         lock (_gate)
         {
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
-                && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId))
+                && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (r.ResourceType != "agent" || allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId))
+                && (r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(r.Operation.CredentialCheck!.CredentialId))
                 && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();
             return ValueTask.FromResult(new TenantApprovalPage(rows.OrderByDescending(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId)
                 .Skip(page.Page * page.PageSize).Take(page.PageSize).ToArray(), rows.Length, page.Page, page.PageSize));
@@ -50,6 +51,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId, ct).Result;
             if (run is null || agent is null) return ValueTask.FromResult<TenantApprovalRequest?>(null);
             TenantApprovalRules.Validate(request, run, agent); TenantSessionRules.RequireExecutor(before, agent);
+            if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
             ValidateAgentActor(before, request.ExecutorPrincipalId);
             if (request.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
@@ -89,6 +91,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId, ct).Result;
             if (run is null || agent is null || run.ApprovalRequestId != request.RequestId || run.Status != AgentCore.Domain.Conversation.AgentRunStatus.WaitingForApproval) return ValueTask.FromResult(false);
             TenantApprovalRules.Validate(request, run, agent, request.Status != TenantApprovalStatus.Cancelled);
+            if (request.Operation.CredentialCheck is not null && request.Status != TenantApprovalStatus.Cancelled) RequireCredentialOperation(request, run, agent);
             if (request.Status != TenantApprovalStatus.Cancelled) TenantSessionRules.RequireExecutor(before, agent);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             if (_approvalSignals.ContainsKey(signal.SignalId) || _approvalDecisions.Values.Any(d => d.DecisionId == decision.DecisionId)
@@ -99,6 +102,14 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             _approvalSignals.Add(signal.SignalId, signal); _tenants[request.TenantId] = next; _audit.Add(audit); return ValueTask.FromResult(true);
         }
     }
+    private void RequireCredentialOperation(TenantApprovalRequest request, AgentCore.Domain.Conversation.AgentRun run, TenantAgent agent)
+    {
+        var snapshot = ReadTenantCredentialBindingsAsync(request.TenantId, request.Operation.InstanceId).Result;
+        var bound = snapshot?.Bindings.SingleOrDefault(b => b.Binding.BindingId == request.Operation.CredentialCheck!.BindingId)
+            ?? throw new AccessDeniedException("credential_binding_changed");
+        TenantCredentialOperationRules.RequireRequest(request, run, agent, bound);
+    }
+
     public ValueTask<IReadOnlyList<ApprovalProcessedSignal>> PendingApprovalSignalsAsync(int limit, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<ApprovalProcessedSignal>>(_approvalSignals.Values.Where(s => s.ProcessedAt is null).OrderBy(s => s.CreatedAt).ThenBy(s => s.SignalId).Take(Math.Clamp(limit, 1, 100)).ToArray()); }
     public ValueTask<IReadOnlyList<TenantApprovalRequest>> DueApprovalsAsync(DateTimeOffset at, int limit, CancellationToken ct = default)

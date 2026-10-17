@@ -28,8 +28,8 @@ public static class TenantOperationAuditRules
         Guid operationId, Guid? requestId = null, Guid? grantId = null) => audit with
     {
         Execution = new(run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required"), run.Revision,
-            state.Tenant.Revision, run.Claim?.Generation, TenantApprovalRequest.Permission,
-            AccessScope.ForResource(state.Tenant.TenantId, TenantApprovalRequest.ResourceType, run.AgentInstanceId.ToString("D")),
+            state.Tenant.Revision, run.Claim?.Generation, "agents.update",
+            AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")),
             null, ExecutionAuthorizationPurpose.EffectResult, requestId, operationId, grantId)
     };
 

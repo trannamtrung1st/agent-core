@@ -71,7 +71,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         if (complete)
         {
             db.Attach(owned.Instance);
-            if (request.Operation.Kind == TenantLocalOperationKind.Persona)
+            if (request.Operation.Kind == TenantOperationKind.Persona)
             {
                 owned.Instance.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 owned.Instance.PersonaRevision = updated.PersonaRevision;

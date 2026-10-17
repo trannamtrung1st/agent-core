@@ -27,9 +27,9 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
     private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) =>
         db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests
-            WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision') = {operation.SemanticActionJson}
+            WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -37,7 +37,9 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var query = db.Set<TenantApprovalRecord>().AsNoTracking().Where(r => r.TenantId == tenantId);
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
         if (allowedInstances is not null)
-        { var ids = allowedInstances.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => ids.Contains(r.InstanceId)); }
+        { var ids = allowedInstances.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.ResourceType != "agent" || ids.Contains(r.InstanceId)); }
+        if (allowedCredentials is not null)
+        { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
         if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);
         if (page.Kind is { } kind) query = query.Where(r => r.Kind == (int)kind);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -68,6 +70,8 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (row is null || target is null || row.Revision != expectedRunRevision) return false;
             var run = AgentRunStoreMapping.ToDomain(row); var agent = Owned(target);
             TenantApprovalRules.Validate(request, run, agent);
+            if (request.Operation.CredentialCheck is not null)
+                TenantCredentialOperationRules.RequireRequest(request, run, agent, await CredentialOperationTarget(db, request, ct).ConfigureAwait(false));
             var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
             TenantSessionRules.RequireExecutor(state, agent);
             if (request.OriginalInitiatorPrincipalId is { } requester) await ValidateTenantActorAsync(db, state, requester, ct).ConfigureAwait(false);
@@ -104,6 +108,8 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var run = AgentRunStoreMapping.ToDomain(runRow); var agent = Owned(target);
         if (run.ApprovalRequestId != request.RequestId || run.Status != AgentRunStatus.WaitingForApproval) return false;
         TenantApprovalRules.Validate(request, run, agent, request.Status != TenantApprovalStatus.Cancelled);
+        if (request.Operation.CredentialCheck is not null && request.Status != TenantApprovalStatus.Cancelled)
+            TenantCredentialOperationRules.RequireRequest(request, run, agent, await CredentialOperationTarget(db, request, ct).ConfigureAwait(false));
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
         if (request.Status != TenantApprovalStatus.Cancelled)
         {

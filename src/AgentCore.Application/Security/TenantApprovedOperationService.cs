@@ -19,7 +19,9 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
         {
             var reason = ex is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)ex).ReasonCode;
-            await operations.RecordFailureAsync(reference, TenantApprovalRequest.Permission, reason, ExecutionAuthorizationPurpose.EffectEligibility, ct).ConfigureAwait(false);
+            var request = await approvals.FindApprovalAsync(reference.TenantId, requestId, ct).ConfigureAwait(false);
+            var permission = request?.Operation.OperationId == operationId ? request.Permission : "";
+            await operations.RecordFailureAsync(reference, permission, reason, ExecutionAuthorizationPurpose.EffectEligibility, ct).ConfigureAwait(false);
             throw;
         }
     }
@@ -41,6 +43,7 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
             throw new SecurityConflictException("operation_mismatch");
         var existing = await effects.FindOperationReceiptAsync(reference.TenantId, operationId, ct).ConfigureAwait(false);
         if (existing is not null) return Existing(existing, request, run);
+        if (!request.Operation.IsLocalConfiguration) throw new AccessDeniedException("tenant_effect_unavailable");
         var decision = await effects.FindApprovalDecisionAsync(reference.TenantId, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var grant = await approvals.FindOperationGrantAsync(reference.TenantId, requestId, ct).ConfigureAwait(false);
         var commit = new TenantLocalEffectCommit(requestId, operationId, run.AgentRunId, generation, run.Revision, request.Revision,
@@ -53,9 +56,9 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         if (run.SideEffect.ToolCallId == "operation:" + operationId.ToString("D") && run.SideEffect.Disposition == AgentRunSideEffectDisposition.Succeeded)
             throw new SecurityConflictException("operation_receipt_missing");
         string? reason = grant is not null && grant.ExpiresAt <= at ? "grant_expired" : request.ExpiresAt <= at ? "approval_expired" : null;
-        var target = AccessScope.ForResource(reference.TenantId, TenantApprovalRequest.ResourceType, request.ResourceId);
+        var target = AccessScope.ForResource(reference.TenantId, request.ResourceType, request.ResourceId);
         if (reason is null && !await operations.QualifiesAsync(state, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId,
-            PermissionCatalog.Get(TenantApprovalRequest.Permission), target, request.Kind, ct).ConfigureAwait(false)) reason = "grantor_authority_lost";
+            PermissionCatalog.Get(request.Permission), target, request.Kind, ct).ConfigureAwait(false)) reason = "grantor_authority_lost";
         if (reason is null)
         {
             try { await operations.ResolveAsync(reference, ct).ConfigureAwait(false); }
@@ -63,7 +66,7 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         }
         if (reason is null)
         {
-            var eligibility = await operations.Check(state, run, TenantApprovalRequest.Permission, target, ct).ConfigureAwait(false);
+            var eligibility = await operations.Check(state, run, request.Permission, target, ct).ConfigureAwait(false);
             if (eligibility.Decision == OperationDecisionKind.Denied || request.Kind == ApprovalKind.Review && eligibility.ApprovalKind == ApprovalKind.ExceptionalGrant)
                 reason = "operation_authority_changed";
         }

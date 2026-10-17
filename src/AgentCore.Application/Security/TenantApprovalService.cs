@@ -16,7 +16,7 @@ public sealed record TenantApprovalView(TenantApprovalRequest Request, long Secu
 public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null)
+    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -28,7 +28,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
     private async ValueTask<TenantApprovalPreparationResult> PrepareAsync(TenantRunReference reference, AgentIdentity? persona, PreparedConversationPreferences? preferences,
         long expectedRunRevision, Guid? generation, CancellationToken ct)
     {
-        var (run, state) = await operations.ResolveForDecisionAsync(reference, TenantApprovalRequest.Permission, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
+        var (run, state) = await operations.ResolveForDecisionAsync(reference, "agents.update", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
         var agent = await agents.FindTenantAgentAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("executor_unavailable");
         var operation = preferences is null ? TenantApprovalRules.Prepare(ids.NewId(), agent.Instance.InstanceId, persona ?? throw new ArgumentException("Missing operation."), agent.Instance.Revision, agent.Instance.PersonaRevision)
@@ -47,13 +47,46 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             _ = AgentInstanceSettingsService.ResolvePatch(baseline, current.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
             managementReview = !TenantPreferenceToolContract.Allows(pinned) || !TenantPreferenceToolContract.Allows(effective);
         }
+        return await PersistAsync(reference, run, state, agent, operation, snapshot, managementReview, expectedRunRevision, generation, ct).ConfigureAwait(false);
+    }
+
+    public async ValueTask<TenantApprovalPreparationResult> PrepareCredentialCheckAsync(TenantRunReference reference, string alias,
+        long expectedRunRevision, Guid generation, CancellationToken ct = default)
+    {
+        try { return await PrepareCredentialCheckCoreAsync(reference, alias, expectedRunRevision, generation, ct).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
+        {
+            var reason = ex is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)ex).ReasonCode;
+            await operations.RecordFailureAsync(reference, "credentials.use", reason, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async ValueTask<TenantApprovalPreparationResult> PrepareCredentialCheckCoreAsync(TenantRunReference reference, string alias,
+        long expectedRunRevision, Guid generation, CancellationToken ct)
+    {
+        if (credentialTargets is null) throw new AccessDeniedException("tenant_effect_unavailable");
+        var (run, state) = await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
+        if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
+        var (agent, bound) = await credentialTargets.ResolveAsync(run, alias, ct).ConfigureAwait(false);
+        var operation = TenantApprovalRules.PrepareCredentialCheck(ids.NewId(), run.AgentInstanceId, TenantCredentialOperationRules.Parameters(bound), agent.Instance.Revision, agent.Instance.PersonaRevision);
+        var read = await authorizer.CheckTenantAsync(state, run.Admission.ExecutionContext!.AgentPrincipalId, PermissionCatalog.Get("credentials.read"),
+            AccessScope.ForResource(reference.TenantId, "credential", operation.ResourceId), ct).ConfigureAwait(false);
+        if (!read.Allowed) return await PreparationOutcome(state, run, operation, OperationDecisionKind.Denied, "executor_read_required", null, ct).ConfigureAwait(false);
+        return await PersistAsync(reference, run, state, agent, operation, TenantCredentialOperationRules.Snapshot(agent, bound), false, expectedRunRevision, generation, ct).ConfigureAwait(false);
+    }
+
+    private async ValueTask<TenantApprovalPreparationResult> PersistAsync(TenantRunReference reference, AgentCore.Domain.Conversation.AgentRun run,
+        TenantSecurityState state, TenantAgent agent, PreparedTenantOperation operation, TenantApprovalSnapshot? snapshot, bool managementReview,
+        long expectedRunRevision, Guid? generation, CancellationToken ct)
+    {
         var existing = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId, agent.PrincipalId, operation, ct).ConfigureAwait(false);
         if (existing is not null) return await DuplicateOutcome(state, run, existing, ct).ConfigureAwait(false);
         OperationAuthorizationDecision decision;
         try
         {
-            decision = await operations.Check(state, run, TenantApprovalRequest.Permission,
-                AccessScope.ForResource(reference.TenantId, TenantApprovalRequest.ResourceType, operation.InstanceId.ToString("D")), ct, managementReview, ExecutionAuthorizationPurpose.ApprovalPreparation).ConfigureAwait(false);
+            decision = await operations.Check(state, run, operation.Permission,
+                AccessScope.ForResource(reference.TenantId, operation.ResourceType, operation.ResourceId), ct, managementReview, ExecutionAuthorizationPurpose.ApprovalPreparation).ConfigureAwait(false);
         }
         catch (SecurityConflictException ex) when (ex.ReasonCode == "stale_revision")
         {
@@ -95,8 +128,8 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
     private async ValueTask<TenantApprovalPreparationResult> PreparationOutcome(TenantSecurityState state, AgentCore.Domain.Conversation.AgentRun run,
         PreparedTenantOperation operation, OperationDecisionKind decision, string reason, TenantApprovalRequest? request, CancellationToken ct)
     {
-        await operations.RecordAsync(state, run, new(decision, reason, TenantApprovalRequest.Permission,
-            AccessScope.ForResource(state.Tenant.TenantId, TenantApprovalRequest.ResourceType, operation.InstanceId.ToString("D")),
+        await operations.RecordAsync(state, run, new(decision, reason, operation.Permission,
+            AccessScope.ForResource(state.Tenant.TenantId, operation.ResourceType, operation.ResourceId),
             decision == OperationDecisionKind.RequiresApproval ? request?.Kind : null), ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
         return new(decision, reason, operation, request);
     }
@@ -121,8 +154,11 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         query.Validate();
         var before = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var requestIds = await VisibleIds(before, human.PrincipalId, "approvals.read", "approval", ct).ConfigureAwait(false);
-        var instanceIds = await VisibleIds(before, human.PrincipalId, TenantApprovalRequest.Permission, TenantApprovalRequest.ResourceType, ct).ConfigureAwait(false);
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct).ConfigureAwait(false);
+        var instanceIds = await VisibleIds(before, human.PrincipalId, "agents.update", "agent", ct).ConfigureAwait(false);
+        var credentialIds = await VisibleIds(before, human.PrincipalId, "credentials.use", "credential", ct).ConfigureAwait(false);
+        var credentialRead = await VisibleIds(before, human.PrincipalId, "credentials.read", "credential", ct).ConfigureAwait(false);
+        credentialIds = credentialIds is null ? credentialRead : credentialRead is null ? credentialIds : credentialIds.Intersect(credentialRead).ToArray();
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -199,16 +235,25 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         if (at >= request.ExpiresAt) throw new SecurityConflictException("approval_expired");
         if (outcome != TenantApprovalStatus.Cancelled)
         {
-            var (run, current) = await operations.ResolveForDecisionAsync(new(tenant, request.RunId), TenantApprovalRequest.Permission, ExecutionAuthorizationPurpose.ApprovalDecision, ct).ConfigureAwait(false);
+            var (run, current) = await operations.ResolveForDecisionAsync(new(tenant, request.RunId), request.Permission, ExecutionAuthorizationPurpose.ApprovalDecision, ct).ConfigureAwait(false);
             if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
             var agent = await agents.FindTenantAgentAsync(tenant, request.Operation.InstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
             TenantApprovalRules.Validate(request, run, agent);
-            var target = AccessScope.ForResource(tenant, TenantApprovalRequest.ResourceType, request.ResourceId);
-            var eligibility = await operations.Check(state, run, TenantApprovalRequest.Permission, target, ct, purpose: ExecutionAuthorizationPurpose.ApprovalDecision).ConfigureAwait(false);
+            if (request.Operation.CredentialCheck is { } check)
+            {
+                if (credentialTargets is null) throw new AccessDeniedException("tenant_effect_unavailable");
+                var (_, bound) = await credentialTargets.ResolveAsync(run, check.Reference, ct).ConfigureAwait(false);
+                TenantCredentialOperationRules.RequireWitness(request.Operation, bound);
+                var read = await authorizer.CheckTenantAsync(state, run.Admission.ExecutionContext!.AgentPrincipalId, PermissionCatalog.Get("credentials.read"),
+                    AccessScope.ForResource(tenant, "credential", request.ResourceId), ct).ConfigureAwait(false);
+                if (!read.Allowed) throw new AccessDeniedException("executor_read_required");
+            }
+            var target = AccessScope.ForResource(tenant, request.ResourceType, request.ResourceId);
+            var eligibility = await operations.Check(state, run, request.Permission, target, ct, purpose: ExecutionAuthorizationPurpose.ApprovalDecision).ConfigureAwait(false);
             if (eligibility.Decision == OperationDecisionKind.Denied || request.Kind == ApprovalKind.Review && eligibility.ApprovalKind == ApprovalKind.ExceptionalGrant)
                 throw new AccessDeniedException("approval_authority_changed");
             if (!await operations.QualifiesAsync(state, request.OriginalInitiatorPrincipalId, human.PrincipalId,
-                PermissionCatalog.Get(TenantApprovalRequest.Permission), target, request.Kind, ct).ConfigureAwait(false)) throw new AccessDeniedException("approver_unqualified");
+                PermissionCatalog.Get(request.Permission), target, request.Kind, ct).ConfigureAwait(false)) throw new AccessDeniedException("approver_unqualified");
         }
         var nextRequest = request.Decide(outcome, expectedRequestRevision, at);
         var decision = new TenantApprovalDecision(ids.NewId(), requestId, tenant, human.PrincipalId, nextRequest.Status, actionHash, nextRequest.Revision, at);
@@ -237,8 +282,14 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
 
     private async ValueTask RequireRead(TenantSecurityState state, Guid human, TenantApprovalRequest request, CancellationToken ct)
     {
+        if (request.Operation.CredentialCheck is not null)
+        {
+            var read = await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("credentials.read"),
+                AccessScope.ForResource(request.TenantId, "credential", request.ResourceId), ct).ConfigureAwait(false);
+            if (!read.Allowed) throw new AccessDeniedException("approval_unavailable");
+        }
         foreach (var pair in new[] { ("approvals.read", AccessScope.ForResource(request.TenantId, "approval", request.RequestId.ToString("D"))),
-            (TenantApprovalRequest.Permission, AccessScope.ForResource(request.TenantId, TenantApprovalRequest.ResourceType, request.ResourceId)) })
+            (request.Permission, AccessScope.ForResource(request.TenantId, request.ResourceType, request.ResourceId)) })
         {
             var decision = await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get(pair.Item1), pair.Item2, ct).ConfigureAwait(false);
             if (!decision.Allowed) throw new AccessDeniedException("approval_unavailable");

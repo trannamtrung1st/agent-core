@@ -15,7 +15,7 @@ public static class TenantLocalEffectRules
         var context = run.Admission.ExecutionContext;
         TenantApprovalContinuationRules.Require(request, run, source);
         if (request.RunId != run.AgentRunId) TenantRunContinuationService.ValidateAuthorizationCheckpoint(run, request, requirePending: true);
-        if (context is null || request.TenantId != context.TenantId || request.RootActivationId != context.RootActivationId
+        if (!request.Operation.IsLocalConfiguration || context is null || request.TenantId != context.TenantId || request.RootActivationId != context.RootActivationId
             || request.ExecutorPrincipalId != context.AgentPrincipalId || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId
             || request.Status != TenantApprovalStatus.Approved || request.Revision != commit.ExpectedRequestRevision
             || run.ApprovalRequestId != request.RequestId || request.RequestId != commit.RequestId || request.Operation.OperationId != commit.OperationId
@@ -80,7 +80,7 @@ public static class TenantLocalEffectRules
         return new(current.InstanceId, operation.ExpectedInstanceRevision, SetSettingsOverrides: true,
             SettingsOverrides: InstanceSettingsResolver.Patch(current.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear), AutomationPolicyChanges: []);
     }
-    public static string AuditAction(PreparedTenantOperation operation) => operation.Kind == TenantLocalOperationKind.Persona ? "operations.persona.apply" : "operations.preferences.apply";
+    public static string AuditAction(PreparedTenantOperation operation) => operation.Kind == TenantOperationKind.Persona ? "operations.persona.apply" : "operations.preferences.apply";
 
     public static void ValidateTransaction(TenantSecurityState next, long expected, TenantApprovalRequest request, AuthorizationAudit audit)
     {

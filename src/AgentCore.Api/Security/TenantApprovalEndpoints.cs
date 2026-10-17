@@ -45,12 +45,18 @@ public static class TenantApprovalEndpoints
     {
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
+        var (summary, operation) = op.Kind switch {
+            TenantOperationKind.Persona => ("Update agent persona", "update_persona"),
+            TenantOperationKind.ConversationPreferences => ("Update conversation preferences", "update_preferences"),
+            TenantOperationKind.CredentialConnectionCheck => ("Check credential connection", "check_credential_connection"),
+            _ => throw new InvalidOperationException("Unsupported prepared operation.") };
         return new(r.RequestId, r.TenantId, r.RunId, r.SessionId, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
             Camel(r.Kind), Camel(r.Status), r.Revision, view.SecurityRevision, r.CreatedAt, r.ExpiresAt,
-            op.Kind == TenantLocalOperationKind.Persona ? "Update agent persona" : "Update conversation preferences", TenantApprovalRequest.Permission,
-            new(TenantApprovalRequest.ResourceType, r.ResourceId), new(op.OperationId, op.Kind == TenantLocalOperationKind.Persona ? "update_persona" : "update_preferences",
+            summary, r.Permission,
+            new(r.ResourceType, r.ResourceId), new(op.OperationId, operation,
                 p is null ? null : new(p.Name, p.Role, p.Description, p.Tone), pref is null ? null : new(pref.ResponseLength, pref.Language, pref.AskOneQuestionAtATime,
-                    pref.ClearResponseLength, pref.ClearLanguage, pref.ClearAskOneQuestionAtATime), op.ExpectedInstanceRevision, op.ExpectedPersonaRevision, op.ActionHash),
+                    pref.ClearResponseLength, pref.ClearLanguage, pref.ClearAskOneQuestionAtATime), op.ExpectedInstanceRevision, op.ExpectedPersonaRevision, op.ActionHash,
+                op.CredentialCheck is { } check ? new(check.CredentialId, check.BindingId, check.Reference, check.BindingRevision, check.CredentialRevision) : null),
             view.Decision is { } d ? new(d.HumanPrincipalId, Camel(d.Status), d.DecidedAt) : null,
             view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt) : null,
             review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,

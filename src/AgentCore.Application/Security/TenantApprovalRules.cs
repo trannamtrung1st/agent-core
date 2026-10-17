@@ -15,8 +15,8 @@ public static class TenantApprovalRules
     {
         AgentDefinitionValidator.ValidateIdentity(persona);
         if (operationId == Guid.Empty || instance == Guid.Empty || instanceRevision < 1 || personaRevision < 1) throw new ArgumentException("Invalid prepared persona operation.");
-        var json = JsonSerializer.Serialize(new { operation = "agents.persona.update", permission = TenantApprovalRequest.Permission,
-            resourceType = TenantApprovalRequest.ResourceType, resourceId = instance.ToString("D"), expectedInstanceRevision = instanceRevision,
+        var json = JsonSerializer.Serialize(new { operation = "agents.persona.update", permission = "agents.update",
+            resourceType = "agent", resourceId = instance.ToString("D"), expectedInstanceRevision = instanceRevision,
             expectedPersonaRevision = personaRevision, persona = new { persona.Name, persona.Role, persona.Description, persona.Tone } });
         if (Encoding.UTF8.GetByteCount(json) > 32768) throw new ArgumentException("Prepared operation exceeds its content bound.");
         return new(operationId, instance, persona, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))));
@@ -27,16 +27,28 @@ public static class TenantApprovalRules
         var normalized = TenantPreferenceToolContract.Parameters(TenantPreferenceToolContract.Patch(preferences));
         if (operationId == Guid.Empty || instance == Guid.Empty || instanceRevision < 1 || personaRevision < 1 || normalized != preferences)
             throw new ArgumentException("Invalid prepared preference operation.");
-        var json = JsonSerializer.Serialize(new { operation = "agents.preferences.update", permission = TenantApprovalRequest.Permission,
-            resourceType = TenantApprovalRequest.ResourceType, resourceId = instance.ToString("D"), expectedInstanceRevision = instanceRevision,
+        var json = JsonSerializer.Serialize(new { operation = "agents.preferences.update", permission = "agents.update",
+            resourceType = "agent", resourceId = instance.ToString("D"), expectedInstanceRevision = instanceRevision,
             expectedPersonaRevision = personaRevision, preferences = normalized });
         return new(operationId, instance, null, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), normalized);
     }
 
-    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => (op.Persona, op.Preferences) switch
+    public static PreparedTenantOperation PrepareCredentialCheck(Guid operationId, Guid instance, PreparedCredentialConnectionCheck check, long instanceRevision, long personaRevision)
     {
-        ({ } persona, null) => Prepare(op.OperationId, op.InstanceId, persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, { } preferences) => PreparePreferences(op.OperationId, op.InstanceId, preferences, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        if (operationId == Guid.Empty || instance == Guid.Empty || check.CredentialId == Guid.Empty || check.BindingId == Guid.Empty
+            || check.Reference != AgentCore.Domain.Credentials.CredentialRules.Reference(check.Reference) || check.BindingRevision < 1
+            || check.CredentialRevision < 1 || check.SecretRevision < 1 || check.AuthEpoch < 1 || instanceRevision < 1 || personaRevision < 1)
+            throw new ArgumentException("Invalid exact credential check.");
+        var json = JsonSerializer.Serialize(new { operation = "credentials.connection.check", permission = "credentials.use", resourceType = "credential",
+            resourceId = check.CredentialId.ToString("D"), expectedInstanceRevision = instanceRevision, expectedPersonaRevision = personaRevision, credentialCheck = check });
+        return new(operationId, instance, null, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), CredentialCheck: check);
+    }
+
+    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => (op.Persona, op.Preferences, op.CredentialCheck) switch
+    {
+        ({ } persona, null, null) => Prepare(op.OperationId, op.InstanceId, persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        (null, { } preferences, null) => PreparePreferences(op.OperationId, op.InstanceId, preferences, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        (null, null, { } check) => PrepareCredentialCheck(op.OperationId, op.InstanceId, check, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")
     };
 

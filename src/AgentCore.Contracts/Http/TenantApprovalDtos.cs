@@ -8,7 +8,10 @@ public sealed record TenantApprovalDto(Guid RequestId, Guid TenantId, Guid RunId
     TenantApprovalOperationResultDto? OperationResult, TenantApprovalReviewDto? Review);
 public sealed record TenantApprovalTargetDto(string Type, string Id);
 public sealed record TenantPreparedActionDto(Guid OperationId, string Operation, TenantPreparedPersonaDto? Persona,
-    TenantPreparedPreferencesDto? Preferences, long ExpectedInstanceRevision, long ExpectedPersonaRevision, string ActionHash);
+    TenantPreparedPreferencesDto? Preferences, long ExpectedInstanceRevision, long ExpectedPersonaRevision, string ActionHash,
+    TenantPreparedCredentialCheckDto? CredentialCheck = null);
+public sealed record TenantPreparedCredentialCheckDto(Guid CredentialId, Guid BindingId, string Reference,
+    long BindingRevision, long CredentialRevision);
 public sealed record TenantPreparedPersonaDto(string Name, string Role, string Description, string Tone);
 public sealed record TenantPreparedPreferencesDto(string? ResponseLength, string? Language, bool? AskOneQuestionAtATime,
     bool ClearResponseLength, bool ClearLanguage, bool ClearAskOneQuestionAtATime);

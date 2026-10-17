@@ -9,27 +9,39 @@ namespace AgentCore.Domain.Security;
 public enum TenantApprovalStatus { Pending, Approved, Rejected, Expired, Cancelled }
 public enum OperationGrantStatus { Available, Claimed, Consumed, Revoked, Indeterminate }
 
-public enum TenantLocalOperationKind { Persona, ConversationPreferences }
+public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck }
 public sealed record PreparedConversationPreferences(string? ResponseLength, string? Language, bool? AskOneQuestionAtATime,
     bool ClearResponseLength = false, bool ClearLanguage = false, bool ClearAskOneQuestionAtATime = false);
+public sealed record PreparedCredentialConnectionCheck(Guid CredentialId, Guid BindingId, string Reference,
+    long BindingRevision, long CredentialRevision, long SecretRevision, long AuthEpoch);
 
 // Exactly one typed payload is allowed. No credential or bearer authority is part of this shape.
 public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, AgentIdentity? Persona,
     long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
-    PreparedConversationPreferences? Preferences = null)
+    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null)
 {
     [JsonIgnore]
-    public TenantLocalOperationKind Kind => Preferences is null ? TenantLocalOperationKind.Persona : TenantLocalOperationKind.ConversationPreferences;
+    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck) switch {
+        (not null, null, null) => TenantOperationKind.Persona,
+        (null, not null, null) => TenantOperationKind.ConversationPreferences,
+        (null, null, not null) => TenantOperationKind.CredentialConnectionCheck,
+        _ => throw new ArgumentException("Exactly one supported operation payload is required.") };
+    [JsonIgnore] public bool IsLocalConfiguration => Kind is TenantOperationKind.Persona or TenantOperationKind.ConversationPreferences;
+    [JsonIgnore] public string Permission => IsLocalConfiguration ? "agents.update" : "credentials.use";
+    [JsonIgnore] public string ResourceType => IsLocalConfiguration ? "agent" : "credential";
+    [JsonIgnore] public string ResourceId => (IsLocalConfiguration ? InstanceId : CredentialCheck!.CredentialId).ToString("D");
 
     // Root correlation excludes mutable witnesses; grants still bind ActionHash exactly.
     [JsonIgnore]
-    public string SemanticActionJson => (Persona, Preferences) switch
+    public string SemanticActionJson => Kind switch
     {
-        ({ } persona, null) => JsonSerializer.Serialize(new { operation = "agents.persona.update", permission = TenantApprovalRequest.Permission,
-            resourceType = TenantApprovalRequest.ResourceType, resourceId = InstanceId.ToString("D"),
-            persona = new { persona.Name, persona.Role, persona.Description, persona.Tone } }),
-        (null, { } preferences) => JsonSerializer.Serialize(new { operation = "agents.preferences.update", permission = TenantApprovalRequest.Permission,
-            resourceType = TenantApprovalRequest.ResourceType, resourceId = InstanceId.ToString("D"), preferences }),
+        TenantOperationKind.Persona => JsonSerializer.Serialize(new { operation = "agents.persona.update", permission = Permission,
+            resourceType = ResourceType, resourceId = ResourceId,
+            persona = new { Persona!.Name, Persona.Role, Persona.Description, Persona.Tone } }),
+        TenantOperationKind.ConversationPreferences => JsonSerializer.Serialize(new { operation = "agents.preferences.update", permission = Permission,
+            resourceType = ResourceType, resourceId = ResourceId, preferences = Preferences }),
+        TenantOperationKind.CredentialConnectionCheck => JsonSerializer.Serialize(new { operation = "credentials.connection.check", permission = Permission,
+            resourceType = ResourceType, resourceId = ResourceId }),
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")
     };
     [JsonIgnore]
@@ -41,9 +53,9 @@ public sealed record TenantApprovalRequest(Guid RequestId, Guid TenantId, Guid R
     ApprovalKind Kind, PreparedTenantOperation Operation, TenantApprovalStatus Status,
     long Revision, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, TenantApprovalSnapshot? Snapshot = null)
 {
-    public const string Permission = "agents.update";
-    public const string ResourceType = "agent";
-    public string ResourceId => Operation.InstanceId.ToString("D");
+    public string Permission => Operation.Permission;
+    public string ResourceType => Operation.ResourceType;
+    public string ResourceId => Operation.ResourceId;
     public string Fingerprint => Operation.OperationFingerprint;
 
     public TenantApprovalRequest Decide(TenantApprovalStatus decision, long expectedRevision, DateTimeOffset at)

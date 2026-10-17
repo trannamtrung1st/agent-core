@@ -23,8 +23,8 @@ public sealed partial class TenantApprovalService
         var matches = target is not null && target.Instance.Revision == op.ExpectedInstanceRevision && target.Instance.PersonaRevision == op.ExpectedPersonaRevision;
         if (snapshot is null && matches)
         {
-            if (op.Kind == TenantLocalOperationKind.Persona) snapshot = TenantApprovalSnapshotRules.Persona(target!);
-            else
+            if (op.Kind == TenantOperationKind.Persona) snapshot = TenantApprovalSnapshotRules.Persona(target!);
+            else if (op.Kind == TenantOperationKind.ConversationPreferences)
             {
                 try
                 {
@@ -39,8 +39,8 @@ public sealed partial class TenantApprovalService
             var user = state.Users.SingleOrDefault(u => u.PrincipalId == principal);
             return user is null ? null : (await security.ReadAccountAsync(user.AccountId, ct).ConfigureAwait(false))?.DisplayName;
         }
-        var scope = AccessScope.ForResource(r.TenantId, TenantApprovalRequest.ResourceType, r.ResourceId);
-        var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(TenantApprovalRequest.Permission));
+        var scope = AccessScope.ForResource(r.TenantId, r.ResourceType, r.ResourceId);
+        var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(r.Permission));
         var source = await operations.FindRunAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
         var waiting = source?.Status == AgentRunStatus.WaitingForApproval && source.ApprovalRequestId == r.RequestId;
         var cancel = r.Status == TenantApprovalStatus.Pending && at < r.ExpiresAt && waiting && target is not null
@@ -57,14 +57,23 @@ public sealed partial class TenantApprovalService
                 if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
                 TenantApprovalRules.Validate(r, run, target!);
                 var effective = await configuration.ResolveAsync(r.TenantId, op.InstanceId, ct).ConfigureAwait(false);
-                unavailable = TenantLocalEffectRules.Eligibility(run, effective.Agent, effective.Configuration.Configuration.Definition);
+                if (op.CredentialCheck is { } check)
+                {
+                    if (credentialTargets is null) throw new AccessDeniedException("tenant_effect_unavailable");
+                    var (_, bound) = await credentialTargets.ResolveAsync(run, check.Reference, ct).ConfigureAwait(false);
+                    TenantCredentialOperationRules.RequireWitness(op, bound);
+                    var read = await authorizer.CheckTenantAsync(state, run.Admission.ExecutionContext!.AgentPrincipalId,
+                        PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
+                    if (!read.Allowed) unavailable = "executor_read_required";
+                }
+                else unavailable = TenantLocalEffectRules.Eligibility(run, effective.Agent, effective.Configuration.Configuration.Definition);
                 if (unavailable is null)
                 {
-                    var eligible = await operations.Evaluate(state, run.Admission.ExecutionContext!, TenantApprovalRequest.Permission, scope, ct).ConfigureAwait(false);
+                    var eligible = await operations.Evaluate(state, run.Admission.ExecutionContext!, r.Permission, scope, ct).ConfigureAwait(false);
                     if (eligible.Decision == OperationDecisionKind.Denied || r.Kind == ApprovalKind.Review && eligible.ApprovalKind == ApprovalKind.ExceptionalGrant)
                         unavailable = "approval_authority_changed";
                     else if (!await operations.QualifiesAsync(state, r.OriginalInitiatorPrincipalId, human.PrincipalId,
-                        PermissionCatalog.Get(TenantApprovalRequest.Permission), scope, r.Kind, ct).ConfigureAwait(false))
+                        PermissionCatalog.Get(r.Permission), scope, r.Kind, ct).ConfigureAwait(false))
                         unavailable = policy.IndependentReview && human.PrincipalId == r.OriginalInitiatorPrincipalId ? "independent_reviewer_required" : "approver_unqualified";
                 }
             }
@@ -81,6 +90,10 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.CredentialCheck is { } check)
+            return [new("credential", snapshot?.Credential?.DisplayName, snapshot?.Credential?.DisplayName, snapshot?.Credential is not null, snapshot?.Credential is not null),
+                new("bindingReference", check.Reference, check.Reference),
+                new("connectionCheck", snapshot?.Credential?.ConnectionStatus, "Verify the bound Google connection; refresh grant rotation or reconnection may be recorded.", snapshot?.Credential is not null)];
         if (op.Persona is { } persona)
             return [new("name", snapshot?.BeforePersona?.Name, persona.Name, snapshot?.BeforePersona is not null),
                 new("role", snapshot?.BeforePersona?.Role, persona.Role, snapshot?.BeforePersona is not null),
