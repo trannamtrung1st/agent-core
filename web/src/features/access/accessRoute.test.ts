@@ -10,7 +10,7 @@ describe('canonical access navigation', () => {
     expect(parseAccessRoute(tenantAgentPath(tenant, tenant, 'connections'))).toMatchObject({ page: 'agents', tenantId: tenant, instanceId: tenant, instancePage: 'connections' });
     expect(canonicalAppUrl(tenantAgentPath(tenant, tenant, 'connections'))).toBe(tenantAgentPath(tenant, tenant, 'connections'));
     expect(parseAccessRoute(tenantAgentPath(tenant, tenant, 'connections') + '/other')?.view).toBe('not-found');
-    for (const instancePage of ['profile', 'version', 'settings', 'execution-budgets', 'self-management', 'unattended-model'] as const) {
+    for (const instancePage of ['profile', 'version', 'skills', 'settings', 'execution-budgets', 'self-management', 'unattended-model'] as const) {
       const path = tenantAgentPath(tenant, tenant, instancePage);
       expect(parseAccessRoute(path)).toMatchObject({ tenantId: tenant, instanceId: tenant, instancePage });
       expect(canonicalAppUrl(path)).toBe(path);

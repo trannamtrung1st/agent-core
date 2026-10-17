@@ -49,6 +49,9 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
         int page = 0, int pageSize = 30, string? search = null, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourceEditorAsync(human.PrincipalId, tenant, instance, page, pageSize, search, token), ct);
 
+    public ValueTask<TenantAgentSkillDetail> ReadSkillDetailAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSkillDetailAsync(human.PrincipalId, tenant, instance, key, token), ct);
+
     public ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourceContentAsync(human.PrincipalId, tenant, instance, key, token), ct);
 

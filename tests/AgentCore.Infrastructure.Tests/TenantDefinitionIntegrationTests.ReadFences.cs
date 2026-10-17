@@ -8,7 +8,7 @@ public sealed partial class TenantDefinitionIntegrationTests
 {
     public static IEnumerable<object[]> AgentConfigurationReadRaces =>
         from sqlite in new[] { false, true }
-        from read in new[] { "effective", "settings", "budgets", "management", "skills", "resources", "editor", "controls", "versions", "version-preview", "skill-editor", "resource-editor" }
+        from read in new[] { "effective", "settings", "budgets", "management", "skills", "resources", "editor", "controls", "versions", "version-preview", "skill-editor", "resource-editor", "skill-detail" }
         from change in new[] { "persona", "security", "logout" }
         select new object[] { sqlite, read, change };
 
@@ -39,6 +39,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 case "budgets": await reads.ReadBudgetsAsync(owner.TenantId, id, human); break;
                 case "management": await reads.ReadManagementAsync(owner.TenantId, id, human); break;
                 case "skills": await reads.ReadSkillsAsync(owner.TenantId, id, human); break;
+                case "skill-detail": await reads.ReadSkillDetailAsync(owner.TenantId, id, human, "builtin:configuration-assistance.v1"); break;
                 case "skill-editor": await reads.ReadSkillEditorAsync(owner.TenantId, id, human); break;
                 case "resource-editor": await reads.ReadResourceEditorAsync(owner.TenantId, id, human); break;
                 case "resources": await reads.ReadResourcesAsync(owner.TenantId, id, human); break;

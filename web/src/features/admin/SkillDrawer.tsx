@@ -12,12 +12,13 @@ export type SkillDrawerValue = {
 /** Shared skill authoring and inspection; callers retain ownership and persistence. */
 export function SkillDrawer({ open, title: incomingTitle, value: incomingValue, definition: incomingDefinition = false, readOnly: incomingReadOnly = false, busy = false,
   context: incomingContext, notice: incomingNotice, contentLabel: incomingContentLabel, onSave, onClose, afterOpenChange, focusTriggerAfterClose = true,
-  validateId, idReadOnly: incomingIdReadOnly = false }: {
+  validateId, idReadOnly: incomingIdReadOnly = false, onValuesChange, disabled = false, saveDisabled = false }: {
   open: boolean; title: string; value: SkillDrawerValue | null; definition?: boolean;
   readOnly?: boolean; busy?: boolean; context: ReactNode; notice?: ReactNode; contentLabel: string;
   onSave?: (value: SkillDrawerValue) => void | Promise<void>; onClose: () => void;
   afterOpenChange?: (visible: boolean) => void; focusTriggerAfterClose?: boolean;
   validateId?: (id: string) => string | null; idReadOnly?: boolean;
+  onValuesChange?: () => void; disabled?: boolean; saveDisabled?: boolean;
 }) {
   // Callers can clear their selection immediately; retain the last open presentation
   // so the closing animation never switches mode, title or content.
@@ -49,7 +50,7 @@ export function SkillDrawer({ open, title: incomingTitle, value: incomingValue, 
     styles={{ wrapper: { maxWidth: '100vw' }, body: { padding: token.padding }, footer: { padding: token.padding } }}
     footer={<Flex justify="flex-end" gap={token.paddingXS}>
       <Button ref={closeButton} disabled={busy} onClick={onClose}>{readOnly ? 'Close inspection' : 'Cancel editing'}</Button>
-      {!readOnly && <Button type="primary" aria-label="Save Skill" htmlType="submit" form={formId} loading={busy} disabled={busy} aria-busy={busy}>Save Skill</Button>}
+      {!readOnly && <Button type="primary" aria-label="Save Skill" htmlType="submit" form={formId} loading={busy} disabled={busy || disabled || saveDisabled} aria-busy={busy}>Save Skill</Button>}
     </Flex>}>
     <section aria-label={contentLabel}><Flex vertical gap={token.padding}>
       <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{context}</Typography.Paragraph>
@@ -66,7 +67,7 @@ export function SkillDrawer({ open, title: incomingTitle, value: incomingValue, 
         ]} />
         <Flex vertical gap={token.paddingXS}><Typography.Title level={5} style={{ margin: 0 }}>Procedure</Typography.Title>
           <Typography.Paragraph style={textStyle}>{value.procedure}</Typography.Paragraph></Flex>
-      </> : <Form id={formId} name={formId} form={form} layout="vertical" disabled={busy} onFinish={onSave} onFinishFailed={failure=>showAdminFormValidation(message,form,failure)}>
+      </> : <Form id={formId} name={formId} form={form} layout="vertical" disabled={busy || disabled} onValuesChange={onValuesChange} onFinish={onSave} onFinishFailed={failure=>showAdminFormValidation(message,form,failure)}>
         <Form.Item name="id" label="Skill ID" extra={idReadOnly ? 'The ID stays fixed after creation.' : `Optional. Empty generates from the Skill name. Unique within this ${definition ? 'Definition' : 'Agent Instance'}.`}
           rules={idReadOnly ? [] : [{ validator: (_, value: string) => {
             const id = (value ?? '').trim();

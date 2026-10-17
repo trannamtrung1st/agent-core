@@ -1,8 +1,14 @@
 # Frontend Implementation Specification
 
+## Tenant Instance Skills
+
+`/t/{tenantId}/admin/agents/{instanceId}/skills` uses the scoped editor collection and exact item detail under the existing original-human read facade. Shared Instance heading/panels, native search/pagination and wrapping rows expose readable origins, effective/stored choices, capabilities and copy provenance. The shared Skill Drawer owns fields/inspection; feature transport owns exact witnesses, independent drafts, explicit reload/discard, stale recovery and acknowledged-save retirement without replay. Exact read loss removes private detail and refreshes cached rows. No owner/global service fallback is permitted.
+
+Inherited/Built-in content remains read-only, typed item manage governs local edits/choices, new destinations require tenant typed read/manage, and Customize/Delete/Reset confirmations identify Skill, agent and organization. The shared feedback-placement owner recognizes `data-feedback-actions` groups so hover-paused native notices cannot cover row controls. Optional Drawer/heading props preserve existing consumers. [Interaction contract](19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract), [focused runtime evidence](reports/tenant-instance-skills-ui-verification-2026-10-18.md). Resources and broader cutover remain pending.
+
 ## Tenant Instance Skills and Resources prerequisite
 
-The canonical child editor APIs supply safe Instance identity, permission-filtered metadata search/paging, current witnesses and exact typed action hints without requiring IAM-inspector permissions. The [Skills/Resources interaction contract](19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract) owns the separate scoped pages, shared Skill Drawer/resource fields, deliberate drafts/confirmations, inherited/local distinctions and responsive recovery. This backend prerequisite does not implement or visually accept the tenant Skills/Resources pages. Rich preview/bulk adapters require independent tenant boundaries; existing global routes must never supply a frontend fallback.
+The canonical child editor APIs supply safe Instance identity, permission-filtered metadata search/paging, current witnesses and exact typed action hints without requiring IAM-inspector permissions. The [Skills/Resources interaction contract](19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract) owns the separate scoped pages, shared Skill Drawer/resource fields, deliberate drafts/confirmations, inherited/local distinctions and responsive recovery. This backend prerequisite alone does not establish browser acceptance; the Skills successor above supplies that page. Resources remains pending. Rich preview/bulk adapters require independent tenant boundaries; existing global routes must never supply a frontend fallback.
 
 ## Tenant Instance Definition version
 

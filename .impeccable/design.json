@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-17T18:17:49.644612+00:00",
+  "generatedAt": "2026-10-17T18:51:02.405150+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -472,6 +472,29 @@
         "captureReview": "Implementation and fresh finish reviewers inspected all 19 existing current captures: top/lower review at 1440/1024/768/390/320px, desktop/narrow confirmation and legacy shared preview, 320px archived, desktop/narrow read-only and 320px revoked-source. Existing 48rem column, 16px section gap, compact headings/actions and full key wrapping; no horizontal page overflow at the five review widths. Documenter sampled shipped source and took no new captures or app checks.",
         "visualAcceptanceLimits": "Loading, transient errors, malformed acknowledgements and stale presentation were not visually accepted from these captures. Functional checks, malformed-ack recovery and stale/revocation journeys are separately scoped by the verification report.",
         "openScope": "Skills/resources UI, Sandbox/resource/effect families, voice/rich delivery, autonomous origins and obsolete-authority/schema consolidation. Full proposal remains active; no CI or milestone acceptance is claimed."
+      },
+      "skillsDocumentationRefresh": {
+        "refreshedAt": "2026-10-17T18:51:02.405150+00:00",
+        "scope": "Bounded October 18 merge of observed tenant Instance Skills presentation and shared feedback clearance for explicit row actions. Normative frontmatter, component previews, all historical source hashes/provenance and global buildPath are preserved. No broad drift repair, re-extraction, app checks or runtime acceptance by this documentation pass.",
+        "sourceSha256": {
+          ".agents/context/DESIGN.md": "9d7b2cd73ca8fd1a011089b9e731f4ac7aebd0e46e59267e714a609ceb606253",
+          ".agents/context/PRODUCT.md": "95c982fd825f3cc4521928b273b11f9a7079976e8af1cc5aad9ed340f4788746",
+          ".impeccable/surfaces/web-src-features-access-tenantagentskills-tsx.md": "ed89a34488a563fc2b82a64a85171da27089c80a59672dc79f1e70766207b30a",
+          "web/src/features/access/TenantAgentSkills.tsx": "dd720558d7bbb83b6265244d9a566950edb1aedab99296c42b05fa8323542d12",
+          "web/src/features/access/TenantAgentHeading.tsx": "aeeaa465250d1a897b21385aebd088d6b6563ec7cbac67b70fba5a79cb2a2ff6",
+          "web/src/features/admin/SkillDrawer.tsx": "2203453ce6b24c87edc3a18514c29cb6643650af01e5c376b8faac583f8c55d4",
+          "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
+          "web/src/app/appFeedbackPlacement.ts": "009e66a7106c1b6a25ffc75ffa83e00bc939650806ac33f26cf2997ee19861f8",
+          "web/src/app.css": "3b86dd330de8b074f0bc2f5231e8caac428147e8e9d1a56a2485495a46b63a5f",
+          "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66"
+        },
+        "evidenceRecords": [
+          "docs/reports/tenant-instance-skills-ui-verification-2026-10-18.md"
+        ],
+        "captureDirectory": ".playwright-mcp/tenant-skills-ui-20261018",
+        "captureReview": "Implementation and fresh finish reviewers individually opened all 18 current captures: collection at 1440/1024/768/390/320px, desktop/narrow editor and confirmation, narrow Built-in inspection, desktop provenance, narrow shared Definition Drawer, archived, read-only top/lower and denied views. No horizontal page overflow across five collection widths; existing 48rem column and 16px parent section gap. Documenter sampled target and shared source; no new captures.",
+        "visualAcceptanceLimits": "Native internal main/Drawer scrolling leaves complete fields/procedure and lower Drawer content uncaptured. Loading, transient, stale and malformed acknowledgements were not visually accepted. Functional evidence, including recovery and revoked access, is separately scoped by the verification report.",
+        "openScope": "Resources UI/rich/bulk adapters, Sandbox/resource/effect families, voice/rich delivery, autonomous origins, obsolete-authority/schema consolidation and earlier SQLite preference follow-up. Full proposal remains active; no CI or milestone acceptance."
       }
     }
   },
@@ -769,7 +792,7 @@
       },
       {
         "name": "The Bounded Feedback Rule",
-        "body": "Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack 16px above the bottom safe area, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Use an opaque `{colors.elevated}` surface and one 1px `{colors.borderStrong}` outline, without an additional shadow. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. [AppShell's shared placement hook](../../web/src/app/appFeedbackPlacement.ts) raises the stack only when its default position would overlap a visible footer, composer or sticky configuration action frame, keeping an 8px gap above that surface. The frontmost dialog owns clearance; covered page controls do not reserve space. Closing, scrolling, resizing and growing inputs recalculate placement. The stack uses normal flow and scrolls locally within half the dynamic viewport or the smaller available space above actions. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains after dismissal. Do not restore a fixed 96px gap across every page.",
+        "body": "Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack 16px above the bottom safe area, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Use an opaque `{colors.elevated}` surface and one 1px `{colors.borderStrong}` outline, without an additional shadow. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. [AppShell's shared placement hook](../../web/src/app/appFeedbackPlacement.ts) raises the stack only when its default position would overlap a visible footer, composer, sticky configuration action frame or explicitly marked row actions (`data-feedback-actions`), keeping an 8px gap above that surface. The frontmost dialog owns clearance; covered page controls do not reserve space. Closing, scrolling, resizing and growing inputs recalculate placement. The stack uses normal flow and scrolls locally within half the dynamic viewport or the smaller available space above actions. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains after dismissal. Do not restore a fixed 96px gap across every page.",
         "section": "components"
       }
     ],

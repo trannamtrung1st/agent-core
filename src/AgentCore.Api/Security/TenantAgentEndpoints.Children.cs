@@ -14,6 +14,12 @@ public static partial class TenantAgentEndpoints
     public sealed record ResourceCopy(long ExpectedRevision, long ExpectedInstanceRevision, string LogicalPath);
     private static void MapChildren(RouteGroupBuilder group)
     {
+        group.MapGet("/agents/{instanceId:guid}/skills/{key}/editor", (Guid instanceId, string key, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var a = IdentityHttp.TenantContext(http);
+            var value = await service.ReadSkillDetailAsync(a.TenantId, instanceId, Human(http), key, ct).ConfigureAwait(false);
+            return Results.Json(new { agent = Safe(value.Agent), item = new { skill = Mapping.AdminHttpMapping.ToInstanceSkill(value.Item.Skill), value.Item.CanManage, value.Item.CanCustomize }, value.SecurityRevision });
+        }));
         group.MapGet("/agents/{instanceId:guid}/skills/editor", (Guid instanceId, int? page, int? pageSize, string? search, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);

@@ -32,6 +32,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.True(skills.CanCreate); Assert.True(resources.CanCreate); Assert.True(skills.AllReadable); Assert.True(resources.AllReadable);
         Assert.Equal(before, skills.SecurityRevision); Assert.Equal(before, resources.SecurityRevision);
         Assert.Equal(file.InstanceRevision, skills.Agent.Instance.Revision); Assert.Equal(file.InstanceRevision, resources.Agent.Instance.Revision);
+        var exact = await reads.ReadSkillDetailAsync(owner.TenantId, id, human, skill.Skill.Key);
+        Assert.Equal(skills.SecurityRevision, exact.SecurityRevision); Assert.Equal(skills.Agent.Instance.Revision, exact.Agent.Instance.Revision);
+        Assert.Equal(skill.Skill.Procedure, exact.Item.Skill.Procedure); Assert.True(exact.Item.CanManage);
         var s = Assert.Single(skills.Items); Assert.True(s.CanManage); Assert.False(s.CanCustomize); Assert.Equal(skill.Skill.Key, s.Skill.Key);
         var r = Assert.Single(resources.Items); Assert.True(r.CanManage); Assert.True(r.CanDelete); Assert.False(r.CanCopy); Assert.Equal(file.Resource!.Key, r.Resource.Key);
         Assert.Equal(1, skills.Total); Assert.Equal(1, resources.Total);

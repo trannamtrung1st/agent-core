@@ -66,6 +66,10 @@ public sealed partial class TenantAgentAccessTests
             Assert.Equal(1, view.GetProperty("total").GetInt32()); Assert.False(view.GetProperty("canCreate").GetBoolean()); Assert.False(view.GetProperty("allReadable").GetBoolean());
             Assert.DoesNotContain("private-sentinel", view.GetRawText());
         }
+        var detail = await Json(await member.GetAsync(agent + "/skills/" + Uri.EscapeDataString(visibleSkill.GetProperty("key").GetString()!) + "/editor"));
+        Assert.Equal("Compare totals.", detail.GetProperty("item").GetProperty("skill").GetProperty("procedure").GetString());
+        Assert.True(detail.GetProperty("item").GetProperty("canManage").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync(agent + "/skills/instance%3Aprivate-sentinel/editor")).StatusCode);
         Assert.True(skills.GetProperty("items")[0].GetProperty("canManage").GetBoolean());
         Assert.Equal("Instance", skills.GetProperty("items")[0].GetProperty("skill").GetProperty("origin").GetString());
         Assert.Equal("OnDemand", skills.GetProperty("items")[0].GetProperty("skill").GetProperty("projection").GetString());

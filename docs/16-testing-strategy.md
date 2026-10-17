@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant Instance Skills focused browser regression
+
+Use `pnpm run test:e2e:tenant-instance-skills` with free isolated Synthetic ports. Cover inherited paging/search, inspection/Escape/focus, choices/reset, atomic Customize, local create/edit/delete, dirty Keep editing, stale exact-item refresh with retained draft and permitted read-only/revoked content without IAM-inspector requests. No owner/global fallback requests or forced clicks are permitted. Include saved-feedback obstruction at narrow row actions: use the shared feedback-placement owner's `data-feedback-actions` markers instead of page offsets. Component checks cover acknowledged malformed results/read recovery without replay, discard and late scope abort; retain shared Drawer/feedback consumers and build verification. [Executed evidence](reports/tenant-instance-skills-ui-verification-2026-10-18.md) separates actual functional checks, bounded captures and remaining visual/full-proposal gaps.
+
 ## Tenant Instance child editor read regression
 
 Verify coherent original-human Skill/resource editor reads through InMemory/SQLite and authenticated HTTP. Assert permission filtering before search/count/paging, deterministic ordering, exact action hints without IAM-inspector permission, independent local resource delete, no sibling creation from item grants, inherited Customize/Copy destination requirements, readable dependency filtering and archived inspection without writes. Read → stale command → refresh → explicit save must preserve exact witnesses. Logout/replacement login and concurrent parent/security changes must reject a captured editor projection. Empty/no-match and invalid query bounds need distinct evidence. These backend checks do not establish tenant Skills/Resources browser acceptance; the [interaction contract](19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract) precedes that frontend work.

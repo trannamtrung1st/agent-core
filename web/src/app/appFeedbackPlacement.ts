@@ -46,7 +46,7 @@ export function useAppFeedbackPlacement() {
       const drawer = visible(".ant-drawer-section").at(-1);
       const controls = modal ? Array.from(modal.querySelectorAll<HTMLElement>(".ant-modal-footer, .ant-modal-confirm-btns"))
         : drawer ? Array.from(drawer.querySelectorAll<HTMLElement>(".ant-drawer-footer"))
-        : visible(".composer-shell, .admin-owner-actions");
+        : visible(".composer-shell, .admin-owner-actions, [data-feedback-actions]");
       const notices = Array.from(list.querySelectorAll<HTMLElement>(".ant-message-notice"));
       const targets = new Set<Element>([list, ...controls, ...notices]);
       for (const target of observed) if (!targets.has(target)) { resize?.unobserve(target); observed.delete(target); }

@@ -2,6 +2,8 @@
 
 ## Tenant Instance child editor reads
 
+`ReadSkillDetailAsync` supplies one exact readable Skill with safe Instance/current security witnesses and the same action hints, independently of list search/paging. It uses the shared filtered catalog under the original-human/final revision fence. Missing or unreadable keys deny without exposing a protected item. An open frontend draft can refresh this exact item without depending on the collection page.
+
 `TenantAgentReadService.ReadSkillEditorAsync` and `ReadResourceEditorAsync` compose the existing child-read owners under the original authenticated human/session and final Instance/security fence. Each returns the actual `TenantAgent`, readable paged items, visible matching total, page/page size, security revision, `CanCreate` and `AllReadable`. Skill items pair the existing `InstanceSkillView` with `CanManage`/`CanCustomize`; resource items pair `InstanceResourceView` with `CanManage`/`CanDelete`/`CanCopy`. The API maps the agent through the existing safe projection.
 
 Shared private catalogs preserve existing child read projections and dependency filtering. Authorization precedes search, count and pagination; case-insensitive metadata search is bounded to 128 UTF-16 units, page to 0–100000 and page size to 1–100 (default 30). Stable name/path and key ordering avoids page changes from incidental backing order. `AllReadable` describes inherited tenant-wide read permission, not hidden counts. No IAM-inspector permission or client-selected principal is needed for these advisory action hints.

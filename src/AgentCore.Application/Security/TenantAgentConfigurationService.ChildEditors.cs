@@ -7,6 +7,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record TenantAgentSkillItem(InstanceSkillView Skill, bool CanManage, bool CanCustomize);
+public sealed record TenantAgentSkillDetail(TenantAgent Agent, TenantAgentSkillItem Item, long SecurityRevision);
 public sealed record TenantAgentSkillEditor(TenantAgent Agent, IReadOnlyList<TenantAgentSkillItem> Items, int Total,
     int Page, int PageSize, long SecurityRevision, bool CanCreate, bool AllReadable);
 public sealed record TenantAgentResourceItem(InstanceResourceView Resource, bool CanManage, bool CanDelete, bool CanCopy);
@@ -16,6 +17,14 @@ public sealed record TenantAgentResourceEditor(TenantAgent Agent, IReadOnlyList<
 public sealed partial class TenantAgentConfigurationService
 {
     private sealed record ChildCatalog<T>(TenantAgent Agent, T[] Items, TenantSecurityState State, bool AllReadable);
+
+    public async ValueTask<TenantAgentSkillDetail> ReadSkillDetailAsync(Guid actor, Guid tenant, Guid id, string key, CancellationToken ct = default)
+    {
+        var catalog = await ReadSkillCatalog(actor, tenant, id, ct).ConfigureAwait(false);
+        var skill = catalog.Items.SingleOrDefault(item => item.Key == key) ?? throw new AccessDeniedException("resource_unavailable");
+        return new(catalog.Agent, new(skill, await CanChangeChild(catalog.State, actor, catalog.Agent, "skills.manage", key, ct).ConfigureAwait(false),
+            skill.Origin == SkillOrigin.Definition && await CanCreateChild(catalog.State, actor, catalog.Agent, "skills", ct).ConfigureAwait(false)), catalog.State.Tenant.Revision);
+    }
 
     public async ValueTask<TenantAgentSkillEditor> ReadSkillEditorAsync(Guid actor, Guid tenant, Guid id,
         int page = 0, int pageSize = 30, string? search = null, CancellationToken ct = default)

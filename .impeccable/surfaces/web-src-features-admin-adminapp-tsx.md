@@ -180,3 +180,5 @@ GENERIC LINUX RUNTIME (2026-10-15): Admin policy/setup owners retain the current
 ## State, isolation and canonical Workspace
 
 State observations retain read-only counts, freshness and partial failures with local Retry. Isolation, Memory and Voice reuse one reviewed draft and shared preview; Definition and Instance policy grids share spacing and provenance. Preview labels use the common 12rem desktop column and stack below 768px. Preset replacement preserves native confirmation/focus, and mobile controls remain reachable. Workspace uses current path breadcrumbs, folder-local search/paging, sampled usage and live-file reload; obsolete opaque file IDs and file-import stages are not presentation patterns. The dated design sync report owns this pass’s evidence.
+
+Tenant Skills continues these shared owners: optional Skill Drawer dirty/field/Save controls leave existing defaults intact. Explicit `data-feedback-actions` groups participate in shared native feedback clearance without surface styles or per-page offsets. The scoped Skills brief and dated verification report own its current evidence and limits.
