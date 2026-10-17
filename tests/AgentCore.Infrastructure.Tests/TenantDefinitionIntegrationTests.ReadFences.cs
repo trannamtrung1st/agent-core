@@ -8,7 +8,7 @@ public sealed partial class TenantDefinitionIntegrationTests
 {
     public static IEnumerable<object[]> AgentConfigurationReadRaces =>
         from sqlite in new[] { false, true }
-        from read in new[] { "effective", "settings", "budgets", "management", "skills", "resources", "editor", "controls" }
+        from read in new[] { "effective", "settings", "budgets", "management", "skills", "resources", "editor", "controls", "versions", "version-preview" }
         from change in new[] { "persona", "security", "logout" }
         select new object[] { sqlite, read, change };
 
@@ -40,6 +40,8 @@ public sealed partial class TenantDefinitionIntegrationTests
                 case "management": await reads.ReadManagementAsync(owner.TenantId, id, human); break;
                 case "skills": await reads.ReadSkillsAsync(owner.TenantId, id, human); break;
                 case "resources": await reads.ReadResourcesAsync(owner.TenantId, id, human); break;
+                case "versions": await reads.ReadVersionsAsync(owner.TenantId, id, human); break;
+                case "version-preview": await reads.PreviewVersionAsync(owner.TenantId, id, human, 1); break;
                 case "controls": await reads.ReadControlsAsync(owner.TenantId, id, human); break;
                 case "editor": await reads.ReadEditorAsync(owner.TenantId, id, human); break;
                 default: throw new InvalidOperationException(read);

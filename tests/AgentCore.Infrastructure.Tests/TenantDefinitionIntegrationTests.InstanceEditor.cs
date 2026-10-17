@@ -91,7 +91,12 @@ public sealed partial class TenantDefinitionIntegrationTests
     private sealed class AfterEditorDefinition(IBuiltInAgentDefinitionStore inner, Func<Task> after) : IBuiltInAgentDefinitionStore
     {
         private Func<Task>? pending = after;
-        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default) => inner.ListAsync(cancellationToken);
+        public async ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default)
+        {
+            var values = await inner.ListAsync(cancellationToken);
+            if (Interlocked.Exchange(ref pending, null) is { } action) await action();
+            return values;
+        }
         public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken cancellationToken = default)
         {
             var value = await inner.GetAsync(id, version, cancellationToken);

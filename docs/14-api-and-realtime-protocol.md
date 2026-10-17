@@ -1,5 +1,16 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Definition version review reads
+
+Under `/api/v2/tenants/{tenantId}/agents/{instanceId}`:
+
+| GET suffix | Contract |
+| --- | --- |
+| `/versions?page=0&pageSize=30` | Exact current human and owned `agents.read`; owned sources additionally need exact `agent-definitions.read`. Returns `{ agent, items:[{version,status,metadataRevision}], total, page, pageSize, securityRevision, canAdopt }`. Only the Instance's exact source appears, newest first. Page is 0–100000 and pageSize 1–100. Deprecated owned publications remain labeled history; shipped versions are Active with null metadata revision. |
+| `/active-version/preview?version=N` | Same read boundary; exact positive target from the same source, Active only. Returns `{ preview, securityRevision, targetPublicationRevision, childAccess, canAdopt }`. `preview` retains `instanceRevision`, current/target versions, changed defaults, preserved overrides, new/changed/removed inherited keys and activation notice. Child keys are independently permission-filtered, with no hidden totals. A compatibility rejection returns safe `400 invalid_request`; missing/deprecated target is `403 definition_unavailable`. |
+
+Both are no-store reads with the original-session and final security/Instance fences. Unavailable original human returns `403 initiator_unavailable`; capture drift returns `409 stale_revision`. `canAdopt` requires an Active Instance and exact current update access, independently of IAM inspection; it is only a hint. Reads do not advance revisions, initialize stored Skill states, reconcile Automation status or execute effects. `PUT .../active-version` remains the independently authorized explicit command with `{ version, expectedRevision, expectedInstanceRevision }`; it recomputes compatibility and checks actual commit witnesses. A changed preview requires fresh review, never an automatic mutation retry.
+
 ## Tenant Instance execution controls HTTP read
 
 `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/configuration-controls` requires the original current cookie human and exact `agents.read`. Its no-store response is `{ agent, budgets, management, securityRevision, canUpdate }`. `agent` is the existing safe projection; `budgets` and `management` retain their existing typed read shapes and matching Instance/security witnesses. `canUpdate` checks exact `agents.update` independently of IAM inspection. Concurrent capture changes return `409 stale_revision`; unavailable original human/read authority fails closed, including logout followed by a replacement login.
@@ -12,7 +23,7 @@ Canonical human agent mutations retain the original cookie-derived Account/sessi
 
 ## Canonical agent GET freshness
 
-All canonical agent reads derive the original human from the authenticated cookie and tenant context, then revalidate that same Account/session/Principal after protected I/O. This applies to `/agent-templates`, `/agents`, `/agents/{id}`, and the exact Instance `/effective-config`, `/settings`, `/execution-budgets`, `/self-management`, `/skills`, `/resources`, `/resources/{key}/content`, `/editor` and `/configuration-controls` suffixes under `/api/v2/tenants/{tenantId}`. Logout or replacement of the original session during a read returns `403 initiator_unavailable`; concurrent security/Instance changes return `409 stale_revision` rather than a mixed snapshot. Clients recover with an explicit new read using current authentication. Existing JSON/file shapes, paging, no-store headers and permission requirements are preserved. The fence does not authorize a write or retry a mutation.
+All canonical agent reads derive the original human from the authenticated cookie and tenant context, then revalidate that same Account/session/Principal after protected I/O. This applies to `/agent-templates`, `/agents`, `/agents/{id}`, and the exact Instance `/effective-config`, `/settings`, `/execution-budgets`, `/self-management`, `/skills`, `/resources`, `/resources/{key}/content`, `/editor`, `/configuration-controls`, `/versions` and `/active-version/preview` suffixes under `/api/v2/tenants/{tenantId}`. Logout or replacement of the original session during a read returns `403 initiator_unavailable`; concurrent security/Instance changes return `409 stale_revision` rather than a mixed snapshot. Clients recover with an explicit new read using current authentication. Existing JSON/file shapes, paging, no-store headers and permission requirements are preserved. The fence does not authorize a write or retry a mutation.
 
 ## Tenant Instance editor HTTP read
 

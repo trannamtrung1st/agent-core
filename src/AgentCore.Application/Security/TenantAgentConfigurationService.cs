@@ -62,20 +62,10 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
         if (current.Revision != instanceRevision) throw new SecurityConflictException("stale_revision");
-        if (Guid.TryParse(current.DefinitionId, out var definitionId))
-            await authorizer.RequireAsync(actor, "agent-definitions.read", AccessScope.ForResource(tenant, "definition", definitionId.ToString("D")), token).ConfigureAwait(false);
-        var (target, metadataRevision, status) = await Definition(tenant, current.DefinitionId, version, token).ConfigureAwait(false);
-        if (status != "Active") throw new AccessDeniedException("definition_unavailable");
-        var effective = InstanceSettingsResolver.Resolve(target, current.SettingsOverrides);
-        _ = SessionModelBinder.PinDefault(models, effective);
-        var skills = new InstanceSkillSnapshot(snapshot.Skills.DefinitionStates.Concat(target.SkillList
-            .Where(s => !snapshot.Skills.DefinitionStates.Any(old => old.DefinitionSkillId == s.Id))
-            .Select(s => new AgentDefinitionSkillState(id, s.Id, null, 1, time.GetUtcNow()))).ToArray(), snapshot.Skills.InstanceSkills);
-        _ = EffectiveSkillCatalogResolver.Resolve(effective, skills);
-        _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, target, token).ConfigureAwait(false), snapshot.Resources, skills);
-        var policy = await automationPolicy.PlanAsync(current, effective, time.GetUtcNow(), token).ConfigureAwait(false);
+        var prepared = await PrepareVersionAsync(actor, tenant, snapshot, version, token).ConfigureAwait(false);
+
         var updated = await Commit(actor, tenant, state, new(id, instanceRevision, ActiveVersion: version,
-            ExpectedPublicationRevision: metadataRevision, DefinitionSkills: target.SkillList, AutomationPolicyChanges: policy), "agents.version.adopt", token, initiator).ConfigureAwait(false);
+            ExpectedPublicationRevision: prepared.MetadataRevision, DefinitionSkills: prepared.Target.SkillList, AutomationPolicyChanges: prepared.AutomationChanges), "agents.version.adopt", token, initiator).ConfigureAwait(false);
         if (sandbox is not null) await sandbox.EnforceAsync(id, token).ConfigureAwait(false);
         return updated;
     }, ct);

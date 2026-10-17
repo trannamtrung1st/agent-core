@@ -44,6 +44,12 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
     public ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourceContentAsync(human.PrincipalId, tenant, instance, key, token), ct);
 
+    public ValueTask<TenantAgentVersionCatalog> ReadVersionsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, int page = 0, int pageSize = 30, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadVersionsAsync(human.PrincipalId, tenant, instance, page, pageSize, token), ct);
+
+    public ValueTask<TenantAgentVersionPreview> PreviewVersionAsync(Guid tenant, Guid instance, TenantSessionInitiator human, int version, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.PreviewVersionAsync(human.PrincipalId, tenant, instance, version, token), ct);
+
     public ValueTask<TenantAgentControlsState> ReadControlsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
         Fenced<TenantAgentControlsState>(tenant, instance, human, async (state, agent, token) =>
         {

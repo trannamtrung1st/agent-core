@@ -1,5 +1,7 @@
 # Frontend Implementation Specification
 
+The tenant version-review backend supplies exact-source `/versions` and `/active-version/preview` reads with original-human/revision fences and filtered child details. The separate tenant version page is still pending; implement the [version interaction contract](19-multi-tenant-iam-ux.md#instance-definition-version-interaction-contract) using these reads and the existing explicit adoption command. Backend verification does not establish browser acceptance.
+
 ## Tenant Instance execution controls
 
 Canonical Instance destinations `/t/{tenantId}/admin/agents/{instanceId}/{execution-budgets|self-management|unattended-model}` use `TenantAgentControls`, the coherent `/configuration-controls` projection and existing tenant mutation endpoints. These pages share `TenantAgentHeading` with Profile/Settings, `AgentConfigurationPanel`, native Ant Design field owners and incumbent bounded forms/token gaps. They require no IAM-inspector or legacy global-catalog request.

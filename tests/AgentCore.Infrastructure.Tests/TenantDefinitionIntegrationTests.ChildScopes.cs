@@ -78,9 +78,20 @@ public sealed partial class TenantDefinitionIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => f.Iam.TrySaveTenantAsync(foreignState with { Tenant = foreignState.Tenant with { Revision = foreignState.Tenant.Revision + 1 }, Assignments = foreignState.Assignments.Append(fabricated).ToArray() },
             foreignState.Tenant.Revision, f.Audit(foreign.Tenant.TenantId, foreign.Users.Single().PrincipalId, id)).AsTask());
         var fork = await f.Service.ForkAsync(owner.OwnerPrincipalId, owner.TenantId, definitionId, 1, await Revision());
-        fork = await f.Service.UpdateAsync(owner.OwnerPrincipalId, owner.TenantId, fork.DraftId, fork.Candidate with { Skills = [] }, await Revision(), fork.Revision);
+        fork = await f.Service.UpdateAsync(owner.OwnerPrincipalId, owner.TenantId, fork.DraftId, fork.Candidate with { Skills = [new SkillSpec("future-private", "Future private procedure", "Future task", "Private future body", SkillProjection.OnDemand, true, ["chat.respond"], [])] }, await Revision(), fork.Revision);
         var removed = await f.Service.RemoveResourceAsync(owner.OwnerPrincipalId, owner.TenantId, fork.DraftId, bound.Resources[0].ResourceId, await Revision(), fork.Revision);
         await f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, fork.DraftId, await Revision(), removed.Revision);
+        await Assert.ThrowsAsync<AccessDeniedException>(() => configuration.PreviewVersionAsync(agent.PrincipalId, owner.TenantId, id, 2).AsTask());
+        var definitionGrant = await f.Access.AssignRoleAsync(owner.OwnerPrincipalId, owner.TenantId, agent.PrincipalId, reader,
+            AccessScope.ForResource(owner.TenantId, "definition", definitionId.ToString("D")), await Revision());
+        var ownerPreview = await configuration.PreviewVersionAsync(owner.OwnerPrincipalId, owner.TenantId, id, 2);
+        Assert.Contains("definition:future-private", ownerPreview.Preview.NewInheritedItems);
+        var limitedPreview = await configuration.PreviewVersionAsync(agent.PrincipalId, owner.TenantId, id, 2);
+        Assert.False(limitedPreview.CanAdopt); Assert.False(limitedPreview.ChildAccess.AllSkills); Assert.False(limitedPreview.ChildAccess.AllResources);
+        Assert.Empty(limitedPreview.Preview.NewInheritedItems);
+        Assert.Contains("definition:inherited-review", limitedPreview.Preview.RemovedInheritedItems); Assert.Contains(resourceKey, limitedPreview.Preview.RemovedInheritedItems);
+        await f.Access.RevokeAssignmentAsync(owner.OwnerPrincipalId, owner.TenantId, definitionGrant.AssignmentId, await Revision());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => configuration.ReadVersionsAsync(agent.PrincipalId, owner.TenantId, id).AsTask());
         await configuration.AdoptVersionAsync(owner.OwnerPrincipalId, owner.TenantId, id, 2, await Revision(), 1);
         var state = (await f.Iam.ReadTenantAsync(owner.TenantId))!;
         Assert.DoesNotContain(state.Assignments, a => a.AssignmentId == skillGrant.AssignmentId || a.AssignmentId == fileGrant.AssignmentId);

@@ -103,7 +103,15 @@ Settings reuses the existing Instance section editor, field controls, constraint
 
 Canonical tenant Settings supplies its own cookie/CSRF transport and model catalog to the shared editor. No legacy owner, provider-secret, Sandbox profile or state-isolation route is called. The unconverted Sandbox section is explicitly unavailable until its tenant catalog/effects are implemented. Profile and Settings retain their own drafts and scoped request cancellation; dirty navigation offers Keep editing/Discard, while former scopes cannot display later results. Existing native Ant Design forms, tabs, disclosures, shared confirmation/draft feedback and 8/12/16px spacing work through 320px without a new theme, token system or generic wrapper.
 
-### Instance execution controls interaction contract
+### Instance Definition version interaction contract
+
+The version page remains a separate scoped destination from Profile/Settings. Show current agent/organization, pinned source and version, then bounded exact-source publication choices with Active/Deprecated status. Choose from actual eligible versions; no free numeric field or implicit latest adoption. Owned Definition read is separate from Instance access, and a missing source permission explains the restriction without exposing other sources. An exact reader can inspect available review information without update/IAM-inspector authority; archived Instances remain read-only.
+
+Preview is a read, never a mutation. Show the exact current/target versions, changed defaults, preserved Instance choices, new/changed/removed readable inherited items and the next-Run activation notice. Explain partial child visibility without counts or protected names. Compatibility failures block adoption and direct the person to review configuration or ask an authorized administrator. A preview whose Instance/security witnesses differ from the displayed context is stale and requires Reload and a new preview.
+
+Adopt explicitly confirms the exact agent, organization and target version with reviewed witnesses. The command reauthorizes and revalidates independently. Stale/denied/revoked responses keep the target choice for deliberate review where still readable and retire the old preview; a confirmed save followed by a read failure requires read recovery without replay. New selection, scope retirement and changed context invalidate outstanding previews/confirmations. Keyboard, Escape/focus restoration, bounded native panels and 320px wrapping follow the existing form/confirmation owners. The backend catalog/preview prerequisite is implemented separately; this contract does not claim the tenant version page has shipped.
+
+## Instance execution controls interaction contract
 
 Scoped Instance navigation adds `/execution-budgets`, `/self-management` and `/unattended-model` under `/t/{tenantId}/admin/agents/{instanceId}`. They retain exact organization/Instance ownership and use the same live read/update and active lifecycle gates as Profile/Settings. One original-human fenced read supplies matching safe agent identity, budget defaults/overrides/effective values/host limits, management defaults/effective policy/overrides and current Instance/security witnesses. A changed witness rejects the whole view. No global owner, execution-limit, policy or model fallback is used.
 

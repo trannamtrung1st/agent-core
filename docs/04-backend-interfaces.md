@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Instance version reads
+
+`TenantAgentReadService.ReadVersionsAsync` and `PreviewVersionAsync` use the existing original-human facade for exact owned Instance reads. `TenantAgentVersionCatalog` supplies bounded, newest-first versions from that Instance's exact owned Definition or immutable shipped source, the safe agent, security revision and advisory `CanAdopt`. Owned sources additionally require exact `agent-definitions.read`; shipped source lookup never falls back to global durable publications or requires unrelated Instance-creation authority.
+
+`TenantAgentVersionPreview` supplies `InstanceVersionPreview`, security/publication witnesses, child visibility flags and advisory `CanAdopt`. Catalog/preview do not authorize a mutation. Preview and adoption share one private compatibility preparation through existing settings/model, Skill/resource and Automation planners. The pure `InstanceVersionPreviewFactory` also serves the existing administrative preview. Protected child keys are filtered before diff construction; no hidden totals or item names are returned. Compatibility errors use a safe generic validation response; non-validation failures keep their status. Original human and final Instance/security checks surround all I/O.
+
 ## Tenant Instance execution controls read
 
 `TenantAgentReadService.ReadControlsAsync(tenant, instance, human, ct)` returns `TenantAgentControlsState`: safe agent identity, existing budgets (overrides, Definition defaults, effective values and host ceilings), existing management projection, one security revision and exact `CanUpdate`. Both child security/Instance witnesses must match the parent capture; the common original-human post-I/O fence then validates the whole result. Exact `agents.read` is sufficient to inspect, independently of IAM inspection; `agents.update` is an advisory action hint. Existing mutation owners still authorize and commit writes.

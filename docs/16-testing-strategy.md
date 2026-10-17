@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant version review backend regression
+
+Verify exact-source, bounded version catalogs and non-mutating previews through the original-human agent read facade. Include InMemory/SQLite preview→explicit adoption→reopen, retained overrides, changed management defaults, independently scoped child visibility, required owned-Definition read, deprecated targets, invalid pages/versions, incompatible retained configuration and non-mutating Automation planning. HTTP checks exercise catalog/preview, stale reviewed witnesses, explicit refreshed adoption, foreign and unauthenticated access, no-store, scoped reader/revocation and logout/relogin during protected I/O. Existing administrative preview consumers retain shared pure-diff coverage. This backend prerequisite does not establish the tenant version UI or full proposal acceptance.
+
 ## Tenant Instance execution controls focused regression
 
 Exercise the composed controls read under both InMemory and SQLite with matching parent/child witnesses, exact scoped read/update hints, concurrent persona/security changes and original-session logout during Definition I/O. HTTP regressions include logout/relogin, exact reader and revoked access. Frontend checks cover staged inheritance, stale-draft recovery, saved-policy locks with unrelated edits, confirmed malformed acknowledgements without replay, catalog failure/retry and read-only inspection; shared field consumers remain covered.

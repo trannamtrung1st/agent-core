@@ -14,7 +14,7 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantAgentAccessTests
 {
     public static IEnumerable<object[]> AgentReadLogoutCases =>
-        from read in new[] { "settings", "execution-budgets", "self-management", "effective-config", "skills", "resources", "editor", "configuration-controls", "agent", "inventory", "templates" }
+        from read in new[] { "settings", "execution-budgets", "self-management", "effective-config", "skills", "resources", "editor", "configuration-controls", "versions", "active-version/preview?version=1", "agent", "inventory", "templates" }
         from signInAgain in new[] { false, true }
         select new object[] { read, signInAgain };
 
@@ -28,7 +28,7 @@ public sealed partial class TenantAgentAccessTests
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var agent = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{tenant}/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
         var id = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
-        factory.CaptureAt = read switch { "agent" => "agent", "inventory" => "inventory", "templates" => "templates", _ => "definition" };
+        factory.CaptureAt = read switch { "agent" => "agent", "inventory" => "inventory", "templates" or "versions" => "templates", _ => "definition" };
         factory.AfterCapture = async () =>
         {
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/v2/auth/logout", null)).StatusCode);

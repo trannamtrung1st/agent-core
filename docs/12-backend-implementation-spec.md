@@ -1,5 +1,13 @@
 # Backend Implementation Specification
 
+## Tenant version catalog and adoption preview
+
+The existing singleton agent read facade now owns canonical version-list and exact-target preview entry points. Configuration uses tenant-owned publication summaries for GUID sources and immutable built-ins for shipped sources, filtering by the exact current Definition before sorting/paging. Owned Definition read is independent of Instance read/update. Both endpoints retain original-session and final security/Instance freshness checks; no new DI lifetime, table or resolver is introduced.
+
+`PrepareVersionAsync` is shared by canonical preview and adoption. It validates the exact active source publication, retained settings/model selection, merged Skill/resource compatibility and the bounded Automation reconciliation plan. Preview never commits that plan or any new Skill states. Adoption retains its existing lifecycle gate, original-human store fence, tenant/Instance/publication/Automation witnesses and atomic write. Compatible persona, settings, local content and choices survive adoption; current Runs remain pinned.
+
+`InstanceVersionPreviewFactory` is a pure diff projection reused by the existing administrative owner and the tenant owner. It covers typed defaults, class budgets, identity/goals/environment/metadata and management defaults, plus preserved Instance choices and inherited-item changes. Tenant projection filters Skill and resource keys independently before constructing item diffs, so scoped readers receive only current readable child keys, without hidden counts. No preview or returned revision is reusable authority.
+
 ## Tenant Instance execution controls composition
 
 `ReadControlsAsync` uses the existing original-human facade to compose budgets and management with the exact safe Instance. It compares each child Instance/security witness against the captured parent before the common final human/security/identity fence. No alternate resolver, authority snapshot or storage schema is added. The API maps this no-store composition only after success. Budget, management/freeze and unattended-model commands retain their existing service/store ownership and original-human atomic commit fences.

@@ -38,10 +38,22 @@ public sealed partial class TenantDefinitionIntegrationTests
         var changed = await configuration.UpdatePersonaAsync(owner.OwnerPrincipalId, owner.TenantId, id, persona, await Revision(), 1, 1);
         var fork = await f.Service.ForkAsync(owner.OwnerPrincipalId, owner.TenantId, definitionId, 1, await Revision());
         var edited = await f.Service.UpdateAsync(owner.OwnerPrincipalId, owner.TenantId, fork.DraftId,
-            fork.Candidate with { AgentInstructions = "New explicit owned publication." }, await Revision(), fork.Revision);
+            fork.Candidate with { AgentInstructions = "New explicit owned publication.", SelfManagement = new(HarnessManagementMode.Assisted, [HarnessManagementScope.Settings], [], []) }, await Revision(), fork.Revision);
         await f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, fork.DraftId, await Revision(), edited.Revision);
         Assert.Equal(publication.Payload.AgentInstructions, (await configuration.ReadAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Definition.AgentInstructions);
         var before = await Revision();
+        var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
+        var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
+        var reads = new TenantAgentReadService(f.Iam, (ITenantAgentStore)f.Iam, configuration, f.Identity, f.Authorizer, agents);
+        var catalog = await reads.ReadVersionsAsync(owner.TenantId, id, human, 0, 1);
+        Assert.Equal(2, catalog.Total); Assert.Equal(2, Assert.Single(catalog.Items).Version); Assert.True(catalog.CanAdopt);
+        var preview = await reads.PreviewVersionAsync(owner.TenantId, id, human, 2);
+        Assert.Equal(before, preview.SecurityRevision); Assert.Equal(changed.Instance.Revision, preview.Preview.InstanceRevision);
+        Assert.Equal(1, preview.Preview.CurrentVersion); Assert.Equal(2, preview.Preview.TargetVersion);
+        Assert.Contains("instructions.agentInstructions", preview.Preview.ChangedDefinitionFields);
+        Assert.Contains("selfManagement", preview.Preview.ChangedDefinitionFields); Assert.Contains("identity", preview.Preview.PreservedInstanceOverrides);
+        Assert.True(preview.ChildAccess.AllSkills); Assert.True(preview.ChildAccess.AllResources); Assert.True(preview.CanAdopt);
+        Assert.Equal(before, await Revision()); Assert.Equal(1, (await configuration.ReadAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Agent.Instance.ActiveVersion);
         var adopted = await configuration.AdoptVersionAsync(owner.OwnerPrincipalId, owner.TenantId, id, 2, before, changed.Instance.Revision);
         Assert.Equal(2, adopted.Instance.ActiveVersion); Assert.Equal(persona, adopted.Instance.Persona);
         Assert.Equal(before + 1, await Revision());
@@ -136,6 +148,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         var automation = await triggers.CreateAsync(new Automation(Guid.NewGuid(), triggerOwner, AutomationStatus.Active, "Review inventory",
             new FixedIntervalSchedule(60, now), now.AddMinutes(1), null, 0, 1, 1,
             new TriggerProvenance(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null));
+        var policyPreview = await configuration.PreviewVersionAsync(owner.OwnerPrincipalId, owner.TenantId, id, 1);
+        Assert.Equal(1, policyPreview.Preview.InstanceRevision);
+        Assert.Equal(AutomationStatus.Active, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Status);
+        Assert.Equal(1, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Revision);
         var reconciled = await configuration.AdoptVersionAsync(owner.OwnerPrincipalId, owner.TenantId, id, 1, state.Tenant.Revision, 1);
         Assert.Equal(2, reconciled.Instance.Revision);
         Assert.Equal(AutomationStatus.SuspendedPolicy, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Status);
