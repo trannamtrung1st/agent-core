@@ -39,6 +39,8 @@ public sealed partial class SessionRuntime
     private bool _agentRunAdmissionPending;
     private readonly ConcurrentDictionary<Guid, byte> _admittedAgentInputs = new();
     private readonly AgentRunOwner? _runtimeOwner;
+    private readonly AgentCore.Application.Security.TenantRunContinuationService? _tenantContinuations;
+    private AgentCore.Application.Security.TenantApprovalOutcome? _tenantApprovalOutcome;
     private AgentRunOwner RunOwner => _runtimeOwner ?? new(_snapshot.AgentInstanceId, _snapshot.ProfileId
         ?? throw AgentCoreErrors.Validation("AgentRun requires a trusted Session owner."));
 
@@ -98,6 +100,18 @@ public sealed partial class SessionRuntime
                 return;
             }
             if (input.Headless) _headlessTransportDetached = true;
+            if (_runtimeOwner is not null)
+            {
+                var resumed = await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
+                    .ResumeAsync(run, ct).ConfigureAwait(false);
+                run = resumed.Run; _tenantApprovalOutcome = resumed.Outcome;
+                if (await _runAuthority!.CurrentDefinitionAsync(run, ct).ConfigureAwait(false) is null)
+                {
+                    await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Fail(run.Revision,
+                        _time.GetUtcNow(), run.Claim!.Generation, "authority-unavailable", "Current tenant execution authority is unavailable.", false, null), ct).ConfigureAwait(false);
+                    input.Completed.TrySetResult(true); return;
+                }
+            }
             _boundAgentRun = run;
             var committedResponse = _snapshot.Entries.LastOrDefault(entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == run.ResponseId);
             if (committedResponse is { Status: EntryStatus.Completed or EntryStatus.Interrupted or EntryStatus.Failed })

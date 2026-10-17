@@ -65,7 +65,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
     public async ValueTask<IReadOnlyList<AgentRun>> ListRunnableTenantRunsAsync(DateTimeOffset at, int limit, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var millis = at.ToUnixTimeMilliseconds();
-        var rows = await db.AgentRuns.AsNoTracking().Where(r => r.TenantId != null && !db.Set<TenantApprovalRecord>().Any(a => a.RunId == r.AgentRunId)
+        var rows = await db.AgentRuns.AsNoTracking().Where(r => r.TenantId != null && !db.Set<TenantApprovalRecord>().Any(a => a.TenantId == r.TenantId && a.RunId == r.AgentRunId && a.Status == (int)TenantApprovalStatus.Pending)
             && db.Set<Tenant>().Any(t => t.TenantId == r.TenantId && t.Status == IdentityStatus.Active)
             && db.Set<TenantSessionRecord>().Any(s => s.SessionId == r.SessionId && s.TenantId == r.TenantId)
             && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null)
@@ -84,7 +84,12 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (command is AgentRunCommand.Claim)
         {
-            if (run.ApprovalRequestId is not null || run.Admission.Activation.Kind != ActivationKind.UserTurn) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            if (run.Admission.Activation.Kind != ActivationKind.UserTurn) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            if (run.ApprovalRequestId is { } approvalId)
+            {
+                var request = await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(a => a.RequestId == approvalId && a.TenantId == owner.TenantId, ct).ConfigureAwait(false);
+                TenantRunContinuationRules.Require(run, request?.Domain());
+            }
             if (!await db.Set<Tenant>().AnyAsync(t => t.TenantId == owner.TenantId && t.Status == IdentityStatus.Active, ct).ConfigureAwait(false)
                 || !await db.Set<Principal>().AnyAsync(p => p.PrincipalId == owner.ExecutorPrincipalId && p.TenantId == owner.TenantId && p.Status == IdentityStatus.Active, ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Executor unavailable.");
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == row.SessionId && r.AgentRunId != row.AgentRunId && (r.Status == (int)AgentRunStatus.Running || r.Status == (int)AgentRunStatus.WaitingForSignal), ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Session owns an active execution.");

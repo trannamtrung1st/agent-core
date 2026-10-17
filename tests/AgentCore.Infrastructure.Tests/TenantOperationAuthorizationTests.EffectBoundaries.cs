@@ -37,7 +37,9 @@ public sealed partial class TenantOperationAuthorizationTests
                 state.Tenant.Revision, change, at, new(f.Ids.NewId(), tenant, setup.Environment.Owner.PrincipalId, "agents.configuration.update", before.Instance.InstanceId.ToString("D"), "allowed", "configuration_updated", at)));
         }
         var current = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(tenant, request.Operation.InstanceId))!;
-        var result = await Effects(f).ExecutePersonaAsync(new(tenant, setup.Run.AgentRunId), request.RequestId, request.Operation.OperationId, setup.Generation, request.Operation.ActionHash);
+        var continuation = await Continuations(f).ResumeAsync(setup.Run);
+        var result = (await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(tenant, request.Operation.OperationId))!;
+        Assert.Equal(result.Outcome, continuation.Outcome!.Outcome); Assert.Equal(result.ReasonCode, continuation.Outcome.ReasonCode);
         Assert.Equal(TenantOperationOutcome.Denied, result.Outcome);
         Assert.Equal(boundary switch { "grantor" => "grantor_authority_lost", "executor" => "operation_authority_changed", "witness" => "operation_witness_changed", _ => "management_unavailable" }, result.ReasonCode);
         Assert.Equal(current.Instance.Persona, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(tenant, request.Operation.InstanceId))!.Instance.Persona);

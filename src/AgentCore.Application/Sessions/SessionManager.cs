@@ -1020,7 +1020,8 @@ public sealed class SessionRuntimeFactory(
     IDiagnosticIdSource? diagnostics = null,
     IBrowserLease? browserLease = null,
     IAgentRunAuthority? runAuthority = null,
-    ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null)
+    ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null,
+    AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null)
 {
     private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
 
@@ -1034,7 +1035,8 @@ public sealed class SessionRuntimeFactory(
             loggers.CreateLogger(typeof(SessionRuntime).FullName!), new AgentCore.Application.Security.TenantAgentRunStore(runtimeStorage, tenantRuns, ids, frame),
             classifier, policy: policy, tools: new SessionToolExecutor(configurationGate: tools.ConfigurationGate, tenantAuthorization: tenantTools),
             modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: new TenantUnavailableArtifacts(),
-            runAuthority: authority, runtimeOwner: frame.Owner);
+            runAuthority: authority, runtimeOwner: frame.Owner,
+            tenantContinuations: tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."));
     }
     private sealed class TenantUnavailableArtifacts : IArtifactReferenceAuthorizer
     { public bool IsAuthorized(Guid sessionId, string artifactId) => false; }

@@ -216,11 +216,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
-        ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null)
+        ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
+        AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
         _runtimeOwner = runtimeOwner;
+        _tenantContinuations = tenantContinuations;
         if (runtimeOwner is { } tenantOwner)
         {
             AgentCore.Application.Security.TenantRuntimeRules.RequireOwner(tenantOwner);
@@ -2413,6 +2415,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var capturedSnapshot = _snapshot;
         var capturedRun = _boundAgentRun;
+        var capturedApprovalOutcome = _tenantApprovalOutcome;
         var occurrencePin = _activeOccurrencePin;
         var boundDefinition = capturedRun is null ? null : ExecutionDefinition;
         var boundPersona = capturedRun?.PinnedPersona;
@@ -2492,6 +2495,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
                     Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
                     ExecutionContext = capturedRun?.Admission.ExecutionContext,
+                    ApprovalOutcome = capturedApprovalOutcome,
                     RunTaskIntent = capturedRun?.Admission.TaskIntent,
                     CurrentUserEntryIds = trigger.Kind == TriggerKind.UserTurn ? capturedRun?.Admission.Activation.SourceEntryIds : null
                 };

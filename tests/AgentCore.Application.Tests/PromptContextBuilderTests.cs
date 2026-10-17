@@ -11,6 +11,31 @@ namespace AgentCore.Application.Tests;
 public sealed class PromptContextBuilderTests
 {
     [Fact]
+    public void Resumed_operation_outcome_stays_data_scoped_to_its_Run_and_survives_optional_evidence_pressure()
+    {
+        var tenant = Guid.NewGuid(); var instance = Guid.NewGuid(); var session = Guid.NewGuid(); var run = Guid.NewGuid(); var activation = Guid.NewGuid();
+        var context = new AgentContext(SampleDefinitions.Examiner, [], "", null, SessionMode.Text, null, false, null,
+            new(Guid.NewGuid(), TriggerKind.UserTurn, "Update persona"), AgentInstanceId: instance, OwnedSessionId: session)
+        {
+            ExecutionContext = new(tenant, Guid.NewGuid(), Guid.NewGuid(), session, run, activation, activation, null, null, ExecutionOrigin.UserMessage),
+            ApprovalOutcome = new(tenant, run, Guid.NewGuid(), Guid.NewGuid(), instance, activation,
+                AgentCore.Domain.Security.TenantApprovalStatus.Approved, AgentCore.Domain.Security.TenantOperationOutcome.Denied, "management_unavailable", 3, 1)
+        };
+        var builder = new PromptContextBuilder(); var snapshot = builder.BuildContext(context);
+        var outcome = Assert.Single(snapshot.Sections, s => s.Id == ContextSectionId.ApprovalOutcome);
+        Assert.Equal(ContextLayer.Evidence, outcome.Layer); Assert.Equal(ModelRole.User, outcome.Message.Role);
+        var crowded = new EffectiveContextSnapshot(snapshot.Sections.Where(s => s.Id is not (ContextSectionId.ApprovalOutcome or ContextSectionId.Memory))
+            .Append(ContextSection.Evidence(ContextSectionId.Memory, ContextSourceKind.Memory, new string('m', ContextAssembler.MaxOptionalEvidenceCharacters)))
+            .Append(outcome), snapshot.Interaction);
+        var request = ContextAssembler.Create(Guid.NewGuid(), crowded);
+        Assert.False(Assert.Single(request.ContextManifest!.Sections, s => s.Id == nameof(ContextSectionId.ApprovalOutcome)).Omitted);
+        Assert.True(Assert.Single(request.ContextManifest.Sections, s => s.Id == nameof(ContextSectionId.Memory)).Omitted);
+        Assert.DoesNotContain(request.Messages.Where(m => m.Role is ModelRole.System or ModelRole.Developer), m => m.Text.Contains("management_unavailable"));
+        Assert.Throws<InvalidOperationException>(() => builder.BuildContext(context with { ApprovalOutcome = context.ApprovalOutcome with { RunId = Guid.NewGuid() } }));
+        Assert.Throws<InvalidOperationException>(() => builder.BuildContext(context with { ExecutionContext = null }));
+    }
+
+    [Fact]
     public void Automation_history_serialization_remains_bounded_and_normal_chat_keeps_its_roles()
     {
         var history = Enumerable.Range(1, 3).Select(sequence => new ConversationEntry(Guid.NewGuid(), sequence,

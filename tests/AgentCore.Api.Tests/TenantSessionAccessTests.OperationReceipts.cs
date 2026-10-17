@@ -2,17 +2,61 @@ using System.Net;
 using System.Net.Http.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
-using AgentCore.Infrastructure.Persistence;
+using AgentCore.Application.Execution;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
+using AgentCore.Application.Context;
+using AgentCore.Infrastructure.Providers.Synthetic;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantSessionAccessTests
 {
-    [Fact]
-    public async Task Canonical_approval_HTTP_projects_exact_receipt_after_trusted_local_execution_without_exposing_grant_authority()
+    private sealed class ApprovalExecutionFactory : AgentCoreApiFactory
     {
-        await using var factory = new AgentCoreApiFactory(); using var owner = Client(factory);
+        protected override bool EnableTenantRunExecution => true;
+        public bool Enabled;
+        public ApprovalRecordingModel Model { get; } = new();
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureTestServices(services =>
+            {
+                services.Replace(ServiceDescriptor.Singleton<ILanguageModel>(Model));
+                services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new ApprovalExecutionGate(this,
+                    new TenantRunExecution(p.GetRequiredService<ITenantRuntimeStore>(), p.GetRequiredService<ITenantRunStore>(),
+                        p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>()))));
+            });
+        }
+    }
+    private sealed class ApprovalExecutionGate(ApprovalExecutionFactory fixture, ITenantRunExecution inner) : ITenantRunExecution
+    {
+        public ValueTask<int> ExecuteRunnableAsync(int limit, CancellationToken ct = default) =>
+            Volatile.Read(ref fixture.Enabled) ? inner.ExecuteRunnableAsync(limit, ct) : ValueTask.FromResult(0);
+    }
+    private sealed class ApprovalRecordingModel : ILanguageModel
+    {
+        private readonly ScriptedLanguageModel _inner = new();
+        public ConcurrentQueue<ModelRequest> Requests { get; } = new();
+        public ModelCapabilities Capabilities => _inner.Capabilities;
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Enqueue(request);
+            await foreach (var item in _inner.GenerateAsync(request, cancellationToken)) yield return item;
+        }
+    }
+
+    [Theory]
+    [InlineData(true, false)] [InlineData(false, false)] [InlineData(true, true)]
+    public async Task Canonical_approval_HTTP_projects_exact_receipt_after_trusted_local_execution_without_exposing_grant_authority(bool approve, bool freeze)
+    {
+        await using var factory = new ApprovalExecutionFactory(); using var owner = Client(factory);
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
         var principal = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
@@ -29,25 +73,62 @@ public sealed partial class TenantSessionAccessTests
         var approvals = factory.Services.GetRequiredService<TenantApprovalService>();
         var request = (await approvals.PreparePersonaAsync(new(tenant, runId), current.Instance.Persona with { Name = "Verified receipt persona" }, 1)).Request!;
         var path = api + $"/approvals/{request.RequestId}";
-        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(path + "/decision", new { decision = "approve", actionHash = request.Operation.ActionHash,
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(path + "/decision", new { decision = approve ? "approve" : "reject", actionHash = request.Operation.ActionHash,
             expectedRevision = await Revision(owner, tenant), expectedRequestRevision = 1 })).StatusCode);
         await approvals.DispatchPendingAsync();
-        // Exercise the internal effect boundary with an actual persisted domain claim; production tenant worker dispatch remains a separate gate.
-        var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var queued = (await runs.FindTenantRunAsync(tenant, runId))!;
-        var generation = Guid.NewGuid(); var at = factory.Services.GetRequiredService<TimeProvider>().GetUtcNow();
-        var claimed = queued.TakeClaim(generation, at, at.AddMinutes(5));
-        var memory = Assert.IsType<InMemoryMemoryStore>(factory.Services.GetRequiredService<IMemoryStore>());
-        lock (memory.AdmissionGate) memory.AgentRuns.Runs[runId] = claimed;
-        var result = await factory.Services.GetRequiredService<TenantApprovedOperationService>().ExecutePersonaAsync(new(tenant, runId), request.RequestId,
-            request.Operation.OperationId, generation, request.Operation.ActionHash);
+        if (freeze)
+            Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/self-management", new
+            {
+                expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2, frozen = true,
+                overrides = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } }
+            })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/v2/auth/logout", null)).StatusCode);
+        // Release the actual hosted worker only after preparation/decision. No manual claim or direct effect call substitutes for execution.
+        var runs = factory.Services.GetRequiredService<ITenantRunStore>();
+        var execution = new TenantRunExecution(factory.Services.GetRequiredService<ITenantRuntimeStore>(), runs,
+            factory.Services.GetRequiredService<ITenantRunDispatcher>(), factory.Services.GetRequiredService<IIdGenerator>(), factory.Services.GetRequiredService<TimeProvider>());
+        Volatile.Write(ref factory.Enabled, true);
+        AgentRun? finished = null;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (!timeout.IsCancellationRequested)
+        {
+            finished = await runs.FindTenantRunAsync(tenant, runId);
+            if (finished?.IsTerminal == true) break;
+            await Task.Delay(25, timeout.Token);
+        }
+        Assert.NotNull(finished); Assert.True(finished.Status == AgentRunStatus.Completed, $"{finished.Status}: {finished.Failure?.Code}: {finished.Failure?.Summary}");
+        Assert.Equal(1, finished.AttemptCount); Assert.NotNull(finished.Result!.OutcomeEntryId);
+        var result = await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId);
+        if (approve) Assert.NotNull(result); else Assert.Null(result);
+        Assert.Equal(0, await execution.ExecuteRunnableAsync(8));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await owner.GetAsync(path)).StatusCode);
+        await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var read = await owner.GetAsync(path); Assert.Equal(HttpStatusCode.OK, read.StatusCode); Assert.True(read.Headers.CacheControl?.NoStore);
-        var view = await Json(read); Assert.Equal("approved", view.GetProperty("status").GetString());
+        var view = await Json(read); Assert.Equal(approve ? "approved" : "rejected", view.GetProperty("status").GetString());
         Assert.Equal(principal, view.GetProperty("decision").GetProperty("principalId").GetGuid());
-        Assert.Equal("completed", view.GetProperty("operationResult").GetProperty("outcome").GetString());
-        Assert.Equal(result.OperationId, view.GetProperty("operationResult").GetProperty("operationId").GetGuid());
+        if (approve)
+        {
+            Assert.Equal(freeze ? "denied" : "completed", view.GetProperty("operationResult").GetProperty("outcome").GetString());
+            Assert.Equal(result!.OperationId, view.GetProperty("operationResult").GetProperty("operationId").GetGuid());
+        }
+        else Assert.Equal(System.Text.Json.JsonValueKind.Null, view.GetProperty("operationResult").ValueKind);
         Assert.DoesNotContain("grantId", view.GetRawText()); Assert.DoesNotContain("effectIdempotencyKey", view.GetRawText());
-        Assert.Equal("Verified receipt persona", (await agentStore.FindTenantAgentAsync(tenant, instance))!.Instance.Persona.Name);
+        var actual = (await agentStore.FindTenantAgentAsync(tenant, instance))!;
+        Assert.Equal(approve && !freeze ? "Verified receipt persona" : current.Instance.Persona.Name, actual.Instance.Persona.Name);
+        var grant = await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId);
+        if (approve) Assert.Equal(freeze ? OperationGrantStatus.Revoked : OperationGrantStatus.Consumed, grant!.Status); else Assert.Null(grant);
+        Assert.Equal(approve ? 1 : 0, (await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200)).Count(a => a.Action == "operations.persona.apply"));
+        Assert.Null(finished.Owner.ProfileIdOrNull);
+        var evidence = factory.Model.Requests.SelectMany(r => r.Context?.Sections ?? []).Where(s => s.Id == ContextSectionId.ApprovalOutcome).ToArray();
+        Assert.NotEmpty(evidence);
+        Assert.All(evidence, section =>
+        {
+            Assert.Equal(ContextLayer.Evidence, section.Layer); Assert.Equal(ModelRole.User, section.Message.Role);
+            Assert.Contains(request.Operation.OperationId.ToString("D"), section.Message.Text);
+            Assert.Contains(freeze ? "management_unavailable" : approve ? "operation_completed" : "approval_rejected", section.Message.Text);
+            Assert.DoesNotContain("grantId", section.Message.Text); Assert.DoesNotContain("actionHash", section.Message.Text);
+        });
         var list = await Json(await owner.GetAsync(api + "/approvals"));
-        Assert.Equal("completed", list.GetProperty("items")[0].GetProperty("operationResult").GetProperty("outcome").GetString());
+        if (approve) Assert.Equal(freeze ? "denied" : "completed", list.GetProperty("items")[0].GetProperty("operationResult").GetProperty("outcome").GetString());
     }
 }

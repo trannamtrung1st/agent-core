@@ -29,7 +29,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate)
         {
-            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => r.ApprovalRequestId is null && r.Admission.Activation.Kind == ActivationKind.UserTurn
+            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => (r.ApprovalRequestId is null || _approvals.GetValueOrDefault(r.ApprovalRequestId.Value) is { Status: not TenantApprovalStatus.Pending }) && r.Admission.Activation.Kind == ActivationKind.UserTurn
                 && r.Owner.TenantId is { } tenant && _tenants.GetValueOrDefault(tenant)?.Tenant.Status == IdentityStatus.Active
                 && sessionBacking.OwnsTenantSession(tenant, r.SessionId) && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.WaitingToRetry && r.NextRetryAtUtc <= at
                     || r.Status == AgentRunStatus.Running && r.Claim!.LeaseExpiresAtUtc <= at))
@@ -48,7 +48,8 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
             if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
             if (command is AgentRunCommand.Claim)
             {
-                if (run.ApprovalRequestId is not null || run.Admission.Activation.Kind != ActivationKind.UserTurn) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+                if (run.Admission.Activation.Kind != ActivationKind.UserTurn) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+                if (run.ApprovalRequestId is { } approvalId) TenantRunContinuationRules.Require(run, _approvals.GetValueOrDefault(approvalId));
                 try { RequireRuntimeOwner(owner); } catch (AccessDeniedException) { throw AgentCoreErrors.Conflict("Executor is unavailable."); }
                 if (sessionBacking.AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.AgentRunId != runId && r.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForSignal))
                     throw AgentCoreErrors.Conflict("Session already owns an active execution.");
