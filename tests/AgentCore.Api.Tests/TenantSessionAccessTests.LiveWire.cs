@@ -28,20 +28,20 @@ public sealed partial class TenantSessionAccessTests
         persistence.AttachmentRoot = Path.Combine(root, "attachments"); persistence.DefinitionResourceRoot = Path.Combine(root, "resources");
         persistence.CredentialProtectionKeyRoot = Path.Combine(root, "keys");
     }
-    private sealed class NativeTenantMemoryFactory(string root, ILanguageModel model) : AgentCoreApiFactory
+    private sealed class NativeTenantMemoryFactory(string root, ILanguageModel model, Action<IServiceCollection>? configure = null) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => true;
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
-            builder.ConfigureTestServices(services => { NativeTenantIdentity(services, root); services.Replace(ServiceDescriptor.Singleton(model)); });
+            builder.ConfigureTestServices(services => { NativeTenantIdentity(services, root); services.Replace(ServiceDescriptor.Singleton(model)); configure?.Invoke(services); });
         }
     }
-    private sealed class NativeTenantSqliteFactory(string root, ILanguageModel model) : DurableSqliteHostFactory(Path.Combine(root, "store.db"), languageModel: model)
+    private sealed class NativeTenantSqliteFactory(string root, ILanguageModel model, Action<IServiceCollection>? configure = null) : DurableSqliteHostFactory(Path.Combine(root, "store.db"), languageModel: model)
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            base.ConfigureWebHost(builder); builder.ConfigureTestServices(services => NativeTenantIdentity(services, root));
+            base.ConfigureWebHost(builder); builder.ConfigureTestServices(services => { NativeTenantIdentity(services, root); configure?.Invoke(services); });
         }
     }
     [Theory]

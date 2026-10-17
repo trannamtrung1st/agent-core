@@ -54,10 +54,11 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     {
         var run = await runs.FindTenantRunAsync(proposed.Owner.TenantId!.Value, proposed.AgentRunId, cancellationToken).ConfigureAwait(false);
         if (run is not { Status: AgentRunStatus.Running, Claim: { } claim } || claim.Generation != proposed.Claim!.Generation) return false;
-        Live? existing = null; Live? collision = null;
+        Live? existing = null; Live? collision = null; long receiptEpoch;
         lock (_gate)
         {
             if (_stopping) return false;
+            receiptEpoch = _receiptEpoch;
             if (_live.TryGetValue(run.SessionId, out var old))
             {
                 if (old.Run.AgentRunId == run.AgentRunId && old.Run.Claim!.Generation == claim.Generation) existing = old;
@@ -83,7 +84,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         lock (_gate)
         {
             if (_stopping) return false;
-            if (_cancelling.Contains((run.Owner.TenantId!.Value, run.AgentRunId))) refused = true;
+            if (_cancelling.Contains((run.Owner.TenantId!.Value, run.AgentRunId)) || _receipting.Contains(run.SessionId) || receiptEpoch != _receiptEpoch) refused = true;
             else if (_live.TryGetValue(run.SessionId, out var raced))
             {
                 if (raced.Run.AgentRunId == run.AgentRunId && raced.Run.Claim!.Generation == claim.Generation) existing = raced;

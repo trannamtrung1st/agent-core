@@ -1,5 +1,7 @@
 # Tenant Hub text and cancellation commands — 2026-10-17
 
+The [tenant receipt successor](tenant-delivery-receipts-verification-2026-10-17.md) adds durable text acknowledgements over the same authenticated command adapter. The receipt gap below describes this historical command checkpoint.
+
 Successor to `547d600b` and the [authenticated live-text checkpoint](tenant-live-text-delivery-verification-2026-10-17.md). This delivers canonical SendText and CancelResponse over an authenticated tenant subscription, using the existing admission and owning-mailbox cancellation services. Durable recipient acknowledgements, frontend/voice and full proposal acceptance remain open.
 
 ## Delivered contract

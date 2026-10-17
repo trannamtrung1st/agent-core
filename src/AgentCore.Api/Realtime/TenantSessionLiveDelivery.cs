@@ -22,6 +22,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     }
     private sealed class Subscription(Guid tenant, Guid session, TenantSessionInitiator human, Guid attachment)
     {
+        public sealed record Delivered(Guid EntryId, long EntrySequence, int PublishedEnd, int ReceivedEnd);
         public Guid Tenant { get; } = tenant;
         public Guid Session { get; } = session;
         public TenantSessionInitiator Human { get; } = human;
@@ -32,6 +33,13 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
         public Queue<Guid> DedupeOrder { get; } = [];
         public ConcurrentDictionary<Guid, Guid> KnownRuns { get; } = new();
         public Queue<Guid> ResponseOrder { get; } = [];
+        public ConcurrentDictionary<Guid, Delivered> Delivery { get; } = new();
+        private Queue<Guid> DeliveryOrder { get; } = [];
+        public void ObserveDelivery(Guid response, Guid entry, long sequence, int published)
+        {
+            if (Delivery.TryAdd(response, new(entry, sequence, published, 0))) DeliveryOrder.Enqueue(response);
+            while (DeliveryOrder.Count > 128) Delivery.TryRemove(DeliveryOrder.Dequeue(), out _);
+        }
         public void ObserveRun(Guid response, Guid run)
         {
             if (KnownRuns.TryAdd(response, run)) ResponseOrder.Enqueue(response); else KnownRuns[response] = run;
@@ -117,6 +125,9 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     mapped.Payload["sessionRevision"] = recipient.SessionRevision;
                     if (connection.Closed) throw new AccessDeniedException("tenant_connection_unavailable");
                     await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", mapped, ct).ConfigureAwait(false);
+                    foreach (var entry in entries.Where(e => e.Role == ConversationRole.Assistant && e.DeliveryMode == SessionMode.Text
+                        && e.ResponseId is not null && e.Status is EntryStatus.Streaming or EntryStatus.Completed))
+                        subscription.ObserveDelivery(entry.ResponseId!.Value, entry.EntryId, entry.Sequence, entry.Text.Length);
                     if (active is { } response) subscription.ObserveRun(response, source!.Run.AgentRunId);
                     return;
                 }
@@ -172,6 +183,13 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             if (state.Closed || state.Current != subscription) return;
             await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence), bounded.Token).ConfigureAwait(false);
             if (output.Payload is ResponseStartedOutput && output.ResponseId is { } response) subscription.ObserveRun(response, source.Run.AgentRunId);
+            if (output.ResponseId is { } delivered)
+            {
+                if (output.Payload is ResponseStartedOutput started) subscription.ObserveDelivery(delivered, started.EntryId, started.EntrySequence, 0);
+                if (output.Payload is TextDeltaOutput delta && subscription.Delivery.TryGetValue(delivered, out var bound) && bound.PublishedEnd == delta.TextStart)
+                    subscription.Delivery.AddOrUpdate(delivered, bound with { PublishedEnd = delta.TextStart + delta.Text.Length },
+                        (_, old) => old with { PublishedEnd = Math.Max(old.PublishedEnd, delta.TextStart + delta.Text.Length) });
+            }
         }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException or OperationCanceledException)
         { if (entered) state.Current = null; }

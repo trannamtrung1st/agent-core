@@ -1170,6 +1170,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case ResponseReceiptReceived receipt:
                     await HandleReceiptAsync(receipt, cancellationToken).ConfigureAwait(false);
                     break;
+                case TenantReceiptReceived tenantReceipt:
+                    await HandleTenantReceiptAsync(tenantReceipt, cancellationToken).ConfigureAwait(false);
+                    break;
                 case CancelResponseReceived cancel:
                     await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1424,6 +1427,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case ResponseReceiptReceived receipt:
                 receipt.Admitted.TrySetResult(value);
+                break;
+            case TenantReceiptReceived tenantReceipt:
+                tenantReceipt.Completed.TrySetResult(value);
                 break;
             case BrainReturned brain:
                 brain.Processed.TrySetResult();
@@ -6233,6 +6239,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public AgentRun? AdmittedRun { get; } = admittedRun;
         public AgentRun? AdmissionResult { get; set; }
         public Action<AgentRun>? OnAdmitted { get; set; }
+        public TenantDeliveryReceipt? Receipt { get; init; }
         public AgentRunOutcomeCommit? RunOutcome { get; } = runOutcome;
         public IReadOnlyList<Guid>? CompletionSourceRunIds { get; } = completionSourceRunIds ?? (completionSourceRunId is { } id ? [id] : null);
         public TaskCompletionSource Applied { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -6325,7 +6332,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         TaskCompletionSource<bool>? ended = null,
         bool userConversationTerminal = false,
         AgentRun? admittedRun = null,
-        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false)
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null)
     {
         if (_tenantCancellationCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
         { ended?.TrySetResult(false); return; }
@@ -6343,7 +6350,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted };
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, Receipt = tenantReceipt };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -6380,6 +6387,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (input.Error is not null)
             {
+                if (job.Receipt is not null)
+                {
+                    // A revoked/stale recipient must not fail the independently authorized Run or leak
+                    // uncommitted receipt credit into a later ordinary snapshot.
+                    job.Ended?.TrySetException(input.Error); return;
+                }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
                 if (job.AdmittedRun?.Admission.Activation.Kind == ActivationKind.UserTurn
                     && input.Error is AgentCoreException { Code: "Conflict" } conflict
@@ -6439,7 +6452,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 _durableRevision = saved.Revision;
                 _durableSnapshot = saved;
+                if (job.Receipt is { } receipt && saved.Entries.SingleOrDefault(e => e.EntryId == receipt.EntryId) is { } received)
+                    _tenantReceiptEvidence[received.EntryId] = received;
                 AdoptPersisted(job.Proposed, saved, job.Kind);
+                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved);
                 foreach (var entry in saved.Entries)
                 {
                     if (entry.Role == ConversationRole.User)
@@ -6710,7 +6726,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
             .Where(id => !_admittedAgentInputs.ContainsKey(id)).ToArray() };
-        if (job.RunOutcome is { } outcome)
+        if (_runtimeOwner?.TenantId is not null) toSave = CarryTenantReceipts(toSave, _durableSnapshot);
+        if (job.Receipt is { } receipt)
+            await ((ITenantRuntimeReceiptWriter)_store).SaveReceiptAsync(toSave, _durableRevision, receipt, cancellationToken).ConfigureAwait(false);
+        else if (job.RunOutcome is { } outcome)
             await _agentRuns.CommitOutcomeAsync(toSave, _durableRevision, outcome.Owner, outcome.AgentRunId,
                 outcome.Completion, outcome.DraftEntryId, cancellationToken).ConfigureAwait(false);
         else if (job.AdmittedRun is { } run)

@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.SignalR;
 namespace AgentCore.Api.Realtime;
 
 public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenants, IdentityService identity, IdentityHttpOptions policy, TimeProvider time,
-    TenantRunService runs, IamAuthorizer authorizer) : Hub
+    TenantRunService runs, IamAuthorizer authorizer, ITenantDeliveryReceiptControl receipts) : Hub
 {
     [Authorize]
     public async Task<CommandAck> AttachTenant(ClientCommand<TenantAttachPayload> command)
@@ -112,7 +112,9 @@ public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenan
         Complete(host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.stopped"));
 
     public Task<CommandAck> ResponseReceived(ClientCommand<ResponseReceiptPayload> command) =>
-        Complete(host.AcceptReceiptAsync(Context.ConnectionId, command));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.ReceiveAsync(Context.ConnectionId, command, receipts, Context.ConnectionAborted)
+            : host.AcceptReceiptAsync(Context.ConnectionId, command));
 
     public Task<CommandAck> SetMuted(ClientCommand<MutePayload> command) =>
         Complete(host.AcceptMuteAsync(Context.ConnectionId, command));

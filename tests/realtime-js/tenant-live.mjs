@@ -75,6 +75,15 @@ try {
   assert.notEqual(secondReady.attachmentId,firstReady.attachmentId);assert.equal(secondReady.sequence,1);assert.equal(secondReady.payload.history.length,2);
   const replay=await live.hub.invoke('SendText',{...sendCommand,attachmentId:secondReady.attachmentId,payload:{text:sendCommand.payload.text,expectedRevision:await human.revision(tenant),expectedSessionRevision:secondReady.payload.sessionRevision}});
   assert.equal(replay.accepted,true);assert.equal(replay.result.created,false);assert.equal(replay.result.runId,receipt.runId);
+  const delivery={protocolVersion:1,sessionId:session,eventId:crypto.randomUUID(),sequence:2,attachmentId:secondReady.attachmentId,
+    responseId:receipt.responseId,type:'response.received',payload:{textEndExclusive:text.length+1}};
+  assert.equal((await live.hub.invoke('ResponseReceived',delivery)).accepted,false);
+  const delivered={...delivery,eventId:crypto.randomUUID(),sequence:3,payload:{textEndExclusive:text.length}};
+  assert.equal((await live.hub.invoke('ResponseReceived',delivered)).accepted,true);
+  assert.equal((await live.hub.invoke('ResponseReceived',delivered)).accepted,true);
+  const credited=await human.json(`/api/v2/tenants/${tenant}/sessions/${session}/messages`);
+  const creditedEntry=credited.items.find(e=>e.responseId===receipt.responseId);
+  assert.equal(creditedEntry.receivedTextEndExclusive,text.length);assert.equal(creditedEntry.heardTextEndExclusive,0);
   const beta=(await human.json('/api/v2/system/tenants',{name:'Live beta',slug:'live-beta'})).tenantId;
   const second=await human.session(beta);
   assert.equal((await live.hub.invoke('AttachTenant',attach(second,beta))).accepted,true);
@@ -92,8 +101,12 @@ try {
   const cacheCommand={...nextCommand,eventId:crypto.randomUUID(),attachmentId:resumedBeta.attachmentId,payload:{text:'A cached Beta admission',expectedRevision:await human.revision(beta),expectedSessionRevision:resumedBeta.payload.sessionRevision}};
   const cached=await live.hub.invoke('SendText',cacheCommand);assert.equal(cached.accepted,true);
   await until(()=>live.events.some(e=>e.type==='agent.response.completed'&&e.responseId===cached.result.responseId));await human.finished(beta,cached.result.runId);
+  const betaReceipt={protocolVersion:1,sessionId:second,eventId:crypto.randomUUID(),sequence:2,attachmentId:resumedBeta.attachmentId,
+    responseId:cached.result.responseId,type:'response.received',payload:{textEndExclusive:5}};
+  assert.equal((await live.hub.invoke('ResponseReceived',betaReceipt)).accepted,true);
   const logoutAt=live.events.length;assert.equal((await human.request('/api/v2/auth/logout',{})).status,204);
   const revokedReplay=await live.hub.invoke('SendText',cacheCommand);assert.equal(revokedReplay.accepted,false);assert.equal(revokedReplay.error.category,'Authorization');
+  assert.equal((await live.hub.invoke('ResponseReceived',betaReceipt)).accepted,false);
   const fresh=new Human();await fresh.login();const after=await fresh.send(beta,second,'After old browser logout');await fresh.finished(beta,after.runId);
   assert.equal(live.events.length,logoutAt);
   const deniedCommand=await live.hub.invoke('SendText',{...nextCommand,eventId:crypto.randomUUID(),sequence:1});assert.equal(deniedCommand.accepted,false);

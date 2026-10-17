@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Security;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Security;
@@ -12,6 +13,21 @@ public sealed partial class TenantSessionLiveDelivery
 {
     private sealed record CommandRecord(string Fingerprint, long Sequence, CommandAck Ack, Guid? Run);
     public bool IsTenantConnection(string connection) => _connections.ContainsKey(connection);
+
+    public Task<CommandAck> ReceiveAsync(string connection, ClientCommand<ResponseReceiptPayload> command, ITenantDeliveryReceiptControl control, CancellationToken ct)
+        => ExecuteAsync(connection, command, "response.received", _ => null, (_, _, _) => Task.CompletedTask, async (subscription, _, token) =>
+        {
+            if (command.Payload is not { } body || body.BlockIds is { Length: > 0 }
+                || !Guid.TryParse(command.ResponseId, out var response) || !subscription.Delivery.TryGetValue(response, out var delivered)
+                || body.TextEndExclusive < delivered.ReceivedEnd || body.TextEndExclusive > delivered.PublishedEnd || body.TextEndExclusive < 0)
+                return Reject(command.EventId, "InvalidReceipt", "A text receipt must acknowledge a delivered prefix on this attachment.", "Validation");
+            var recipient = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, token).ConfigureAwait(false);
+            await control.ReceiveAsync(new(recipient.Owner, subscription.Human, recipient.SecurityRevision, delivered.EntryId,
+                delivered.EntrySequence, response, delivered.PublishedEnd, body.TextEndExclusive), token).ConfigureAwait(false);
+            subscription.Delivery.AddOrUpdate(response, delivered with { ReceivedEnd = body.TextEndExclusive },
+                (_, old) => old with { ReceivedEnd = Math.Max(old.ReceivedEnd, body.TextEndExclusive) });
+            return new() { EventId = command.EventId, Accepted = true };
+        }, ct);
 
     public Task<CommandAck> SendTextAsync(string connection, ClientCommand<UserTextPayload> command, TenantRunService service, CancellationToken ct)
         => ExecuteAsync(connection, command, "user.text", _ => null, (_, _, _) => Task.CompletedTask, async (subscription, _, token) =>
