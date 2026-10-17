@@ -43,12 +43,19 @@ public sealed partial class TenantSessionAccessTests
     {
         private readonly ScriptedLanguageModel _inner = new();
         public AgentCore.Domain.Definitions.AgentIdentity? ProposedPersona { get; set; }
+        public string? ProposedPreferences { get; set; }
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public ModelCapabilities Capabilities => _inner.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            if (ProposedPreferences is { } preferences && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.TenantPreferenceToolContract.Name)
+                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.TenantPreferenceToolContract.Name) == true)
+            {
+                yield return new ModelToolCallEvent(new("direct-preferences", AgentCore.Application.Tools.TenantPreferenceToolContract.Name, preferences));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
             if (ProposedPersona is { } proposed && request.Context?.Sections.All(s => s.Id != ContextSectionId.ApprovalOutcome) == true
                 && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization) == true)
             {

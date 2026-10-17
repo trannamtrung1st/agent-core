@@ -173,6 +173,7 @@ public static class ToolPolicy
         if (context?.ExecutionContext is not null && descriptor.OfferRule != ToolOfferRule.TenantExecutionAuthority) return false;
         if (descriptor.OfferRule == ToolOfferRule.TenantExecutionAuthority)
             return (descriptor.Name != ToolCatalog.RequestAuthorization || definition.SelfManagement?.Allows(AgentCore.Domain.Definitions.HarnessManagementScope.Settings) == true)
+                && (descriptor.Name != TenantPreferenceToolContract.Name || TenantPreferenceToolContract.Allows(definition))
                 && context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
                 && execution.SessionId == context.OwnedSessionId;
         if (!IsolationAllows(definition, descriptor.Name)) return false;

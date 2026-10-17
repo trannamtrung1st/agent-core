@@ -3300,6 +3300,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("Outcome")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ParametersHash")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("PersonaRevision")
                         .HasColumnType("INTEGER");
 
@@ -3310,7 +3313,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("RecordedAt")
                         .HasColumnType("INTEGER");
 
-                    b.Property<Guid>("RequestId")
+                    b.Property<Guid?>("RequestId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RootActivationId")
@@ -3323,6 +3326,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("SessionId")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceCallId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("TenantId")
@@ -3341,12 +3347,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "RunId", "RecordedAt");
 
+                    b.HasIndex("TenantId", "RunId", "SourceCallId")
+                        .IsUnique()
+                        .HasFilter("SourceCallId IS NOT NULL");
+
                     b.HasIndex("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId");
 
                     b.HasIndex("TenantId", "RequestId", "ExecutorPrincipalId", "OperationId", "ActionHash");
 
                     b.ToTable("TenantOperationReceipts", null, t =>
                         {
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_Source", "(RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL) OR (RequestId IS NULL AND SourceCallId IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200 AND ParametersHash IS NOT NULL AND length(ParametersHash) = 64)");
+
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Values", "Outcome IN (0,1) AND InstanceRevision >= 1 AND PersonaRevision >= 1 AND length(ActionHash) = 64 AND length(ReasonCode) BETWEEN 1 AND 128");
                         });
                 });
@@ -3945,8 +3957,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("RequestId", "RootActivationId", "InstanceId")
                         .HasPrincipalKey("RequestId", "RootActivationId", "InstanceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
                         .WithMany()
@@ -3959,8 +3970,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "RequestId", "ExecutorPrincipalId", "OperationId", "ActionHash")
                         .HasPrincipalKey("TenantId", "RequestId", "ExecutorPrincipalId", "OperationId", "Fingerprint")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantSessionRecord", b =>

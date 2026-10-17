@@ -40,4 +40,26 @@ public sealed class TenantApprovalToolContractTests
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { Definition = definition, ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         Assert.False(TenantApprovalToolContract.Descriptor().DefinitionAuthorizable);
     }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Direct_preferences_are_context_only_and_require_explicit_Managed_auto_apply_in_both_projection_modes(bool capabilities)
+    {
+        var definition = await CapabilityProjectionTests.Definition();
+        definition = definition with { Environment = definition.Environment! with { Capabilities = capabilities ? definition.Environment!.Capabilities : null },
+            SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], [], ManagedAutoApply: [ManagementAutoApply.ConversationPreferences]) };
+        var session = Guid.NewGuid(); var activation = Guid.NewGuid();
+        var context = CapabilityProjectionTests.Context(definition) with {
+            AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
+            ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage) };
+        Assert.Contains(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == TenantPreferenceToolContract.Name);
+        foreach (var blocked in new[] {
+            definition with { SelfManagement = definition.SelfManagement with { Mode = HarnessManagementMode.Assisted } },
+            definition with { SelfManagement = definition.SelfManagement with { ManagedAutoApply = [] } },
+            definition with { SelfManagement = definition.SelfManagement with { Frozen = true } } })
+            Assert.DoesNotContain(ToolCatalog.For(blocked, context with { Definition = blocked }, ToolConfigurationGates.AllowAll), t => t.Name == TenantPreferenceToolContract.Name);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == TenantPreferenceToolContract.Name);
+        Assert.False(TenantPreferenceToolContract.Descriptor().DefinitionAuthorizable);
+        Assert.False(TenantPreferenceToolContract.Descriptor().Discoverable);
+    }
 }

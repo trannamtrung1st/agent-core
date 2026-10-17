@@ -11,6 +11,15 @@ namespace AgentCore.Application.Security;
 public sealed class TenantRunConfigurationResolver(ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, ITenantCredentialBindingStore bindings)
 {
+    public async ValueTask<(TenantAgent Agent, AgentDefinition Definition)> BaselineAsync(Guid tenant, Guid instance, CancellationToken ct)
+    {
+        var agent = await agents.FindTenantAgentAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        var owner = agent.Instance;
+        var baseline = Guid.TryParse(owner.DefinitionId, out var owned)
+            ? (await definitions.FindDefinitionPublicationAsync(tenant, owned, owner.ActiveVersion, ct).ConfigureAwait(false))?.Payload
+            : await builtIns.GetAsync(owner.DefinitionId, owner.ActiveVersion, ct).ConfigureAwait(false);
+        return (agent, baseline ?? throw new AccessDeniedException("definition_unavailable"));
+    }
     public async ValueTask<(TenantAgent Agent, ResolvedAgentRunConfiguration Configuration)> ResolveAsync(Guid tenant, Guid instance, CancellationToken ct)
     {
         var state = await agents.ReadTenantAgentConfigurationAsync(tenant, instance, ct).ConfigureAwait(false)

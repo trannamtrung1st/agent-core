@@ -2,6 +2,15 @@ namespace AgentCore.Domain.Conversation;
 
 public sealed partial class AgentRun
 {
+    public AgentRun RecordDirectLocalEffect(long revision, Guid generation, Guid operationId, string actionHash, DateTimeOffset at)
+    {
+        RequireOperational(revision, generation);
+        if (Owner.TenantId is null || operationId == Guid.Empty || Claim!.LeaseExpiresAtUtc <= at
+            || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "A live direct local operation is required.");
+        return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null, KnownEffectSummary,
+            Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.Succeeded, "operation:" + operationId.ToString("D"), actionHash, at), Approval, at);
+    }
     public AgentRun RecordApprovedLocalEffect(long revision, Guid generation, Guid requestId, Guid operationId,
         string actionHash, bool succeeded, DateTimeOffset at)
     {

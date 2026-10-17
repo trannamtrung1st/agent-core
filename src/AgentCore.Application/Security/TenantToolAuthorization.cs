@@ -6,7 +6,8 @@ using AgentCore.Application.Tools;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
-    TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null)
+    TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
+    TenantPreferenceOperationService? preferences = null)
 {
     // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
     public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
@@ -32,7 +33,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
-            var allowed = IamToolContracts.IsInspection(tool) || tool == ToolCatalog.RequestAuthorization
+            var allowed = IamToolContracts.IsInspection(tool) || (tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name)
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -41,17 +42,25 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
     public async ValueTask<ToolPolicyDecision?> PolicyAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
-        return boundary.Tenant || (IamToolContracts.IsInspection(call.Name) || call.Name == ToolCatalog.RequestAuthorization) || admission?.TenantId is not null
+        return boundary.Tenant || IsTenantTool(call.Name) || admission?.TenantId is not null
             ? boundary.Allowed ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny : null;
     }
     public async ValueTask<string?> ExecuteAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
-        if (!boundary.Tenant && !(IamToolContracts.IsInspection(call.Name) || call.Name == ToolCatalog.RequestAuthorization) && admission?.TenantId is null) return null;
+        if (!boundary.Tenant && !IsTenantTool(call.Name) && admission?.TenantId is null) return null;
         if (!boundary.Allowed) return Error("forbidden", boundary.Reason);
         if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
         try
         {
+            if (call.Name == TenantPreferenceToolContract.Name)
+            {
+                if (preferences is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
+                var result = await preferences.ExecuteAsync(boundary.Reference!, generation, call.Id, call.ArgumentsJson, ct).ConfigureAwait(false);
+                return JsonSerializer.Serialize(new { decision = JsonNamingPolicy.CamelCase.ConvertName(result.Decision.ToString()),
+                    reasonCode = result.ReasonCode, applied = result.Receipt is not null, operationId = result.Receipt?.OperationId,
+                    instanceRevision = result.Receipt?.InstanceRevision });
+            }
             if (string.IsNullOrWhiteSpace(call.ArgumentsJson) || Encoding.UTF8.GetByteCount(call.ArgumentsJson) > IamToolContracts.MaxArgumentBytes)
                 return Error("invalid", "invalid_arguments");
             using var document = JsonDocument.Parse(call.ArgumentsJson); var input = document.RootElement;
@@ -68,6 +77,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException) { return Error("invalid", "invalid_arguments"); }
         catch (AccessDeniedException ex) { return Error("forbidden", ex.ReasonCode); }
+        catch (SecurityConflictException ex) { return Error("conflict", ex.ReasonCode); }
     }
     public async ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(Guid session, ModelToolCall call, ToolExecutionAdmission admission, CancellationToken ct)
     {
@@ -83,6 +93,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
             throw new AccessDeniedException(denied);
         return await approvals.PreparePersonaAsync(boundary.Reference, persona, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
     }
+    private static bool IsTenantTool(string name) => IamToolContracts.IsInspection(name) || name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name;
     private static object Project(OperationAuthorizationDecision decision) => new { decision = JsonNamingPolicy.CamelCase.ConvertName(decision.Decision.ToString()),
         reasonCode = decision.ReasonCode, requiredPermission = decision.Permission, targetResource = new { type = decision.Resource.ResourceType, id = decision.Resource.ResourceId },
         approvalKind = decision.ApprovalKind is { } kind ? JsonNamingPolicy.CamelCase.ConvertName(kind.ToString()) : null };
