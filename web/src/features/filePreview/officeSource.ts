@@ -1,11 +1,12 @@
 import type { PreviewOptions } from './previewOptions';
-import { OwnerCapabilityError, ownerFetch } from '../../services/api';
+import { OwnerCapabilityError } from '../../services/api';
 import {
   PreviewError,
   readFailure,
   sourcePath,
   driveReadQuery,
   type FileRef,
+  fileReadResponse,
 } from './fileSource';
 export type OfficeCell = {
   address: string;
@@ -43,9 +44,9 @@ export async function readOfficePreview(
     ...(range ? { range } : {}),
   });
   selection.forEach((value, key) => query.set(key, value));
-  const response = await ownerFetch(
+  const response = await fileReadResponse(file,
     `${sourcePath(file)}/office-preview${query.size ? '?' + query : ''}`,
-    { signal },
+    signal,
   ).catch(reason => {
     if (reason instanceof OwnerCapabilityError) throw readFailure(403);
     throw reason;

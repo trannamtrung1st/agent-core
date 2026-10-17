@@ -1,4 +1,6 @@
 import { ownerFetch } from '../../services/api';
+import { identityReadResponse } from '../../services/identity';
+import { tenantAgentApi, type TenantResourceDetail } from '../../services/tenantAgentConfiguration';
 
 export type FileMetadata = {
   displayName: string;
@@ -7,6 +9,7 @@ export type FileMetadata = {
   sha256?: string;
 };
 export type FileRef =
+  | { kind: 'tenantResource'; tenantId: string; instanceId: string; resourceKey: string; metadata: FileMetadata }
   | { kind: 'attachment'; sessionId: string; attachmentId: string }
   | { kind: 'artifact'; sessionId: string; artifactId: string }
   | { kind: 'home'; instanceId: string; path: string; metadata: FileMetadata }
@@ -34,6 +37,7 @@ export type FileRef =
       metadata: FileMetadata;
     };
 export const sourceLabel = {
+  tenantResource: 'Instance Resource',
   attachment: 'Attachment',
   artifact: 'Artifact',
   home: 'Agent Workspace',
@@ -44,6 +48,8 @@ export const sourceLabel = {
 const enc = encodeURIComponent;
 export function sourcePath(ref: FileRef): string {
   switch (ref.kind) {
+    case 'tenantResource':
+      return tenantAgentApi(ref.tenantId, ref.instanceId, `/resources/${enc(ref.resourceKey)}`);
     case 'attachment':
       return `/api/v2/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`;
     case 'artifact':
@@ -67,6 +73,7 @@ export class PreviewError extends Error {
   }
 }
 export function readFailure(status: number): PreviewError {
+  if (status === 401) return new PreviewError('preview_forbidden', 'Your session has expired. Sign in again to read this file.');
   if (status === 403)
     return new PreviewError(
       'preview_forbidden',
@@ -91,6 +98,16 @@ export async function resolveFile(
   ref: FileRef,
   signal: AbortSignal,
 ): Promise<FileMetadata> {
+  if (ref.kind === 'tenantResource') {
+    const response = await fileReadResponse(ref, `${sourcePath(ref)}/editor`, signal);
+    if (!response.ok) throw readFailure(response.status);
+    const value = await response.json() as TenantResourceDetail;
+    const item = value?.item?.resource;
+    if (value?.agent?.instance?.instanceId !== ref.instanceId || item?.key !== ref.resourceKey || typeof item.logicalPath !== 'string'
+      || typeof item.mediaType !== 'string' || !Number.isSafeInteger(item.byteLength) || item.byteLength < 0 || !/^[a-f0-9]{64}$/i.test(item.contentSha256))
+      throw new PreviewError('preview_unavailable', 'Current resource metadata is unavailable. Reload the resource list.');
+    return { displayName: item.logicalPath.split('/').at(-1)!, contentType: item.mediaType, byteSize: item.byteLength, sha256: item.contentSha256 };
+  }
   if (ref.kind === 'home') {
     const response = await ownerFetch(`${sourcePath(ref)}/metadata?${new URLSearchParams({path: ref.path})}`, {signal});
     if (!response.ok) throw readFailure(response.status);
@@ -136,9 +153,9 @@ export async function readFile(
       'preview_too_large',
       `This file is ${(metadata.byteSize / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB; its preview limit is ${(maxBytes / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB. Download the original.`,
     );
-  const response = await ownerFetch(
+  const response = await fileReadResponse(ref,
     `${sourcePath(ref)}/content${ref.kind === 'drive' ? '?' + driveReadQuery(ref) : ref.kind === 'home' ? '?' + new URLSearchParams({path: ref.path}) : ''}`,
-    { signal },
+    signal,
   );
   if (!response.ok) throw readFailure(response.status);
   if (Number(response.headers.get('content-length')) > maxBytes) {
@@ -188,6 +205,10 @@ export async function readFile(
   }
   return blob;
 }
+export function fileReadResponse(ref: FileRef, path: string, signal: AbortSignal): Promise<Response> {
+  return ref.kind === 'tenantResource' ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
+}
+export const fileReadLost = (error: unknown) => error instanceof PreviewError && ['preview_forbidden', 'preview_unavailable'].includes(error.code);
 export async function downloadFile(
   ref: FileRef,
   signal: AbortSignal,

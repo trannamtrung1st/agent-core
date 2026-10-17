@@ -495,6 +495,34 @@
         "captureReview": "Implementation and fresh finish reviewers individually opened all 18 current captures: collection at 1440/1024/768/390/320px, desktop/narrow editor and confirmation, narrow Built-in inspection, desktop provenance, narrow shared Definition Drawer, archived, read-only top/lower and denied views. No horizontal page overflow across five collection widths; existing 48rem column and 16px parent section gap. Documenter sampled target and shared source; no new captures.",
         "visualAcceptanceLimits": "Native internal main/Drawer scrolling leaves complete fields/procedure and lower Drawer content uncaptured. Loading, transient, stale and malformed acknowledgements were not visually accepted. Functional evidence, including recovery and revoked access, is separately scoped by the verification report.",
         "openScope": "Resources UI/rich/bulk adapters, Sandbox/resource/effect families, voice/rich delivery, autonomous origins, obsolete-authority/schema consolidation and earlier SQLite preference follow-up. Full proposal remains active; no CI or milestone acceptance."
+      },
+      "resourcesDocumentationRefresh": {
+        "refreshedAt": "2026-10-17T19:47:52.224128+00:00",
+        "scope": "Bounded October 18 merge of observed tenant Instance Resources and shared fields/inspection, rich preview transport, named zoom handles and frontmost dialog body-action feedback clearance. Normative frontmatter, all component previews, historical source hashes/provenance and global buildPath are preserved. No broad drift repair, re-extraction, app checks or runtime acceptance by this documentation pass.",
+        "resourcesSourceHashes": {
+          ".impeccable/surfaces/web-src-features-access-tenantagentresources-tsx.md": "901a9ddf089a6d274f96e52b74746e629ebdbd6cca86f7cbde68a3a700dc2d96",
+          "web/src/features/access/TenantAgentResources.tsx": "ddfbb49cc2bd9d6544880e27d42d28bc4329b862a33b96814e860a91dc586974",
+          "web/src/features/admin/InstanceResourceFields.tsx": "b598bcd51aaaa48e6b7432dfd31ad8a11ed36fbeb72fa44edae2ba1b7e4a91ac",
+          "web/src/features/admin/InstanceResourcesSection.tsx": "ab380051f483d2601442f7f914afee47a86d4f58fa1d435c80778c533e897b89",
+          "web/src/features/admin/ResourceImportFields.tsx": "5746ebec88abaf0f2dfb787ff6f248b967cc3480f49dbd15c4209e9b6382b955",
+          "web/src/features/filePreview/FilePreview.tsx": "252df56ed06fd77d969ab37cf5e712ce9044521853b27a82eb2f9009e7296c5c",
+          "web/src/features/filePreview/WordPreview.tsx": "d1aa0e1aa4349a1ed3522d52651a8f5bf60703cbcae3fa454ab569e924fba840",
+          "web/src/features/filePreview/SpreadsheetPreview.tsx": "74bb45f59069677a318440938dd610b11baafcf514801b9185e1b5543998e7ac",
+          "web/src/features/filePreview/fileSource.ts": "6a901bcbb46320ef64599a203740fb96bf1dd718c76ff3891c20d9a1608e0404",
+          "web/src/app/appFeedbackPlacement.ts": "b33db834cdc044e3730a5c16e142f0e86810aa64feaf70e15b4d4954b50d771e",
+          "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
+          "web/src/app.css": "3b86dd330de8b074f0bc2f5231e8caac428147e8e9d1a56a2485495a46b63a5f",
+          "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
+          ".agents/context/DESIGN.md": "01ed92d477096516615c3bdffe3a713c8016ed44fcd50b5b34a8d6c59d6b6fd6",
+          ".agents/context/PRODUCT.md": "ef01919543bb20edfdcbcef1bc1b455428207bc14a43946ad5dddb5e084c4273"
+        },
+        "evidenceRecords": [
+          "docs/reports/tenant-instance-resources-ui-verification-2026-10-18.md"
+        ],
+        "captureDirectory": ".playwright-mcp/tenant-resources-ui-20261018",
+        "captureReview": "Fresh finish reviewer individually inspected all 25 named captures and returned ship. Collection at 1440/1024/768/390/320px, narrow row/paging, editor/import top and lower regions, copy confirmation/provenance, DOCX/XLSX/image previews, empty/read-only/archived/denied views. Documenter sampled shipped source plus resources-320-row.png and resources-provenance-1440.png; no new captures or app checks.",
+        "visualAcceptanceLimits": "Loading, transient, stale and malformed-acknowledgement presentation were not visually accepted from the current captures. Functional interactions, exact download bytes, partial imports, stale drafts and nested revoked reads stay separately scoped by the verification report.",
+        "openScope": "Sandbox, other resource Access/effect families, Governance/platform, voice/rich Chat delivery, autonomous origins, obsolete-authority/schema consolidation and earlier SQLite preference follow-up. Full proposal remains active; no CI or milestone acceptance."
       }
     }
   },
@@ -792,7 +820,7 @@
       },
       {
         "name": "The Bounded Feedback Rule",
-        "body": "Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack 16px above the bottom safe area, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Use an opaque `{colors.elevated}` surface and one 1px `{colors.borderStrong}` outline, without an additional shadow. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. [AppShell's shared placement hook](../../web/src/app/appFeedbackPlacement.ts) raises the stack only when its default position would overlap a visible footer, composer, sticky configuration action frame or explicitly marked row actions (`data-feedback-actions`), keeping an 8px gap above that surface. The frontmost dialog owns clearance; covered page controls do not reserve space. Closing, scrolling, resizing and growing inputs recalculate placement. The stack uses normal flow and scrolls locally within half the dynamic viewport or the smaller available space above actions. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains after dismissal. Do not restore a fixed 96px gap across every page.",
+        "body": "Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack 16px above the bottom safe area, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Use an opaque `{colors.elevated}` surface and one 1px `{colors.borderStrong}` outline, without an additional shadow. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. [AppShell's shared placement hook](../../web/src/app/appFeedbackPlacement.ts) raises the stack only when its default position would overlap a visible footer, composer, sticky configuration action frame or explicitly marked row actions (`data-feedback-actions`), keeping an 8px gap above that surface. The frontmost dialog owns clearance, including its explicitly marked body action groups and footer; covered page controls do not reserve space. Closing, scrolling, resizing and growing inputs recalculate placement. The stack uses normal flow and scrolls locally within half the dynamic viewport or the smaller available space above actions. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains after dismissal. Do not restore a fixed 96px gap across every page.",
         "section": "components"
       }
     ],

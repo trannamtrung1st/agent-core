@@ -2,6 +2,7 @@ import type { AdminAgentInstance, ExecutionBudgetPolicy, ExecutionBudgetLimits, 
 import type { SettingsSection, SettingValue, VersionPreview } from './instanceConfiguration';
 import { identityRequest, tenantApi } from './identity';
 import type { InstanceSkill } from './instanceSkills';
+import type { InstanceResource } from './instanceConfiguration';
 
 export type TenantAgentEditor = { agent: { principalId: string; systemIdentityId: string; instance: AdminAgentInstance & { persona: { name: string; role: string; description: string; tone: string } } }; settings: SettingsSection[]; securityRevision: number; canUpdate: boolean; unavailableSettings: string[] };
 export type TenantAgentControlsView = Pick<TenantAgentEditor, 'agent' | 'securityRevision' | 'canUpdate'> & {
@@ -23,3 +24,6 @@ export type TenantAgentVersionPreview = { preview: VersionPreview; securityRevis
 export type TenantSkillItem = { skill: InstanceSkill; canManage: boolean; canCustomize: boolean };
 export type TenantSkillEditor = Pick<TenantAgentEditor, 'agent' | 'securityRevision'> & { items: TenantSkillItem[]; total: number; page: number; pageSize: number; canCreate: boolean; allReadable: boolean };
 export type TenantSkillDetail = Pick<TenantAgentEditor, 'agent' | 'securityRevision'> & { item: TenantSkillItem };
+export type TenantResourceItem = { resource: InstanceResource; canManage: boolean; canDelete: boolean; canCopy: boolean };
+export type TenantResourceEditor = Pick<TenantAgentEditor, 'agent' | 'securityRevision'> & { items: TenantResourceItem[]; total: number; page: number; pageSize: number; canCreate: boolean; allReadable: boolean };
+export type TenantResourceDetail = Pick<TenantAgentEditor, 'agent' | 'securityRevision'> & { item: TenantResourceItem };

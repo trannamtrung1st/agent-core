@@ -92,6 +92,14 @@ it('uses the effective limit before reading oversized content', async () => {
   expect(screen.getByRole('button', { name: 'Download readme.txt' })).toBeEnabled();
 });
 
+it('uses the exact tenant policy owner and reports definitive read loss to retire protected details', async () => {
+  const onReadLost = vi.fn(); const source = { kind: 'tenantResource' as const, tenantId: 'tenant', instanceId: 'agent', resourceKey: 'instance:file', metadata };
+  vi.mocked(readFile).mockRejectedValueOnce(new PreviewError('preview_forbidden', 'File access was revoked.'));
+  render(<FilePreviewButton file={source} onReadLost={onReadLost} />); fireEvent.click(screen.getByRole('button', { name: 'Preview readme.txt' }));
+  await screen.findByText('File access was revoked.'); expect(onReadLost).toHaveBeenCalledTimes(1); expect(loadPreviewOptions).toHaveBeenCalledWith('tenant', expect.any(AbortSignal));
+  expect(screen.queryByRole('button', { name: 'Download readme.txt' })).not.toBeInTheDocument();
+});
+
 it.each([['docx', false], ['xlsx', false], ['docx', true], ['xlsx', true]] as const)('Office %s preview failures keep original Download available (Drive: %s)', async (extension, drive) => {
   vi.mocked(resolveFile).mockResolvedValue({ displayName: 'original.' + extension, contentType: 'application/vnd.openxmlformats-officedocument.' + (extension === 'docx' ? 'wordprocessingml.document' : 'spreadsheetml.sheet'), byteSize: 15 });
   vi.mocked(readOfficePreview).mockRejectedValue(new PreviewError('office_feature_unsupported', 'This Office file contains a feature the preview does not support. The original file is still available to download.'));

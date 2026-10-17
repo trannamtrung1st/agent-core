@@ -25,8 +25,8 @@ export function useAppFeedbackPlacement() {
     const observed = new Set<Element>();
     const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
 
-    function visible(selector: string) {
-      return Array.from(document.querySelectorAll<HTMLElement>(selector))
+    function visible(selector: string, owner: ParentNode = document) {
+      return Array.from(owner.querySelectorAll<HTMLElement>(selector))
         .filter(element => {
           const rect = element.getBoundingClientRect();
           return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < innerWidth
@@ -44,8 +44,8 @@ export function useAppFeedbackPlacement() {
       // The frontmost dialog owns its actions; covered page controls do not reserve space.
       const modal = visible(".ant-modal").at(-1);
       const drawer = visible(".ant-drawer-section").at(-1);
-      const controls = modal ? Array.from(modal.querySelectorAll<HTMLElement>(".ant-modal-footer, .ant-modal-confirm-btns"))
-        : drawer ? Array.from(drawer.querySelectorAll<HTMLElement>(".ant-drawer-footer"))
+      const controls = modal ? visible(".ant-modal-footer, .ant-modal-confirm-btns, [data-feedback-actions]", modal)
+        : drawer ? visible(".ant-drawer-footer, [data-feedback-actions]", drawer)
         : visible(".composer-shell, .admin-owner-actions, [data-feedback-actions]");
       const notices = Array.from(list.querySelectorAll<HTMLElement>(".ant-message-notice"));
       const targets = new Set<Element>([list, ...controls, ...notices]);

@@ -34,6 +34,7 @@ import {
   sourceLabel,
   type FileMetadata,
   type FileRef,
+  fileReadLost,
 } from './fileSource';
 import { loadPreviewOptions, mib, type PreviewOptions } from './previewOptions';
 const loadCsvPreview = () =>
@@ -58,11 +59,13 @@ export function FilePreviewButton({
   disabled = false,
   iconOnly = false,
   label,
+  onReadLost,
 }: {
   file: FileRef;
   disabled?: boolean;
   iconOnly?: boolean;
   label?: string;
+  onReadLost?: () => void;
 }) {
   return (
     <PreviewEntry
@@ -71,6 +74,7 @@ export function FilePreviewButton({
       disabled={disabled}
       iconOnly={iconOnly}
       label={label}
+      onReadLost={onReadLost}
     />
   );
 }
@@ -79,11 +83,13 @@ function PreviewEntry({
   disabled,
   iconOnly,
   label,
+  onReadLost,
 }: {
   file: FileRef;
   disabled: boolean;
   iconOnly: boolean;
   label?: string;
+  onReadLost?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -105,7 +111,7 @@ function PreviewEntry({
           {iconOnly ? null : 'Preview'}
         </Button>
       </Tooltip>
-      <FilePreview file={file} open={open} onClose={() => setOpen(false)} />
+      <FilePreview file={file} open={open} onClose={() => setOpen(false)} onReadLost={onReadLost} />
     </>
   );
 }
@@ -113,10 +119,12 @@ export function FilePreview({
   file,
   open = true,
   onClose,
+  onReadLost,
 }: {
   file: FileRef;
   open?: boolean;
   onClose: () => void;
+  onReadLost?: () => void;
 }) {
   const { token } = theme.useToken();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -155,7 +163,7 @@ export function FilePreview({
         setLoaded({ metadata: value, format, policy: undefined });
         return;
       }
-      const policy = await loadPreviewOptions();
+      const policy = await loadPreviewOptions(file.kind === 'tenantResource' ? file.tenantId : undefined, controller.signal);
       controller.signal.throwIfAborted();
       const limit = formatLimit(format, policy);
       if (value.byteSize > limit) throw new PreviewError('preview_too_large', `This file is ${mib(value.byteSize)}; its preview limit is ${mib(limit)}. Download the original.`);
@@ -196,7 +204,8 @@ export function FilePreview({
         setLoaded({ metadata: currentMetadata, format, policy, url });
       }
     })().catch((reason) => {
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
+        if (fileReadLost(reason)) { setMetadata(null); onReadLost?.(); }
         setError(
           reason instanceof PreviewError
             ? reason
@@ -207,6 +216,7 @@ export function FilePreview({
                   'The file could not be loaded. Check the connection and retry.',
                 ),
         );
+      }
     });
     return () => {
       controller.abort();
@@ -237,8 +247,8 @@ export function FilePreview({
     setDownloadError(false);
     try {
       await downloadFile(file, controller.signal);
-    } catch {
-      if (!controller.signal.aborted) setDownloadError(true);
+    } catch (reason) {
+      if (!controller.signal.aborted) { if (fileReadLost(reason)) { setLoaded(null); setMetadata(null); onReadLost?.(); } setDownloadError(true); }
     } finally {
       if (!controller.signal.aborted) {
         setBusy(false);
@@ -270,6 +280,7 @@ export function FilePreview({
       <Flex ref={previewShell} className="file-preview-shell" vertical gap={token.paddingSM}>
         <Flex
           className="file-preview-actions"
+          data-feedback-actions
           wrap
           justify="space-between"
           align="center"
@@ -341,7 +352,7 @@ export function FilePreview({
             </Suspense>
           ) : loaded.format === 'xlsx' ? (
             <Suspense fallback={<Spin aria-label="Loading Excel preview" />}>
-              <SpreadsheetPreview file={file} initial={loaded.office!} policy={loaded.policy!} />
+              <SpreadsheetPreview file={file} initial={loaded.office!} policy={loaded.policy!} onReadLost={onReadLost} />
             </Suspense>
           ) : loaded.format === 'csv' ? (
             <Suspense fallback={<Spin aria-label="Loading grid" />}>
@@ -447,6 +458,7 @@ function ImagePreview({
       </Flex>
       <Slider
         aria-label="Image zoom"
+        ariaLabelForHandle="Image zoom"
         min={1}
         max={200}
         step={1}

@@ -91,6 +91,7 @@ export function WordPreview({
         <Slider
           style={{ flex: 1 }}
           aria-label="Document zoom"
+          ariaLabelForHandle="Document zoom"
           min={50}
           max={150}
           step={25}

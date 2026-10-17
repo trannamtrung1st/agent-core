@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Empty, Flex, Input, Spin, Tabs, Typography, theme } from 'antd';
-import { type FileRef, PreviewError, readFailure } from './fileSource';
+import { type FileRef, PreviewError, readFailure, fileReadLost } from './fileSource';
 import { readOfficePreview, type OfficePreview } from './officeSource';
 import type { PreviewOptions } from './previewOptions';
 import { columnName, spreadsheetSheet } from './spreadsheetAdapter';
-export function SpreadsheetPreview({ file, initial, policy }: { file: FileRef; initial: OfficePreview; policy: PreviewOptions }) {
+export function SpreadsheetPreview({ file, initial, policy, onReadLost }: { file: FileRef; initial: OfficePreview; policy: PreviewOptions; onReadLost?: () => void }) {
   const ReadonlySpreadsheet = useMemo(() => lazy(() => import('./ReadonlySpreadsheet').then(module => ({ default: module.ReadonlySpreadsheet }))), []);
   const { token } = theme.useToken();
   const [sheet, setSheet] = useState(initial.sheet!), [range, setRange] = useState(initial.range!);
@@ -18,7 +18,7 @@ export function SpreadsheetPreview({ file, initial, policy }: { file: FileRef; i
     void readOfficePreview(file, controller.signal, policy, query.sheet, query.range).then(value => {
       if (value.sha256 !== initial.sha256) throw readFailure(409);
       if (!controller.signal.aborted) setResult(value);
-    }).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof PreviewError ? reason.message : 'The worksheet could not be loaded. Retry or reload this file.'); });
+    }).catch(reason => { if (!controller.signal.aborted) { if (fileReadLost(reason)) onReadLost?.(); setError(reason instanceof PreviewError ? reason.message : 'The worksheet could not be loaded. Retry or reload this file.'); } });
     return () => controller.abort();
   }, [query, initial, identity, policy]);
   const cells = result?.rows ?? [];

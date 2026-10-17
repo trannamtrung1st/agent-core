@@ -1,13 +1,13 @@
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Select, Spin, Switch, Table, Tooltip, Typography, Upload, theme } from 'antd';
-import { UndoOutlined, UploadOutlined, EyeOutlined, DownloadOutlined, CopyOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Drawer, Dropdown, Empty, Flex, Grid, Select, Spin, Switch, Table, Tooltip, Typography, theme } from 'antd';
+import { UndoOutlined, EyeOutlined, DownloadOutlined, CopyOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 import { ResourceDeletionContent, ResourceSelectionToolbar } from './ResourceSelectionToolbar';
 import { confirmAction } from '../../app/confirmAction';
 import { AdminCollectionToolbar, useAdminCollectionSearch } from './AdminCollectionToolbar';
-import { useAdminDetailLayout } from './useAdminDetailLayout';
+import { InstanceResourceFields, InstanceResourceInspector, RESOURCE_COPY_DESCRIPTION } from './InstanceResourceFields';
 import { ResourceFilePicker, ResourceImportPreview } from './ResourceImportFields';
-import { RESOURCE_FILE_HELP, RESOURCE_KINDS, createPreviewItem, resourceBatchLimitProblem, resourceMediaType, resourcePreviewProblem, type ResourcePreviewItem } from './resourcePreview';
+import { RESOURCE_KINDS, createPreviewItem, resourceBatchLimitProblem, resourceMediaType, resourcePreviewProblem, type ResourcePreviewItem } from './resourcePreview';
 import { describeAdminError } from './adminErrors';
 import { listInstanceResources, copyInstanceResource, uploadInstanceResource, toggleInstanceResource, deleteInstanceResource, downloadInstanceResource, readInstanceResourceFile, type InstanceResource, type ResourceCatalog } from '../../services/instanceConfiguration';
 const kinds = [{ value: 1, label: 'Knowledge' }, { value: 2, label: 'Reference' }, { value: 3, label: 'Template' }, { value: 4, label: 'Static asset' }];
@@ -15,7 +15,7 @@ import { FilePreviewButton } from "../filePreview/FilePreview";
 
 type Editor = { resource: InstanceResource | null; logicalPath: string; kind: number; enabled: boolean; file: File | null; items: ResourcePreviewItem[]; readOnly: boolean };
 export function InstanceResourcesSection({ instanceId, archived, active = true, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; active?: boolean; onDirtyChange?: (dirty: boolean) => void; onUpdated: () => void }) {
-  const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken(); const { modal } = App.useApp(); const compact = !Grid.useBreakpoint().md;
+  const { token } = theme.useToken(); const { modal } = App.useApp(); const compact = !Grid.useBreakpoint().md;
   const [selectedResources, setSelectedResources] = useState<React.Key[]>([]);
   const [catalog, setCatalog] = useState<ResourceCatalog | null>(null); const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null); const [editor, setEditor] = useState<Editor | null>(null); const [kind, setKind] = useState<number>();
@@ -151,7 +151,7 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
             <Tooltip title="Download"><Button icon={<DownloadOutlined aria-hidden />} aria-label="Download" disabled={!ready} onClick={() => void downloadInstanceResource(instanceId, r).catch(e => setError(describeAdminError(e, 'Download failed. Retry.').message))} /></Tooltip>
             <Dropdown trigger={['click']} menu={{ items: origin === 'Definition' ? [{ key: 'copy', icon: <CopyOutlined aria-hidden />, label: 'Copy to Instance', disabled: archived || !ready }] : [{ key: 'edit', icon: <EditOutlined aria-hidden />, label: 'Edit', disabled: archived || !ready }, { key: 'delete', icon: <DeleteOutlined aria-hidden />, label: 'Delete', danger: true, disabled: archived || !ready }], onClick: ({ key }) => {
               if (key === 'edit') open(r, false, menuOpener.current ?? undefined);
-              else if (key === 'copy') confirmAction(modal, { title: 'Copy to this Instance?', content: 'Creates an independent file with source provenance. The inherited original stays enabled. Changes to it will not update the copy.', okText: 'Copy resource', afterClose: () => (menuOpener.current?.isConnected ? menuOpener.current : createOpener.current)?.focus(), onOk: () => mutate(() => copyInstanceResource(instanceId, catalog, r)) });
+              else if (key === 'copy') confirmAction(modal, { title: 'Copy to this Instance?', content: RESOURCE_COPY_DESCRIPTION, okText: 'Copy resource', afterClose: () => (menuOpener.current?.isConnected ? menuOpener.current : createOpener.current)?.focus(), onOk: () => mutate(() => copyInstanceResource(instanceId, catalog, r)) });
               else confirmAction(modal, { title: 'Delete Instance resource?', content: 'Removes this file from future Runs. Admitted Runs retain their immutable content.', okText: 'Delete resource', danger: true, afterClose: () => (menuOpener.current?.isConnected ? menuOpener.current : createOpener.current)?.focus(), onOk: () => mutate(() => deleteInstanceResource(instanceId, catalog, r)) });
             } }}><Button icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${origin} resource ${r.logicalPath}`} disabled={!ready} onClick={event => { menuOpener.current = event.currentTarget; }} /></Dropdown>
           </Flex> }
@@ -168,13 +168,7 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
     </Flex> : undefined}>
       {editor && <Flex vertical gap={token.padding}>
         {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Reload and retain draft</Button>} />}
-        {editor.readOnly && editor.resource ? <Descriptions {...detailLayout} column={1} size="small" className="admin-effective-details" items={[
-          { key: 'identity', label: 'Resource key', children: <Typography.Text style={{ overflowWrap: 'anywhere' }}>{editor.resource.key}</Typography.Text> },
-          { key: 'path', label: 'Run path', children: <Typography.Text style={{ overflowWrap: 'anywhere' }}>{editor.resource.virtualPath}</Typography.Text> },
-          { key: 'hash', label: 'Content SHA-256', children: <Typography.Text copyable style={{ overflowWrap: 'anywhere' }}>{editor.resource.contentSha256}</Typography.Text> },
-          { key: 'revision', label: 'Revision', children: editor.resource.revision },
-          { key: 'dependencies', label: 'Enabled Skill dependencies', children: editor.resource.dependencies.join(', ') || 'None' }
-        ]} /> : !editor.resource ? <Flex vertical gap={token.padding}>
+        {editor.readOnly && editor.resource ? <InstanceResourceInspector resource={editor.resource} /> : !editor.resource ? <Flex vertical gap={token.padding}>
           <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Choose files or a folder, then review each path and kind before adding. Resources apply to the next Run.</Typography.Paragraph>
           <ResourceFilePicker disabled={busy} onFiles={files => updateItems(current => [...current, ...files.map(createPreviewItem)])} onError={setError} />
           {incoming.length > 0 && <Flex vertical gap={token.paddingSM}>
@@ -186,34 +180,7 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
           </Flex>}
           {limitProblem && <Alert type="warning" showIcon title={limitProblem} />}
           <Flex align="center" gap={token.paddingXS}><Switch aria-label="Enable imported resources" checked={editor.enabled} disabled={busy} onChange={enabled => setEditor({ ...editor, enabled })} /><Typography.Text>Enable added resources</Typography.Text></Flex>
-        </Flex> : <Form layout="vertical">
-          <Flex vertical gap={token.padding}>
-            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Update the path, kind or availability. Changes apply to the next Run.</Typography.Paragraph>
-            <Form.Item label="Logical path" style={{ margin: 0 }} extra="A relative path, such as references/guide.pdf.">
-              <Input aria-label="Resource logical path" value={editor.logicalPath} disabled={busy} onChange={e => setEditor({ ...editor, logicalPath: e.target.value })} />
-            </Form.Item>
-            <Flex gap={token.padding} wrap>
-              <Form.Item label="Kind" style={{ margin: 0, flex: '1 1 220px' }}><Select aria-label="Resource kind" value={editor.kind} options={kinds} disabled={busy} onChange={kind => setEditor({ ...editor, kind })} /></Form.Item>
-              <Form.Item label="Availability" style={{ margin: 0 }}><Flex align="center" gap={token.paddingXS} style={{ minHeight: token.controlHeight }}><Switch aria-label="Instance resource enabled" checked={editor.enabled} disabled={busy} onChange={enabled => setEditor({ ...editor, enabled })} /><Typography.Text>{editor.enabled ? 'Enabled' : 'Disabled'}</Typography.Text></Flex></Form.Item>
-            </Flex>
-            <Flex vertical gap={token.paddingXS}>
-              <Typography.Text strong>Content</Typography.Text>
-              <Typography.Text style={{ overflowWrap: 'anywhere' }}>{editor.resource.logicalPath.split('/').at(-1)} · {editor.resource.byteLength.toLocaleString()} bytes</Typography.Text>
-              <Typography.Text type="secondary">{editor.file ? 'The selected file will replace the current content.' : 'Current content is kept unless you choose a replacement.'}</Typography.Text>
-              <Upload.Dragger className="admin-resource-upload" maxCount={1} showUploadList={false} disabled={busy} beforeUpload={file => { setEditor(current => current ? { ...current, file } : current); return false; }}>
-                <p className="ant-upload-drag-icon"><UploadOutlined /></p>
-                <p className="ant-upload-text">Choose a replacement file</p>
-                <p className="ant-upload-hint">Or drop one file here · up to 8 MiB</p>
-              </Upload.Dragger>
-              {editor.file && <Flex gap={token.paddingXS} align="center" justify="space-between">
-                <Typography.Text style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{editor.file.name} · {editor.file.size.toLocaleString()} bytes</Typography.Text>
-                <Button type="text" disabled={busy} onClick={() => setEditor({ ...editor, file: null })}>Keep current file</Button>
-              </Flex>}
-              <Typography.Text type="secondary">Knowledge requires a supported text or data format. {RESOURCE_FILE_HELP}</Typography.Text>
-            </Flex>
-            {editProblem && <Alert type="error" showIcon title={editProblem} />}
-          </Flex>
-        </Form>}
+        </Flex> : <InstanceResourceFields resource={editor.resource} value={editor} disabled={busy} problem={editProblem} onChange={patch => setEditor({ ...editor, ...patch })} />}
         {editor.readOnly && editor.resource && <>
           <FilePreviewButton disabled={!active} file={{ kind: 'resource', instanceId, resourceKey: editor.resource.key, metadata: { displayName: editor.resource.logicalPath.split('/').at(-1)!, contentType: editor.resource.mediaType, byteSize: editor.resource.byteLength, sha256: editor.resource.contentSha256 } }} />
         </>}

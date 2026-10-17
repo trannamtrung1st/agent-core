@@ -82,5 +82,11 @@ export async function identityBlob(path: string, signal?: AbortSignal): Promise<
   const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal });
   await requireIdentityResponse(response, path); return response.blob();
 }
+/** Raw authenticated GET for bounded file readers which own safe source-specific error parsing. */
+export async function identityReadResponse(path: string, signal: AbortSignal): Promise<Response> {
+  const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal });
+  if (response.status === 401) window.dispatchEvent(new Event('agentcore:authentication-expired'));
+  return response;
+}
 export const tenantApi = (tenantId: string, suffix: string) => `/api/v2/tenants/${encodeURIComponent(tenantId)}${suffix}`;
 export const membershipsApi = (page: number, q = '') => `/api/v2/account/tenants?page=${page}&pageSize=10&q=${encodeURIComponent(q)}`;

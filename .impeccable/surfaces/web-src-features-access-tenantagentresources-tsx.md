@@ -1,0 +1,9 @@
+# Tenant Instance Resources
+
+Mode: Operate. Ordinary code-led extension of the existing scoped Instance editor. The proposal and docs/19 settle task, hierarchy and unattended execution. Preserve the Ant Design v6 dark world, shared Instance heading, 48rem bounded column and native panel/collection/Drawer/confirmation owners. No new visual world, comp, seed, assets or theme.
+
+Show full logical paths, origin/kind/size, effective enabled state versus stored inherited choice, readable dependencies and copy provenance. One wrapping row keeps each resource's actions together. The enclosing panel owns 16px section gaps; sibling facts and actions own 8px. Use existing resource picker/import review and rich-file components, with canonical tenant transport and exact item reads. No global owner fallback.
+
+Stage file/folder selections until explicit Save. Sequential import retires each acknowledged file, keeps failed/unsubmitted files and requires fresh facts after a failure; never replay an acknowledged item. Metadata edits preserve existing bytes and omitted availability. Exact reload retains drafts; explicit discard adopts saved data. Inherited bytes remain read-only; copy has a deliberate distinct destination and source provenance. Delete has independent permission. Dependency rejection cannot silently change another child.
+
+Partial, empty, transient, denied, archived and read-only states remain distinct. Definitive read loss retires protected details/previews; tenant/Instance changes abort old reads, commands and confirmations. Native Cancel/Escape, dirty guards and focus restoration use shared owners. Verify actual Synthetic import/edit/inspect/preview/download/choice/reset/copy/delete, stale/partial/revoked recovery, then batch 1440/1024/768/390/320 and representative shared consumers. Fresh finish review and narrow observed design persistence follow functional verification.
