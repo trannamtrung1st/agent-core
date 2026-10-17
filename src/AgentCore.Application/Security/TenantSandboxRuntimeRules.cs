@@ -11,6 +11,13 @@ namespace AgentCore.Application.Security;
 
 public static class TenantSandboxRuntimeRules
 {
+    public static int InitialLifetimeSeconds(SandboxProfile profile, SandboxCommandRequest command)
+    {
+        var setup = string.IsNullOrWhiteSpace(profile.InitializationScript) && string.IsNullOrWhiteSpace(profile.InstanceInitializationScript) ? 0 : profile.MaxCommandSeconds;
+        var minimum = checked(45 + setup + command.TimeoutSeconds!.Value + 20);
+        if (profile.MaxLifetimeSeconds < minimum) throw new AccessDeniedException("sandbox_lifetime_insufficient");
+        return Math.Min(profile.MaxLifetimeSeconds, Math.Max(profile.IdleTtlSeconds, minimum));
+    }
     public static void RequireCurrentPolicy(AgentRun run, TenantAgent agent, AgentDefinition baseline, SandboxProfile admitted,
         SandboxProfile source, SandboxMountAuthority? mounted)
     {
@@ -48,14 +55,16 @@ public static class TenantSandboxRuntimeRules
             || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || session.Snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
             throw new AccessDeniedException("tenant_runtime_unavailable");
     }
-    public static void ValidateNewLease(TenantSandboxRuntimeWrite write, SandboxLease lease, long expectedRevision, AgentRun run, SandboxLease? previous, DateTimeOffset at)
+    public static void ValidateNewLease(TenantSandboxRuntimeWrite write, SandboxLease lease, long expectedRevision, AgentRun run, SandboxLease? previous, DateTimeOffset at, SandboxExecution? reserved = null)
     {
         var f = write.Runtime;
         ValidateLease(lease);
         var pinned = run.Admission.Configuration?.Definition.ExecutionSandboxProfiles?.SingleOrDefault(p => p.Id == lease.Profile.Id);
         if (lease.TenantId != f.Owner.TenantId || lease.ExecutorPrincipalId != f.Owner.ExecutorPrincipalId || lease.SessionId != f.SessionId || lease.AgentInstanceId != f.Owner.AgentInstanceId
             || lease.Profile.TenantId != lease.TenantId || lease.Generation == Guid.Empty || lease.Revision != checked(expectedRevision + 1)
-            || lease.State != SandboxLeaseState.Provisioning || lease.ProviderId is not null || lease.ActiveExecutionId is not null || lease.LastExecutionId is not null
+            || lease.State != SandboxLeaseState.Provisioning || lease.ProviderId is not null
+            || (reserved is null ? lease.ActiveExecutionId is not null || lease.LastExecutionId is not null
+                : !reserved.InitializesGeneration || lease.ActiveExecutionId != reserved.Id || lease.LastExecutionId != reserved.Id)
             || lease.AdmissionRunId != f.RunId || lease.AdmissionToolCallId is not { Length: > 0 and <= 128 }
             || lease.CreatedAt > at || lease.ExpiresAt <= at || lease.ExpiresAt <= lease.CreatedAt || lease.Profile.AdmittedForExecution != true || pinned != lease.Profile
             || run.Admission.Configuration?.Definition.SandboxPolicy?.AllowedProfileIds.Contains(lease.Profile.Id, StringComparer.Ordinal) != true
@@ -89,9 +98,11 @@ public static class TenantSandboxRuntimeRules
             || execution.AgentInstanceId != f.Owner.AgentInstanceId || execution.AgentRunId != f.RunId || execution.ClaimGeneration != f.Generation
             || execution.Revision != 1 || execution.Generation != lease.Generation || execution.ProfileId != lease.Profile.Id || execution.ProfileRevision != lease.Profile.Revision
             || execution.State != SandboxExecutionState.Dispatching || execution.ProviderCommandId is not null || execution.FinishedAt is not null
-            || lease.TenantId != execution.TenantId || lease.ExecutorPrincipalId != execution.ExecutorPrincipalId || lease.State != SandboxLeaseState.Ready || lease.ActiveExecutionId is not null
-            || execution.DeadlineAt is not { } deadline || deadline <= at || execution.StartedAt > at || deadline <= execution.StartedAt || deadline > lease.ExpiresAt
-            || deadline > execution.StartedAt.AddSeconds(lease.Profile.MaxCommandSeconds)
+            || lease.TenantId != execution.TenantId || lease.ExecutorPrincipalId != execution.ExecutorPrincipalId || execution.StartedAt > at
+            || (execution.InitializesGeneration ? lease.State != SandboxLeaseState.Provisioning || lease.ActiveExecutionId != execution.Id
+                || execution.DeadlineAt is not null || execution.CommandStartedAt is not null || execution.Phase != "provisioning"
+                : lease.State != SandboxLeaseState.Ready || lease.ActiveExecutionId is not null || execution.DeadlineAt is not { } deadline
+                    || deadline <= at || deadline <= execution.StartedAt || deadline > lease.ExpiresAt || deadline > execution.StartedAt.AddSeconds(lease.Profile.MaxCommandSeconds))
             || pinned?.AdmittedForExecution != true || (pinned with { InstanceRevision = lease.Profile.InstanceRevision }) != lease.Profile
             || !RolePermissions.AllowsTool(run.Admission.Configuration!.Definition, ToolCatalog.SandboxExec))
             throw new ArgumentException("Invalid exact tenant Sandbox execution reservation.");
@@ -100,6 +111,11 @@ public static class TenantSandboxRuntimeRules
     {
         if (value.Id == Guid.Empty || value.TenantId is null || value.TenantId == Guid.Empty || value.ExecutorPrincipalId is null || value.ExecutorPrincipalId == Guid.Empty
             || (value.ApprovalRequestId is null) != (value.OperationId is null) || value.ApprovalRequestId == Guid.Empty || value.OperationId == Guid.Empty
+            || value.InitializesGeneration && value.ApprovalRequestId is null
+            || value.CommandStartedAt < value.StartedAt || value.CommandStartedAt > value.FinishedAt
+            || value.CommandStartedAt is not null && (value.DeadlineAt is null || value.DeadlineAt <= value.CommandStartedAt)
+            || value.InitializesGeneration && value.CommandStartedAt is null && (value.DeadlineAt is not null || value.ProviderCommandId is not null
+                || value.ExitCode is not null || value.State is SandboxExecutionState.Running or SandboxExecutionState.Completed)
             || value.Revision < 1 || value.Generation == Guid.Empty || value.SessionId == Guid.Empty || value.AgentInstanceId == Guid.Empty || value.AgentRunId == Guid.Empty
             || value.ClaimGeneration == Guid.Empty || string.IsNullOrWhiteSpace(value.ToolCallId) || value.ToolCallId.Length > 128 || value.ToolCallId.Any(char.IsControl)
             || value.ActionHash is not { Length: 64 } || value.ActionHash.Any(c => !char.IsAsciiHexDigit(c)) || !Enum.IsDefined(value.State)
@@ -131,6 +147,7 @@ public static class TenantSandboxRuntimeRules
         if (before.TenantId != next.TenantId || before.ExecutorPrincipalId != next.ExecutorPrincipalId || before.SessionId != next.SessionId || before.AgentInstanceId != next.AgentInstanceId
             || before.Generation != next.Generation || before.Id != next.Id || before.AgentRunId != next.AgentRunId || before.ClaimGeneration != next.ClaimGeneration
             || before.ApprovalRequestId != next.ApprovalRequestId || before.OperationId != next.OperationId
+            || before.InitializesGeneration != next.InitializesGeneration || before.CommandStartedAt != next.CommandStartedAt
             || before.ToolCallId != next.ToolCallId || before.ActionHash != next.ActionHash || before.CommandText != next.CommandText || before.StartedAt != next.StartedAt
             || before.ProfileId != next.ProfileId || before.ProfileRevision != next.ProfileRevision || before.Background != next.Background || before.DeadlineAt != next.DeadlineAt
             || next.Revision != checked(before.Revision + 1) || before.ProviderCommandId is not null && next.ProviderCommandId != before.ProviderCommandId

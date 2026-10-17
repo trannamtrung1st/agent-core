@@ -7,7 +7,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
-    private void RequireSandboxOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent)
+    private void RequireSandboxOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent, SandboxExecution? reserved = null)
     {
         var value = request.Operation.SandboxCommand!; var tenant = request.TenantId;
         var source = sandboxBacking.TenantProfile(tenant, value.ProfileId, value.ProfileRevision);
@@ -19,9 +19,9 @@ public sealed partial class InMemoryIamStore
             : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion).GetAwaiter().GetResult();
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         var lease = sandboxBacking.TenantLease(tenant, value.SessionId);
-        TenantSandboxOperationRules.Require(value, run, agent, session, baseline, source, lease, ApprovalNow);
+        TenantSandboxOperationRules.Require(value, run, agent, session, baseline, source, lease, ApprovalNow, reserved);
         var pinned = TenantSandboxOperationRules.Profile(run, value.ProfileId);
-        if (request.Snapshot != TenantSandboxOperationRules.Snapshot(agent, pinned, lease)) throw new SecurityConflictException("sandbox_operation_witness_changed");
+        if (request.Snapshot != TenantSandboxOperationRules.Snapshot(agent, pinned, lease, reserved?.InitializesGeneration)) throw new SecurityConflictException("sandbox_operation_witness_changed");
         if (pinned.RegistryCredentialId is { } credential)
             TenantSandboxProfileRules.RequireCredential(pinned, credentials?.ReadTenantCredential(tenant, credential)?.Value, ApprovalNow);
         TenantSandboxRuntimeRules.RequirePermissionsAsync(_tenants[tenant], run, pinned, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();

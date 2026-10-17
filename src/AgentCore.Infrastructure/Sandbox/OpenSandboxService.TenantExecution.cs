@@ -41,6 +41,16 @@ public sealed partial class OpenSandboxService
                 if (current.Request.RequestId != requestId) throw new SecurityConflictException("sandbox_approval_mismatch");
                 var command = TenantApprovalRules.SandboxCommand(current.Request.Operation.SandboxCommand!);
                 lease = current.Lease; receipt = current.Execution;
+                if (receipt.InitializesGeneration)
+                {
+                    // This single fresh reservation owns template seeding, create and exact ordered initialization.
+                    receipt = await SaveReceiptAsync(receipt with { FilesystemEffectsMayHaveOccurred = true }, false, ct);
+                    lease = await ProvisionApprovedGenerationAsync(frame, lease, receipt, ct);
+                    await using var initialized = await ConnectAsync(lease, ct);
+                    lease = await ReserveExecutionLifetimeAsync(initialized, lease, command.TimeoutSeconds!.Value, ct);
+                    receipt = await approvedSandbox.StartCommandAsync(frame, receipt.Id, ct);
+                    lease = (await TenantExecution.RequireAsync(frame, receipt.Id, ct)).Lease;
+                }
                 // The existing watcher continuously checks the current, renewable claim. The saved command deadline stays fixed.
                 var remaining = receipt.DeadlineAt!.Value - time.GetUtcNow();
                 if (remaining <= TimeSpan.Zero) throw new TimeoutException();
@@ -65,7 +75,7 @@ public sealed partial class OpenSandboxService
                 {
                     receipt = await SaveReceiptAsync(receipt with { State = SandboxExecutionState.Canceled, Phase = "notDispatched",
                         FinishedAt = time.GetUtcNow(), TerminationConfirmed = true, FailureCategory = error is OperationCanceledException ? "cancellation" : "authorityOrSetupChanged" }, false, CancellationToken.None);
-                    lease = await SaveAsync(lease with { State = SandboxLeaseState.Ready, ActiveExecutionId = null }, CancellationToken.None);
+                    lease = await SaveAsync(lease with { State = receipt.InitializesGeneration ? SandboxLeaseState.Terminated : SandboxLeaseState.Ready, ActiveExecutionId = null }, CancellationToken.None);
                 }
                 else if (!receipt.TerminationConfirmed)
                     (lease, receipt) = await AbortExecutionFinalizationAsync(lease, receipt, error);

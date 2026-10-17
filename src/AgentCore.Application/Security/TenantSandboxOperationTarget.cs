@@ -32,7 +32,7 @@ public sealed class TenantSandboxOperationTarget(ITenantSessionStore sessions, I
             || target.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision)
             throw new SecurityConflictException("sandbox_operation_witness_changed");
         TenantSandboxOperationRules.Require(value, run, target.Agent, target.Session, target.Baseline, target.Profile, target.Lease, time.GetUtcNow(), reserved);
-        if (request.Snapshot != TenantSandboxOperationRules.Snapshot(target.Agent, TenantSandboxOperationRules.Profile(run, value.ProfileId), target.Lease))
+        if (request.Snapshot != TenantSandboxOperationRules.Snapshot(target.Agent, TenantSandboxOperationRules.Profile(run, value.ProfileId), target.Lease, reserved?.InitializesGeneration))
             throw new SecurityConflictException("sandbox_operation_witness_changed");
     }
 }

@@ -60,7 +60,7 @@ public sealed partial class InMemoryIamStore
     }
     public ValueTask<bool> TryReserveTenantSandboxExecutionAsync(TenantSandboxRuntimeWrite write, SandboxExecution execution, DateTimeOffset at, CancellationToken ct = default)
     {
-        if (execution.ApprovalRequestId is not null || execution.OperationId is not null) throw new AccessDeniedException("sandbox_approval_context_required");
+        if (execution.ApprovalRequestId is not null || execution.OperationId is not null || execution.InitializesGeneration) throw new AccessDeniedException("sandbox_approval_context_required");
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate)
         {
             var tenant = write.Runtime.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");

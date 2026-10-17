@@ -90,7 +90,10 @@ public sealed partial class OpenSandboxService
         execution = await SaveReceiptAsync(execution, false, CancellationToken.None);
         lease = await SaveAsync(lease with { State = remote ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation,
             ActiveExecutionId = remote ? null : execution.Id, DiagnosticId = execution.DiagnosticId,
-            CleanupReason = cancelled ? "cancelled" : "executionFailed", SafeMessage = remote
+            CleanupReason = cancelled ? "cancelled" : execution.InitializesGeneration && execution.CommandStartedAt is null
+                ? lease.Initialization?.State == "Failed" ? "initializationFailed" : "setupFailed" : "executionFailed",
+            FailurePhase = execution.InitializesGeneration && execution.CommandStartedAt is null ? lease.TransitionPhase : lease.FailurePhase,
+            FailureCategory = execution.FailureCategory, SafeMessage = remote
                 ? "Container termination confirmed. Canonical files retain any complete or partial writes. The command is never replayed."
                 : "Container termination remains unconfirmed. Canonical writes may still occur. Inspect durable evidence before further execution." }, CancellationToken.None);
         return (lease, execution);

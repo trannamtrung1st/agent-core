@@ -51,7 +51,7 @@ public sealed partial class OpenSandboxService
             receipt = receipt with { ProviderCommandId = execution.Id ?? receipt.ProviderCommandId, Stdout = stdout.Text, Stderr = stderr.Text,
                 Truncated = stdout.Truncated || stderr.Truncated, State = command.Background ? SandboxExecutionState.Running : SandboxExecutionState.Completed,
                 ExitCode = execution.ExitCode, FinishedAt = command.Background ? null : time.GetUtcNow() };
-            if (!command.Background) receipt = receipt with { DurationMs = Math.Max(0, execution.Complete?.ExecutionTimeMs ?? (long)(time.GetUtcNow() - receipt.StartedAt).TotalMilliseconds) };
+            if (!command.Background) receipt = receipt with { DurationMs = Math.Max(0, execution.Complete?.ExecutionTimeMs ?? (long)(time.GetUtcNow() - (receipt.CommandStartedAt ?? receipt.StartedAt)).TotalMilliseconds) };
             if (!command.Background)
             {
                 receipt = receipt with { Phase = "processInspection" };

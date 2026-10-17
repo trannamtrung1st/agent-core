@@ -11,7 +11,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    private async ValueTask RequireSandboxOperation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run, TenantAgent agent, CancellationToken ct)
+    private async ValueTask RequireSandboxOperation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run, TenantAgent agent, CancellationToken ct, SandboxExecution? reserved = null)
     {
         var value = request.Operation.SandboxCommand!; var tenant = request.TenantId;
         var source = await OwnedSandboxProfiles(db, tenant).AsNoTracking().SingleOrDefaultAsync(p => p.Id == value.ProfileId && p.Revision == value.ProfileRevision, ct).ConfigureAwait(false);
@@ -28,9 +28,9 @@ public sealed partial class SqliteIamStore
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         var row = await db.Set<SandboxLeaseRow>().AsNoTracking().SingleOrDefaultAsync(l => l.TenantId == tenant && l.SessionId == value.SessionId.ToString("D"), ct).ConfigureAwait(false);
         var lease = row is null ? null : SandboxRuntimePersistence.Value(row);
-        TenantSandboxOperationRules.Require(value, run, agent, session, baseline, SandboxValue(source), lease, ApprovalNow);
+        TenantSandboxOperationRules.Require(value, run, agent, session, baseline, SandboxValue(source), lease, ApprovalNow, reserved);
         var pinned = TenantSandboxOperationRules.Profile(run, value.ProfileId);
-        if (request.Snapshot != TenantSandboxOperationRules.Snapshot(agent, pinned, lease)) throw new SecurityConflictException("sandbox_operation_witness_changed");
+        if (request.Snapshot != TenantSandboxOperationRules.Snapshot(agent, pinned, lease, reserved?.InitializesGeneration)) throw new SecurityConflictException("sandbox_operation_witness_changed");
         if (pinned.RegistryCredentialId is { } credential)
         {
             var saved = await OwnedCredentials(db, tenant).SingleOrDefaultAsync(c => c.CredentialId == credential.ToString("D"), ct).ConfigureAwait(false);

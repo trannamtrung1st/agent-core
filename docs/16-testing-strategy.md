@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Sandbox first-generation regression
+
+Use actual owned Definition/Instance/Session/Run/Review services in both stores with immutable template bytes, real disposable directories and the installed SDK against an authenticated loopback peer. Assert first-generation reservation, exact ownership metadata/mount request, Profile-then-Instance setup, one command, delayed fixed command deadline, factual effect settlement/reopen and no SDK work on retry. The peer's mount/readiness and command responses are controlled; this is not Docker or shell qualification.
+
+Exercise initialization failure in either script, revocation during create/setup, refused mounts, foreign created metadata, lost create response and an occupied template file. No failure may dispatch the approved command or overwrite retained bytes; cleanup cannot delete a foreign environment. Concurrent initial reservations must have one winner; a command cannot start before successful setup, through factual CAS or more than once. Changed parent/revoked executor after setup rejects start. Keep existing owned Ready/approval/current-policy and shared legacy workspace/finalization regressions. [Evidence](reports/tenant-sandbox-provisioning-verification-2026-10-18.md) records the executed boundary. Full process/reset/orphan cleanup workers, Docker, model offering/output delivery and UI acceptance remain separate.
+
 ## Tenant Sandbox actual SDK execution regression
 
 Using actual tenant Definition/Instance/Session/Run/Review owners in both stores, reserve a controlled Ready generation over real disposable canonical directories and execute through the production SDK against an authenticated loopback server. Assert exact command argv, cwd, UID/GID and timeout, bounded streamed output, one dispatch, current execution checks and immutable effect receipt/Run/audit settlement. Invoke the normal external-effect preparation and receipt-consuming continuation, then repeat the command and verify no further provider calls.

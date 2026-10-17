@@ -28,7 +28,12 @@ public sealed partial class OpenSandboxService
         AgentCoreException core when core.Code == "WorkspaceQuotaExceeded" => "storageLimit",
         OperationCanceledException => "cancellation",
         TimeoutException => "commandTimeout",
+        AgentCoreException core when core.Code == "MountIncompatible" => "mountFailure",
+        AgentCore.Application.Security.AccessDeniedException denied when denied.ReasonCode == "sandbox_generation_unavailable" => "provisioningFailure",
+        AgentCore.Application.Security.AccessDeniedException => "sourceAuthorizationChanged",
+        AgentCore.Application.Security.SecurityConflictException conflict when conflict.ReasonCode is "sandbox_operation_witness_changed" or "operation_witness_changed" or "stale_revision" or "resource_changed" => "sourceAuthorizationChanged",
         AgentCoreException core when core.Code == "Forbidden" => "sourceAuthorizationChanged",
+        _ when phase == "provisioning" => "provisioningFailure",
         _ when phase == "processInspection" => "processInspectionFailure",
         _ => "providerTransportFailure"
     };

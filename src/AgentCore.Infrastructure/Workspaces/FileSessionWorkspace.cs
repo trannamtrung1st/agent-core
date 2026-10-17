@@ -10,7 +10,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Workspaces;
 
-public sealed partial class FileSessionWorkspace : ISessionWorkspace
+public sealed partial class FileSessionWorkspace : ISessionWorkspace, ITenantSandboxWorkspacePreparer
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private readonly string _root;
@@ -21,6 +21,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
     private readonly IMemoryStore _sessions;
     private readonly IAgentInstanceStore _instances;
     private readonly ISandboxStore _sandboxes;
+    private readonly AgentCore.Application.Security.TenantSandboxExecutionAuthority? _tenantAuthority;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _provisioning = new();
     private readonly ConcurrentDictionary<Guid, byte> _deleted = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _ioLifetimes = new();
@@ -28,8 +29,10 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
     public FileSessionWorkspace(string workspaceRoot, string templateRoot, IAttachmentStore? attachments = null,
         long maxWritableBytes = WorkspaceLimits.MaxWritableBytes, DefinitionPublicationResourceReader? publicationResources = null,
-        IMemoryStore? sessions = null, IAgentInstanceStore? instances = null, ISandboxStore? sandboxes = null)
+        IMemoryStore? sessions = null, IAgentInstanceStore? instances = null, ISandboxStore? sandboxes = null,
+        AgentCore.Application.Security.TenantSandboxExecutionAuthority? tenantAuthority = null)
     {
+        _tenantAuthority = tenantAuthority;
         _root = AgentWorkspacePhysicalPaths.ValidateRoot(workspaceRoot);
         _templateRoot = Path.GetFullPath(templateRoot);
         _attachments = attachments; _maxWritableBytes = maxWritableBytes; _publicationResources = publicationResources;

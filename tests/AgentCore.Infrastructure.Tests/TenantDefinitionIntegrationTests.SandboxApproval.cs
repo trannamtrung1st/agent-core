@@ -15,9 +15,9 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantDefinitionIntegrationTests
 {
-    private static (TenantApprovalService Approvals, TenantSandboxApprovedOperationService Execution) SandboxApprovalServices(Fixture f, RuntimeSandboxSetup setup, IIamStore? reopened = null)
+    private static (TenantApprovalService Approvals, TenantSandboxApprovedOperationService Execution) SandboxApprovalServices(Fixture f, RuntimeSandboxSetup setup, IIamStore? reopened = null, AgentCore.Infrastructure.Sandbox.OpenSandboxOptions? options = null)
     {
-        var current = reopened ?? f.Iam; var authorizer = new IamAuthorizer(current); var p = SetupProfiles(f);
+        var current = reopened ?? f.Iam; var authorizer = new IamAuthorizer(current); var p = SetupProfiles(f, options);
         var operations = new TenantOperationAuthorizer(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer,
             new((ITenantAuthorizationAuditStore)current, f.Ids, TimeProvider.System));
         var target = new TenantSandboxOperationTarget((ITenantSessionStore)current, (ITenantSandboxProfileStore)current, (ITenantSandboxRuntimeStore)current,

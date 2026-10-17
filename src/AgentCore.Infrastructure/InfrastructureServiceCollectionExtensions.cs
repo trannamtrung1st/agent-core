@@ -302,8 +302,10 @@ public static class InfrastructureServiceCollectionExtensions
             return new FileSessionWorkspace(options.WorkspaceRoot, options.TemplateRoot,
                 provider.GetService<IAttachmentStore>(),
                 publicationResources: provider.GetService<DefinitionPublicationResourceReader>(),
-                sessions: provider.GetRequiredService<IMemoryStore>(), instances: provider.GetRequiredService<IAgentInstanceStore>(), sandboxes: provider.GetRequiredService<ISandboxStore>());
+                sessions: provider.GetRequiredService<IMemoryStore>(), instances: provider.GetRequiredService<IAgentInstanceStore>(), sandboxes: provider.GetRequiredService<ISandboxStore>(),
+                tenantAuthority: provider.GetRequiredService<AgentCore.Application.Security.TenantSandboxExecutionAuthority>());
         });
+        services.TryAddSingleton<ITenantSandboxWorkspacePreparer>(provider => (ITenantSandboxWorkspacePreparer)provider.GetRequiredService<ISessionWorkspace>());
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<IArtifactStore>(provider => new SqliteArtifactStore(

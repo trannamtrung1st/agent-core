@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed partial class OpenSandboxService
 {
-    private async ValueTask<SandboxLease> InitializeLockedAsync(SdkSandbox sdk, SandboxLease lease, SandboxAccess access, CancellationToken ct)
+    private async ValueTask<SandboxLease> InitializeLockedAsync(SdkSandbox sdk, SandboxLease lease, CancellationToken ct)
     {
         var evidence = new SandboxInitializationEvidence("Running", lease.Profile.Id, lease.Profile.Revision, lease.Profile.InstanceRevision, time.GetUtcNow());
         lease = await SaveAsync(lease with { Initialization = evidence }, ct);
@@ -37,7 +37,7 @@ public sealed partial class OpenSandboxService
                         OnStdout = async m => { stdout.Append(m.Text); await SaveOutputAsync(); },
                         OnStderr = async m => { stderr.Append(m.Text); await SaveOutputAsync(); } }, token), scriptDeadline.Token);
                 evidence = evidence with { ExitCode = result.ExitCode };
-                if (result.ExitCode != 0) throw new InvalidOperationException("Initialization failed.");
+                if (result.ExitCode != 0 || result.Error is not null || result.Complete is null) throw new InvalidOperationException("Initialization failed.");
             }
             evidence = evidence with { Phase = "validation" };
             await ConfirmQuiescentAsync(sdk, lease, ct);

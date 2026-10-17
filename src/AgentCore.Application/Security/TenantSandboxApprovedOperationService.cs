@@ -11,6 +11,22 @@ public sealed class TenantSandboxApprovedOperationService(ITenantRunStore runs, 
     ITenantApprovedOperationStore decisions, ITenantSandboxRuntimeStore runtime, TenantSandboxOperationTarget targets,
     TenantOperationAuthorizer operations, IIdGenerator ids, TimeProvider time)
 {
+    public async ValueTask<SandboxExecution> StartCommandAsync(TenantRuntimeFrame frame, Guid executionId, CancellationToken ct = default)
+    {
+        var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
+        var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
+        var saved = await runtime.ReadTenantSandboxRuntimeAsync(tenant, frame.SessionId, executionId, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("resource_unavailable");
+        TenantRuntimeRules.Require(frame, saved.Owner, run, time.GetUtcNow());
+        var execution = saved.Execution ?? throw new AccessDeniedException("resource_unavailable");
+        var request = await approvals.FindApprovalAsync(tenant, execution.ApprovalRequestId ?? Guid.Empty, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("approval_unavailable");
+        await targets.RequireAsync(request, run, ct, execution).ConfigureAwait(false);
+        if (!await runtime.TryStartApprovedSandboxCommandAsync(new(frame, state.Tenant.Revision, run.Revision), executionId,
+                execution.Revision, saved.Lease!.Revision, time.GetUtcNow(), ct).ConfigureAwait(false))
+            throw new SecurityConflictException("sandbox_command_already_started");
+        return (await runtime.ReadTenantSandboxRuntimeAsync(tenant, frame.SessionId, executionId, ct).ConfigureAwait(false))!.Execution!;
+    }
     public async ValueTask<TenantOperationReceipt?> SettleAsync(Guid tenant, Guid session, Guid executionId, CancellationToken ct = default)
     {
         for (var attempt = 0; attempt < 4; attempt++)
@@ -73,17 +89,26 @@ public sealed class TenantSandboxApprovedOperationService(ITenantRunStore runs, 
         }
         await targets.RequireAsync(request, run, ct).ConfigureAwait(false);
         var value = request.Operation.SandboxCommand ?? throw new AccessDeniedException("sandbox_approval_mismatch");
-        var lease = session.Lease ?? throw new AccessDeniedException("sandbox_environment_required");
+        var lease = session.Lease;
         var decision = await decisions.FindApprovalDecisionAsync(tenant, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var source = request.RunId == run.AgentRunId ? null : await runs.FindTenantRunAsync(tenant, request.RunId, ct).ConfigureAwait(false);
         var command = TenantApprovalRules.SandboxCommand(value); var at = time.GetUtcNow();
-        var execution = new SandboxExecution(ids.NewId(), frame.SessionId, frame.Owner.AgentInstanceId, lease.Generation, run.AgentRunId, frame.Generation,
+        var initializes = lease is null || lease.State == SandboxLeaseState.Terminated;
+        var executionId = ids.NewId();
+        SandboxLease? generation = initializes ? new(frame.SessionId, frame.Owner.AgentInstanceId, ids.NewId(), checked((lease?.Revision ?? 0) + 1),
+            TenantSandboxOperationRules.Profile(run, value.ProfileId), SandboxLeaseState.Provisioning, null, at,
+            at.AddSeconds(TenantSandboxRuntimeRules.InitialLifetimeSeconds(TenantSandboxOperationRules.Profile(run, value.ProfileId), command)),
+            Initialization: new("Pending", value.ProfileId, value.ProfileRevision, TenantSandboxOperationRules.Profile(run, value.ProfileId).InstanceRevision),
+            ActiveExecutionId: executionId, LastExecutionId: executionId, SelectedProfileId: value.ProfileId, TransitionPhase: "provisioning",
+            AdmissionRunId: frame.RunId, AdmissionToolCallId: call, TenantId: tenant, ExecutorPrincipalId: frame.Owner.ExecutorPrincipalId) : null;
+        var execution = new SandboxExecution(executionId, frame.SessionId, frame.Owner.AgentInstanceId, generation?.Generation ?? lease!.Generation, run.AgentRunId, frame.Generation,
             call, request.Operation.ActionHash, SandboxExecutionState.Dispatching, at, Background: command.Background,
-            CommandText: command.Command ?? JsonSerializer.Serialize(command.Argv), DeadlineAt: at.AddSeconds(command.TimeoutSeconds!.Value),
+            CommandText: command.Command ?? JsonSerializer.Serialize(command.Argv), DeadlineAt: initializes ? null : at.AddSeconds(command.TimeoutSeconds!.Value),
+            Phase: initializes ? "provisioning" : null, InitializesGeneration: initializes, CommandStartedAt: initializes ? null : at,
             ProfileId: value.ProfileId, ProfileRevision: value.ProfileRevision, TenantId: tenant, ExecutorPrincipalId: frame.Owner.ExecutorPrincipalId,
             Revision: 1, ApprovalRequestId: requestId, OperationId: request.Operation.OperationId);
         var audit = new AuthorizationAudit(ids.NewId(), tenant, frame.Owner.ExecutorPrincipalId!.Value, "sandbox.command.reserve", execution.Id.ToString("D"), "allowed", "sandbox_command_reserved", at);
-        var review = new TenantSandboxApprovalReservation(new(frame, state.Tenant.Revision, run.Revision), requestId, request.Revision, decision.DecisionId, request.Operation.ActionHash, audit);
+        var review = new TenantSandboxApprovalReservation(new(frame, state.Tenant.Revision, run.Revision), requestId, request.Revision, decision.DecisionId, request.Operation.ActionHash, audit, generation);
         TenantSandboxApprovalRules.RequireApproved(review, request, decision, run, source, execution, at);
         try
         {

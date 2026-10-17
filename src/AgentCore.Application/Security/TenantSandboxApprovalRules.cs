@@ -39,7 +39,11 @@ public static class TenantSandboxApprovalRules
             || execution.ProfileRevision != command.ProfileRevision || execution.Background != TenantApprovalRules.SandboxCommand(command).Background)
             throw new SecurityConflictException("sandbox_approval_mismatch");
         var exact = TenantApprovalRules.SandboxCommand(command);
-        if (execution.CommandText != (exact.Command ?? JsonSerializer.Serialize(exact.Argv)) || execution.DeadlineAt != execution.StartedAt.AddSeconds(exact.TimeoutSeconds!.Value))
+        if (execution.InitializesGeneration != (request.Snapshot?.Sandbox?.WillInitialize == true)
+            || (review.NewGeneration is not null) != execution.InitializesGeneration
+            || execution.CommandText != (exact.Command ?? JsonSerializer.Serialize(exact.Argv))
+            || (execution.InitializesGeneration ? execution.DeadlineAt is not null || execution.CommandStartedAt is not null
+                : execution.CommandStartedAt != execution.StartedAt || execution.DeadlineAt != execution.StartedAt.AddSeconds(exact.TimeoutSeconds!.Value)))
             throw new SecurityConflictException("sandbox_approval_mismatch");
         var audit = review.Audit;
         if (audit.TenantId != request.TenantId || audit.ActorPrincipalId != request.ExecutorPrincipalId || audit.Action != "sandbox.command.reserve"

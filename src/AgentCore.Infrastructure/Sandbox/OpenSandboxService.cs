@@ -248,7 +248,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             {
                 phase = "initialization";
                 lease = await ReserveExecutionLifetimeAsync(sdk, lease, lease.Profile.MaxCommandSeconds, ct);
-                lease = await InitializeLockedAsync(sdk, lease, access, ct);
+                lease = await InitializeLockedAsync(sdk, lease, ct);
             }
             else lease = await SaveAsync(lease with { Initialization = new("Succeeded", lease.Profile.Id, lease.Profile.Revision, lease.Profile.InstanceRevision,
                 time.GetUtcNow(), time.GetUtcNow(), 0) }, ct);
