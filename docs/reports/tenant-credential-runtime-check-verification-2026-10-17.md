@@ -47,6 +47,20 @@ Evidence: `/private/tmp/agent-core-credential-ui.Imod3K/result-confirmed-{1440,7
 
 The affected Audit consumer was then checked through Playwright MCP at 1440, 390 and 320 px using normalized audit-read fixtures. Both result labels survived refresh; desktop expansion and mobile Drawer retained exact effect references and Recorded effect result wording without horizontal overflow or a false Not applied tag. There were no page/console errors in that pass. Evidence: `/private/tmp/agent-core-credential-ui.Imod3K/audit-{1440,390,320}.png`. The fixture login file was removed and the restarted task-owned Synthetic/Vite processes were stopped after this check.
 
+## Review follow-up after `b51746de`
+
+Review reproduced a false-success path in `TenantCredentialCheckService`: the provider result was assigned before the final configuration recheck, and an exception from that recheck left the candidate result intact. Both InMemory and SQLite regressions failed before the fix with expected Indeterminate versus actual Completed. The catch now clears that result, so an unverified rotation cannot be committed as success.
+
+The two store regressions now verify an immutable uncertain receipt, reconnect-required health with no retained candidate secret, an Indeterminate grant and Run marker, an indeterminate audit with no raw provider error, and replay with only one verifier call. Two additional integrated cancellation cases cancel the caller while a noncooperative verifier is pending: the service saves and closes an uncertain dispatch before returning cancellation, and a late successful rotation cannot restore the credential or cause another provider call.
+
+The focused four-case fix/cancellation selection passed. The six existing Synthetic HTTP cases also passed: actual credential create/consent/bind/admission, human approve/reject, trusted service execution, and completed/uncertain receipt plus audit readback on both stores, with zero outbound provider networking. No frontend source or presentation contract changed; earlier browser evidence remains scoped to the inspector fixtures above. Natural model initiation and Run-B provider consumption remain unverified and disabled as described below.
+
+Final checks passed with **168 distinct cases** (the four new cases are included in the 162):
+
+- `dotnet test tests/AgentCore.Infrastructure.Tests --no-build --no-restore --filter FullyQualifiedName~TenantCredentialIntegrationTests`: 162 passed, none failed or skipped.
+- `dotnet test tests/AgentCore.Api.Tests --no-restore --filter FullyQualifiedName~Credential_approval_HTTP_projects_exact_consent`: 6 passed, none failed or skipped.
+- `git diff --check` and local Markdown link/fence checks for both changed documents passed. CI and live Google acceptance were not run; this follow-up does not claim milestone or proposal completion.
+
 ## Remaining work
 
 The model authorization tool still accepts only persona/preferences. Wire credential check intent, capability offering and preparation through the existing Runtime, execute the provider step off-mailbox in the shared-capacity tenant host, then consume the immutable result through the exact saved Run-B checkpoint. Verify that natural journey, active budget/cancellation and no-repeat recovery before enabling it to agents. Other credential/external action families, live Google acceptance, tenant transport/resource cutover, obsolete authority removal and full proposal gates remain pending. No CI, live provider call, installed-data migration/reset or milestone acceptance was performed.

@@ -109,7 +109,12 @@ public sealed class TenantCredentialCheckService(IIamStore security, ITenantRunS
                     if (linked.IsCancellationRequested || verifier.Describe(bound.Credential.Value.Purpose) != descriptor) result = null;
                 }
             }
-            catch (Exception) { if (pending is not null) _ = Observe(pending); } // Never repeat a possibly dispatched refresh or expose provider failures.
+            catch (Exception)
+            {
+                // A fault after the provider returns must not retain an unvalidated success.
+                result = null;
+                if (pending is not null) _ = Observe(pending);
+            } // Never repeat a possibly dispatched refresh or expose provider failures.
         }
         // Even shutdown/caller cancellation must leave a durable uncertain result when storage is available.
         using var settleDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10), time);

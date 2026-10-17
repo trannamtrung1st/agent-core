@@ -41,7 +41,9 @@ public sealed partial class TenantCredentialIntegrationTests
     {
         public int Calls;
         public bool HostEnabled = true;
-        public CredentialOAuthDescriptor Describe(CredentialPurpose purpose) => new("tenant-client", "https://app.example.test/callback", false, true, HostEnabled);
+        public Exception? DescriptionFailure;
+        public CredentialOAuthDescriptor Describe(CredentialPurpose purpose) => DescriptionFailure is { } failure ? throw failure
+            : new("tenant-client", "https://app.example.test/callback", false, true, HostEnabled);
         public ValueTask<CredentialOAuthCheck> CheckAsync(Credential current, CancellationToken ct)
         { Interlocked.Increment(ref Calls); return check(current, ct); }
     }
@@ -281,6 +283,60 @@ public sealed partial class TenantCredentialIntegrationTests
         late.TrySetResult(new(f.Protector.Protect(before.CredentialId, before.ProtectionVersion, GoogleOAuthRefreshGrant.Write("too-late-private-refresh", "tenant-client"))));
         await late.Task;
         Assert.Equal(receipt, await service.ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId, request.Operation.OperationId, run.Claim.Generation, request.Operation.ActionHash));
+        var after = (await f.Credentials.FindTenantCredentialAsync(setup.Tenant, setup.CredentialId))!.Value;
+        Assert.Equal(before.SecretRevision, after.SecretRevision); Assert.Equal("", after.ProtectedPayload); Assert.Equal(1, verifier.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task A_failed_final_provider_configuration_check_cannot_record_a_successful_effect(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite); var (setup, request, run) = await ApprovedRuntimeCheck(f);
+        RuntimeCheckVerifier verifier = null!;
+        verifier = new((original, _) => {
+            verifier.DescriptionFailure = new InvalidOperationException("private-provider-configuration");
+            return ValueTask.FromResult(new CredentialOAuthCheck(f.Protector.Protect(original.CredentialId, original.ProtectionVersion,
+                GoogleOAuthRefreshGrant.Write("unverified-private-refresh", "tenant-client"))));
+        });
+        var service = RuntimeChecks(f, verifier);
+        var receipt = await service.ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId, request.Operation.OperationId,
+            run.Claim!.Generation, request.Operation.ActionHash);
+        Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome); Assert.Equal("credential_check_uncertain", receipt.ReasonCode);
+        var credential = (await f.Credentials.FindTenantCredentialAsync(setup.Tenant, setup.CredentialId))!.Value;
+        Assert.Equal(DriveConnectionStatus.ReconnectRequired, credential.DriveAccount!.ConnectionStatus); Assert.Equal("", credential.ProtectedPayload);
+        Assert.Equal(OperationGrantStatus.Indeterminate, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(setup.Tenant, request.RequestId))!.Status);
+        Assert.Equal(AgentRunSideEffectDisposition.Indeterminate, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, run.AgentRunId))!.SideEffect.Disposition);
+        var audit = Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == TenantCredentialCheckRules.Action);
+        Assert.Equal("indeterminate", audit.Decision); Assert.DoesNotContain("private-provider", JsonSerializer.Serialize(audit));
+        Assert.Equal(receipt, await service.ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId, request.Operation.OperationId,
+            run.Claim.Generation, request.Operation.ActionHash));
+        Assert.Equal(1, verifier.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Caller_cancellation_settles_an_uncertain_dispatch_before_returning_and_ignores_late_provider_success(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite); var (setup, request, run) = await ApprovedRuntimeCheck(f);
+        using var cancellation = new CancellationTokenSource();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var late = new TaskCompletionSource<CredentialOAuthCheck>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var verifier = new RuntimeCheckVerifier((_, _) => { entered.TrySetResult(); return new(late.Task); });
+        var service = RuntimeChecks(f, verifier);
+        var checking = service.ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId, request.Operation.OperationId,
+            run.Claim!.Generation, request.Operation.ActionHash, cancellation.Token).AsTask();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(15)); cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => checking.WaitAsync(TimeSpan.FromSeconds(15)));
+        var receipt = (await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(setup.Tenant, request.Operation.OperationId))!;
+        Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome);
+        var before = (await f.Credentials.FindTenantCredentialAsync(setup.Tenant, setup.CredentialId))!.Value;
+        Assert.Equal(DriveConnectionStatus.ReconnectRequired, before.DriveAccount!.ConnectionStatus); Assert.Equal("", before.ProtectedPayload);
+        Assert.NotNull((await ((ITenantCredentialCheckStore)f.Iam).FindCredentialCheckDispatchAsync(setup.Tenant, request.Operation.OperationId))!.CompletedAt);
+        late.SetResult(new(f.Protector.Protect(before.CredentialId, before.ProtectionVersion,
+            GoogleOAuthRefreshGrant.Write("cancelled-private-refresh", "tenant-client"))));
+        await late.Task;
+        Assert.Equal(receipt, await service.ExecuteAsync(new(setup.Tenant, run.AgentRunId), request.RequestId, request.Operation.OperationId,
+            run.Claim.Generation, request.Operation.ActionHash));
         var after = (await f.Credentials.FindTenantCredentialAsync(setup.Tenant, setup.CredentialId))!.Value;
         Assert.Equal(before.SecretRevision, after.SecretRevision); Assert.Equal("", after.ProtectedPayload); Assert.Equal(1, verifier.Calls);
     }
