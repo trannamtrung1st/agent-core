@@ -14,7 +14,7 @@ public sealed partial class TenantOperationAuthorizationTests
     private static TenantRunContinuationService Continuations(Fixture f, IIamStore? store = null)
     {
         var current = store ?? f.Iam;
-        return new((ITenantRunStore)current, (ITenantApprovalStore)current, Effects(f, current), f.Clock);
+        return new((ITenantRunStore)current, (ITenantApprovalStore)current, Effects(f, current), f.Clock, (ITenantRuntimeStore)current, f.Ids);
     }
 
     [Theory]

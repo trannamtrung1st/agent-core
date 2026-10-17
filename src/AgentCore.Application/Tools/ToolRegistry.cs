@@ -8,6 +8,7 @@ public static class ToolRegistry
         new Dictionary<string, ToolDescriptor>(StringComparer.Ordinal)
         {
             [ToolCatalog.IamCheckAccess] = IamToolContracts.Descriptor(ToolCatalog.IamCheckAccess),
+            [ToolCatalog.RequestAuthorization] = TenantApprovalToolContract.Descriptor(),
             [ToolCatalog.IamEffectivePermissions] = IamToolContracts.Descriptor(ToolCatalog.IamEffectivePermissions),
             ["drive.accounts"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.accounts"),
             ["drive.list"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.list"),

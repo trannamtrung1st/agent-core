@@ -1,3 +1,6 @@
+using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
+
 namespace AgentCore.Application.Tools;
 
 public sealed partial class SessionToolExecutor
@@ -10,4 +13,8 @@ public sealed partial class SessionToolExecutor
         return tenantAuthorization is null ? null
             : await tenantAuthorization.PreparationErrorAsync(sessionId, admission, ct).ConfigureAwait(false);
     }
+    internal ValueTask<TenantApprovalPreparationResult> RequestTenantPersonaApprovalAsync(Guid sessionId, ModelToolCall call,
+        ToolExecutionAdmission admission, CancellationToken ct) => tenantAuthorization is not null
+        ? tenantAuthorization.PreparePersonaAsync(sessionId, call, admission, ct)
+        : throw new AccessDeniedException("tenant_context_required");
 }

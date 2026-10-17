@@ -1,4 +1,7 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Execution;
+using AgentCore.Application.Tools;
+using System.Text.Json;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 
@@ -24,7 +27,7 @@ public static class TenantRunContinuationRules
 }
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
-    TenantApprovedOperationService effects, TimeProvider time)
+    TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null)
 {
     public async ValueTask<(AgentRun Run, TenantApprovalOutcome? Outcome)> ResumeAsync(AgentRun dispatched, CancellationToken ct = default)
     {
@@ -33,6 +36,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         if (run.ApprovalRequestId is not { } requestId) return (run, null);
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
         TenantRunContinuationRules.Require(run, request);
+        ValidateAuthorizationCheckpoint(run, request!);
         TenantOperationReceipt? receipt = null;
         if (request!.Status == TenantApprovalStatus.Approved)
             receipt = await effects.ExecutePersonaAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
@@ -45,9 +49,38 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
             TenantApprovalStatus.Cancelled => "approval_cancelled",
             _ => throw new SecurityConflictException("approval_continuation_unavailable")
         };
-        return (run, new(tenant, run.AgentRunId, requestId, request.Operation.OperationId, request.Operation.InstanceId,
+        var outcome = new TenantApprovalOutcome(tenant, run.AgentRunId, requestId, request.Operation.OperationId, request.Operation.InstanceId,
             request.RootActivationId, request.Status, receipt?.Outcome ?? TenantOperationOutcome.Denied,
-            reason, receipt?.InstanceRevision, receipt?.PersonaRevision));
+            reason, receipt?.InstanceRevision, receipt?.PersonaRevision);
+        if (run.Checkpoint is { } checkpoint && AgentRunToolCallCheckpoint.TryRead(checkpoint, out var transcript))
+        {
+            var pending = AgentRunToolCallCheckpoint.PendingCalls(transcript!);
+            if (pending.Any(c => c.Name == ToolCatalog.RequestAuthorization))
+            {
+                ValidateAuthorizationCheckpoint(run, request);
+                if (runtimeStore is null || ids is null)
+                    throw new SecurityConflictException("approval_continuation_mismatch");
+                var text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
+                    reasonCode = reason, operationId = outcome.OperationId, applied = outcome.Outcome == TenantOperationOutcome.Completed });
+                var resumed = AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, pending[0], text);
+                run = await runtimeStore.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                    new AgentRunCommand.Checkpoint(run.Revision, time.GetUtcNow(), run.Claim!.Generation, resumed, null), ids.NewId(), ct, run.Claim.Generation).ConfigureAwait(false);
+            }
+        }
+        return (run, outcome);
+    }
+
+    private static void ValidateAuthorizationCheckpoint(AgentRun run, TenantApprovalRequest request)
+    {
+        if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var transcript)) return;
+        var pending = AgentRunToolCallCheckpoint.PendingCalls(transcript!);
+        if (!pending.Any(c => c.Name == ToolCatalog.RequestAuthorization)) return;
+        try
+        {
+            if (pending.Count != 1 || TenantApprovalToolContract.Parse(pending[0]) != request.Operation.Persona)
+                throw new ArgumentException("Pending authorization differs from the saved operation.");
+        }
+        catch (Exception ex) when (ex is ArgumentException or JsonException) { throw new SecurityConflictException("approval_continuation_mismatch"); }
     }
 
     private async ValueTask<AgentRun> Current(AgentRun dispatched, CancellationToken ct)

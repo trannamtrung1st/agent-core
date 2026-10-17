@@ -42,12 +42,20 @@ public sealed partial class TenantSessionAccessTests
     private sealed class ApprovalRecordingModel : ILanguageModel
     {
         private readonly ScriptedLanguageModel _inner = new();
+        public AgentCore.Domain.Definitions.AgentIdentity? ProposedPersona { get; set; }
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public ModelCapabilities Capabilities => _inner.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            if (ProposedPersona is { } proposed && request.Context?.Sections.All(s => s.Id != ContextSectionId.ApprovalOutcome) == true
+                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization) == true)
+            {
+                yield return new ModelToolCallEvent(new("durable-persona-request", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization,
+                    System.Text.Json.JsonSerializer.Serialize(new { operation = "update_persona", persona = proposed }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
             await foreach (var item in _inner.GenerateAsync(request, cancellationToken)) yield return item;
         }
     }

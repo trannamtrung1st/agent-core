@@ -167,6 +167,21 @@ public static class AgentRunToolCallCheckpoint
         return new AgentRunCheckpoint(payload, checkpoint.StepCount, checkpoint.OutputBytes + Encoding.UTF8.GetByteCount(result), checkpoint.RemainingOverallBudgetMs, checkpoint.ActiveExecutionMs, checkpoint.BudgetRecordedAtUtc);
     }
 
+    public static AgentRunCheckpoint CompleteTenantAuthorization(AgentRunCheckpoint checkpoint, ModelToolCall call, string result)
+    {
+        EnsureCurrentContextContract(checkpoint);
+        if (call.Name != ToolCatalog.RequestAuthorization || !TryRead(checkpoint, out var messages)
+            || PendingCalls(messages!) is not { Count: 1 } pending || pending[0] != call)
+            throw new ArgumentException("The exact pending authorization call is required.");
+        var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)!;
+        var payload = JsonSerializer.Serialize(document with { Messages = document.Messages.Append(MessageDto.From(
+            new ModelMessage(ModelRole.Tool, result, ToolCallId: call.Id, Name: call.Name))).ToArray() }, CheckpointJson);
+        var bytes = checked(checkpoint.OutputBytes + Encoding.UTF8.GetByteCount(result));
+        if (Encoding.UTF8.GetByteCount(payload) + CompletionReserve(TriggerKind.UserTurn) > AgentRunLimits.MaxCheckpointBytes || bytes > ToolLimits.MaxOutputBytes)
+            throw new ArgumentException("Authorization result exceeds checkpoint capacity.");
+        return new(payload, checkpoint.StepCount, bytes, checkpoint.RemainingOverallBudgetMs, checkpoint.ActiveExecutionMs, checkpoint.BudgetRecordedAtUtc);
+    }
+
     public static int ToolResultBudget(IReadOnlyList<ModelMessage> messages, ModelToolCall call,
         bool observationRequired, string? blockedActionHash, TriggerKind kind = TriggerKind.ScheduledOccurrence,
         IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, int cleanupReserve = 0, ToolLoopExecutionState? executionState = null)

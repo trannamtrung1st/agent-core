@@ -7,6 +7,7 @@ namespace AgentCore.Application.Tools;
 public static class ToolCatalog
 {
     public const string IamCheckAccess = "iam.check_access";
+    public const string RequestAuthorization = "approvals.request_authorization";
     public const string IamEffectivePermissions = "iam.get_effective_permissions";
     public const string CredentialsList = "credentials.list";
     public const string KnowledgeRetrieve = "knowledge.retrieve";

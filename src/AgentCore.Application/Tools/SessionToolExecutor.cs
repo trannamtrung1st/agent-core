@@ -132,7 +132,7 @@ public sealed partial class SessionToolExecutor(
     {
         if (admission?.OwnedSessionId is { } ownedSession && (ownedSession == Guid.Empty || ownedSession != sessionId)) return ToolPolicyDecision.Deny;
         if (tenantAuthorization is not null && await tenantAuthorization.PolicyAsync(sessionId, call, admission, ct).ConfigureAwait(false) is { } tenantPolicy) return tenantPolicy;
-        if (admission?.TenantId is not null || IamToolContracts.IsInspection(call.Name)) return ToolPolicyDecision.Deny;
+        if (admission?.TenantId is not null || (IamToolContracts.IsInspection(call.Name) || call.Name == ToolCatalog.RequestAuthorization)) return ToolPolicyDecision.Deny;
         if (admission?.AgentInstanceId is { } isolationOwner)
             definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, ct);
         if (ManagementTools.IsManagement(call.Name) && admission is not null)
@@ -207,7 +207,7 @@ public sealed partial class SessionToolExecutor(
         cancellationToken.ThrowIfCancellationRequested();
         if (tenantAuthorization is not null && await tenantAuthorization.ExecuteAsync(sessionId, call, admission, cancellationToken).ConfigureAwait(false) is { } tenantResult)
             return FitResult(remainingOutputBytes, tenantResult);
-        if (admission?.TenantId is not null || IamToolContracts.IsInspection(call.Name)) return TextResult(Error("forbidden", "Trusted tenant execution is required."));
+        if (admission?.TenantId is not null || (IamToolContracts.IsInspection(call.Name) || call.Name == ToolCatalog.RequestAuthorization)) return TextResult(Error("forbidden", "Trusted tenant execution is required."));
         if (admission?.AgentInstanceId is { } isolationOwner)
         {
             try { definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, cancellationToken); }

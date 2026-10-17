@@ -5,7 +5,8 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer)
+public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
+    TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null)
 {
     // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
     public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
@@ -31,21 +32,24 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
-            return new(true, IamToolContracts.IsInspection(tool), reference, IamToolContracts.IsInspection(tool) ? "allowed" : "tenant_effect_unavailable");
+            var allowed = IamToolContracts.IsInspection(tool) || tool == ToolCatalog.RequestAuthorization
+                && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
+            return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
         catch (AccessDeniedException ex) { return new(true, false, null, ex.ReasonCode); }
     }
     public async ValueTask<ToolPolicyDecision?> PolicyAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
-        return boundary.Tenant || IamToolContracts.IsInspection(call.Name) || admission?.TenantId is not null
+        return boundary.Tenant || (IamToolContracts.IsInspection(call.Name) || call.Name == ToolCatalog.RequestAuthorization) || admission?.TenantId is not null
             ? boundary.Allowed ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny : null;
     }
     public async ValueTask<string?> ExecuteAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
-        if (!boundary.Tenant && !IamToolContracts.IsInspection(call.Name) && admission?.TenantId is null) return null;
+        if (!boundary.Tenant && !(IamToolContracts.IsInspection(call.Name) || call.Name == ToolCatalog.RequestAuthorization) && admission?.TenantId is null) return null;
         if (!boundary.Allowed) return Error("forbidden", boundary.Reason);
+        if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
         try
         {
             if (string.IsNullOrWhiteSpace(call.ArgumentsJson) || Encoding.UTF8.GetByteCount(call.ArgumentsJson) > IamToolContracts.MaxArgumentBytes)
@@ -64,6 +68,20 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException) { return Error("invalid", "invalid_arguments"); }
         catch (AccessDeniedException ex) { return Error("forbidden", ex.ReasonCode); }
+    }
+    public async ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(Guid session, ModelToolCall call, ToolExecutionAdmission admission, CancellationToken ct)
+    {
+        var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
+        if (!boundary.Tenant || !boundary.Allowed || call.Name != ToolCatalog.RequestAuthorization || boundary.Reference is null || approvals is null || configuration is null)
+            throw new AccessDeniedException("tenant_context_required");
+        var persona = TenantApprovalToolContract.Parse(call);
+        var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
+        if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
+            throw new AccessDeniedException("tenant_runtime_unavailable");
+        var current = await configuration.ResolveAsync(boundary.Reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
+        if (TenantPersonaEffectRules.Eligibility(run, current.Agent, current.Configuration.Configuration.Definition) is { } denied)
+            throw new AccessDeniedException(denied);
+        return await approvals.PreparePersonaAsync(boundary.Reference, persona, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
     }
     private static object Project(OperationAuthorizationDecision decision) => new { decision = JsonNamingPolicy.CamelCase.ConvertName(decision.Decision.ToString()),
         reasonCode = decision.ReasonCode, requiredPermission = decision.Permission, targetResource = new { type = decision.Resource.ResourceType, id = decision.Resource.ResourceId },

@@ -916,6 +916,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
         }
 
+        if (_tenantApprovalPreparationTask is { } preparation)
+            await preparation.ConfigureAwait(false);
+
         // The mailbox drains admitted inputs during shutdown. Keep its persist
         // writer open until those handlers finish, including a queued detach.
         _persistJobs.Writer.TryComplete();
@@ -1034,6 +1037,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case AgentRunDispatchReceived dispatch:
                     await HandleAgentRunDispatchAsync(dispatch, cancellationToken).ConfigureAwait(false);
+                    break;
+                case TenantApprovalRequested approval:
+                    await HandleTenantApprovalAsync(approval, cancellationToken).ConfigureAwait(false);
+                    break;
+                case TenantApprovalBarrierFailed failedApproval:
+                    FailTenantApprovalBarrier(failedApproval);
+                    break;
+                case TenantApprovalPrepared preparedApproval:
+                    ApplyTenantApprovalPrepared(preparedApproval);
                     break;
                 case UserTextReceived user:
                     await HandleUserTextAsync(user, cancellationToken).ConfigureAwait(false);
@@ -3337,6 +3349,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                 var allowedIntermediate = _intermediateMessagingAllowed;
                 var substantiveWorkInBatch = false;
+                if (_runtimeOwner is not null && pending.Count == 1 && pending[0].Name == ToolCatalog.RequestAuthorization && ToolLimits.MaxOutputBytes - outputBytes >= 1024)
+                {
+                    var call = pending[0];
+                    var receipt = !model.Capabilities.Tools || working.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) != true
+                        ? new TenantApprovalToolResult(false, "{\"error\":\"forbidden\",\"reasonCode\":\"tool_not_offered\"}")
+                        : AgentRunToolCallCheckpoint.ToolResultBudget(messages, call, false, null, TriggerKind.UserTurn,
+                        _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0,
+                        new(pinnedSkills, _boundAgentRun?.SkillLoadCount ?? 0), executionState: State()) < 1024
+                        ? new TenantApprovalToolResult(false, AgentRunToolCallCheckpoint.FinishRequired)
+                        : await RequestTenantApprovalAsync(cause, request.ResponseId, call, generateToken).ConfigureAwait(false);
+                    if (receipt.Suspended) return;
+                    var resultText = ToolJsonResults.FitToBudget(Math.Min(4096, ToolLimits.MaxOutputBytes - outputBytes), invalidCalls.Note(call, receipt.Text, out _));
+                    messages.Add(new ModelMessage(ModelRole.Tool, resultText, ToolCallId: call.Id, Name: call.Name));
+                    outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(resultText));
+                    await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken,
+                        protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
+                    continue;
+                }
                 foreach (var call in pending)
                 {
                     await BeginCleanupAsync().ConfigureAwait(false);
@@ -6289,8 +6319,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         TaskCompletionSource<bool>? ended = null,
         bool userConversationTerminal = false,
         AgentRun? admittedRun = null,
-        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null)
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false)
     {
+        if ((_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
+        { ended?.TrySetResult(false); return; }
         if (snapshot.Entries.Count > 1000)
         {
             ended?.TrySetResult(false);
