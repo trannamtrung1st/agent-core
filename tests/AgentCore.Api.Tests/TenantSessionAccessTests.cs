@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Tests;
 
@@ -42,6 +45,31 @@ public sealed class TenantSessionAccessTests
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = 1, expectedInstanceRevision = 1 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, mode = "invalid" })).StatusCode);
         Assert.Equal(1, (await Json(await owner.GetAsync(root))).GetProperty("total").GetInt32());
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PatchAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}", new { title = "Foreign", expectedRevision = 1, expectedSessionRevision = 1 })).StatusCode);
+        var renamed = await owner.PatchAsJsonAsync(root + $"/{id}", new { title = "  Session review  ", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode); Assert.True(renamed.Headers.CacheControl?.NoStore);
+        var current = await Json(renamed); Assert.Equal("Session review", current.GetProperty("title").GetString());
+        foreach (var action in new[] { "pause", "resume", "archive", "restore", "complete" })
+        {
+            var changed = await owner.PostAsJsonAsync(root + $"/{id}/{action}", new { expectedRevision = await Revision(owner, tenant), expectedSessionRevision = current.GetProperty("revision").GetInt64(), source = "system" });
+            Assert.Equal(HttpStatusCode.OK, changed.StatusCode); current = await Json(changed);
+            Assert.False(current.TryGetProperty("definition", out _)); Assert.False(current.TryGetProperty("summary", out _));
+            if (action == "pause") Assert.Equal("paused", current.GetProperty("lifecycleStatus").GetString());
+            if (action == "archive") Assert.NotEqual(JsonValueKind.Null, current.GetProperty("archivedAt").ValueKind);
+            if (action == "restore") Assert.Equal(JsonValueKind.Null, current.GetProperty("archivedAt").ValueKind);
+        }
+        Assert.Equal("completed", current.GetProperty("lifecycleStatus").GetString());
+        var stored = await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, id);
+        Assert.Equal(LifecycleTransitionSource.User, stored!.Snapshot.LifecycleSource);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(root + $"/{id}/resume", new { expectedRevision = await Revision(owner, tenant), expectedSessionRevision = current.GetProperty("revision").GetInt64() })).StatusCode);
+        var deletion = root + $"/{id}?expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision={current.GetProperty("revision").GetInt64()}";
+        owner.DefaultRequestHeaders.Remove("X-AgentCore-CSRF"); Assert.Equal(HttpStatusCode.BadRequest, (await owner.DeleteAsync(deletion)).StatusCode); await Csrf(owner);
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(deletion)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(root + $"/{id}")).StatusCode);
+        Assert.Equal(0, (await Json(await owner.GetAsync(root))).GetProperty("total").GetInt32());
+        var another = await Json(await owner.PostAsJsonAsync(root, new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }));
+        var cancelled = await owner.PostAsJsonAsync(root + $"/{another.GetProperty("sessionId").GetGuid()}/cancel", new { expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
+        Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode); Assert.Equal("cancelled", (await Json(cancelled)).GetProperty("lifecycleStatus").GetString());
     }
     private static HttpClient Client(AgentCoreApiFactory factory) => factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
     private static async Task Login(HttpClient client, string login, string password)

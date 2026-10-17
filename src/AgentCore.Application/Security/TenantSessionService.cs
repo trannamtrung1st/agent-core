@@ -9,10 +9,10 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record TenantSessionMetadata(TenantSessionRoot Owner, string Title, SessionMode Mode, SessionStatus Status,
-    long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+    long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, SessionLifecycleStatus LifecycleStatus, DateTimeOffset? ArchivedAt);
 public sealed record TenantSessionMetadataPage(IReadOnlyList<TenantSessionMetadata> Items, int Total, int Page, int PageSize);
 
-public sealed class TenantSessionService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions,
+public sealed partial class TenantSessionService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions,
     ITenantDefinitionStore definitions, IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer,
     IModelCatalog models, VoiceAvailability voice, IIdGenerator ids, TimeProvider time)
 {
@@ -67,7 +67,7 @@ public sealed class TenantSessionService(IIamStore security, ITenantAgentStore a
         return new(result.Items.Select(Metadata).ToArray(), result.Total, result.Page, result.PageSize);
     }
     private static TenantSessionMetadata Metadata(TenantSession item) => new(item.Owner, item.Snapshot.Title, item.Snapshot.Mode, item.Snapshot.Status,
-        item.Snapshot.Revision, item.Snapshot.CreatedAt, item.Snapshot.UpdatedAt);
+        item.Snapshot.Revision, item.Snapshot.CreatedAt, item.Snapshot.UpdatedAt, item.Snapshot.LifecycleStatus, item.Snapshot.ArchivedAt);
     private ValueTask<TenantSecurityState> Human(Guid tenant, TenantSessionInitiator initiator, CancellationToken ct) =>
         TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct);
     private async ValueTask Require(TenantSecurityState state, Guid actor, string key, AccessScope scope, CancellationToken ct)

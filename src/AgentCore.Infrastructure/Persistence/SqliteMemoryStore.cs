@@ -676,7 +676,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.CompletedAtUtc == entry.CompletedAt?.ToUnixTimeMilliseconds()
         && row.ApplicationMessageEffectKey == entry.ApplicationMessageEffectKey;
 
-    private static void ApplySession(SessionRecord row, SessionSnapshot snapshot)
+    internal static void ApplySession(SessionRecord row, SessionSnapshot snapshot)
     {
         row.AgentId = snapshot.Definition.Id;
         row.AgentVersion = snapshot.Definition.Version;

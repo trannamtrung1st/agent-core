@@ -1,5 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Definitions;
+using AgentCore.Application.Security;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Infrastructure.Persistence;
 
@@ -41,6 +43,21 @@ public sealed partial class InMemoryMemoryStore
             if (tenantSessions.ContainsKey(owner.SessionId) || _sessions.ContainsKey(owner.SessionId)) return false;
             snapshot = snapshot with { Definition = AgentDefinitionAdminSnapshots.Freeze(snapshot.Definition) };
             Store(snapshot); tenantSessions.Add(owner.SessionId, owner); return true;
+        }
+    }
+    internal TenantSession? ChangeTenantSession(Guid tenant, TenantSessionChange change, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            if (!OwnsTenantSession(tenant, change.SessionId)) return null;
+            var current = _sessions[change.SessionId];
+            if (current.Revision != change.ExpectedSessionRevision) return null;
+            if (AgentRuns.Runs.Values.Any(r => r.SessionId == change.SessionId && !r.IsTerminal)) throw new SecurityConflictException("session_in_use");
+            var next = TenantSessionMutations.Apply(current, change, at);
+            if (change.Action == TenantSessionAction.Delete && _entries.TryGetValue(change.SessionId, out var entries))
+                _entries[change.SessionId] = entries.Select(TenantSessionMutations.RedactEntry).ToList();
+            Store(next);
+            return new(tenantSessions[change.SessionId], next with { Definition = AgentDefinitionAdminSnapshots.Freeze(next.Definition), Entries = [] });
         }
     }
 }

@@ -1,0 +1,32 @@
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
+
+namespace AgentCore.Application.Security;
+
+public sealed partial class TenantSessionService
+{
+    public async ValueTask<TenantSessionMetadata?> ChangeAsync(Guid tenant, TenantSessionInitiator initiator, TenantSessionChange change,
+        long expectedSecurityRevision, CancellationToken ct = default)
+    {
+        var current = await sessions.FindTenantSessionAsync(tenant, change.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        var state = await Human(tenant, initiator, ct).ConfigureAwait(false); var scope = TenantSessionRules.Scope(tenant, change.SessionId);
+        await Require(state, initiator.PrincipalId, TenantSessionMutations.Permission(change.Action), scope, ct).ConfigureAwait(false);
+        if (change.Action != TenantSessionAction.Delete) await Require(state, initiator.PrincipalId, "sessions.read", scope, ct).ConfigureAwait(false);
+        if (change.Action == TenantSessionAction.Resume)
+        {
+            var parent = await agents.FindTenantAgentAsync(tenant, current.Owner.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+            await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", current.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
+            if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+            TenantSessionRules.RequireExecutor(state, parent);
+        }
+        if (state.Tenant.Revision != expectedSecurityRevision || current.Snapshot.Revision != change.ExpectedSessionRevision) throw new SecurityConflictException("stale_revision");
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
+        _ = TenantSessionMutations.Apply(current.Snapshot, change, now);
+        var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) },
+            Assignments = change.Action == TenantSessionAction.Delete ? state.Assignments.Where(a => a.Scope != scope).ToArray() : state.Assignments };
+        var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, TenantSessionMutations.AuditAction(change.Action), change.SessionId.ToString("D"), "allowed", "session_changed", now);
+        var saved = await sessions.TryChangeTenantSessionAsync(next, state.Tenant.Revision, change, initiator, now, audit, ct).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
+        return change.Action == TenantSessionAction.Delete ? null : Metadata(saved);
+    }
+}

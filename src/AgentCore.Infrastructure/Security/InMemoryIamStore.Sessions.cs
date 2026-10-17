@@ -7,6 +7,31 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
+    public ValueTask<TenantSession?> TryChangeTenantSessionAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantSessionChange change, TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
+        if (next.Tenant.Revision != checked(expectedSecurityRevision + 1) || audit.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != initiator.PrincipalId
+            || audit.Target != change.SessionId.ToString("D") || audit.Action != TenantSessionMutations.AuditAction(change.Action)) throw new ArgumentException("Invalid Session mutation transaction.");
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)
+        {
+            if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantSession?>(null);
+            IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); ValidateAgentActor(before, initiator.PrincipalId); EnsureReferences(next, audit, ct: ct);
+            RequireHumanSession(next.Tenant.TenantId, initiator);
+            if (change.Action == TenantSessionAction.Delete && next.Assignments.Any(a => a.Scope == TenantSessionRules.Scope(next.Tenant.TenantId, change.SessionId))) throw new ArgumentException("Deleting a Session must retire its direct grants.");
+            if (change.Action == TenantSessionAction.Resume)
+            {
+                var root = sessionBacking.ReadTenantSession(next.Tenant.TenantId, change.SessionId)?.Owner;
+                var parent = root is null ? null : FindTenantAgentAsync(root.TenantId, root.AgentInstanceId, ct).Result;
+                if (parent is null) return ValueTask.FromResult<TenantSession?>(null);
+                if (parent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+                TenantSessionRules.RequireExecutor(before, parent);
+            }
+            ct.ThrowIfCancellationRequested(); var saved = sessionBacking.ChangeTenantSession(next.Tenant.TenantId, change, at);
+            if (saved is null) return ValueTask.FromResult<TenantSession?>(null);
+            _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); return ValueTask.FromResult<TenantSession?>(saved);
+        }
+    }
     public ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(sessionBacking.ReadTenantSession(tenantId, sessionId)); }
     public ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default)
