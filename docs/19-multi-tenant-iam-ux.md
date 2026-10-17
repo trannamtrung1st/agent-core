@@ -1,5 +1,7 @@
 # Accounts, organizations, access and approvals UX
 
+The [public Chat discovery prerequisite](reports/tenant-chat-discovery-verification-2026-10-17.md) now provides scoped active-agent search/paging and Session-creation revision hints independently of administrative read access. Backend HTTP/MessagePack evidence covers a Chat-only member's actual conversation and revocation. This does not enable or accept the tenant Chat frontend, which still needs the scoped shell/rail/connection integration specified below.
+
 Status: implementation contract, internally reviewed 2026-10-16. This defines the approved target; implementation and verification status live in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). It does not claim that the previous owner-only application already enforces IAM. The owner-requested proposal at `local/proposals/agent-core-multitenant-iam-approval-final-proposal.md` supersedes the original MVP authentication exclusion.
 
 The owner-prioritized foundation UI now implements sign-in, Account/organization selection, invitation acceptance, member/invitation access, roles, current effective access and audit. [Observed frontend evidence](reports/access-ui-polish-2026-10-16.md) covers these routes only. Agent/resource access, tenant-aware Chat and durable approval journeys below remain requirements for the complete successor.

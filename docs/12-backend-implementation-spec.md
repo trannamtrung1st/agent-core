@@ -1,5 +1,7 @@
 # Backend Implementation Specification
 
+The canonical Chat directory is a public communication projection over existing owned Instances, not the administrative Instance projection. Current actual human/session and scoped `agents.chat` select active executors before public-label search/count/paging. It resolves an exact owned/shipped definition for language and emits no tone, settings, management policy, credentials, role snapshots or execution grants. Final human/security checks prevent stale inventory after logout, role change or archive. Returned revision and create hints feed the existing Session creation boundary, which still reauthorizes. Canonical voice availability is false while only the tenant text transport is supported. [Verification](reports/tenant-chat-discovery-verification-2026-10-17.md).
+
 ## Tenant Hub text and cancellation commands
 
 SendText and CancelResponse select the canonical adapter when the connection belongs to the tenant registry. They require its current exact Session/attachment and sequential client commands, beginning at 1 independently of server event sequence. The adapter revalidates the actual human/session and Session/Chat authority. Text accepts current security/Session witnesses and plain text, deriving message correlation from eventId and all execution identity/configuration from existing admission. Rich parts/attachments/behavior controls remain outside this canonical command checkpoint. A successful Ack carries the safe admission receipt.

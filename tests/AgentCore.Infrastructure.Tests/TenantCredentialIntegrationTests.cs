@@ -94,6 +94,8 @@ public sealed partial class TenantCredentialIntegrationTests
         public IAgentInstanceStore Instances { get; private set; } = null!;
         public IMemoryStore Memory { get; private set; } = null!;
         public TenantSessionService Sessions => SessionService((ITenantSessionStore)Iam);
+        public TenantChatService ChatService(ITenantAgentStore? agents = null) => new(Iam, agents ?? (ITenantAgentStore)Iam,
+            (ITenantDefinitionStore)Iam, BuiltIns, Identity, Authorizer);
         public TenantSessionService SessionService(ITenantSessionStore sessions) => new(Iam, (ITenantAgentStore)Iam, sessions, (ITenantRunStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns,
             Identity, Authorizer, ModelCatalogFactory.Create("Synthetic", null, null), new(), Ids, Clock);
         public IDefinitionResourceContentStore RunContent { get; } = new InMemoryDefinitionResourceContentStore();

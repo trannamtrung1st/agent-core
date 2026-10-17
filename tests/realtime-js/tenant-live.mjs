@@ -19,7 +19,11 @@ class Human {
   async session(tenant) {
     const prefix=`/api/v2/tenants/${tenant}`;
     const agent=await this.json(prefix+'/agents',{templateId:'examiner',version:1,expectedRevision:await this.revision(tenant)});
-    return (await this.json(prefix+'/sessions',{agentInstanceId:agent.instance.instanceId,expectedRevision:await this.revision(tenant),expectedInstanceRevision:1})).sessionId;
+    const directory=await this.json(prefix+'/chat/agents?page=0&pageSize=100');
+    const selected=directory.items.find(item=>item.instanceId===agent.instance.instanceId);
+    assert.ok(selected);assert.equal(selected.voiceAvailable,false);assert.equal(directory.canCreateSessions,true);
+    assert.ok(!JSON.stringify(selected).match(/ownerCapability|systemIdentityId|principalId|settingsOverrides|executionBudgets|harnessManagement|tone/i));
+    return (await this.json(prefix+'/sessions',{agentInstanceId:selected.instanceId,expectedRevision:directory.securityRevision,expectedInstanceRevision:selected.revision})).sessionId;
   }
   async send(tenant,session,text) {
     const prefix=`/api/v2/tenants/${tenant}`, metadata=await this.json(prefix+`/sessions/${session}`);

@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Canonical tenant Chat discovery
+
+`GET /api/v2/tenants/{tenantId}/chat/agents` requires the actual authenticated Account/session and tenant User, with no owner-capability fallback. It accepts `page` (0–100000, default 0), `pageSize` (1–100, default 30) and optional trimmed `q` (at most 200 UTF-16 units). Matching is case-insensitive over public persona name/role only. Active executor and exact scoped `agents.chat` filtering apply before search/count/offset, independently of administrative `agents.read`; read-only administration does not grant Chat.
+
+The no-store response is `{ items, total, page, pageSize, securityRevision, canCreateSessions }`. Each item contains `{ instanceId, revision, definitionId, activeVersion, name, role, description, voiceAvailable, language }`. Public description is the same persona field exposed by the existing agent descriptor; private tone, configuration and identity/role records are omitted. `voiceAvailable` is false for the current tenant text transport. `canCreateSessions` reflects current tenant-scope Session-create/read permission and remains advisory. Use the selected instanceId/revision with securityRevision in existing Session creation; it rechecks current human/Chat/Session permissions and exact revisions. Foreign/unavailable membership denies, invalid bounds/search return 400, and human/security changes during the read deny or return stale_revision rather than stale counts. No new event/protocol version is added. [Verification](reports/tenant-chat-discovery-verification-2026-10-17.md).
+
 ## Canonical tenant Hub commands
 
 After AttachTenant, existing SendText, CancelResponse and ResponseReceived methods use the server-bound tenant subscription. They retain the protocol-1 envelope, exact sessionId/attachmentId, fresh eventId and client sequence starting at 1, increasing by one independently of server event sequence. The client cannot supply correlationId/causationId. Every command rechecks the actual human/session, exact Session read and agent Chat. No owner capability or payload identity selects authority.
