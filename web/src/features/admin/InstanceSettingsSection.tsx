@@ -5,7 +5,7 @@ import { useStateIsolationConfiguration } from './StateIsolationConfigurationPro
 import { IsolationChangePreview } from './IsolationChangePreview';
 import { followAppLink } from '../../app/appLink';
 import { instancePath } from './adminNavigation';
-import { emptyDraft, useInstanceSettingsController } from './useInstanceSettingsController';
+import { emptyDraft, useInstanceSettingsController, type InstanceSettingsTransport } from './useInstanceSettingsController';
 import { useAdminDraftStatus } from './AdminDraftStatus';
 import { useEffect, useId, useState } from 'react';
 import { Alert, App, Button, Collapse, Flex, Form, Input, InputNumber, Select, Spin, Switch, Tooltip, Typography, theme } from 'antd';
@@ -14,8 +14,10 @@ import { confirmAction } from '../../app/confirmAction';
 import { instanceSettingGroups, type InstancePage } from './adminNavigation';
 import { orderedReasoningEfforts } from '../models/reasoningEfforts';
 
-const titles: Record<string, string> = { instructions: 'Agent instructions', conversationPolicy: 'Conversation', behaviorPolicy: 'Behavior', initiativePolicy: 'Initiative', voice: 'Voice', modelDefaults: 'Model defaults', memoryPolicy: 'Memory policy', capabilities: 'Capabilities', triggerPolicy: 'Trigger restrictions', providerPreferences: 'Provider preferences', sandboxPolicy: 'Sandbox environment' };
+const titles: Record<string, string> = { instructions: 'Agent instructions', conversationPolicy: 'Conversation', behaviorPolicy: 'Behavior', initiativePolicy: 'Initiative', voice: 'Voice', modelDefaults: 'Model defaults', memoryPolicy: 'Memory policy', capabilities: 'Capabilities', triggerPolicy: 'Trigger restrictions', providerPreferences: 'Provider preferences', sandboxPolicy: 'Sandbox environment', stateIsolationPolicy: 'State & Isolation' };
 const labels: Record<string, string> = { agentInstructions: 'Agent instructions', responseLength: 'Response length', askOneQuestionAtATime: 'Ask one question at a time', maxOutputTokens: 'Maximum output tokens', interruptionStyle: 'Interruption style', acknowledgeInterruption: 'Acknowledge interruption', avoidUnsupportedClaims: 'Avoid unsupported claims', silenceThresholdMs: 'Silence threshold (ms)', cooldownMs: 'Cooldown (ms)', maxPerSilencePeriod: 'Maximum speaks per silence period', maxConsecutiveProactiveTurns: 'Maximum consecutive proactive turns', maxSilentEvaluations: 'Maximum silent evaluations', maxInactivityMs: 'Maximum inactivity (ms)', voiceId: 'Voice ID', speakingRate: 'Speaking rate', catalogKey: 'Default model', reasoningEffort: 'Reasoning effort', sessionMemory: 'Session memory', identityUserPromotion: 'Instance memory promotion', identityUserRetrieval: 'Instance memory retrieval', userPromotion: 'User memory promotion', userRetrieval: 'User memory retrieval', selected: 'Selected capabilities', always: 'Always projected capabilities', allowUnreadUnsupportedTypes: 'Allow unread unsupported attachments', language: 'Language', enabled: 'Enabled', triggers: 'Initiative triggers', allowUserScheduling: 'Allow user scheduling', allowOneShot: 'Allow one-shot schedules', allowDaily: 'Allow daily schedules', allowWeekly: 'Allow weekly schedules', allowIndefiniteRecurrence: 'Allow indefinite recurrence', maxActiveRegistrations: 'Maximum active schedules', oneShotHorizonDays: 'One-shot horizon (days)', minRecurrenceDays: 'Minimum recurrence (days)', allowedSourceKinds: 'Allowed sources', allowFixedInterval: 'Allow fixed intervals', minFixedIntervalSeconds: 'Minimum fixed interval (seconds)', languageModel: 'Language model', speechRecognizer: 'Speech recognizer', speechSynthesizer: 'Speech synthesizer', interruptionClassifier: 'Interruption classifier', allowedProfileIds: 'Allowed Sandbox profiles', profileId: 'Default Sandbox profile', initializationScript: 'Instance initialization script', cpu:'CPU cores', memoryMiB:'Memory (MiB)', maxCommandSeconds:'Maximum command (seconds)', idleTtlSeconds:'Idle expiry (seconds)', maxLifetimeSeconds:'Maximum lifetime (seconds)', storageBytes:'Canonical /working storage (MiB)' };
+const isolationLabels: Record<string, string> = { conversationContextScope: 'Conversation context', homeAccess: 'Home access', workingCleanup: 'Working folder cleanup', browserIsolation: 'Browser isolation', agentStateVisibility: 'Agent state visibility', experienceRecord: 'Experience recording', experienceRecall: 'Experience recall', profileEvidence: 'Profile evidence', crossSessionContinuity: 'Cross-conversation continuity' };
+const isolationChoices: Record<string, string> = { Session: 'Conversation', CurrentRequest: 'Current request', ReadWrite: 'Read and write', ReadOnly: 'Read only', Disabled: 'Disabled', OnSessionDeletion: 'On conversation deletion', AfterTerminal: 'After terminal work', HostDefault: 'Host default', PersistentAgent: 'Persistent per agent', EphemeralSession: 'Ephemeral per conversation', Off: 'Off', CurrentSession: 'Current conversation', InstanceSummary: 'Instance summary' };
 const fieldOrder: Record<string, string[]> = {
   conversationPolicy: ['language', 'responseLength', 'maxOutputTokens', 'askOneQuestionAtATime'],
   sandboxPolicy: ['allowedProfileIds', 'profileId', 'cpu', 'memoryMiB', 'maxCommandSeconds', 'idleTtlSeconds', 'maxLifetimeSeconds', 'storageBytes', 'initializationScript'],
@@ -25,12 +27,12 @@ const nullable = new Set(['initializationScript','maxConsecutiveProactiveTurns',
 const numerics = new Set(['cpu','memoryMiB','maxCommandSeconds','idleTtlSeconds','maxLifetimeSeconds','storageBytes','maxOutputTokens', 'silenceThresholdMs', 'cooldownMs', 'maxPerSilencePeriod', 'maxConsecutiveProactiveTurns', 'maxSilentEvaluations', 'maxInactivityMs', 'speakingRate', 'maxActiveRegistrations', 'oneShotHorizonDays', 'minRecurrenceDays', 'minFixedIntervalSeconds']);
 
 
-export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onUpdated }: { instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onUpdated: () => void }) {
+export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext }: { instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport?: InstanceSettingsTransport; confirmationContext?: string }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
   const formId = useId();
   const isolation = useStateIsolationConfiguration();
-  const settings = useInstanceSettingsController(instanceId, archived, active, onUpdated, isolation?.view?.revisions.instance, isolation?.editor.saving);
+  const settings = useInstanceSettingsController(instanceId, archived, active, onUpdated, isolation?.view?.revisions.instance, isolation?.editor.saving, transport);
   const coordinated = (section: string, field: string) => !!isolation && (section === 'memoryPolicy' || section === 'voice' && field === 'enabled');
   const coordinatedPage = !!isolation && (page === 'memory-policy' || page === 'voice');
   // Saved values and sparse edits share one owner with the coordinated preset preview.
@@ -54,6 +56,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   const { setDrafts, error, models, defaultModelKey, save, saveAll } = settings;
   const busy = settings.busy || !!isolation?.busy;
   const loading = settings.loading || coordinatedPage && !isolation?.view;
+  useEffect(() => { onBusyChange?.(busy || !!loading); }, [busy, loading, onBusyChange]);
   const reload = async () => { await Promise.all([settings.reload(), ...(coordinatedPage ? [isolation!.refresh().catch(() => {})] : [])]); };
   const change: typeof settings.change = (section, field, value) => coordinated(section.section, field)
     ? isolation!.edit(section.section, field, value) : settings.change(section, field, value);
@@ -82,6 +85,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
     {coordinatedPage && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Memory policy and Voice enablement share the State &amp; Isolation draft and Save. <a href={instancePath(instanceId, 'state-isolation')} onClick={followAppLink}>Review State &amp; Isolation</a></Typography.Paragraph>}
     {coordinatedPage && isolation?.error && <Alert type="error" showIcon title={isolation.error} action={<Button onClick={() => void isolation.refresh().catch(() => {})}>Retry isolation</Button>} />}
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry settings</Button>} />}
+    {settings.modelError && <Alert type="warning" showIcon title="Model catalog unavailable" description="Saved model choices are preserved. Reload models before changing the default model." action={<Button disabled={busy} onClick={settings.reloadModels}>Reload models</Button>} />}
     {sandboxInventoryError && <Alert type="warning" showIcon title="Sandbox catalog unavailable" description="Saved choices are preserved. Retry before selecting another image." action={<Button onClick={()=>setCatalogAttempt(v=>v+1)}>Retry profiles</Button>} />}
     {loading && <Spin aria-label="Loading Instance settings" />}
     {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.filter(section => !requested || requested.includes(section.section)).map(section => {
@@ -104,7 +108,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             const constraint = section.constraints?.[field];
             const locked = typeof constraint?.requiredBoolean === 'boolean';
             const disabled = archived || busy || draft.clear.includes(field) && !coordinated(section.section, field) || locked || coordinated(section.section, field) && !isolation?.view;
-            const label = labels[field] ?? field[0].toUpperCase() + field.slice(1);
+            const label = (section.section === 'stateIsolationPolicy' ? isolationLabels[field] : labels[field]) ?? field[0].toUpperCase() + field.slice(1);
             const id = `${formId}-${section.section}-${field}`;
             const boolean = typeof inherited === 'boolean';
             const wide = field === 'profileId' || Array.isArray(inherited) || field === 'agentInstructions' || field === 'initializationScript' || field === 'enabled';
@@ -138,6 +142,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
               const model = models.find(m => m.key === (selected ?? defaultModelKey));
               control = <Select id={id} className="instance-settings-control instance-settings-short-control" aria-label={label} value={value as string | null} disabled={disabled || !model} allowClear options={orderedReasoningEfforts(model?.supportedReasoningEfforts ?? []).map(e => ({ label: e, value: e }))} onChange={v => change(section, field, v ?? null)} />;
             } else if (field === 'responseLength' || field === 'interruptionStyle') control = <Select id={id} className={`instance-settings-control${field === 'responseLength' ? ' instance-settings-short-control' : ''}`} aria-label={label} value={value as string} disabled={disabled} options={(field === 'responseLength' ? ['concise', 'balanced'] : ['acknowledgeThenContinue', 'answerNewTurn']).map(v => ({ label: choiceLabels[v], value: v }))} onChange={v => change(section, field, v)} />;
+            else if (section.section === 'stateIsolationPolicy' && constraint?.choices) control = <Select id={id} className="instance-settings-control" aria-label={label} value={value as string} disabled={disabled} options={constraint.choices.map(choice => ({ value: choice, label: isolationChoices[choice] ?? choice }))} onChange={next => change(section, field, next)} />;
             else if (Array.isArray(inherited)) control = <Select id={id} className="instance-settings-control" aria-label={label} mode="multiple" maxCount={16} options={(section.definitionDefaults?.[field] as string[] ?? []).map(v => ({ label: v, value: v }))} value={Array.isArray(value) ? value : []} disabled={disabled} onChange={v => change(section, field, v)} />;
             else if (field === 'agentInstructions' || field === 'initializationScript') control = <Input.TextArea id={id} aria-label={label} autoSize={field === 'initializationScript' ? { minRows: 4, maxRows: 14 } : { minRows: 6, maxRows: 18 }} maxLength={field === "initializationScript" ? 16384 : 8000} value={value as string ?? ''} disabled={disabled} onChange={e => change(section, field, nullable.has(field) && e.target.value === "" ? null : e.target.value)} />;
             else control = <Input id={id} className="instance-settings-control" aria-label={label} value={value as string ?? ''} disabled={disabled} onChange={e => change(section, field, nullable.has(field) && e.target.value === "" ? null : e.target.value)} />;
@@ -149,7 +154,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
           {!configuration.managed && <Button aria-label={`Discard ${title} changes`} disabled={busy || archived || !changed && Object.keys(section.overrides).length > 0} onClick={() => {
             setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
           }}>Discard</Button>}
-          <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || (sharedSection ? !isolation?.view || !hasOverrides : !Object.keys(section.overrides).length)} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: `Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.${sharedSection ? ' Review and Save the resulting draft to apply it.' : ''}`, okText: "Reset section", onOk: () => resetSection(section) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
+          <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || (sharedSection ? !isolation?.view || !hasOverrides : !Object.keys(section.overrides).length)} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: `Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.${confirmationContext ? ` ${confirmationContext}` : ''}${sharedSection ? ' Review and Save the resulting draft to apply it.' : ''}`, okText: "Reset section", onOk: () => resetSection(section) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
         </Flex>
         <Typography.Text type="secondary">Instance adopted v{section.definitionVersion} · revision {section.instanceRevision}</Typography.Text>
       </Flex> };

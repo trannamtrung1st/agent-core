@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "test:e2e:tenant-chat": "playwright test --config playwright.tenant-chat.config.ts",
     "test:e2e:tenant-agent-access": "playwright test --config playwright.tenant-agent-access.config.ts",
-    "test:e2e:tenant-agent-connections": "playwright test --config playwright.tenant-agent-connections.config.ts"
+    "test:e2e:tenant-agent-connections": "playwright test --config playwright.tenant-agent-connections.config.ts",
+    "test:e2e:tenant-instance-editor": "playwright test --config playwright.tenant-instance-editor.config.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

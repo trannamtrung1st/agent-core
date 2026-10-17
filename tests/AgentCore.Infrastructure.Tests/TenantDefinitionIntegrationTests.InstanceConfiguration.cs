@@ -147,11 +147,13 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(p1.Payload.AgentInstructions, (await configuration.ReadAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Definition.AgentInstructions);
     }
 
-    private static (TenantAgentService Agents, TenantAgentConfigurationService Configuration) ConfigurationServices(Fixture f, IIamStore? reopened = null, IDefinitionResourceContentStore? content = null)
+    private static (TenantAgentService Agents, TenantAgentConfigurationService Configuration) ConfigurationServices(Fixture f, IIamStore? reopened = null, IDefinitionResourceContentStore? content = null,
+        Func<IBuiltInAgentDefinitionStore, IBuiltInAgentDefinitionStore>? wrapBuiltIns = null)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
-        var root = Path.Combine(directory!.FullName, "agents"); var builtIns = new FileAgentDefinitionStore(root, SyntheticProviderAliases.Default);
+        var root = Path.Combine(directory!.FullName, "agents"); IBuiltInAgentDefinitionStore builtIns = new FileAgentDefinitionStore(root, SyntheticProviderAliases.Default);
+        if (wrapBuiltIns is not null) builtIns = wrapBuiltIns(builtIns);
         var store = reopened ?? f.Iam; var authorizer = new IamAuthorizer(store);
         ITriggerStore triggers;
         if (f.Contexts is not null) triggers = new SqliteTriggerStore(f.Contexts);

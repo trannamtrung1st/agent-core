@@ -38,7 +38,9 @@ export function personaFieldsToJson(persona: PersonaFields): string {
 }
 
 export function parsePersonaJson(text: string): PersonaFields {
-  const parsed = JSON.parse(text) as Record<string, unknown>;
+  const value: unknown = JSON.parse(text);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('Persona JSON must be an object with name, role, description and tone.');
+  const parsed = value as Record<string, unknown>;
   const keys = ["name", "role", "description", "tone"] as const;
   for (const key of keys) {
     if (typeof parsed[key] !== "string") {

@@ -1,5 +1,6 @@
+import { InstancePersonaFields } from './InstancePersonaFields';
 import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
-import { Alert, App, Button, Flex, Form, Input, Select, Tabs, Tag, Typography } from "antd";
+import { Alert, App, Button, Flex, Select, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { confirmAction } from "../../app/confirmAction";
 import { deleteAdminAgentInstance, listAdminDefinitionPublications, listAdminDefinitions, updateAdminAgentInstanceActiveVersion, updateAdminAgentInstanceLifecycle, updateAdminAgentInstancePersona, type AdminDefinitionInventoryItem, type AdminDefinitionPublicationSummary, type AdminEffectiveConfiguration } from "../../services/adminApi";
@@ -224,69 +225,9 @@ export function InstanceManagedControls({
               Rev {config.personaRevision}
             </Typography.Text>
           </Flex>
-          <Tabs
-            className="admin-instance-persona-tabs"
-            activeKey={personaTab}
-            onChange={handlePersonaTabChange}
-            items={[
-              {
-                key: "form",
-                label: "Form",
-                children: (
-                  <Form className="admin-instance-persona-form admin-settings-form" layout="vertical" disabled={busy || config.instanceLifecycle !== "Active"}>
-                    <Form.Item label="Name">
-                      <Input
-                        aria-label="Persona name"
-                        value={persona.name}
-                        onChange={(event) => setPersona({ ...persona, name: event.target.value })}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Role">
-                      <Input
-                        aria-label="Persona role"
-                        value={persona.role}
-                        onChange={(event) => setPersona({ ...persona, role: event.target.value })}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Description">
-                      <Input.TextArea
-                        aria-label="Persona description"
-                        rows={3}
-                        value={persona.description}
-                        onChange={(event) => setPersona({ ...persona, description: event.target.value })}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Tone">
-                      <Input
-                        aria-label="Persona tone"
-                        value={persona.tone}
-                        onChange={(event) => setPersona({ ...persona, tone: event.target.value })}
-                      />
-                    </Form.Item>
-                  </Form>
-                )
-              },
-              {
-                key: "json",
-                label: "JSON",
-                children: (
-                  <Flex vertical gap={8}>
-                    <Input.TextArea
-                      aria-label="Persona JSON"
-                      disabled={busy || config.instanceLifecycle !== "Active"}
-                      rows={8}
-                      value={personaJsonDraft}
-                      onChange={(event) => {
-                        setPersonaJsonDraft(event.target.value);
-                        setPersonaJsonError(null);
-                      }}
-                    />
-                    {personaJsonError || invalidPersonaJson ? <Typography.Text type="danger">{personaJsonError ?? invalidPersonaJson}</Typography.Text> : null}
-                  </Flex>
-                )
-              }
-            ]}
-          />
+          <InstancePersonaFields persona={persona} onChange={setPersona} tab={personaTab} onTabChange={handlePersonaTabChange}
+            json={personaJsonDraft} onJsonChange={value => { setPersonaJsonDraft(value); setPersonaJsonError(null); }}
+            error={personaJsonError || invalidPersonaJson} disabled={busy || config.instanceLifecycle !== "Active"} />
           <Flex vertical gap={8} align="start" className="admin-instance-persona-actions">
             {!configuration.managed && <Button type="primary" onClick={() => void savePersona()} disabled={busy || config.instanceLifecycle !== "Active"}>
               Save persona

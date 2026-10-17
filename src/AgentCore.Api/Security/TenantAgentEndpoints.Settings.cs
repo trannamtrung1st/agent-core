@@ -23,7 +23,7 @@ public static partial class TenantAgentEndpoints
         {
             var a = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.PatchSettingsAsync(a.PrincipalId, a.TenantId, instanceId, section, body.ExpectedRevision,
-                body.ExpectedInstanceRevision, body.Set, body.Clear, ct).ConfigureAwait(false)));
+                body.ExpectedInstanceRevision, body.Set, body.Clear, ct).ConfigureAwait(false), checked(body.ExpectedRevision + 1)));
         }));
         group.MapGet("/agents/{instanceId:guid}/execution-budgets", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

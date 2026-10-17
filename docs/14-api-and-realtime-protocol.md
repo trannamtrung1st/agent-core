@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Instance editor HTTP read
+
+`GET /api/v2/tenants/{tenantId}/agents/{instanceId}/editor` uses the current cookie human/session and exact `agents.read`. The no-store response is `{ agent, settings, securityRevision, canUpdate, unavailableSettings }`; `agent` uses the existing safe agent/Instance projection, `settings` uses existing typed sections with matching Instance revisions, and `canUpdate` checks exact `agents.update` without IAM-inspection permission. `unavailableSettings` currently contains `sandboxPolicy`, absent from `settings`. Stale composed reads return `409 stale_revision`; unavailable human/read authority fails closed.
+
+Profile writes remain `PUT .../persona` with `{ persona, expectedRevision, expectedInstanceRevision, expectedPersonaRevision }`. Settings writes remain `PATCH .../settings/{section}` with `{ set, clear, expectedRevision, expectedInstanceRevision }`. Settings PATCH additionally returns `securityRevision` at the safe-agent root, equal to the committed next tenant revision. This is a concurrency witness, never authority or a retry instruction. Other response fields and existing errors remain unchanged.
+
 ## Canonical Agent Access view
 
 `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/access` derives the current human from the authenticated Account/session and tenant User. It requires `agents.read` and `iam.roles.read` on the exact owned agent before resolving private labels. `audiencePage`, `executionPage`, `principalPage` are zero-based 0–100000 (default 0), with fixed ten-item pages. Optional `q` is at most 200 UTF-16 units, trimmed and case-insensitive over safe principal display names. `authorityScope` is `agent` (default) or `tenant`; organization inspection additionally requires `iam.roles.read` at tenant scope. Invalid bounds/scope/search return 400; unknown/foreign/inaccessible targets deny. Final current human/session, tenant security and Instance revision checks reject retired/stale projections. Responses use the existing no-store identity policy.

@@ -10,6 +10,12 @@ describe('canonical access navigation', () => {
     expect(parseAccessRoute(tenantAgentPath(tenant, tenant, 'connections'))).toMatchObject({ page: 'agents', tenantId: tenant, instanceId: tenant, instancePage: 'connections' });
     expect(canonicalAppUrl(tenantAgentPath(tenant, tenant, 'connections'))).toBe(tenantAgentPath(tenant, tenant, 'connections'));
     expect(parseAccessRoute(tenantAgentPath(tenant, tenant, 'connections') + '/other')?.view).toBe('not-found');
+    for (const instancePage of ['profile', 'settings'] as const) {
+      const path = tenantAgentPath(tenant, tenant, instancePage);
+      expect(parseAccessRoute(path)).toMatchObject({ tenantId: tenant, instanceId: tenant, instancePage });
+      expect(canonicalAppUrl(path)).toBe(path);
+      expect(parseAccessRoute(path + '/extra')?.view).toBe('not-found');
+    }
     for (const path of [`/t/${tenant}/admin/agents/${tenant}`, `/t/${tenant}/admin/agents/invalid/access`, `${tenantAgentPath(tenant, tenant)}/other`]) expect(parseAccessRoute(path)?.view).toBe('not-found');
   });
   it('opens the OAuth return destination as a tenant Credential page and preserves its exact item query', () => {

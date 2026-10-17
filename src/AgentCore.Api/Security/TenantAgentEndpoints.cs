@@ -56,7 +56,7 @@ public static partial class TenantAgentEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             var result = await service.ListAsync(actor.PrincipalId, actor.TenantId, page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false);
-            return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize });
+            return Results.Json(new { items = result.Items.Select(agent => Safe(agent)), result.Total, result.Page, result.PageSize });
         }));
         group.MapGet("/agents/{instanceId:guid}", (Guid instanceId, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

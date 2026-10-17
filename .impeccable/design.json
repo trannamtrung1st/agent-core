@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-16T11:58:42.112716+00:00",
+  "generatedAt": "2026-10-17T16:38:28.111923+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -379,7 +379,7 @@
         "web/src/services/stateIsolation.ts": "b1a87a108608e5abbd75a7f21d75530f70fe6862fec2b74384cb70a59de71ddb"
       },
       "evidence": "docs/reports/access-foundation-review-2026-10-16.md",
-      "scope": "Focused identity/access consistency review and member inspector recovery candidate. Historical design and runtime reports retain their own acceptance scope; full resource/Hub/approval cutover remains pending.",
+      "scope": "Historical October 16 identity/access consistency review and member inspector recovery candidate. Historical design and runtime reports retain their own acceptance scope; resource/Hub/approval cutover was pending at that checkpoint. See documentationRefresh for the bounded October 17 successor merge.",
       "snapshotKind": "commit-candidate",
       "inspectedAt": "2026-10-16T11:58:42.112716+00:00",
       "evidenceRecords": [
@@ -402,7 +402,28 @@
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
       "verification": "Eight InMemory/SQLite IAM scenarios, six canonical API/restart scenarios, 37 focused frontend tests and production build pass. MCP reproduced/corrected member switching and refresh errors at desktop/mobile widths; final isolated browser fallback covers truthful recovery and no mutation replay. See report for final result and MCP transport limitation.",
-      "verificationReport": "docs/reports/access-foundation-review-2026-10-16.md"
+      "verificationReport": "docs/reports/access-foundation-review-2026-10-16.md",
+      "documentationRefresh": {
+        "refreshedAt": "2026-10-17T16:38:28.111923+00:00",
+        "scope": "Bounded October 17 scoped Instance Profile/Settings source-pattern merge and current tenant cutover summaries. Normative tokens and component previews are unchanged; earlier inspection timestamps, base commit and source hashes remain historical and do not describe the current tree. No broad system re-extraction or runtime acceptance was performed by this documentation pass.",
+        "sourceSha256": {
+          ".agents/context/DESIGN.md": "ce1801c42e71bcfec1ab151cc17015c860337b2d9b4209db196ef66fb7fcd91a",
+          ".agents/context/PRODUCT.md": "f4b0618d5ae7128842efd8281124412ca3a47e99a198d7fd5a6d3265a228eb76",
+          "web/src/features/access/TenantAgentConfiguration.tsx": "2852b25f38b0a98f6adbbe8ca7f6279afde90235b1d50d0d2c15381489d16a8e",
+          "web/src/features/access/AccessApp.tsx": "3fb594f236df00faf4b1e36e438cf8b71cf0701791f615dbe7168fc0eee846d1",
+          "web/src/features/admin/InstancePersonaFields.tsx": "180d3d4b9f90e8175b0a963e6ab627a5dbec9c4753dd24e5ca4449615368c321",
+          "web/src/features/admin/InstanceSettingsSection.tsx": "de82454badea97ed62599cc7634d584fbab8ba4fe168480fd20c0591ddccef9e",
+          "web/src/features/admin/useInstanceSettingsController.ts": "f3e9e7577c9ebccc8732896793c57fc5d0f3881bf6b4d90459572c5385dd1327"
+        },
+        "evidenceRecords": [
+          "docs/reports/tenant-instance-editor-ui-verification-2026-10-17.md",
+          "docs/reports/tenant-chat-ui-verification-2026-10-17.md",
+          "docs/reports/tenant-chat-approvals-verification-2026-10-17.md",
+          "docs/reports/tenant-approval-ui-verification-2026-10-17.md",
+          "docs/reports/tenant-agent-access-ui-verification-2026-10-17.md",
+          "docs/reports/tenant-agent-connections-ui-verification-2026-10-17.md"
+        ]
+      }
     }
   },
   "components": [
@@ -641,7 +662,7 @@
   ],
   "narrative": {
     "northStar": "Ant Design operate UI",
-    "overview": "Current design sync: October 16, 2026, through `cca9050d`. Theme values come from `antdTheme.ts` and the resolved `AppShell` bridge; compositions come from current product components. The [current documentation sync](../../docs/reports/design-system-access-sync-2026-10-16.md) records source inspection and token/metadata checks. The [earlier rendered sync](../../docs/reports/design-system-sync-2026-10-16.md) and [access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) retain their measured layouts and executed journeys. This refresh does not repeat runtime acceptance.\n\n**Creative North Star: \"Ant Design operate UI\"**\n\nAgent Core combines personal Chat, Admin configuration and account/organization access in one Ant Design v6 operate UI. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.\n\nThe shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. The theme seed remains `#1677ff`; Ant Design resolves the dark primary to `#1668dc`. `AppShell` maps resolved `theme.useToken()` roles to product CSS custom properties and publishes them on the document root so body portals (Dropdown, Drawer and Modal) share the same theme. Product CSS does not maintain independent color or spacing literals.\n\nShared source-owned previews inherit the same dark surfaces, typography and spacing; the document remains the focus. Source collections own their action rows, the preview owns filename/metadata/toolbar and a locally scrolling canvas, and bounded dialogs keep Download, Close and local recovery reachable on short screens. Document paper stays white inside the isolated Word renderer. No parallel file-management shell, theme or UI kit is introduced.",
+    "overview": "The October 17, 2026 scoped Instance documentation merge preserves the design system extracted on October 16 through `cca9050d`. Theme values come from `antdTheme.ts` and the resolved `AppShell` bridge; compositions come from current product components. The [October 16 documentation sync](../../docs/reports/design-system-access-sync-2026-10-16.md) records token/metadata checks. The [earlier rendered sync](../../docs/reports/design-system-sync-2026-10-16.md), [access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) and [current Instance editor evidence](../../docs/reports/tenant-instance-editor-ui-verification-2026-10-17.md) retain their own measured layouts and executed journeys. This merge does not repeat runtime acceptance or rebase historical fingerprints.\n\n**Creative North Star: \"Ant Design operate UI\"**\n\nAgent Core combines personal Chat, Admin configuration and account/organization access in one Ant Design v6 operate UI. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.\n\nThe shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. The theme seed remains `#1677ff`; Ant Design resolves the dark primary to `#1668dc`. `AppShell` maps resolved `theme.useToken()` roles to product CSS custom properties and publishes them on the document root so body portals (Dropdown, Drawer and Modal) share the same theme. Product CSS does not maintain independent color or spacing literals.\n\nShared source-owned previews inherit the same dark surfaces, typography and spacing; the document remains the focus. Source collections own their action rows, the preview owns filename/metadata/toolbar and a locally scrolling canvas, and bounded dialogs keep Download, Close and local recovery reachable on short screens. Document paper stays white inside the isolated Word renderer. No parallel file-management shell, theme or UI kit is introduced.",
     "keyCharacteristics": [
       "Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.",
       "Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).",

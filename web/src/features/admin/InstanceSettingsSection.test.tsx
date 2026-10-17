@@ -5,12 +5,34 @@ import { InstanceSettingsSection } from './InstanceSettingsSection';
 import * as api from '../../services/instanceConfiguration';
 import * as modelApi from '../../services/api';
 import { getSandboxPlatform, getInstanceSandbox } from '../../services/sandboxes';
+import { IdentityCompletionError } from '../../services/identity';
 
 vi.mock('../../services/instanceConfiguration', () => ({ listInstanceSettings: vi.fn(), patchInstanceSettings: vi.fn() }));
 vi.mock('../../services/api', () => ({ listModels: vi.fn(async () => ({ models: [] })) }));
 vi.mock('../../services/sandboxes', async (importOriginal) => ({ ...await importOriginal<typeof import('../../services/sandboxes')>(), getSandboxPlatform: vi.fn(), getInstanceSandbox: vi.fn() }));
 vi.mock('./ExecutionBudgetsSection', () => ({ InstanceExecutionBudgets: () => null }));
 afterEach(cleanup);
+
+it('retires an acknowledged section after an unreadable response and explicitly reloads without replaying it', async () => {
+  const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn().mockRejectedValue(new IdentityCompletionError()), models: vi.fn().mockResolvedValue({ models: [], defaultKey: null }) };
+  render(<ConfigProvider><App><InstanceSettingsSection instanceId="tenant-agent" archived={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
+  await editVoiceWithOtherDraft();
+  await screen.findByText(/Settings were saved\./);
+  expect(screen.queryByRole('button', { name: 'Save Voice' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry settings' }));
+  expect(await screen.findByRole('textbox', { name: 'Language' })).toHaveValue('fr-FR');
+  expect(screen.getByRole('button', { name: 'Save Voice' })).toBeDisabled();
+  expect(transport.patch).toHaveBeenCalledTimes(1);
+  expect(api.patchInstanceSettings).not.toHaveBeenCalled();
+});
+
+it('makes a tenant model catalog failure visible and retries only its read', async () => {
+  const transport = { list: vi.fn().mockResolvedValue(sections()), patch: vi.fn(), models: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ models: [], defaultKey: null }) };
+  render(<ConfigProvider><App><InstanceSettingsSection instanceId="tenant-agent" archived={false} onUpdated={() => {}} transport={transport} /></App></ConfigProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Reload models' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Reload models' })).not.toBeInTheDocument());
+  expect(transport.models).toHaveBeenCalledTimes(2); expect(transport.patch).not.toHaveBeenCalled();
+});
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(modelApi.listModels).mockResolvedValue({ defaultKey: 'host', models: [] }); });
 
 function sections(revision = 1, voiceEnabled = true): api.SettingsSection[] {

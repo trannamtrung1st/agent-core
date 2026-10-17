@@ -26,6 +26,9 @@ describe("isPersonaDraftDirty", () => {
 });
 
 describe("instanceManagedControls persona sync", () => {
+  it.each(['null', '[]', 'true', '42', '"persona"'])("rejects non-object persona JSON: %s", json => {
+    expect(() => parsePersonaJson(json)).toThrow('Persona JSON must be an object');
+  });
   it("round-trips Form to JSON to Form", () => {
     const edited = { ...samplePersona, role: "Coach" };
     const toJson = syncPersonaOnTabChange("form", "json", edited, "");
