@@ -1,5 +1,12 @@
 # Backend Implementation Specification
 
+## Protected tenant conversation history
+
+`TenantConversationService` is the human-recipient read use case over existing owned Entry rows. Require the current human/session, exact Session read and owning Instance Chat before storage; revalidate those facts and security/Session revisions after the bounded page and resource checks. Metadata-read authority alone cannot read conversation content. The content store uses a separate typed port from claim-bound Runtime history; terminal or waiting work needs no fabricated live claim. InMemory reads under existing shared locks; SQLite reads owner, Session revision and at most limit+1 rows in one transaction. Deleted/foreign roots stay unavailable, including after reopen.
+
+Public projection reuses the existing terminal-versus-interrupted/streaming text rules. Completed/failed generated text is readable without manufacturing received/heard offsets; interrupted/streaming tails stay received-clamped. Artifact/attachment cards and metadata need independently owned recipient-readable targets; source-event references and memory receipts use their own permissions. Canonical ingress currently admits text only, so legacy structured resource labels/locators are replaced with Resource unavailable and untyped effect receipts are omitted until target-aware conversion. This is field-level resource gating, not a universal free-text disclosure filter. Reads have no Session/Run/security/audit write and cannot revive superseded output. Live Hub/voice delivery and actual recipient receipts remain pending. [Verification](reports/tenant-conversation-history-verification-2026-10-17.md).
+
+
 ## Canonical tenant Run cancellation
 
 The current human must hold exact Run cancel/read, owning Session read and Instance chat. Preparation records only the actual owner/Session/Run/generation and current security/Run witnesses. The host routes a matching live execution to its urgent mailbox; that handler repeats current authority and reference checks and commits before cancelling local workers. An absent owner is handled under an admission reservation. Logout, revoked permission, changed revision or forged generation/owner fails before terminal mutation.

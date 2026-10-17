@@ -15,6 +15,14 @@ public static class TenantSessionEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions").RequireAuthorization();
+        group.MapGet("/{sessionId:guid}/messages", (Guid sessionId, long? after, long? before, int? limit, HttpContext http,
+            TenantConversationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var page = await service.ReadAsync(actor.TenantId, sessionId, Initiator(http, actor), after, before, limit ?? 50, ct).ConfigureAwait(false);
+            return Results.Json(new { items = page.Items.Select(HttpMapping.ToHistoryItem), page.NextAfter, page.HasMore,
+                page.HasOlder, page.NextBefore, page.SessionRevision, page.SecurityRevision });
+        }));
         group.MapPost("/{sessionId:guid}/messages", (Guid sessionId, MessageRequest body, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

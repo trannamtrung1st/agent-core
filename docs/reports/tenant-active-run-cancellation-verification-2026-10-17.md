@@ -40,3 +40,5 @@ Narrow development runs already passed: active HTTP cancellation (2), saved-pref
 ## Remaining scope
 
 No frontend code changed. The private text execution/cancellation path has HTTP/mailbox/store evidence; live tenant Chat/history/output, Hub/voice control, recipient delivery revalidation, original-Chat approval notifications, other operation/resource families, autonomous-origin completion and obsolete-authority/schema removal still require the proposal's remaining work. Saved generated text is not a received/heard acknowledgement. No CI, Real provider call, deployment or installed-data migration/reset was performed. The full goal remains active.
+
+Subsequent [protected tenant history verification](tenant-conversation-history-verification-2026-10-17.md) adds authenticated persisted conversation readback. Live delivery/Hub/voice and delivery receipts remain separate; earlier pending-history statements describe their original checkpoint.

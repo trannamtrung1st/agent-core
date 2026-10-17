@@ -131,8 +131,10 @@ public static partial class HttpMapping
     };
 
     public static HistoryItemResponse ToHistoryItem(ConversationEntry entry)
+        => ToHistoryItem(PublicHistory.FromEntry(entry));
+
+    public static HistoryItemResponse ToHistoryItem(PublicHistoryEntry projected)
     {
-        var projected = PublicHistory.FromEntry(entry);
         return new HistoryItemResponse(
             projected.EntryId.ToString(),
             projected.Sequence,
