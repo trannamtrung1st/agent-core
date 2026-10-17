@@ -32,9 +32,11 @@ public sealed partial class TenantCredentialIntegrationTests
         var read = await Grant(f, owner.TenantId, owner.OwnerPrincipalId, principal, ["credentials.read"], scope);
         var page = await f.BindingService.ListAsync(principal, owner.TenantId, id, 0, 1);
         Assert.False(page.AllRead); Assert.Equal(1, page.Total); Assert.Equal("visible", Assert.Single(page.Items).Reference);
+        Assert.True(page.CanUpdate); Assert.Equal("Alex", page.AgentName); Assert.Equal("Active", page.Lifecycle); Assert.Empty(page.RemovableBindingIds);
         Assert.Empty((await f.BindingService.ListAsync(principal, owner.TenantId, id, 1, 1)).Items);
         await Assert.ThrowsAsync<AccessDeniedException>(() => f.BindingService.UnbindAsync(principal, owner.TenantId, id, first.Binding.BindingId, 1, 1, 1).AsTask());
         var bind = await Grant(f, owner.TenantId, owner.OwnerPrincipalId, principal, ["credentials.bind"], scope);
+        Assert.Equal(first.Binding.BindingId, Assert.Single((await f.BindingService.ListAsync(principal, owner.TenantId, id)).RemovableBindingIds));
         Assert.False((await f.Authorizer.CheckAsync(principal, "credentials.use", scope)).Allowed);
         await f.Access.RevokeAssignmentAsync(owner.OwnerPrincipalId, owner.TenantId, read.AssignmentId, await Revision());
         Assert.Equal(0, (await f.BindingService.ListAsync(principal, owner.TenantId, id)).Total);

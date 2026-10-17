@@ -30,6 +30,8 @@ public sealed partial class TenantCredentialAccessTests
         var binding = saved.GetProperty("binding").GetProperty("bindingId").GetGuid();
         var page = await Json(await owner.GetAsync(path + "?pageSize=1")); Safe(page);
         Assert.Equal(1, page.GetProperty("total").GetInt32()); Assert.Equal("primary", page.GetProperty("items")[0].GetProperty("reference").GetString());
+        Assert.Equal("Alex", page.GetProperty("agentName").GetString()); Assert.True(page.GetProperty("canUpdate").GetBoolean());
+        Assert.Equal(binding, Assert.Single(page.GetProperty("removableBindingIds").EnumerateArray()).GetGuid());
         Assert.Equal(2, (await Json(await owner.GetAsync(root + $"/agents/{id}"))).GetProperty("instance").GetProperty("revision").GetInt64());
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(path, new TenantBindCredentialRequest(credential, "duplicate", await Revision(owner, tenant), 2, 1))).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await owner.DeleteAsync(root + $"/credentials/{credential}?expectedRevision={await Revision(owner, tenant)}&expectedCredentialRevision=1")).StatusCode);
@@ -40,7 +42,9 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode); var invalid = await Json(malformed); Safe(invalid);
         Assert.False(invalid.TryGetProperty("diagnosticId", out _));
         Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(root + $"/agents/{id}/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 })).StatusCode);
-        Assert.Equal(1, (await Json(await owner.GetAsync(path))).GetProperty("total").GetInt32());
+        var archivedView = await Json(await owner.GetAsync(path));
+        Assert.Equal(1, archivedView.GetProperty("total").GetInt32()); Assert.Equal("Archived", archivedView.GetProperty("lifecycle").GetString());
+        Assert.Empty(archivedView.GetProperty("removableBindingIds").EnumerateArray());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.DeleteAsync(path + $"/{binding}?expectedRevision={await Revision(owner, tenant)}&expectedInstanceRevision=3&expectedBindingRevision=1")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(root + $"/agents/{id}/lifecycle", new { lifecycle = 0, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 3 })).StatusCode);
         var removed = await owner.DeleteAsync(path + $"/{binding}?expectedRevision={await Revision(owner, tenant)}&expectedInstanceRevision=4&expectedBindingRevision=1");

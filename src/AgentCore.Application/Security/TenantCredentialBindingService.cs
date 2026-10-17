@@ -9,7 +9,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record TenantCredentialBindingPage(IReadOnlyList<CredentialBindingView> Items, int Total, int Page, int PageSize,
-    bool AllRead, long InstanceRevision, long SecurityRevision);
+    bool AllRead, long InstanceRevision, long SecurityRevision, string AgentName, string Lifecycle, bool CanUpdate, IReadOnlyList<Guid> RemovableBindingIds);
 public sealed record TenantCredentialBindingSaved(CredentialBindingView Binding, long InstanceRevision, long SecurityRevision);
 public sealed record TenantCredentialBindingRemoved(long InstanceRevision, long SecurityRevision);
 
@@ -31,12 +31,19 @@ public sealed class TenantCredentialBindingService(IIamStore security, ITenantAg
             item => TenantCredentialRules.Scope(tenant, item.Binding.CredentialId), ct).ConfigureAwait(false);
         page = Math.Clamp(page, 0, 100_000); pageSize = Math.Clamp(pageSize, 1, 100);
         var items = visible.Items.OrderBy(item => item.Binding.Reference, StringComparer.Ordinal).ToArray();
+        var selected = items.Skip(page * pageSize).Take(pageSize).ToArray();
+        var canUpdate = (await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.update"), TenantAgentServiceScope(tenant, instance), ct).ConfigureAwait(false)).Allowed;
+        var removable = new List<Guid>();
+        if (canUpdate && snapshot.Agent.Instance.Lifecycle == AgentInstanceLifecycle.Active)
+            foreach (var item in selected)
+                if ((await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("credentials.bind"), TenantCredentialRules.Scope(tenant, item.Binding.CredentialId), ct).ConfigureAwait(false)).Allowed)
+                    removable.Add(item.Binding.BindingId);
         // Snapshot I/O and item checks may yield across revocation or a configuration write.
         // Never pair an old projection with a newer security witness or a retired human session.
         var current = await ParentState(actor, tenant, instance, false, ct, human).ConfigureAwait(false);
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
-        return new(items.Skip(page * pageSize).Take(pageSize).Select(View).ToArray(), items.Length, page, pageSize, visible.All,
-            snapshot.Agent.Instance.Revision, state.Tenant.Revision);
+        return new(selected.Select(View).ToArray(), items.Length, page, pageSize, visible.All,
+            snapshot.Agent.Instance.Revision, state.Tenant.Revision, snapshot.Agent.Instance.Persona.Name, snapshot.Agent.Instance.Lifecycle.ToString(), canUpdate, removable);
     }
     public ValueTask<TenantCredentialBindingSaved> BindAsync(Guid actor, Guid tenant, Guid instance, Guid credentialId, string reference,
         long expectedSecurityRevision, long expectedInstanceRevision, long expectedCredentialRevision, CancellationToken ct = default) =>

@@ -15,7 +15,8 @@ public static class TenantCredentialBindingEndpoints
             var actor = IdentityHttp.TenantContext(http);
             var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
             var result = await service.ListForHumanAsync(actor.TenantId, instanceId, human, page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false);
-            return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize, result.AllRead, result.InstanceRevision, result.SecurityRevision });
+            return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize, result.AllRead, result.InstanceRevision, result.SecurityRevision,
+                result.AgentName, result.Lifecycle, result.CanUpdate, result.RemovableBindingIds });
         }));
         group.MapPost("", (Guid instanceId, TenantBindCredentialRequest body, HttpContext http, [FromServices] TenantCredentialBindingService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

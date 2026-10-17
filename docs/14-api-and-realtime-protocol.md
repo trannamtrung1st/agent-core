@@ -247,7 +247,7 @@ Base path: `/api/v2/tenants/{tenantId}/agents/{instanceId}/credential-bindings`,
 
 | Method/path | Contract |
 | --- | --- |
-| `GET /` | `page`/`pageSize` default 0/30, maximum 100. Parent `agents.read`; item `credentials.read` filters before totals/paging. Returns safe `items`, visible `total`, paging, `allRead` (inherited tenant Credential read), `instanceRevision`, `securityRevision`. |
+| `GET /` | `page`/`pageSize` default 0/30, maximum 100. Parent `agents.read`; item `credentials.read` filters before totals/paging. Returns safe `items`, visible `total`, paging, `allRead` (inherited tenant Credential read), `instanceRevision`, `securityRevision`, authorized parent `agentName`/`lifecycle`, exact parent `canUpdate` and `removableBindingIds` limited to visible rows on this page. Removal hints require an active Instance, parent update and exact Credential bind; every mutation rechecks independently. |
 | `POST /` | `credentialId`, normalized `reference`, `expectedRevision` (tenant security), `expectedInstanceRevision`, `expectedCredentialRevision`. Parent read/update plus item Credential read/bind. Returns 201 `{ binding, instanceRevision, securityRevision }`; `binding` uses the existing safe binding/credential metadata projection. |
 | `DELETE /{bindingId}` | Query `expectedRevision`, `expectedInstanceRevision`, `expectedBindingRevision`. Parent read/update plus item `credentials.bind`. Returns 200 `{ instanceRevision, securityRevision }` without Credential content. |
 

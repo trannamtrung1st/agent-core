@@ -7,6 +7,9 @@ describe('canonical access navigation', () => {
     expect(parseAppRoute(`/t/${tenant}/admin/agents`)).toMatchObject({ area: 'access', view: 'tenant', page: 'agents', tenantId: tenant });
     expect(parseAccessRoute(tenantAgentPath(tenant, tenant))).toMatchObject({ page: 'agents', tenantId: tenant, instanceId: tenant });
     expect(canonicalAppUrl(tenantAgentPath(tenant, tenant))).toBe(tenantAgentPath(tenant, tenant));
+    expect(parseAccessRoute(tenantAgentPath(tenant, tenant, 'connections'))).toMatchObject({ page: 'agents', tenantId: tenant, instanceId: tenant, instancePage: 'connections' });
+    expect(canonicalAppUrl(tenantAgentPath(tenant, tenant, 'connections'))).toBe(tenantAgentPath(tenant, tenant, 'connections'));
+    expect(parseAccessRoute(tenantAgentPath(tenant, tenant, 'connections') + '/other')?.view).toBe('not-found');
     for (const path of [`/t/${tenant}/admin/agents/${tenant}`, `/t/${tenant}/admin/agents/invalid/access`, `${tenantAgentPath(tenant, tenant)}/other`]) expect(parseAccessRoute(path)?.view).toBe('not-found');
   });
   it('opens the OAuth return destination as a tenant Credential page and preserves its exact item query', () => {

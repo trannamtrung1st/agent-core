@@ -25,7 +25,7 @@ export function TenantAgents({ context }: { context: TenantContext }) {
       pagination={{ ...adminCollectionPagination, current: page + 1, pageSize: 20, total: state.data?.total, showSizeChanger: false, onChange: next => setPage(next - 1) }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? 'No matching instances on this page. Clear search or choose another page.' : 'No agent instances you can read in this organization.'} /> }} columns={[
         { title: 'Agent', render: (_, row) => <Flex vertical align="start" gap="var(--ac-space-tight)"><Typography.Text strong>{row.instance.persona.name}</Typography.Text><Typography.Text type="secondary">{row.instance.persona.role}</Typography.Text><Tag>{row.instance.lifecycle}</Tag></Flex> },
-        { title: 'Access', width: 100, render: (_, row) => <Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId)} onClick={followAppLink} aria-label={`Access for ${row.instance.persona.name}`}>Access</Typography.Link> }
+        { title: 'Manage', width: 116, render: (_, row) => <Flex vertical gap="var(--ac-space-compact)"><Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId)} onClick={followAppLink} aria-label={`Access for ${row.instance.persona.name}`}>Access</Typography.Link><Typography.Link href={tenantAgentPath(tenant, row.instance.instanceId, 'connections')} onClick={followAppLink} aria-label={`Connections for ${row.instance.persona.name}`}>Connections</Typography.Link></Flex> }
       ]} />}
     {creating && <CreateAgent context={context} onClose={closeCreation} />}
   </Flex>;

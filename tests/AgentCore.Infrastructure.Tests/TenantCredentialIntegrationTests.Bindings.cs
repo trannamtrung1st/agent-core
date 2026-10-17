@@ -62,7 +62,8 @@ public sealed partial class TenantCredentialIntegrationTests
         Assert.Equal(0, (await f.BindingService.ListAsync(owner.OwnerPrincipalId, owner.TenantId, a.Instance.InstanceId)).Total);
         Assert.Equal(1, (await f.Service.ReadAsync(owner.OwnerPrincipalId, owner.TenantId, id)).Credential.BindingCount);
         var archived = await f.Agents.SetLifecycleAsync(owner.OwnerPrincipalId, owner.TenantId, b.Instance.InstanceId, AgentInstanceLifecycle.Archived, await Revision(), 2);
-        Assert.Equal(1, (await f.BindingService.ListAsync(owner.OwnerPrincipalId, owner.TenantId, b.Instance.InstanceId)).Total);
+        var archivedBindings = await f.BindingService.ListAsync(owner.OwnerPrincipalId, owner.TenantId, b.Instance.InstanceId);
+        Assert.Equal(1, archivedBindings.Total); Assert.Equal("Archived", archivedBindings.Lifecycle); Assert.Empty(archivedBindings.RemovableBindingIds);
         before = await Revision();
         var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => f.BindingService.UnbindAsync(owner.OwnerPrincipalId, owner.TenantId, b.Instance.InstanceId, second.Binding.BindingId, before, archived.Instance.Revision, 1).AsTask());
         Assert.Equal("agent_archived", denied.ReasonCode);
