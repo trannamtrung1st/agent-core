@@ -2,6 +2,12 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Sandbox catalog successor — 2026-10-18
+
+The [focused Sandbox profile evidence](tenant-sandbox-profiles-verification-2026-10-18.md) advances only the reusable human catalog boundary. [TenantSandboxProfileEndpoints](../../src/AgentCore.Api/Security/TenantSandboxProfileEndpoints.cs) supplies canonical collection GET/POST and exact current/historical GET/PUT under `/api/v2/tenants/{tenantId}/sandbox-profiles`. `TenantSandboxProfileService`, `ITenantSandboxProfileStore` and the actual InMemory/SQLite IAM adapters own profile tenancy, filtered search/count/paging, exact read/manage, original-human post-I/O/commit fences, immutable revisions and atomic security/audit. Registry preparation additionally requires current scoped Credential read/bind/use and original-human proof before protected dispatch. Existing global catalog/write/verification methods exclude or reject owned IDs.
+
+The original Sandbox rows below remain removal/cutover obligations: platform readiness/options, disposable profile/Instance verification, Instance selection, Session generation/execution/process/reset, mounts/cleanup and every `sandbox.*` tool still need canonical owners. The catalog does not authorize execution or reuse a global verification observation. Browser isolation, remaining resource/effect families, final schema and owner-capability removal remain open; no full boundary inventory acceptance is claimed.
+
 ## Boundary ownership and required enforcement
 
 | Family | Trusted owner / tenant | Principal / permissions | Policy and verification |

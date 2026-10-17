@@ -8,9 +8,10 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null) : IIamStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     private readonly InMemoryMemoryStore sessionBacking = definitionReferences.BindTenantInstances(instances);
+    private readonly InMemorySandboxStore sandboxBacking = sandboxProfiles ?? new();
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
     private readonly Dictionary<Guid, TenantSecurityState> _tenants = [];
@@ -120,6 +121,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantSandboxProfileRules.TryId(a.Scope, out var profile) && FindTenantSandboxProfileAsync(state.Tenant.TenantId, profile, ct: ct).Result is null))
+            throw new ArgumentException("A Sandbox profile assignment requires its actual owned profile.");
         if (state.Assignments.Any(a => TenantApprovalRules.TryApprovalId(a.Scope, out var id) && _approvals.GetValueOrDefault(id)?.TenantId != state.Tenant.TenantId))
             throw new ArgumentException("An Approval assignment requires its actual owned request.");
         if (state.Assignments.Any(a => TenantRunRules.TryId(a.Scope, out var run) && sessionBacking.ReadTenantRun(state.Tenant.TenantId, run) is null))

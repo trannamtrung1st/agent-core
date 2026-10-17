@@ -8,7 +8,7 @@ using AgentCore.Application.Admin;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class SandboxProfileRow { public string Id { get; set; } = ""; public long Revision { get; set; } public string Json { get; set; } = ""; }
+public sealed class SandboxProfileRow { public string SearchText { get; set; } = ""; public Guid? TenantId { get; set; } public string Id { get; set; } = ""; public long Revision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxVerificationRow { public string ProfileId { get; set; } = ""; public long ProfileRevision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxInstanceVerificationRow { public string InstanceId { get; set; } = ""; public long InstanceRevision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxLeaseRow { public string SessionId { get; set; } = ""; public string AgentInstanceId { get; set; } = ""; public long Revision { get; set; } public long ExpiresAt { get; set; } public int State { get; set; } public string Json { get; set; } = ""; }
@@ -36,31 +36,36 @@ public sealed class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> fac
     public async ValueTask<IReadOnlyList<SandboxProfile>> ListProfilesAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        var rows = await db.Set<SandboxProfileRow>().AsNoTracking().ToListAsync(ct);
+        var rows = await db.Set<SandboxProfileRow>().AsNoTracking().Where(r => r.TenantId == null).ToListAsync(ct);
         return rows.GroupBy(r => r.Id).Select(g => Read<SandboxProfile>(g.MaxBy(r => r.Revision)!.Json)).OrderBy(p => p.Name).ToArray();
     }
     public async ValueTask<SandboxProfile?> GetProfileAsync(string id, long? revision = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        var row = await db.Set<SandboxProfileRow>().AsNoTracking().Where(r => r.Id == id && (revision == null || r.Revision == revision)).OrderByDescending(r => r.Revision).FirstOrDefaultAsync(ct);
+        var row = await db.Set<SandboxProfileRow>().AsNoTracking().Where(r => r.TenantId == null && r.Id == id && (revision == null || r.Revision == revision)).OrderByDescending(r => r.Revision).FirstOrDefaultAsync(ct);
         return row is null ? null : Read<SandboxProfile>(row.Json);
     }
     public async ValueTask SaveProfileAsync(SandboxProfile profile, long expectedRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
-        profile.Validate(); await _gate.WaitAsync(ct);
+        profile.Validate(); if (profile.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
+        await _gate.WaitAsync(ct);
         try
         {
             await using var db = await factory.CreateDbContextAsync(ct);
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            if (await db.Set<AgentCore.Infrastructure.Security.TenantSandboxProfileRecord>().AnyAsync(r => r.ProfileId == profile.Id, ct))
+                throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
             var latest = await db.Set<SandboxProfileRow>().Where(r => r.Id == profile.Id).OrderByDescending(r => r.Revision).FirstOrDefaultAsync(ct);
             if ((latest?.Revision ?? 0) != expectedRevision || profile.Revision != expectedRevision + 1) throw AgentCoreErrors.Conflict("Sandbox profile changed. Reload before saving.");
             db.Add(new SandboxProfileRow { Id = profile.Id, Revision = profile.Revision, Json = JsonSerializer.Serialize(profile, Json) });
             if (history is not null) AdminEventPersistence.StageAppend(db,history,Guid.CreateVersion7());
-            await db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
         } finally { _gate.Release(); }
     }
     public async ValueTask<SandboxProfileVerification?> GetVerificationAsync(string id, long revision, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
+        if (await db.Set<SandboxProfileRow>().AnyAsync(r => r.Id == id && r.TenantId != null, ct)) return null;
         var row = await db.Set<SandboxVerificationRow>().AsNoTracking().SingleOrDefaultAsync(r => r.ProfileId == id && r.ProfileRevision == revision, ct);
         return row is null ? null : Read<SandboxProfileVerification>(row.Json);
     }
@@ -70,7 +75,7 @@ public sealed class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> fac
         try
         {
             await using var db = await factory.CreateDbContextAsync(ct);
-            if (!await db.Set<SandboxProfileRow>().AnyAsync(r => r.Id == verification.ProfileId && r.Revision == verification.ProfileRevision, ct))
+            if (!await db.Set<SandboxProfileRow>().AnyAsync(r => r.TenantId == null && r.Id == verification.ProfileId && r.Revision == verification.ProfileRevision, ct))
                 throw AgentCoreErrors.NotFound("Verified profile revision was not found.");
             var row = await db.Set<SandboxVerificationRow>().SingleOrDefaultAsync(r => r.ProfileId == verification.ProfileId && r.ProfileRevision == verification.ProfileRevision, ct);
             if (row is null) { row = new() { ProfileId = verification.ProfileId, ProfileRevision = verification.ProfileRevision }; db.Add(row); }

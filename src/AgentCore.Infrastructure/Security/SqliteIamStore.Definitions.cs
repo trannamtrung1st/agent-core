@@ -11,6 +11,7 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (TenantSandboxProfileRules.TryId(scope, out var profile)) return await FindTenantSandboxProfileAsync(scope.TenantId!.Value, profile, ct: ct).ConfigureAwait(false) is not null;
         if (TenantApprovalRules.TryApprovalId(scope, out var approval))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

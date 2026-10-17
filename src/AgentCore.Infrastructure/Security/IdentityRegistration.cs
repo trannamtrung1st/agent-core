@@ -46,6 +46,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantDefinitionService>();
         services.TryAddSingleton<ITenantCredentialStore>(provider => (ITenantCredentialStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantCredentialService>();
+        services.TryAddSingleton<ITenantSandboxProfileStore>(p => (ITenantSandboxProfileStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantSandboxProfileService>();
+        services.TryAddSingleton<TenantSandboxImageAuthorization>();
         services.TryAddSingleton<ITenantCredentialBindingStore>(provider => (ITenantCredentialBindingStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantCredentialBindingService>();
         services.TryAddSingleton<ITenantCredentialOAuthStore>(provider => (ITenantCredentialOAuthStore)provider.GetRequiredService<IIamStore>());
@@ -90,6 +93,7 @@ public static class IdentityRegistration
         _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
-            provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>());
+            provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>(),
+            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>());
     }
 }

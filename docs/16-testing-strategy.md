@@ -1,5 +1,12 @@
 # Testing Strategy
 
+## Tenant Sandbox profile catalog regression
+
+Exercise canonical Synthetic HTTP create/read/history/search/update, no-store, anonymous/owner-token/foreign denial, strict unexpected ownership fields, stale-write rejection and explicit current save. Exact profile grants must work through the real assignment route, filter before count/paging, permit only their item and never grant sibling creation or agent execution.
+
+Use both actual InMemory and SQLite adapters for immutable history, concurrent same-witness writes, authoritative ownership, global read/write/verification denial, original logout/replacement login after captured reads and at atomic commit, unchanged audit/security on rejection and explicit fresh-session recovery. Reopen SQLite and test actual ownership FKs and JSON CHECK constraints. Private source tests cover independent Credential read/bind/use, foreign credentials, rotation/deletion epoch fencing and disabling an unchanged source after revocation. Resolve an actual tag against a disposable loopback registry, assert the pinned digest, revoke the original session after protected credential lookup and require zero further registry requests before explicit recovery. Retain affected global source/store/API regressions. These checks do not establish tenant Sandbox verification, selection, execution, UI, Docker or production isolation acceptance.
+
+
 ## Tenant Instance Resources focused browser regression
 
 `pnpm run test:e2e:tenant-instance-resources` runs three tenant journeys and the two existing administrative import/resource consumers against an isolated Synthetic host. Verify 320px paging, staged upload, exact preview/download bytes, dirty cancellation, concurrent settings change → stale resource save → exact reload retaining the draft → explicit save, deletion, inherited disable/reset and a disabled-source copy that preserves its choice and records provenance. Open the actual XLSX renderer and inspect B4. A partial three-file import and a real committed-but-malformed success must retire acknowledged files and submit only the remainder. An exact resource reader without IAM-inspector access must see no siblings, preview the workbook, then lose both nested preview and cached detail/row after independently revoked authority, returning focus to Reload. Canonical traffic must not fall back to owner/global services.

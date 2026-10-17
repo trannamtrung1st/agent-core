@@ -1,5 +1,21 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Sandbox profile catalog HTTP
+
+Canonical cookie/CSRF routes under `/api/v2/tenants/{tenantId}/sandbox-profiles`:
+
+| Method | Suffix | Contract |
+| --- | --- | --- |
+| GET | collection | `page` (0–100000), `pageSize` (1–100), `search` (up to 128 non-control characters); authorized metadata filtering before count/paging |
+| GET | `/{profileId}` | Exact current profile, or exact positive `revision`; current human and scoped read apply to history too |
+| POST | collection | Create with `expectedRevision` (security) and `expectedProfileRevision: 0`; server generates the stable ID |
+| PUT | `/{profileId}` | Append with current `expectedRevision` and `expectedProfileRevision`; no overwrite or implicit retry |
+
+The strict `TenantSandboxProfileSaveRequest` owns name, description, enabled, image reference, optional initialization script, existing bounded CPU/memory/PIDs/command/idle/lifetime/storage fields and optional registry Credential ID. It accepts neither tenant/actor attribution nor registry epochs, verification or execution-admission fields. Tag and short-name input resolves to a saved immutable digest under current host/source policy. Private source selection requires independent Credential read/bind/use.
+
+Exact reads/saves return `{profile, canManage, securityRevision}`; collections return those items plus `total`, `page`, `pageSize`, `canCreate`, `allReadable`, `securityRevision`. `profile` uses the existing safe `SandboxProfileResponse`; registry credential/secret revisions are omitted. Availability is Disabled or NeedsVerification; catalog configuration grants no execution authority and does not assert tenant verification. These routes have no owner-token/global fallback. Account/tenant validation, no-store, CSRF and safe 401/403/409/400 errors use the canonical identity owner. Current authorization precedes stale-write reporting. The tenant permission catalog adds `resourceTypes` to show exact supported types: Sandbox read/manage include `sandbox-profile`, while execute remains `agent`; the existing primary `resourceType` is retained.
+
+
 ## Tenant Instance exact resource and Office preview reads
 
 Under `/api/v2/tenants/{tenantId}`:

@@ -95,7 +95,7 @@ public static class TenantAccessEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             await authorizer.RequireAsync(actor.PrincipalId, "iam.roles.read", AccessScope.ForTenant(actor.TenantId), ct).ConfigureAwait(false);
-            return Results.Json(new { items = PermissionCatalog.All.Where(p => !p.SystemOnly).Select(p => new { p.Key, p.ResourceType, p.HumanOnly, p.Delegatable, p.SystemOnly,
+            return Results.Json(new { items = PermissionCatalog.All.Where(p => !p.SystemOnly).Select(p => new { p.Key, p.ResourceType, p.ResourceTypes, p.HumanOnly, p.Delegatable, p.SystemOnly,
                 approvalClass = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(p.ApprovalClass.ToString()) }) });
         }));
         group.MapPost("/roles", (RoleRequest body, HttpContext http, TenantAccessService access, CancellationToken ct) => SaveRole(null, body, http, access, ct));

@@ -1,5 +1,12 @@
 # Backend Interfaces
 
+## Tenant Sandbox profile ports
+
+`ITenantSandboxProfileStore` reads exact owned historical/current revisions, filters a bounded metadata page by authorized IDs and search, and saves a prepared revision with `TenantSecurityState`, expected security/profile revisions, original `HumanSessionReference` and audit in one transaction. It operates on the existing Sandbox profile rows with authoritative `TenantSandboxProfileRoot` ownership; it supplies no execution or disposable-verification operation. Global `ISandboxStore` profile/verification operations exclude or reject owned IDs.
+
+`ISandboxImageAuthority.ResolveAsync(profile, SandboxImageAuthorization, ct)` is the tenant source-preparation entry. `SandboxImageAuthorization` carries the server-derived original human and current security witness, independently of user-authored profile fields. `TenantSandboxImageAuthorization` rechecks live human membership, profile catalog read/manage and Credential read/bind/use. The existing Infrastructure adapter resolves bounded tags and retains secret plaintext/SDK authorization internally. Its global overload and unframed protected-auth helper reject tenant profiles. `InspectAsync` cannot make an owned profile executable from a global verification observation.
+
+
 ## Tenant Instance exact resource and preview reads
 
 `TenantAgentReadService.ReadResourceDetailAsync` returns `TenantAgentResourceDetail`: the safe Instance, one exact readable `TenantAgentResourceItem` and current security revision. It shares the permission-filtered catalog and typed manage/delete/copy hints with the paged resource editor, independently of that editor's filters or page. Missing/unreadable keys deny; dependencies include only independently readable Skills. Archived resources remain inspectable with no mutation hints.

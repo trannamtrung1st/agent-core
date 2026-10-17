@@ -7,7 +7,7 @@ using AgentCore.Infrastructure.Admin;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemorySandboxStore(InMemoryAdminEventStore? events = null) : ISandboxStore
+public sealed partial class InMemorySandboxStore(InMemoryAdminEventStore? events = null) : ISandboxStore
 {
     public ValueTask<ResourceStateObservation> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, DateTimeOffset observedAt, CancellationToken ct = default)
     {
@@ -36,13 +36,14 @@ public sealed class InMemorySandboxStore(InMemoryAdminEventStore? events = null)
     private readonly Dictionary<Guid, SandboxLease> _leases = [];
     private readonly Dictionary<Guid, SandboxExecution> _executions = [];
     public ValueTask<IReadOnlyList<SandboxProfile>> ListProfilesAsync(CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<SandboxProfile>>(_profiles.Values.GroupBy(p => p.Id).Select(g => g.MaxBy(p => p.Revision)!).OrderBy(p => p.Name).ToArray()); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<SandboxProfile>>(_profiles.Values.Where(p => !_tenantProfiles.ContainsKey(p.Id)).GroupBy(p => p.Id).Select(g => g.MaxBy(p => p.Revision)!).OrderBy(p => p.Name).ToArray()); }
     public ValueTask<SandboxProfile?> GetProfileAsync(string id, long? revision = null, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_profiles.Values.Where(p => p.Id == id && (revision is null || p.Revision == revision)).MaxBy(p => p.Revision)); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_profiles.Values.Where(p => !_tenantProfiles.ContainsKey(p.Id) && p.Id == id && (revision is null || p.Revision == revision)).MaxBy(p => p.Revision)); }
     public ValueTask SaveProfileAsync(SandboxProfile profile, long expectedRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
         ct.ThrowIfCancellationRequested(); profile.Validate(); lock (_gate)
         {
+            if (profile.TenantId is not null || _tenantProfiles.ContainsKey(profile.Id)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
             if ((_profiles.Values.Where(p => p.Id == profile.Id).MaxBy(p => p.Revision)?.Revision ?? 0) != expectedRevision || profile.Revision != expectedRevision + 1)
                 throw AgentCoreErrors.Conflict("Sandbox profile changed. Reload before saving.");
             if (history is not null) (events ?? throw new InvalidOperationException("Sandbox audit store is required.")).AppendAsync(history,ct).GetAwaiter().GetResult();
@@ -50,11 +51,12 @@ public sealed class InMemorySandboxStore(InMemoryAdminEventStore? events = null)
         } return ValueTask.CompletedTask;
     }
     public ValueTask<SandboxProfileVerification?> GetVerificationAsync(string id, long revision, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_verifications.GetValueOrDefault((id, revision))); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_tenantProfiles.ContainsKey(id) ? null : _verifications.GetValueOrDefault((id, revision))); }
     public ValueTask SaveVerificationAsync(SandboxProfileVerification verification, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
+            if (_tenantProfiles.ContainsKey(verification.ProfileId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
             if (!_profiles.ContainsKey((verification.ProfileId, verification.ProfileRevision))) throw AgentCoreErrors.NotFound("Verified profile revision was not found.");
             _verifications[(verification.ProfileId, verification.ProfileRevision)] = verification;
         }

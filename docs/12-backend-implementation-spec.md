@@ -1,5 +1,14 @@
 # Backend Implementation Specification
 
+## Tenant Sandbox profile catalog
+
+`TenantSandboxProfileService` owns human catalog reads and explicit saves through `ITenantSandboxProfileStore`. Generated stable IDs use `p-` plus a lowercase 32-hex identifier. Creation requires tenant-wide `sandbox.read/manage`; updates and historical inspection use the exact owned profile scope. Item grants cannot create sibling profiles, and profile access never authorizes `sandbox.execute` on an agent. Authorized metadata filters precede search/count/paging; exact read and write preparation recheck original human/session and current security witnesses after I/O. Current command permissions are checked before reporting stale revisions.
+
+Save preserves immutable prior revisions and resolves tag/short-name sources through the existing host allowlist and bounded registry adapter. Private sources additionally require exact Credential read/bind/use; actual ownership, purpose, active status, repository scope and revision/secret epoch must still match at commit. The adapter requires trusted original-human evidence before releasing protected registry authorization. A disabled revision with an unchanged source can retain its old epoch references even after credential revocation/deletion, so safe disabling remains possible. Enabling or changing its source requires fresh authority. Saved verification/admission/tenant/actor fields are not accepted from the request.
+
+The InMemory store shares its IAM/credential/profile locks; SQLite commits ownership, profile row, security CAS and audit in one transaction and rechecks the original session there. Failed writes leave profile/history/security/audit unchanged. Global catalog/write/verification adapters cannot consume owned rows. This checkpoint does not expose tenant verification, Instance selection or runtime command/mount operations; existing tenant Settings continues to report Sandbox unavailable until those owning boundaries are implemented.
+
+
 ## Tenant Instance resource preview composition
 
 Exact resource detail reuses the same private authorized catalog and typed hints as the paged editor. `TenantAgentReadService.ProjectResourceContentAsync<T>` surrounds fresh metadata, bounded verified byte I/O and trusted projection with the existing original-human/final parent-security fence. The preview content limit is evaluated against current authorized metadata before blob allocation. Ordinary downloads keep their existing behavior. Office projection reuses `OfficePreviewEndpoints.Project` and `IOfficeProcessor`, with the same effective host policy, bounded XLSX windows, DOCX validation proof and safe malformed-package errors. DOCX source bytes still require a separate authorized content read; the preview response contains no base64 source.

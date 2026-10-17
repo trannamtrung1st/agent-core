@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    TimeProvider? clock = null) : IIamStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }
@@ -162,6 +162,9 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     }
     private async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
+        foreach (var assignment in state.Assignments.Where(a => TenantSandboxProfileRules.TryId(a.Scope, out _)))
+            if (!await OwnedSandboxProfiles(db, state.Tenant.TenantId).AnyAsync(r => r.Id == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
+                throw new ArgumentException("A Sandbox profile assignment requires its actual owned profile.");
         foreach (var assignment in state.Assignments.Where(a => TenantApprovalRules.TryApprovalId(a.Scope, out _)))
             if (!await db.Set<TenantApprovalRecord>().AnyAsync(r => r.TenantId == state.Tenant.TenantId && r.RequestId == Guid.Parse(assignment.Scope.ResourceId!), ct).ConfigureAwait(false))
                 throw new ArgumentException("An Approval assignment requires its actual owned request.");

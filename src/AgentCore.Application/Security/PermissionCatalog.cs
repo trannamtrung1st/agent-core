@@ -5,9 +5,11 @@ namespace AgentCore.Application.Security;
 public sealed record PermissionDefinition(string Key, string ResourceType, bool HumanOnly = false,
     bool Delegatable = true, bool SystemOnly = false, PermissionApprovalClass ApprovalClass = PermissionApprovalClass.Mutation)
 {
+    public IReadOnlyList<string> ResourceTypes => Key is "sandbox.read" or "sandbox.manage"
+        ? [ResourceType, "sandbox-profile"] : [ResourceType];
     // Access inspection/assignment and exact-action decisions govern the target resource itself.
     // Ordinary operation permissions apply only to their catalog-owned resource family.
-    public bool AppliesToResource(string? resourceType) => !SystemOnly && (ResourceType == resourceType
+    public bool AppliesToResource(string? resourceType) => !SystemOnly && (resourceType is not null && ResourceTypes.Contains(resourceType, StringComparer.Ordinal)
         || Key is "iam.roles.read" or "iam.roles.assign" or "approvals.approve" or "approvals.grant_exception");
 }
 
