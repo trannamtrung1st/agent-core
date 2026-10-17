@@ -29,6 +29,6 @@ public sealed partial class TenantSessionService
                 && !(TenantRunRules.TryId(a.Scope, out var runId) && runIds.Contains(runId))).ToArray() : state.Assignments };
         var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, TenantSessionMutations.AuditAction(change.Action), change.SessionId.ToString("D"), "allowed", "session_changed", now);
         var saved = await sessions.TryChangeTenantSessionAsync(next, state.Tenant.Revision, change, initiator, now, audit, ct).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
-        return change.Action == TenantSessionAction.Delete ? null : Metadata(saved);
+        return change.Action == TenantSessionAction.Delete ? null : Metadata(saved, canManage: true);
     }
 }

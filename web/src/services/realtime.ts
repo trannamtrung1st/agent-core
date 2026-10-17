@@ -1,4 +1,6 @@
 import { hasTask, messageText, snapshotParts, wireParts, type MessagePart, type ResourceReference } from "./messageParts";
+import { chatTenantId, retireTenantChatRequests, tenantCanCreateChat, tenantCancelWitness, tenantChatCandidates, tenantTextWitness } from './tenantChat';
+import { newChatPath } from '../app/sessionRoute';
 import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
@@ -234,7 +236,7 @@ function command(
 ) {
   const snapshot = useSessionStore.getState();
   const payloadWithOwner =
-    type === "session.attach"
+    type === "session.attach" && !chatTenantId
       ? { ...payload, ownerCapability: window.localStorage.getItem("agent-core.owner-capability") }
       : payload;
   return {
@@ -262,20 +264,43 @@ async function invoke(
     throw new Error("Not connected.");
   }
 
-  return connection.invoke(method, command(type, payload, sequence, responseId, eventId)) as Promise<{
+  const active = connection; const epoch = connectionEpoch;
+  const result = await active.invoke(method, command(type, payload, sequence, responseId, eventId)) as {
     accepted?: boolean;
     error?: WireError;
-  }>;
+    result?: Record<string, unknown>;
+  };
+  if (chatTenantId && (connection !== active || connectionEpoch !== epoch)) return { accepted: false };
+  if (chatTenantId && method !== 'AttachTenant' && ['StaleCommand', 'StaleAttachment', 'stale_revision'].includes(result.error?.code ?? '')) {
+    // A retired attachment is a transport fence, including when the server reports it as
+    // Authorization. Reattach without replaying this command; actual access is checked again.
+    void recoverFromSequenceGap('explicit');
+  } else if (chatTenantId && result.error?.category === 'Authorization'
+    && !['receipt_unavailable', 'receipt_out_of_bounds', 'UnknownResponse', 'tenant_runtime_unavailable'].includes(result.error.code ?? '')) {
+    // A queued receipt can lose to Stop's interrupted-row commit. That refusal (and an
+    // unknown response target) says nothing about this human's access to the conversation.
+    const draft = useSessionStore.getState().draft || pendingUserText?.text || '';
+    retirePrivateChat(); syncBrowserSessionPath(null, 'replace');
+    useSessionStore.setState({ draft, connection: 'failed', error: 'Your access to this conversation changed. Reload your organization or choose another chat.', errorFatal: false });
+  }
+  return result;
 }
 
-type HubCommandAck = { accepted?: boolean; error?: WireError };
+type HubCommandAck = { accepted?: boolean; error?: WireError; result?: Record<string, unknown> };
 
-function dispatchHubCommand(run: (sequence: number) => Promise<HubCommandAck | void>): Promise<HubCommandAck | void> {
+function dispatchHubCommand(run: (sequence: number) => Promise<HubCommandAck | void>, prepare?: () => Promise<void>): Promise<HubCommandAck | void> {
   const result = commandDispatchChain.then(async () => {
     if (!connection) {
       return;
     }
 
+    if (chatTenantId && useSessionStore.getState().connection !== 'ready') return;
+    const current = connection; const epoch = connectionEpoch;
+    const attachment = useSessionStore.getState().attachmentId;
+    if (prepare) await prepare();
+    if (!connection || connection !== current) return;
+    if (chatTenantId && (connectionEpoch !== epoch || useSessionStore.getState().attachmentId !== attachment
+      || useSessionStore.getState().connection !== 'ready')) return;
     commandSequence += 1;
     const sequence = commandSequence;
     return run(sequence);
@@ -670,9 +695,9 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
       commandSequence = 0;
       commandDispatchChain = Promise.resolve();
       const ack = await invoke(
-        "Attach",
+        chatTenantId ? "AttachTenant" : "Attach",
         "session.attach",
-        { lastServerSequence: lastServerSequence || null },
+        chatTenantId ? { tenantId: chatTenantId } : { lastServerSequence: lastServerSequence || null },
         0
       );
       if (loop !== attachLoop) {
@@ -684,7 +709,7 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
         return true;
       }
 
-      if (ack?.error?.code === "Unauthorized" && !retriedOwnerCapability) {
+      if (!chatTenantId && ack?.error?.code === "Unauthorized" && !retriedOwnerCapability) {
         retriedOwnerCapability = true;
         clearOwnerCapability();
         await ensureOwnerCapability();
@@ -1340,7 +1365,8 @@ export function reportCommittedEntries(
     }
   }
 
-  void sendReceipt(false);
+  const latest = chatTenantId && !useSessionStore.getState().liveResponseId ? [...entries].reverse().find(entry => entry.role === 'assistant' && entry.status === 'completed' && entry.responseId) : null;
+  void sendReceipt(false, latest?.responseId ?? undefined);
 }
 
 function startReceipts(responseId: string): void {
@@ -1380,18 +1406,11 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
     return;
   }
 
-  lastReceiptOffset = offset;
-  lastReceiptResponseId = id;
-  lastReceiptBlockSignature = blockSignature;
-  await dispatchHubCommand((sequence) =>
-    invoke(
-      "ResponseReceived",
-      "response.received",
-      { textEndExclusive: offset, blockIds: renderedBlockIds(id) },
-      sequence,
-      id
-    )
-  );
+  try {
+    const ack = await dispatchHubCommand((sequence) => invoke("ResponseReceived", "response.received",
+      chatTenantId ? { textEndExclusive: offset } : { textEndExclusive: offset, blockIds: renderedBlockIds(id) }, sequence, id));
+    if (ack?.accepted) { lastReceiptOffset = offset; lastReceiptResponseId = id; lastReceiptBlockSignature = blockSignature; }
+  } catch { /* A lost acknowledgement grants no receipt credit. Fresh attach can retry rendered text. */ }
 }
 
 async function sendPlayback(method: string, type: string, responseId: string, consumed: number, textEndExclusive?: number): Promise<void> {
@@ -1755,11 +1774,11 @@ async function startConnection(
   audioFramesSent = 0;
   audioOutputsReceived = 0;
   const epoch = ++connectionEpoch;
-  const ownerCapability = await ensureOwnerCapability();
+  const ownerCapability = chatTenantId ? null : await ensureOwnerCapability();
   const builder = new HubConnectionBuilder().withUrl("/hubs/session", {
     skipNegotiation: true,
     transport: HttpTransportType.WebSockets,
-    headers: { "X-AgentCore-Owner-Capability": ownerCapability }
+    ...(ownerCapability ? { headers: { "X-AgentCore-Owner-Capability": ownerCapability } } : {})
   });
   const selected =
     import.meta.env.VITE_AGENTCORE_REALTIME_PROTOCOL === "json"
@@ -1777,7 +1796,7 @@ async function startConnection(
       }
     })
     .build();
-  connection.on("SessionEvent", handleEvent);
+  connection.on("SessionEvent", (raw: ServerEvent) => { if (epoch === connectionEpoch) handleEvent(raw); });
   connection.on("AudioOutput", handleAudioOutput);
   connection.onreconnecting(() => {
     if (epoch !== connectionEpoch) {
@@ -1904,6 +1923,13 @@ async function stopConnection(options?: { keepPreparedCapture?: boolean }): Prom
 let applyRouteTask: Promise<void> | null = null;
 let bootstrapTask: Promise<string> | null = null;
 
+export function retirePrivateChat(): void {
+  disposed = true; candidateEpoch += 1; if (chatTenantId) retireTenantChatRequests(); beginSessionHistory(); stopReceipts(); void stopConnection();
+  pendingUserText = null; awaitingAgentResponseStart = false; committedText.clear(); committedBlocks.clear(); releaseAllPendingFiles();
+  useSessionStore.setState({ ...emptySession(), agents: [], chatAgentInstances: [], chatAgentInstancesError: null, chatAgentInstancesLoading: false,
+    newChatIdentityKey: '', modelCatalog: [], catalogItems: [], catalogNextCursor: null, catalogHasMore: false, catalogError: null });
+}
+
 export async function bootstrap(): Promise<string> {
   if (bootstrapTask) {
     return bootstrapTask;
@@ -1915,7 +1941,26 @@ export async function bootstrap(): Promise<string> {
   return bootstrapTask;
 }
 
-async function loadChatAgentInstances(): Promise<void> {
+let candidateEpoch = 0;
+async function loadChatAgentInstances(query = '', more = false): Promise<void> {
+  if (chatTenantId) {
+    const epoch = ++candidateEpoch;
+    useSessionStore.setState({ chatAgentInstancesLoading: true, chatAgentInstancesError: null });
+    try {
+      const page = await tenantChatCandidates(more ? useSessionStore.getState().chatAgentPage + 1 : 0, query);
+      if (epoch !== candidateEpoch) return;
+      const before = useSessionStore.getState();
+      const rows = more ? [...before.chatAgentInstances, ...page.items].filter((item, index, all) => all.findIndex(x => x.instanceId === item.instanceId) === index) : page.items;
+      const selected = rows.some(item => `managed:${item.instanceId}` === before.newChatIdentityKey) ? before.newChatIdentityKey
+        : !query && !before.newChatIdentityKey ? defaultChatIdentityKey(rows) : '';
+      useSessionStore.setState({ chatAgentInstances: rows, chatAgentInstancesLoading: false, chatAgentPage: page.page,
+        chatAgentQuery: query, chatAgentHasMore: (page.page + 1) * page.pageSize < page.total, newChatIdentityKey: selected });
+    } catch (error) {
+      if (epoch === candidateEpoch) useSessionStore.setState({ chatAgentInstancesLoading: false, chatAgentInstances: [],
+        newChatIdentityKey: '', chatAgentInstancesError: error instanceof Error ? error.message : 'Unable to load agents.' });
+    }
+    return;
+  }
   useSessionStore.setState({
     chatAgentInstancesLoading: true,
     chatAgentInstancesError: null,
@@ -1942,13 +1987,15 @@ async function loadChatAgentInstances(): Promise<void> {
 }
 
 export function reloadChatAgentInstances(): Promise<void> {
-  return loadChatAgentInstances();
+  return loadChatAgentInstances(useSessionStore.getState().chatAgentQuery);
 }
+export function searchChatAgents(query: string): Promise<void> { return loadChatAgentInstances(query); }
+export function loadMoreChatAgents(): Promise<void> { return loadChatAgentInstances(useSessionStore.getState().chatAgentQuery, true); }
 
 async function bootstrapInner(): Promise<string> {
   const requestedSession = parseSessionIdFromPath(window.location.pathname);
   const initial = useSessionStore.getState();
-  if (window.location.pathname === "/" && initial.sessionId) {
+  if (window.location.pathname === newChatPath() && initial.sessionId) {
     // Chat's root route always means New Chat, including a mount from Admin.
     // A /c/{id} mount must keep the SPA-owned transport and live Run intact.
     useSessionStore.setState({ connection: "connecting" });
@@ -2406,6 +2453,7 @@ export async function resumePausedSession(): Promise<boolean> {
 export async function retryConnection(): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (!snapshot.sessionId) {
+    if (chatTenantId) { useSessionStore.setState({ connection: 'idle', error: null, sessionError: null }); await bootstrap(); }
     return;
   }
 
@@ -2752,6 +2800,7 @@ function composerCanSend(
 }
 
 async function hydrateBoundAttachments(sessionId: string | null): Promise<void> {
+  if (chatTenantId) return;
   if (!sessionId) {
     return;
   }
@@ -2810,6 +2859,7 @@ async function syncVoiceStage(): Promise<void> {
 }
 
 export function composerSendEnabled(): boolean {
+  if (chatTenantId && !useSessionStore.getState().sessionId && !tenantCanCreateChat()) return false;
   const snapshot = useSessionStore.getState();
   if (isReadonlySession(snapshot) || snapshot.status === "paused") {
     return false;
@@ -2842,6 +2892,7 @@ export function composerStopEnabled(): boolean {
 }
 
 export async function queueComposerFiles(fileList: File[]): Promise<void> {
+  if (chatTenantId) { useSessionStore.setState({ error: 'Files are not available in this conversation.', errorFatal: false }); return; }
   let snapshot = useSessionStore.getState();
   if (isReadonlySession(snapshot)) {
     return;
@@ -3215,7 +3266,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     }));
   appendOptimisticUserEntry(eventId, text, refs, snapshot.mode, message.parts);
 
-  const payload: Record<string, unknown> = {
+  let payload: Record<string, unknown> = {
     text,
     attachmentIds: readyAttachmentIds,
     behavior,
@@ -3235,7 +3286,8 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     try {
       const ack = await dispatchHubCommand((sequence) =>
         invoke("SendText", "user.text", payload, sequence, null, eventId)
-      );
+      , chatTenantId ? async () => { payload = { text, ...await tenantTextWitness(snapshot.sessionId!) }; } : undefined);
+      if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
       if (!ack?.accepted) {
         clearAwaitingAgentResponseStart();
         pendingUserText = null;
@@ -3262,6 +3314,8 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
 
       pendingUserText = null;
       accepted = true;
+      if (chatTenantId && typeof ack.result?.entryId === 'string') useSessionStore.setState(current => ({ entries: current.entries.map(entry =>
+        entry.role === 'user' && entry.sourceEventId === eventId ? { ...entry, entryId: String(ack.result!.entryId) } : entry) }));
       clearRestoredPendingAttachments(pendingAttachmentSnapshot);
 
       const latest = useSessionStore.getState();
@@ -3272,6 +3326,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         commitOptimisticUserEntry(eventId);
       }
     } catch (error) {
+      if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
       clearAwaitingAgentResponseStart();
       const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";
       if (queueLocalId) {
@@ -3332,6 +3387,7 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
 }
 
 export function composerSteerEnabled(localId: string): boolean {
+  if (chatTenantId) return false;
   const snapshot = useSessionStore.getState();
   const item = snapshot.pendingSendQueue.find((queued) => queued.localId === localId);
   const anyDispatching = snapshot.pendingSendQueue.some((queued) => queued.dispatching);
@@ -3552,9 +3608,13 @@ async function cancelServerResponse(responseId: string): Promise<void> {
 
   const stopPromise = (async () => {
     try {
+      let payload: Record<string, unknown> = {};
       const ack = await dispatchHubCommand((dispatchSequence) =>
-        invoke("CancelResponse", "agent.response.cancel", {}, dispatchSequence, responseId)
-      );
+        invoke("CancelResponse", "agent.response.cancel", payload, dispatchSequence, responseId)
+      , chatTenantId ? async () => {
+        const run = useSessionStore.getState().agentRunId; if (!run) throw new Error('Reload this conversation before stopping the response.');
+        payload = await tenantCancelWitness(run);
+      } : undefined);
       const latest = useSessionStore.getState();
       if (ack?.accepted || latest.liveResponseId !== responseId || ack?.error?.code === "StaleCommand") {
         return;
@@ -3920,7 +3980,7 @@ export async function hangUp(): Promise<void> {
   if (snapshot.sessionId) {
     let ended = false;
     try {
-      const ack = await dispatchHubCommand((sequence) =>
+      const ack = chatTenantId ? undefined : await dispatchHubCommand((sequence) =>
         invoke("EndSession", "session.end", { reason: "userEnded" }, sequence)
       );
       ended = Boolean(ack?.accepted);

@@ -1,5 +1,15 @@
 # HTTP API and Realtime Protocol
 
+## Canonical tenant Chat view and presentation hints
+
+`GET /api/v2/tenants/{tenantId}/chat/models` requires the current authenticated human tenant membership and returns the existing public `{ defaultKey, models }` catalog projection. Provider configuration, endpoint aliases and credentials remain backend-only.
+
+`GET /api/v2/tenants/{tenantId}/sessions/{sessionId}/conversation` requires current human/session, exact Session-read and agent-Chat authority, with a final security witness check. Its no-store projection contains tenantId, sessionId, agentInstanceId, title, revision, securityRevision, mode, pendingMode (currently null), status, lifecycleStatus, createdAt, updatedAt, public agentId/version/name/role and the existing public model selection. It contains no Definition, private persona configuration, roles or reusable authorization. Metadata-only Session reads do not substitute for this protected conversation view.
+
+Canonical Session metadata adds agentId, agentVersion, agentName, agentRole and canManage. `GET /sessions` accepts `includeArchived` (default true preserves the existing API behavior); false filters archived rows before authorized totals and paging. Run reads add canCancel, evaluated against the exact Run with current permissions and terminal state. Both hints control presentation only; write endpoints reauthorize with fresh revision witnesses.
+
+Tenant `session.ready` includes the saved model selection through the existing mapper. The frontend selects `AttachTenant` and canonical SendText/CancelResponse/ResponseReceived on the existing Hub. It obtains text/cancel witnesses within the serialized command preparation before allocating a sequence. Explicit attachment/sequence/stale-security rejection reattaches without silently replaying the rejected action. True recipient permission loss retires private state. A queued receipt refused because Stop has already interrupted its row is not evidence of revoked conversation access. Rendered text receipts never credit heard audio. No protocol-version change or new event family is introduced. [Verification](reports/tenant-chat-ui-verification-2026-10-17.md).
+
 ## Canonical tenant Chat discovery
 
 `GET /api/v2/tenants/{tenantId}/chat/agents` requires the actual authenticated Account/session and tenant User, with no owner-capability fallback. It accepts `page` (0–100000, default 0), `pageSize` (1–100, default 30) and optional trimmed `q` (at most 200 UTF-16 units). Matching is case-insensitive over public persona name/role only. Active executor and exact scoped `agents.chat` filtering apply before search/count/offset, independently of administrative `agents.read`; read-only administration does not grant Chat.

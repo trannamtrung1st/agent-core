@@ -1,5 +1,7 @@
 # Backend Implementation Specification
 
+The tenant Chat header view is separate from metadata administration: current human Session-read plus exact agent Chat are required, and only public pinned identity/lifecycle/model fields cross the boundary. Public catalog models reuse the existing safe HTTP mapper after tenant membership validation. Session catalog metadata supplies exact management hints and optional pre-pagination archive filtering; Run reads supply exact current cancellation hints. Human-requested explicit Session model choices record User origin, while the existing binder retains its default rules. Hints confer no mutation authority. [Verification](reports/tenant-chat-ui-verification-2026-10-17.md).
+
 The canonical Chat directory is a public communication projection over existing owned Instances, not the administrative Instance projection. Current actual human/session and scoped `agents.chat` select active executors before public-label search/count/paging. It resolves an exact owned/shipped definition for language and emits no tone, settings, management policy, credentials, role snapshots or execution grants. Final human/security checks prevent stale inventory after logout, role change or archive. Returned revision and create hints feed the existing Session creation boundary, which still reauthorizes. Canonical voice availability is false while only the tenant text transport is supported. [Verification](reports/tenant-chat-discovery-verification-2026-10-17.md).
 
 ## Tenant Hub text and cancellation commands

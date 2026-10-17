@@ -1,4 +1,5 @@
 import { parseAccessRoute, type AccessRoute } from '../features/access/accessRoute';
+import { newChatPath, parseTenantChatRoute, tenantIdFromPath } from './sessionRoute';
 import { definitionPages, definitionPath, draftPages, draftPath, globalPages, globalPath, instancePages, instancePath, legacyDraftPages, type AdminCollection, type DefinitionPage, type DraftPage, type InstancePage } from '../features/admin/adminNavigation';
 export type { AdminCollection };
 export type AdminDefinitionTab = DefinitionPage;
@@ -12,7 +13,7 @@ export type AdminRoute =
   | { area: 'admin'; view: 'draft'; definitionId: string; draftId: string; page: DraftPage }
   | { area: 'admin'; view: 'instance'; instanceId: string; page: InstancePage }
   | { area: 'admin'; view: 'not-found' };
-export type AppRoute = { area: 'chat' } | AdminRoute | AccessRoute;
+export type AppRoute = { area: 'chat'; tenantId?: string } | AdminRoute | AccessRoute;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const missing: AdminRoute = { area: 'admin', view: 'not-found' };
 const legacyInstance: Record<string, InstancePage> = {
@@ -23,6 +24,8 @@ const legacyInstance: Record<string, InstancePage> = {
   runs: 'runs',
 };
 export function parseAppRoute(pathname: string): AppRoute {
+  const chat = parseTenantChatRoute(pathname);
+  if (chat) return { area: 'chat', tenantId: chat.tenantId };
   const access = parseAccessRoute(pathname);
   if (access) return access;
   if (!/^\/admin(?:\/|$)/i.test(pathname)) return { area: 'chat' };
@@ -95,8 +98,8 @@ export function canonicalAppUrl(path: string): string {
   return `${canonical}${safe.size ? `?${safe}` : ''}${hash}`;
 }
 const LAST_CHAT_URL_KEY = 'agent-core:last-chat-url';
-export function rememberChatUrl(path: string): void { const url = new URL(path, window.location.origin); if (url.origin === window.location.origin && (url.pathname === '/' || url.pathname.startsWith('/c/'))) sessionStorage.setItem(LAST_CHAT_URL_KEY, url.pathname + url.search + url.hash); }
-export function lastChatUrl(): string { return sessionStorage.getItem(LAST_CHAT_URL_KEY) ?? '/'; }
+export function rememberChatUrl(path: string): void { const url = new URL(path, window.location.origin); const tenant = parseTenantChatRoute(url.pathname); if (url.origin === window.location.origin && (tenant || url.pathname === '/' || url.pathname.startsWith('/c/'))) sessionStorage.setItem(LAST_CHAT_URL_KEY + (tenant ? `:${tenant.tenantId}` : ''), url.pathname + url.search + url.hash); }
+export function lastChatUrl(): string { const tenant = tenantIdFromPath(window.location.pathname); return sessionStorage.getItem(LAST_CHAT_URL_KEY + (tenant ? `:${tenant}` : '')) ?? newChatPath(); }
 export type NavigationGuard = (path: string) => boolean | Promise<boolean>;
 let guard: NavigationGuard | undefined;
 export function registerNavigationGuard(next: NavigationGuard): () => void { guard = next; return () => { if (guard === next) guard = undefined; }; }
@@ -106,6 +109,10 @@ export function initializeAppHistory() {
 }
 export function navigateToAppPath(path: string, replace = false): void {
   const commit = () => {
+    const currentChat = parseTenantChatRoute(window.location.pathname); const nextChat = parseTenantChatRoute(new URL(path, window.location.origin).pathname);
+    if ((currentChat || nextChat) && (!currentChat || !nextChat || currentChat.tenantId !== nextChat.tenantId)) {
+      window.location[replace ? 'replace' : 'assign'](path); return;
+    }
     initializeAppHistory();
     const index = window.history.state.acIndex as number;
     window.history[replace ? 'replaceState' : 'pushState']({ acIndex: replace ? index : index + 1 }, '', canonicalAppUrl(path));

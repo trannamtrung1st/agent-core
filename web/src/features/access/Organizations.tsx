@@ -11,11 +11,11 @@ import { AccessError, AccessLoading, accessErrorMessage } from './AccessFeedback
 import { tenantAccessPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 
-export function OrganizationsList({ selectedTenantId, switching = false }: { selectedTenantId?: string; switching?: boolean }) {
+export function OrganizationsList({ selectedTenantId, switching = false, chat = false }: { selectedTenantId?: string; switching?: boolean; chat?: boolean }) {
   const [page, setPage] = useState(0); const [query, setQuery] = useState('');
   const state = useIdentityQuery<Page<Membership>>(membershipsApi(page, query));
   const open = async (tenantId: string) => {
-    const target = tenantAccessPath(tenantId);
+    const target = chat ? `/t/${tenantId}` : tenantAccessPath(tenantId);
     if (switching) {
       if (await approveAppNavigation(target)) window.location.assign(target);
     } else navigateToAppPath(target);
@@ -31,9 +31,9 @@ export function OrganizationsList({ selectedTenantId, switching = false }: { sel
     </>}
   </Flex>;
 }
-export function TenantSwitcher({ tenantId, name }: { tenantId: string; name: string }) {
+export function TenantSwitcher({ tenantId, name, chat = false }: { tenantId: string; name: string; chat?: boolean }) {
   const [open, setOpen] = useState(false);
-  return <><Button className="access-tenant-switcher" icon={<ApartmentOutlined aria-hidden />} title={name} onClick={() => setOpen(true)} aria-label={`Switch organization. Current: ${name}`}><span>{name}</span></Button><Modal title="Switch organization" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden><OrganizationsList selectedTenantId={tenantId} switching /></Modal></>;
+  return <><Button className="access-tenant-switcher" icon={<ApartmentOutlined aria-hidden />} title={name} onClick={() => setOpen(true)} aria-label={`Switch organization. Current: ${name}`}><span>{name}</span></Button><Modal title="Switch organization" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden><OrganizationsList selectedTenantId={tenantId} switching chat={chat} /></Modal></>;
 }
 export function CreateOrganization({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [dirty, setDirty] = useState(false); const [error, setError] = useState<unknown>();

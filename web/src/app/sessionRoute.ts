@@ -21,6 +21,8 @@ export function sameSessionId(left: string | null | undefined, right: string | n
 }
 
 export function parseSessionIdFromPath(pathname: string): string | null {
+  const tenant = parseTenantChatRoute(pathname);
+  if (tenant) return tenant.sessionId;
   const match = SESSION_PATH_PATTERN.exec(pathname);
   if (!match) {
     return null;
@@ -31,11 +33,22 @@ export function parseSessionIdFromPath(pathname: string): string | null {
 }
 
 export function sessionPath(sessionId: string): string {
-  return `/c/${normalizeSessionId(sessionId)}`;
+  return `${tenantChatRoot(tenantIdFromPath(window.location.pathname))}/c/${normalizeSessionId(sessionId)}`;
 }
 
+export function tenantIdFromPath(path: string): string | null {
+  const value = /^\/t\/([^/]+)(?:\/|$)/i.exec(path)?.[1];
+  return value && isSessionId(value) ? value.toLowerCase() : null;
+}
+export function parseTenantChatRoute(path: string): { tenantId: string; sessionId: string | null } | null {
+  const match = /^\/t\/([0-9a-f-]{36})(?:\/c\/([0-9a-f-]{36}))?\/?$/i.exec(path);
+  return match && isSessionId(match[1]) && (!match[2] || isSessionId(match[2])) ? { tenantId: match[1].toLowerCase(), sessionId: match[2]?.toLowerCase() ?? null } : null;
+}
+export function tenantChatRoot(tenant: string | null): string { return tenant ? `/t/${tenant}` : ''; }
+export function newChatPath(): string { return tenantChatRoot(tenantIdFromPath(window.location.pathname)) || '/'; }
+
 export function syncBrowserSessionPath(sessionId: string | null, mode: "push" | "replace" = "replace"): void {
-  const next = sessionId ? sessionPath(sessionId) : "/";
+  const next = sessionId ? sessionPath(sessionId) : newChatPath();
   const current = window.location.pathname;
   if (current === next) {
     return;

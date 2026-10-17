@@ -18,7 +18,7 @@ export function ChatHeader({
   sandboxButtonRef,
   attentionCount = 0,
   onEnd,
-  inSession
+  inSession, endDisabled = false
 }: {
   title: string;
   subtitle?: string | null;
@@ -34,6 +34,7 @@ export function ChatHeader({
   attentionCount?: number;
   onEnd: () => void;
   inSession: boolean;
+  endDisabled?: boolean;
 }) {
   const { modal } = AntApp.useApp();
   const timeLabel = timestamp ? formatChatTime(timestamp) : null;
@@ -97,12 +98,13 @@ export function ChatHeader({
               </Tooltip>
             ) : null}
             {inSession ? (
-              <Tooltip title="End conversation">
+              <Tooltip title={endDisabled ? "Wait for the response to finish, or stop it first." : "End conversation"}>
                 <Button
                   type="text"
                   size="small"
                   className="chat-header-icon-action"
                   aria-label="End"
+                  disabled={endDisabled}
                   icon={<PoweroffOutlined />}
                   onClick={() => {
                     confirmAction(modal, {

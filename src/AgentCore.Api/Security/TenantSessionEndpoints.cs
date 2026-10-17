@@ -15,6 +15,15 @@ public static class TenantSessionEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions").RequireAuthorization();
+        group.MapGet("/{sessionId:guid}/conversation", (Guid sessionId, HttpContext http, TenantConversationService service, IModelCatalog models, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http); var view = await service.ReadViewAsync(actor.TenantId, sessionId, Initiator(http, actor), ct).ConfigureAwait(false);
+            return Results.Json(new { view.Owner.TenantId, view.Owner.SessionId, view.Owner.AgentInstanceId, view.Title, view.Revision, view.SecurityRevision,
+                mode = view.Mode.ToString().ToLowerInvariant(), pendingMode = (string?)null, status = view.Status.ToString().ToLowerInvariant(),
+                lifecycleStatus = LifecycleTransition.ToWire(view.LifecycleStatus), view.CreatedAt, view.UpdatedAt,
+                agentId = view.Agent.Id, agentVersion = view.Agent.Version, agentName = view.Agent.Name, agentRole = view.Agent.Role,
+                model = HttpMapping.ToModel(view.Model, models) });
+        }));
         group.MapGet("/{sessionId:guid}/messages", (Guid sessionId, long? after, long? before, int? limit, HttpContext http,
             TenantConversationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -66,9 +75,9 @@ public static class TenantSessionEndpoints
             var item = await service.CreateAsync(actor.TenantId, body.AgentInstanceId, initiator, HttpMapping.ParseMode(body.Mode), body.ExpectedRevision, body.ExpectedInstanceRevision, body.ModelKey, body.ReasoningEffort, ct).ConfigureAwait(false);
             return Results.Json(Safe(item), statusCode: 201);
         }));
-        group.MapGet("", (int? page, int? pageSize, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("", (int? page, int? pageSize, bool? includeArchived, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var actor = IdentityHttp.TenantContext(http); var result = await service.ListAsync(actor.PrincipalId, actor.TenantId, page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false);
+            var actor = IdentityHttp.TenantContext(http); var result = await service.ListAsync(actor.PrincipalId, actor.TenantId, page ?? 0, pageSize ?? 30, ct, includeArchived ?? true).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize });
         }));
         group.MapGet("/{sessionId:guid}", (Guid sessionId, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
@@ -83,11 +92,11 @@ public static class TenantSessionEndpoints
         var c = result.Context;
         return new { context = new { c.TenantId, c.AgentPrincipalId, c.OriginalInitiatorPrincipalId, c.SessionId, c.RunId,
             c.ActivationId, c.RootActivationId, c.ParentRunId, c.ParentActivationId, origin = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(c.Origin.ToString()) },
-            result.AgentInstanceId, status = result.Status.ToString().ToLowerInvariant(), result.Revision, result.CreatedAt, result.UpdatedAt, result.ContinuationRunId,
+            result.AgentInstanceId, status = result.Status.ToString().ToLowerInvariant(), result.Revision, result.CreatedAt, result.UpdatedAt, result.ContinuationRunId, result.CanCancel,
             outcomeKind = result.OutcomeKind is { } outcome ? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()) : null };
     }
     private static object Safe(TenantSessionMetadata item) => new { item.Owner.TenantId, item.Owner.SessionId, item.Owner.AgentInstanceId,
         item.Owner.ExecutorPrincipalId, item.Owner.CreatedByPrincipalId, item.Title, mode = item.Mode.ToString().ToLowerInvariant(),
         status = item.Status.ToString().ToLowerInvariant(), item.Revision, item.CreatedAt, item.UpdatedAt,
-        lifecycleStatus = LifecycleTransition.ToWire(item.LifecycleStatus), item.ArchivedAt };
+        lifecycleStatus = LifecycleTransition.ToWire(item.LifecycleStatus), item.ArchivedAt, item.AgentId, item.AgentVersion, item.AgentName, item.AgentRole, item.CanManage };
 }

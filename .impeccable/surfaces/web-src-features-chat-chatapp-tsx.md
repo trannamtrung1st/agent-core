@@ -2,32 +2,7 @@
 version: 1
 slug: "web-src-features-chat-chatapp-tsx"
 primary_target: "web/src/features/chat/ChatApp.tsx"
-related_targets:
-  - web/src/features/chat/ChatHeader.tsx
-  - web/src/features/chat/Conversation.tsx
-  - web/src/features/chat/ChatMessage.tsx
-  - web/src/features/chat/SpokenText.tsx
-  - web/src/features/chat/Composer.tsx
-  - web/src/features/chat/StructuredMessageEditor.tsx
-  - web/src/features/chat/ComposerChipNode.ts
-  - web/src/features/chat/MessageParts.tsx
-  - web/src/features/chat/composerChoices.ts
-  - web/src/features/chat/ModelPicker.tsx
-  - web/src/features/chat/AgentPicker.tsx
-  - web/src/features/chat/SessionRail.tsx
-  - web/src/features/chat/BackgroundWorkDrawer.tsx
-  - web/src/features/chat/AgentRunDetails.tsx
-  - web/src/features/chat/SessionSandboxDrawer.tsx
-  - web/src/features/chat/DiagnosticDetails.tsx
-  - web/src/features/chat/detailPopover.tsx
-  - web/src/features/chat/SessionArtifacts.tsx
-  - web/src/features/chat/ArtifactView.tsx
-  - web/src/features/chat/AttachmentPreview.tsx
-  - web/src/features/chat/ChatFileCard.tsx
-  - web/src/features/chat/DrawerListFooter.tsx
-  - web/src/app/antdTheme.ts
-  - web/src/features/filePreview/FilePreview.tsx
-  - web/src/app.css
+related_targets: ["web/src/features/chat/ChatHeader.tsx","web/src/features/chat/Conversation.tsx","web/src/features/chat/ChatMessage.tsx","web/src/features/chat/SpokenText.tsx","web/src/features/chat/Composer.tsx","web/src/features/chat/StructuredMessageEditor.tsx","web/src/features/chat/ComposerChipNode.ts","web/src/features/chat/MessageParts.tsx","web/src/features/chat/composerChoices.ts","web/src/features/chat/ModelPicker.tsx","web/src/features/chat/AgentPicker.tsx","web/src/features/chat/SessionRail.tsx","web/src/features/chat/BackgroundWorkDrawer.tsx","web/src/features/chat/AgentRunDetails.tsx","web/src/features/chat/SessionSandboxDrawer.tsx","web/src/features/chat/DiagnosticDetails.tsx","web/src/features/chat/detailPopover.tsx","web/src/features/chat/SessionArtifacts.tsx","web/src/features/chat/ArtifactView.tsx","web/src/features/chat/AttachmentPreview.tsx","web/src/features/chat/ChatFileCard.tsx","web/src/features/chat/DrawerListFooter.tsx","web/src/app/antdTheme.ts","web/src/features/filePreview/FilePreview.tsx","web/src/app.css"]
 ---
 
 # ChatApp
@@ -119,3 +94,18 @@ A cleanly terminated Sandbox with a retained profile choice still offers confirm
 GENERIC LINUX RUNTIME (2026-10-15): Chat shows command exit/files independently from generic container recycling. A fully resolved Completed/committed recycle is informational, with Lifecycle evidence collapsed. Pending retirement/cleanup and unknown commits retain expanded truth and diagnostics; remote absence does not imply staging deletion. Explicit reset does not promise retained selection. Five-width runtime checks, Copy, Escape/focus, retained evidence during a 503 and Retry supplement actual real-SDK recycle and profile-switch commands. [Current evidence and coverage limits](../../docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md).
 
 FINAL SANDBOX FOLLOW-UP (2026-10-15): Separate file recovery from termination cleanup in the existing responsive Descriptions. NeedsResync retains staging explicitly and does not say No pending cleanup. Five-width controlled Synthetic inspection/recovery and Real disposable exact-file readback passed; no new styles or controls. [Evidence](../../docs/reports/sandbox-final-polish-acceptance-2026-10-15.md).
+
+
+## Tenant Chat direction contract (2026-10-17)
+
+THESIS: Extend the existing personal conversation with explicit organization scope and actual human permissions. Chat remains the primary task.
+
+OWN-WORLD: Preserve the Ant Design v6 dark shell, shared transcript/composer, native status semantics and existing 8/12/16px spacing owners. No new palette or component kit.
+
+STORY: Sign in, choose an organization and authorized agent, converse, recover a connection and inspect saved history. Authority loss clears private live state; a switch retires its document.
+
+FIRST VIEWPORT: Existing Session rail beside one reading column; identity/profile/status stay at the header start, organization/account actions at its end. Message remains the primary action. Compact screens use the existing Chats drawer.
+
+FORM: Code-led established Chat extension; the pinned incumbent composition supplies the form, so no new concept seed or comp applies. Signature interaction: switch organization without carrying its transcript, draft or transport into the next scope. Existing native motion remains.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

@@ -7,7 +7,7 @@ import { TenantDefinitionDetail } from './TenantDefinitionDetail';
 import { TenantDefinitionEditor } from './TenantDefinitionEditor';
 import { useEffect, useState } from 'react';
 import { App as AntdApp, Alert, Button, Collapse, Empty, Flex, Tag, Typography } from 'antd';
-import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { LogoutOutlined, UserOutlined, MessageOutlined } from '@ant-design/icons';
 import { approveAppNavigation, navigateToAppPath } from '../../app/appRoute';
 import { AdminShell, type AdminShellContext } from '../admin/AdminShell';
 import { draftPages, type NavigationPage } from '../admin/adminNavigation';
@@ -49,7 +49,7 @@ function AccessContent({ route }: { route: AccessRoute }) {
   const navigation = [...(route.view === 'tenant' && route.draftId && route.definitionId ? draftPages.map(item => ({ ...item, href: tenantDraftPath(route.tenantId, route.definitionId!, route.draftId!, item.id) })) : []), ...(route.view === 'tenant' ? visibleTenantPages.map(item => ({ ...item, href: tenantAccessPath(route.tenantId, item.id as AccessPage) })) : []), ...accountPages.map(item => ({ ...item, href: `/account/${item.id}` }))];
   const context: AdminShellContext = { key: window.location.pathname, name: route.view === 'tenant' ? tenantContext?.tenant.name ?? 'Organization' : account.data.account.displayName, areaLabel: route.view === 'tenant' ? 'Organization' : 'Account', page: active, navigation,
     scopeAction: tenantContext ? <TenantSwitcher tenantId={tenantContext.tenant.tenantId} name={tenantContext.tenant.name} /> : undefined,
-    headerActions: <><Button icon={<UserOutlined aria-hidden />} aria-label="Your account" title="Your account" onClick={() => navigateToAppPath('/account/profile')} /><Button icon={<LogoutOutlined aria-hidden />} aria-label="Sign out" title="Sign out" loading={signingOut} onClick={() => void signOut()} /></> };
+    headerActions: <>{tenantContext && <Button icon={<MessageOutlined aria-hidden />} href={`/t/${tenantContext.tenant.tenantId}`} aria-label="Chat">Chat</Button>}<Button icon={<UserOutlined aria-hidden />} aria-label="Your account" title="Your account" onClick={() => navigateToAppPath('/account/profile')} /><Button icon={<LogoutOutlined aria-hidden />} aria-label="Sign out" title="Sign out" loading={signingOut} onClick={() => void signOut()} /></> };
   const allowed = route.view !== 'tenant' || !pagePermission[route.page] || tenantContext?.permissions.includes(pagePermission[route.page]);
   return <AdminShell route={{ area: 'admin', view: 'home' }} context={context} headingActions={route.view === 'account' && route.page === 'organizations' && account.data.systemPermissions.includes('system.tenants.create') ? <CreateOrganization onCreated={() => setOrganizationsVersion(value => value + 1)} /> : undefined}>
     {logoutError !== undefined && <AccessError error={logoutError} />}

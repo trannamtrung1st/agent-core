@@ -2923,6 +2923,7 @@ body,
   .access-organization-row { align-items: start; flex-wrap: wrap; }
   .access-organization-row > .access-row-summary { flex: 1 1 12rem; }
   .access-tenant-switcher { max-inline-size: 7rem; }
+  .chat-header-inner .access-tenant-switcher { max-inline-size: min(20rem, 45vw); }
   :is(.access-editor-drawer, .access-auth-form, .access-bounded-form) :is(input.ant-input:not(.ant-input-affix-wrapper input), .ant-input-affix-wrapper) { min-height: 40px; }
   .access-editor-drawer .ant-btn, .access-auth-form .ant-btn { min-height: 40px; }
 }

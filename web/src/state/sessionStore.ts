@@ -1162,6 +1162,9 @@ export type SessionStore = SessionView & {
   chatAgentInstances: ChatAgentInstance[];
   chatAgentInstancesError: string | null;
   chatAgentInstancesLoading: boolean;
+  chatAgentPage: number;
+  chatAgentQuery: string;
+  chatAgentHasMore: boolean;
   newChatIdentityKey: string;
   selectedAgentId: string;
   modelCatalog: ModelDescriptor[];
@@ -1200,6 +1203,9 @@ export const useSessionStore = create<SessionStore>(() => ({
   chatAgentInstances: [],
   chatAgentInstancesError: null,
   chatAgentInstancesLoading: false,
+  chatAgentPage: 0,
+  chatAgentQuery: '',
+  chatAgentHasMore: false,
   newChatIdentityKey: "",
   selectedAgentId: "examiner",
   modelCatalog: [],

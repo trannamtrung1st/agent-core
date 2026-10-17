@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { Button, Flex, Dropdown, Tooltip, Alert, theme } from "antd";
+import { Button, Flex, Dropdown, Tooltip, Alert, Input, theme } from "antd";
 import {
   AudioOutlined,
   AudioFilled,
@@ -204,7 +204,7 @@ function ComposerActionTooltip({ suppressed, title, children }: { suppressed: bo
 }
 
 export function Composer({
-  draft, parts, instanceId, onPartsChange,
+  draft, parts, instanceId, onPartsChange, plainTextOnly = false,
   canSend,
   canStop,
   approvalPending = false,
@@ -236,6 +236,7 @@ export function Composer({
   imageIncompatibilityMessage
 }: {
   draft: string;
+  plainTextOnly?: boolean;
   parts?: MessagePart[] | null;
   instanceId?: string | null;
   onPartsChange?: (parts: MessagePart[]) => void;
@@ -376,7 +377,7 @@ export function Composer({
                     ) : null}
                   </div>
                   <Flex gap={token.paddingXS} align="center" className="pending-send-queue-actions">
-                    <Tooltip title="Steer">
+                    {!plainTextOnly && <Tooltip title="Steer">
                       <Button
                         type="text"
                         size="small"
@@ -386,7 +387,7 @@ export function Composer({
                       >
                         Steer
                       </Button>
-                    </Tooltip>
+                    </Tooltip>}
                     <Tooltip title="Remove">
                       <Button
                         type="text"
@@ -429,7 +430,7 @@ export function Composer({
             ))}
           </ul>
         ) : null}
-        <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>
+        {plainTextOnly ? <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (canSend) onSend(); } }} /> : <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>}
         <input
           ref={fileInput}
           className="attach-input"
@@ -445,7 +446,7 @@ export function Composer({
         <Flex justify="space-between" align="center" gap={token.paddingXS} wrap="wrap" className="composer-toolbar">
           <Flex gap={token.paddingXS} align="center" wrap="wrap" className="composer-toolbar-start">
             {modelControls}
-            <Dropdown
+            {!plainTextOnly && <Dropdown
               open={addOpen}
               onOpenChange={setAddOpen}
               classNames={{ root: "composer-add-menu" }}
@@ -464,7 +465,7 @@ export function Composer({
               }}
             >
               <Button type="text" className="composer-icon" aria-label="Add content" disabled={!ready} icon={<PlusOutlined />} />
-            </Dropdown>
+            </Dropdown>}
             {voiceAvailable ? (
               <>
                 <VoiceModeControl
@@ -523,7 +524,7 @@ export function Composer({
                 />
               </ComposerActionTooltip>
             ) : (
-              <ComposerActionTooltip suppressed={approvalPending} title={`${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
+              <ComposerActionTooltip suppressed={approvalPending} title={plainTextOnly ? `${sendLabel} (Enter)` : `${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
                 <Button
                   type="primary"
                   htmlType="submit"

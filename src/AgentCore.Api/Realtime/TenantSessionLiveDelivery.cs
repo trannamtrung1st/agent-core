@@ -117,7 +117,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     var ready = new SessionReadyProjection(SessionMode.Text, null, recipient.Status, recipient.Agent, null, null,
                         new(false, false, false, false), new(false, false, false, false, false, []), "none",
                         entries.Count == 0 ? 0 : entries.Max(e => e.Sequence), entries.OrderBy(e => e.Sequence).ToArray(), active, "none", "none",
-                        recipient.LifecycleStatus, AgentRunId: active is null ? null : source!.Run.AgentRunId,
+                        recipient.LifecycleStatus, ModelSelection: recipient.Model, AgentRunId: active is null ? null : source!.Run.AgentRunId,
                         OutputActivity: active is null ? "Idle" : "Generating", HasOlderHistory: history.HasOlder, HistoryBeforeSequence: history.NextBefore);
                     var output = new SessionOutput(Context(session), active, new ReadyOutput(ready));
                     var mapped = SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence);

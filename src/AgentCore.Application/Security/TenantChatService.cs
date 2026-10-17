@@ -15,6 +15,8 @@ public sealed record TenantChatAgentPage(IReadOnlyList<TenantChatAgent> Items, i
 public sealed class TenantChatService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer)
 {
+    public async ValueTask RequireMemberAsync(Guid tenant, TenantSessionInitiator human, CancellationToken ct = default) =>
+        _ = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
     public async ValueTask<TenantChatAgentPage> ListAgentsAsync(Guid tenant, TenantSessionInitiator human,
         int page = 0, int pageSize = 30, CancellationToken ct = default, string? query = null)
     {

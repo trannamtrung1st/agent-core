@@ -1,6 +1,7 @@
 import { AccessApp } from "../features/access/AccessApp";
 import { useEffect, useRef, useState } from "react";
 import { ChatApp } from "../features/chat/ChatApp";
+import { TenantChatEntry } from '../features/chat/TenantChatEntry';
 import { AdminApp } from "../features/admin/AdminApp";
 import { navigateFromBrowserHistory, suspendLiveSessionForNavigation } from "../services/realtime";
 import { adminHomePath, approveAppNavigation, canonicalAppUrl, initializeAppHistory, navigateToAppPath, parseAppRoute, rememberChatUrl, type AppRoute } from "./appRoute";
@@ -67,6 +68,7 @@ export function AppRouter() {
   if (route.area === "admin") {
     return <AdminApp route={route} />;
   }
+  if (route.area === 'chat' && route.tenantId) return <TenantChatEntry tenantId={route.tenantId} />;
 
   const returnPath = new URLSearchParams(window.location.search).get("returnTo");
   let activityHref: string | undefined;

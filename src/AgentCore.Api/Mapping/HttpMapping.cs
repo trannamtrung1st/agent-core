@@ -324,8 +324,10 @@ public static partial class HttpMapping
     }
 
     public static SessionModelSelectionResponse? ToModel(SessionSnapshot snapshot, IModelCatalog? catalog)
+        => ToModel(snapshot.ModelSelection, catalog);
+    public static SessionModelSelectionResponse? ToModel(SessionModelSelection? model, IModelCatalog? catalog)
     {
-        if (snapshot.ModelSelection is not { } selection)
+        if (model is not { } selection)
         {
             return null;
         }

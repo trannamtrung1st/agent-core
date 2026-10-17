@@ -58,6 +58,12 @@ public sealed partial class TenantSessionAccessTests
             var created = await Json(await reader.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = selected.GetProperty("instanceId").GetGuid(),
                 expectedRevision = page.GetProperty("securityRevision").GetInt64(), expectedInstanceRevision = selected.GetProperty("revision").GetInt64() }));
             var session = created.GetProperty("sessionId").GetGuid(); Assert.Equal(member.PrincipalId, created.GetProperty("createdByPrincipalId").GetGuid());
+            Assert.False(created.GetProperty("canManage").GetBoolean());
+            var view = await Json(await reader.GetAsync(api + $"/sessions/{session}/conversation"));
+            Assert.Equal(session, view.GetProperty("sessionId").GetGuid()); Assert.Equal("Alex", view.GetProperty("agentName").GetString());
+            Assert.True(view.TryGetProperty("model", out _)); Assert.False(view.TryGetProperty("definition", out _));
+            Assert.False(view.TryGetProperty("principalId", out _)); Assert.False(view.TryGetProperty("ownerCapability", out _));
+            var models = await Json(await reader.GetAsync(api + "/chat/models")); Assert.True(models.TryGetProperty("models", out _));
             var events = new ConcurrentQueue<ServerEvent>(); await using var hub = TenantSocket(ready.BaseAddress!, cookies, events); await hub.StartAsync();
             Assert.True((await hub.InvokeAsync<CommandAck>("AttachTenant", TenantAttach(tenant, session))).Accepted);
             var attached = await AwaitTenantWire(() => events.FirstOrDefault(e => e.Type == "session.ready"));
@@ -70,6 +76,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Contains(history.GetProperty("items").EnumerateArray(), e => e.GetProperty("text").GetString() == "Hello from synthetic.");
             await access.RevokeAssignmentAsync(principal, tenant, grant.AssignmentId, await Revision(owner, tenant));
             Assert.Equal(0, (await Json(await reader.GetAsync(path))).GetProperty("total").GetInt32());
+            Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(api + $"/sessions/{session}/conversation")).StatusCode);
             Assert.False((await hub.InvokeAsync<CommandAck>("SendText", text)).Accepted);
             Assert.False((await hub.InvokeAsync<CommandAck>("AttachTenant", TenantAttach(tenant, session))).Accepted);
             using var anonymous = new HttpClient { BaseAddress = ready.BaseAddress };

@@ -431,7 +431,20 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             cancellationToken.ThrowIfCancellationRequested();
             await Task.Delay(400, cancellationToken).ConfigureAwait(false);
-            yield return new ModelTextDelta(ToNativeJson(lastUser, chunks, proposals));
+            var native = ToNativeJson(lastUser, chunks, proposals);
+            var hold = lastUser.Contains(DurableStreamLongHoldMarker, StringComparison.OrdinalIgnoreCase) ? 45_000
+                : lastUser.Contains(DurableStreamProbeMarker, StringComparison.OrdinalIgnoreCase) ? 8000 : 0;
+            var display = native.IndexOf("\"displayText\":\"", StringComparison.Ordinal);
+            if (hold > 0 && display >= 0)
+            {
+                // The existing Synthetic stream probes exercise the same visible-prefix boundary in
+                // native structured output as in marker output. They confer no execution authority.
+                var split = Math.Min(native.Length, display + "\"displayText\":\"".Length + 5);
+                yield return new ModelTextDelta(native[..split]);
+                await Task.Delay(hold, cancellationToken).ConfigureAwait(false);
+                if (split < native.Length) yield return new ModelTextDelta(native[split..]);
+            }
+            else yield return new ModelTextDelta(native);
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
         }

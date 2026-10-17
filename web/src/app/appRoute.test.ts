@@ -51,6 +51,19 @@ it('redirects saved Execution sandbox anchors to the dedicated Instance Sandbox 
   expect(canonicalAppUrl(`/admin/instances/${id}/execution#sandboxPolicy`)).toBe(`/admin/instances/${id}/sandbox#sandboxPolicy`);
 });
 
+it('keeps canonical tenant Chat routes ahead of the administration router and separates remembered conversations', () => {
+  const second = '22222222-2222-2222-2222-222222222222';
+  sessionStorage.clear();
+  expect(parseAppRoute(`/t/${id}`)).toEqual({ area: 'chat', tenantId: id });
+  expect(parseAppRoute(`/t/${id}/c/${second}`)).toEqual({ area: 'chat', tenantId: id });
+  rememberChatUrl(`/t/${id}/c/${second}`); rememberChatUrl(`/t/${second}/c/${id}`);
+  window.history.replaceState(null, '', `/t/${id}/admin/access`);
+  expect(lastChatUrl()).toBe(`/t/${id}/c/${second}`);
+  window.history.replaceState(null, '', `/t/${second}`);
+  expect(lastChatUrl()).toBe(`/t/${second}/c/${id}`);
+  window.history.replaceState(null, '', '/'); expect(lastChatUrl()).toBe('/');
+});
+
  it('relocates Definition Sandbox anchors and shares navigation placement with Instances', () => {
   const draft = `/admin/definitions/examiner/drafts/${id}`;
   expect(canonicalAppUrl(`${draft}/capabilities#sandboxPolicy`)).toBe(`${draft}/sandbox#sandboxPolicy`);

@@ -1,3 +1,5 @@
+import { chatTenantId, createTenantChat, deleteTenantChat, tenantChatCandidates, tenantChatCatalog, tenantChatHistory, tenantChatModels, tenantChatMutation, tenantSessionView } from './tenantChat';
+
 export type AutomationTarget = { kind: "backgroundSession" | "existingSession"; sessionId?: string | null };
 export type AutomationDelivery = { kind: "none" | "toSession"; sessionId?: string | null };
 export type AgentDescriptor = {
@@ -124,6 +126,7 @@ export type SessionHistoryQuery = {
 };
 
 export type CatalogItem = {
+  canManage?: boolean;
   agentInstanceId?: string;
   sessionId: string;
   title: string;
@@ -182,6 +185,7 @@ async function refreshOwnerCapability(): Promise<string> {
 }
 
 export async function ensureOwnerCapability(): Promise<string> {
+  if (chatTenantId) throw new Error('Local owner access is unavailable in organization Chat.');
   const stored = window.localStorage.getItem(OWNER_STORAGE_KEY);
   if (stored) {
     return stored;
@@ -202,6 +206,7 @@ async function issueOwnerCapability(): Promise<string> {
 }
 
 export async function ownerFetch(input: string, init: RequestInit = {}, retried = false): Promise<Response> {
+  if (chatTenantId) throw new Error('This action is unavailable in this conversation.');
   const token = await ensureOwnerCapability();
   const headers = new Headers(init.headers);
   headers.set("X-AgentCore-Owner-Capability", token);
@@ -235,6 +240,7 @@ export type ChatAgentInstance = {
 };
 
 export async function listChatAgentInstances(): Promise<ChatAgentInstance[]> {
+  if (chatTenantId) return (await tenantChatCandidates()).items;
   const response = await ownerFetch("/api/v2/agent-instances");
   if (!response.ok) {
     throw new Error(`Unable to list managed chat instances (${response.status}).`);
@@ -263,6 +269,7 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function listModels(): Promise<ModelCatalog> {
+  if (chatTenantId) return tenantChatModels();
   const response = await ownerFetch("/api/v2/models");
   if (!response.ok) {
     throw new Error("Unable to load models.");
@@ -277,6 +284,7 @@ export async function createSessionForInstance(
   speechLocale?: string | null,
   model?: SessionModelChoice | null
 ): Promise<SessionResponse> {
+  if (chatTenantId) return createTenantChat(agentInstanceId, model);
   const body: Record<string, unknown> = { agentInstanceId, mode };
   if (speechLocale) {
     body.speechLocale = speechLocale;
@@ -343,6 +351,7 @@ export async function setSpeechLocale(sessionId: string, locale: string | null):
 }
 
 export async function endSession(sessionId: string): Promise<void> {
+  if (chatTenantId) { await tenantChatMutation(sessionId, 'complete'); return; }
   const response = await ownerFetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
   if (!response.ok) {
     throw new Error("Unable to end the session.");
@@ -354,6 +363,7 @@ export async function listCatalog(options?: {
   includeArchived?: boolean;
   limit?: number;
 }): Promise<CatalogPage> {
+  if (chatTenantId) return tenantChatCatalog(options);
   const params = new URLSearchParams();
   if (options?.cursor) {
     params.set("cursor", options.cursor);
@@ -375,6 +385,7 @@ export async function listCatalog(options?: {
 }
 
 export async function renameSession(sessionId: string, title: string): Promise<CatalogItem> {
+  if (chatTenantId) return tenantChatMutation(sessionId, 'rename', title);
   const response = await ownerFetch(`/api/v2/sessions/${sessionId}/rename`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -388,6 +399,7 @@ export async function renameSession(sessionId: string, title: string): Promise<C
 }
 
 export async function archiveSession(sessionId: string): Promise<CatalogItem> {
+  if (chatTenantId) return tenantChatMutation(sessionId, 'archive');
   const response = await ownerFetch(`/api/v2/sessions/${sessionId}/archive`, { method: "POST" });
   if (!response.ok) {
     throw new Error("Unable to archive the session.");
@@ -397,6 +409,7 @@ export async function archiveSession(sessionId: string): Promise<CatalogItem> {
 }
 
 export async function unarchiveSession(sessionId: string): Promise<CatalogItem> {
+  if (chatTenantId) return tenantChatMutation(sessionId, 'restore');
   const response = await ownerFetch(`/api/v2/sessions/${sessionId}/unarchive`, { method: "POST" });
   if (!response.ok) {
     throw new Error("Unable to unarchive the session.");
@@ -406,6 +419,7 @@ export async function unarchiveSession(sessionId: string): Promise<CatalogItem> 
 }
 
 export async function getSession(sessionId: string): Promise<SessionResponse> {
+  if (chatTenantId) return tenantSessionView(sessionId);
   const response = await ownerFetch(`/api/v1/sessions/${sessionId}`);
   if (!response.ok) {
     throw new Error("Unable to load the session.");
@@ -418,6 +432,7 @@ export async function listSessionMessages(
   sessionId: string,
   query: SessionHistoryQuery = {}
 ): Promise<HistoryPage> {
+  if (chatTenantId) return tenantChatHistory(sessionId, query);
   const params = new URLSearchParams();
   if (query.after != null) {
     params.set("after", String(query.after));
@@ -454,6 +469,7 @@ export async function transitionLifecycle(
 }
 
 export async function reopenSession(sessionId: string): Promise<"reopened" | "in-use"> {
+  if (chatTenantId) { await tenantChatMutation(sessionId, 'resume'); return 'reopened'; }
   const response = await ownerFetch(`/api/v2/sessions/${sessionId}/reopen`, { method: "POST" });
   if (response.status === 409) {
     return "in-use";
@@ -466,6 +482,7 @@ export async function reopenSession(sessionId: string): Promise<"reopened" | "in
 }
 
 export async function durableDeleteSession(sessionId: string): Promise<void> {
+  if (chatTenantId) return deleteTenantChat(sessionId);
   const response = await ownerFetch(`/api/v2/sessions/${sessionId}`, { method: "DELETE" });
   if (!response.ok) {
     throw new Error("Unable to delete the session.");

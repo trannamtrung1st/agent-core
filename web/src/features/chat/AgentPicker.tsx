@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Alert, Button, Flex, Select, Spin, Typography } from "antd";
 import type { ChatAgentInstance } from "../../services/api";
 import { managedChatIdentityKey, managedInstancePickerLabel } from "./chatIdentity";
@@ -6,7 +7,7 @@ import type { SessionErrorView } from "./sessionError";
 import { SpeechLocalePicker } from "./SpeechLocalePicker";
 
 export function AgentPicker({
-  managedInstances,
+  managedInstances, organization = false, onSearch, onLoadMore, hasMore = false,
   identityKey,
   error,
   managedInstancesError,
@@ -17,6 +18,7 @@ export function AgentPicker({
   onRetryManagedInstances
 }: {
   managedInstances: ChatAgentInstance[];
+  organization?: boolean; onSearch?: (query: string) => void; onLoadMore?: () => void; hasMore?: boolean;
   identityKey: string;
   error: SessionErrorView | string | null;
   managedInstancesError: string | null;
@@ -26,6 +28,8 @@ export function AgentPicker({
   onSpeechLocaleChange: (locale: string | null) => void;
   onRetryManagedInstances: () => void;
 }) {
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(searchTimer.current), []);
   const hasOptions = managedInstances.length > 0;
   const options = managedInstances.map(item => ({ value: managedChatIdentityKey(item.instanceId), label: managedInstancePickerLabel(item) }));
 
@@ -36,7 +40,7 @@ export function AgentPicker({
         <Alert
           type="warning"
           showIcon
-          message="Managed instances could not be loaded."
+          message={organization ? "Agents could not be loaded." : "Managed instances could not be loaded."}
           description={managedInstancesError}
           action={
             <Button size="small" aria-label="Retry managed instances" onClick={onRetryManagedInstances} loading={managedInstancesLoading}>
@@ -56,7 +60,10 @@ export function AgentPicker({
         aria-label="Identity"
         value={!managedInstancesLoading && hasOptions && identityKey ? identityKey : undefined}
         placeholder={managedInstancesLoading ? "Loading managed instances…" : "Select identity"}
-        disabled={managedInstancesLoading || !hasOptions}
+        disabled={!onSearch && (managedInstancesLoading || !hasOptions)}
+        loading={managedInstancesLoading}
+        filterOption={onSearch ? false : undefined}
+        onSearch={onSearch ? query => { clearTimeout(searchTimer.current); searchTimer.current = setTimeout(() => onSearch(query), 250); } : undefined}
         options={options}
         showSearch
         optionFilterProp="label"
@@ -64,9 +71,10 @@ export function AgentPicker({
         style={{ width: "100%" }}
       />
       {!managedInstancesLoading && !managedInstancesError && !hasOptions ? (
-        <Typography.Text type="secondary">Create an instance in Admin to chat.</Typography.Text>
+        <Typography.Text type="secondary">{organization ? "No agents are available. Try another search or ask an organization owner for Chat access." : "Create an instance in Admin to chat."}</Typography.Text>
       ) : null}
-      <SpeechLocalePicker value={speechLocale} onChange={onSpeechLocaleChange} />
+      {hasMore && <Button onClick={onLoadMore} loading={managedInstancesLoading}>More agents</Button>}
+      {!organization && <SpeechLocalePicker value={speechLocale} onChange={onSpeechLocaleChange} />}
     </Flex>
   );
 }

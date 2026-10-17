@@ -1,3 +1,5 @@
+import { chatTenantId } from '../../services/tenantChat';
+import { newChatPath } from '../../app/sessionRoute';
 import { followAppLink } from "../../app/appLink";
 import { useState, type ReactNode } from "react";
 import { Alert, App, Button, Dropdown, Empty, Flex, Input, Tooltip, Typography } from "antd";
@@ -42,6 +44,7 @@ function rowState(item: CatalogItem): string {
   if (item.archived) {
     return "Archived";
   }
+  if (item.status === "created") return "Active";
   if (item.status === "attached") {
     return "Open";
   }
@@ -252,6 +255,7 @@ export function SessionRail({
           onClick: () => {
             void archiveCatalogItem(item.sessionId).then(async (ok) => {
               await notifyMutation(ok, "Session archived.");
+              if (ok && chatTenantId && item.sessionId === activeSessionId) onNewChat({ urlMode: 'replace' });
             });
           }
         });
@@ -277,13 +281,13 @@ export function SessionRail({
         void setIncludeArchived(!includeArchived);
       }
     },
-    {
+    ...(!chatTenantId ? [{
       key: "delete-all",
       danger: true,
       label: "Delete all chats",
       disabled: listActionsDisabled,
       onClick: () => confirmDeleteAll()
-    }
+    }] : [])
   ];
 
   function refreshList(): void {
@@ -301,7 +305,7 @@ export function SessionRail({
           className="session-new-chat"
           aria-label="Start a new chat"
           icon={<PlusOutlined />}
-          href="/"
+          href={newChatPath()}
           onClick={event => followAppLink(event, () => {
             setRenamingId(null);
             onNewChat();
@@ -421,7 +425,7 @@ export function SessionRail({
                         </Typography.Text>
                       </Flex>
                     </Button>
-                    <Dropdown menu={{ items: rowMenu(item) }} trigger={["click"]} placement="bottomRight">
+                    {(!chatTenantId || item.canManage) && <Dropdown menu={{ items: rowMenu(item) }} trigger={["click"]} placement="bottomRight">
                       <Button
                         type="text"
                         size="small"
@@ -430,7 +434,7 @@ export function SessionRail({
                         icon={<MoreOutlined />}
                         disabled={busy}
                       />
-                    </Dropdown>
+                    </Dropdown>}
                   </>
                 )}
               </div>
