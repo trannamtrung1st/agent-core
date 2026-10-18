@@ -68,10 +68,10 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.DoesNotContain((await f.Iam.ReadTenantAsync(setup.Tenant))!.Assignments, a => a.PrincipalId == setup.Agent.PrincipalId);
     }
 
-    private static TenantApprovalService ApprovalService(Fixture f, IIamStore? security = null, ITenantApprovalStore? store = null)
+    private static TenantApprovalService ApprovalService(Fixture f, IIamStore? security = null, ITenantApprovalStore? store = null, TenantArtifactRuntimeReadService? artifactReads = null)
     {
         var current = security ?? f.Iam; var authorizer = new IamAuthorizer(current);
         return new(current, store ?? (ITenantApprovalStore)current, (ITenantAgentStore)current,
-            new(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), AgentCore.Application.Ports.SyntheticProviderAliases.Default, current as ITenantApprovedOperationStore);
+            new(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), AgentCore.Application.Ports.SyntheticProviderAliases.Default, current as ITenantApprovedOperationStore, artifactReads: artifactReads);
     }
 }

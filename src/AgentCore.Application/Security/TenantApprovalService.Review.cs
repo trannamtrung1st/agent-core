@@ -71,6 +71,13 @@ public sealed partial class TenantApprovalService
                         PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
                     if (!read.Allowed) unavailable = "executor_read_required";
                 }
+                else if (op.ArtifactVerification is not null)
+                {
+                    var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.CredentialRead is not null)
                 {
                     var reads = credentialReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -127,6 +134,11 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.ArtifactVerification is { } verification)
+            return [new("artifactDisplayName", null, verification.DisplayName, false), new("artifactContentType", null, verification.ContentType, false),
+                new("artifactStoredByteSize", null, verification.ByteSize, false), new("artifactChecksum", null, verification.Sha256Hex, false),
+                new("readDisclosure", null, "Return only this exact file's name, type, size, checksum and creation time. No file body, workspace path, source attachment or download authority is disclosed.", false),
+                new("readLimit", null, "One exact metadata inspection in this continuation. Later reads require current policy again; this approval grants no file creation or body read.", false)];
         if (op.ArtifactPublication is { } publication)
         {
             var args = AgentCore.Application.Tools.TenantArtifactToolContract.Parse(publication.ArgumentsJson);

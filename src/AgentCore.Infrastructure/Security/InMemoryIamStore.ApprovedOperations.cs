@@ -68,6 +68,12 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 TenantSandboxReadOperationRules.RequireReviewerAsync(before, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactVerification is not null)
+            {
+                RequireArtifactVerificationOperation(request, run, target);
+                TenantArtifactVerificationRules.ReviewerAsync(before, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId,
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CredentialRead is not null)
             {
                 RequireCredentialReadOperation(request, run, target);

@@ -714,3 +714,7 @@ Stored profile Evidence can be omitted independently of explicit Session speech 
 ## Tenant Artifact reference delivery
 
 Tenant model workers preflight bounded rich references against the actual Session-owned Artifact and current executor Session/read policy before posting a frozen authorization set to the mailbox. The mailbox maps synchronously without store I/O. Each human recipient independently passes the canonical current Artifact read owner; publication consent grants neither Agent read nor human download access. Live delivery and protected history share these source rules. Existing Session receipts preserve only exact sent block facts and merge monotonically through later writer snapshots.
+
+## Tenant Artifact metadata verification
+
+The existing `artifacts.verify` tool now uses the tenant read adapter over the canonical owned Artifact query. The current claimed Run, Session, admitted/current capability and independent executor Session/Artifact reads gate safe metadata; the body is never read. Current policy may require exact durable Review. The existing approval, successor Run, local consent receipt and checkpoint owners return one witnessed metadata observation, with no new role or download authority. Retained metadata is revalidated before continuation/model reuse. Recipient rich references and original downloads keep independent current access checks; metadata consent does not authorize them.

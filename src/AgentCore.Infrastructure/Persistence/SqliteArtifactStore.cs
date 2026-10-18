@@ -311,7 +311,7 @@ public sealed partial class SqliteArtifactStore(
             CreatedAtUtc = record.CreatedAt.ToUnixTimeMilliseconds()
         };
 
-    private static ArtifactRecord FromRow(ArtifactRecordRow row) =>
+    internal static ArtifactRecord FromRow(ArtifactRecordRow row) =>
         new(
             Guid.Parse(row.ArtifactId),
             Guid.Parse(row.SessionId),

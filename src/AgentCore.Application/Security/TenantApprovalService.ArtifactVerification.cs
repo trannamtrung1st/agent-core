@@ -1,0 +1,35 @@
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
+
+namespace AgentCore.Application.Security;
+
+public sealed partial class TenantApprovalService
+{
+    public async ValueTask<TenantApprovalPreparationResult> PrepareArtifactVerificationAsync(TenantRunReference reference, Guid artifact,
+        long expectedRunRevision, Guid generation, CancellationToken ct = default)
+    {
+        try
+        {
+            var (run, _) = await operations.ResolveForDecisionAsync(reference, "artifacts.read", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
+            if (run.Status != AgentRunStatus.Running || run.Claim?.Generation != generation || run.Revision != expectedRunRevision || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())
+                throw new AccessDeniedException("tenant_runtime_unavailable");
+            var prepared = await (artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareInspectionAsync(new(run.Owner, run.SessionId, run.AgentRunId, generation), artifact, ct).ConfigureAwait(false);
+            var op = TenantApprovalRules.PrepareArtifactVerification(ids.NewId(), run.AgentInstanceId, prepared.Verification, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
+            var prior = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.ExecutionContext!.RootActivationId, prepared.Agent.PrincipalId, op, ct).ConfigureAwait(false);
+            if (prior is not null) return await DuplicateOutcome(prepared.State, run, prior, ct).ConfigureAwait(false);
+            if (!prepared.ReviewRequired) return await PreparationOutcome(prepared.State, run, op, OperationDecisionKind.Allowed, "allowed", null, ct).ConfigureAwait(false);
+            var qualified = false;
+            foreach (var human in prepared.State.Users.Where(u => u.Status == IdentityStatus.Active))
+            {
+                try { await TenantArtifactVerificationRules.ReviewerAsync(prepared.State, prepared.Verification, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, human.PrincipalId, authorizer, ct).ConfigureAwait(false); qualified = true; break; }
+                catch (AccessDeniedException) { }
+            }
+            if (!qualified) return await PreparationOutcome(prepared.State, run, op, OperationDecisionKind.Denied, "no_eligible_approver", null, ct).ConfigureAwait(false);
+            return await PersistAsync(reference, run, prepared.State, prepared.Agent, op, prepared.Snapshot, true, expectedRunRevision, generation, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is AccessDeniedException or SecurityConflictException)
+        {
+            await operations.RecordFailureAsync(reference, "artifacts.read", e is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)e).ReasonCode, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false); throw;
+        }
+    }
+}

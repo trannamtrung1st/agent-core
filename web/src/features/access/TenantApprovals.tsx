@@ -33,8 +33,11 @@ const fields: Record<string, string> = { name: 'Name', role: 'Role', description
   sandboxProfile: 'Sandbox profile', image: 'Image', command: 'Command', workingDirectory: 'Working directory', timeoutSeconds: 'Timeout (seconds)', background: 'Run in background',
   homeAccess: 'Home access', cpu: 'CPU cores', memoryMiB: 'Memory (MiB)', storageBytes: 'Storage (bytes)', initializationRequired: 'Initialization required',
   profileInitialization: 'Profile initialization script', instanceInitialization: 'Instance initialization script',
-  artifactDisplayName: 'File name', artifactContentType: 'File type', artifactByteSize: 'UTF-8 bytes' };
+  artifactStoredByteSize: 'Stored bytes', artifactChecksum: 'File checksum (SHA-256)', artifactDisplayName: 'File name', artifactContentType: 'File type', artifactByteSize: 'UTF-8 bytes' };
 const reasons: Record<string, string> = {
+  artifact_metadata_read_authorized: 'The exact metadata inspection was authorized. File contents and download access require separate authority.',
+  artifact_source_changed: 'The saved file or current access changed. Refresh details before continuing.',
+  artifact_verification_review_required: 'A human must review this exact metadata inspection.',
   credential_metadata_read_authorized: 'This exact metadata page was authorized. Current access is checked before data is returned; no protected value or use permission is granted.',
   credential_source_changed: 'The Credential metadata source or current access changed. Refresh details or prepare a new request.',
   browser_command_completed: "The Browser command completed. Its effect in the application has not been independently verified.",
@@ -79,8 +82,9 @@ const reasons: Record<string, string> = {
   sandbox_profile_not_admitted: 'This Sandbox profile was not available to the source work. Prepare a new command in new work with an allowed profile.'
 };
 const isSandboxControl = (item?: TenantApproval) => item?.preparedAction.operation === 'stop_sandbox_process' || item?.preparedAction.operation === 'reset_sandbox_environment';
-const isReadOperation = (operation?: string) => operation === 'inspect_credential_metadata' || operation === 'inspect_sandbox_profiles' || operation === 'inspect_sandbox_status' || operation === 'inspect_sandbox_process' || operation === 'sandbox_read';
+const isReadOperation = (operation?: string) => operation === 'verify_artifact' || operation === 'inspect_credential_metadata' || operation === 'inspect_sandbox_profiles' || operation === 'inspect_sandbox_status' || operation === 'inspect_sandbox_process' || operation === 'sandbox_read';
 export function approvalResultLabel(operation: string | undefined, outcome: string) {
+  if (operation === 'verify_artifact' && (outcome === 'completed' || outcome === 'denied')) return outcome === 'completed' ? 'Metadata inspection authorized' : 'Metadata not authorized';
   if (operation === 'publish_artifact' && (outcome === 'completed' || outcome === 'denied')) return outcome === 'completed' ? 'File published' : 'File not published';
   if (outcome === 'completed') return operation === 'browser_command' ? 'Command completed' : isReadOperation(operation) ? 'Read authorized' : operation === 'check_credential_connection' ? 'Check completed'
     : operation === 'sandbox_control' || operation === 'stop_sandbox_process' || operation === 'reset_sandbox_environment' ? 'Request recorded' : 'Applied';
@@ -160,7 +164,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setConfirming(true);
     confirmation.current = confirmAction(modal, { title: `${label}?`, okText: label, cancelText: 'Keep reviewing', danger: decision !== 'approve',
-      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.preparedAction.operation === 'publish_artifact' ? `${saved.kind === 'exceptionalGrant' ? 'Authorize' : 'Approve'} publication of only this exact saved file once, before expiry. No role or file read access is granted. Execution checks current access again.` : saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
+      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.preparedAction.operation === 'verify_artifact' ? 'Approve one exact metadata inspection of this saved file. This grants no file creation, contents, download access or later-read authority.' : saved.preparedAction.operation === 'publish_artifact' ? `${saved.kind === 'exceptionalGrant' ? 'Authorize' : 'Approve'} publication of only this exact saved file once, before expiry. No role or file read access is granted. Execution checks current access again.` : saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
       afterClose: () => { if (active.current) setConfirming(false); },
       onOk: () => command.run(async signal => {
         if (!active.current) throw new Error('Review closed.');
@@ -175,6 +179,8 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const sandboxCommand = data?.preparedAction.operation === 'run_sandbox_command';
   const sandboxControl = isSandboxControl(data);
   const savedRead = isReadOperation(data?.preparedAction.operation);
+  const artifactVerification = data?.preparedAction.operation === 'verify_artifact';
+  const artifactChecksum = data?.review.changes.find(change => change.field === 'artifactChecksum');
   const artifactPublication = data?.preparedAction.operation === 'publish_artifact';
   const fileContent = data?.review.changes.find(change => change.field === 'artifactContent');
   const savedTitle = artifactPublication ? 'Exact saved file' : savedRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
@@ -205,7 +211,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
               {fileContent?.afterAvailable && typeof fileContent.after === 'string' ? <Input.TextArea id={contentId} readOnly value={fileContent.after} autoSize={{ minRows: 6, maxRows: 12 }} /> : <Typography.Text>Content was not recorded for this request.</Typography.Text>}
               <Typography.Text type="secondary">Untrusted file content is shown as plain text. Publication grants no file read access.</Typography.Text>
             </Flex>
-          </Flex> : browserCommand || sandboxCommand || sandboxControl || savedRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
+          </Flex> : browserCommand || sandboxCommand || sandboxControl || savedRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.filter(change => change.field !== 'artifactChecksum').map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
             { key: 'before', label: 'Before', children: change.beforeAvailable ? value(change.before) : 'Not recorded for this request' },
             { key: 'after', label: 'After', children: <Flex vertical gap="var(--ac-space-tight)">{change.afterAvailable ? value(change.after) : 'Definition default was not recorded'}{change.restoresDefault && <Typography.Text type="secondary">Restore the Definition default</Typography.Text>}</Flex> }
           ]} />)}</Flex>}
@@ -218,7 +224,8 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
         <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={resultLabel(data)} description={<>{artifactPublication && data.operationResult.outcome === 'completed' ? 'The exact saved file was published. Viewing or downloading it requires separate current access.' : reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {approvalDate(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
         <Collapse items={[{ key: 'technical', label: 'Technical references', children: <Descriptions {...layout} column={1} size="small" items={[
           { key: 'request', label: 'Request', children: data.requestId }, { key: 'run', label: 'Source Run', children: data.runId }, { key: 'session', label: 'Session', children: data.sessionId }, { key: 'root', label: 'Execution root', children: data.rootActivationId },
-          { key: 'hash', label: 'Exact action hash', children: data.preparedAction.actionHash }, { key: 'revision', label: 'Request revision', children: data.requestRevision }, { key: 'access', label: 'Access revision', children: data.securityRevision }
+          { key: 'hash', label: 'Exact action hash', children: data.preparedAction.actionHash },
+          ...(artifactVerification && artifactChecksum?.afterAvailable ? [{ key: 'artifact-checksum', label: fields.artifactChecksum, children: value(artifactChecksum.after) }] : []), { key: 'revision', label: 'Request revision', children: data.requestRevision }, { key: 'access', label: 'Access revision', children: data.securityRevision }
         ]} /> }]} />
         <Typography.Link href={`/t/${tenant}/c/${data.sessionId}`}>Open original conversation</Typography.Link>
       </>}

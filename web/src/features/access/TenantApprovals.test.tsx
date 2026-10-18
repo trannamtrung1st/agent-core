@@ -28,6 +28,38 @@ function view(item = request) {
 beforeEach(() => { fetchMock.mockReset(); resetIdentityCsrf(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+const artifactVerificationRequest: TenantApproval = { ...request, kind: 'review', summary: 'Verify file metadata',
+  preparedAction: { ...request.preparedAction, operation: 'verify_artifact' }, review: { ...request.review, changes: [
+    { field: 'artifactDisplayName', before: null, after: 'private-report.md', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'artifactStoredByteSize', before: null, after: 200, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'artifactChecksum', before: null, after: 'b'.repeat(64), beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+  ] } };
+it('reviews exact file metadata with a separate checksum disclosure and no body or download grant', async () => {
+  view(artifactVerificationRequest); const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved read' });
+  expect(within(saved).getByText('private-report.md')).toBeVisible(); expect(within(saved).getByText('Stored bytes')).toBeVisible();
+  expect(within(saved).queryByText('Before')).not.toBeInTheDocument(); expect(within(saved).queryByText('b'.repeat(64))).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('textbox', { name: 'Exact file content' })).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: /Download/ })).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Technical references' }));
+  expect(await within(dialog).findByText('b'.repeat(64))).toBeVisible();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/no file creation, contents, download access or later-read authority/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+  fetchMock.mockImplementation(async path => String(path).includes('/approvals?') ? response({ items: [], total: 0, page: 0, pageSize: 20 }) : response({ reasonCode: 'approval_unavailable' }, 403));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Refresh details' }));
+  await waitFor(() => expect(within(dialog).queryByText('private-report.md')).not.toBeInTheDocument());
+  expect(await within(dialog).findByText(/This approval is unavailable or you no longer have access/)).toBeVisible();
+});
+it.each(['completed', 'denied'])('labels an exact metadata %s result as consent rather than file publication', async outcome => {
+  view({ ...artifactVerificationRequest, status: 'approved', operationResult: { outcome, reasonCode: 'artifact_metadata_read_authorized', recordedAt: request.createdAt } });
+  const dialog = await screen.findByRole('dialog'); const result = await within(dialog).findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText(outcome === 'completed' ? 'Metadata inspection authorized' : 'Metadata not authorized')).toBeVisible();
+  expect(within(result).queryByText('Applied')).not.toBeInTheDocument();
+});
+
 const artifactRequest: TenantApproval = { ...request, summary: 'Publish exact file', preparedAction: { ...request.preparedAction, operation: 'publish_artifact' },
   review: { ...request.review, changes: [
     { field: 'artifactDisplayName', before: null, after: 'reviewed-report.md', beforeAvailable: false, afterAvailable: true, restoresDefault: false },

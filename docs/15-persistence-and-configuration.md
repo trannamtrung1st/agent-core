@@ -1050,3 +1050,9 @@ Migration `20261018153150_TenantArtifactReview` extends the existing approval re
 ## Tenant rich delivery receipt persistence
 
 No schema or second receipt ledger is added. Existing envelope `DisplayDelivered` flags carry exact Markdown/Unknown/Artifact block credit. Trusted receipt facts must match saved kind/ID and actual owned Artifact source, with current human read checks inside the existing store commit boundary. Carry-forward preserves credited blocks and longer received text when a late earlier writer snapshot arrives; it never creates heard credit. Public history rechecks current actual source/read access, so previously credited file references can disappear after revocation. This is store-level delivery evidence, not application-host restart qualification.
+
+## Exact Artifact verification consent persistence
+
+Migration `20261018183653_TenantArtifactVerification` expands the existing approval CHECK for typed Review-only `artifacts.read` on an actual Artifact resource and matching parent Session. It rejects mixed variants, exceptional grants, malformed source fields/checksum and oversized saved payloads. Existing enum values and action hashes remain stable; the new optional payload is omitted when null. Downgrade refuses retained Artifact verification requests before replacing the CHECK. No table, ledger, role assignment or body copy is added.
+
+The existing local consent transaction repeats actual owned source, current definition/configuration, compound executor reads and reviewer qualification, then atomically records the Run marker, immutable receipt, security revision and audit. Metadata returned to the model retains a source witness and is revalidated before reuse. Disposable tests distinguish schema upgrade/reopen/rollback from actual application-host recreation with pending consent; neither authorizes installed-data migration/reset.

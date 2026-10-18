@@ -14,6 +14,7 @@ const reasons: Record<string, string> = {
   not_authenticated: 'Your session has expired. Sign in again to continue.',
   not_member: 'You no longer have access to this organization. Choose another organization or contact its owner.',
   permission_denied: 'You do not have permission for this action. Contact an organization owner if you need access.',
+  approval_unavailable: 'This approval is unavailable or you no longer have access. Return to the inbox or contact an organization owner.',
   last_owner: 'Keep at least one active owner. Add another owner before changing this access.',
   stale_revision: 'Access has changed since you opened this page. Reload the latest access before trying again.',
   stale_account: 'Your account changed in another session. Sign in again before trying this action.',

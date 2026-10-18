@@ -898,3 +898,7 @@ The requested refactor replaces language-specific helper shutdown with generic q
 ## Tenant Artifact delivery checkpoint — 2026-10-19
 
 The bounded Artifact continuation adds worker-authorized rich references, independent current recipient cards/preview/download and exact durable block credit through existing owners. Focused evidence is recorded in the [delivery report](reports/tenant-artifact-delivery-verification-2026-10-19.md). This supersedes earlier rich-delivery-pending notes only for this path. Browser/Workspace/Office publication adapters, generic model read/list and exact read-consent conversion, cleanup, autonomous families, final authority/schema cutover and full proposal acceptance remain open. CI and application-host restart acceptance are not implied.
+
+## Tenant Artifact verification checkpoint — 2026-10-19
+
+The existing `artifacts.verify` conversion uses current independent reads and exact durable metadata Review through the existing consent/Run/receipt owners. [Focused evidence](reports/tenant-artifact-metadata-verification-2026-10-19.md) separates direct/model/store checks, application-host recreation and browser approval evidence. This adds no general file-discovery or content-read tool. Remaining existing Browser/Workspace/Office publication adapters, cleanup, autonomous/resource/transport families and final authority/schema consolidation remain open; the full proposal is active.

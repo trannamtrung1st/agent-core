@@ -24,7 +24,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ArtifactPublication is { } artifact
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ArtifactVerification is { } verification
+        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE Permission = 'artifacts.read' AND ResourceType = 'artifact' AND ResourceId = {operation.ResourceId}
+            AND json_extract(PayloadJson, '$.Operation.ArtifactVerification') = {System.Text.Json.JsonSerializer.Serialize(verification)}
+            """)
+        : operation.ArtifactPublication is { } artifact
         ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE Permission = 'artifacts.create' AND ResourceType = 'session'
             AND json_extract(PayloadJson, '$.Operation.ArtifactPublication.SessionId') = {artifact.SessionId.ToString("D")}
@@ -60,11 +65,13 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests
             WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var artifactVerifyJson = System.Text.Json.JsonSerializer.Serialize(artifactReadVisibility?.Artifacts?.Select(id => id.ToString("D")).ToArray());
+        var artifactVerifySessionJson = System.Text.Json.JsonSerializer.Serialize(artifactReadVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         var artifactCreateJson = System.Text.Json.JsonSerializer.Serialize(artifactCreateSessions?.Select(id => id.ToString("D")).ToArray());
         var artifactReadJson = System.Text.Json.JsonSerializer.Serialize(sandboxVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         var readableJson = System.Text.Json.JsonSerializer.Serialize(sandboxVisibility?.Profiles);
@@ -76,6 +83,15 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         // Browser compound visibility applies to protected Credential fills too, independently of the primary permission.
         var source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE
+            (Permission <> 'artifacts.read' OR (
+                ({artifactVerifyJson} = 'null' OR ResourceId IN (SELECT value FROM json_each({artifactVerifyJson})))
+                AND ({artifactVerifySessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactVerifySessionJson})))
+                AND EXISTS (SELECT 1 FROM Artifacts AS file
+                    JOIN AgentRuns AS source ON source.AgentRunId = file.AgentRunId AND source.TenantId = file.TenantId AND source.SessionId = file.SessionId
+                    JOIN TenantSessions AS root ON root.TenantId = file.TenantId AND root.SessionId = file.SessionId
+                    JOIN Sessions AS saved ON saved.SessionId = root.SessionId
+                    WHERE file.TenantId = TenantApprovalRequests.TenantId AND file.SessionId = TenantApprovalRequests.SessionId
+                    AND file.ArtifactId = TenantApprovalRequests.ResourceId AND saved.DurablyDeletedAtUtc IS NULL))) AND
             (Permission <> 'artifacts.create' OR (
                 ({artifactReadJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactReadJson})))
                 AND ({artifactCreateJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactCreateJson})))
@@ -142,6 +158,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             TenantApprovalRules.Validate(request, run, agent);
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.ArtifactVerification is not null) await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.CredentialRead is not null) await RequireCredentialReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxCommand is not null) await RequireSandboxOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxControl is not null) await RequireSandboxControlOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -208,6 +225,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 var owner = await RequireSandboxReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantSandboxReadOperationRules.RequireReviewerAsync(state, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.ArtifactVerification is not null)
+            {
+                await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantArtifactVerificationRules.ReviewerAsync(state, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.CredentialRead is not null)
             {

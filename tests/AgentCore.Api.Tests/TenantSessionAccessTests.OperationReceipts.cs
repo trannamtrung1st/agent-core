@@ -50,6 +50,7 @@ public sealed partial class TenantSessionAccessTests
         public string? ProposedPreferences { get; set; }
         public string? ProposedArtifact { get; set; }
         public bool EmitArtifactReference { get; set; }
+        public bool VerifyPublishedArtifact { get; set; }
         public string? ProposedArtifactAuthorization { get; set; }
         public string? ProposedPreferenceAuthorization { get; set; }
         public TaskCompletionSource? ApprovalResponseGate { get; set; }
@@ -95,6 +96,39 @@ public sealed partial class TenantSessionAccessTests
             {
                 yield return new ModelToolCallEvent(new("reviewed-artifact", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization, publication));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (VerifyPublishedArtifact && ProposedArtifact is not null)
+            {
+                var publicationResult = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate);
+                if (publicationResult is not null)
+                {
+                    using var published = System.Text.Json.JsonDocument.Parse(publicationResult.Text);
+                    if (published.RootElement.TryGetProperty("applied", out var applied) && applied.ValueKind == System.Text.Json.JsonValueKind.True
+                        && published.RootElement.TryGetProperty("operationId", out var operationId) && operationId.TryGetGuid(out var artifactId))
+                    {
+                        var verificationResult = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.ArtifactsVerify);
+                        var consentResult = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization);
+                        if (verificationResult is null && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.ArtifactsVerify) == true)
+                        {
+                            yield return new ModelToolCallEvent(new("verify-published", AgentCore.Application.Tools.ToolCatalog.ArtifactsVerify,
+                                System.Text.Json.JsonSerializer.Serialize(new { artifactId })));
+                            yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+                        }
+                        if (verificationResult is not null && consentResult is null)
+                        {
+                            using var verification = System.Text.Json.JsonDocument.Parse(verificationResult.Text);
+                            if (verification.RootElement.TryGetProperty("reasonCode", out var reason) && reason.GetString() == "artifact_verification_review_required"
+                                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("verify_artifact")) == true)
+                            {
+                                yield return new ModelToolCallEvent(new("review-exact-metadata", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization,
+                                    System.Text.Json.JsonSerializer.Serialize(new { operation = "verify_artifact", artifactId })));
+                                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+                            }
+                        }
+                        yield return new ModelTextDelta("The exact file metadata request was processed. File bytes and download access were not granted.");
+                        yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+                    }
+                }
             }
             if (EmitArtifactReference && (ProposedArtifactAuthorization is not null || ProposedArtifact is not null))
             {

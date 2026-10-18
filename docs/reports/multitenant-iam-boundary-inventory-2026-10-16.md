@@ -1,5 +1,13 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant Artifact metadata verification successor — 2026-10-19
+
+Tenant `artifacts.verify` now supports exact actual-source metadata reads under current Allowed policy and durable metadata-only Review through the existing approval, successor Run and consent receipt owners. Independent Session/Artifact reads, current source/claim/configuration fences, scoped inbox counts and retained-checkpoint revalidation remain required. [Focused evidence](tenant-artifact-metadata-verification-2026-10-19.md) records both-store model/store flows, actual SQLite host recreation and shared inspector browser verification. This supersedes metadata-verification/read-consent-pending notes only for this exact tool; no new generic Artifact read/list tool is required. Source publication adapters, cleanup, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+
+## Tenant Artifact delivery successor — 2026-10-19
+
+Tenant Artifact rich delivery now validates actual source and current executor read policy on the supervised worker, filters each human recipient independently, and credits only exact sent blocks through the existing Session receipt owner. Current tenant cards, original downloads and DOCX/XLSX projections reuse canonical read/preview owners. [Focused evidence](tenant-artifact-delivery-verification-2026-10-19.md) separates backend live wire/receipt checks from browser acknowledged-history, exact UTF-8 download, read-loss recovery and five-width UI evidence. Source publication adapters, existing metadata verification tool conversion, read consent, cleanup and final authority/schema removal remain open; the full proposal is active.
+
 ## Tenant Browser exact target successor — 2026-10-18
 
 The existing native tenant entry now compares and consumes an exact transient physical command target under its incumbent Session/owner gates. This rejects argument drift, duplicate use and changed native identity without SDK replay, while retaining pending-dialog controls. [Focused evidence](tenant-browser-target-verification-2026-10-18.md) records actual local Chromium and existing protected store/HTTP regressions. This is a provider prerequisite, not durable Review or grant/effect execution. Browser model/effect/approval adapters and the earlier Browser removal/cutover obligations remain open.

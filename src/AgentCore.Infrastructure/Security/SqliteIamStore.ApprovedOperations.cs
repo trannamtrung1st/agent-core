@@ -83,6 +83,12 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             await TenantSandboxReadOperationRules.RequireReviewerAsync(before, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactVerification is not null)
+        {
+            await RequireArtifactVerificationOperation(db, request, run, target, ct).ConfigureAwait(false);
+            await TenantArtifactVerificationRules.ReviewerAsync(before, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId,
+                decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        }
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CredentialRead is not null)
         {
             await RequireCredentialReadOperation(db, request, run, target, ct).ConfigureAwait(false);

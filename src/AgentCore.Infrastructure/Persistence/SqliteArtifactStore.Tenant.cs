@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class SqliteArtifactStore : ITenantArtifactStore
 {
-    private static IQueryable<ArtifactRecordRow> Owned(AgentCoreDbContext db, Guid tenant, Guid session) => db.Artifacts.AsNoTracking()
+    internal static IQueryable<ArtifactRecordRow> Owned(AgentCoreDbContext db, Guid tenant, Guid session) => db.Artifacts.AsNoTracking()
         .Where(a => a.TenantId == tenant && a.SessionId == session.ToString("D")
             && db.Set<TenantSessionRecord>().Any(s => s.TenantId == tenant && s.SessionId == a.SessionId
                 && db.Sessions.Any(saved => saved.SessionId == s.SessionId && saved.DurablyDeletedAtUtc == null))
