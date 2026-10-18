@@ -9,9 +9,9 @@ import { useApprovalUpdates } from '../access/useApprovalUpdates';
 
 type Approval = { requestId: string; runId: string; responseId: string | null; operation: string; kind: string; status: string;
   createdAt: string; expiresAt: string; waiting: boolean; canInspect: boolean; outcome: string | null };
-const titles: Record<string, string> = { update_persona: 'Update agent persona', update_preferences: 'Update conversation preferences', check_credential_connection: 'Check credential connection', run_sandbox_command: 'Run exact Sandbox command' };
+const titles: Record<string, string> = { update_persona: 'Update agent persona', update_preferences: 'Update conversation preferences', check_credential_connection: 'Check credential connection', run_sandbox_command: 'Run exact Sandbox command', sandbox_control: 'Review Sandbox cleanup request' };
 const statuses: Record<string, string> = { pending: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', expired: 'Expired', cancelled: 'Cancelled' };
-const result = (item: Approval) => item.outcome === 'completed' ? item.operation === 'check_credential_connection' ? 'Check completed' : 'Applied' : item.outcome === 'denied' ? 'Not applied' : 'Outcome uncertain';
+const result = (item: Approval) => item.outcome === 'completed' ? item.operation === 'check_credential_connection' ? 'Check completed' : item.operation === 'sandbox_control' ? 'Request recorded' : 'Applied' : item.outcome === 'denied' ? 'Not applied' : 'Outcome uncertain';
 export function TenantConversationApprovals({ tenant, organization, session }: { tenant: string; organization: string; session: string }) {
   const [page, setPage] = useState(0); const [selected, setSelected] = useState<string>(); const opener = useRef<HTMLElement | null>(null);
   const state = useApprovalUpdates<{ items: Approval[]; total: number }>(tenantApi(tenant, `/sessions/${session}/approvals?page=${page}&pageSize=10`));

@@ -49,6 +49,8 @@ public static class TenantApprovalEndpoints
             TenantOperationKind.Persona => ("Update agent persona", "update_persona"),
             TenantOperationKind.ConversationPreferences => ("Update conversation preferences", "update_preferences"),
             TenantOperationKind.CredentialConnectionCheck => ("Check credential connection", "check_credential_connection"),
+            TenantOperationKind.SandboxControl => op.SandboxControl!.Kind == SandboxControlKind.StopProcess
+                ? ("Stop exact Sandbox process", "stop_sandbox_process") : ("Reset existing Sandbox environment", "reset_sandbox_environment"),
             TenantOperationKind.SandboxCommand => ("Run exact Sandbox command", "run_sandbox_command"),
             _ => throw new InvalidOperationException("Unsupported prepared operation.") };
         return new(r.RequestId, r.TenantId, r.RunId, r.SessionId, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,

@@ -1,5 +1,9 @@
 # System Architecture
 
+## Tenant model reviewed Sandbox cleanup
+
+Model Stop/reset extends the existing durable authorization/checkpoint and local approved-operation transaction. Core derives the exact stored target, rechecks current executor/requester/reviewer authority and records cleanup consent once on existing lease/receipt ownership. The deciding human remains consent authority; no original-human API login is fabricated. Runtime receives the exact recorded result through its mailbox; provider interruption/retirement remains with the existing technical Sandbox worker. Factual progress during a human wait is distinct from replacement generation/command/control intent. Acceptance never replays commands or initialization and never claims provider termination. [Focused evidence](reports/tenant-sandbox-model-controls-verification-2026-10-18.md).
+
 ## Tenant model Sandbox inspection and discovery
 
 Canonical tenant models can now use exact selected `sandbox.profiles`, `sandbox.status` and `sandbox.process.status` capabilities through the existing tool executor and canonical Sandbox read owner. Actual tenant/Session/Instance/Run/claim context is server-bound. Current original requester/executor, active Session, saved/current capability, independent executor Session read, agent Sandbox read and exact profile read apply. Read policy must return Allowed; a stronger tenant review policy cannot be bypassed by an inspection call. This supported read path does not synthesize a typed read Review.

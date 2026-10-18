@@ -1,5 +1,9 @@
 # Accounts, organizations, access and approvals UX
 
+## Exact Sandbox cleanup Review presentation
+
+Stop/reset use the existing shared approval inspector. Show the exact generation/process, old readable profile/image, stored observation states, pending-cleanup consequences and retained canonical files as a compact parameter list. Approval records consent only. Completed consent uses “Request recorded”; confirmed interruption/retirement remains a separate Sandbox observation. A stale decision disables submission until explicit refresh, with no automatic decision retry. The incumbent Ant Design Drawer, Descriptions, section spacing, confirmation and footer remain shared with existing approvals. [Implementation evidence](reports/tenant-sandbox-model-controls-verification-2026-10-18.md) does not claim the pending tenant Sandbox workspace UI.
+
 ## Exact Sandbox command review presentation
 
 The existing tenant approval inspector recognizes `run_sandbox_command`, presents an exact parameter list with named units, escaped wrapped scripts and no meaningless before/after rows, and preserves independent consent versus recorded effect status. Chat uses the same operation title and shared inspector. The existing 736px viewport-capped Ant Design Drawer, responsive Descriptions, 16px section gaps, footer/confirmation and explicit refresh/focus recovery remain the owners. [Focused evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md) separates actual preference-review interactions from controlled Sandbox projection checks. This does not add a tenant Sandbox command screen or model/SDK dispatch path.

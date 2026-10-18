@@ -101,6 +101,8 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
+        if (intent.SandboxControl is { } control)
+            return await approvals.PrepareSandboxControlAsync(boundary.Reference, control.Kind, control.ExecutionId, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.Sandbox is { } sandbox)
             return await approvals.PrepareSandboxAsync(boundary.Reference, sandbox.ProfileId, sandbox.Command, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.CredentialReference is { } reference)

@@ -27,4 +27,21 @@ public sealed partial class InMemoryIamStore
             TenantSandboxProfileRules.RequireCredential(pinned, credentials?.ReadTenantCredential(tenant, credential)?.Value, ApprovalNow);
         TenantSandboxRuntimeRules.RequirePermissionsAsync(_tenants[tenant], run, pinned, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
     }
+    private (SandboxLease Lease, SandboxExecution? Execution) RequireSandboxControlOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent)
+    {
+        var value = request.Operation.SandboxControl!; var tenant = request.TenantId;
+        var session = sessionBacking.ReadTenantSession(tenant, value.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
+        var lease = sandboxBacking.TenantLease(tenant, value.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
+        var execution = value.ExecutionId is { } executionId ? sandboxBacking.TenantExecution(tenant, value.SessionId, executionId) : null;
+        var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
+            ? definitions.TenantPublication(tenant, definition, agent.Instance.ActiveVersion)?.Payload
+            : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion).GetAwaiter().GetResult();
+        if (baseline is null) throw new AccessDeniedException("definition_unavailable");
+        TenantSandboxControlOperationRules.Require(value, run, agent, baseline, session, lease, execution);
+        if (request.Snapshot?.SandboxControl is not { } snapshot || snapshot.ProfileName != lease.Profile.Name || snapshot.ImageReference != lease.Profile.ImageReference)
+            throw new SecurityConflictException("sandbox_operation_witness_changed");
+        TenantSandboxControlOperationRules.RequirePermissionsAsync(_tenants[tenant], session.Owner, value.ProfileId, agent.PrincipalId, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
+        return (lease, execution);
+    }
+
 }

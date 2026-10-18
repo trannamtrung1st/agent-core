@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Sandbox control Review projection
+
+The existing approval detail/decision/cancel routes recognize `stop_sandbox_process` and `reset_sandbox_environment`, with “Stop exact Sandbox process” and “Reset existing Sandbox environment” summaries. The shared review changes name control kind, old profile/image, exact generation/execution, stored observation state, cleanup consequences and canonical-file retention. No command text, setup script, provider handle, internal target hash, source secret or unreadable selection target is disclosed.
+
+Conversation approval status uses the safe `sandbox_control` family title and the same shared inspector. Completed control receipts display “Request recorded”; they do not assert process/container termination. Stale decisions require explicit refresh and never retry automatically. Other existing operation projections retain their shapes.
+
+The model authorization continuation adds `controlRequestAccepted` (whether the exact control intent committed), `terminationConfirmed:false` (this consent transaction does not observe provider termination), and `filesRetained:true` (canonical mounts are retained by cleanup). `applied:true` means that metadata intent was recorded. Current process/environment observation remains separate; writes may continue while cleanup is pending. [Verification](reports/tenant-sandbox-model-controls-verification-2026-10-18.md).
+
 ## Tenant model Sandbox inspection contracts
 
 No HTTP route changes. The existing model read names now have a canonical tenant implementation:

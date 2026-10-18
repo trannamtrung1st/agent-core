@@ -1,5 +1,11 @@
 # Frontend Implementation Specification
 
+## Tenant Sandbox control Review inspection
+
+The shared approval Drawer recognizes exact Stop/reset Review independently of Sandbox commands. It reuses the existing one-column parameter Descriptions, 16px section stack, viewport-capped Drawer, sticky wrapping footer, native confirmation and explicit stale refresh. Control rows show target generation/receipt, stored observations, pending-cleanup consequences and file retention, without meaningless before/after rows. No new Sandbox page or generic UI wrapper is added.
+
+Completed control consent displays “Request recorded” in the inbox, detail and conversation status. Confirmation and result copy explain that writes may continue until cleanup is confirmed; canonical files remain retained. Approval status, recorded consent and provider termination are separate facts. [Focused evidence](reports/tenant-sandbox-model-controls-verification-2026-10-18.md) includes desktop/narrow inspector interaction with a controlled approval adapter, separately from actual hosted model/worker evidence.
+
 ## Tenant Sandbox SDK backend boundary
 
 The [SDK execution successor](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md) advances trusted command execution and recorded effect meanings over existing Ready generations. It adds no model command offering or new tenant Sandbox screen. Existing approval inspection remains shared; a recorded background launch is distinct from process completion, and uncertain or pending cleanup must remain separate from consent and known exit evidence. First-generation setup and the complete tenant Sandbox interaction/delivery path remain open.

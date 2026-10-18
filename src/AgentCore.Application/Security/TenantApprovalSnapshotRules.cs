@@ -24,6 +24,17 @@ public static class TenantApprovalSnapshotRules
         }
         if (string.IsNullOrWhiteSpace(s.AgentName) || s.AgentName.Length > 256)
             throw new ArgumentException("Invalid approval display identity.");
+        if (request.Operation.Kind == TenantOperationKind.SandboxControl)
+        {
+            if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null || s.Sandbox is not null
+                || s.SandboxControl is not { } control || string.IsNullOrWhiteSpace(control.ProfileName) || control.ProfileName.Length > 120
+                || OciImageReference.Parse(control.ImageReference).Value != control.ImageReference
+                || !Enum.TryParse<AgentCore.Domain.Conversation.SandboxLeaseState>(control.StoredState, out var lease) || !Enum.IsDefined(lease) || control.StoredState != lease.ToString()
+                || control.ExecutionState is { } execution && (!Enum.TryParse<AgentCore.Domain.Conversation.SandboxExecutionState>(execution, out var e) || !Enum.IsDefined(e) || execution != e.ToString()))
+                throw new ArgumentException("Invalid Sandbox control review snapshot.");
+            return;
+        }
+        if (s.SandboxControl is not null) throw new ArgumentException("Unexpected Sandbox control evidence.");
         if (request.Operation.Kind == TenantOperationKind.SandboxCommand)
         {
             if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null

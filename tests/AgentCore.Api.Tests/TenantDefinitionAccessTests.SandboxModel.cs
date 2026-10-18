@@ -90,10 +90,11 @@ public sealed partial class TenantDefinitionAccessTests
         }
     }
 
-    [Theory] [InlineData("approve")] [InlineData("reject")] [InlineData("cancel")] [InlineData("uncertain")] [InlineData("provision")] [InlineData("background")] [InlineData("inspect")]
+    [Theory] [InlineData("approve")] [InlineData("reject")] [InlineData("cancel")] [InlineData("uncertain")] [InlineData("provision")] [InlineData("background")] [InlineData("inspect")] [InlineData("stop")] [InlineData("reset")]
     public async Task Tenant_Sandbox_model_request_waits_for_exact_Review_then_shared_worker_delivers_bounded_result_once(string choice)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-model-sandbox-" + Guid.NewGuid().ToString("N"));
+        var control = choice is "stop" or "reset";
         try
         {
             SandboxLease lease = null!; Guid tenant = default; var commands = 0; var contacts = 0; var creates = 0; var initializations = 0; Dictionary<string,string> metadata = []; var paths = new ConcurrentQueue<string>(); var contactsAtInspection = -1;
@@ -102,6 +103,13 @@ public sealed partial class TenantDefinitionAccessTests
                 contacts++; Assert.Equal("synthetic-model-command", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
                 var path = http.Request.Path.Value!; paths.Enqueue(http.Request.Method + " " + path);
                 if (path == "/agent-core/generations/capabilities") await http.Response.WriteAsJsonAsync(new { contractVersion = 1, retirementFencing = true });
+                else if (path == "/agent-core/generations/retire")
+                {
+                    using var body = await JsonDocument.ParseAsync(http.Request.Body); var value = body.RootElement;
+                    Assert.Equal(tenant.ToString("N"), value.GetProperty("tenant").GetString()); Assert.Equal(lease.Generation.ToString("N"), value.GetProperty("generation").GetString());
+                    await http.Response.WriteAsJsonAsync(new { contractVersion = 1, tenant = tenant.ToString("N"), session = lease.SessionId.ToString("N"),
+                        executor = lease.ExecutorPrincipalId!.Value.ToString("N"), generation = lease.Generation.ToString("N"), retired = true });
+                }
                 else if (path == "/v1/sandboxes" && http.Request.Method == "POST")
                 {
                     creates++; using var body = await JsonDocument.ParseAsync(http.Request.Body);
@@ -159,7 +167,7 @@ public sealed partial class TenantDefinitionAccessTests
             var definitions = factory.Services.GetRequiredService<TenantDefinitionService>();
             var draft = await definitions.CreateAsync(actor, tenant, "Model Sandbox command", await Revision(owner, tenant));
             draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, [profileId]),
-                Environment = new(Capabilities: new("Selected", choice == "inspect" ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : [ToolCatalog.SandboxExec])) }, await Revision(owner, tenant), draft.Revision);
+                Environment = new(Capabilities: new("Selected", control ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : choice == "inspect" ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : [ToolCatalog.SandboxExec])) }, await Revision(owner, tenant), draft.Revision);
             await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
             var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();
@@ -170,14 +178,20 @@ public sealed partial class TenantDefinitionAccessTests
                 await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, grant.Item2, await Revision(owner, tenant));
             }
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
-            if (choice == "inspect")
+            if (choice == "inspect" || control)
             {
                 foreach (var grant in new[] { ("sandbox.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))), ("sessions.read", TenantSessionRules.Scope(tenant, session)) })
                 {
                     var role = await access.SaveRoleAsync(actor, tenant, null, "Inspect " + grant.Item1, [grant.Item1], await Revision(owner, tenant));
                     await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, grant.Item2, await Revision(owner, tenant));
                 }
-                factory.Model.Inspect = true;
+                if (control)
+                    foreach (var grant in new[] { ("sandbox.manage", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))), ("sessions.manage", TenantSessionRules.Scope(tenant, session)) })
+                    {
+                        var role = await access.SaveRoleAsync(actor, tenant, null, "Control " + grant.Item1, [grant.Item1], await Revision(owner, tenant));
+                        await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, grant.Item2, await Revision(owner, tenant));
+                    }
+                factory.Model.Inspect = choice == "inspect";
                 factory.Model.BeforeProcessInspection = async () => { contactsAtInspection = contacts; await peer.StopAsync(); };
             }
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var storage = factory.Services.GetRequiredService<ITenantSandboxRuntimeStore>();
@@ -196,6 +210,19 @@ public sealed partial class TenantDefinitionAccessTests
                     ProviderHostScope: factory.Services.GetRequiredService<ISandboxVerificationHost>().Scope);
                 Assert.True(await storage.TryReserveTenantSandboxLeaseAsync(new(new(run.Owner, session, run.AgentRunId, run.Claim!.Generation), await Revision(owner, tenant), run.Revision), lease, 0, at));
                 Assert.True(await storage.TrySaveTenantSandboxLeaseFactsAsync(tenant, lease with { Revision = 2, State = SandboxLeaseState.Ready, ProviderId = "model-owned", BaselineProcesses = [] }, 1));
+                if (control)
+                {
+                    Guid? executionId = null;
+                    if (choice == "stop")
+                    {
+                        executionId = Guid.NewGuid();
+                        var execution = new SandboxExecution(executionId.Value, session, instance, lease.Generation, run.AgentRunId, run.Claim!.Generation, "seed-process", new string('c', 64),
+                            SandboxExecutionState.Dispatching, at, CommandText: "PRIVATE_ORIGINAL_COMMAND", DeadlineAt: at.AddMinutes(1), ProfileId: pinned.Id, ProfileRevision: pinned.Revision,
+                            TenantId: tenant, ExecutorPrincipalId: executor, Revision: 1);
+                        Assert.True(await storage.TryReserveTenantSandboxExecutionAsync(new(new(run.Owner, session, run.AgentRunId, run.Claim!.Generation), await Revision(owner, tenant), run.Revision), execution, at));
+                    }
+                    factory.Model.Arguments = choice == "stop" ? JsonSerializer.Serialize(new { operation = "stop_sandbox_process", executionId }) : "{\"operation\":\"reset_sandbox_environment\"}";
+                }
             };
             var submitted = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Run the exact sandbox command after Review", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
             var runId = submitted.GetProperty("runId").GetGuid();
@@ -222,9 +249,9 @@ public sealed partial class TenantDefinitionAccessTests
                 }
             Assert.True(released, "The approval wait must release the sole Runtime slot.");
             var approval = (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, waiting.ApprovalRequestId!.Value))!;
-            Assert.Equal(ApprovalKind.Review, approval.Kind); Assert.Equal(TenantOperationKind.SandboxCommand, approval.Operation.Kind);
+            Assert.Equal(ApprovalKind.Review, approval.Kind); Assert.Equal(control ? TenantOperationKind.SandboxControl : TenantOperationKind.SandboxCommand, approval.Operation.Kind);
             var route = api + $"/approvals/{approval.RequestId}";
-            var detail = await Json(await owner.GetAsync(route)); Assert.Equal("run_sandbox_command", detail.GetProperty("preparedAction").GetProperty("operation").GetString());
+            var detail = await Json(await owner.GetAsync(route)); Assert.Equal(control ? choice == "stop" ? "stop_sandbox_process" : "reset_sandbox_environment" : "run_sandbox_command", detail.GetProperty("preparedAction").GetProperty("operation").GetString());
             Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(route + (choice == "cancel" ? "/cancel" : "/decision"), new { decision = choice == "reject" ? "reject" : "approve", actionHash = approval.Operation.ActionHash,
                 expectedRevision = await Revision(owner, tenant), expectedRequestRevision = approval.Revision })).StatusCode);
             var completed = await Await(r => r.IsTerminal);
@@ -248,6 +275,26 @@ public sealed partial class TenantDefinitionAccessTests
                 if (choice == "background") Assert.Equal("sandbox_command_started", payload.RootElement.GetProperty("reasonCode").GetString());
                 if (choice == "uncertain") Assert.All(factory.Model.Requests.Where(r => r.Context?.Sections.Any(s => s.Id == AgentCore.Application.Context.ContextSectionId.ApprovalOutcome) == true), r => Assert.All(r.Tools ?? [], t => Assert.Equal("agent_core_respond", t.Name)));
                 Assert.Contains(factory.Model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Text == result.Text));
+            }
+            else if (control)
+            {
+                Assert.Equal(0, commands); Assert.Equal(0, contacts); Assert.True(payload.RootElement.GetProperty("controlRequestAccepted").GetBoolean());
+                Assert.False(payload.RootElement.GetProperty("terminationConfirmed").GetBoolean()); Assert.True(payload.RootElement.GetProperty("filesRetained").GetBoolean());
+                Assert.Equal(choice == "stop" ? "sandbox_stop_requested" : "sandbox_reset_requested", payload.RootElement.GetProperty("reasonCode").GetString());
+                Assert.DoesNotContain("PRIVATE_ORIGINAL_COMMAND", result.Text);
+                if (choice == "stop") { Assert.NotNull(facts!.Execution!.ProcessStop); Assert.False(facts.Execution.TerminationConfirmed); }
+                else { Assert.Equal(SandboxLeaseState.Terminating, facts!.Lease!.State); Assert.Equal("reset", facts.Lease.CleanupReason); }
+                Assert.Contains(factory.Model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Text == result.Text));
+                var receipts = factory.Services.GetRequiredService<ITenantApprovedOperationStore>();
+                var receipt = await receipts.FindOperationReceiptAsync(tenant, approval.Operation.OperationId);
+                // Accepted cleanup runs through the existing technical owner after the model Run has completed.
+                await factory.Services.GetRequiredService<ISandboxService>().ReconcileAsync();
+                var retired = (await storage.ReadTenantSandboxRuntimeAsync(tenant, session))!;
+                Assert.Equal(SandboxLeaseState.Terminated, retired.Lease!.State);
+                if (choice == "stop") Assert.True(retired.Execution!.TerminationConfirmed);
+                Assert.Equal(receipt, await receipts.FindOperationReceiptAsync(tenant, approval.Operation.OperationId));
+                Assert.Equal(0, commands); Assert.Equal(0, creates); Assert.Equal(0, initializations);
+                var contactsAfterCleanup = contacts; await factory.Services.GetRequiredService<ISandboxService>().ReconcileAsync(); Assert.Equal(contactsAfterCleanup, contacts);
             }
             else { Assert.Equal(0, commands); Assert.Equal(0, contacts); Assert.False(payload.RootElement.GetProperty("applied").GetBoolean()); }
             if (choice == "inspect")

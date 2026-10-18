@@ -98,6 +98,11 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                 var text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
                     reasonCode = reason, operationId = outcome.OperationId, applied = request.Operation.Kind == TenantOperationKind.SandboxCommand && outcome.Outcome != TenantOperationOutcome.Denied ? null : outcome.Outcome switch {
                         TenantOperationOutcome.Completed => (bool?)true, TenantOperationOutcome.Denied => false, _ => null } });
+                if (request.Operation.SandboxControl is not null)
+                    text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()),
+                        outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()), reasonCode = reason, operationId = outcome.OperationId,
+                        applied = outcome.Outcome == TenantOperationOutcome.Completed, controlRequestAccepted = outcome.Outcome == TenantOperationOutcome.Completed,
+                        terminationConfirmed = false, filesRetained = true });
                 var paused = checkpoint.PauseBudgetClock(time.GetUtcNow());
                 var resumed = sandbox is null ? AgentRunToolCallCheckpoint.CompleteTenantAuthorization(paused, pending[0], text)
                     : TenantSandboxContinuationProjection.Complete(paused, pending[0], request, outcome, sandbox);

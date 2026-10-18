@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Sandbox reviewed control persistence
+
+Migration `20261018021925_TenantSandboxControlReview` extends the existing approval CHECK constraint for typed `sandbox.manage` Review payloads. It reuses owned profile/revision indexes and FKs, with the original 128 KiB small-operation payload bound. No table/column or alternate control queue is added. Older exact approval JSON is retained byte-for-byte; domain deserialization gives absent optional control fields their null defaults.
+
+The existing approved-operation store atomically records local control consent with the owned lease/receipt, immutable `TenantOperationReceipt`, matching Run effect, security revision and safe audit. Stop uses the existing receipt `ProcessStop` marker with exact approval request ID and deciding human; reset uses the existing generation retirement/selection-clearing fields. The technical worker advances cleanup facts independently without rewriting that consent result or the original command result. Both-store scope/target checks and root semantic dedupe remain equivalent. Disposable constraints, migration and reopen evidence appears in [the verification report](reports/tenant-sandbox-model-controls-verification-2026-10-18.md); no user database was migrated or reset.
+
 ## Tenant Sandbox model read persistence
 
 Discovery and inspection read the existing owned Session, admitted Run, lease/receipt, profile revision and verification owners. No schema, migration, cache, lifecycle writer, queue or credential-secret read is added. Human and model projections share the canonical read facade and scope construction. Model read audits use existing operation-decision audit records; they do not change security or Sandbox revisions.

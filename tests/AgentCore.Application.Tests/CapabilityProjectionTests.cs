@@ -12,7 +12,7 @@ namespace AgentCore.Application.Tests;
 public sealed class CapabilityProjectionTests
 {
     [Fact]
-    public async Task Tenant_context_offers_only_implemented_IAM_and_Sandbox_inspection_even_with_loaded_legacy_capabilities()
+    public async Task Tenant_context_offers_only_implemented_inspection_and_typed_controls_even_with_loaded_legacy_capabilities()
     {
         var definition = await Definition(ToolRegistry.All.Select(t => t.Name).ToArray());
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
@@ -23,7 +23,7 @@ public sealed class CapabilityProjectionTests
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage)
         };
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order().ToArray();
-        Assert.Equal(new[] { ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus }.Order(), offered);
+        Assert.Equal(new[] { ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus }.Order(), offered);
         Assert.Empty(ToolCatalog.For(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll));
     }
 

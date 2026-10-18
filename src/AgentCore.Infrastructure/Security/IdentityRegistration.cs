@@ -55,6 +55,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantSandboxRuntimeReadService>();
         services.TryAddSingleton<TenantSandboxControlService>();
         services.TryAddSingleton<TenantSandboxOperationTarget>();
+        services.TryAddSingleton<TenantSandboxControlOperationTarget>();
         services.TryAddSingleton<TenantSandboxApprovedOperationService>();
         services.TryAddSingleton<TenantSandboxExecutionAuthority>();
         services.TryAddSingleton<TenantSandboxGenerationAuthority>();

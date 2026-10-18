@@ -133,3 +133,24 @@ it('inspects exact Sandbox parameters with units and escaped scripts while appro
   expect(within(dialog).getByText(/No effect result recorded yet/)).toBeVisible();
   expect(within(dialog).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
 });
+
+it.each(['stop_sandbox_process', 'reset_sandbox_environment'])('shows %s consent independently from termination', async operation => {
+  view({ ...request, kind: 'review', status: 'approved', summary: 'Exact Sandbox cleanup',
+    preparedAction: { ...request.preparedAction, operation },
+    operationResult: { outcome: 'completed', reasonCode: operation === 'stop_sandbox_process' ? 'sandbox_stop_requested' : 'sandbox_reset_requested', recordedAt: '2026-10-18T01:00:00Z' },
+    review: { ...request.review, changes: [
+      { field: 'sandboxControl', before: null, after: 'Request exact cleanup', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'generation', before: null, after: 'exact-generation', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'cleanupConsequence', before: null, after: 'Writes may continue until cleanup is confirmed.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'fileRetention', before: null, after: 'Canonical files are retained.', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } });
+  const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved control request' });
+  expect(within(saved).getByText('Environment generation', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('Cleanup behavior', { exact: true })).toBeVisible();
+  expect(within(saved).queryByText('Before', { exact: true })).not.toBeInTheDocument();
+  expect(within(saved).queryByText('Saved field', { exact: true })).not.toBeInTheDocument();
+  expect(within(dialog).getByText('Request recorded', { exact: true })).toBeVisible();
+  expect(within(dialog).getByText(/writes may continue until/)).toBeVisible();
+  expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+});

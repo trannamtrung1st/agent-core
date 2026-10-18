@@ -26,8 +26,8 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
                 && (page.SessionId is null || r.SessionId == page.SessionId)
                 && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (r.Permission != "agents.update" || allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId))
-                && (r.Permission != "sandbox.execute" || (sandboxVisibility?.Instances is null || sandboxVisibility.Instances.Contains(r.Operation.InstanceId))
-                    && (sandboxVisibility?.Profiles is null || sandboxVisibility.Profiles.Contains(r.Operation.SandboxCommand!.ProfileId))
+                && (r.Permission is not ("sandbox.execute" or "sandbox.manage") || (r.Permission == "sandbox.manage" ? sandboxVisibility?.ControlInstances is null || sandboxVisibility.ControlInstances.Contains(r.Operation.InstanceId) : sandboxVisibility?.Instances is null || sandboxVisibility.Instances.Contains(r.Operation.InstanceId))
+                    && (sandboxVisibility?.Profiles is null || sandboxVisibility.Profiles.Contains((r.Operation.SandboxCommand?.ProfileId ?? r.Operation.SandboxControl!.ProfileId)))
                     && (sandboxVisibility?.Sessions is null || sandboxVisibility.Sessions.Contains(r.SessionId)))
                 && (r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(r.Operation.CredentialCheck!.CredentialId))
                 && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();
@@ -57,6 +57,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             TenantApprovalRules.Validate(request, run, agent); TenantSessionRules.RequireExecutor(before, agent);
             if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
             if (request.Operation.SandboxCommand is not null) RequireSandboxOperation(request, run, agent);
+            if (request.Operation.SandboxControl is not null) RequireSandboxControlOperation(request, run, agent);
             ValidateAgentActor(before, request.ExecutorPrincipalId);
             if (request.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
@@ -98,6 +99,12 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             TenantApprovalRules.Validate(request, run, agent, request.Status != TenantApprovalStatus.Cancelled);
             if (request.Operation.CredentialCheck is not null && request.Status != TenantApprovalStatus.Cancelled) RequireCredentialOperation(request, run, agent);
             if (request.Operation.SandboxCommand is not null && request.Status != TenantApprovalStatus.Cancelled) RequireSandboxOperation(request, run, agent);
+            if (request.Operation.SandboxControl is not null && request.Status != TenantApprovalStatus.Cancelled)
+            {
+                RequireSandboxControlOperation(request, run, agent);
+                TenantSandboxControlOperationRules.RequirePermissionsAsync(before, sessionBacking.ReadTenantSession(request.TenantId, request.SessionId)!.Owner,
+                    request.Operation.SandboxControl.ProfileId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
             if (request.Status != TenantApprovalStatus.Cancelled) TenantSessionRules.RequireExecutor(before, agent);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             if (_approvalSignals.ContainsKey(signal.SignalId) || _approvalDecisions.Values.Any(d => d.DecisionId == decision.DecisionId)

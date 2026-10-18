@@ -68,6 +68,12 @@ public sealed partial class TenantApprovalService
                 }
                 else if (op.SandboxCommand is not null)
                     await (sandboxTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, ct).ConfigureAwait(false);
+                else if (op.SandboxControl is not null)
+                {
+                    var controls = controlTargets ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    await controls.RequireAsync(r, run, ct).ConfigureAwait(false);
+                    await controls.RequireReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else unavailable = TenantLocalEffectRules.Eligibility(run, effective.Agent, effective.Configuration.Configuration.Definition);
                 if (unavailable is null)
                 {
@@ -92,6 +98,17 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.SandboxControl is { } control)
+            return [new("sandboxControl", null, control.Kind == SandboxControlKind.StopProcess ? "Stop the exact process" : "Reset the existing environment", false),
+                new("sandboxProfile", null, snapshot?.SandboxControl?.ProfileName, false, snapshot?.SandboxControl is not null),
+                new("image", null, snapshot?.SandboxControl?.ImageReference, false, snapshot?.SandboxControl is not null),
+                new("generation", null, control.Generation, false), new("execution", null, control.ExecutionId, false),
+                new("storedEnvironmentState", null, snapshot?.SandboxControl?.StoredState, false, snapshot?.SandboxControl is not null),
+                new("storedExecutionState", null, snapshot?.SandboxControl?.ExecutionState, false, snapshot?.SandboxControl is not null),
+                new("cleanupConsequence", null, control.Kind == SandboxControlKind.StopProcess
+                    ? "Request one interrupt; uncertain termination may retire this environment. Writes may continue until cleanup is confirmed."
+                    : "Retire this generation and clear saved profile selection. Writes may continue until retirement is confirmed. Another command requires fresh exact Review.", false),
+                new("fileRetention", null, "Canonical /working, /home and Artifacts are retained. Unsynchronized environment-local files may be lost.", false)];
         if (op.SandboxCommand is { } sandbox)
         {
             var command = TenantApprovalRules.SandboxCommand(sandbox);

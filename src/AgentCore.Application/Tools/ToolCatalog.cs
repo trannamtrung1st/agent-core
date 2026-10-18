@@ -203,7 +203,9 @@ public static class ToolCatalog
                     definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == true,
                     TenantApprovalToolContract.AllowsCredentialCheck(definition, context),
                     TenantSandboxAuthorizationContract.Allows(definition) ? definition.ExecutionSandboxProfiles!.Where(p => p.AdmittedForExecution == true
-                        && definition.SandboxPolicy!.AllowedProfileIds.Contains(p.Id, StringComparer.Ordinal)).Select(p => p.Id).ToArray() : null).ModelDefinition : authority.ModelDefinition);
+                        && definition.SandboxPolicy!.AllowedProfileIds.Contains(p.Id, StringComparer.Ordinal)).Select(p => p.Id).ToArray() : null,
+                    TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.StopProcess),
+                    TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.ResetEnvironment)).ModelDefinition : authority.ModelDefinition);
         foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate, AgentCore.Application.Experience.ExperienceService.SourceTool, AgentCore.Application.Experience.ExperienceService.RecordTool })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))
