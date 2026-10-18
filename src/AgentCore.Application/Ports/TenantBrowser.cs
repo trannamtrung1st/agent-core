@@ -16,6 +16,8 @@ public interface ITenantBrowserBinding
 {
     void BindTenantSession(TenantBrowserOwner owner);
     ValueTask<string?> BindTenantIsolationAsync(TenantBrowserOwner owner, BrowserProfileMode mode, CancellationToken ct = default);
+    // Cold/same-mode registration only; never close or transition a live view.
+    ValueTask<string?> EnsureTenantIsolationAsync(TenantBrowserOwner owner, BrowserProfileMode mode, CancellationToken ct = default);
     ValueTask ReleaseTenantAsync(TenantBrowserOwner owner, CancellationToken ct = default);
 }
 

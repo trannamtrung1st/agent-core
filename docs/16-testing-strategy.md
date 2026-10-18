@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser reviewed model continuation checks
+
+Use both-store `TenantBrowserApprovalTests` model cases for exact pending-call matching, receipt/checkpoint atomic visibility before mailbox Resume, store reopen without reexecution, unknown no-replay results, current settlement/delivery authority loss, earlier observation scope across later approval hops and bounded content without binaries. Contract checks reject model identities, changed/duplicate arguments and unconverted resources. Native cold-binding checks must prove zero initial context allocation, idempotent same-mode metadata and refusal to transition an existing view.
+
+Opt-in `TenantSessionAccessTests.Tenant_Browser_model_requests_exact_Review*` drives actual model offering/proposal → durable wait → cookie-authenticated decision → successor Run → actual disposable Chromium → saved result → resumed model and terminal Run. Cover approval, rejection and cancellation with both stores. Shared persona/credential continuation regressions remain relevant because the authorization branch is shared. Store reopen does not by itself prove full host-recreation behavior; record those scopes separately. [Focused evidence](reports/tenant-browser-model-verification-2026-10-18.md) owns exact outcomes and remaining gaps. No milestone or CI claim follows from this local checkpoint.
+
 ## Tenant Browser dispatch, settlement and recovery checks
 
 `TenantBrowserApprovalTests` covers both stores for approved one-time dispatch, SQLite reopen/receipt-only replay, duplicate callers, post-fence revocation, uncertain SDK completion, post-I/O authority/Run-cancellation output suppression, caller cancellation/late success and abandoned expired/deleted-Session recovery without native I/O. Fake-time consent expiry after saved start must deny without even invoking the Browser port. Keep existing credential external-fence regressions because their generic Run origin metadata is shared.
@@ -12,7 +18,7 @@ The shared inspector uses named Command completed versus unknown outcome copy; S
 
 Use `TenantBrowserApprovalTests` for both-store durable preparation/reopen/decision, raw permission and target drift, filtered inventory totals, compound independent reviewer scopes, busy preflight, canonical intent and disposable schema upgrade/CHECK coverage. `TenantSessionAccessTests.Tenant_Browser_Review_HTTP_*` opts into disposable loopback Chromium with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`; actual trusted fixture warmup, current target comparison and HTTP decision/feed projection remain distinct from a model effect. Assert unchanged command revisions and absent grants/effect receipts after consent. Retain the existing ownership/target, canonical approval and closed tool-boundary regressions.
 
-Browser UI presentation may use an explicitly identified controlled approval projection because model offering/dispatch remains closed. Exercise readable parameters, current stale-target recovery, one exact cancellation, acknowledgement and narrow-footer containment through Playwright MCP, alongside the shared inspector tests/build. Do not count that projection as server authorization or end-to-end Browser model delivery. [Current focused results](reports/tenant-browser-review-verification-2026-10-18.md) do not claim milestone acceptance or CI.
+Browser UI presentation may use an explicitly identified controlled approval projection for isolated state coverage; actual reviewed model/dispatch behavior now has the separate backend evidence above. Exercise readable parameters, current stale-target recovery, one exact cancellation, acknowledgement and narrow-footer containment through Playwright MCP, alongside the shared inspector tests/build. Do not count that projection as server authorization or end-to-end Browser model delivery. [Current focused results](reports/tenant-browser-review-verification-2026-10-18.md) do not claim milestone acceptance or CI.
 
 ## Tenant Browser exact target verification
 

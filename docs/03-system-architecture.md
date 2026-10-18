@@ -1,12 +1,16 @@
 # System Architecture
 
+## Tenant Browser model continuation ownership
+
+Exact model Browser proposals use the existing authorization tool, durable Review and successor Run. Source-checked cold registration changes metadata only; existing view isolation cannot transition during preparation. The shared-capacity host performs approved Browser I/O outside the mailbox. Factual settlement can atomically append one bounded untrusted result to the same Run checkpoint with the receipt/security/audit, so a later mailbox delivery or reopened store consumes saved data without provider replay. Current delivery authority and the live uncancelled claim are rechecked before resumed/later generations. Unknown completion never becomes application-success evidence. [Ports](04-backend-interfaces.md#tenant-browser-model-authorization-and-result-continuation) and [verification](reports/tenant-browser-model-verification-2026-10-18.md) define the supported boundary. Direct Allowed reads, protected resources and the wider proposal remain open.
+
 ## Tenant Browser reviewed dispatch and factual recovery
 
 `TenantBrowserEffectService` owns one exact approved command attempt outside the Session mailbox. The existing AgentRun side-effect checkpoint is its durable at-most-once fence; no Browser queue, dispatch ledger or execution engine is added. The original claim generation, start Run revision and UTC start time remain attached through cancellation and recovery. A duplicate caller receives only the immutable operation receipt, never provider authority.
 
 After durable start, Core rechecks current actual source, capabilities, isolation, executor, requester and qualified reviewer under the existing native owner/Session gate, before consuming the physical target. Claim, consent, admitted per-tool and remaining Run deadlines bound dispatch. The native provider then compares/consumes the witness and performs the typed command without releasing those gates. Host disablement prevents native work. A provider acknowledgement proves command completion only; application business success requires separate evidence.
 
-Settlement records factual Completed, Denied or Indeterminate with the existing Run/security/audit transaction. Recovery can seal an abandoned fence as Indeterminate through retained ownership after Session deletion; it never calls the Browser. Terminal/new Run frames cannot be revived. Observations are transient, fenced again by current authority and the same uncancelled live claim, and stripped of bytes/downloads. Model offering, durable observation/checkpoint delivery, protected Credential/Artifact adapters and autonomous admission remain pending. [Focused evidence](reports/tenant-browser-effect-verification-2026-10-18.md).
+Settlement records factual Completed, Denied or Indeterminate with the existing Run/security/audit transaction. Recovery can seal an abandoned fence as Indeterminate through retained ownership after Session deletion; it never calls the Browser. Terminal/new Run frames cannot be revived. Fresh observations are fenced again by current authority and the same uncancelled live claim, and stripped of bytes/downloads. The model adapter above now retains bounded observations only in its exact checkpoint. Protected Credential/Artifact adapters, direct Allowed reads and autonomous admission remain pending. [Focused evidence](reports/tenant-browser-effect-verification-2026-10-18.md).
 
 ## Tenant Browser exact command targets
 

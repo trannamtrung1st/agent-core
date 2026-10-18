@@ -76,10 +76,10 @@ public sealed partial class InMemoryIamStore
         }
     }
     public ValueTask<TenantOperationReceipt?> TrySettleBrowserEffectAsync(TenantSecurityState next, long expectedSecurityRevision, TenantBrowserEffectFence fence,
-        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default)
+        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next); TenantBrowserEffectRules.Outcome(outcome, reason, recovery);
-        lock (_gate) lock (sessionBacking.AdmissionGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
         {
             if (_operationReceipts.GetValueOrDefault(fence.OperationId) is { } old)
                 return ValueTask.FromResult<TenantOperationReceipt?>(TenantBrowserEffectRules.Matching(old, fence));
@@ -91,6 +91,18 @@ public sealed partial class InMemoryIamStore
             var at = ApprovalNow;
             if (at < fence.Origin.StartedAtUtc || recovery && !TenantBrowserEffectRules.Recoverable(run, at)) return ValueTask.FromResult<TenantOperationReceipt?>(null);
             var saved = TenantBrowserEffectRules.SettleRun(run, fence, outcome, at);
+            if (observation is not null)
+            {
+                try
+                {
+                    var decision = _approvalDecisions.GetValueOrDefault(request.RequestId) ?? throw new AccessDeniedException("approval_unavailable");
+                    var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
+                    TenantApprovalRules.Validate(request, run, agent, source: source); RequireBrowserOperation(request, run, agent);
+                    TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+                }
+                catch (Exception e) when (e is AccessDeniedException or SecurityConflictException) { observation = null; }
+            }
+            saved = TenantBrowserContinuationProjection.Save(run, saved, request, outcome, reason, at, observation);
             var receipt = TenantBrowserEffectRules.Receipt(request, run, outcome, reason, at);
             audit = TenantOperationAuditRules.WithEffectResult(audit with { At = at, Decision = outcome switch { TenantOperationOutcome.Completed => "allowed", TenantOperationOutcome.Denied => "denied", _ => "indeterminate" }, ReasonCode = reason }, before, run, request, null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();

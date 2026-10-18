@@ -6,7 +6,7 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantApprovalService
 {
     public async ValueTask<TenantApprovalPreparationResult> PrepareBrowserAsync(TenantRunReference reference, string tool, string argumentsJson,
-        long expectedRunRevision, Guid generation, CancellationToken ct = default)
+        long expectedRunRevision, Guid generation, CancellationToken ct = default, bool registerCold = false)
     {
         var permission = "browser.use";
         try
@@ -15,7 +15,7 @@ public sealed partial class TenantApprovalService
             if (run.Status != AgentRunStatus.Running || run.Claim?.Generation != generation || run.Revision != expectedRunRevision || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())
                 throw new AccessDeniedException("tenant_runtime_unavailable");
             permission = TenantApprovalRules.BrowserIntent(run.SessionId, tool, argumentsJson).ReadOnly ? "browser.read" : "browser.use";
-            var prepared = await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(run, tool, argumentsJson, ct).ConfigureAwait(false);
+            var prepared = await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(run, tool, argumentsJson, ct, registerCold).ConfigureAwait(false);
             var value = prepared.Command;
             var operation = TenantApprovalRules.PrepareBrowser(ids.NewId(), run.AgentInstanceId, value, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
             var review = await TenantBrowserOperationRules.NeedsReviewAsync(state, run.AgentInstanceId, value,

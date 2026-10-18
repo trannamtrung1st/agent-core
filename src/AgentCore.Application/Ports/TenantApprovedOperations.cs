@@ -8,6 +8,7 @@ public sealed record TenantOperationCommit(Guid RequestId, Guid OperationId, Gui
 
 public sealed record TenantBrowserEffectFence(Guid TenantId, Guid RequestId, Guid OperationId, Guid RunId,
     string ActionHash, AgentCore.Domain.Conversation.AgentRunExternalEffect Origin);
+public sealed record TenantBrowserEffectObservation(long RunRevision, string Json);
 public sealed record TenantBrowserEffectStart(TenantBrowserEffectFence? Fence, TenantOperationReceipt? Receipt);
 
 public interface ITenantApprovedOperationStore
@@ -22,5 +23,5 @@ public interface ITenantApprovedOperationStore
     ValueTask<IReadOnlyList<TenantBrowserEffectFence>> RecoverableBrowserEffectsAsync(DateTimeOffset at, int limit, CancellationToken ct = default);
     ValueTask<TenantOperationReceipt?> TrySettleBrowserEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantBrowserEffectFence fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit,
-        bool recovery = false, CancellationToken ct = default);
+        bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null);
 }

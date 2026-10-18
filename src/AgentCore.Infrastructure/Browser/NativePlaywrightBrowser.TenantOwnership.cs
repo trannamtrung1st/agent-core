@@ -58,6 +58,24 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserBinding, ITe
         return BindIsolationCoreAsync(owner.SessionId, owner.AgentInstanceId, mode, ct, tenant: true);
     }
 
+    public async ValueTask<string?> EnsureTenantIsolationAsync(TenantBrowserOwner owner, BrowserProfileMode mode, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!Enum.IsDefined(mode) || mode == BrowserProfileMode.PersistentAgent && _policy.ProfileMode != BrowserProfileMode.PersistentAgent) return "policy_denied";
+        BindTenantSession(owner);
+        var sessionUse = _sessionUse.GetOrAdd(owner.SessionId, static _ => new SemaphoreSlim(1, 1));
+        if (!await sessionUse.WaitAsync(0, ct).ConfigureAwait(false)) return "policy_transition_pending";
+        try
+        {
+            if (ContextTransitionBlocked(owner.SessionId)
+                || _sessions.TryGetValue(owner.SessionId, out var view) && view.Persistent != (mode == BrowserProfileMode.PersistentAgent)
+                || _sessionModes.TryGetValue(owner.SessionId, out var existing) && existing != mode)
+                return "policy_transition_pending";
+            SelectSessionMode(owner.SessionId, mode); return null;
+        }
+        finally { sessionUse.Release(); }
+    }
+
     public ValueTask ReleaseTenantAsync(TenantBrowserOwner owner, CancellationToken ct = default)
     {
         owner.Validate();

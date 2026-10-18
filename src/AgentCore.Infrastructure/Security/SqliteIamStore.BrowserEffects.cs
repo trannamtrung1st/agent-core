@@ -91,7 +91,7 @@ public sealed partial class SqliteIamStore
         return result;
     }
     public async ValueTask<TenantOperationReceipt?> TrySettleBrowserEffectAsync(TenantSecurityState next, long expectedSecurityRevision, TenantBrowserEffectFence fence,
-        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default)
+        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null)
     {
         next = IamStateRules.Freeze(next); TenantBrowserEffectRules.Outcome(outcome, reason, recovery);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -110,7 +110,22 @@ public sealed partial class SqliteIamStore
         TenantBrowserEffectRules.Transaction(next, expectedSecurityRevision, request, audit, false);
         var at = ApprovalNow;
         if (at < fence.Origin.StartedAtUtc || recovery && !TenantBrowserEffectRules.Recoverable(run, at)) return null;
-        var saved = TenantBrowserEffectRules.SettleRun(run, fence, outcome, at); var receipt = TenantBrowserEffectRules.Receipt(request, run, outcome, reason, at);
+        var saved = TenantBrowserEffectRules.SettleRun(run, fence, outcome, at);
+        if (observation is not null)
+        {
+            try
+            {
+                var decision = await db.Set<TenantApprovalDecision>().AsNoTracking().SingleAsync(d => d.TenantId == fence.TenantId && d.RequestId == request.RequestId, ct).ConfigureAwait(false);
+                var owned = await OwnedAgents(db, fence.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
+                var agent = owned is null ? throw new AccessDeniedException("executor_unavailable") : Owned(owned);
+                TenantApprovalRules.Validate(request, run, agent, source: sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow));
+                await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is AccessDeniedException or SecurityConflictException) { observation = null; }
+        }
+        saved = TenantBrowserContinuationProjection.Save(run, saved, request, outcome, reason, at, observation);
+        var receipt = TenantBrowserEffectRules.Receipt(request, run, outcome, reason, at);
         audit = TenantOperationAuditRules.WithEffectResult(audit with { At = at, Decision = outcome switch { TenantOperationOutcome.Completed => "allowed", TenantOperationOutcome.Denied => "denied", _ => "indeterminate" }, ReasonCode = reason }, before, run, request, null);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         if (saved.Revision != run.Revision) AgentRunStoreMapping.Apply(row, saved);

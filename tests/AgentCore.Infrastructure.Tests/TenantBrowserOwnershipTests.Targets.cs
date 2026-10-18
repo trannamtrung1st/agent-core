@@ -31,6 +31,27 @@ public sealed partial class TenantBrowserOwnershipTests
         finally { await browser.StopAsync(CancellationToken.None); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [TenantChromiumFact]
+    public async Task Tenant_model_cold_binding_never_allocates_or_transitions_an_existing_native_view()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tenant-browser-cold-binding-" + Guid.NewGuid().ToString("N"));
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
+            FixturePort = 0, ProfileRoot = root, ProfileMode = "PersistentAgent" }, null);
+        await browser.StartAsync(CancellationToken.None);
+        try
+        {
+            var owner = Owner(); Assert.Null(await browser.EnsureTenantIsolationAsync(owner, BrowserProfileMode.EphemeralSession));
+            Assert.Null(browser.ContextFor(owner.SessionId));
+            Assert.Null((await Dispatch(browser, owner, new BrowserNavigate(browser.Fixture.Origin + "/browser-native.html"))).ErrorCode);
+            var context = browser.ContextFor(owner.SessionId); var before = (await browser.PrepareTenantCommandAsync(owner, new BrowserClose())).Witness;
+            Assert.Equal("policy_transition_pending", await browser.EnsureTenantIsolationAsync(owner, BrowserProfileMode.PersistentAgent));
+            Assert.Same(context, browser.ContextFor(owner.SessionId)); Assert.Equal(before, (await browser.PrepareTenantCommandAsync(owner, new BrowserClose())).Witness);
+            Assert.Null(await browser.EnsureTenantIsolationAsync(owner, BrowserProfileMode.EphemeralSession));
+            Assert.Equal(before, (await browser.PrepareTenantCommandAsync(owner, new BrowserClose())).Witness);
+        }
+        finally { await browser.StopAsync(CancellationToken.None); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static async Task<BrowserResult> Dispatch(NativePlaywrightBrowser browser, TenantBrowserOwner owner, BrowserCommand command)
     {
         var prepared = await browser.PrepareTenantCommandAsync(owner, command);

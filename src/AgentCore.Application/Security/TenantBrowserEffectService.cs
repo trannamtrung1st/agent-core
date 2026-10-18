@@ -1,10 +1,11 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Execution;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-// Native observations are transient here. Durable model output/checkpoint delivery is a separate adapter.
+// Direct callers receive transient observations; reviewed model output is retained only in its exact Run checkpoint.
 public sealed record TenantBrowserEffectResult(TenantOperationReceipt Receipt, BrowserResult? Result, string? ObservationUnavailableReason = null);
 
 public sealed class TenantBrowserEffectService(IIamStore security, ITenantRunStore runs, ITenantApprovalStore approvals,
@@ -37,6 +38,7 @@ public sealed class TenantBrowserEffectService(IIamStore security, ITenantRunSto
         var old = await effects.FindOperationReceiptAsync(reference.TenantId, operationId, ct).ConfigureAwait(false);
         if (old is not null) return new(Matching(old, request, run), null, "browser_observation_not_retained");
         RequireClaim(run, generation);
+        TenantRunContinuationService.ValidateAuthorizationCheckpoint(run, request);
         if (run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             throw new SecurityConflictException("browser_effect_in_progress");
         var state = await security.ReadTenantAsync(reference.TenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
@@ -94,7 +96,21 @@ public sealed class TenantBrowserEffectService(IIamStore security, ITenantRunSto
         reason = outcome switch { TenantOperationOutcome.Completed => TenantBrowserEffectRules.Completed,
             TenantOperationOutcome.Indeterminate => TenantBrowserEffectRules.Uncertain, _ => TenantBrowserEffectRules.Denial(result!.ErrorCode!) };
         using var settleDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10), time);
-        var receipt = await SettleAsync(fence, outcome, reason, false, settleDeadline.Token).ConfigureAwait(false) ?? throw new SecurityConflictException("browser_effect_unsettled");
+        TenantBrowserEffectObservation? observation = null;
+        if (outcome == TenantOperationOutcome.Completed && result is not null)
+        {
+            try
+            {
+                var observedRun = await runs.FindTenantRunAsync(reference.TenantId, run.AgentRunId, settleDeadline.Token).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+                RequireClaim(observedRun, generation);
+                var observedState = await security.ReadTenantAsync(reference.TenantId, settleDeadline.Token).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+                var observedAgent = await targets.RequireSourceAsync(request, observedRun, source, settleDeadline.Token).ConfigureAwait(false);
+                await TenantBrowserEffectRules.RequireAuthorityAsync(observedState, request, decision, observedRun, observedAgent, authorizer, settleDeadline.Token).ConfigureAwait(false);
+                observation = new(observedRun.Revision, TenantBrowserContinuationProjection.Observation(result));
+            }
+            catch (Exception e) when (e is AccessDeniedException or SecurityConflictException) { }
+        }
+        var receipt = await SettleAsync(fence, outcome, reason, false, settleDeadline.Token, observation).ConfigureAwait(false) ?? throw new SecurityConflictException("browser_effect_unsettled");
         ct.ThrowIfCancellationRequested();
         if (receipt.Outcome != TenantOperationOutcome.Completed || outcome != TenantOperationOutcome.Completed) return new(receipt, null);
         try
@@ -136,6 +152,41 @@ public sealed class TenantBrowserEffectService(IIamStore security, ITenantRunSto
         catch (AccessDeniedException e) { return TenantBrowserEffectRules.Denial(e.ReasonCode); }
         catch (SecurityConflictException e) { return TenantBrowserEffectRules.Denial(e.ReasonCode); }
     }
+    // A saved observation is historical tool data, never permission for another command.
+    // Recheck its delivery scope before every resumed model generation as well as first delivery.
+    public async ValueTask RequireStoredObservationAsync(AgentRun run, CancellationToken ct = default)
+    {
+        if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages)) return;
+        var observations = new HashSet<(Guid RequestId, Guid OperationId)>();
+        foreach (var message in messages!.Where(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization))
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(message.Text); var root = doc.RootElement;
+            if (!root.TryGetProperty("browser", out var data) || data.ValueKind == System.Text.Json.JsonValueKind.Null) continue;
+            if (!root.TryGetProperty("requestId", out var requestId) || !requestId.TryGetGuid(out var id)
+                || !root.TryGetProperty("operationId", out var operationId) || !operationId.TryGetGuid(out var operation))
+                throw new AccessDeniedException("browser_source_changed");
+            observations.Add((id, operation));
+        }
+        if (observations.Count == 0) return;
+        var tenant = run.Owner.TenantId!.Value;
+        var current = await runs.FindTenantRunAsync(tenant, run.AgentRunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+        RequireClaim(current, run.Claim!.Generation);
+        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        foreach (var observation in observations)
+        {
+            var request = await approvals.FindApprovalAsync(tenant, observation.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
+            if (request.Operation.OperationId != observation.OperationId) throw new AccessDeniedException("browser_source_changed");
+            var agent = await targets.RequireObservationSourceAsync(request, current, ct).ConfigureAwait(false);
+            var decision = await effects.FindApprovalDecisionAsync(tenant, request.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
+            await TenantBrowserEffectRules.RequireAuthorityAsync(state, request, decision, current, agent, authorizer, ct).ConfigureAwait(false);
+        }
+        if ((await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false))?.Tenant.Revision != state.Tenant.Revision)
+            throw new AccessDeniedException("browser_source_changed");
+        var finalRun = await runs.FindTenantRunAsync(tenant, run.AgentRunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+        RequireClaim(finalRun, run.Claim.Generation);
+        if (finalRun.Revision != current.Revision) throw new AccessDeniedException("browser_source_changed");
+    }
+
     private void RequireClaim(AgentRun run, Guid generation)
     {
         if (run.Status != AgentRunStatus.Running || run.CancellationRequested || run.Claim?.Generation != generation || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())
@@ -148,13 +199,13 @@ public sealed class TenantBrowserEffectService(IIamStore security, ITenantRunSto
             if (await SettleAsync(fence, TenantOperationOutcome.Indeterminate, TenantBrowserEffectRules.Uncertain, true, ct).ConfigureAwait(false) is not null) count++;
         return count;
     }
-    private async ValueTask<TenantOperationReceipt?> SettleAsync(TenantBrowserEffectFence fence, TenantOperationOutcome outcome, string reason, bool recovery, CancellationToken ct)
+    private async ValueTask<TenantOperationReceipt?> SettleAsync(TenantBrowserEffectFence fence, TenantOperationOutcome outcome, string reason, bool recovery, CancellationToken ct, TenantBrowserEffectObservation? observation = null)
     {
         for (var attempt = 0; attempt < 4; attempt++)
         {
             var state = await security.ReadTenantAsync(fence.TenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
             var request = await approvals.FindApprovalAsync(fence.TenantId, fence.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
-            var receipt = await effects.TrySettleBrowserEffectAsync(Next(state), state.Tenant.Revision, fence, outcome, reason, Audit(request, TenantBrowserEffectRules.Action, reason), recovery, ct).ConfigureAwait(false);
+            var receipt = await effects.TrySettleBrowserEffectAsync(Next(state), state.Tenant.Revision, fence, outcome, reason, Audit(request, TenantBrowserEffectRules.Action, reason), recovery, ct, observation).ConfigureAwait(false);
             if (receipt is not null) return receipt;
         }
         return null;

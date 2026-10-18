@@ -6,7 +6,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
-    TenantRunConfigurationResolver configurations) : IAgentRunAuthority, ITenantRunContext
+    TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null) : IAgentRunAuthority, ITenantRunContext
 {
     public async ValueTask<AgentDefinition?> CurrentDefinitionAsync(AgentRun run, CancellationToken cancellationToken = default)
     {
@@ -23,11 +23,16 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                 if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
                     || current.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || current.Agent.Instance.DefinitionId != run.DefinitionId)
                     return null;
-                if (before.State.Tenant.Revision == after.State.Tenant.Revision) return current.Definition;
+                if (before.State.Tenant.Revision == after.State.Tenant.Revision)
+                {
+                    if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    return current.Definition;
+                }
             }
             return null;
         }
         catch (AccessDeniedException) { return null; }
+        catch (SecurityConflictException) { return null; }
     }
 
     private async ValueTask<(AgentRun Run, TenantSecurityState State)> ResolveCurrentAsync(AgentRun run, CancellationToken ct)

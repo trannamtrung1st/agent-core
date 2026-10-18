@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null)
 {
     // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
     public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
@@ -40,9 +40,9 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
         var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
         TenantRunContinuationRules.Require(run, request, source);
-        ValidateAuthorizationCheckpoint(run, request!, (request!.Operation.Kind is TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand)
+        ValidateAuthorizationCheckpoint(run, request!, (request!.Operation.Kind is TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand)
             && run.Admission.ApprovalResume is not null && run.SideEffect.ToolCallId != "operation:" + request.Operation.OperationId.ToString("D"));
-        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind is not (TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand)) return;
+        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind is not (TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand)) return;
         var remaining = run.Checkpoint?.PauseBudgetClock(time.GetUtcNow()).RemainingOverallBudgetMs
             ?? (run.Admission.ExecutionBudget?.Profile.DurationSeconds ?? 180) * 1000;
         if (remaining <= 0) throw new AccessDeniedException("execution_budget_exhausted");
@@ -50,7 +50,10 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, budget.Token);
         try
         {
-            if (request.Operation.Kind == TenantOperationKind.SandboxCommand)
+            if (request.Operation.Kind == TenantOperationKind.BrowserCommand)
+                await (browserEffects ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
+                    run.Claim!.Generation, request.Operation.ActionHash, linked.Token).ConfigureAwait(false);
+            else if (request.Operation.Kind == TenantOperationKind.SandboxCommand)
                 await (sandboxCommands ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteApprovedAsync(
                     new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), requestId, linked.Token).ConfigureAwait(false);
             else await (credentialChecks ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
@@ -68,6 +71,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
         TenantRunContinuationRules.Require(run, request, source);
         ValidateAuthorizationCheckpoint(run, request!);
+        if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(run, ct).ConfigureAwait(false);
         TenantOperationReceipt? receipt = null;
         if (request!.Status == TenantApprovalStatus.Approved)
             receipt = await effects.ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
@@ -115,7 +119,10 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                         applied = outcome.Outcome == TenantOperationOutcome.Completed, controlRequestAccepted = outcome.Outcome == TenantOperationOutcome.Completed,
                         terminationConfirmed = false, filesRetained = true });
                 var paused = checkpoint.PauseBudgetClock(time.GetUtcNow());
-                var resumed = request.Operation.SandboxRead is not null ? TenantSandboxContinuationProjection.CompleteRead(paused, pending[0], request, outcome, inspection, readUnavailable)
+                var resumed = request.Operation.BrowserCommand is not null
+                    ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
+                        request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched")
+                    : request.Operation.SandboxRead is not null ? TenantSandboxContinuationProjection.CompleteRead(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : sandbox is null ? AgentRunToolCallCheckpoint.CompleteTenantAuthorization(paused, pending[0], text)
                     : TenantSandboxContinuationProjection.Complete(paused, pending[0], request, outcome, sandbox);
                 run = await runtimeStore.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
