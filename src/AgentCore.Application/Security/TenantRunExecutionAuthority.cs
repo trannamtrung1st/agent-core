@@ -12,13 +12,20 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
     {
         try
         {
-            var before = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
-            var current = await configurations.CurrentPolicyAsync(before.State.Tenant.TenantId, run.AgentInstanceId, cancellationToken).ConfigureAwait(false);
-            var after = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
-            if (before.State.Tenant.Revision != after.State.Tenant.Revision || current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
-                || current.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || current.Agent.Instance.DefinitionId != run.DefinitionId)
-                return null;
-            return current.Definition;
+            // Discard a raced policy snapshot and make one fresh read. This never
+            // retries a model call or effect, and every attempt rechecks live authority.
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var before = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
+                var current = await configurations.CurrentPolicyAsync(before.State.Tenant.TenantId, run.AgentInstanceId, cancellationToken).ConfigureAwait(false);
+                var after = await ResolveCurrentAsync(run, cancellationToken).ConfigureAwait(false);
+                if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
+                    || current.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || current.Agent.Instance.DefinitionId != run.DefinitionId)
+                    return null;
+                if (before.State.Tenant.Revision == after.State.Tenant.Revision) return current.Definition;
+            }
+            return null;
         }
         catch (AccessDeniedException) { return null; }
     }

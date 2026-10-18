@@ -149,14 +149,17 @@ public sealed partial class TenantRunAdmissionTests
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, receipt.RunId))!;
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
             new AgentRunCommand.Claim(run.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
+        var reads = 0;
         var hook = new CurrentPolicyBuiltinHook(f.BuiltIns, async () => {
+            reads++;
             if (cancel) await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
                 new AgentRunCommand.RequestCancellation(run.Revision, f.Clock.GetUtcNow(), null), f.Ids.NewId());
-            else await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, tenant, null, "Policy I/O mutation", ["agents.read"], (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
+            else await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, tenant, null, $"Policy I/O mutation {reads}", ["agents.read"], (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision);
         });
         var authority = new TenantRunExecutionAuthority(new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer,
             new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), f.Iam, f.Clock, f.RunConfiguration(hook));
         Assert.Null(await authority.CurrentDefinitionAsync(run));
+        Assert.Equal(cancel ? 1 : 2, reads);
         if (cancel) Assert.Null(await RequesterAuthority(f).CurrentDefinitionAsync(run));
         else Assert.NotNull(await RequesterAuthority(f).CurrentDefinitionAsync(run));
     }

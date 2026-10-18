@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant current-policy read recovery
+
+Use a deterministic source-read hook with both InMemory and disposable SQLite to change the tenant revision during policy lookup. An unrelated one-time change must discard the captured source and obtain a coherent fresh policy; a restrictive Instance change must return the new restriction without rewriting admission. Revoke requester access, cancel the Run, cancel the read and continuously change revisions to prove there is no stale-policy fallback or unbounded retry. In the hosted Synthetic preference journey, interleave one real IAM change after the model proposes its typed operation: the worker/Runtime must finish with one applied receipt/audit and the ordinary two model requests. A read retry must never replay the effect or create an approval.
+
 ## Tenant model Sandbox inspection journeys
 
 In both stores, require independent exact Session and agent Sandbox reads before discovery/status. Inspect an owned completed receipt, preserve factual exit/output while hiding owner-only setup evidence and command text, reject foreign receipts and stale claims, and prove all lease/receipt revisions remain unchanged. Bound Unicode streams under a small remaining tool budget without invalid JSON/UTF-8. Read stored facts while readiness is unavailable. Remove execution configuration while retaining explicit read capabilities and verify status remains readable, while discovery returns no choices. Removed current read capability or a capability added only after admission must still deny.
