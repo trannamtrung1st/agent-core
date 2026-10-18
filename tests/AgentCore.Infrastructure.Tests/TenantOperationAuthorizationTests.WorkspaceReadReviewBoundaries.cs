@@ -13,14 +13,16 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantOperationAuthorizationTests
 {
     private static async Task<(Environment Setup, TenantRuntimeFrame Frame, TenantWorkspaceRuntimeReadService Reads,
-        TenantApprovalService Approvals, TenantApprovalRequest Request, TenantSessionInitiator? Peer)> WorkspaceReviewFixture(Fixture f, bool working = false, bool list = false, string permission = "workspaces.read", bool independent = false)
+        TenantApprovalService Approvals, TenantApprovalRequest Request, TenantSessionInitiator? Peer)> WorkspaceReviewFixture(Fixture f, bool working = false, bool list = false, string permission = "workspaces.read", bool independent = false, bool search = false)
     {
         var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working); await GrantWorkspaceRuntimeReads(f, s);
+        if (search) await SeedRuntimeWorkspace(f, s, working, "nonmatch.txt", System.Text.Encoding.UTF8.GetBytes("No matching information."));
         var peer = independent ? await User(f, s, "independent-workspace-reviewer@example.test", ["approvals.read", "approvals.approve", "agents.read", "sessions.read", "workspaces.read"]) : null;
         await Policies(f).SaveAsync(s.Tenant, s.Owner, permission, new(OperationApprovalMode.Always, independent), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
-        var path = working ? "/working" : "/home"; if (!list) path += "/private.txt";
-        var tool = list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead; var reads = WorkspaceRuntimeReads(f); var approvals = ApprovalService(f, workspaceReads: reads);
-        var call = new ModelToolCall("saved-workspace-read", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool, arguments = new { path } } }));
+        var path = working ? "/working" : "/home"; if (!list && !search) path += "/private.txt";
+        var tool = search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead; var reads = WorkspaceRuntimeReads(f); var approvals = ApprovalService(f, workspaceReads: reads);
+        var arguments = search ? JsonSerializer.Serialize(new { path, query = "Private", glob = "**/*.txt", maxResults = 10 }) : JsonSerializer.Serialize(new { path });
+        var call = new ModelToolCall("saved-workspace-read", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool, arguments = JsonSerializer.Deserialize<JsonElement>(arguments) } }));
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, f.Clock.GetUtcNow(), frame.Generation,
             new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 10000, 100), null), f.Ids.NewId());
@@ -70,9 +72,12 @@ public sealed partial class TenantOperationAuthorizationTests
         await Assert.ThrowsAsync<AccessDeniedException>(() => v.Approvals.ReadAsync(s.Tenant, v.Request.RequestId, reader).AsTask());
     }
     [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Workspace_read_Review_rejection_cannot_be_bypassed_by_policy_relaxation_or_source_changes_in_the_same_root(bool sqlite)
+    public Task Workspace_read_Review_rejection_cannot_be_bypassed_by_policy_relaxation_or_source_changes_in_the_same_root(bool sqlite) => WorkspaceReadRefusal(sqlite);
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public Task Tenant_workspace_search_refusal_cannot_be_bypassed_by_policy_or_source_changes(bool sqlite) => WorkspaceReadRefusal(sqlite, search: true);
+    private async Task WorkspaceReadRefusal(bool sqlite, bool search = false)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await WorkspaceReviewFixture(f); var s = v.Setup;
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await WorkspaceReviewFixture(f, search: search); var s = v.Setup;
         var view = await v.Approvals.ReadViewAsync(s.Tenant, v.Request.RequestId, s.Owner);
         await v.Approvals.DecideAsync(s.Tenant, v.Request.RequestId, s.Owner, false, v.Request.Operation.ActionHash, view.SecurityRevision, v.Request.Revision);
         Assert.Equal(1, await v.Approvals.DispatchPendingAsync()); var runs = (ITenantRunStore)f.Iam;
@@ -80,7 +85,7 @@ public sealed partial class TenantOperationAuthorizationTests
         next = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(next.Owner, next.AgentRunId, new AgentRunCommand.Claim(next.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
         await Policies(f).SaveAsync(s.Tenant, s.Owner, "workspaces.read", new(OperationApprovalMode.None, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
         await SeedRuntimeWorkspace(f, s, false, bytes: "Changed source does not authorize a refused read"u8.ToArray());
-        var call = new ModelToolCall("same-refused-read", ToolCatalog.WorkspaceRead, """{"path":"/home/private.txt"}""");
+        var call = new ModelToolCall("same-refused-read", v.Request.Operation.WorkspaceRead!.ToolName, v.Request.Operation.WorkspaceRead.ArgumentsJson);
         Assert.Equal("previously_rejected", (await Assert.ThrowsAsync<AccessDeniedException>(() => v.Reads.InspectAsync(new(next.Owner, next.SessionId, next.AgentRunId, next.Claim!.Generation), call, 16000).AsTask())).ReasonCode);
         var again = await v.Approvals.PrepareWorkspaceReadAsync(new(s.Tenant, next.AgentRunId), call, next.Revision, next.Claim!.Generation);
         Assert.Equal("previously_rejected", again.ReasonCode); Assert.Equal(v.Request.RequestId, again.Request!.RequestId);

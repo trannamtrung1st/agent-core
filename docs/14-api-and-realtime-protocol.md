@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant workspace search protocol
+
+Converted `workspace.search` accepts one closed object with required `path` (exact absolute home/working path) and `query` (1–200 characters), optional relative `glob` (1–200 characters, no parent traversal) and `maxResults` (1–50, default 20). It returns `path`, `query`, `truncated`, complete `matches` records (`path`, `kind`, `snippet`), `untrusted` and the Core-owned workspace-read checkpoint witness. A small output budget returns `output_limit` rather than splitting a record. Search retains bounded content/name semantics; a result is not exhaustive coverage or recipient download authority.
+
+When current policy requires Review, the same `inspect_workspace` intent binds `read.tool = "workspace.search"` and these exact `read.arguments`. Protected detail includes requested query/glob/match and scan bounds, never matching names or snippets. Consent and successor result use the existing saved-read receipt/checkpoint shape; no new approval kind or transport is introduced. [Search ownership](04-backend-interfaces.md#tenant-workspace-read-review).
+
 ## Tenant workspace read Review protocol
 
 The existing `approvals.request_authorization` tool offers `inspect_workspace` only for admitted/current readable workspace tool capabilities. A request uses one closed `read` object, for example `{"operation":"inspect_workspace","read":{"tool":"workspace.read","arguments":{"path":"/home/report.txt"}}}`. Listing uses `workspace.list` with its exact path, optional cursor and bounded limit. Core derives identity, workspace scope, policy and the saved source witness; the model cannot submit a permission, owner, fingerprint or grant.

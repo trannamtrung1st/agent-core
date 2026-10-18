@@ -265,10 +265,10 @@ public sealed partial class SessionToolExecutor
                 {
                     var content = await ReadExecutionWorkspaceAsync(sessionId, definition, node.LogicalPath, cancellationToken)
                         .ConfigureAwait(false);
-                    if (TryReadSearchText(content.Bytes, out var text)
+                    if (WorkspaceSearchText.TryReadText(content.Bytes, out var text)
                         && text.Contains(query, StringComparison.OrdinalIgnoreCase))
                     {
-                        snippet = Snippet(text, query);
+                        snippet = WorkspaceSearchText.Snippet(text, query);
                         kind = "content";
                     }
                 }
@@ -309,53 +309,6 @@ public sealed partial class SessionToolExecutor
         var prefix = root.TrimEnd('/') + "/";
         return path.StartsWith(prefix, StringComparison.Ordinal) ? path[prefix.Length..] : Path.GetFileName(path);
     }
-
-    private static bool TryReadSearchText(byte[] bytes, out string text)
-    {
-        text = "";
-        var sample = Math.Min(bytes.Length, 8192);
-        for (var index = 0; index < sample; index++)
-        {
-            if (bytes[index] == 0)
-            {
-                return false;
-            }
-        }
-
-        try
-        {
-            text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
-            return true;
-        }
-        catch (DecoderFallbackException)
-        {
-            return false;
-        }
-    }
-
-    private static string Snippet(string text, string query)
-    {
-        var index = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-        if (index < 0)
-        {
-            return "";
-        }
-
-        var start = Math.Max(0, index - 40);
-        var length = Math.Min(text.Length - start, WorkspaceSearchLimits.MaxSnippetChars);
-        var snippet = text.Substring(start, length).Replace('\r', ' ').Replace('\n', ' ');
-        if (start > 0)
-        {
-            snippet = "…" + snippet;
-        }
-
-        if (start + length < text.Length)
-        {
-            snippet += "…";
-        }
-
-        return snippet;
-    }
 }
 
 internal static class WorkspaceGlob
@@ -372,6 +325,6 @@ internal static class WorkspaceGlob
             .Replace("\\*\\*", ".*", StringComparison.Ordinal)
             .Replace("\\*", "[^/]*", StringComparison.Ordinal)
             .Replace("\\?", "[^/]", StringComparison.Ordinal) + "$";
-        return Regex.IsMatch(relativePath, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return Regex.IsMatch(relativePath, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
     }
 }

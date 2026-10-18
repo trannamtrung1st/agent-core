@@ -24,17 +24,24 @@ public sealed partial class TenantSessionAccessTests
     [Fact]
     public Task Workspace_read_Review_pending_consent_survives_actual_SQLite_application_host_recreation() => WorkspaceReadReviewFlow(true, false, false, "approve", restart: true);
 
-    private async Task WorkspaceReadReviewFlow(bool sqlite, bool working, bool list, string decision, bool restart = false)
+    [Theory] [InlineData(false, false, "approve")] [InlineData(true, false, "approve")]
+    [InlineData(false, true, "approve")] [InlineData(true, true, "approve")]
+    [InlineData(false, false, "reject")] [InlineData(true, false, "reject")]
+    public Task Tenant_workspace_search_Review_model_HTTP_returns_exact_content_and_name_matches(bool sqlite, bool working, string decision) => WorkspaceReadReviewFlow(sqlite, working, false, decision, search: true);
+    [Fact]
+    public Task Tenant_workspace_search_pending_consent_survives_actual_SQLite_host_recreation() => WorkspaceReadReviewFlow(true, true, false, "approve", restart: true, search: true);
+
+    private async Task WorkspaceReadReviewFlow(bool sqlite, bool working, bool list, string decision, bool restart = false, bool search = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-workspace-read-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        var proof = !sqlite && !working && !list && decision == "approve" && System.Environment.GetEnvironmentVariable("AGENTCORE_WORKSPACE_READ_UI_PROOF") == "1";
+        var proof = !sqlite && !working && !list && !search && decision == "approve" && System.Environment.GetEnvironmentVariable("AGENTCORE_WORKSPACE_READ_UI_PROOF") == "1";
         const string proofPath = "/private/tmp/agent-core-workspace-read-review-ui";
         WebApplicationFactory<Program>? recreated = null; HttpClient? recreatedOwner = null;
         try
         {
             var path = (working ? "/working/" : "/home/") + (proof ? "quarterly-workspace-read-review-with-long-name-and-international-試験-thử-nghiệm-2026.txt" : "reviewed-note.txt");
             const string body = "Exact saved workspace body: thử nghiệm. No wider file scope.";
-            var model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead };
+            var model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead };
             void Configure(IServiceCollection services) { if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5179"]; }
             await using WebApplicationFactory<Program> initial = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             WebApplicationFactory<Program> factory = initial; if (proof) factory.UseKestrel(0);
@@ -47,6 +54,11 @@ public sealed partial class TenantSessionAccessTests
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
             var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(body)))).StatusCode);
+            if (search)
+            {
+                var named = path[..path.LastIndexOf('/')] + "/saved-name.txt";
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(named)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Unrelated literal body"u8.ToArray()))).StatusCode);
+            }
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Exact workspace observation", ["agents.read", "sessions.read", "workspaces.read"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
@@ -55,9 +67,14 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var sourceId = (await Json(sent)).GetProperty("runId").GetGuid();
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitBrowserRestartRun(runs, tenant, sourceId, true);
             Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status); Assert.Null(waiting.Claim);
+            if (search)
+            {
+                Assert.Contains(model.Requests.First().Tools!, t => t.Name == ToolCatalog.WorkspaceSearch && t.ParametersJson.Contains("maxResults"));
+                Assert.Contains(model.Requests.First().Tools!, t => t.Name == ToolCatalog.RequestAuthorization && t.Description.Contains("workspace.search"));
+            }
             if (restart)
             {
-                await factory.DisposeAsync(); model = new WorkspaceRecordingModel(path) { Reviewed = true };
+                await factory.DisposeAsync(); model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = search ? ToolCatalog.WorkspaceSearch : ToolCatalog.WorkspaceRead };
                 recreated = new NativeTenantSqliteFactory(root, model); recreatedOwner = recreated.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
                 factory = recreated; owner = recreatedOwner; await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
                 runs = factory.Services.GetRequiredService<ITenantRunStore>();
@@ -67,6 +84,12 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(ApprovalKind.Review, request.Kind); Assert.Equal(TenantOperationKind.WorkspaceRead, request.Operation.Kind);
             var detail = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
             Assert.Equal("inspect_workspace", detail.GetProperty("preparedAction").GetProperty("operation").GetString()); Assert.True(detail.GetProperty("review").GetProperty("canDecide").GetBoolean()); Assert.DoesNotContain(body, detail.GetRawText());
+            if (search)
+            {
+                Assert.DoesNotContain("saved-name.txt", detail.GetRawText());
+                var rows = detail.GetProperty("review").GetProperty("changes").EnumerateArray();
+                Assert.Contains(rows, r => r.GetProperty("field").GetString() == "readPage" && r.GetProperty("after").GetString()!.Contains("glob: **/*.txt; up to 10 matches"));
+            }
             var conversationResponse = await owner.GetAsync(api + $"/sessions/{session}/approvals");
             Assert.Equal(HttpStatusCode.OK, conversationResponse.StatusCode);
             var conversationRequest = Assert.Single((await Json(conversationResponse)).GetProperty("items").EnumerateArray());
@@ -85,7 +108,14 @@ public sealed partial class TenantSessionAccessTests
             if (decision == "approve")
             {
                 var data = result.GetProperty("workspaceObservation"); Assert.True(data.GetProperty("tenantWorkspaceRead").GetBoolean());
-                if (list) Assert.Equal(path, Assert.Single(data.GetProperty("entries").EnumerateArray()).GetProperty("path").GetString());
+                if (search)
+                {
+                    var matches = data.GetProperty("matches").EnumerateArray().ToArray(); Assert.Equal(2, matches.Length);
+                    var match = Assert.Single(matches, m => m.GetProperty("path").GetString() == path);
+                    Assert.Contains(matches, m => m.GetProperty("kind").GetString() == "name" && m.GetProperty("path").GetString()!.EndsWith("/saved-name.txt"));
+                    Assert.Equal("content", match.GetProperty("kind").GetString()); Assert.Contains("Exact saved workspace body", match.GetProperty("snippet").GetString());
+                }
+                else if (list) Assert.Equal(path, Assert.Single(data.GetProperty("entries").EnumerateArray()).GetProperty("path").GetString());
                 else Assert.Equal(body, data.GetProperty("content").GetString());
                 var receipt = await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId);
                 Assert.Equal(TenantWorkspaceReadOperationRules.Reason, receipt!.ReasonCode); Assert.Equal(done.AgentRunId, receipt.RunId);

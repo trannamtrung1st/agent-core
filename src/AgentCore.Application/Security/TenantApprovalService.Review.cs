@@ -144,7 +144,10 @@ public sealed partial class TenantApprovalService
         if (op.WorkspaceRead is { } workspace)
         {
             var args = AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(workspace.ToolName, workspace.ArgumentsJson);
-            return [new("path", null, args.Path, false), new("readPage", null, workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceRead ? "One exact current UTF-8 file" : $"Up to {args.Limit} directory entries" + (args.Cursor is null ? "." : $", after {args.Cursor}."), false),
+            var page = workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceRead ? "One exact current UTF-8 file"
+                : workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceSearch ? $"Search for {args.Query}; glob: {args.Glob ?? "all files"}; up to {args.MaxResults} matches. Scan bounds: 200 files, 4096 entries, depth 8 and 256 KiB per file."
+                : $"Up to {args.Limit} directory entries" + (args.Cursor is null ? "." : $", after {args.Cursor}.");
+            return [new("path", null, args.Path, false), new("readPage", null, page, false),
                 new("readDisclosure", null, "Return only this saved file or directory observation to the Agent. Changed source requires fresh review. No file mutation, recipient download or later discovery is authorized.", false),
                 new("readLimit", null, "One bounded observation in this exact continuation. Later reads require current policy again.", false)];
         }

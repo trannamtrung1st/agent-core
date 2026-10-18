@@ -23,7 +23,7 @@ public sealed class CapabilityProjectionTests
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage)
         };
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order().ToArray();
-        Assert.Equal(new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.ArtifactsVerify, ToolCatalog.ArtifactsCreate, ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions,
+        Assert.Equal(new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch, ToolCatalog.ArtifactsVerify, ToolCatalog.ArtifactsCreate, ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions,
             ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus,
             ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserFind, ToolCatalog.BrowserWait, "browser.console_messages", "browser.network_requests",
             "browser.network_request", "browser.routes", "browser.verify", "browser.generate_locator", "browser.get_config", "browser.tabs", "browser.dialog" }.Order(), offered);

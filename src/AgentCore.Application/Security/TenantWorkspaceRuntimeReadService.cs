@@ -73,7 +73,9 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         var before = await Require(frame, call.Name, args, ct, !approved, approved, live).ConfigureAwait(false);
         object Witness() => new { tool = call.Name, arguments = args };
         string result; string fingerprint;
-        if (call.Name == ToolCatalog.WorkspaceList)
+        if (call.Name == ToolCatalog.WorkspaceSearch)
+            (result, fingerprint) = await Search(frame, args, before, remainingBytes, ct, approved, live).ConfigureAwait(false);
+        else if (call.Name == ToolCatalog.WorkspaceList)
         {
             var page = await files.ListTenantAsync(before.Workspace, args.Path, args.Cursor, args.Limit, ct).ConfigureAwait(false);
             fingerprint = Hash(JsonSerializer.Serialize(new { page.Items, page.NextPath, page.Truncated }));
@@ -149,7 +151,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
                 var witness = root.GetProperty("workspaceRead");
                 if (witness.GetProperty("tool").GetString() != message.Name) throw new AccessDeniedException("workspace_source_changed");
                 args = witness.GetProperty("arguments").Deserialize<TenantWorkspaceReadArguments>() ?? throw new AccessDeniedException("workspace_source_changed");
-                _ = TenantWorkspaceReadContract.Parse(message.Name!, JsonSerializer.Serialize(new { path = args.Path }));
+                args = TenantWorkspaceReadContract.Parse(message.Name!, TenantWorkspaceReadContract.Canonical(message.Name!, args));
             }
             catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException or KeyNotFoundException)
             { throw new AccessDeniedException("workspace_source_changed"); }

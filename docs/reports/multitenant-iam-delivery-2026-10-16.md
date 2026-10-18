@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant workspace search successor — 2026-10-19
+
+Tenant `workspace.search` now uses canonical owned filesystem reads and exact durable Review for filename/UTF-8 content searches. Saved query/glob/result bounds and private traversal fingerprints include negative matches; current compound authority, source checks and refusal suppression remain enforced. [Focused evidence](tenant-workspace-search-verification-2026-10-19.md) records the executed qualification. This supersedes earlier search-pending notes only. Model mutations, virtual resources/Office/source publication, autonomous origins, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant workspace read Review successor — 2026-10-19
 
 Tenant `workspace.read` and `workspace.list` now support exact durable Review through the existing approval, successor Run, consent receipt and checkpoint owners. Saved source fingerprints, independent current executor/reviewer reads, scoped inbox counts, parent policy and root refusal suppression prevent wider access or changed-file substitution. Organization and Chat share exact-path consent and truthful read-result copy. [Focused evidence](tenant-workspace-read-review-verification-2026-10-19.md) records 191 selected local cases, actual SQLite host recreation and browser approval/changed-source cancellation. This supersedes workspace-read-Review-pending notes below only for exact home/working observations. Mutation/search/virtual-resource/Office/publication conversion, autonomous origins, other proposal families and final authority/schema cutover remain open; the full proposal stays active.

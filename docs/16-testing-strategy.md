@@ -2,6 +2,8 @@
 
 ## Tenant workspace read consent
 
+Include converted `workspace.search`: actual UTF-8 content/name results, relative glob, binary/large-file skipping, complete-record byte fitting, bounded traversal, negative-match source changes, same-size restored timestamps, exact query identity, post-I/O revocation and SQLite pending-consent host recreation. Search must use canonical tenant reads without initializing a missing root or widening to another owned scope.
+
 Exercise read/list × home/working through both real stores and the canonical filesystem, plus actual hosted model prepare → human approve/reject → successor consent/result. Required boundaries include same-size/timestamp-restored byte changes, changed directory page, independent parent policies/reviewers, deciding-human revocation, no raw-read exceptional grant, scoped inbox counts before paging, rejected-root suppression after source/policy changes, source-bound retained output, truthful result budgeting and no replay. Temporary SQLite qualification covers upgrade/reopen, mixed/forged shapes, protected rollback and actual application-host recreation with pending consent. Frontend checks reuse the shared saved-read inspector and Chat labels, with actual Synthetic browser decision and changed-source recovery. No live provider, installed migration, CI or full proposal acceptance is implied.
 
 ## Tenant model workspace reads

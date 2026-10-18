@@ -2,6 +2,8 @@
 
 ## Tenant workspace read consent persistence
 
+`TenantWorkspaceSearchReview` extends the same typed read check constraint to the existing search tool. Canonical query/glob/result bounds remain inside the closed saved arguments; only a private traversal digest is retained as source witness. No search index, saved result body, file ledger or read-session table is introduced. Rollback must refuse while search consent remains. Disposable SQLite qualification owns the upgrade/reopen/rollback evidence.
+
 `TenantWorkspaceReadReview` extends the existing approval payload/check constraint with one Review-only `PreparedWorkspaceRead`. It binds actual Session/derived workspace, a supported tool, closed canonical arguments and a lowercase SHA-256 observation witness while excluding every other operation payload. Existing owner foreign keys, root fingerprints, decision signal, local receipt and Run checkpoint remain the durable owners. No file version table, grant, content blob or new execution engine is added. The migration preserves earlier request shapes; rollback refuses while workspace-read requests remain rather than discarding their consent. Migration/shape/reopen checks use disposable SQLite only. No installed application data migration or full clean cutover is accepted by this checkpoint. [Contract](04-backend-interfaces.md#tenant-workspace-read-review).
 
 ## Human tenant workspace mutation persistence

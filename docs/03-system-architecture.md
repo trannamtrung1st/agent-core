@@ -2,6 +2,8 @@
 
 ## Tenant workspace saved-read consent
 
+Converted filename/content search uses the same current-read and saved-consent owners. Its private bounded traversal digest includes negative evidence; requested query/glob/limits define the action without a search index or persisted result body. [Search verification](reports/tenant-workspace-search-verification-2026-10-19.md) distinguishes this path from pending mutation/virtual-resource/Office/publication conversion.
+
 The existing approval/local-effect/Run owners now support one exact saved home/working observation under Review. Private source fingerprints constrain decision and successor delivery; current compound authority and root refusal identity remain separate from mutable filesystem observations. Existing original-human visibility filters protect detail and inbox counts; Organization and Chat share the native inspector. No new mailbox, file ledger, grant engine or provider is introduced. [Exact contract](04-backend-interfaces.md#tenant-workspace-read-review), [bounded verification](reports/tenant-workspace-read-review-verification-2026-10-19.md). The full proposal remains active.
 
 ## Human tenant workspace mutations

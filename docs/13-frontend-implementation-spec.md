@@ -2,6 +2,8 @@
 
 ## Workspace read consent inspector
 
+Search reuses these same saved-read rows: the exact requested path, literal query, relative glob, match count and scan bounds. Matching filenames and content snippets are excluded from protected preview. No new component or layout is required.
+
 Organization and Chat reuse `TenantApprovalDetail` for `inspect_workspace`. Extend the existing saved-read classifier and native description field map; label the escaped plain-text path **Exact path**, preserve the responsive label/stack owner and wrapping footer, and distinguish decision acknowledgement from **Read authorized**. Confirmation names the saved observation and no-mutation/no-download/no-later-read boundary. Changed-source and disabled-HomeAccess states explain current decision unavailability without replay. Source bodies and directory contents stay out of preview. No markup/layout owner, token, CSS, UI kit or visual world is added. [Interaction owner](19-multi-tenant-iam-ux.md#exact-workspace-read-review).
 
 ## Tenant workspace files

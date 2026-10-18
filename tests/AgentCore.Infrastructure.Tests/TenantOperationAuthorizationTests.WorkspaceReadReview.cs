@@ -15,15 +15,20 @@ public sealed partial class TenantOperationAuthorizationTests
     [InlineData(false, true, false)] [InlineData(true, true, false)]
     [InlineData(false, false, true)] [InlineData(true, false, true)]
     [InlineData(false, true, true)] [InlineData(true, true, true)]
-    public async Task Workspace_read_Review_returns_only_one_saved_observation_through_the_existing_successor_and_consent_receipt(bool sqlite, bool working, bool list)
+    public Task Workspace_read_Review_returns_only_one_saved_observation_through_the_existing_successor_and_consent_receipt(bool sqlite, bool working, bool list) => WorkspaceReadReviewJourney(sqlite, working, list);
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public Task Tenant_workspace_search_Review_uses_the_saved_traversal_and_existing_successor_receipt(bool sqlite, bool working) => WorkspaceReadReviewJourney(sqlite, working, false, search: true);
+
+    private async Task WorkspaceReadReviewJourney(bool sqlite, bool working, bool list, bool search = false)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working); var grant = await GrantWorkspaceRuntimeReads(f, s);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, "workspaces.read", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var runtime = (ITenantRuntimeStore)f.Iam; var runs = (ITenantRunStore)f.Iam; var reads = WorkspaceRuntimeReads(f);
-        var path = working ? "/working" : "/home"; if (!list) path += "/private.txt";
-        var tool = list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead; var json = JsonSerializer.Serialize(new { path });
-        var call = new ModelToolCall("inspect-exact-workspace", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool, arguments = new { path } } }));
+        var path = working ? "/working" : "/home"; if (!list && !search) path += "/private.txt";
+        var tool = search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead;
+        var json = search ? JsonSerializer.Serialize(new { path, query = "Private", glob = "**/*.txt", maxResults = 10 }) : JsonSerializer.Serialize(new { path });
+        var call = new ModelToolCall("inspect-exact-workspace", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool, arguments = JsonSerializer.Deserialize<JsonElement>(json) } }));
         var run = (await runs.FindTenantRunAsync(s.Tenant, frame.RunId))!;
         run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, f.Clock.GetUtcNow(), frame.Generation,
             new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 10000, 100), null), f.Ids.NewId());
@@ -45,7 +50,8 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.True(AgentRunToolCallCheckpoint.TryRead(result.Run.Checkpoint, out var messages)); var text = Assert.Single(messages!, m => m.Role == ModelRole.Tool).Text;
         using var doc = JsonDocument.Parse(text); Assert.True(doc.RootElement.GetProperty("readAuthorized").GetBoolean()); Assert.False(doc.RootElement.GetProperty("applied").GetBoolean());
         var data = doc.RootElement.GetProperty("workspaceObservation"); Assert.True(data.GetProperty("tenantWorkspaceRead").GetBoolean());
-        if (list) Assert.Equal(path + "/private.txt", Assert.Single(data.GetProperty("entries").EnumerateArray()).GetProperty("path").GetString());
+        if (search) Assert.Equal(path + "/private.txt", Assert.Single(data.GetProperty("matches").EnumerateArray()).GetProperty("path").GetString());
+        else if (list) Assert.Equal(path + "/private.txt", Assert.Single(data.GetProperty("entries").EnumerateArray()).GetProperty("path").GetString());
         else Assert.Equal("Private model bytes: thử nghiệm", data.GetProperty("content").GetString());
         Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, request.RequestId));
         Assert.Single(await f.Iam.ReadAuditAsync(s.Tenant, 200), a => a.Action == TenantWorkspaceReadOperationRules.AuditAction);
