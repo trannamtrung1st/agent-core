@@ -1,0 +1,45 @@
+# Tenant protected Browser Credential grant verification — 2026-10-18
+
+This successor extends the [reviewed protected-fill path](tenant-browser-credential-verification-2026-10-18.md) with exact ExceptionalGrant consumption for primary `credentials.use`. It preserves the incumbent Browser provider, native protected sink, Run worker, approval/grant/receipt stores and shared Ant Design inspector. The full [proposal delivery](multitenant-iam-delivery-2026-10-16.md) remains active; this is focused local evidence, not phase or proposal acceptance.
+
+## Supported boundary
+
+Core selects Review when the executor has raw Credential use, or ExceptionalGrant when that exact delegatable permission is absent. Independent raw Credential read, Browser read/use and Session read remain mandatory. Binding/capability, exact Credential/secret/frame-origin witnesses, human Chat lineage, requester authority and policy floors remain unchanged. Review never upgrades after use permission is lost. Human exception approval requires current underlying action, scoped approve and scoped grant-exception authority, plus applicable compound review/independence rules.
+
+The existing transaction claims Available → Claimed with the original Browser/Run fence. Completed consumes the grant; known Denied revokes it; unknown or recovered abandoned work seals it Indeterminate. Every transition advances the grant revision together with Run/security/audit and applicable receipt/checkpoint. Preflight denial revokes Available without calling the provider. Native authority callbacks require the same claimed grant, original fence, live claim, unexpired consent and currently qualified grantor before resolving and immediately before SDK fill. No general RoleAssignment or new schema is created.
+
+A matching Consumed grant and immutable Completed receipt prove only the historical operation for saved result delivery. Current independent scopes, source/binding and grantor checks still apply. The proof does not permit another native command, secret resolution or retry. SQLite recovery now selects typed Browser payloads instead of filtering only Browser permissions, so protected fills with primary Credential-use cannot be stranded. Grant deadline identity respects the store's existing UTC millisecond precision.
+
+## Observed workflows
+
+Eight hosted Synthetic cases use real model tool orchestration, authenticated HTTP consent, native headless Chromium and a disposable reflecting password page, through both stores. The model discovers the admitted alias, proposes the exact fill and waits with the field empty. Review and ExceptionalGrant each fill once, resolve once and return bounded redacted facts. Exceptional runs retain no raw Credential-use permission; their exact grant ends Consumed. Model requests, approval JSON, checkpoints and audits contain no password or protected payload. SDK acknowledgement means field filling, not successful sign-in.
+
+Four of those cases change actual IAM after real protected resolution and before native fill: raw Review loses Credential use; ExceptionalGrant loses independent Browser use. The actual final native callback leaves the password field empty, records Denied and, for the exceptional path, revokes the claimed grant. Read authority remains, allowing safe alias metadata and the no-effect result explanation to continue. This controlled resolver wrapper does not replace native targeting, protection, stores or the final authority check. Navigation is separately identified trusted fixture setup.
+
+Both-store integrated boundary fixtures exercise Available/Claimed/Consumed revisions, exact grant identity, immutable receipt retries, scoped reviewer visibility/qualification, missing grant-exception authority and its later revocation before dispatch or at the native gate. Those revoked paths perform no secret resolution or native effect. Unknown attempts remain Indeterminate with one dispatch only. Wrong operation references cannot reuse them. Protected Review cannot become an exception when use is removed, and an exception cannot supply missing Browser use.
+
+Controlled abandoned-fill staging starts the real durable fence without calling the provider, advances injected time past the claim lease, recreates the SQLite store when applicable and recovers both Review and ExceptionalGrant as Indeterminate. Repeated recovery performs no I/O, secret resolution or duplicate settlement. Separate model-continuation cases save the actual protected-fill receipt/checkpoint/grant atomically, reopen the store and deliver the saved result under Consumed proof without replay. Unknown saved results retain their factual outcome. These store-reopen checks are not a fresh application-host recreation claim.
+
+## Verification
+
+Final selections passed **88 Application, 205 Infrastructure and 64 API cases: 357 passing, with no failures or skips**. These include the eight hosted model/HTTP/native cases, exact-proof, expiry, Review-loss, protected-fill continuation and shared Browser/Credential/Sandbox regressions. The representative eight-case hosted and twenty-case boundary runs overlap these selections and are not additive.
+
+`git diff --check` passed. All 17 added/changed local Markdown links and anchors and balanced fences passed validation across twelve documents. Current contracts/status distinguish this exact exceptional path from the remaining proposal scope.
+
+Focused final commands:
+
+```sh
+dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --no-restore --filter 'FullyQualifiedName~ToolRegistryPolicyTests|FullyQualifiedName~TenantApprovalToolContractTests|FullyQualifiedName~BrowserToolTests' --disable-build-servers -p:UseSharedCompilation=false -m:1 --logger 'console;verbosity=normal'
+AGENTCORE_CHROMIUM_ISOLATION_TESTS=1 dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore --filter 'FullyQualifiedName~TenantBrowserApprovalTests|FullyQualifiedName~TenantBrowserOwnershipTests|FullyQualifiedName~BrowserCredentialSinkTests|FullyQualifiedName~Tenant_Sandbox_read_Review_|FullyQualifiedName~Credential_approval_inventory_requires_both_scoped_read_and_use_|FullyQualifiedName~Credential_successor_consumes_only_the_exact_checkpoint|FullyQualifiedName~Approved_runtime_credential_check_rotates_protected_grant_once_with_durable_receipt_and_reopen|FullyQualifiedName~Abandoned_credential_dispatch_recovers_after_lease_or_deleted_session_without_provider_replay|FullyQualifiedName~Concurrent_exact_credential_check_callers_share_only_the_saved_receipt_and_never_provider_authority|FullyQualifiedName~Caller_cancellation_settles_an_uncertain_dispatch_before_returning_and_ignores_late_provider_success|FullyQualifiedName~Shared_tool_boundary_uses_actual_executor' --disable-build-servers -p:UseSharedCompilation=false -m:1 --logger 'console;verbosity=normal'
+AGENTCORE_CHROMIUM_ISOLATION_TESTS=1 dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-restore --filter 'FullyQualifiedName~Tenant_Browser_SQLite_recreation_|FullyQualifiedName~Tenant_Browser_model_|FullyQualifiedName~Tenant_Browser_effect_HTTP_|FullyQualifiedName~Tenant_Browser_Review_HTTP_|FullyQualifiedName~Model_prepares_durable_persona_approval_|FullyQualifiedName~Model_approval_and_exact_checkpoint_survive_SQLite_host_recreation_|FullyQualifiedName~Model_credential_check_waits_for_exact_human_consent_' --disable-build-servers -p:UseSharedCompilation=false -m:1 --logger 'console;verbosity=normal'
+```
+
+Final logs use `/private/tmp/agent-core-browser-grant-final-{application,infrastructure,api}-20261018.log`. Representative logs are `/private/tmp/agent-core-browser-grant-model-20261018.log` and `/private/tmp/agent-core-browser-grant-boundaries-20261018.log`.
+
+No source/test edits occurred while a build/test/EF process was live. An initial test call was blocked by the sandbox's test-runner loopback socket restriction and rerun with approved local execution. Initial repairs addressed a missing test cancellation-token argument and the grant/request timestamp precision mismatch; those failed/interrupted runs are not passing evidence.
+
+## Remaining scope
+
+No installed database/profile reset or migration, Real-host restart, external provider/account spending, deployment, hosted CI or full CI suite occurred. External login semantics and live-model behavior remain unverified. This pass changes no frontend component, token, CSS or UI kit and claims no fresh rendered frontend verification; authenticated HTTP/shared projection behavior is exercised.
+
+Typed Credential metadata-read Review, Browser captures/upload/download/Artifact adapters, privacy/reset/decommission/autonomous admission, other resource/effect families, Governance/platform, voice/rich Chat/live input arbitration, final obsolete-authority/schema consolidation and the historical SQLite preference reliability cause remain open. Prior reports retain their original scope. The full proposal goal is unchanged and active.

@@ -37,7 +37,7 @@ public sealed partial class TenantBrowserApprovalTests
                     command is BrowserFillCredential ? "http://127.0.0.1:5091" : null), "http://127.0.0.1:5091"));
         }
     }
-    private static async Task<Setup> Prepare(Fixture f, bool permissions = true, bool password = false)
+    private static async Task<Setup> Prepare(Fixture f, bool permissions = true, bool password = false, bool credentialUseAllowed = true)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
@@ -52,7 +52,8 @@ public sealed partial class TenantBrowserApprovalTests
             await f.BindingService.BindAsync(human.PrincipalId, owner.TenantId, agent.Instance.InstanceId, credential.Credential.CredentialId, "account", await Revision(), agent.Instance.Revision, 1);
             agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, agent.Instance.InstanceId))!;
             bound = Assert.Single((await ((ITenantCredentialBindingStore)f.Iam).ReadTenantCredentialBindingsAsync(owner.TenantId, agent.Instance.InstanceId))!.Bindings);
-            var credentialRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Use bound Browser password", ["credentials.read", "credentials.use"], await Revision());
+            var credentialRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Use bound Browser password",
+                credentialUseAllowed ? ["credentials.read", "credentials.use"] : ["credentials.read"], await Revision());
             credentialUse = await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, credentialRole.RoleId,
                 TenantCredentialRules.Scope(owner.TenantId, credential.Credential.CredentialId), await Revision());
         }

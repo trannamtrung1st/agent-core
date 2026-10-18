@@ -181,7 +181,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantBrowserOperationRules.RequireReviewerAsync(state, agent.Instance.InstanceId, browser, request.OriginalInitiatorPrincipalId,
-                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct, request.Kind).ConfigureAwait(false);
             }
             TenantSessionRules.RequireExecutor(state, agent); await ValidateTenantActorAsync(db, state, request.ExecutorPrincipalId, ct).ConfigureAwait(false);
             if (request.OriginalInitiatorPrincipalId is { } requester) await ValidateTenantActorAsync(db, state, requester, ct).ConfigureAwait(false);

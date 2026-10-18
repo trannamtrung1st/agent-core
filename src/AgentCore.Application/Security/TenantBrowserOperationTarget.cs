@@ -31,7 +31,9 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         var credential = intent.Command is BrowserFillCredential password
             ? await (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).ResolveAsync(run, password.CredentialRef, ct).ConfigureAwait(false) : null;
         if (credential is not null) command = command with { Credential = TenantBrowserCredentialRules.Parameters(credential, "") };
-        await TenantBrowserOperationRules.RequirePermissionsAsync(state, run.AgentInstanceId, command, run.Owner.ExecutorPrincipalId!.Value, authorizer, ct).ConfigureAwait(false);
+        // Preparation is not use authority. Only the primary typed Credential use may proceed to exact exceptional classification.
+        await TenantBrowserOperationRules.RequirePermissionsAsync(state, run.AgentInstanceId, command, run.Owner.ExecutorPrincipalId!.Value, authorizer, ct,
+            allowCredentialUseException: command.Credential is not null).ConfigureAwait(false);
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
         var mode = TenantBrowserOperationRules.Isolation(run.Admission.Configuration!.Definition, current) switch {
             BrowserIsolation.EphemeralSession => BrowserProfileMode.EphemeralSession,

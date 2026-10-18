@@ -70,7 +70,7 @@ public sealed partial class TenantApprovalService
                 {
                     independent = await TenantBrowserOperationRules.IndependentAsync(r, state, authorizer, ct).ConfigureAwait(false);
                     await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, ct).ConfigureAwait(false);
-                    await TenantBrowserOperationRules.RequireReviewerAsync(state, op.InstanceId, browser, r.OriginalInitiatorPrincipalId, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                    await TenantBrowserOperationRules.RequireReviewerAsync(state, op.InstanceId, browser, r.OriginalInitiatorPrincipalId, human.PrincipalId, authorizer, ct, r.Kind).ConfigureAwait(false);
                 }
                 else if (op.SandboxCommand is not null)
                     await (sandboxTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, ct).ConfigureAwait(false);

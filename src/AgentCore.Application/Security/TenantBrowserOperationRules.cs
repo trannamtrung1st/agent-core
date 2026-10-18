@@ -18,11 +18,14 @@ public static class TenantBrowserOperationRules
         Targets(tenant, instance, value.SessionId, value.ReadOnly).Concat(value.Credential is { } c
             ? new[] { ("credentials.read", TenantCredentialRules.Scope(tenant, c.CredentialId)), ("credentials.use", TenantCredentialRules.Scope(tenant, c.CredentialId)) } : []).ToArray();
     public static async ValueTask RequirePermissionsAsync(TenantSecurityState state, Guid instance, PreparedBrowserCommand value, Guid principal,
-        IamAuthorizer authorizer, CancellationToken ct)
+        IamAuthorizer authorizer, CancellationToken ct, bool allowCredentialUseException = false)
     {
         foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value))
+        {
+            if (allowCredentialUseException && value.Credential is not null && permission == "credentials.use") continue;
             if (!(await authorizer.CheckTenantAsync(state, principal, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("permission_denied");
+        }
     }
     public static async ValueTask<bool> NeedsReviewAsync(TenantSecurityState state, Guid instance, PreparedBrowserCommand value, Guid? requester,
         IamAuthorizer authorizer, CancellationToken ct)
@@ -39,17 +42,25 @@ public static class TenantBrowserOperationRules
         return false;
     }
     public static async ValueTask RequireReviewerAsync(TenantSecurityState state, Guid instance, PreparedBrowserCommand value, Guid? requester,
-        Guid human, IamAuthorizer authorizer, CancellationToken ct)
+        Guid human, IamAuthorizer authorizer, CancellationToken ct, ApprovalKind kind = ApprovalKind.Review)
     {
         if (!state.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approver_unqualified");
         await RequirePermissionsAsync(state, instance, value, human, authorizer, ct).ConfigureAwait(false);
         foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value))
         {
-            if (permission != (value.ReadOnly ? "browser.read" : "browser.use")
+            if (permission != (value.Credential is not null ? "credentials.use" : value.ReadOnly ? "browser.read" : "browser.use")
                 && !await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, permission, scope, authorizer, ct).ConfigureAwait(false)) continue;
             if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(permission)).IndependentReview && requester == human)
                 throw new AccessDeniedException("independent_reviewer_required");
             if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("approvals.approve"), scope, ct).ConfigureAwait(false)).Allowed)
+                throw new AccessDeniedException("approver_unqualified");
+        }
+        if (kind == ApprovalKind.ExceptionalGrant)
+        {
+            if (value.Credential is not { } credential || !PermissionCatalog.Get("credentials.use").Delegatable)
+                throw new AccessDeniedException("nondelegatable");
+            if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("approvals.grant_exception"),
+                TenantCredentialRules.Scope(state.Tenant.TenantId, credential.CredentialId), ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("approver_unqualified");
         }
     }

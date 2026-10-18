@@ -26,6 +26,7 @@ public sealed partial class SqliteIamStore
         }
         if (request.Snapshot != TenantBrowserOperationRules.Snapshot(agent, value)) throw new SecurityConflictException("browser_target_changed");
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
-        await TenantBrowserOperationRules.RequirePermissionsAsync(state, agent.Instance.InstanceId, value, request.ExecutorPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        await TenantBrowserOperationRules.RequirePermissionsAsync(state, agent.Instance.InstanceId, value, request.ExecutorPrincipalId, new IamAuthorizer(this), ct,
+            request.Kind == ApprovalKind.ExceptionalGrant).ConfigureAwait(false);
     }
 }

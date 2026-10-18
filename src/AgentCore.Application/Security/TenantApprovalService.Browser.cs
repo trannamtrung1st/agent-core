@@ -21,13 +21,16 @@ public sealed partial class TenantApprovalService
             var operation = TenantApprovalRules.PrepareBrowser(ids.NewId(), run.AgentInstanceId, value, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
             var review = await TenantBrowserOperationRules.NeedsReviewAsync(state, run.AgentInstanceId, value,
                 run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, authorizer, ct).ConfigureAwait(false);
+            var kind = value.Credential is { } credential && !(await authorizer.CheckTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value,
+                PermissionCatalog.Get("credentials.use"), TenantCredentialRules.Scope(reference.TenantId, credential.CredentialId), ct).ConfigureAwait(false)).Allowed
+                ? ApprovalKind.ExceptionalGrant : ApprovalKind.Review;
             if (review)
             {
                 var qualified = false;
                 foreach (var human in state.Users.Where(u => u.Status == IdentityStatus.Active))
                 {
                     try { await TenantBrowserOperationRules.RequireReviewerAsync(state, run.AgentInstanceId, value, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId,
-                        human.PrincipalId, authorizer, ct).ConfigureAwait(false); qualified = true; break; }
+                        human.PrincipalId, authorizer, ct, kind).ConfigureAwait(false); qualified = true; break; }
                     catch (AccessDeniedException) { }
                 }
                 if (!qualified) return await PreparationOutcome(state, run, operation, OperationDecisionKind.Denied, "no_eligible_approver", null, ct).ConfigureAwait(false);

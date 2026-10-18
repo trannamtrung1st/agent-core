@@ -288,7 +288,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             {
                 await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request, run, ct).ConfigureAwait(false);
                 await TenantBrowserOperationRules.RequireReviewerAsync(state, request.Operation.InstanceId, browser, request.OriginalInitiatorPrincipalId,
-                    human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                    human.PrincipalId, authorizer, ct, request.Kind).ConfigureAwait(false);
             }
             var target = AccessScope.ForResource(tenant, request.ResourceType, request.ResourceId);
             var eligibility = await operations.Check(state, run, request.Permission, target, ct, purpose: ExecutionAuthorizationPurpose.ApprovalDecision).ConfigureAwait(false);

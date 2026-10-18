@@ -123,7 +123,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             {
                 RequireBrowserOperation(request, run, agent);
                 TenantBrowserOperationRules.RequireReviewerAsync(before, agent.Instance.InstanceId, browser, request.OriginalInitiatorPrincipalId,
-                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct, request.Kind).GetAwaiter().GetResult();
             }
             if (request.Status != TenantApprovalStatus.Cancelled) TenantSessionRules.RequireExecutor(before, agent);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();

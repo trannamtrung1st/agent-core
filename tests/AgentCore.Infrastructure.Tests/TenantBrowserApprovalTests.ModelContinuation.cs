@@ -24,13 +24,16 @@ public sealed partial class TenantBrowserApprovalTests
         return new((ITenantRunStore)store, (ITenantApprovalStore)store, local, f.Clock, (ITenantRuntimeStore)store, f.Ids,
             browserEffects: Effects(f, browser, store));
     }
-    private static async Task<(Setup Setup, TenantApprovalRequest Request)> BrowserModelApproval(Fixture f, Setup s, IBrowser browser)
+    private static async Task<(Setup Setup, TenantApprovalRequest Request)> BrowserModelApproval(Fixture f, Setup s, IBrowser browser, bool password = false)
     {
-        var runtime = (ITenantRuntimeStore)f.Iam; var call = BrowserModelCall();
+        var runtime = (ITenantRuntimeStore)f.Iam; var call = password
+            ? new ModelToolCall("exact-password", ToolCatalog.RequestAuthorization, """{"operation":"run_browser_command","command":{"tool":"browser.fill_credential","arguments":{"credentialRef":"account","target":{"by":"label","value":"Password"}}}}""")
+            : BrowserModelCall();
         var run = await runtime.ApplyTenantRuntimeCommandAsync(s.Run.Owner, s.Run.AgentRunId,
             new AgentRunCommand.Checkpoint(s.Run.Revision, f.Clock.GetUtcNow(), s.Run.Claim!.Generation,
                 new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 10000, 100), null), f.Ids.NewId());
-        s = s with { Run = run }; var approvals = Service(f, browser); var request = (await Request(approvals, s)).Request!;
+        s = s with { Run = run }; var approvals = Service(f, browser);
+        var request = (await Request(approvals, s, password ? ToolCatalog.BrowserFillCredential : ToolCatalog.BrowserNavigate, password ? PasswordArguments : Navigate)).Request!;
         var view = await approvals.ReadViewAsync(s.Tenant, request.RequestId, s.Human);
         request = await approvals.DecideAsync(s.Tenant, request.RequestId, s.Human, true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
         await approvals.DispatchPendingAsync(); var source = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, run.AgentRunId))!;
@@ -40,11 +43,12 @@ public sealed partial class TenantBrowserApprovalTests
         return (s with { Run = next }, request);
     }
 
-    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
-    public async Task Tenant_Browser_model_checkpoint_and_receipt_commit_together_and_reopen_never_reexecutes(bool sqlite, bool uncertain)
+    [Theory] [InlineData(false, false, false)] [InlineData(true, false, false)] [InlineData(false, true, false)] [InlineData(true, true, false)]
+    [InlineData(false, false, true)] [InlineData(true, false, true)] [InlineData(false, true, true)] [InlineData(true, true, true)]
+    public async Task Tenant_Browser_model_checkpoint_and_receipt_commit_together_and_reopen_never_reexecutes(bool sqlite, bool uncertain, bool password)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Prepare(f); var probe = new EffectProbe(Probe(s)) { Uncertain = uncertain };
-        (s, var request) = await BrowserModelApproval(f, s, probe); var service = BrowserContinuations(f, probe);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Prepare(f, password: password, credentialUseAllowed: !password); var probe = new EffectProbe(Probe(s)) { Uncertain = uncertain };
+        (s, var request) = await BrowserModelApproval(f, s, probe, password); var service = BrowserContinuations(f, probe);
         await service.PrepareExternalEffectAsync(s.Run);
         // Before mailbox Resume, both the immutable fact and the exact completed transcript are already saved.
         var receipt = (await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId))!;
@@ -60,7 +64,11 @@ public sealed partial class TenantBrowserApprovalTests
         var resumed = await service.ResumeAsync(saved); Assert.Equal(receipt.Outcome, resumed.Outcome!.Outcome); Assert.True(saved.Checkpoint!.AwaitingRuntimeAdmission); Assert.Null(saved.Checkpoint.BudgetRecordedAtUtc);
         Assert.Equal(saved.Revision + 1, resumed.Run.Revision); Assert.False(resumed.Run.Checkpoint!.AwaitingRuntimeAdmission);
         Assert.Equal(saved.Checkpoint!.PayloadJson, resumed.Run.Checkpoint!.PayloadJson); Assert.Equal(1, probe.Invocations); Assert.Equal(1, probe.NativeEffects);
-        Assert.Null(await ((ITenantApprovalStore)reopened).FindOperationGrantAsync(s.Tenant, request.RequestId));
+        var grant = await ((ITenantApprovalStore)reopened).FindOperationGrantAsync(s.Tenant, request.RequestId);
+        if (password) { Assert.NotNull(grant); Assert.Equal(uncertain ? OperationGrantStatus.Indeterminate : OperationGrantStatus.Consumed, grant.Status); }
+        else Assert.Null(grant);
+        // A spent exact grant permits delivery of its completed historical result, never another dispatch.
+        await Effects(f, probe, reopened).RequireStoredObservationAsync(resumed.Run);
     }
 
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]

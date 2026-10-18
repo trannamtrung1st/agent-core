@@ -40,8 +40,9 @@ public sealed partial class TenantSessionAccessTests
             return native.ExecuteAsync(request, ct);
         }
     }
-    [TenantBrowserChromiumTheory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
-    public async Task Tenant_Browser_model_protected_fill_requires_exact_Credential_consent_and_returns_only_redacted_facts(bool sqlite, bool revokeAfterResolution)
+    [TenantBrowserChromiumTheory] [InlineData(false, false, false)] [InlineData(true, false, false)] [InlineData(false, true, false)] [InlineData(true, true, false)]
+    [InlineData(false, false, true)] [InlineData(true, false, true)] [InlineData(false, true, true)] [InlineData(true, true, true)]
+    public async Task Tenant_Browser_model_protected_fill_requires_exact_Credential_consent_and_returns_only_redacted_facts(bool sqlite, bool revokeAfterResolution, bool exceptional)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-browser-password-model-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         const string password = "model-owned-private-password-7625";
@@ -74,14 +75,16 @@ public sealed partial class TenantSessionAccessTests
             var session = await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2 }));
             var sessionId = session.GetProperty("sessionId").GetGuid(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Reviewed Browser", ["browser.read", "browser.use"], await Revision(owner, tenant));
+            var browserRole = role;
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForResource(tenant, "agent", instance.ToString("D")), await Revision(owner, tenant));
             role = await access.SaveRoleAsync(human, tenant, null, "Read conversation", ["sessions.read"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, TenantSessionRules.Scope(tenant, sessionId), await Revision(owner, tenant));
-            role = await access.SaveRoleAsync(human, tenant, null, "Use exact login", ["credentials.read", "credentials.use"], await Revision(owner, tenant));
+            role = await access.SaveRoleAsync(human, tenant, null, "Use exact login", exceptional ? ["credentials.read"] : ["credentials.read", "credentials.use"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, TenantCredentialRules.Scope(tenant, credential.Credential.CredentialId), await Revision(owner, tenant));
             if (revokeAfterResolution) race.AfterResolution = async () => {
                 var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
-                await access.SaveRoleAsync(human, tenant, role.RoleId, role.Name, ["credentials.read"], state.Tenant.Revision);
+                var changed = exceptional ? browserRole : role;
+                await access.SaveRoleAsync(human, tenant, changed.RoleId, changed.Name, exceptional ? ["browser.read"] : ["credentials.read"], state.Tenant.Revision);
             };
             var scope = new TenantBrowserOwner(tenant, instance, executor, sessionId); Assert.Null(await native.BindTenantIsolationAsync(scope, BrowserProfileMode.EphemeralSession));
             var navigation = new BrowserNavigate(native.Fixture.Origin + "/credential-login?reflect=1"); var target = await native.PrepareTenantCommandAsync(scope, navigation);
@@ -96,7 +99,7 @@ public sealed partial class TenantSessionAccessTests
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitBrowserRestartRun(runs, tenant, source, true);
             Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}");
             var request = (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, waiting.ApprovalRequestId!.Value))!;
-            Assert.Equal("credentials.use", request.Permission); Assert.Equal("credential", request.ResourceType); Assert.Equal(ApprovalKind.Review, request.Kind);
+            Assert.Equal("credentials.use", request.Permission); Assert.Equal("credential", request.ResourceType); Assert.Equal(exceptional ? ApprovalKind.ExceptionalGrant : ApprovalKind.Review, request.Kind);
             Assert.Equal(credential.Credential.CredentialId, request.Operation.BrowserCommand!.Credential!.CredentialId);
             Assert.Equal("", await page.GetByLabel("Password", new() { Exact = true }).InputValueAsync());
             var view = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}")); Assert.True(view.GetProperty("review").GetProperty("canDecide").GetBoolean());
@@ -118,10 +121,16 @@ public sealed partial class TenantSessionAccessTests
             var receipt = (await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId))!;
             Assert.Equal(revokeAfterResolution ? TenantOperationOutcome.Denied : TenantOperationOutcome.Completed, receipt.Outcome);
             if (revokeAfterResolution) Assert.Equal("permission_denied", receipt.ReasonCode);
-            Assert.Null(await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId));
+            var grant = await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId);
+            if (exceptional) { Assert.NotNull(grant); Assert.Equal(revokeAfterResolution ? OperationGrantStatus.Revoked : OperationGrantStatus.Consumed, grant.Status); Assert.Equal(3, grant.Revision); }
+            else Assert.Null(grant);
+            var current = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
+            Assert.Equal(!exceptional && !revokeAfterResolution, (await factory.Services.GetRequiredService<IamAuthorizer>().CheckTenantAsync(current, executor,
+                PermissionCatalog.Get("credentials.use"), TenantCredentialRules.Scope(tenant, credential.Credential.CredentialId), CancellationToken.None)).Allowed);
             var audits = await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200);
             Assert.DoesNotContain(password, JsonSerializer.Serialize(audits)); Assert.Single(audits, a => a.Action == "operations.browser.command.dispatch");
             Assert.Single(audits, a => a.Action == "operations.browser.command");
+            Assert.All(audits.Where(a => a.Action is "operations.browser.command" or "operations.browser.command.dispatch"), a => Assert.Equal(grant?.GrantId, a.Execution!.GrantId));
         }
         finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

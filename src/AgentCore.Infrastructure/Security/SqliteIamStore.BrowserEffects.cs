@@ -27,7 +27,7 @@ public sealed partial class SqliteIamStore
         var request = requestRow.Domain(); var run = AgentRunStoreMapping.ToDomain(row);
         var sourceRow = request.RunId == run.AgentRunId ? null : await OwnedRuns(db, tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
         var source = sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow);
-        var grant = await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
+        var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
         TenantBrowserEffectRules.Start(request, decision, grant, run, commit, source);
         if (run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate) return null;
         TenantBrowserEffectRules.Transaction(next, expectedSecurityRevision, request, audit, commit.Outcome == TenantOperationOutcome.Completed);
@@ -35,7 +35,8 @@ public sealed partial class SqliteIamStore
         if (run.Claim!.LeaseExpiresAtUtc <= at) throw new SecurityConflictException("execution_claim_expired");
         var owned = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
         var agent = owned is null ? null : Owned(owned);
-        var reason = commit.Outcome == TenantOperationOutcome.Denied ? commit.ReasonCode : request.ExpiresAt <= at ? "approval_expired" : null;
+        var reason = commit.Outcome == TenantOperationOutcome.Denied ? commit.ReasonCode : request.ExpiresAt <= at ? "approval_expired"
+            : grant?.ExpiresAt <= at ? "grant_expired" : null;
         if (reason is null)
         {
             try
@@ -43,7 +44,8 @@ public sealed partial class SqliteIamStore
                 if (agent is null) throw new AccessDeniedException("executor_unavailable");
                 TenantApprovalRules.Validate(request, run, agent, source: source);
                 await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
-                await TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct).ConfigureAwait(false);
+                await TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct,
+                    grant, OperationGrantStatus.Available, at).ConfigureAwait(false);
                 if ((await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false))?.RequestId != request.RequestId)
                     reason = "root_operation_conflict";
             }
@@ -54,10 +56,11 @@ public sealed partial class SqliteIamStore
             : run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, false, at);
         var receipt = reason is null ? null : TenantBrowserEffectRules.Receipt(request, run, TenantOperationOutcome.Denied, reason, at);
         audit = TenantOperationAuditRules.WithEffectResult(audit with { Action = reason is null ? TenantBrowserEffectRules.DispatchAction : TenantBrowserEffectRules.Action,
-            At = at, Decision = reason is null ? "allowed" : "denied", ReasonCode = reason ?? "browser_command_dispatched" }, before, run, request, null);
+            At = at, Decision = reason is null ? "allowed" : "denied", ReasonCode = reason ?? "browser_command_dispatched" }, before, run, request, grant?.GrantId);
         if (reason is null) audit = audit with { Execution = audit.Execution! with { Purpose = ExecutionAuthorizationPurpose.EffectEligibility } };
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         AgentRunStoreMapping.Apply(row, saved); if (receipt is not null) db.Add(TenantOperationReceiptRecord.From(receipt));
+        if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = reason is null ? OperationGrantStatus.Claimed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
         db.Entry(tenant).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return new(reason is null ? TenantBrowserEffectRules.Fence(request, saved) : null, receipt); }
         catch (DbUpdateConcurrencyException) { return null; }
@@ -69,7 +72,7 @@ public sealed partial class SqliteIamStore
         var candidates = await db.AgentRuns.FromSqlInterpolated($"""
             SELECT r.* FROM AgentRuns r JOIN TenantApprovalRequests a
                 ON lower(a.RequestId) = json_extract(r.PayloadJson, '$.approvalRequestId') AND a.TenantId = r.TenantId
-            WHERE a.Permission IN ('browser.read','browser.use')
+            WHERE json_type(a.PayloadJson, '$.Operation.BrowserCommand') IS 'object'
                 AND json_type(r.PayloadJson, '$.sideEffect.externalEffect') IS 'object'
                 AND json_extract(r.PayloadJson, '$.sideEffect.disposition') IN (2,5)
                 AND json_extract(r.PayloadJson, '$.sideEffect.toolCallId') = 'operation:' || lower(a.OperationId)
@@ -106,7 +109,8 @@ public sealed partial class SqliteIamStore
         if (requestRow is null || row is null) return null;
         var request = requestRow.Domain(); var run = AgentRunStoreMapping.ToDomain(row);
         var sourceRow = request.RunId == run.AgentRunId ? null : await RetainedTenantOperationRuns(db, tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
-        TenantBrowserEffectRules.RequireFence(fence, request, run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow));
+        var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
+        TenantBrowserEffectRules.RequireFence(fence, request, run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow), grant);
         TenantBrowserEffectRules.Transaction(next, expectedSecurityRevision, request, audit, false);
         var at = ApprovalNow;
         if (at < fence.Origin.StartedAtUtc || recovery && !TenantBrowserEffectRules.Recoverable(run, at)) return null;
@@ -120,15 +124,18 @@ public sealed partial class SqliteIamStore
                 var agent = owned is null ? throw new AccessDeniedException("executor_unavailable") : Owned(owned);
                 TenantApprovalRules.Validate(request, run, agent, source: sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow));
                 await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
-                await TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct).ConfigureAwait(false);
+                await TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct,
+                    grant, OperationGrantStatus.Claimed, at).ConfigureAwait(false);
             }
             catch (Exception e) when (e is AccessDeniedException or SecurityConflictException) { observation = null; }
         }
         saved = TenantBrowserContinuationProjection.Save(run, saved, request, outcome, reason, at, observation);
         var receipt = TenantBrowserEffectRules.Receipt(request, run, outcome, reason, at);
-        audit = TenantOperationAuditRules.WithEffectResult(audit with { At = at, Decision = outcome switch { TenantOperationOutcome.Completed => "allowed", TenantOperationOutcome.Denied => "denied", _ => "indeterminate" }, ReasonCode = reason }, before, run, request, null);
+        audit = TenantOperationAuditRules.WithEffectResult(audit with { At = at, Decision = outcome switch { TenantOperationOutcome.Completed => "allowed", TenantOperationOutcome.Denied => "denied", _ => "indeterminate" }, ReasonCode = reason }, before, run, request, grant?.GrantId);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         if (saved.Revision != run.Revision) AgentRunStoreMapping.Apply(row, saved);
+        if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = outcome switch {
+            TenantOperationOutcome.Completed => OperationGrantStatus.Consumed, TenantOperationOutcome.Denied => OperationGrantStatus.Revoked, _ => OperationGrantStatus.Indeterminate }, Revision = checked(grant.Revision + 1) });
         db.Add(TenantOperationReceiptRecord.From(receipt)); db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return receipt; }

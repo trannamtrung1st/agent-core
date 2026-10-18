@@ -1,6 +1,7 @@
 using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Security;
@@ -47,9 +48,10 @@ public sealed partial class TenantBrowserApprovalTests
             new((ITenantSessionStore)current, f.RunConfiguration(), current, new(current), browser,
                 new((ITenantCredentialBindingStore)current, f.RunConfiguration(), f.Protector, (ITenantRunStore)current)), new(current), browser, Operations(f, current), f.Ids, f.Clock);
     }
-    private static async Task<(Setup Setup, TenantApprovalRequest Request)> ApprovedEffect(Fixture f, Setup s, IBrowser browser, Action? beforeDecision = null)
+    private static async Task<(Setup Setup, TenantApprovalRequest Request)> ApprovedEffect(Fixture f, Setup s, IBrowser browser, Action? beforeDecision = null,
+        string tool = ToolCatalog.BrowserNavigate, string args = Navigate)
     {
-        var service = Service(f, browser); var request = (await Request(service, s)).Request!;
+        var service = Service(f, browser); var request = (await Request(service, s, tool, args)).Request!;
         beforeDecision?.Invoke();
         var view = await service.ReadViewAsync(s.Tenant, request.RequestId, s.Human);
         request = await service.DecideAsync(s.Tenant, request.RequestId, s.Human, true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
@@ -172,17 +174,19 @@ public sealed partial class TenantBrowserApprovalTests
         Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome); proceed.TrySetResult(); await returned.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(receipt, (await ExecuteEffect(service, s, request)).Receipt); Assert.Equal(1, probe.NativeEffects);
     }
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Browser_effect_expired_consent_after_durable_start_never_calls_native_port(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Browser_effect_expired_consent_after_durable_start_never_calls_native_port(bool sqlite, bool password)
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true);
-        var s = await Prepare(f); var probe = new EffectProbe(Probe(s));
-        (s, var request) = await ApprovedEffect(f, s, probe, () => clock.Advance(TimeSpan.FromMinutes(59) + TimeSpan.FromSeconds(59)));
+        var s = await Prepare(f, password: password, credentialUseAllowed: !password); var probe = new EffectProbe(Probe(s));
+        (s, var request) = await ApprovedEffect(f, s, probe, () => clock.Advance(TimeSpan.FromMinutes(59) + TimeSpan.FromSeconds(59)),
+            password ? ToolCatalog.BrowserFillCredential : ToolCatalog.BrowserNavigate, password ? PasswordArguments : Navigate);
         var store = new DelayedBrowserFence((ITenantApprovedOperationStore)f.Iam, () => clock.Advance(TimeSpan.FromSeconds(2)));
         var service = Effects(f, probe, effects: store); var result = await ExecuteEffect(service, s, request);
         Assert.Equal(TenantOperationOutcome.Denied, result.Receipt.Outcome); Assert.Equal("browser_command_not_dispatched", result.Receipt.ReasonCode);
         Assert.Null(result.Result); Assert.Equal(0, probe.Invocations); Assert.Equal(0, probe.NativeEffects); Assert.Equal(1, store.Starts);
         Assert.Equal(result.Receipt, (await ExecuteEffect(service, s, request)).Receipt); Assert.Equal(0, probe.Invocations); Assert.Equal(1, store.Starts);
+        if (password) Assert.Equal(OperationGrantStatus.Revoked, (await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, request.RequestId))!.Status);
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]

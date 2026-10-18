@@ -15,44 +15,91 @@ public static class TenantBrowserEffectRules
         "policy_transition_pending", "provider_unavailable", "root_operation_conflict", "operation_witness_changed", "resource_unavailable",
         "browser_command_not_dispatched", "independent_reviewer_required", "approver_unqualified", "browser_source_changed", "execution_claim_expired",
         "credential_unavailable", "credential_binding_changed", "credential_origin_changed", "credential_origin_unavailable", "credential_direct_chat_required",
-        "credential_target_invalid", "user_intervention_required", "forbidden", "target_denied", "target_missing", "ambiguous_target", "stale_frame" };
+        "credential_target_invalid", "user_intervention_required", "forbidden", "target_denied", "target_missing", "ambiguous_target", "stale_frame",
+        "grant_expired", "grant_unavailable", "operation_authority_changed" };
     public static string Denial(string reason) => Denials.Contains(reason) ? reason : "browser_source_changed";
     public static DateTimeOffset Milliseconds(DateTimeOffset at) => DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds());
     public static void Start(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant, AgentRun run,
         TenantOperationCommit commit, AgentRun? source)
     {
         TenantLocalEffectRules.ValidateApproval(request, decision, grant, run, commit, source);
-        if (request.Operation.BrowserCommand is null || request.Kind != ApprovalKind.Review || grant is not null
+        RequireGrant(request, grant, OperationGrantStatus.Available);
+        if (request.Operation.BrowserCommand is null || request.Kind == ApprovalKind.ExceptionalGrant && request.Operation.BrowserCommand.Credential is null
             || commit.Outcome is not (TenantOperationOutcome.Completed or TenantOperationOutcome.Denied)
             || (commit.Outcome == TenantOperationOutcome.Completed ? commit.ReasonCode != "operation_completed" : !Denials.Contains(commit.ReasonCode)))
             throw new SecurityConflictException("operation_mismatch");
     }
     public static TenantBrowserEffectFence Fence(TenantApprovalRequest request, AgentRun run) => new(request.TenantId, request.RequestId,
         request.Operation.OperationId, run.AgentRunId, request.Operation.ActionHash, run.SideEffect.ExternalEffect ?? throw new SecurityConflictException("browser_effect_fence_required"));
-    public static void RequireFence(TenantBrowserEffectFence fence, TenantApprovalRequest request, AgentRun run, AgentRun? source)
+    public static void RequireFence(TenantBrowserEffectFence fence, TenantApprovalRequest request, AgentRun run, AgentRun? source, TenantOperationGrant? grant = null)
     {
         TenantRunContinuationRules.Require(run, request, source);
-        if (request.Operation.BrowserCommand is null || request.Kind != ApprovalKind.Review || request.Status != TenantApprovalStatus.Approved
+        if (request.Operation.BrowserCommand is null || request.Status != TenantApprovalStatus.Approved
             || fence != Fence(request, run) || run.SideEffect.ToolCallId != "operation:" + fence.OperationId.ToString("D")
             || run.SideEffect.ActionHash != fence.ActionHash || run.Revision < fence.Origin.StartedRunRevision
             || run.SideEffect.Disposition is not (AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate))
             throw new SecurityConflictException("operation_mismatch");
+        RequireGrant(request, grant, OperationGrantStatus.Claimed);
     }
     public static bool Recoverable(AgentRun run, DateTimeOffset at) => run.SideEffect.Disposition == AgentRunSideEffectDisposition.Indeterminate
         || run.Status != AgentRunStatus.Running || run.Claim is null || run.Claim.Generation != run.SideEffect.ExternalEffect?.Generation || run.Claim.LeaseExpiresAtUtc <= at;
     public static async ValueTask RequireAuthorityAsync(TenantSecurityState state, TenantApprovalRequest request, TenantApprovalDecision decision,
-        AgentRun run, TenantAgent agent, IamAuthorizer authorizer, CancellationToken ct)
+        AgentRun run, TenantAgent agent, IamAuthorizer authorizer, CancellationToken ct, TenantOperationGrant? grant = null,
+        OperationGrantStatus expectedGrantStatus = OperationGrantStatus.Available, DateTimeOffset? at = null, TenantOperationReceipt? receipt = null)
     {
         if (state.Tenant.Status != IdentityStatus.Active) throw new AccessDeniedException("tenant_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
-        await TenantBrowserOperationRules.RequirePermissionsAsync(state, agent.Instance.InstanceId, request.Operation.BrowserCommand!, request.ExecutorPrincipalId, authorizer, ct).ConfigureAwait(false);
-        await TenantBrowserOperationRules.RequireReviewerAsync(state, agent.Instance.InstanceId, request.Operation.BrowserCommand!, request.OriginalInitiatorPrincipalId,
-            decision.HumanPrincipalId, authorizer, ct).ConfigureAwait(false);
+        if (request.Status != TenantApprovalStatus.Approved || decision.Status != TenantApprovalStatus.Approved || decision.RequestId != request.RequestId
+            || decision.TenantId != request.TenantId || decision.ActionHash != request.Operation.ActionHash || decision.RequestRevision != request.Revision)
+            throw new SecurityConflictException("operation_mismatch");
+        RequireGrant(request, grant, expectedGrantStatus);
+        if (request.Kind == ApprovalKind.ExceptionalGrant)
+        {
+            if (expectedGrantStatus == OperationGrantStatus.Consumed)
+            {
+                if (receipt is null || receipt.Outcome != TenantOperationOutcome.Completed || receipt.TenantId != request.TenantId || receipt.RequestId != request.RequestId
+                    || receipt.OperationId != request.Operation.OperationId || receipt.ActionHash != request.Operation.ActionHash || receipt.ExecutorPrincipalId != request.ExecutorPrincipalId
+                    || receipt.InstanceId != request.Operation.InstanceId || receipt.SessionId != request.SessionId || receipt.RootActivationId != request.RootActivationId)
+                    throw new SecurityConflictException("grant_unavailable");
+            }
+            else
+            {
+                if (at is null || grant!.ExpiresAt <= at || request.ExpiresAt <= at) throw new AccessDeniedException("grant_expired");
+                if (expectedGrantStatus == OperationGrantStatus.Claimed && (run.SideEffect.ExternalEffect is null
+                    || run.SideEffect.ToolCallId != "operation:" + request.Operation.OperationId.ToString("D") || run.SideEffect.ActionHash != request.Operation.ActionHash))
+                    throw new SecurityConflictException("grant_unavailable");
+            }
+        }
+        await TenantBrowserOperationRules.RequirePermissionsAsync(state, agent.Instance.InstanceId, request.Operation.BrowserCommand!, request.ExecutorPrincipalId, authorizer, ct,
+            request.Kind == ApprovalKind.ExceptionalGrant).ConfigureAwait(false);
+        try
+        {
+            await TenantBrowserOperationRules.RequireReviewerAsync(state, agent.Instance.InstanceId, request.Operation.BrowserCommand!, request.OriginalInitiatorPrincipalId,
+                decision.HumanPrincipalId, authorizer, ct, request.Kind).ConfigureAwait(false);
+        }
+        catch (AccessDeniedException) when (request.Kind == ApprovalKind.ExceptionalGrant) { throw new AccessDeniedException("grantor_authority_lost"); }
         if (request.OriginalInitiatorPrincipalId is { } human)
             foreach (var (permission, scope) in new[] { ("sessions.read", TenantSessionRules.Scope(request.TenantId, run.SessionId)),
                 ("agents.chat", AccessScope.ForResource(request.TenantId, "agent", run.AgentInstanceId.ToString("D"))) })
                 if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
                     throw new AccessDeniedException("requester_unavailable");
+    }
+    public static void RequireGrant(TenantApprovalRequest request, TenantOperationGrant? grant, OperationGrantStatus status)
+    {
+        if (!Enum.IsDefined(request.Kind)) throw new SecurityConflictException("grant_mismatch");
+        if (request.Kind != ApprovalKind.ExceptionalGrant)
+        {
+            if (grant is not null) throw new SecurityConflictException("grant_mismatch");
+            return;
+        }
+        if (status is not (OperationGrantStatus.Available or OperationGrantStatus.Claimed or OperationGrantStatus.Consumed)
+            || request.Operation.BrowserCommand?.Credential is null || request.Permission != "credentials.use" || grant is null
+            || grant.Status != status || grant.TenantId != request.TenantId || grant.RequestId != request.RequestId || grant.ExecutorPrincipalId != request.ExecutorPrincipalId
+            || grant.GrantId == Guid.Empty || grant.Revision < 1 || grant.OperationId != request.Operation.OperationId || grant.ActionHash != request.Operation.ActionHash
+            // Grant deadlines are persisted at SQLite's UTC millisecond precision.
+            || Milliseconds(grant.ExpiresAt) != Milliseconds(request.ExpiresAt)
+            || grant.EffectIdempotencyKey != "operation:" + request.Operation.OperationId.ToString("D"))
+            throw new SecurityConflictException("grant_unavailable");
     }
     public static void Transaction(TenantSecurityState next, long revision, TenantApprovalRequest request, AuthorizationAudit audit, bool dispatch)
     {
