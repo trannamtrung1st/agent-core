@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant Artifact deletion cleanup successor — 2026-10-19
+
+Canonical Session deletion now drives exact tenant-owned Artifact byte cleanup through the existing supervised worker, with restart recovery, no-follow filesystem removal, per-target retries and atomic child-grant retirement. Immutable metadata, receipts and tombstones remain. [Focused evidence](tenant-artifact-cleanup-verification-2026-10-19.md) covers actual memory/SQLite boundaries, same-Account tenants and model publication → HTTP deletion → cleanup, including an actual SQLite host restart. This supersedes deleted-Session Artifact-cleanup-pending notes only. Other cleanup/resource/transport/autonomous families, source publication adapters and final authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant Artifact metadata verification successor — 2026-10-19
 
 Tenant `artifacts.verify` now supports exact actual-source metadata reads under current Allowed policy and durable metadata-only Review through the existing approval, successor Run and consent receipt owners. Independent Session/Artifact reads, current source/claim/configuration fences, scoped inbox counts and retained-checkpoint revalidation remain required. [Focused evidence](tenant-artifact-metadata-verification-2026-10-19.md) records both-store model/store flows, actual SQLite host recreation and shared inspector browser verification. This supersedes metadata-verification/read-consent-pending notes only for this exact tool; no new generic Artifact read/list tool is required. Source publication adapters, cleanup, other proposal families and final authority/schema cutover remain open; the full proposal stays active.

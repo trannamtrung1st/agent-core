@@ -20,6 +20,23 @@ public sealed partial class InMemoryMemoryStore
     private System.Collections.Immutable.ImmutableDictionary<Guid, TenantSessionRoot> tenantSessionOwnership = System.Collections.Immutable.ImmutableDictionary<Guid, TenantSessionRoot>.Empty;
     // Retained immutable ownership only, used by legacy exclusion without reversing backing-store locks.
     internal TenantSessionRoot? RetainedTenantSessionOwnerSnapshot(Guid session) => Volatile.Read(ref tenantSessionOwnership).GetValueOrDefault(session);
+    internal TenantArtifactCleanupPage DeletedArtifactOwners(Guid? after, int limit)
+    {
+        lock (_gate)
+        {
+            var rows = tenantSessions.Values.Where(o => _sessions[o.SessionId].DurablyDeletedAt is not null
+                && (after is null || string.CompareOrdinal(o.SessionId.ToString("D"), after.Value.ToString("D")) > 0))
+                .OrderBy(o => o.SessionId.ToString("D"), StringComparer.Ordinal).Take(limit + 1).ToArray();
+            var items = rows.Take(limit).Select(o => new TenantArtifactCleanupTarget(o, _sessions[o.SessionId].DurablyDeletedAt!.Value)).ToArray();
+            return new(items, rows.Length > limit ? items[^1].Owner.SessionId : null);
+        }
+    }
+    internal bool CanCleanupDeletedArtifacts(TenantArtifactCleanupTarget target)
+    {
+        lock (_gate) return tenantSessions.GetValueOrDefault(target.Owner.SessionId) == target.Owner
+            && _sessions.TryGetValue(target.Owner.SessionId, out var session) && session.DurablyDeletedAt == target.DeletedAt
+            && !AgentRuns.Runs.Values.Any(r => r.SessionId == target.Owner.SessionId && !r.IsTerminal);
+    }
     private IEnumerable<AgentCore.Domain.Conversation.SessionSnapshot> LegacySessions => _sessions.Values.Where(s => !tenantSessions.ContainsKey(s.SessionId));
     internal bool OwnsTenantSession(Guid tenant, Guid id)
     { lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot) && snapshot.DurablyDeletedAt is null; }

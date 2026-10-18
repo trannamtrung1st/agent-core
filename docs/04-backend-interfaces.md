@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Artifact cleanup worker port
+
+`ITenantArtifactCleanupStore.ListDeletedArtifactOwnersAsync(after, limit)` returns at most 100 canonical retained tenant/Session deletion witnesses, ordered by Session identity with an exclusive cursor. It includes owners with no published rows so an interrupted private staging write is still recoverable. It is a technical worker port, never a human/model inventory API.
+
+`CleanupDeletedArtifactsAsync(target)` repeats actual immutable owner, exact deletion timestamp and quiescent-Run checks. A live, archived, merely terminal, foreign or mismatched owner returns false without removing bytes. A missing derived byte namespace converges; an unsafe substituted root fails without following it. Metadata/receipts remain unchanged. `TenantArtifactCleanupService` serializes bounded scans and isolates failures per target; the next scan wrap or new service instance retries retained tombstones. The existing five-minute supervised cleanup host invokes it independently of legacy workspace cleanup failures. Canonical Session deletion also retires its exact Artifact grants with Session/Run grants under the existing security/audit transaction; both stores reject a direct deletion transaction that retains those grants.
+
 ## Tenant Artifact ports
 
 `ITenantArtifactStore` is implemented by the existing InMemory/SQLite Artifact adapters over their existing records/blobs. `CreateTenantAsync` accepts a `TenantRuntimeFrame`, stable Artifact ID, bounded safe display name/content type and immutable copied bytes. It validates the actual Session/Run, live claim generation/lease and per-item/Session quotas. A same-ID identical retry returns the original record; changed metadata, bytes or source conflict. This is a storage prerequisite only: protected publishers must separately use current IAM, exact Review/grant where required and the existing effect receipt owner. The storage port itself grants no model authority; human HTTP creation is absent. The protected inline model adapter below uses the existing local effect owner.

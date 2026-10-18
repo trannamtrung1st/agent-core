@@ -24,9 +24,15 @@ public sealed partial class TenantSessionService
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
         _ = TenantSessionMutations.Apply(current.Snapshot, change, now);
         var runIds = change.Action == TenantSessionAction.Delete ? (await runs.ListTenantRunIdsAsync(tenant, change.SessionId, ct).ConfigureAwait(false)).ToHashSet() : [];
+        var artifactScopes = new HashSet<AccessScope>();
+        if (change.Action == TenantSessionAction.Delete && artifacts is not null)
+            foreach (var assignment in state.Assignments)
+                if (TenantArtifactRules.TryId(assignment.Scope, out var artifact)
+                    && await artifacts.FindTenantAsync(tenant, change.SessionId, artifact, ct).ConfigureAwait(false) is not null)
+                    artifactScopes.Add(assignment.Scope);
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) },
             Assignments = change.Action == TenantSessionAction.Delete ? state.Assignments.Where(a => a.Scope != scope
-                && !(TenantRunRules.TryId(a.Scope, out var runId) && runIds.Contains(runId))).ToArray() : state.Assignments };
+                && !artifactScopes.Contains(a.Scope) && !(TenantRunRules.TryId(a.Scope, out var runId) && runIds.Contains(runId))).ToArray() : state.Assignments };
         var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, TenantSessionMutations.AuditAction(change.Action), change.SessionId.ToString("D"), "allowed", "session_changed", now);
         var saved = await sessions.TryChangeTenantSessionAsync(next, state.Tenant.Revision, change, initiator, now, audit, ct).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
         return change.Action == TenantSessionAction.Delete ? null : Metadata(saved, canManage: true);

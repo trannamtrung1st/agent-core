@@ -322,6 +322,8 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.TryAddSingleton<ITenantArtifactStore>(provider => (ITenantArtifactStore)provider.GetRequiredService<IArtifactStore>());
+        services.TryAddSingleton<ITenantArtifactCleanupStore>(provider => (ITenantArtifactCleanupStore)provider.GetRequiredService<IArtifactStore>());
+        services.TryAddSingleton<AgentCore.Application.Workspaces.TenantArtifactCleanupService>();
         services.TryAddSingleton<AgentCore.Application.Security.TenantArtifactService>();
         services.TryAddSingleton<IArtifactReferenceAuthorizer>(provider =>
             new SessionArtifactAuthorizer(provider.GetService<IArtifactStore>()));

@@ -14,6 +14,15 @@ public sealed class WorkspaceCleanupHostedService(
         {
             try
             {
+                await services.GetRequiredService<AgentCore.Application.Workspaces.TenantArtifactCleanupService>().RecoverAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex)
+            {
+                HandledFailureLog.Warning(logger, ex, "artifacts.cleanup", "artifact_cleanup_scan_failed", diagnostics: diagnosticIds);
+            }
+            try
+            {
                 // Resolve inside supervision so an unavailable cleanup dependency does not block host startup.
                 await services.GetRequiredService<IAdminLifecycleDeletion>().RecoverWorkspaceCleanupAsync(stoppingToken);
                 await services.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>().RecoverAsync(stoppingToken);

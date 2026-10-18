@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant Artifact deletion cleanup
+
+Exercise canonical Session deletion and actual memory/SQLite Artifact stores: live/archived/terminal retention, exact owner/deletion witness, cancellation, current child-grant retirement and rejection of bypass transactions, retained metadata/receipt identity, same-Account two-tenant and sibling byte isolation, exclusive bounded paging and per-target retry fairness. SQLite checks must include unreachable final/partial staging files, nested links without target traversal, substituted Session/tenant/blob roots, missing-path convergence and recovery through an actually recreated application host. Model publication → authenticated HTTP delete → worker purge is the integrated use case; a store reopen alone does not prove startup recovery. All destructive fixtures use dedicated temporary roots, never installed/live data.
+
 ## Tenant Artifact storage and human-delivery checks
 
 Use both actual InMemory and disposable migrated SQLite stores. Claim a real tenant Run, publish a stable-ID immutable Artifact through trusted fixture setup, then exercise authenticated canonical collection/metadata/attachment download. Verify exact bytes/hash/sanitized attachment headers/no-store and independent Session/Artifact/Run scope; exact Artifact assignments must filter before cursor/limit+1 paging. Reject stale generations, changed publication retries, cross-tenant/Session lookup, anonymous and old owner-header requests, revoked read authority and legacy read/create/delete bypasses.
