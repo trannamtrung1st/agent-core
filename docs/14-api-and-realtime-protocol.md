@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Session Sandbox control projection
+
+Authenticated `GET /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/controls` returns `{observation, instanceRevision, canReset, canStop, profiles, defaultProfileId}`. `observation` is the existing bounded stored Sandbox view with exact Session/security and generation/lease/execution revisions and `liveAuthorityConfirmed=false`. Each independently readable, currently allowed profile contributes only `{id, revision, name, imageReference, availability, canSelect}`. Unreadable/missing profiles, hidden totals and inaccessible defaults are omitted; no global catalog fallback is permitted. Availability concerns the reusable source; `canSelect` separately reflects human management, current effective setup, host/readiness and the existing exact selection shape. No environment means no reset/Stop/profile-switch action, even when readable future choices exist.
+
+The route retains current Session read, agent Sandbox read and every referenced stored profile read. Reset/Stop/selection additionally require exact Session management and agent Sandbox management; profile management and agent update are independent. The server rechecks original login, current security/Session/Instance and stored generation/lease/latest receipt after source I/O. A change returns a conflict or current access denial without captured detail. The existing POST routes still accept only exact saved witnesses and reauthorize at commit; this GET cannot execute, verify, initialize, refresh, stop, reset or grant permission. Responses are private no-store. Existing observation and exact-execution routes retain their shapes.
+
 ## Tenant Instance Sandbox editor identity
 
 The existing authenticated `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/sandbox` adds `instanceName` and `definitionVersion` from the same bound Instance snapshot as `instanceRevision`, and explicitly emits `lifecycle` as `Active` or `Archived`. Existing `section`, readable `profiles`, `completeCatalog`, `canManage` and `securityRevision` retain their scoped meanings. No hidden profile/default, script, host epoch, secret or unrelated configuration is added for the heading. Partial catalogs may withhold the protected section while still exposing independently readable profile choices.

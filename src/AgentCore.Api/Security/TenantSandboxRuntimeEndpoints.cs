@@ -10,6 +10,12 @@ public static class TenantSandboxRuntimeEndpoints
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox").RequireAuthorization();
         group.MapGet("", (Guid sessionId, HttpContext http, TenantSandboxRuntimeReadService service, CancellationToken ct) => Read(sessionId, null, http, service, ct));
+        group.MapGet("/controls", (Guid sessionId, HttpContext http, TenantSandboxRuntimeReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
+            return Results.Json(await service.ReadControlsAsync(actor.TenantId, sessionId, human, ct).ConfigureAwait(false));
+        }));
         group.MapGet("/executions/{executionId:guid}", (Guid sessionId, Guid executionId, HttpContext http, TenantSandboxRuntimeReadService service, CancellationToken ct) => Read(sessionId, executionId, http, service, ct));
         group.MapPost("/executions/{executionId:guid}/stop", (Guid sessionId, Guid executionId, TenantSandboxProcessStopRequest request, HttpContext http, TenantSandboxControlService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

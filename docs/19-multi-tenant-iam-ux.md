@@ -1,5 +1,15 @@
 # Accounts, organizations, access and approvals UX
 
+## Session Sandbox controls interaction contract
+
+Expose Session Sandbox from the existing Chat header within the current organization/Session. Preserve its incumbent native Drawer, responsive Descriptions, bounded escaped evidence, wrapping action rows and focus return to the opener. A tenant-specific adapter must use canonical tenant reads/commands only; it must not invoke the legacy owner transport. The stored status and control preflight are distinct from live provider readiness or permission to run a command.
+
+The original-human control projection supplies the exact observation, current Instance revision, independently readable allowed profile choices and per-action hints. No client reconstruction from tenant-wide roles or administrative Instance configuration is sufficient. Read-only and limited-profile users see only readable facts, with inaccessible default/transition information omitted. A Chat-only user without the compound Sandbox read boundary receives explicit local unavailability, leaving Chat usable. No initial environment is a truthful empty state; a profile choice does not create one.
+
+Reset, process Stop and profile switch require an explicit exact-context native confirmation and the displayed saved witnesses. Reset/selection explain retained canonical files, separate cleanup confirmation and fresh Review before future initialization/command. Selection displays the exact readable target revision and never substitutes another profile. Stop records request acceptance separately from interruption/retirement. Busy commands block duplicate controls. Read loss or organization/Session retirement clears captured details and closes former confirmation. Stale or unreadable acknowledgement requires read recovery without automatically repeating any mutation. Native close/Escape restores focus. Stored output remains escaped and bounded; current observation, old receipt, pending cleanup and accepted consent remain distinct.
+
+Acceptance requires scoped backend tests across InMemory/SQLite, current human/access changes during I/O, exact returned witnesses accepted by existing controls, and real Synthetic browser interactions for normal read/empty/permission/recovery behavior. Controlled provider/process fixtures must be identified separately from live Docker proof. Inspect the shared legacy Drawer consumer and all five proposal widths if presentation changes. The backend preflight is a prerequisite; no tenant Session Sandbox UI acceptance is claimed by the projection alone.
+
 ## Instance Sandbox interaction contract
 
 Add Sandbox to canonical Instance navigation at `/t/{tenantId}/admin/agents/{instanceId}/sandbox`. Preserve the shared Instance heading, back link, 48rem content column, settings section/form grid and native save/reset/feedback controls. The original-human fenced setup read owns the same-snapshot Instance name/version/lifecycle, section, readable Definition-authorized profile choices, completeness, independent management hint and exact security/Instance witnesses. No global catalog or legacy owner route is called.

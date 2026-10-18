@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Tenant Session Sandbox control adapter prerequisite
+
+The planned tenant Chat Sandbox Drawer uses `GET .../sessions/{id}/sandbox/controls` for one original-human coherent observation, current Instance revision, readable current profile choices and separate reset/Stop/selection hints. It must not infer these from tenant-wide role names, call administrative Instance setup just to build choices, or use the legacy owner transport. Existing exact commands still reauthorize at commit. Stored observation never establishes live readiness; selection/cleanup request acceptance remains separate from confirmed provider effects. The [interaction contract](19-multi-tenant-iam-ux.md#session-sandbox-controls-interaction-contract) owns the future behavior. This backend prerequisite does not enable the tenant Drawer; current Chat still hides that legacy-only control for organizations.
+
 ## Tenant Instance Sandbox configuration and verification
 
 `/t/{tenantId}/admin/agents/{instanceId}/sandbox` uses the original-human fenced setup read for same-snapshot Instance name/version/lifecycle, protected settings, readable profile choices and exact security/Instance witnesses. The shared Instance heading and 48rem column remain the presentation owners. Generic Settings keeps Sandbox in this separate destination and links to it without calling its protected source.

@@ -20,12 +20,21 @@ public sealed partial class TenantSessionAccessTests
         var observed = await Json(response); Assert.Equal(id, observed.GetProperty("sessionId").GetGuid());
         Assert.Equal(System.Text.Json.JsonValueKind.Null, observed.GetProperty("environment").ValueKind);
         Assert.False(observed.GetProperty("liveAuthorityConfirmed").GetBoolean());
+        var controlsResponse = await owner.GetAsync(path + "/controls"); Assert.Equal(HttpStatusCode.OK, controlsResponse.StatusCode);
+        Assert.True(controlsResponse.Headers.CacheControl?.NoStore); var controls = await Json(controlsResponse);
+        Assert.Equal(id, controls.GetProperty("observation").GetProperty("sessionId").GetGuid());
+        Assert.False(controls.GetProperty("canReset").GetBoolean()); Assert.False(controls.GetProperty("canStop").GetBoolean());
+        Assert.Equal(1, controls.GetProperty("instanceRevision").GetInt64());
+        Assert.Empty(controls.GetProperty("profiles").EnumerateArray());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(path + $"/executions/{Guid.NewGuid()}")).StatusCode);
         using var anonymous = Client(factory); using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path + "/controls")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path + "/controls")).StatusCode);
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other Sandbox", slug = "other-sandbox" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox/controls")).StatusCode);
         Assert.Equal(HttpStatusCode.MethodNotAllowed, (await owner.PostAsJsonAsync(path, new { command = "echo no dispatch" })).StatusCode);
     }
 }

@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Session Sandbox control preflight
+
+`TenantSandboxRuntimeReadService.ReadControlsAsync` extends the original-human stored observation owner with a coherent control projection. It reads current effective Instance policy, filters allowed profile metadata through independent profile `sandbox.read`, supplies only readable default IDs and computes reset/Stop/selection hints through existing human control permission and target rules. No `agents.read` or `agents.update` requirement is added to Session Sandbox management. A hint is not a grant or command acceptance.
+
+Original Account/login/Principal, Session owner/revision, security, current Instance and generation/lease/latest-execution witnesses are checked again after source inspection. Concurrent change fails the whole projection; captured controls cannot be paired with newer evidence. Source availability is inspected without SDK work. Stored observations remain `LiveAuthorityConfirmed=false`; no provider/host/source secret or internal proof is added. Existing reset, Stop, profile-switch transaction and worker owners remain decisive. The tenant Session Drawer integration remains pending this backend prerequisite.
+
 ## Tenant Instance Sandbox editor projection
 
 The existing `TenantAgentConfigurationService.ReadSandboxAsync` and original-human `TenantAgentReadService` fence now project Instance name and adopted Definition version from the same bound Instance snapshot as revision/lifecycle/setup. They expose no generic configuration or hidden profile values to supply a page heading. The existing API explicitly maps lifecycle to its named wire value, consistent with other Instance views. Section/profile filtering, raw read/manage authority and post-I/O fences retain their owners.

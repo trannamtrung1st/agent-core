@@ -19,9 +19,13 @@ public sealed partial class TenantSandboxRuntimeReadService(IIamStore security, 
     IdentityService identity, IamAuthorizer authorizer, TenantOperationAuthorizer? operations = null,
     TenantRunConfigurationResolver? runConfiguration = null, ITenantSandboxProfileStore? profileStore = null,
     ISandboxImageAuthority? images = null, ISandboxReadiness? readiness = null, TimeProvider? time = null,
-    ITenantApprovalStore? approvalStore = null, ITenantApprovedOperationStore? effectStore = null)
+    ITenantApprovalStore? approvalStore = null, ITenantApprovedOperationStore? effectStore = null, ISandboxVerificationHost? host = null)
 {
-    public async ValueTask<TenantSandboxRuntimeView> ReadAsync(Guid tenant, Guid session, HumanSessionReference human, Guid? executionId = null, CancellationToken ct = default)
+    public async ValueTask<TenantSandboxRuntimeView> ReadAsync(Guid tenant, Guid session, HumanSessionReference human, Guid? executionId = null, CancellationToken ct = default) =>
+        (await ReadHuman(tenant, session, human, executionId, ct).ConfigureAwait(false)).View;
+
+    private sealed record HumanObservation(TenantSecurityState Security, TenantSession Session, TenantSandboxRuntimeSnapshot Snapshot, TenantSandboxRuntimeView View);
+    private async ValueTask<HumanObservation> ReadHuman(Guid tenant, Guid session, HumanSessionReference human, Guid? executionId, CancellationToken ct)
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var saved = await sessions.FindTenantSessionAsync(tenant, session, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
@@ -40,7 +44,7 @@ public sealed partial class TenantSandboxRuntimeReadService(IIamStore security, 
         var final = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         if (currentSession?.Owner != saved.Owner || currentSession.Snapshot.Revision != saved.Snapshot.Revision || current.Tenant.Revision != state.Tenant.Revision
             || final.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
-        return Project(snapshot, state.Tenant.Revision, readableSelection);
+        return new(state, saved, snapshot, Project(snapshot, state.Tenant.Revision, readableSelection));
     }
     private static TenantSandboxRuntimeView Project(TenantSandboxRuntimeSnapshot snapshot, long securityRevision, bool readableSelection)
     {
