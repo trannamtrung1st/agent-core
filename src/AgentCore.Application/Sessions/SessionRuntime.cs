@@ -3818,7 +3818,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     else
                                     {
                                     if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
-                                    effectFenced = (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
+                                    effectFenced = !(_runtimeOwner is not null && TenantBrowserInspectionContract.IsInspection(call.Name))
+                                        && (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
                                     effectHash = actionHash;
                                     var skipDispatch = false;
                                     if (_boundAgentRun is { SideEffect.Disposition: AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight })

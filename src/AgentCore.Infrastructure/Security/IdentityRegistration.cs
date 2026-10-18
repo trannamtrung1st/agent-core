@@ -58,6 +58,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantSandboxOperationTarget>();
         services.TryAddSingleton<TenantBrowserOperationTarget>();
         services.TryAddSingleton<TenantBrowserEffectService>();
+        services.TryAddSingleton<TenantBrowserReadService>();
         services.TryAddSingleton<TenantSandboxControlOperationTarget>();
         services.TryAddSingleton<TenantSandboxApprovedOperationService>();
         services.TryAddSingleton<TenantSandboxExecutionAuthority>();

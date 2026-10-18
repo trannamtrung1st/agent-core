@@ -43,6 +43,8 @@ public sealed partial class TenantSessionAccessTests
     {
         private readonly ScriptedLanguageModel _inner = new();
         public AgentCore.Domain.Definitions.AgentIdentity? ProposedPersona { get; set; }
+        public ModelToolCall? ProposedBrowserRead { get; set; }
+        public int BrowserReadRepeats { get; set; } = 1;
         public string? ProposedBrowserCommand { get; set; }
         public string? ProposedPreferences { get; set; }
         public string? ProposedPreferenceAuthorization { get; set; }
@@ -58,6 +60,12 @@ public sealed partial class TenantSessionAccessTests
             if (BeforeGenerate is { } beforeGenerate) await beforeGenerate(request, cancellationToken);
             if (ApprovalResponseGate is { } gate && request.Context?.Sections.Any(s => s.Id == ContextSectionId.ApprovalOutcome) == true)
             { ApprovalResponseEntered.TrySetResult(); await gate.Task.WaitAsync(cancellationToken); }
+            if (ProposedBrowserRead is { } browserRead && request.Messages.Count(m => m.Role == ModelRole.Tool && m.Name == browserRead.Name) is var reads && reads < BrowserReadRepeats
+                && request.Tools?.Any(t => t.Name == browserRead.Name) == true)
+            {
+                yield return new ModelToolCallEvent(browserRead with { Id = "direct-browser-read-" + reads });
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
             if (ProposedBrowserCommand is { } browserCommand && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization)
                 && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("run_browser_command")) == true)
             {

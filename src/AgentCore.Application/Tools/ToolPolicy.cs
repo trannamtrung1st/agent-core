@@ -17,6 +17,9 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && TenantBrowserInspectionContract.IsInspection(toolName))
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && TenantBrowserInspectionContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantSandboxInspectionContract.IsInspection(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantSandboxInspectionContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -173,6 +176,8 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is not null && TenantBrowserInspectionContract.IsInspection(descriptor.Name))
+            return TenantBrowserInspectionContract.IsOffered(definition, context, descriptor.Name);
         if (context?.ExecutionContext is not null && TenantSandboxInspectionContract.IsInspection(descriptor.Name))
             return TenantSandboxInspectionContract.IsOffered(definition, context, descriptor.Name);
         if (context?.ExecutionContext is not null && descriptor.OfferRule != ToolOfferRule.TenantExecutionAuthority) return false;

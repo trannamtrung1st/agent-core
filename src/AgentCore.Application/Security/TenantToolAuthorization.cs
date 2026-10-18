@@ -7,7 +7,7 @@ namespace AgentCore.Application.Security;
 
 public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
     TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
-    TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null)
+    TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserReadService? browserReads = null)
 {
     // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
     public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
@@ -33,7 +33,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
-            var allowed = IamToolContracts.IsInspection(tool) || (tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool))
+            var allowed = IamToolContracts.IsInspection(tool) || (tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -60,6 +60,12 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
         try
         {
+            if (TenantBrowserInspectionContract.IsInspection(call.Name))
+            {
+                if (browserReads is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
+                var current = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+                return await browserReads.InspectAsync(new(current.Owner, session, boundary.Reference.RunId, generation), call, remainingBytes, ct).ConfigureAwait(false);
+            }
             if (TenantSandboxInspectionContract.IsInspection(call.Name))
             {
                 if (sandboxReads is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");

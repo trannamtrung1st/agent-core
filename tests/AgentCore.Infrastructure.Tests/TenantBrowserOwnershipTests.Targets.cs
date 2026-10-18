@@ -21,6 +21,10 @@ public sealed partial class TenantBrowserOwnershipTests
             var request = new BrowserRequest(owner.SessionId, command) { TenantOwner = owner, TenantWitness = prepared.Witness,
                 TenantDispatchCheck = _ => { checks++; return ValueTask.FromResult<string?>(deny ? "permission_denied" : null); } };
             Assert.DoesNotContain(nameof(BrowserRequest.TenantDispatchCheck), System.Text.Json.JsonSerializer.Serialize(request));
+            Assert.DoesNotContain(nameof(BrowserRequest.TenantReadOnly), System.Text.Json.JsonSerializer.Serialize(request));
+            Assert.Equal("forbidden", (await browser.ExecuteAsync(request with { TenantReadOnly = true })).ErrorCode);
+            Assert.Equal(0, checks); Assert.NotNull(browser.ContextFor(owner.SessionId));
+            Assert.Equal(prepared.Witness, (await browser.PrepareTenantCommandAsync(owner, command)).Witness);
             options.Enabled = false;
             Assert.Equal("permission_denied", (await browser.ExecuteAsync(request)).ErrorCode); Assert.NotNull(browser.ContextFor(owner.SessionId));
             deny = false;

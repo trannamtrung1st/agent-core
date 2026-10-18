@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser direct read checks
+
+Both-store `TenantBrowserApprovalTests` read fixtures require actual frame/generation, independent Session and Browser reads without Browser use, fresh policy, native-gate and post-I/O revocation, caller/Run cancellation and no mutation/grant/effect receipt. Reject foreign tenant/Session and mutation/identity arguments before provider access. Force either compound read policy to Review before any binding/target observation, then prepare the exact canonical read request. Persist/compact actual read results and prove later role/policy loss withholds their data; include tiny output budgets without partial observations.
+
+Opt-in `TenantSessionAccessTests.Tenant_Browser_model_reads_use_scoped_Allowed*` drives actual model reads with both stores and disposable Chromium: cold config creates no context; warm snapshots reuse only a trusted disposable fixture view; repeated snapshots retain scoped compacted evidence. Browser-read Review must refuse direct access, suspend through the existing authorization tool, accept an authenticated decision and deliver one exact observation. Keep native mutation-lane guards, reviewed command, shared continuation and legacy browser-compaction regressions focused on affected owners. [Evidence](reports/tenant-browser-read-verification-2026-10-18.md) separates trusted warmup, actual reads and remaining Browser host-recreation qualification. No milestone or CI acceptance is implied.
+
 ## Tenant Browser reviewed model continuation checks
 
 Use both-store `TenantBrowserApprovalTests` model cases for exact pending-call matching, receipt/checkpoint atomic visibility before mailbox Resume, store reopen without reexecution, unknown no-replay results, current settlement/delivery authority loss, earlier observation scope across later approval hops and bounded content without binaries. Contract checks reject model identities, changed/duplicate arguments and unconverted resources. Native cold-binding checks must prove zero initial context allocation, idempotent same-mode metadata and refusal to transition an existing view.

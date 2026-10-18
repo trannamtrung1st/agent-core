@@ -24,9 +24,7 @@ public static partial class TenantApprovalRules
             || command is BrowserDrop { ArtifactId: not null }) throw new AccessDeniedException("browser_resource_adapter_unavailable");
         // The legacy tool effect classification treats navigation as ReadOnly. Tenant IAM must
         // reserve navigation, closure, storage and context changes for sensitive browser.use.
-        var read = command is BrowserObserve or BrowserFind or BrowserWaitFor or BrowserConsoleMessages or BrowserNetworkRequests
-            or BrowserNetworkRequest or BrowserRoutes or BrowserVerify or BrowserGenerateLocator or BrowserGetConfig
-            or BrowserTabs { Operation: "list" } or BrowserDialog { Operation: "inspect" };
+        var read = TenantBrowserInspectionContract.ReadOnly(command);
         return (command, ToolActionHash.Normalize(doc.RootElement), read);
         static bool Unique(JsonElement value) => value.ValueKind switch {
             JsonValueKind.Object => value.EnumerateObject().Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() == value.EnumerateObject().Count()

@@ -74,12 +74,12 @@ internal static class BrowserSnapshotCompaction
     {
         using var document = JsonDocument.Parse(text);
         var root = document.RootElement;
-        return JsonSerializer.Serialize(new
+        return PreserveReadScope(text, JsonSerializer.Serialize(new
         {
             untrustedBrowserContent = true, compacted = true, status = "ok",
             matchCount = root.TryGetProperty("matchCount", out var count) && count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var value) ? value : root.GetProperty("matches").GetArrayLength(),
             guidance = "An earlier browser.find search succeeded; its detailed evidence was compacted. Observe or act using current direct semantic targets."
-        });
+        }));
     }
 
     private static bool IsCompactedObservation(ModelMessage message)
@@ -165,7 +165,7 @@ internal static class BrowserSnapshotCompaction
         }
 
         var excerpt = Excerpt(visible, rich);
-        return settled is bool settledValue
+        var result = settled is bool settledValue
             ? JsonSerializer.Serialize(new
             {
                 status, effectAttempted, effectConfirmedBySdk, applicationOutcomeVerified,
@@ -185,6 +185,16 @@ internal static class BrowserSnapshotCompaction
                 title,
                 contentExcerpt = excerpt
             });
+        return PreserveReadScope(text, result);
+    }
+
+    private static string PreserveReadScope(string source, string receipt)
+    {
+        using var doc = JsonDocument.Parse(source);
+        if (ReadBoolean(doc.RootElement, "tenantBrowserRead") != true) return receipt;
+        var result = System.Text.Json.Nodes.JsonNode.Parse(receipt)!.AsObject();
+        result["tenantBrowserRead"] = true; result["readCommandHash"] = Read(doc.RootElement, "readCommandHash");
+        return result.ToJsonString();
     }
 
     private static string Excerpt(string visible, bool rich)

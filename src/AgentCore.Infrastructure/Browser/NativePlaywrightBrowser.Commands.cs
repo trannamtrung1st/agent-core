@@ -23,6 +23,7 @@ public sealed partial class NativePlaywrightBrowser
     public async ValueTask<BrowserResult> ExecuteAsync(BrowserRequest command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (command.TenantReadOnly && (command.TenantOwner is null || !TenantBrowserInspectionContract.ReadOnly(command.Command))) return new("forbidden");
         if (!TenantRequestAllowed(command)) return new("forbidden");
         if (command.TenantOwner is not null)
         {
