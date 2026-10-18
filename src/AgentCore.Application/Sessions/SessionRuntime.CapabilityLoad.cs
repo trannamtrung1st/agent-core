@@ -28,7 +28,8 @@ public sealed partial class SessionRuntime
             OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
             AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
             HasBackgroundClaim: _boundAgentRun is { Claim: { } claim } bound && await _agentRuns.HasCompletionClaimAsync(bound.Owner, bound.AgentRunId, claim.Generation, _time.GetUtcNow(), ct),
-            CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
+            CredentialMetadataAvailable: _boundAgentRun?.Owner.TenantId is not null ? _boundAgentRun.Admission.Configuration?.CredentialBindings.Count > 0
+                : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
             Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct),
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),

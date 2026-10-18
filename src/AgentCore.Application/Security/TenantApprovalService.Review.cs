@@ -120,7 +120,7 @@ public sealed partial class TenantApprovalService
                 new("browserProfileMode", null, snapshot?.Browser?.ProfileMode switch { "EphemeralSession" => "Separate for this Session", "PersistentAgent" => "Shared across this agent's Sessions", _ => null }, false, snapshot?.Browser is not null),
                 new("browserArguments", null, TenantApprovalRules.BrowserDescription(browser), false),
                 new("browserEffect", null, browser.ReadOnly ? "Inspect the exact Browser target once." : "Attempt this exact Browser command once. External changes may be irreversible.", false),
-                new("browserLimit", null, "Execution is not available yet. Approving records your consent but will not run this command. If the target or policy changes, prepare a new request.", false)];
+                new("browserLimit", null, "Approving records consent for one exact attempt under current authority. If the target, Credential or policy changes, prepare a new request.", false)];
         if (op.SandboxRead is { } read)
         {
             var labels = snapshot?.SandboxRead is null ? null : TenantApprovalRules.ReadSnapshotLabels(op, snapshot.SandboxRead);

@@ -46,6 +46,7 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserCommandTarge
             if (ContextTransitionBlocked(owner.SessionId)) return new("policy_transition_pending");
             if (_sessions.TryGetValue(owner.SessionId, out var view) && TenantTargetBusy(view, command)) return new("browser_target_busy");
             var witness = CaptureTenantWitness(owner, command, out var origin);
+            if (command is BrowserFillCredential && witness.CredentialOrigin is null) return new("credential_origin_unavailable");
             return new(null, witness, origin);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return new("browser_target_busy"); }
@@ -70,7 +71,18 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserCommandTarge
             context is null ? null : _tenantContexts.GetValue(context, static _ => new()).Id,
             view is null ? null : FindPageId(view), view?.Generation,
             view?.Dialog is { } dialog ? _tenantDialogs.GetValue(dialog, static _ => new()).Id : null,
-            location is null ? null : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(location))), BrowserCommandIdentity.Hash(command));
+            location is null ? null : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(location))), BrowserCommandIdentity.Hash(command),
+            command is BrowserFillCredential fill && view is not null ? CredentialTargetOrigin(view, fill.Target) : null);
+    }
+
+    // Cached frame handles only. The protected sink still validates the live field and exact frame before resolving a secret.
+    private string? CredentialTargetOrigin(SessionBrowser view, BrowserTarget target)
+    {
+        var frame = target.FrameRef is null ? view.Page.MainFrame : FindPageFrame(view, target.FrameRef);
+        if (frame is null || !PermittedFrame(view, frame) || !Allows(view, frame.Url, true)
+            || !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, frame.Url, _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed
+            || !Uri.TryCreate(frame.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0) return null;
+        return uri.GetLeftPart(UriPartial.Authority);
     }
 
     // The caller holds the incumbent Session/owner gates until ExecuteCoreAsync returns.

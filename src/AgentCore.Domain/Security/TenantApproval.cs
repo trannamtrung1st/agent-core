@@ -27,9 +27,12 @@ public enum SandboxReadKind { Profiles, Status, Process }
 public sealed record PreparedSandboxRead(SandboxReadKind Kind, Guid SessionId, Guid? ExecutionId, Guid? Generation,
     string ProfileReferencesJson, string TargetHash);
 
-public sealed record PreparedBrowserCommand(Guid SessionId, string ToolName, string ArgumentsJson, string CommandHash, string TargetJson, bool ReadOnly);
+public sealed record PreparedBrowserCredential(Guid CredentialId, Guid BindingId, string Reference, long BindingRevision,
+    long CredentialRevision, long SecretRevision, string Origin, string DisplayName);
+public sealed record PreparedBrowserCommand(Guid SessionId, string ToolName, string ArgumentsJson, string CommandHash, string TargetJson, bool ReadOnly,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBrowserCredential? Credential = null);
 
-// Exactly one typed payload is allowed. No credential or bearer authority is part of this shape.
+// Exactly one typed payload is allowed. No secret or bearer authority is part of this shape.
 public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, AgentIdentity? Persona,
     long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
     PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null, PreparedSandboxControl? SandboxControl = null, PreparedSandboxRead? SandboxRead = null, PreparedBrowserCommand? BrowserCommand = null)
@@ -45,9 +48,10 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
         (null, null, null, null, null, null, not null) => TenantOperationKind.BrowserCommand,
         _ => throw new ArgumentException("Exactly one supported operation payload is required.") };
     [JsonIgnore] public bool IsLocalConfiguration => Kind is TenantOperationKind.Persona or TenantOperationKind.ConversationPreferences;
-    [JsonIgnore] public string Permission => Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
-    [JsonIgnore] public string ResourceType => Kind != TenantOperationKind.CredentialConnectionCheck ? "agent" : "credential";
-    [JsonIgnore] public string ResourceId => (Kind != TenantOperationKind.CredentialConnectionCheck ? InstanceId : CredentialCheck!.CredentialId).ToString("D");
+    [JsonIgnore] public string Permission => Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.Credential is not null ? "credentials.use" : BrowserCommand.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
+    [JsonIgnore] public string ResourceType => Kind == TenantOperationKind.CredentialConnectionCheck || BrowserCommand?.Credential is not null ? "credential" : "agent";
+    [JsonIgnore] public string ResourceId => (Kind == TenantOperationKind.CredentialConnectionCheck ? CredentialCheck!.CredentialId
+        : Kind == TenantOperationKind.BrowserCommand && BrowserCommand!.Credential is { } c ? c.CredentialId : InstanceId).ToString("D");
 
     // Root correlation excludes mutable witnesses; grants still bind ActionHash exactly.
     [JsonIgnore]

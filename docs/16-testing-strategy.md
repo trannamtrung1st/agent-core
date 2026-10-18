@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant protected Browser Credential checks
+
+Exercise actual Synthetic model alias discovery, exact authenticated human consent, native loopback password filling and bounded redacted result delivery through both stores. The field must stay empty before consent; exactly one resolver/dispatch may fill it afterward. Assert no value/protected payload in approval views, model requests, retained context or audit, no ExceptionalGrant and no implied sign-in. A controlled resolver wrapper may change real IAM after protected resolution; the actual native final callback must then prevent filling and store Denied facts.
+
+Native checks cover missing callbacks, foreign owner, wrong command, reused witness, safe shared redaction, live field reclassification and target iframe-origin drift before resolution. Both-store checks cover exact Credential/binding/secret witness, rotation invalidating consent with cancellation retained, independent permissions, scoped counts/pagination even under primary Credential use, immutable receipt reuse, resolved same-Chat human-root lineage, metadata-only read without use, tiny-output fitting and historical read revocation/policy changes. Include incumbent protected-sink, Browser ownership/Review/read/restart, shared external-effect, Credential approval inventory and Sandbox read-review regressions when changing their shared owners. [Observed workflows, exact commands and limits](reports/tenant-browser-credential-verification-2026-10-18.md).
+
 ## Tenant Browser host-recreation delivery checks
 
 Use disposable SQLite, actual native Chromium and two fully disposed/recreated application/DI hosts against one independent loopback page fixture. Exercise pending cold consent, saved completed and unknown results before mailbox delivery, revoked delivery scope and abandoned dispatch. Assert exact receipts/checkpoints, current authenticated human decision, hosted successor/model outcome, no duplicate native context/dispatch/audit and no grant. Advance only the injected store/application UTC clock past lease expiry; native worker timers remain real. A controlled execution gate stages the crash boundary without replacing the provider or adding a production endpoint. Loss of the native acknowledgement is separately controlled after actual Chromium completes.

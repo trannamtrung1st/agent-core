@@ -17,7 +17,7 @@ public static class TenantBrowserAuthorizationContract
 {
     public static IReadOnlyList<string> Allowed(AgentDefinition definition) => BrowserToolCatalog.Tools.Values
         .Where(t => Supported(t.Name) && RolePermissions.AllowsTool(definition, t.Name)).Select(t => t.Name).ToArray();
-    private static bool Supported(string name) => name is not (ToolCatalog.BrowserFillCredential or ToolCatalog.BrowserUpload or ToolCatalog.BrowserScreenshot
+    private static bool Supported(string name) => name is not (ToolCatalog.BrowserUpload or ToolCatalog.BrowserScreenshot
         or ToolCatalog.BrowserVisionMouse or ToolCatalog.BrowserGeolocation) && BrowserToolCatalog.TryGet(name, out _);
     public static JsonNode Schema(IReadOnlyList<string> tools)
     {

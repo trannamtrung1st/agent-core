@@ -2506,7 +2506,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ConfigurationContinuationTarget: ContinuationTarget(capturedRun),
                     PinnedSkillCatalog: skillCatalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
-                    CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
+                    CredentialMetadataAvailable: capturedRun?.Owner.TenantId is not null ? capturedRun.Admission.Configuration?.CredentialBindings.Count > 0
+                        : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
                     AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),

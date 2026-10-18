@@ -69,12 +69,18 @@ public sealed partial class NativePlaywrightBrowser
         }
         """;
 
-    public async ValueTask<BrowserResult> FillCredentialAsync(Guid sessionId, BrowserTarget target,
+    public ValueTask<BrowserResult> FillCredentialAsync(Guid sessionId, BrowserTarget target,
         Func<string, CancellationToken, ValueTask<string>> resolve, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        if (!TenantRequestAllowed(new(sessionId, new BrowserObserve()))) return Result("forbidden");
-        await using var held = await EnterInteractiveAsync(sessionId, ct);
+        if (!TenantRequestAllowed(new(sessionId, new BrowserObserve()))) return ValueTask.FromResult(Result("forbidden"));
+        return FillCredentialCoreAsync(sessionId, target, resolve, ct);
+    }
+
+    private async ValueTask<BrowserResult> FillCredentialCoreAsync(Guid sessionId, BrowserTarget target,
+        Func<string, CancellationToken, ValueTask<string>> resolve, CancellationToken ct, bool interactiveHeld = false, BrowserRequest? tenant = null)
+    {
+        await using var held = interactiveHeld ? NoInteractiveHold.Instance : await EnterInteractiveAsync(sessionId, ct);
         if (!IsAvailable || !_sessions.TryGetValue(sessionId, out var session)) return Result("provider_unavailable");
         await session.Gate.WaitAsync(ct);
         if (ContextTransitionBlocked(sessionId)) { session.Gate.Release(); return Result("policy_transition_pending"); }
@@ -95,6 +101,7 @@ public sealed partial class NativePlaywrightBrowser
             var generation = session.Generation;
             var frameUrl = await locator.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(token);
             if (!Uri.TryCreate(frameUrl, UriKind.Absolute, out var uri)) return Result("target_denied");
+            if (tenant is not null && uri.GetLeftPart(UriPartial.Authority) != tenant.TenantWitness!.CredentialOrigin) return Result("browser_target_changed");
             var value = await resolve(uri.GetLeftPart(UriPartial.Authority), token);
             if (!session.ProtectedValues.TryRegister(value)) return Result("user_intervention_required");
             // Secret resolution may await an external owner; recheck current semantics and exact frame before dispatch.
@@ -104,6 +111,7 @@ public sealed partial class NativePlaywrightBrowser
                 return Result("action_not_confirmed");
             if (!await locator.EvaluateAsync<bool>("el => el.matches('input[type=password]')").WaitAsync(token)
                 || await ClassifyInterventionAsync(session.Page, token) != BrowserInterventionKind.None) return Result("user_intervention_required");
+            if (tenant?.TenantDispatchCheck is { } check && await check(token).ConfigureAwait(false) is { } denied) return Result(denied);
             session.VisualSnapshotId = null;
             attempted = true;
             active = locator.FillAsync(value, new() { Timeout = TimeoutMs() });
@@ -113,6 +121,8 @@ public sealed partial class NativePlaywrightBrowser
             return (await CaptureWithRetryAsync(session, sessionId, "credential", BrowserSnapshotSettle.None, null, token))
                 with { EffectAttempted = true, EffectConfirmedBySdk = true };
         }
+        catch (AgentCore.Application.Security.AccessDeniedException ex) when (tenant is not null) { return Outcome(Result(ex.ReasonCode)); }
+        catch (AgentCore.Application.Security.SecurityConflictException ex) when (tenant is not null) { return Outcome(Result(ex.ReasonCode)); }
         catch (BrowserTargetException ex) { return Outcome(Result(ex.Code)); }
         catch (BrowserTargetDeniedException) { return Outcome(Result("target_denied")); }
         catch (OperationCanceledException ex)

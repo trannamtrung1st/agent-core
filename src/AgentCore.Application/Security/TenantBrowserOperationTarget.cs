@@ -8,7 +8,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, TenantRunConfigurationResolver configuration,
-    IIamStore security, IamAuthorizer authorizer, IBrowser browser)
+    IIamStore security, IamAuthorizer authorizer, IBrowser browser, TenantBrowserCredentialTarget? passwords = null)
 {
     public async ValueTask<(TenantAgent Agent, PreparedBrowserCommand Command, TenantBrowserCommandWitness Witness)> PrepareAsync(AgentRun run, string tool, string json, CancellationToken ct, bool registerCold = false)
     {
@@ -28,6 +28,9 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         var command = new PreparedBrowserCommand(run.SessionId, tool, intent.Arguments, BrowserCommandIdentity.Hash(intent.Command),
             "", intent.ReadOnly);
         TenantBrowserOperationRules.RequireSource(run.SessionId, tool, run, agent, baseline, session);
+        var credential = intent.Command is BrowserFillCredential password
+            ? await (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).ResolveAsync(run, password.CredentialRef, ct).ConfigureAwait(false) : null;
+        if (credential is not null) command = command with { Credential = TenantBrowserCredentialRules.Parameters(credential, "") };
         await TenantBrowserOperationRules.RequirePermissionsAsync(state, run.AgentInstanceId, command, run.Owner.ExecutorPrincipalId!.Value, authorizer, ct).ConfigureAwait(false);
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
         var mode = TenantBrowserOperationRules.Isolation(run.Admission.Configuration!.Definition, current) switch {
@@ -47,6 +50,11 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
             throw new SecurityConflictException("browser_target_changed");
         if (witness.ProfileMode != mode) throw new AccessDeniedException("policy_transition_pending");
         command = command with { TargetJson = TenantApprovalRules.BrowserTarget(witness, prepared.Origin) };
+        if (credential is not null)
+        {
+            command = command with { Credential = TenantBrowserCredentialRules.Parameters(credential, witness.CredentialOrigin ?? throw new AccessDeniedException("credential_origin_changed")) };
+            TenantBrowserCredentialRules.RequireWitness(command.Credential, credential);
+        }
         TenantBrowserOperationRules.Require(command, run, agent, baseline, session);
         return (agent, command, witness);
     }
@@ -56,6 +64,8 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         var saved = request.Operation.BrowserCommand ?? throw new ArgumentException("Browser operation required.");
         // Restore trusted metadata after host loss, then compare the actual target. Never restore old native handles or transition an existing view.
         var current = await PrepareAsync(run, saved.ToolName, saved.ArgumentsJson, ct, registerCold: browser is ITenantBrowserBinding).ConfigureAwait(false);
+        if (saved.Credential != current.Command.Credential)
+            throw new SecurityConflictException(saved.Credential?.Origin != current.Command.Credential?.Origin ? "credential_origin_changed" : "credential_binding_changed");
         if (current.Command != saved || current.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
             || current.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision
             || request.Snapshot != TenantBrowserOperationRules.Snapshot(current.Agent, current.Command))
@@ -70,6 +80,8 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         var session = await sessions.FindTenantSessionAsync(request.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         TenantApprovalRules.Validate(request, run, agent, source: source);
         TenantBrowserOperationRules.Require(value, run, agent, baseline, session);
+        if (value.Credential is { } credential)
+            await (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(run, credential, ct).ConfigureAwait(false);
         return agent;
     }
     // Historical output can outlive one approval hop; it never supplies dispatch authority.
@@ -84,7 +96,13 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         var (agent, baseline) = await configuration.BaselineAsync(request.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(request.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         TenantBrowserOperationRules.Require(value, run, agent, baseline, session);
+        if (value.Credential is { } credential)
+            await (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(run, credential, ct).ConfigureAwait(false);
         return agent;
     }
+
+    public ValueTask<string> PasswordAsync(TenantApprovalRequest request, AgentRun run, string origin, CancellationToken ct) =>
+        (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).PasswordAsync(run,
+            request.Operation.BrowserCommand?.Credential ?? throw new AccessDeniedException("credential_unavailable"), origin, ct);
 
 }

@@ -16,7 +16,8 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantBrowserApprovalTests
 {
-    private sealed record Setup(Guid Tenant, TenantSessionInitiator Human, TenantAgent Agent, AgentRun Run, RoleAssignment Use);
+    private sealed record Setup(Guid Tenant, TenantSessionInitiator Human, TenantAgent Agent, AgentRun Run, RoleAssignment Use,
+        TenantCredentialBinding? Password = null, RoleAssignment? CredentialUse = null);
     private sealed class TargetProbe(TenantBrowserOwner owner) : IBrowser, ITenantBrowserCommandTarget
     {
         public Guid Context = Guid.NewGuid();
@@ -32,16 +33,29 @@ public sealed partial class TenantBrowserApprovalTests
         {
             ct.ThrowIfCancellationRequested(); Assert.Equal(owner, actual); Reads++;
             return ValueTask.FromResult(Error is not null ? new TenantBrowserCommandPreparation(Error) : new(null,
-                new(actual, Guid.NewGuid(), 0, CommandRevision, Mode, Context, "pg_owned", 1, null, new string('a', 64), BrowserCommandIdentity.Hash(command)), "http://127.0.0.1:5091"));
+                new(actual, Guid.NewGuid(), 0, CommandRevision, Mode, Context, "pg_owned", 1, null, new string('a', 64), BrowserCommandIdentity.Hash(command),
+                    command is BrowserFillCredential ? "http://127.0.0.1:5091" : null), "http://127.0.0.1:5091"));
         }
     }
-    private static async Task<Setup> Prepare(Fixture f, bool permissions = true)
+    private static async Task<Setup> Prepare(Fixture f, bool permissions = true, bool password = false)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 32, await Revision());
+        TenantCredentialBinding? bound = null; RoleAssignment? credentialUse = null;
+        if (password)
+        {
+            var credential = await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, new("Browser account", AgentCore.Domain.Credentials.CredentialKind.Password,
+                AgentCore.Domain.Credentials.CredentialPurpose.General, null, ["http://127.0.0.1:5091"], "tenant-bound-private-password"), await Revision());
+            await f.BindingService.BindAsync(human.PrincipalId, owner.TenantId, agent.Instance.InstanceId, credential.Credential.CredentialId, "account", await Revision(), agent.Instance.Revision, 1);
+            agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, agent.Instance.InstanceId))!;
+            bound = Assert.Single((await ((ITenantCredentialBindingStore)f.Iam).ReadTenantCredentialBindingsAsync(owner.TenantId, agent.Instance.InstanceId))!.Bindings);
+            var credentialRole = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Use bound Browser password", ["credentials.read", "credentials.use"], await Revision());
+            credentialUse = await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, credentialRole.RoleId,
+                TenantCredentialRules.Scope(owner.TenantId, credential.Credential.CredentialId), await Revision());
+        }
         var session = await f.Sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, human, SessionMode.Text, await Revision(), agent.Instance.Revision);
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Browser command", permissions ? ["browser.read", "browser.use"] : ["browser.read"], await Revision());
         var use = await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId,
@@ -53,7 +67,7 @@ public sealed partial class TenantBrowserApprovalTests
         var at = f.Clock.GetUtcNow();
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
             new AgentRunCommand.Claim(run.Revision, at, f.Ids.NewId(), at.AddMinutes(5)), f.Ids.NewId());
-        return new(owner.TenantId, human, agent, run, use);
+        return new(owner.TenantId, human, agent, run, use, bound, credentialUse);
     }
     private static TargetProbe Probe(Setup s) => new(new(s.Tenant, s.Agent.Instance.InstanceId, s.Agent.PrincipalId, s.Run.SessionId));
     private static TenantOperationAuthorizer Operations(Fixture f, IIamStore store) => new(store, (ITenantRunStore)store, (ITenantAgentStore)store,
@@ -63,7 +77,8 @@ public sealed partial class TenantBrowserApprovalTests
         store ??= f.Iam;
         return new(store, (ITenantApprovalStore)store, (ITenantAgentStore)store, Operations(f, store), new(store), f.Identity, f.Ids, f.Clock,
             f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store,
-            browserTargets: new((ITenantSessionStore)store, f.RunConfiguration(), store, new(store), browser));
+            browserTargets: new((ITenantSessionStore)store, f.RunConfiguration(), store, new(store), browser,
+                new((ITenantCredentialBindingStore)store, f.RunConfiguration(), f.Protector, (ITenantRunStore)store)));
     }
     private const string Navigate = """{"url":"http://127.0.0.1:5091/browser-native.html"}""";
     private static ValueTask<TenantApprovalPreparationResult> Request(TenantApprovalService service, Setup s, string tool = ToolCatalog.BrowserNavigate, string args = Navigate) =>

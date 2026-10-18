@@ -36,7 +36,7 @@ public sealed class TenantApprovalRecord
         RootActivationId = r.RootActivationId.ToString("D"), ExecutorPrincipalId = r.ExecutorPrincipalId, OriginalInitiatorPrincipalId = r.OriginalInitiatorPrincipalId,
         // This legacy column is the exact grant/receipt FK witness, not semantic root correlation.
         OperationId = r.Operation.OperationId, Fingerprint = r.Operation.ActionHash, Permission = r.Permission,
-        ResourceType = r.ResourceType, ResourceId = r.ResourceId, SandboxProfileId = (r.Operation.SandboxCommand?.ProfileId ?? r.Operation.SandboxControl?.ProfileId), SandboxProfileRevision = (r.Operation.SandboxCommand?.ProfileRevision ?? r.Operation.SandboxControl?.ProfileRevision), CredentialId = r.Operation.CredentialCheck?.CredentialId.ToString("D"), Kind = (int)r.Kind, Status = (int)r.Status, Revision = r.Revision,
+        ResourceType = r.ResourceType, ResourceId = r.ResourceId, SandboxProfileId = (r.Operation.SandboxCommand?.ProfileId ?? r.Operation.SandboxControl?.ProfileId), SandboxProfileRevision = (r.Operation.SandboxCommand?.ProfileRevision ?? r.Operation.SandboxControl?.ProfileRevision), CredentialId = (r.Operation.CredentialCheck?.CredentialId ?? r.Operation.BrowserCommand?.Credential?.CredentialId)?.ToString("D"), Kind = (int)r.Kind, Status = (int)r.Status, Revision = r.Revision,
         CreatedAt = r.CreatedAt.ToUnixTimeMilliseconds(), ExpiresAt = r.ExpiresAt.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(r)
     };
 

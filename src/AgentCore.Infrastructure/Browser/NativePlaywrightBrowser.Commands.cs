@@ -23,6 +23,9 @@ public sealed partial class NativePlaywrightBrowser
     public async ValueTask<BrowserResult> ExecuteAsync(BrowserRequest command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (command.Command is BrowserFillCredential && (command.TenantOwner is null || command.TenantPasswordResolver is null || command.TenantDispatchCheck is null
+            || command.TenantWitness?.CredentialOrigin is null)) return new("forbidden");
+        if (command.Command is not BrowserFillCredential && command.TenantPasswordResolver is not null) return new("forbidden");
         if (command.TenantReadOnly && (command.TenantOwner is null || !TenantBrowserInspectionContract.ReadOnly(command.Command))) return new("forbidden");
         if (!TenantRequestAllowed(command)) return new("forbidden");
         if (command.TenantOwner is not null)
@@ -44,6 +47,8 @@ public sealed partial class NativePlaywrightBrowser
         if (!BrowserToolArguments.WithinOperationalLimits(command.Command, _policy.Limits)) return new("invalid");
         if (command.Command is BrowserWaitFor wait) command = command with { Command = wait with { TimeoutMs = Math.Min(wait.TimeoutMs, _policy.Limits.WaitTimeoutMs) } };
         if (command.Operation == BrowserOperation.Navigate) return await NavigateAsync(command, cancellationToken, interactiveHeld);
+        if (command.Command is BrowserFillCredential password)
+            return await FillCredentialCoreAsync(command.SessionId, password.Target, command.TenantPasswordResolver!, cancellationToken, interactiveHeld, command).ConfigureAwait(false);
         if (command.Operation == BrowserOperation.Close)
         {
             var closed = await CloseAsync(command.SessionId, cancellationToken, interactiveHeld);

@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant protected Browser command and Credential discovery
+
+The existing model `approvals.request_authorization` branch accepts `operation=run_browser_command`, `command.tool=browser.fill_credential` and native `arguments={credentialRef,target}` only. The reference is canonical lowercase; no value, Credential/binding ID, revision, tenant, grant or owner field is accepted from the model. Core resolves and seals the exact protected witness. Existing authenticated approval inbox/detail/decision/cancel routes and the shared Browser parameter preview are reused. Primary `credentials.use` targets the actual Credential, while Browser/Session permissions remain independently required. Approval creates no ExceptionalGrant. Result facts still distinguish command completion, unverified application outcome and no replay.
+
+Tenant `credentials.list` retains cursor/limit pagination and safe alias/name/kind/non-secret metadata records, filtered under current read authority/policy before pagination. Private `tenantCredentialRead`/`credentialReads` provenance adds no permission or writable operation input. A new read Review requirement returns a named unavailable result; unrelated Browser consent cannot authorize discovery. No new HTTP endpoint or SignalR method is added. [Port contract](04-backend-interfaces.md#tenant-protected-browser-credentials), [focused evidence](reports/tenant-browser-credential-verification-2026-10-18.md).
+
 ## Tenant Browser direct read model contract
 
 Tenant model projection now includes converted Browser read names under admitted Definition capabilities. Tabs accepts only `{"operation":"list"}` and Dialog only `{"operation":"inspect"}`; native schemas remain for other read arguments. The scoped internal read owner freshly checks compound Session/Browser policy for every call. `browser_read_review_required` directs the same command/arguments to `approvals.request_authorization`; neither a prior read nor approval is a later read grant.

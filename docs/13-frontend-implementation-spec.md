@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Protected Browser Credential review design
+
+The converted protected-fill operation reuses the existing shared Browser approval inspector. Its escaped parameter text includes the bound Credential display name/reference, exact target-frame origin and semantic password target, with “Protected field fill only; sign-in is not confirmed.” It exposes no value, protected payload, native handle or writable authority field. Primary Credential-use scope and independent Browser/Session scopes govern inbox counts and detail access. Current binding/secret/origin drift disables approval while preserving separately authorized cancellation/reload. Completed execution means a protected field action, never authentication; uncertain results retain no replay guidance. This adds no component, visual token, CSS or new UI kit. [Port contract](04-backend-interfaces.md#tenant-protected-browser-credentials) and [verification](reports/tenant-browser-credential-verification-2026-10-18.md) distinguish backend/model evidence from rendered UI evidence. The shared execution guidance now truthfully describes one current-authority attempt; it no longer says execution is unavailable.
+
 ## Tenant Browser Review inspector compatibility
 
 Internally prepared Browser requests reuse `TenantApprovalDetail` in the inbox and conversation links. The existing viewport-capped native Drawer, responsive one-column Descriptions, section spacing, wrapping escaped text, confirmation and footer owners remain. Browser command, saved origin, sharing mode, readable effective parameters, consequence and execution availability use the same exact-command list as Sandbox commands. Do not show canonical JSON or native target handles by default. Stale target/capability/provider states have named recovery; a stale decision stays disabled while independently authorized cancellation remains available.

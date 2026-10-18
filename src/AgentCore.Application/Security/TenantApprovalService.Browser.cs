@@ -14,7 +14,8 @@ public sealed partial class TenantApprovalService
             var (run, state) = await operations.ResolveForDecisionAsync(reference, permission, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
             if (run.Status != AgentRunStatus.Running || run.Claim?.Generation != generation || run.Revision != expectedRunRevision || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())
                 throw new AccessDeniedException("tenant_runtime_unavailable");
-            permission = TenantApprovalRules.BrowserIntent(run.SessionId, tool, argumentsJson).ReadOnly ? "browser.read" : "browser.use";
+            var intent = TenantApprovalRules.BrowserIntent(run.SessionId, tool, argumentsJson);
+            permission = intent.Command is AgentCore.Application.Ports.BrowserFillCredential ? "credentials.use" : intent.ReadOnly ? "browser.read" : "browser.use";
             var prepared = await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(run, tool, argumentsJson, ct, registerCold).ConfigureAwait(false);
             var value = prepared.Command;
             var operation = TenantApprovalRules.PrepareBrowser(ids.NewId(), run.AgentInstanceId, value, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);

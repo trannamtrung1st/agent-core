@@ -14,23 +14,26 @@ public static class TenantBrowserOperationRules
         new[] { ("sessions.read", TenantSessionRules.Scope(tenant, session)),
             ("browser.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))) }
         .Concat(readOnly ? [] : new[] { ("browser.use", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))) }).ToArray();
+    public static IReadOnlyList<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, PreparedBrowserCommand value) =>
+        Targets(tenant, instance, value.SessionId, value.ReadOnly).Concat(value.Credential is { } c
+            ? new[] { ("credentials.read", TenantCredentialRules.Scope(tenant, c.CredentialId)), ("credentials.use", TenantCredentialRules.Scope(tenant, c.CredentialId)) } : []).ToArray();
     public static async ValueTask RequirePermissionsAsync(TenantSecurityState state, Guid instance, PreparedBrowserCommand value, Guid principal,
         IamAuthorizer authorizer, CancellationToken ct)
     {
-        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value.SessionId, value.ReadOnly))
+        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value))
             if (!(await authorizer.CheckTenantAsync(state, principal, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("permission_denied");
     }
     public static async ValueTask<bool> NeedsReviewAsync(TenantSecurityState state, Guid instance, PreparedBrowserCommand value, Guid? requester,
         IamAuthorizer authorizer, CancellationToken ct)
     {
-        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value.SessionId, value.ReadOnly))
+        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value))
             if (await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, permission, scope, authorizer, ct).ConfigureAwait(false)) return true;
         return false;
     }
     public static async ValueTask<bool> IndependentAsync(TenantApprovalRequest request, TenantSecurityState state, IamAuthorizer authorizer, CancellationToken ct)
     {
-        foreach (var (permission, scope) in Targets(request.TenantId, request.Operation.InstanceId, request.SessionId, request.Operation.BrowserCommand!.ReadOnly))
+        foreach (var (permission, scope) in Targets(request.TenantId, request.Operation.InstanceId, request.Operation.BrowserCommand!))
             if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(permission)).IndependentReview
                 && (permission == request.Permission || await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, permission, scope, authorizer, ct).ConfigureAwait(false))) return true;
         return false;
@@ -40,7 +43,7 @@ public static class TenantBrowserOperationRules
     {
         if (!state.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approver_unqualified");
         await RequirePermissionsAsync(state, instance, value, human, authorizer, ct).ConfigureAwait(false);
-        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value.SessionId, value.ReadOnly))
+        foreach (var (permission, scope) in Targets(state.Tenant.TenantId, instance, value))
         {
             if (permission != (value.ReadOnly ? "browser.read" : "browser.use")
                 && !await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, permission, scope, authorizer, ct).ConfigureAwait(false)) continue;

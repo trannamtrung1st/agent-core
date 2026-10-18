@@ -35,7 +35,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && (r.Operation.BrowserCommand is null || (browserVisibility?.ReadInstances is null || browserVisibility.ReadInstances.Contains(r.Operation.InstanceId))
                     && (r.Operation.BrowserCommand.ReadOnly || browserVisibility?.UseInstances is null || browserVisibility.UseInstances.Contains(r.Operation.InstanceId))
                     && (browserVisibility?.Sessions is null || browserVisibility.Sessions.Contains(r.SessionId)))
-                && (r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(r.Operation.CredentialCheck!.CredentialId))
+                && (r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(Guid.Parse(r.ResourceId)))
                 && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();
             return ValueTask.FromResult(new TenantApprovalPage(rows.OrderByDescending(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId)
                 .Skip(page.Page * page.PageSize).Take(page.PageSize).ToArray(), rows.Length, page.Page, page.PageSize));

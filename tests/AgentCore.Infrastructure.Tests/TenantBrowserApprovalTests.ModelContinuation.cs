@@ -117,14 +117,14 @@ public sealed partial class TenantBrowserApprovalTests
     public void Tenant_Browser_model_contract_reuses_native_schema_and_rejects_ownership_or_unconverted_resources()
     {
         var schema = TenantBrowserAuthorizationContract.Schema([ToolCatalog.BrowserNavigate, ToolCatalog.BrowserFillCredential, "browser.drop"]).ToJsonString();
-        Assert.Contains("browser.navigate", schema); Assert.DoesNotContain("browser.fill_credential", schema); Assert.DoesNotContain("artifactId", schema);
+        Assert.Contains("browser.navigate", schema); Assert.Contains("browser.fill_credential", schema); Assert.DoesNotContain("artifactId", schema);
         Assert.NotNull(TenantApprovalToolContract.Parse(BrowserModelCall()).Browser);
         foreach (var bad in new[] {
             """{"operation":"run_browser_command","sessionId":"foreign","command":{"tool":"browser.close","arguments":{}}}""",
             """{"operation":"run_browser_command","command":{"tool":"browser.close","tenantId":"foreign","arguments":{}}}""",
             """{"operation":"run_browser_command","command":{"tool":"browser.close","arguments":{"operationId":"foreign"}}}""",
             """{"operation":"run_browser_command","command":{"tool":"browser.navigate","arguments":{"url":"https://one.test","url":"https://two.test"}}}""",
-            """{"operation":"run_browser_command","command":{"tool":"browser.fill_credential","arguments":{"target":{"by":"label","value":"Password"},"credentialRef":"private"}}}""",
+            """{"operation":"run_browser_command","command":{"tool":"browser.fill_credential","arguments":{"target":{"by":"label","value":"Password"},"credentialRef":"private","value":"secret"}}}""",
             """{"operation":"run_browser_command","command":{"tool":"browser.drop","arguments":{"target":{"by":"label","value":"Drop"},"artifactId":"foreign"}}}""" })
         {
             var error = Record.Exception(() => TenantApprovalToolContract.Parse(new("invalid-browser", ToolCatalog.RequestAuthorization, bad)));

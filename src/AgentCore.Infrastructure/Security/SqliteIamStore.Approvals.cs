@@ -40,7 +40,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             AND json_extract(PayloadJson, '$.Operation.SandboxControl.TargetHash') = {control.TargetHash}
             """)
         : operation.BrowserCommand is { } browser ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission IN ('browser.read','browser.use') AND ResourceId = {operation.ResourceId}
+            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND ResourceType = {operation.ResourceType} AND ResourceId = {operation.ResourceId}
             AND json_extract(PayloadJson, '$.Operation.BrowserCommand.SessionId') = {browser.SessionId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.BrowserCommand.ToolName') = {browser.ToolName}
             AND json_extract(PayloadJson, '$.Operation.BrowserCommand.CommandHash') = {browser.CommandHash}
@@ -54,16 +54,21 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-        var source = db.Set<TenantApprovalRecord>().AsQueryable();
-        if (sandboxVisibility?.Profiles is { } readableProfiles)
-        {
-            var readableJson = System.Text.Json.JsonSerializer.Serialize(readableProfiles);
-            source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-                SELECT * FROM TenantApprovalRequests WHERE Permission <> 'sandbox.read' OR NOT EXISTS (
-                    SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.SandboxRead.ProfileReferencesJson')) AS profile
-                    WHERE json_extract(profile.value, '$.Id') NOT IN (SELECT value FROM json_each({readableJson})))
-                """);
-        }
+        var readableJson = System.Text.Json.JsonSerializer.Serialize(sandboxVisibility?.Profiles);
+        var browserReadJson = System.Text.Json.JsonSerializer.Serialize(browserVisibility?.ReadInstances?.Select(id => id.ToString("D")).ToArray());
+        var browserUseJson = System.Text.Json.JsonSerializer.Serialize(browserVisibility?.UseInstances?.Select(id => id.ToString("D")).ToArray());
+        var browserSessionJson = System.Text.Json.JsonSerializer.Serialize(browserVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
+        // Browser compound visibility applies to protected Credential fills too, independently of the primary permission.
+        var source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE
+            ({readableJson} = 'null' OR Permission <> 'sandbox.read' OR NOT EXISTS (
+                SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.SandboxRead.ProfileReferencesJson')) AS profile
+                WHERE json_extract(profile.value, '$.Id') NOT IN (SELECT value FROM json_each({readableJson}))))
+            AND (json_type(PayloadJson, '$.Operation.BrowserCommand') IS NOT 'object' OR (
+                ({browserReadJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({browserReadJson})))
+                AND (json_extract(PayloadJson, '$.Operation.BrowserCommand.ReadOnly') = 1 OR {browserUseJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({browserUseJson})))
+                AND ({browserSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({browserSessionJson})))))
+            """);
         var query = source.AsNoTracking().Where(r => r.TenantId == tenantId);
         if (page.SessionId is { } session) query = query.Where(r => r.SessionId == session.ToString("D"));
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
@@ -78,12 +83,6 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         if (sandboxVisibility?.Profiles is { } profiles) query = query.Where(r => (r.Permission != "sandbox.execute" && r.Permission != "sandbox.manage") || profiles.Contains(r.SandboxProfileId!));
         if (sandboxVisibility?.Sessions is not null)
         { var ids = sandboxVisibility.Sessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "sandbox.execute" && r.Permission != "sandbox.manage" && r.Permission != "sandbox.read") || ids.Contains(r.SessionId)); }
-        if (browserVisibility?.ReadInstances is { } browserRead)
-        { var ids = browserRead.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "browser.read" && r.Permission != "browser.use") || ids.Contains(r.InstanceId)); }
-        if (browserVisibility?.UseInstances is { } browserUse)
-        { var ids = browserUse.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "browser.use" || ids.Contains(r.InstanceId)); }
-        if (browserVisibility?.Sessions is { } browserSessions)
-        { var ids = browserSessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "browser.read" && r.Permission != "browser.use") || ids.Contains(r.SessionId)); }
         if (allowedCredentials is not null)
         { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
         if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);

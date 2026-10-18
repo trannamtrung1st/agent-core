@@ -18,6 +18,7 @@ public sealed partial class TenantBrowserApprovalTests
         public bool Uncertain { get; set; }
         public int Invocations;
         public int NativeEffects;
+        public int PasswordResolutions;
         public BrowserProviderDescriptor Provider => target.Provider;
         public BrowserHostPolicy HostPolicy => target.HostPolicy;
         public bool IsAvailable => true;
@@ -28,6 +29,11 @@ public sealed partial class TenantBrowserApprovalTests
             Assert.NotNull(request.TenantDispatchCheck); Assert.NotNull(request.TenantWitness);
             if (BeforeGate is { } before) await before();
             var denied = await request.TenantDispatchCheck(ct); if (denied is not null) return new(denied);
+            if (request.Command is BrowserFillCredential)
+            {
+                Assert.NotNull(request.TenantPasswordResolver); PasswordResolutions++;
+                Assert.Equal("tenant-bound-private-password", await request.TenantPasswordResolver(target.HostPolicy.NavigationOrigins.Single(), ct));
+            }
             Interlocked.Increment(ref NativeEffects); target.CommandRevision++;
             if (AfterEffect is { } after) await after();
             return Uncertain ? new("close_uncertain", EffectAttempted: true)
@@ -38,7 +44,8 @@ public sealed partial class TenantBrowserApprovalTests
     {
         current ??= f.Iam;
         return new(current, (ITenantRunStore)current, (ITenantApprovalStore)current, effects ?? (ITenantApprovedOperationStore)current,
-            new((ITenantSessionStore)current, f.RunConfiguration(), current, new(current), browser), new(current), browser, Operations(f, current), f.Ids, f.Clock);
+            new((ITenantSessionStore)current, f.RunConfiguration(), current, new(current), browser,
+                new((ITenantCredentialBindingStore)current, f.RunConfiguration(), f.Protector, (ITenantRunStore)current)), new(current), browser, Operations(f, current), f.Ids, f.Clock);
     }
     private static async Task<(Setup Setup, TenantApprovalRequest Request)> ApprovedEffect(Fixture f, Setup s, IBrowser browser, Action? beforeDecision = null)
     {

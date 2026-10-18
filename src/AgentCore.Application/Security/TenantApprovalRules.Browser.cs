@@ -20,8 +20,10 @@ public static partial class TenantApprovalRules
             throw new ArgumentException("Use the exact supported Browser command schema.");
         var command = request.Command;
         // These require their own canonical resource/credential/attached-input adapters.
-        if (command is BrowserFillCredential or BrowserUploadCommand or BrowserScreenshot or BrowserMouse or BrowserSetGeolocation
+        if (command is BrowserUploadCommand or BrowserScreenshot or BrowserMouse or BrowserSetGeolocation
             || command is BrowserDrop { ArtifactId: not null }) throw new AccessDeniedException("browser_resource_adapter_unavailable");
+        if (command is BrowserFillCredential password && password.CredentialRef != AgentCore.Domain.Credentials.CredentialRules.Reference(password.CredentialRef))
+            throw new ArgumentException("Use the canonical bound Credential reference.");
         // The legacy tool effect classification treats navigation as ReadOnly. Tenant IAM must
         // reserve navigation, closure, storage and context changes for sensitive browser.use.
         var read = TenantBrowserInspectionContract.ReadOnly(command);
@@ -78,6 +80,12 @@ public static partial class TenantApprovalRules
                 JsonValueKind.Null => "Not set", JsonValueKind.String => item.GetString(), _ => item.GetRawText() }));
         }
         Describe(effective, "");
+        if (value.Credential is { } credential)
+        {
+            lines.Add("Credential: " + credential.DisplayName);
+            lines.Add("Credential origin: " + credential.Origin);
+            lines.Add("Protected field fill only; sign-in is not confirmed.");
+        }
         return lines.Count == 0 ? "No additional parameters" : string.Join("\n", lines);
         static string Label(string key) => key switch { "url" => "URL", "by" => "Match by", "frameRef" => "Frame", "tabRef" => "Tab",
             "within" => "Within", "cwd" => "Working directory", "mimeType" => "Media type", _ => string.Concat(key.Select((c, i) =>
@@ -89,8 +97,10 @@ public static partial class TenantApprovalRules
         var parsed = BrowserIntent(value.SessionId, value.ToolName, value.ArgumentsJson); _ = BrowserTarget(value);
         if (parsed.Arguments != value.ArgumentsJson || parsed.ReadOnly != value.ReadOnly || BrowserCommandIdentity.Hash(parsed.Command) != value.CommandHash)
             throw new ArgumentException("Browser command parameters must be exact and canonical.");
-        var json = JsonSerializer.Serialize(new { operation = "browser.command", permission = value.ReadOnly ? "browser.read" : "browser.use", resourceType = "agent",
-            resourceId = instance.ToString("D"), expectedInstanceRevision = instanceRevision, expectedPersonaRevision = personaRevision, browserCommand = value });
+        TenantBrowserCredentialRules.Shape(value, parsed.Command);
+        var json = JsonSerializer.Serialize(new { operation = "browser.command", permission = value.Credential is not null ? "credentials.use" : value.ReadOnly ? "browser.read" : "browser.use",
+            resourceType = value.Credential is not null ? "credential" : "agent", resourceId = (value.Credential?.CredentialId ?? instance).ToString("D"),
+            expectedInstanceRevision = instanceRevision, expectedPersonaRevision = personaRevision, browserCommand = value });
         return new(operationId, instance, null, instanceRevision, personaRevision, json,
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), BrowserCommand: value);
     }
