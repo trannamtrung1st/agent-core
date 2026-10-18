@@ -57,7 +57,12 @@ public sealed partial class TenantApprovalService
                 var (run, current) = await operations.ResolveAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
                 if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
                 TenantApprovalRules.Validate(r, run, target!);
-                if (op.CredentialCheck is { } check)
+                if (op.ArtifactPublication is not null)
+                {
+                    await RequireArtifactAsync(r, run, state, ct).ConfigureAwait(false);
+                    await TenantArtifactReviewRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
+                else if (op.CredentialCheck is { } check)
                 {
                     if (credentialTargets is null) throw new AccessDeniedException("tenant_effect_unavailable");
                     var (_, bound) = await credentialTargets.ResolveAsync(run, check.Reference, ct).ConfigureAwait(false);
@@ -122,6 +127,12 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.ArtifactPublication is { } publication)
+        {
+            var args = AgentCore.Application.Tools.TenantArtifactToolContract.Parse(publication.ArgumentsJson);
+            return [new("artifactDisplayName", null, args.DisplayName, false), new("artifactContentType", null, args.ContentType, false),
+                new("artifactByteSize", null, System.Text.Encoding.UTF8.GetByteCount(args.Content), false), new("artifactContent", null, args.Content, false)];
+        }
         if (op.CredentialRead is { } metadata)
         {
             using var doc = System.Text.Json.JsonDocument.Parse(metadata.ArgumentsJson);

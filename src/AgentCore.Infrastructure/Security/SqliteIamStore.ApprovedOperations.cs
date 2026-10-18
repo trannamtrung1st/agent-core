@@ -89,6 +89,23 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             await TenantCredentialReadOperationRules.ReviewerAsync(before, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
+        ArtifactRecordRow? artifactRow = null;
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactPublication is not null)
+        {
+            try
+            {
+                var artifact = await RequireArtifactOperation(db, request, run, target, ct, source).ConfigureAwait(false);
+                try { await TenantArtifactReviewRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false); }
+                catch (AccessDeniedException) { throw new AccessDeniedException("grantor_authority_lost"); }
+                var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = System.Text.Encoding.UTF8.GetBytes(artifact.Content);
+                artifactRow = await (artifactBacking ?? throw new AccessDeniedException("tenant_effect_unavailable")).StageTenantLocalAsync(db, frame,
+                    TenantArtifactRules.Record(frame, commit.OperationId, artifact.DisplayName, artifact.ContentType, bytes, at), bytes, ct).ConfigureAwait(false);
+            }
+            catch (AccessDeniedException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }
+            catch (SecurityConflictException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }
+            at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
+        }
         audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
         var configure = complete && request.Operation.IsLocalConfiguration;
@@ -119,6 +136,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
                 db.Entry(executionRow).CurrentValues.SetValues(SandboxRuntimePersistence.Row(stopped));
             }
         }
+        if (complete && artifactRow is not null) db.Artifacts.Add(artifactRow);
         AgentRunStoreMapping.Apply(row, savedRun);
         if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
         var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,

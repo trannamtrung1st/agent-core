@@ -23,6 +23,9 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
             var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
+            var prepared = TenantApprovalRules.PrepareArtifact(commit.OperationId, run.AgentInstanceId, new(run.SessionId, args.CanonicalArguments), target.Instance.Revision, target.Instance.PersonaRevision);
+            var correlated = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, target.PrincipalId, prepared.OperationFingerprint);
+            if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated));
             if (!AgentCore.Application.Tools.TenantArtifactToolContract.Allows(TenantAgentDefinitionBaseline(target))) throw new AccessDeniedException("capability_unavailable");
             TenantArtifactOperationRules.RequireAuthorityAsync(before, run, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             TenantArtifactOperationRules.Transaction(next, expectedSecurityRevision, run, audit);

@@ -46,6 +46,7 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.ArtifactPublication => PrepareArtifact(op.OperationId, op.InstanceId, op.ArtifactPublication!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.Persona => Prepare(op.OperationId, op.InstanceId, op.Persona!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ConversationPreferences => PreparePreferences(op.OperationId, op.InstanceId, op.Preferences!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.CredentialConnectionCheck => PrepareCredentialCheck(op.OperationId, op.InstanceId, op.CredentialCheck!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),

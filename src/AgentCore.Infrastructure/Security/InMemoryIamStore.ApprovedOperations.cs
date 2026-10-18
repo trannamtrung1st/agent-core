@@ -74,6 +74,19 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 TenantCredentialReadOperationRules.ReviewerAsync(before, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
+            AgentCore.Application.Tools.TenantArtifactArguments? artifact = null;
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactPublication is not null)
+            {
+                try
+                {
+                    artifact = RequireArtifactOperation(request, run, target, source);
+                    try { TenantArtifactReviewRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult(); }
+                    catch (AccessDeniedException) { throw new AccessDeniedException("grantor_authority_lost"); }
+                }
+                catch (AccessDeniedException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }
+                catch (SecurityConflictException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
@@ -94,6 +107,12 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                     : current.Lease with { Revision = checked(current.Lease.Revision + 1), SafeMessage = "Stop requested. Process cleanup is pending; canonical files are retained." };
                 if (request.Operation.SandboxControl.Kind == SandboxControlKind.StopProcess)
                     stopped = TenantSandboxControlRules.ApplyStop(current.Execution!, audit with { AuditId = request.RequestId, ActorPrincipalId = decision.HumanPrincipalId });
+            }
+            if (complete && artifact is not null)
+            {
+                var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = System.Text.Encoding.UTF8.GetBytes(artifact.Content);
+                (artifactBacking ?? throw new AccessDeniedException("tenant_effect_unavailable")).PublishTenantLocal(frame,
+                    TenantArtifactRules.Record(frame, commit.OperationId, artifact.DisplayName, artifact.ContentType, bytes, at), bytes, false, ct);
             }
             sessionBacking.SaveTenantOperationRun(savedRun, run.Revision);
             if (pending is not null) sandboxBacking.SaveTenantLease(pending);

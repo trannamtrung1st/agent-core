@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Collapse, Descriptions, Drawer, Empty, Flex, Select, Table, Tag, Typography } from 'antd';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Alert, App, Button, Collapse, Descriptions, Drawer, Empty, Flex, Input, Select, Table, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { confirmAction } from '../../app/confirmAction';
 import { navigateToAppPath } from '../../app/appRoute';
@@ -32,7 +32,8 @@ const fields: Record<string, string> = { name: 'Name', role: 'Role', description
   sandboxControl: 'Control request', generation: 'Environment generation', execution: 'Exact execution', storedEnvironmentState: 'Stored environment state', storedExecutionState: 'Stored process state', cleanupConsequence: 'Cleanup behavior', fileRetention: 'File retention',
   sandboxProfile: 'Sandbox profile', image: 'Image', command: 'Command', workingDirectory: 'Working directory', timeoutSeconds: 'Timeout (seconds)', background: 'Run in background',
   homeAccess: 'Home access', cpu: 'CPU cores', memoryMiB: 'Memory (MiB)', storageBytes: 'Storage (bytes)', initializationRequired: 'Initialization required',
-  profileInitialization: 'Profile initialization script', instanceInitialization: 'Instance initialization script' };
+  profileInitialization: 'Profile initialization script', instanceInitialization: 'Instance initialization script',
+  artifactDisplayName: 'File name', artifactContentType: 'File type', artifactByteSize: 'UTF-8 bytes' };
 const reasons: Record<string, string> = {
   credential_metadata_read_authorized: 'This exact metadata page was authorized. Current access is checked before data is returned; no protected value or use permission is granted.',
   credential_source_changed: 'The Credential metadata source or current access changed. Refresh details or prepare a new request.',
@@ -59,7 +60,7 @@ const reasons: Record<string, string> = {
   management_unavailable: 'The current agent management policy does not permit this change.',
   operation_completed: 'The exact change was applied.', operation_authority_changed: 'Authority changed before the action could be applied.',
   grantor_authority_lost: 'The approver no longer has the required authority.',
-  executor_read_required: 'The agent no longer has the required credential read permission.',
+  executor_read_required: 'The agent no longer has the required read permission.',
   credential_binding_changed: 'The saved credential binding changed. Prepare a new action with the current binding.',
   credential_connection_checked: 'The bound connection check completed. This result does not authorize another credential use.',
   credential_reconnect_required: 'The check completed and the credential requires reconnection.',
@@ -80,6 +81,7 @@ const reasons: Record<string, string> = {
 const isSandboxControl = (item?: TenantApproval) => item?.preparedAction.operation === 'stop_sandbox_process' || item?.preparedAction.operation === 'reset_sandbox_environment';
 const isReadOperation = (operation?: string) => operation === 'inspect_credential_metadata' || operation === 'inspect_sandbox_profiles' || operation === 'inspect_sandbox_status' || operation === 'inspect_sandbox_process' || operation === 'sandbox_read';
 export function approvalResultLabel(operation: string | undefined, outcome: string) {
+  if (operation === 'publish_artifact' && (outcome === 'completed' || outcome === 'denied')) return outcome === 'completed' ? 'File published' : 'File not published';
   if (outcome === 'completed') return operation === 'browser_command' ? 'Command completed' : isReadOperation(operation) ? 'Read authorized' : operation === 'check_credential_connection' ? 'Check completed'
     : operation === 'sandbox_control' || operation === 'stop_sandbox_process' || operation === 'reset_sandbox_environment' ? 'Request recorded' : 'Applied';
   return outcome === 'denied' ? isReadOperation(operation) ? 'Read not authorized' : 'Not applied' : 'Outcome uncertain';
@@ -125,6 +127,14 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const [loading, setLoading] = useState(true); const [version, setVersion] = useState(0); const [expired, setExpired] = useState(false);
   const [acknowledged, setAcknowledged] = useState<Status>(); const [confirming, setConfirming] = useState(false);
   const active = useRef(true); const confirmation = useRef<ReturnType<typeof modal.confirm> | null>(null);
+  const returnFocus = useRef<HTMLElement | null>(null); const refreshButton = useRef<HTMLButtonElement>(null);
+  const contentId = useId();
+  useEffect(() => {
+    if (!confirming && returnFocus.current) {
+      const target = returnFocus.current; returnFocus.current = null;
+      (target.isConnected && !target.matches(':disabled') ? target : refreshButton.current)?.focus();
+    }
+  }, [confirming]);
   const reload = () => { command.clearError(); setFresh(false); setVersion(value => value + 1); };
   useEffect(() => { active.current = true; return () => { active.current = false; confirmation.current?.destroy(); }; }, []);
   useEffect(() => {
@@ -147,9 +157,10 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const decide = (decision: 'approve' | 'reject' | 'cancel') => {
     if (!data || blocked || (decision === 'cancel' ? !data.review.canCancel : !data.review.canDecide)) return;
     const saved = data; const label = decision === 'approve' ? saved.kind === 'exceptionalGrant' ? 'Authorize once' : 'Approve' : decision === 'reject' ? 'Reject' : 'Cancel request';
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setConfirming(true);
     confirmation.current = confirmAction(modal, { title: `${label}?`, okText: label, cancelText: 'Keep reviewing', danger: decision !== 'approve',
-      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
+      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.preparedAction.operation === 'publish_artifact' ? `${saved.kind === 'exceptionalGrant' ? 'Authorize' : 'Approve'} publication of only this exact saved file once, before expiry. No role or file read access is granted. Execution checks current access again.` : saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
       afterClose: () => { if (active.current) setConfirming(false); },
       onOk: () => command.run(async signal => {
         if (!active.current) throw new Error('Review closed.');
@@ -164,11 +175,13 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const sandboxCommand = data?.preparedAction.operation === 'run_sandbox_command';
   const sandboxControl = isSandboxControl(data);
   const savedRead = isReadOperation(data?.preparedAction.operation);
-  const savedTitle = savedRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
+  const artifactPublication = data?.preparedAction.operation === 'publish_artifact';
+  const fileContent = data?.review.changes.find(change => change.field === 'artifactContent');
+  const savedTitle = artifactPublication ? 'Exact saved file' : savedRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
   return <Drawer open title="Approval details" aria-label="Approval details" className="access-editor-drawer" size="large" styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden
     onClose={() => { if (!busy) onClose(); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
     footer={<Flex wrap gap="var(--ac-space-compact)" justify="end">
-      <Button onClick={reload} disabled={busy} loading={loading} icon={<ReloadOutlined aria-hidden />}>Refresh details</Button>
+      <Button ref={refreshButton} onClick={reload} disabled={busy} loading={loading} icon={<ReloadOutlined aria-hidden />}>Refresh details</Button>
       {status === 'pending' && <><Button danger disabled={blocked || !data?.review.canCancel} onClick={() => decide('cancel')}>Cancel request</Button><Button danger disabled={blocked || !data?.review.canDecide} onClick={() => decide('reject')}>Reject</Button><Button type="primary" disabled={blocked || !data?.review.canDecide} onClick={() => decide('approve')}>{data?.kind === 'exceptionalGrant' ? 'Authorize once' : 'Approve'}</Button></>}
     </Flex>}>
     <Flex vertical gap="var(--ac-space-section)">
@@ -186,7 +199,13 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: approvalDate(data.decision.decidedAt) }] : [])
         ]} />
         <section aria-label={savedTitle}><Typography.Title level={5}>{savedTitle}</Typography.Title>
-          {browserCommand || sandboxCommand || sandboxControl || savedRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
+          {artifactPublication ? <Flex vertical gap="var(--ac-space-default)">
+            <Descriptions {...layout} column={1} size="small" items={data.review.changes.filter(change => change.field !== 'artifactContent').map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} />
+            <Flex vertical gap="var(--ac-space-compact)"><label htmlFor={contentId}>Exact file content</label>
+              {fileContent?.afterAvailable && typeof fileContent.after === 'string' ? <Input.TextArea id={contentId} readOnly value={fileContent.after} autoSize={{ minRows: 6, maxRows: 12 }} /> : <Typography.Text>Content was not recorded for this request.</Typography.Text>}
+              <Typography.Text type="secondary">Untrusted file content is shown as plain text. Publication grants no file read access.</Typography.Text>
+            </Flex>
+          </Flex> : browserCommand || sandboxCommand || sandboxControl || savedRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
             { key: 'before', label: 'Before', children: change.beforeAvailable ? value(change.before) : 'Not recorded for this request' },
             { key: 'after', label: 'After', children: <Flex vertical gap="var(--ac-space-tight)">{change.afterAvailable ? value(change.after) : 'Definition default was not recorded'}{change.restoresDefault && <Typography.Text type="secondary">Restore the Definition default</Typography.Text>}</Flex> }
           ]} />)}</Flex>}
@@ -196,7 +215,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           {(expired || data.review.decisionUnavailableReason) && <Alert type="warning" showIcon title="Decision unavailable" description={expired ? reasons.approval_expired : reasons[data.review.decisionUnavailableReason!] ?? 'Current authority or configuration does not permit this decision. Refresh details or ask an owner.'} />}
           {!fresh && <Typography.Text role="status" type="secondary">Refresh details before deciding. A saved decision is never submitted again automatically.</Typography.Text>}
         </>}
-        <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={resultLabel(data)} description={<>{reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {approvalDate(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
+        <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={resultLabel(data)} description={<>{artifactPublication && data.operationResult.outcome === 'completed' ? 'The exact saved file was published. Viewing or downloading it requires separate current access.' : reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {approvalDate(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
         <Collapse items={[{ key: 'technical', label: 'Technical references', children: <Descriptions {...layout} column={1} size="small" items={[
           { key: 'request', label: 'Request', children: data.requestId }, { key: 'run', label: 'Source Run', children: data.runId }, { key: 'session', label: 'Session', children: data.sessionId }, { key: 'root', label: 'Execution root', children: data.rootActivationId },
           { key: 'hash', label: 'Exact action hash', children: data.preparedAction.actionHash }, { key: 'revision', label: 'Request revision', children: data.requestRevision }, { key: 'access', label: 'Access revision', children: data.securityRevision }

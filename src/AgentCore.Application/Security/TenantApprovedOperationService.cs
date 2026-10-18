@@ -43,6 +43,7 @@ public sealed partial class TenantApprovedOperationService(IIamStore security, I
             throw new SecurityConflictException("operation_mismatch");
         var existing = await effects.FindOperationReceiptAsync(reference.TenantId, operationId, ct).ConfigureAwait(false);
         if (existing is not null) return Existing(existing, request, run);
+        if (request.Operation.ArtifactPublication is not null) return await ExecuteArtifactAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);
         if (request.Operation.CredentialRead is not null) return await ExecuteMetadataReadAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
         if (request.Operation.SandboxRead is not null) return await ExecuteReadAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);
         if (request.Operation.SandboxControl is not null) return await ExecuteControlAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);

@@ -28,6 +28,45 @@ function view(item = request) {
 beforeEach(() => { fetchMock.mockReset(); resetIdentityCsrf(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+const artifactRequest: TenantApproval = { ...request, summary: 'Publish exact file', preparedAction: { ...request.preparedAction, operation: 'publish_artifact' },
+  review: { ...request.review, changes: [
+    { field: 'artifactDisplayName', before: null, after: 'reviewed-report.md', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'artifactContentType', before: null, after: 'text/markdown', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'artifactByteSize', before: null, after: 90, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'artifactContent', before: null, after: '# Exact file\n<script>alert("literal")</script>\nUTF-8: thử nghiệm', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+  ] } };
+
+it.each(['review', 'exceptionalGrant'] as const)('reviews complete literal file content and confirms %s publication without granting read access', async kind => {
+  view({ ...artifactRequest, kind }); const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved file' });
+  const content = within(saved).getByRole('textbox', { name: 'Exact file content' });
+  expect(content).toHaveValue(artifactRequest.review.changes[3].after as string); expect(content).toHaveAttribute('readonly');
+  expect(saved.querySelector('script, img')).toBeNull(); expect(within(saved).queryByText('Before')).not.toBeInTheDocument();
+  expect(within(saved).getByText('UTF-8 bytes')).toBeVisible();
+  const label = kind === 'review' ? 'Approve' : 'Authorize once';
+  fireEvent.click(within(dialog).getByRole('button', { name: label }));
+  const confirm = (await screen.findAllByText(label + '?'))[0].closest('[role="dialog"]') as HTMLElement;
+  expect(within(confirm).getByText(/only this exact saved file once/)).toBeInTheDocument();
+  expect(within(confirm).getByText(/No role or file read access is granted/)).toBeInTheDocument();
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+
+it.each(['completed', 'denied'])('labels an Artifact %s receipt separately from the approval decision', async outcome => {
+  view({ ...artifactRequest, status: 'approved', operationResult: { outcome, reasonCode: outcome === 'completed' ? 'operation_completed' : 'grantor_authority_lost', recordedAt: request.createdAt } });
+  const dialog = await screen.findByRole('dialog'); const result = await within(dialog).findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText(outcome === 'completed' ? 'File published' : 'File not published')).toBeVisible();
+  expect(within(dialog).queryByRole('button', { name: 'Authorize once' })).not.toBeInTheDocument();
+});
+
+it('removes saved file content when current approval read access is lost', async () => {
+  view(artifactRequest); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByRole('textbox', { name: 'Exact file content' })).toBeVisible();
+  fetchMock.mockImplementation(async path => String(path).includes('/approvals?') ? response({ items: [], total: 0, page: 0, pageSize: 20 }) : response({ reasonCode: 'approval_unavailable' }, 403));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Refresh details' }));
+  await waitFor(() => expect(within(dialog).queryByRole('textbox', { name: 'Exact file content' })).not.toBeInTheDocument());
+});
+
 it('reviews exact Browser parameters with clear consent and stale-target recovery in the shared command inspector', async () => {
   const browser = { ...request, kind: 'review' as const, summary: 'Review exact Browser command',
     preparedAction: { ...request.preparedAction, operation: 'browser_command' },

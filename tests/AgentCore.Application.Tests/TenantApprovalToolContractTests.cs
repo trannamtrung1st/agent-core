@@ -12,6 +12,29 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantApprovalToolContractTests
 {
     [Fact]
+    public void Artifact_consent_binds_exact_normalized_bytes_and_rejects_model_selected_authority()
+    {
+        const string input = """{"operation":"publish_artifact","artifact":{"displayName":"../review.md","content":"<script>literal</script>\r\nUTF-8: thử nghiệm"}}""";
+        var intent = TenantApprovalToolContract.Parse(new("file", ToolCatalog.RequestAuthorization, input));
+        var parsed = TenantArtifactToolContract.Parse(intent.ArtifactArguments!);
+        Assert.Equal("review.md", parsed.DisplayName); Assert.Equal("<script>literal</script>\r\nUTF-8: thử nghiệm", parsed.Content);
+        var saved = TenantApprovalRules.PrepareArtifact(Guid.NewGuid(), Guid.NewGuid(), new(Guid.NewGuid(), parsed.CanonicalArguments), 1, 1);
+        Assert.True(intent.Matches(saved)); Assert.False((intent with { ArtifactArguments = parsed.CanonicalArguments.Replace("literal", "changed") }).Matches(saved));
+        Assert.Equal(saved.ActionHash, TenantApprovalRules.Rebuild(saved).ActionHash);
+        var changed = TenantApprovalRules.PrepareArtifact(Guid.NewGuid(), saved.InstanceId, saved.ArtifactPublication!, 2, 1);
+        Assert.NotEqual(saved.ActionHash, changed.ActionHash); Assert.Equal(saved.SemanticActionJson, changed.SemanticActionJson);
+        foreach (var key in new[] { "tenantId", "sessionId", "artifactId", "runId", "principalId", "permission", "grantId", "expectedRevision" })
+        {
+            var root = JsonNode.Parse(input)!; root[key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("bad", ToolCatalog.RequestAuthorization, root.ToJsonString())));
+            root = JsonNode.Parse(input)!; root["artifact"]![key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("bad", ToolCatalog.RequestAuthorization, root.ToJsonString())));
+        }
+        Assert.Contains("publish_artifact", TenantApprovalToolContract.Descriptor(settings: false, credentials: false, artifactPublication: true).ModelDefinition.ParametersJson);
+        Assert.DoesNotContain("publish_artifact", TenantApprovalToolContract.Descriptor(settings: false, credentials: false).ModelDefinition.ParametersJson);
+    }
+
+    [Fact]
     public void Credential_metadata_intent_normalizes_only_discovery_arguments_and_never_accepts_authority_or_scope_members()
     {
         const string input = """{"operation":"inspect_credential_metadata","arguments":{"cursor":" ACCOUNT ","limit":2}}""";

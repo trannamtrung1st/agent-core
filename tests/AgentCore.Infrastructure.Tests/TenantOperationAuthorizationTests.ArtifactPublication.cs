@@ -22,7 +22,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var frame = await ClaimArtifactRun(f, setup); var scope = TenantSessionRules.Scope(setup.Tenant, frame.SessionId);
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Publish in this Session", ["sessions.read", "artifacts.create"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, setup.Agent.PrincipalId, role.RoleId, scope, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
-        var service = new TenantArtifactOperationService((ITenantArtifactOperationStore)f.Iam, Operations(f), f.RunConfiguration(), f.Ids, f.Clock, f.Authorizer);
+        var service = new TenantArtifactOperationService((ITenantArtifactOperationStore)f.Iam, Operations(f), f.RunConfiguration(), f.Ids, f.Clock, f.Authorizer, (ITenantApprovalStore)f.Iam);
         const string args = """{"displayName":"private-report.md","content":"# Private report\nExact UTF-8 content: thử nghiệm"}""";
         var result = await service.ExecuteAsync(new(setup.Tenant, frame.RunId), frame.Generation, "publish-1", args);
         Assert.Equal(OperationDecisionKind.Allowed, result.Decision); Assert.NotNull(result.Receipt); Assert.Null(result.Receipt.RequestId);
@@ -148,7 +148,7 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     private static TenantArtifactOperationService PublicationService(Fixture f, ITenantArtifactOperationStore? effects = null) => new(effects ?? (ITenantArtifactOperationStore)f.Iam,
-        Operations(f), f.RunConfiguration(), f.Ids, f.Clock, f.Authorizer);
+        Operations(f), f.RunConfiguration(), f.Ids, f.Clock, f.Authorizer, (ITenantApprovalStore)f.Iam);
     private static async Task<RoleAssignment> GrantPublication(Fixture f, Environment setup, string[]? permissions = null)
     {
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Publish an Artifact", permissions ?? ["sessions.read", "artifacts.create"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
