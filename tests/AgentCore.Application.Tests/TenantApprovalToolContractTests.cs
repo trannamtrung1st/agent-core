@@ -12,6 +12,25 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantApprovalToolContractTests
 {
     [Fact]
+    public void Credential_metadata_intent_normalizes_only_discovery_arguments_and_never_accepts_authority_or_scope_members()
+    {
+        const string input = """{"operation":"inspect_credential_metadata","arguments":{"cursor":" ACCOUNT ","limit":2}}""";
+        var intent = TenantApprovalToolContract.Parse(new("metadata", ToolCatalog.RequestAuthorization, input));
+        Assert.Equal("{\"cursor\":\"account\",\"limit\":2}", intent.MetadataArguments);
+        foreach (var key in new[] { "tenantId", "principalId", "credentialId", "bindingId", "permission", "grantId", "value", "expectedRevision" })
+        {
+            var root = JsonNode.Parse(input)!.AsObject(); root[key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("bad", ToolCatalog.RequestAuthorization, root.ToJsonString())));
+            root = JsonNode.Parse(input)!.AsObject(); root["arguments"]![key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("bad", ToolCatalog.RequestAuthorization, root.ToJsonString())));
+        }
+        foreach (var args in new[] { "null", "[]", "{\"limit\":0}", "{\"limit\":101}", "{\"cursor\":\"bad/alias\"}", "{\"limit\":1,\"limit\":2}" })
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("bad", ToolCatalog.RequestAuthorization,
+                "{\"operation\":\"inspect_credential_metadata\",\"arguments\":" + args + "}")));
+        Assert.Contains("inspect_credential_metadata", TenantApprovalToolContract.Descriptor(settings: false, credentials: false, credentialMetadata: true).ModelDefinition.ParametersJson);
+        Assert.DoesNotContain("inspect_credential_metadata", TenantApprovalToolContract.Descriptor(settings: false, credentials: false).ModelDefinition.ParametersJson);
+    }
+    [Fact]
     public void Credential_authorization_accepts_only_a_bound_reference_and_matches_only_that_operation_kind()
     {
         const string arguments = """{"operation":"check_credential_connection","reference":" Work-Drive "}""";

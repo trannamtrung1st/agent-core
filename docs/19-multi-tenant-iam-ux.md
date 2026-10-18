@@ -1,5 +1,12 @@
 # Accounts, organizations, access and approvals UX
 
+## Credential metadata read Review
+
+The existing approval inbox and shared inspector cover `inspect_credential_metadata` with the summary “Read bound Credential metadata”. Reuse the current Drawer, responsive descriptions, confirmation and result sections. Show the saved alias/name scope, starting alias and maximum page size, then explain that only aliases, names, kinds and operator-authored non-secret metadata may return to the agent. One additional saved alias may be checked to determine whether another page is available. Do not show protected values or imply Credential-use authority. The source Session and exact operation references remain in the existing technical disclosure.
+
+An empty page still has its actual Session-read scope. Current raw Credential and Session reads govern visibility; approve scope and applicable independent review govern decisions. “Approve” authorizes this one saved bounded page. A completed consent receipt is “Read authorized”, not “Applied”; current data delivery may still be unavailable after access or source changes. Cancel/reload remains available under its existing independent authority for materially stale consent. No new UI kit, token, container, editable authority input or parallel resource browser is introduced.
+
+
 ## Session Sandbox controls interaction contract
 
 Expose Session Sandbox from the existing Chat header within the current organization/Session. Preserve its incumbent native Drawer, responsive Descriptions, bounded escaped evidence, wrapping action rows and focus return to the opener. A tenant-specific adapter must use canonical tenant reads/commands only; it must not invoke the legacy owner transport. The stored status and control preflight are distinct from live provider readiness or permission to run a command.

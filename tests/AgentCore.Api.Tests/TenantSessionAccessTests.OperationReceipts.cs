@@ -46,6 +46,7 @@ public sealed partial class TenantSessionAccessTests
         public ModelToolCall? ProposedBrowserRead { get; set; }
         public int BrowserReadRepeats { get; set; } = 1;
         public string? ProposedBrowserCommand { get; set; }
+        public string? ProposedMetadataRead { get; set; }
         public string? ProposedPreferences { get; set; }
         public string? ProposedPreferenceAuthorization { get; set; }
         public TaskCompletionSource? ApprovalResponseGate { get; set; }
@@ -64,6 +65,12 @@ public sealed partial class TenantSessionAccessTests
                 && request.Tools?.Any(t => t.Name == browserRead.Name) == true)
             {
                 yield return new ModelToolCallEvent(browserRead with { Id = "direct-browser-read-" + reads });
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (ProposedMetadataRead is { } metadataRead && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization)
+                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("inspect_credential_metadata")) == true)
+            {
+                yield return new ModelToolCallEvent(new("reviewed-metadata-read", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization, metadataRead));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             if (ProposedBrowserCommand is { } browserCommand && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization)

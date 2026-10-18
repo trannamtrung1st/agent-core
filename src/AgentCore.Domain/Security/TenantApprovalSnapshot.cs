@@ -11,7 +11,8 @@ public sealed record TenantApprovalSandboxSnapshot(string ProfileName, string Im
     int MaxCommandSeconds, int IdleTtlSeconds, int MaxLifetimeSeconds, long StorageBytes);
 public sealed record TenantApprovalSandboxControlSnapshot(string ProfileName, string ImageReference, string StoredState, string? ExecutionState);
 public sealed record TenantApprovalSandboxReadSnapshot(string ScopeSummary, string ProfileLabelsJson, bool IncludesBoundedOutput);
+public sealed record TenantApprovalCredentialReadSnapshot(int Count);
 public sealed record TenantApprovalBrowserSnapshot(string ToolName, string? Origin, string ProfileMode);
 public sealed record TenantApprovalSnapshot(string AgentName, AgentIdentity? BeforePersona = null,
     TenantApprovalPreferenceValues? PreferenceDefaults = null, TenantApprovalPreferenceOverrides? PreferenceOverrides = null,
-    TenantApprovalCredentialSnapshot? Credential = null, TenantApprovalSandboxSnapshot? Sandbox = null, TenantApprovalSandboxControlSnapshot? SandboxControl = null, TenantApprovalSandboxReadSnapshot? SandboxRead = null, TenantApprovalBrowserSnapshot? Browser = null);
+    TenantApprovalCredentialSnapshot? Credential = null, TenantApprovalSandboxSnapshot? Sandbox = null, TenantApprovalSandboxControlSnapshot? SandboxControl = null, TenantApprovalSandboxReadSnapshot? SandboxRead = null, TenantApprovalBrowserSnapshot? Browser = null, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantApprovalCredentialReadSnapshot? CredentialRead = null);

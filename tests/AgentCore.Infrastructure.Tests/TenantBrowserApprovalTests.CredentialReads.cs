@@ -12,7 +12,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantBrowserApprovalTests
 {
     private static TenantCredentialRuntimeReadService CredentialReads(Fixture f, ITenantCredentialBindingStore? bindings = null) => new(Operations(f, f.Iam), (ITenantRunStore)f.Iam,
-        (ITenantSessionStore)f.Iam, bindings ?? (ITenantCredentialBindingStore)f.Iam, f.RunConfiguration(), f.Iam, new(f.Iam), f.Clock);
+        (ITenantSessionStore)f.Iam, bindings ?? (ITenantCredentialBindingStore)f.Iam, f.RunConfiguration(), f.Iam, new(f.Iam), f.Clock, (ITenantApprovalStore)f.Iam, (ITenantApprovedOperationStore)f.Iam);
     private sealed class CredentialBindingReadProbe(ITenantCredentialBindingStore inner) : ITenantCredentialBindingStore
     {
         public int Reads;

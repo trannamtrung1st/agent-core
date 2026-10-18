@@ -207,3 +207,22 @@ it.each(['inspect_sandbox_profiles', 'inspect_sandbox_status', 'inspect_sandbox_
   expect(within(dialog).getByText('Read authorized', { exact: true })).toBeVisible();
   expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
 });
+
+it('shows exact Credential metadata scope and page as a read, with escaped names and no implied use authority', async () => {
+  view({ ...request, kind: 'review', status: 'approved', summary: 'Read bound Credential metadata',
+    preparedAction: { ...request.preparedAction, operation: 'inspect_credential_metadata' },
+    operationResult: { outcome: 'completed', reasonCode: 'credential_metadata_read_authorized', recordedAt: '2026-10-18T12:00:00Z' },
+    review: { ...request.review, changes: [
+      { field: 'credentialMetadata', before: null, after: 'Bound Credential metadata', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readCredentials', before: null, after: 'Account <script>not markup</script> (account)', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readPage', before: null, after: 'Up to 1 record, starting from the first alias.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readDisclosure', before: null, after: 'Return aliases, names, kinds and non-secret metadata. No protected values or use permission.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readLimit', before: null, after: 'One exact bounded page. Later reads require current policy again.', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } });
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved read' });
+  expect(within(saved).getByText('Credential scope', { exact: true })).toBeVisible(); expect(within(saved).getByText('Page', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('Account <script>not markup</script> (account)', { exact: true })).toBeVisible(); expect(saved.querySelector('script')).toBeNull();
+  expect(within(saved).queryByText('Saved field', { exact: true })).not.toBeInTheDocument(); expect(within(saved).queryByText('Before', { exact: true })).not.toBeInTheDocument();
+  expect(within(dialog).getByText('Read authorized', { exact: true })).toBeVisible(); expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+  expect(within(dialog).getByText(/no protected value or use permission is granted/)).toBeVisible();
+});

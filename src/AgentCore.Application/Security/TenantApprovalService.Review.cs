@@ -66,6 +66,13 @@ public sealed partial class TenantApprovalService
                         PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
                     if (!read.Allowed) unavailable = "executor_read_required";
                 }
+                else if (op.CredentialRead is not null)
+                {
+                    var reads = credentialReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.BrowserCommand is { } browser)
                 {
                     independent = await TenantBrowserOperationRules.IndependentAsync(r, state, authorizer, ct).ConfigureAwait(false);
@@ -115,6 +122,16 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.CredentialRead is { } metadata)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(metadata.ArgumentsJson);
+            var page = AgentCore.Application.Tools.CredentialDiscovery.Parse(doc.RootElement); var refs = TenantApprovalRules.CredentialReadReferences(metadata);
+            return [new("credentialMetadata", null, "Bound Credential metadata", false),
+                new("readCredentials", null, refs.Count == 0 ? "No readable bindings in this saved page" : string.Join("\n", refs.Select(r => r.DisplayName + " (" + r.Reference + ")")), false),
+                new("readPage", null, $"Up to {page.Limit} {(page.Limit == 1 ? "record" : "records")}" + (page.Cursor is null ? ", starting from the first alias." : $", after alias {page.Cursor}."), false),
+                new("readDisclosure", null, "Return the saved page of aliases, names, kinds and non-secret metadata. No protected values or use permission are disclosed. One additional saved alias may establish whether another page is available.", false),
+                new("readLimit", null, "One exact bounded page in this continuation. Later reads require current policy again; this approval cannot expand the saved page.", false)];
+        }
         if (op.BrowserCommand is { } browser)
             return [new("browserTool", null, browser.ToolName, false), new("browserOrigin", null, snapshot?.Browser?.Origin ?? "No live page", false, snapshot?.Browser is not null),
                 new("browserProfileMode", null, snapshot?.Browser?.ProfileMode switch { "EphemeralSession" => "Separate for this Session", "PersistentAgent" => "Shared across this agent's Sessions", _ => null }, false, snapshot?.Browser is not null),

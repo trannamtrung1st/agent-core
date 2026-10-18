@@ -39,6 +39,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             AND json_extract(PayloadJson, '$.Operation.SandboxControl.ExecutionId') IS {control.ExecutionId?.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.SandboxControl.TargetHash') = {control.TargetHash}
             """)
+        : operation.CredentialRead is { } metadata ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.CredentialRead') IS 'object'
+            AND json_extract(PayloadJson, '$.Operation.CredentialRead.SessionId') = {metadata.SessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.CredentialRead.ArgumentsJson') = {metadata.ArgumentsJson}
+            """)
         : operation.BrowserCommand is { } browser ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND ResourceType = {operation.ResourceType} AND ResourceId = {operation.ResourceId}
             AND json_extract(PayloadJson, '$.Operation.BrowserCommand.SessionId') = {browser.SessionId.ToString("D")}
@@ -49,7 +54,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests
             WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -58,9 +63,16 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var browserReadJson = System.Text.Json.JsonSerializer.Serialize(browserVisibility?.ReadInstances?.Select(id => id.ToString("D")).ToArray());
         var browserUseJson = System.Text.Json.JsonSerializer.Serialize(browserVisibility?.UseInstances?.Select(id => id.ToString("D")).ToArray());
         var browserSessionJson = System.Text.Json.JsonSerializer.Serialize(browserVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
+        var metadataReadJson = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility?.Credentials?.Select(id => id.ToString("D")).ToArray());
+        var metadataSessionJson = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         // Browser compound visibility applies to protected Credential fills too, independently of the primary permission.
         var source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE
+            (json_type(PayloadJson, '$.Operation.CredentialRead') IS NOT 'object' OR (
+                ({metadataSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({metadataSessionJson})))
+                AND ({metadataReadJson} = 'null' OR NOT EXISTS (
+                    SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.CredentialRead.ReferencesJson')) AS credential
+                    WHERE json_extract(credential.value, '$.CredentialId') NOT IN (SELECT value FROM json_each({metadataReadJson})))))) AND
             ({readableJson} = 'null' OR Permission <> 'sandbox.read' OR NOT EXISTS (
                 SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.SandboxRead.ProfileReferencesJson')) AS profile
                 WHERE json_extract(profile.value, '$.Id') NOT IN (SELECT value FROM json_each({readableJson}))))
@@ -84,7 +96,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         if (sandboxVisibility?.Sessions is not null)
         { var ids = sandboxVisibility.Sessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "sandbox.execute" && r.Permission != "sandbox.manage" && r.Permission != "sandbox.read") || ids.Contains(r.SessionId)); }
         if (allowedCredentials is not null)
-        { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
+        { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission == "credentials.read" || r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
         if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);
         if (page.Kind is { } kind) query = query.Where(r => r.Kind == (int)kind);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -116,6 +128,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             var run = AgentRunStoreMapping.ToDomain(row); var agent = Owned(target);
             TenantApprovalRules.Validate(request, run, agent);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.CredentialRead is not null) await RequireCredentialReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxCommand is not null) await RequireSandboxOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxControl is not null) await RequireSandboxControlOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxRead is not null) await RequireSandboxReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -175,6 +188,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 var owner = await RequireSandboxReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantSandboxReadOperationRules.RequireReviewerAsync(state, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.CredentialRead is not null)
+            {
+                await RequireCredentialReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantCredentialReadOperationRules.ReviewerAsync(state, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.BrowserCommand is { } browser)

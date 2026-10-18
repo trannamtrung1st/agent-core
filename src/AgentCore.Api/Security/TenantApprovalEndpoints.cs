@@ -46,6 +46,7 @@ public static class TenantApprovalEndpoints
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
+            TenantOperationKind.CredentialRead => ("Read bound Credential metadata", "inspect_credential_metadata"),
             TenantOperationKind.BrowserCommand => ("Review exact Browser command", "browser_command"),
             TenantOperationKind.Persona => ("Update agent persona", "update_persona"),
             TenantOperationKind.ConversationPreferences => ("Update conversation preferences", "update_preferences"),

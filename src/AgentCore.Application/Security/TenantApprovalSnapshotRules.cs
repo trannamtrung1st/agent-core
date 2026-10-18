@@ -24,6 +24,15 @@ public static class TenantApprovalSnapshotRules
         }
         if (string.IsNullOrWhiteSpace(s.AgentName) || s.AgentName.Length > 256)
             throw new ArgumentException("Invalid approval display identity.");
+        if (request.Operation.CredentialRead is { } credentialRead)
+        {
+            if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null
+                || s.Sandbox is not null || s.SandboxControl is not null || s.SandboxRead is not null || s.Browser is not null
+                || s.CredentialRead?.Count != TenantApprovalRules.CredentialReadReferences(credentialRead).Count)
+                throw new ArgumentException("Invalid Credential metadata review evidence.");
+            return;
+        }
+        if (s.CredentialRead is not null) throw new ArgumentException("Unexpected Credential metadata review evidence.");
         if (request.Operation.BrowserCommand is { } browser)
         {
             var target = TenantApprovalRules.BrowserTarget(browser);

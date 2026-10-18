@@ -9,7 +9,7 @@ import { useApprovalUpdates } from '../access/useApprovalUpdates';
 
 type Approval = { requestId: string; runId: string; responseId: string | null; operation: string; kind: string; status: string;
   createdAt: string; expiresAt: string; waiting: boolean; canInspect: boolean; outcome: string | null };
-const titles: Record<string, string> = { browser_command: 'Review exact Browser command', update_persona: 'Update agent persona', update_preferences: 'Update conversation preferences', check_credential_connection: 'Check credential connection', run_sandbox_command: 'Run exact Sandbox command', sandbox_control: 'Review Sandbox cleanup request', sandbox_read: 'Review stored Sandbox read' };
+const titles: Record<string, string> = { inspect_credential_metadata: 'Read bound Credential metadata', browser_command: 'Review exact Browser command', update_persona: 'Update agent persona', update_preferences: 'Update conversation preferences', check_credential_connection: 'Check credential connection', run_sandbox_command: 'Run exact Sandbox command', sandbox_control: 'Review Sandbox cleanup request', sandbox_read: 'Review stored Sandbox read' };
 const statuses: Record<string, string> = { pending: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', expired: 'Expired', cancelled: 'Cancelled' };
 const result = (item: Approval) => approvalResultLabel(item.operation, item.outcome ?? '');
 export function TenantConversationApprovals({ tenant, organization, session }: { tenant: string; organization: string; session: string }) {

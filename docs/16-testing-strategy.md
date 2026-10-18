@@ -1,5 +1,12 @@
 # Testing Strategy
 
+## Tenant Credential metadata page Review checks
+
+Exercise exact saved scope/cursor/limit, page fitting, empty Session-target pages, approve/reject/cancel, no secret-use/grant, and scoped reviewer independence through both stores. Inbox filters all saved Credential and Session reads before totals/offset, including an undisplayed lookahead; no use permission is required. Same-root changed scope/revisions cannot bypass refusal/correlation. Current Credential/Session/lookahead read loss or source rotation blocks retained metadata before later model generation while preserving the factual receipt.
+
+Use hosted Synthetic models and authenticated HTTP for actual wait/release, schema offering, private-name absence before consent and exact bounded metadata after consent. Revoke current read after an accepted decision before worker execution and require denied facts without data. Recreate a fully disposed SQLite host with pending consent and decide through a new authenticated session. Separate store reopen/result evidence from actual host recreation. Verify older request/decision/signal bytes and FK integrity through disposable schema upgrade, malformed metadata rows and no pending model changes. Frontend checks cover shared read wording, escaped long names, desktop/mobile actions and factual completion without “Applied”. [Executed scenarios and limits](reports/tenant-credential-metadata-review-verification-2026-10-18.md).
+
+
 ## Tenant protected Browser Credential checks
 
 Exercise actual Synthetic model alias discovery, exact authenticated human consent, native loopback password filling and bounded redacted result delivery through both stores. The field must stay empty before consent; exactly one resolver/dispatch may fill it afterward. Assert no value/protected payload in approval views, model requests, retained context or audit and no implied sign-in. Cover both raw-use Review without a grant and missing-use ExceptionalGrant without adding a RoleAssignment. A controlled resolver wrapper may change real IAM after protected resolution; the actual native final callback must then prevent filling and store Denied facts.

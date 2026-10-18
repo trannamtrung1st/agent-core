@@ -9,7 +9,7 @@ namespace AgentCore.Domain.Security;
 public enum TenantApprovalStatus { Pending, Approved, Rejected, Expired, Cancelled }
 public enum OperationGrantStatus { Available, Claimed, Consumed, Revoked, Indeterminate }
 
-public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand }
+public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead }
 public sealed record PreparedConversationPreferences(string? ResponseLength, string? Language, bool? AskOneQuestionAtATime,
     bool ClearResponseLength = false, bool ClearLanguage = false, bool ClearAskOneQuestionAtATime = false);
 public sealed record PreparedCredentialConnectionCheck(Guid CredentialId, Guid BindingId, string Reference,
@@ -32,25 +32,28 @@ public sealed record PreparedBrowserCredential(Guid CredentialId, Guid BindingId
 public sealed record PreparedBrowserCommand(Guid SessionId, string ToolName, string ArgumentsJson, string CommandHash, string TargetJson, bool ReadOnly,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBrowserCredential? Credential = null);
 
+public sealed record PreparedCredentialRead(Guid SessionId, Guid? CredentialId, string ArgumentsJson, string ReferencesJson);
+
 // Exactly one typed payload is allowed. No secret or bearer authority is part of this shape.
 public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, AgentIdentity? Persona,
     long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
-    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null, PreparedSandboxControl? SandboxControl = null, PreparedSandboxRead? SandboxRead = null, PreparedBrowserCommand? BrowserCommand = null)
+    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null, PreparedSandboxControl? SandboxControl = null, PreparedSandboxRead? SandboxRead = null, PreparedBrowserCommand? BrowserCommand = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedCredentialRead? CredentialRead = null)
 {
     [JsonIgnore]
-    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand) switch {
-        (not null, null, null, null, null, null, null) => TenantOperationKind.Persona,
-        (null, not null, null, null, null, null, null) => TenantOperationKind.ConversationPreferences,
-        (null, null, not null, null, null, null, null) => TenantOperationKind.CredentialConnectionCheck,
-        (null, null, null, not null, null, null, null) => TenantOperationKind.SandboxCommand,
-        (null, null, null, null, not null, null, null) => TenantOperationKind.SandboxControl,
-        (null, null, null, null, null, not null, null) => TenantOperationKind.SandboxRead,
-        (null, null, null, null, null, null, not null) => TenantOperationKind.BrowserCommand,
+    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead) switch {
+        (not null, null, null, null, null, null, null, null) => TenantOperationKind.Persona,
+        (null, not null, null, null, null, null, null, null) => TenantOperationKind.ConversationPreferences,
+        (null, null, not null, null, null, null, null, null) => TenantOperationKind.CredentialConnectionCheck,
+        (null, null, null, not null, null, null, null, null) => TenantOperationKind.SandboxCommand,
+        (null, null, null, null, not null, null, null, null) => TenantOperationKind.SandboxControl,
+        (null, null, null, null, null, not null, null, null) => TenantOperationKind.SandboxRead,
+        (null, null, null, null, null, null, not null, null) => TenantOperationKind.BrowserCommand,
+        (null, null, null, null, null, null, null, not null) => TenantOperationKind.CredentialRead,
         _ => throw new ArgumentException("Exactly one supported operation payload is required.") };
     [JsonIgnore] public bool IsLocalConfiguration => Kind is TenantOperationKind.Persona or TenantOperationKind.ConversationPreferences;
-    [JsonIgnore] public string Permission => Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.Credential is not null ? "credentials.use" : BrowserCommand.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
-    [JsonIgnore] public string ResourceType => Kind == TenantOperationKind.CredentialConnectionCheck || BrowserCommand?.Credential is not null ? "credential" : "agent";
-    [JsonIgnore] public string ResourceId => (Kind == TenantOperationKind.CredentialConnectionCheck ? CredentialCheck!.CredentialId
+    [JsonIgnore] public string Permission => Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "sessions.read" : "credentials.read" : Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.Credential is not null ? "credentials.use" : BrowserCommand.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
+    [JsonIgnore] public string ResourceType => Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "session" : "credential" : Kind == TenantOperationKind.CredentialConnectionCheck || BrowserCommand?.Credential is not null ? "credential" : "agent";
+    [JsonIgnore] public string ResourceId => (Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId ?? CredentialRead.SessionId : Kind == TenantOperationKind.CredentialConnectionCheck ? CredentialCheck!.CredentialId
         : Kind == TenantOperationKind.BrowserCommand && BrowserCommand!.Credential is { } c ? c.CredentialId : InstanceId).ToString("D");
 
     // Root correlation excludes mutable witnesses; grants still bind ActionHash exactly.
@@ -72,6 +75,7 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
             SandboxControl.Generation, SandboxControl.ExecutionId, SandboxControl.TargetHash }),
         TenantOperationKind.BrowserCommand => JsonSerializer.Serialize(new { operation = "browser.command", permission = Permission,
             resourceType = ResourceType, resourceId = ResourceId, BrowserCommand!.SessionId, BrowserCommand.ToolName, BrowserCommand.CommandHash }),
+        TenantOperationKind.CredentialRead => JsonSerializer.Serialize(new { operation = "credentials.metadata.read", CredentialRead!.SessionId, CredentialRead.ArgumentsJson }),
         TenantOperationKind.SandboxRead => JsonSerializer.Serialize(new { operation = "sandbox.read", permission = Permission,
             resourceType = ResourceType, resourceId = ResourceId, read = SandboxRead }),
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")

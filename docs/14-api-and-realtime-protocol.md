@@ -6,6 +6,13 @@ The existing model `approvals.request_authorization` branch accepts `operation=r
 
 Tenant `credentials.list` retains cursor/limit pagination and safe alias/name/kind/non-secret metadata records, filtered under current read authority/policy before pagination. Private `tenantCredentialRead`/`credentialReads` provenance adds no permission or writable operation input. Either Session-read or Credential-read Review policy returns `credential_read_review_required` without creating consent; unrelated Browser approval cannot authorize discovery. No new HTTP endpoint or SignalR method is added. [Port contract](04-backend-interfaces.md#tenant-protected-browser-credentials), [focused evidence](reports/tenant-browser-credential-verification-2026-10-18.md).
 
+## Tenant reviewed Credential metadata intent
+
+The existing `approvals.request_authorization` schema may offer `{ "operation": "inspect_credential_metadata", "arguments": { "cursor": "account", "limit": 20 } }`. `arguments` uses the same optional normalized cursor and 1–100 limit as `credentials.list`; the default page size is 20. Extra/duplicate authority members, Credential IDs, role/grant selection and malformed arguments reject. Core derives the entire saved raw-readable scope, including at most one additional alias to establish pagination. Consent stores safe names/revisions, not metadata values. No new HTTP prepare/execute endpoint or SignalR method is introduced.
+
+Inbox/detail and original-Chat status identify `inspect_credential_metadata` as “Read bound Credential metadata”. The shared inspector shows the saved scope, page bounds, disclosure and one-read limit. Both read and decision use every saved Credential and Session scope; secret-use permission is independent. The existing decision/cancel witnesses remain unchanged. Result JSON distinguishes `readAuthorized`, `credentialMetadata`, `metadataUnavailable`/reason, `applied=false` and `replayAllowed=false`, with exact `requestId`/`operationId`. Authorization does not promise data delivery. [Port contract](04-backend-interfaces.md#tenant-credential-metadata-page-review), [verification](reports/tenant-credential-metadata-review-verification-2026-10-18.md).
+
+
 ## Tenant Browser direct read model contract
 
 Tenant model projection now includes converted Browser read names under admitted Definition capabilities. Tabs accepts only `{"operation":"list"}` and Dialog only `{"operation":"inspect"}`; native schemas remain for other read arguments. The scoped internal read owner freshly checks compound Session/Browser policy for every call. `browser_read_review_required` directs the same command/arguments to `approvals.request_authorization`; neither a prior read nor approval is a later read grant.

@@ -22,6 +22,7 @@ public static class TenantSessionEndpoints
             var result = await service.ListAsync(actor.TenantId, sessionId, Initiator(http, actor), page ?? 0, pageSize ?? 20, ct).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(item => new { item.RequestId, item.RunId, item.ResponseId,
                 operation = item.Operation switch { AgentCore.Domain.Security.TenantOperationKind.Persona => "update_persona",
+                    AgentCore.Domain.Security.TenantOperationKind.CredentialRead => "inspect_credential_metadata",
                     AgentCore.Domain.Security.TenantOperationKind.BrowserCommand => "browser_command",
                     AgentCore.Domain.Security.TenantOperationKind.SandboxRead => "sandbox_read",
                     AgentCore.Domain.Security.TenantOperationKind.SandboxControl => "sandbox_control",
