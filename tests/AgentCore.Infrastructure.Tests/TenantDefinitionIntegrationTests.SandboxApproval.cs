@@ -72,7 +72,9 @@ public sealed partial class TenantDefinitionIntegrationTests
     private static async Task<TenantRuntimeFrame> ResumeSandboxApproval(Fixture f, RuntimeSandboxSetup s, TenantApprovalService service)
     {
         Assert.Equal(1, await service.DispatchPendingAsync());
-        var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!; var at = DateTimeOffset.UtcNow;
+        var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!;
+        if (run.Result?.ContinuationRunId is { } successor) run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, successor))!;
+        var at = DateTimeOffset.UtcNow;
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
             new AgentRunCommand.Claim(run.Revision, at, f.Ids.NewId(), at.AddMinutes(5)), f.Ids.NewId());
         return new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation);

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Security;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Sandbox;
@@ -51,12 +52,20 @@ public sealed partial class TenantDefinitionIntegrationTests
     {
         await SandboxSdkScenario(sqlite, outcome);
     }
+    [Theory] [InlineData(false, "outputLarge")] [InlineData(true, "outputLarge")]
+    [InlineData(false, "outputRevoked")] [InlineData(true, "outputRevoked")]
+    [InlineData(false, "checkpointMismatch")] [InlineData(true, "checkpointMismatch")]
+    public async Task Tenant_Sandbox_model_continuation_bounds_output_rechecks_scope_and_rejects_changed_command_before_dispatch(bool sqlite, string outcome)
+    {
+        await SandboxSdkScenario(sqlite, outcome);
+    }
     private static async Task SandboxSdkScenario(bool sqlite, string outcome)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-command-sdk-" + Guid.NewGuid().ToString("N"));
         try
         {
             await using var f = await Fixture.Create(sqlite);
+            var modelContinuation = outcome is "completed" or "outputLarge" or "outputRevoked" or "checkpointMismatch";
             using var callerCancellation = new CancellationTokenSource();
             var s = await PrepareRuntimeSandbox(f);
             var storage = (ITenantSandboxRuntimeStore)f.Iam;
@@ -128,7 +137,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                     if (userCommand && outcome is "uncertain" or "deleted" or "cleanupForeign" or "absent") { http.Response.StatusCode = 500; await http.Response.WriteAsync("PRIVATE_SDK_BODY"); return; }
                     http.Response.ContentType = "text/event-stream";
                     await http.Response.WriteAsync("data: {\"type\":\"init\",\"text\":\"owned-command\",\"timestamp\":0}\n\n");
-                    if (userCommand) await http.Response.WriteAsync("data: {\"type\":\"stdout\",\"text\":\"actual SDK output\",\"timestamp\":1}\n\n");
+                    if (userCommand) await http.Response.WriteAsync("data: " + JsonSerializer.Serialize(new { type = "stdout", text = outcome == "outputLarge" ? new string('界', 10000) : "actual SDK output", timestamp = 1 }) + "\n\n");
                     if (userCommand && outcome == "backgroundIncomplete") return;
                     if (userCommand && outcome == "backgroundError") await http.Response.WriteAsync("data: {\"type\":\"error\",\"error\":{\"name\":\"LaunchFailed\",\"value\":\"1\"}}\n\n");
                     await http.Response.WriteAsync("data: {\"type\":\"execution_complete\",\"execution_time\":5,\"timestamp\":2}\n\n");
@@ -144,14 +153,31 @@ public sealed partial class TenantDefinitionIntegrationTests
             Assert.True(await storage.TryReserveTenantSandboxLeaseAsync(s.Write, s.Lease, 0, DateTimeOffset.UtcNow));
             Assert.True(await storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, s.Lease with { Revision = 2,
                 State = SandboxLeaseState.Ready, ProviderId = "owned-environment", BaselineProcesses = [] }, 1));
+            var operations = new TenantOperationAuthorizer(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam,
+                f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, TimeProvider.System));
+            ModelToolCall? modelCall = null;
+            if (modelContinuation)
+            {
+                modelCall = new("exact-sandbox-request", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "run_sandbox_command", profileId = s.Lease.Profile.Id,
+                    command = new { command = "printf 'exact tenant command'", cwd = "/working", timeoutSeconds = 30, background = false } }));
+                var checkpointed = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(s.Run.Owner, s.Run.AgentRunId,
+                    new AgentRunCommand.Checkpoint(s.Run.Revision, DateTimeOffset.UtcNow, s.Run.Claim!.Generation,
+                        new(AgentRunToolCallCheckpoint.Write(outcome == "outputLarge"
+                            ? [new(ModelRole.User, new string('x', 205000)), new(ModelRole.Assistant, "", ToolCalls: [modelCall])]
+                            : [new(ModelRole.Assistant, "", ToolCalls: [modelCall])]), 1, 0, 180000, 0), null), f.Ids.NewId());
+                s = s with { Run = checkpointed };
+            }
             var services = SandboxApprovalServices(f, s);
-            var request = (await services.Approvals.PrepareSandboxAsync(new(s.Tenant, s.Run.AgentRunId), s.Lease.Profile.Id,
-                new("printf 'exact tenant command'", TimeoutSeconds: 30, Background: outcome.StartsWith("background", StringComparison.Ordinal)), s.Run.Revision, s.Run.Claim!.Generation)).Request!;
+            var request = (modelCall is not null
+                ? await new TenantToolAuthorization((ITenantRunStore)f.Iam, operations, services.Approvals, s.Resolver).PrepareAsync(s.Session.SessionId, modelCall,
+                    new(false, TriggerKind.UserTurn, AgentInstanceId: s.Session.AgentInstanceId, AgentRunId: s.Run.AgentRunId,
+                        OwnedSessionId: s.Session.SessionId, TenantId: s.Tenant, AgentRunGeneration: s.Run.Claim!.Generation), default)
+                : await services.Approvals.PrepareSandboxAsync(new(s.Tenant, s.Run.AgentRunId), s.Lease.Profile.Id,
+                    new("printf 'exact tenant command'", TimeoutSeconds: 30, Background: outcome.StartsWith("background", StringComparison.Ordinal)), s.Run.Revision, s.Run.Claim!.Generation)).Request!;
             var view = await services.Approvals.ReadViewAsync(s.Tenant, request.RequestId, SandboxHuman(s));
             await services.Approvals.DecideAsync(s.Tenant, request.RequestId, SandboxHuman(s), true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
             var frame = await ResumeSandboxApproval(f, s, services.Approvals);
-            var p = SetupProfiles(f); var operations = new TenantOperationAuthorizer(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam,
-                f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, TimeProvider.System));
+            var p = SetupProfiles(f);
             var target = new TenantSandboxOperationTarget((ITenantSessionStore)f.Iam, (ITenantSandboxProfileStore)f.Iam, storage,
                 s.Resolver, f.Authorizer, f.Iam, p.Images, p.Ready, TimeProvider.System);
             var authority = new TenantSandboxExecutionAuthority(operations, storage, (ITenantApprovalStore)f.Iam,
@@ -161,8 +187,20 @@ public sealed partial class TenantDefinitionIntegrationTests
             var local = new TenantApprovedOperationService(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantApprovalStore)f.Iam,
                 (ITenantApprovedOperationStore)f.Iam, operations, s.Resolver, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
             var continuation = new TenantRunContinuationService((ITenantRunStore)f.Iam, (ITenantApprovalStore)f.Iam, local, TimeProvider.System,
-                sandboxCommands: sdk);
-            if (outcome == "completed") await continuation.PrepareExternalEffectAsync((await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!);
+                runtimeStore: (ITenantRuntimeStore)f.Iam, ids: f.Ids, sandboxCommands: sdk, sandboxResults: services.Execution);
+            if (outcome == "checkpointMismatch")
+            {
+                var claimed = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
+                var wrong = modelCall! with { ArgumentsJson = modelCall.ArgumentsJson.Replace("exact tenant command", "different command", StringComparison.Ordinal) };
+                var savedCheckpoint = claimed.Checkpoint!;
+                var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [wrong])]), savedCheckpoint.StepCount,
+                    savedCheckpoint.OutputBytes, savedCheckpoint.RemainingOverallBudgetMs, savedCheckpoint.ActiveExecutionMs, savedCheckpoint.BudgetRecordedAtUtc);
+                claimed = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(claimed.Owner, claimed.AgentRunId,
+                    new AgentRunCommand.Checkpoint(claimed.Revision, DateTimeOffset.UtcNow, frame.Generation, checkpoint, null), f.Ids.NewId());
+                Assert.Equal("approval_continuation_mismatch", (await Assert.ThrowsAsync<SecurityConflictException>(() => continuation.PrepareExternalEffectAsync(claimed).AsTask())).ReasonCode);
+                Assert.Equal(0, contacts); Assert.Null((await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!.Execution); return;
+            }
+            if (modelContinuation) await continuation.PrepareExternalEffectAsync((await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!);
             SandboxCommandResult result;
             if (outcome == "callerCanceled")
             {
@@ -192,11 +230,38 @@ public sealed partial class TenantDefinitionIntegrationTests
             {
                 Assert.Null(run!.Owner.ProfileIdOrNull);
                 Assert.Equal(denied ? AgentRunSideEffectDisposition.DefinitelyFailed : uncertain ? AgentRunSideEffectDisposition.Indeterminate : AgentRunSideEffectDisposition.Succeeded, run.SideEffect.Disposition);
+                if (outcome == "outputRevoked") await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, s.ExecutionGrant, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
                 var resumed = await continuation.ResumeAsync(run);
                 Assert.Equal(effect.Outcome, resumed.Outcome!.Outcome);
                 Assert.Equal(effect.ReasonCode, resumed.Outcome.ReasonCode);
+                if (modelContinuation)
+                {
+                    Assert.True(AgentRunToolCallCheckpoint.TryRead(resumed.Run.Checkpoint, out var messages));
+                    var text = Assert.Single(messages!, m => m.Role == ModelRole.Tool && m.ToolCallId == modelCall!.Id).Text;
+                    using var observed = JsonDocument.Parse(text);
+                    if (outcome == "outputRevoked")
+                    {
+                        Assert.Equal(JsonValueKind.Null, observed.RootElement.GetProperty("sandbox").ValueKind);
+                        Assert.True(observed.RootElement.GetProperty("resultUnavailable").GetBoolean()); Assert.DoesNotContain("actual SDK output", text);
+                    }
+                    else
+                    {
+                        var output = observed.RootElement.GetProperty("sandbox"); Assert.Equal("Completed", output.GetProperty("status").GetString());
+                        if (outcome == "outputLarge")
+                        {
+                            Assert.True(output.GetProperty("truncated").GetBoolean()); Assert.NotEmpty(output.GetProperty("stdout").GetString()!);
+                            Assert.True(output.GetProperty("stdout").GetString()!.Length < result.Stdout.Length); Assert.DoesNotContain("�", text);
+                            Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(resumed.Run.Checkpoint!.PayloadJson), 1, AgentRunLimits.MaxCheckpointBytes);
+                        }
+                        else Assert.Equal("actual SDK output", output.GetProperty("stdout").GetString());
+                        Assert.Null((await services.Execution.ReadResultAsync(frame with { SessionId = Guid.NewGuid() }, request, effect)).Result);
+                        Assert.Null((await services.Execution.ReadResultAsync(frame, request, effect with { OperationId = Guid.NewGuid() })).Result);
+                    }
+                    Assert.Equal(JsonValueKind.Null, observed.RootElement.GetProperty("applied").ValueKind);
+                    var total = contacts; Assert.Equal(resumed.Run.Revision, (await continuation.ResumeAsync(resumed.Run)).Run.Revision); Assert.Equal(total, contacts);
+                }
             }
-            if (outcome == "completed") { Assert.Equal(0, result.ExitCode); Assert.Equal("actual SDK output", result.Stdout); Assert.True(result.TerminationConfirmed); }
+            if (modelContinuation) { Assert.Equal(0, result.ExitCode); if (outcome != "outputLarge") Assert.Equal("actual SDK output", result.Stdout); Assert.True(result.TerminationConfirmed); }
             else if (outcome == "background") { Assert.Equal("Running", result.Status); Assert.Equal("sandbox_command_started", effect.ReasonCode); }
             else if (!denied)
             {
@@ -216,7 +281,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 if (outcome == "humanStop") { Assert.NotNull(stopped.Execution.ProcessStop); Assert.Null(stopped.Execution.ProcessStop.DispatchStartedAt); }
             }
             var before = contacts;
-            if (outcome is "revoked" or "deleted" or "duringCommandRevoked") await Assert.ThrowsAsync<AccessDeniedException>(() => sdk.ExecuteApprovedAsync(frame, request.RequestId).AsTask());
+            if (outcome is "revoked" or "deleted" or "duringCommandRevoked" or "outputRevoked") await Assert.ThrowsAsync<AccessDeniedException>(() => sdk.ExecuteApprovedAsync(frame, request.RequestId).AsTask());
             else Assert.Equal(result.ExecutionId, (await sdk.ExecuteApprovedAsync(frame, request.RequestId)).ExecutionId);
             Assert.Equal(before, contacts); Assert.Equal(denied ? 0 : 1, dispatches);
             Assert.Null(await f.Sandbox.GetExecutionAsync(frame.SessionId, result.ExecutionId));

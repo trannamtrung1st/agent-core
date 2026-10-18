@@ -7,7 +7,7 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantSandboxExecutionStart(bool Reserved, SandboxExecution Execution);
 
-public sealed class TenantSandboxApprovedOperationService(ITenantRunStore runs, ITenantApprovalStore approvals,
+public sealed partial class TenantSandboxApprovedOperationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     ITenantApprovedOperationStore decisions, ITenantSandboxRuntimeStore runtime, TenantSandboxOperationTarget targets,
     TenantOperationAuthorizer operations, IIdGenerator ids, TimeProvider time, ISandboxVerificationHost? host = null)
 {

@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Sandbox model continuation evidence
+
+Exact model command proposals and bounded result JSON use existing versioned `AgentRunToolCallCheckpoint` messages. The existing Sandbox Review, successor, owned execution/lease, immutable operation receipt and factual settlement retain their owners. No schema migration, table, index, alternate queue or new checkpoint format is added. Claim/security/request/action witnesses still gate actual effects; model-visible result data is never dispatch proof.
+
+The exact pending authorization call must match the saved operation before external preparation. Result append checks the actual serialized checkpoint and existing completion reserve; UTF-8 stdout/stderr prefixes shrink rather than discarding the operation outcome or replaying the effect. Current read denial records a safe unavailable result without copying streams or altering the existing execution/effect. Once saved, the tool result is consumed once through the existing Runtime checkpoint CAS; duplicate observation does not append a second result.
+
 ## Tenant Session profile-switch state
 
 The existing lease JSON carries selected/transition profile identity plus optional `SandboxSelectionWitness` containing the actual audit request ID, Instance revision, registry Credential identity/revisions and host scope. Target IDs are not duplicated in the witness; active `Profile` remains the old generation's setup until replacement. Both stores atomically validate and save intent with one security revision and audit under their existing owner. No Core table, index or migration is added; existing leases deserialize with a null witness.

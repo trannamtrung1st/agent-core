@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant model Sandbox command journeys
+
+Use an actual hosted tenant Runtime and recording Synthetic model to emit the exact Sandbox authorization call. Verify the filtered schema is offered without Settings self-management, the sole pending call is persisted, capacity/claim is released, and no SDK command occurs before human decision. Approve through canonical HTTP, then run the shared worker and installed SDK against an authenticated controlled peer and confirm one dispatch, stored factual output in the resumed model request and no reasking. Also start without a lease using an explicitly permitted local image identity: require one SDK create, reviewed initialization and main dispatch. Verify a background launch reports Running/combined logs without claiming process completion. Reject/cancel must send no SDK work. An uncertain provider reply must not leak the body, retry or expose effect tools; it reaches the existing response-only explanation and indeterminate terminal result.
+
+On both stores, verify exact checkpoint-command mismatch blocks before provider contact, Unicode output fits a nearly full durable checkpoint without splitting characters or losing outcome, current scope revocation withholds output, and cross-Session/operation data is unavailable. Preserve existing persona/preference/Credential continuation, SQLite reopen, Sandbox SDK/selection and generic tool-policy regressions. These checks prove controlled SDK protocol/store/hosted Runtime behavior, not actual container shell semantics, live Docker qualification, tenant UI or model Stop/reset/inspection support. [Focused evidence](reports/tenant-sandbox-model-command-verification-2026-10-18.md).
+
 ## Tenant Session profile switching
 
 InMemory and SQLite checks select an independently verified allowed target without provider effects, retire the old exact generation after logout/reopen, preserve files, reject old-profile fallback, then require fresh exact Review and reserve the selected target once. Drive the shared SDK through actual local create/mount/readiness/Profile-init/command protocol; assert the selected image, one initialization/command and no duplicate dispatch. Foreign old metadata must leave selection pending without create/kill until repaired.

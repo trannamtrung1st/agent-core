@@ -1,5 +1,17 @@
 # HTTP API and Realtime Protocol
 
+## Tenant model Sandbox authorization and result
+
+The existing `approvals.request_authorization` model tool adds a schema-filtered operation:
+
+```json
+{"operation":"run_sandbox_command","profileId":"p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","command":{"command":"printf exact-command","cwd":"/working","timeoutSeconds":30,"background":false}}
+```
+
+Use exactly one `command` string or `argv` array. Profile, cwd, integer timeout and Boolean background are explicit; nested profile IDs, owner/provider fields, revisions, grants and unknown/duplicate members are invalid. The entire authorization argument stays within 16 KiB. The schema enumerates only admitted eligible profiles and is offered independently from Settings. Core derives identity and current mutable witnesses, then uses existing Review GET/decision/cancel and durable Runtime suspension; no public prepare/execute HTTP route is added.
+
+The resumed tool message retains `{approvalStatus,outcome,reasonCode,operationId,applied}`. A recorded Sandbox effect additionally has `sandbox` containing safe execution ID/status, exit, bounded stdout/stderr, truncation, combined-log flag, timing, profile/generation and factual phase/failure/cleanup evidence. `applied` is null for executed Sandbox effects: a completed launch/process is not proof of arbitrary shell semantics. Rejected/cancelled proposals retain `applied:false` and dispatch nothing. If current result-read scope is unavailable, `sandbox:null`, `resultUnavailable:true` and `resultUnavailableReason` withhold streams while the recorded effect outcome remains unchanged. Provider IDs/URLs, physical paths, protected source epochs and SDK bodies are omitted. Repeated continuation does not append again or dispatch. Unknown effects get display-only explanation and the existing indeterminate terminal outcome. [Focused evidence](reports/tenant-sandbox-model-command-verification-2026-10-18.md).
+
 ## Canonical tenant Session Sandbox profile switch
 
 Authenticated `POST /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/profile` accepts strict `{expectedRevision, expectedSessionRevision, expectedGeneration, expectedLeaseRevision, expectedExecutionId, profileId, expectedProfileRevision, expectedInstanceRevision}`. `expectedExecutionId` must be present and may be null only when there is no active/latest execution. The server derives the actual tenant and Account/login/Principal. Independent current Session read/manage, agent Sandbox read/manage and old/target profile read apply, with original-login and exact witnesses repeated at commit. The target requires current allowed setup and full reusable host/source verification. Active execution, pending retirement or failed initialization without explicit reset cannot switch.
@@ -26,7 +38,7 @@ Authenticated `POST /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/rese
 
 Existing approval `operationResult` can now record Sandbox outcomes from canonical SDK receipts: `sandbox_command_completed` means foreground process completion with bounded exit evidence and confirmed quiescence/retirement; `sandbox_command_started` means an acknowledged background launch whose process may still be Running; `sandbox_command_not_dispatched` means preflight failed before dispatch; `sandbox_command_uncertain` preserves an uncertain possibly dispatched command without replay. Completed shell transport does not guarantee the semantic success of arbitrary shell work; the exact execution receipt retains its exit/output facts.
 
-The operation result remains separate from approval status and Session environment/process state. A background launch result is not a completed process, and pending or foreign cleanup is not confirmed absence. No new public prepare/execute endpoint, browser-supplied command proof or model Sandbox authorization offering is enabled here. Existing protected inspection mappings continue to omit provider IDs, host paths, source authorization and secrets. [Focused backend evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md).
+The operation result remains separate from approval status and Session environment/process state. A background launch result is not a completed process, and pending or foreign cleanup is not confirmed absence. No new public prepare/execute endpoint or browser-supplied command proof is enabled. The exact model authorization branch is documented above. Existing protected inspection mappings continue to omit provider IDs, host paths, source authorization and secrets. [Focused backend evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md).
 
 ## Tenant Sandbox command approval projection
 
