@@ -4,14 +4,66 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
 using Fixture = AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.Fixture;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantBrowserApprovalTests
 {
-    private static TenantCredentialRuntimeReadService CredentialReads(Fixture f) => new(Operations(f, f.Iam), (ITenantRunStore)f.Iam,
-        (ITenantSessionStore)f.Iam, (ITenantCredentialBindingStore)f.Iam, f.RunConfiguration(), f.Iam, new(f.Iam), f.Clock);
+    private static TenantCredentialRuntimeReadService CredentialReads(Fixture f, ITenantCredentialBindingStore? bindings = null) => new(Operations(f, f.Iam), (ITenantRunStore)f.Iam,
+        (ITenantSessionStore)f.Iam, bindings ?? (ITenantCredentialBindingStore)f.Iam, f.RunConfiguration(), f.Iam, new(f.Iam), f.Clock);
+    private sealed class CredentialBindingReadProbe(ITenantCredentialBindingStore inner) : ITenantCredentialBindingStore
+    {
+        public int Reads;
+        public Func<Task>? AfterFirstRead;
+        public async ValueTask<TenantCredentialBindingSnapshot?> ReadTenantCredentialBindingsAsync(Guid tenant, Guid instance, CancellationToken ct = default)
+        {
+            var result = await inner.ReadTenantCredentialBindingsAsync(tenant, instance, ct);
+            if (++Reads == 1 && AfterFirstRead is { } after) await after();
+            return result;
+        }
+        public ValueTask<TenantAgent?> TryBindTenantCredentialAsync(TenantSecurityState next, long revision, AgentCore.Domain.Credentials.AgentCredentialBinding binding,
+            long instanceRevision, long credentialRevision, AuthorizationAudit audit, CancellationToken ct = default) => throw new InvalidOperationException("Reads cannot bind credentials.");
+        public ValueTask<TenantAgent?> TryUnbindTenantCredentialAsync(TenantSecurityState next, long revision, Guid instance, Guid binding, long instanceRevision,
+            long bindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) => throw new InvalidOperationException("Reads cannot unbind credentials.");
+    }
+
+    [Theory] [InlineData(false, "before")] [InlineData(true, "before")] [InlineData(false, "after")] [InlineData(true, "after")]
+    [InlineData(false, "history")] [InlineData(true, "history")]
+    public async Task Tenant_Credential_discovery_and_retained_metadata_require_current_independent_Session_read_policy(bool sqlite, string stage)
+    {
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Prepare(f, password: true, credentialUseAllowed: false);
+        var probe = new CredentialBindingReadProbe((ITenantCredentialBindingStore)f.Iam); var reads = CredentialReads(f, probe);
+        async Task Review() => await RequireReadReview(f, s, "sessions.read");
+        if (stage == "history")
+        {
+            var text = await reads.InspectAsync(Frame(s), "{}", 32768, CancellationToken.None);
+            Assert.Contains("Browser account", text); var readCount = probe.Reads;
+            var call = new ModelToolCall("credential-list", ToolCatalog.CredentialsList, "{}");
+            var messages = new ModelMessage[] { new(ModelRole.Assistant, "", ToolCalls: [call]), new(ModelRole.Tool, text, ToolCallId: call.Id, Name: call.Name) };
+            var run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(s.Run.Owner, s.Run.AgentRunId,
+                new AgentRunCommand.Checkpoint(s.Run.Revision, f.Clock.GetUtcNow(), s.Run.Claim!.Generation,
+                    new(AgentRunToolCallCheckpoint.Write(messages), 1, text.Length, 10000, 100), null), f.Ids.NewId());
+            await Review();
+            var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => reads.RequireStoredAsync(run).AsTask());
+            Assert.Equal("credential_read_review_required", denied.ReasonCode); Assert.Equal(readCount, probe.Reads);
+            Assert.Null(await new TenantRunExecutionAuthority(Operations(f, f.Iam), f.Iam, f.Clock, f.RunConfiguration(), credentialReads: reads).CurrentDefinitionAsync(run));
+        }
+        else
+        {
+            if (stage == "before") await Review(); else probe.AfterFirstRead = Review;
+            if (stage == "after")
+            {
+                var raced = await Assert.ThrowsAsync<SecurityConflictException>(() => reads.InspectAsync(Frame(s), "{}", 32768, CancellationToken.None).AsTask());
+                Assert.Equal("stale_revision", raced.ReasonCode); Assert.Equal(1, probe.Reads);
+            }
+            var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => reads.InspectAsync(Frame(s), "{}", 32768, CancellationToken.None).AsTask());
+            Assert.Equal("credential_read_review_required", denied.ReasonCode); Assert.Equal(stage == "before" ? 0 : 1, probe.Reads);
+        }
+        Assert.Equal(AgentRunStatus.Running, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!.Status);
+        Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(s.Tenant, null, null, new())).Items);
+    }
 
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_Credential_discovery_requires_only_current_read_and_retained_metadata_never_bypasses_later_scope_or_policy(bool sqlite, bool policy)

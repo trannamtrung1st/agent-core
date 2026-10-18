@@ -35,7 +35,7 @@ public sealed class TenantCredentialRuntimeReadService(TenantOperationAuthorizer
     {
         if (Encoding.UTF8.GetByteCount(arguments) > 4096) throw new ArgumentException("Use bounded Credential discovery arguments.");
         using var json = JsonDocument.Parse(arguments); var request = CredentialDiscovery.Parse(json.RootElement);
-        var before = await RequireAsync(frame, ct).ConfigureAwait(false); var allowed = new List<TenantCredentialBinding>();
+        var before = await RequireAsync(frame, ct, audit: true).ConfigureAwait(false); var allowed = new List<TenantCredentialBinding>();
         foreach (var bound in before.Bindings.OrderBy(b => b.Binding.Reference, StringComparer.Ordinal))
         {
             if (!Eligible(before, bound) || request.Cursor is not null && string.CompareOrdinal(bound.Binding.Reference, request.Cursor) <= 0) continue;
@@ -86,7 +86,7 @@ public sealed class TenantCredentialRuntimeReadService(TenantOperationAuthorizer
         }
         if (current is not null) await FenceAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), current, ct).ConfigureAwait(false);
     }
-    private async ValueTask<Read> RequireAsync(TenantRuntimeFrame frame, CancellationToken ct)
+    private async ValueTask<Read> RequireAsync(TenantRuntimeFrame frame, CancellationToken ct, bool audit = false)
     {
         var (run, state) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(state.Tenant.TenantId, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
@@ -94,8 +94,13 @@ public sealed class TenantCredentialRuntimeReadService(TenantOperationAuthorizer
         if (session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null
             || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended)
             throw new AccessDeniedException("resource_unavailable");
+        var sessionScope = TenantSessionRules.Scope(state.Tenant.TenantId, frame.SessionId);
         if (!(await authorizer.CheckTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get("sessions.read"),
-            TenantSessionRules.Scope(state.Tenant.TenantId, frame.SessionId), ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("permission_denied");
+            sessionScope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("permission_denied");
+        var sessionRead = audit ? await operations.Check(state, run, "sessions.read", sessionScope, ct, purpose: ExecutionAuthorizationPurpose.ToolBoundary).ConfigureAwait(false)
+            : await operations.Evaluate(state, run.Admission.ExecutionContext!, "sessions.read", sessionScope, ct).ConfigureAwait(false);
+        if (sessionRead.Decision == OperationDecisionKind.RequiresApproval) throw new AccessDeniedException("credential_read_review_required");
+        if (sessionRead.Decision != OperationDecisionKind.Allowed) throw new AccessDeniedException(sessionRead.ReasonCode);
         var (agent, baseline) = await configuration.BaselineAsync(state.Tenant.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
         var snapshot = await bindings.ReadTenantCredentialBindingsAsync(state.Tenant.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("resource_unavailable");

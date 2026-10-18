@@ -40,9 +40,10 @@ public sealed partial class TenantSessionAccessTests
             return native.ExecuteAsync(request, ct);
         }
     }
-    [TenantBrowserChromiumTheory] [InlineData(false, false, false)] [InlineData(true, false, false)] [InlineData(false, true, false)] [InlineData(true, true, false)]
-    [InlineData(false, false, true)] [InlineData(true, false, true)] [InlineData(false, true, true)] [InlineData(true, true, true)]
-    public async Task Tenant_Browser_model_protected_fill_requires_exact_Credential_consent_and_returns_only_redacted_facts(bool sqlite, bool revokeAfterResolution, bool exceptional)
+    [TenantBrowserChromiumTheory] [InlineData(false, false, false, false)] [InlineData(true, false, false, false)] [InlineData(false, true, false, false)] [InlineData(true, true, false, false)]
+    [InlineData(false, false, true, false)] [InlineData(true, false, true, false)] [InlineData(false, true, true, false)] [InlineData(true, true, true, false)]
+    [InlineData(false, false, true, true)] [InlineData(true, false, true, true)]
+    public async Task Tenant_Browser_model_protected_fill_requires_exact_Credential_consent_and_returns_only_redacted_facts(bool sqlite, bool revokeAfterResolution, bool exceptional, bool metadataReview)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-browser-password-model-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         const string password = "model-owned-private-password-7625";
@@ -93,6 +94,15 @@ public sealed partial class TenantSessionAccessTests
             var page = native.ContextFor(sessionId)!.Pages.Single(); Assert.Equal("", await page.GetByLabel("Password", new() { Exact = true }).InputValueAsync());
             model.ProposedBrowserCommand = """{"operation":"run_browser_command","command":{"tool":"browser.fill_credential","arguments":{"credentialRef":"account","target":{"by":"label","value":"Password"}}}}""";
             model.ProposedBrowserRead = new("discover-credential", ToolCatalog.CredentialsList, "{}");
+            if (metadataReview)
+            {
+                var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
+                var identity = factory.Services.GetRequiredService<IdentityService>();
+                var login = (await identity.SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!.Session;
+                await factory.Services.GetRequiredService<TenantOperationPolicyService>().SaveAsync(tenant,
+                    new(state.Users.Single(u => u.PrincipalId == human).AccountId, login.SessionId, human),
+                    "sessions.read", new(OperationApprovalMode.Always, false), state.Tenant.Revision, 0);
+            }
             var source = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Fill the existing Password using the bound account Credential; do not submit.",
                 expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
             if (baseFactory is ApprovalExecutionFactory enabled) Volatile.Write(ref enabled.Enabled, true);
@@ -114,7 +124,16 @@ public sealed partial class TenantSessionAccessTests
             using var output = JsonDocument.Parse(result); Assert.Equal(!revokeAfterResolution, output.RootElement.GetProperty("commandCompleted").GetBoolean());
             Assert.False(output.RootElement.GetProperty("applicationOutcomeVerified").GetBoolean()); Assert.False(output.RootElement.GetProperty("replayAllowed").GetBoolean());
             Assert.Contains(model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Text == result));
-            Assert.Contains(model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.CredentialsList && m.Text.Contains("tenantCredentialRead", StringComparison.Ordinal)));
+            var discoveries = model.Requests.SelectMany(r => r.Messages).Where(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.CredentialsList).ToArray();
+            Assert.NotEmpty(discoveries);
+            if (metadataReview)
+            {
+                Assert.All(discoveries, m => { Assert.Contains("credential_read_review_required", m.Text); Assert.DoesNotContain("Local login", m.Text); Assert.DoesNotContain("tenantCredentialRead", m.Text); });
+            }
+            else Assert.Contains(discoveries, m => m.Text.Contains("tenantCredentialRead", StringComparison.Ordinal));
+            Assert.Contains(model.Requests.SelectMany(r => r.Tools ?? []), t => t.Name == ToolCatalog.RequestAuthorization
+                && t.ParametersJson.Contains("browser.fill_credential", StringComparison.Ordinal)
+                && t.Description.Contains("filling does not confirm sign-in", StringComparison.Ordinal));
             Assert.DoesNotContain(password, result); Assert.DoesNotContain(password, JsonSerializer.Serialize(model.Requests));
             var retained = JsonSerializer.Serialize(new { completed.Admission, completed.Checkpoint, completed.SideEffect });
             Assert.DoesNotContain(password, retained); Assert.DoesNotContain("ProtectedPayload", retained);
