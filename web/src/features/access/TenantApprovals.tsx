@@ -26,6 +26,7 @@ export interface TenantApproval {
 interface ApprovalPage { items: TenantApproval[]; total: number; page: number; pageSize: number }
 const statuses: Record<Status, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', expired: 'Expired' };
 const fields: Record<string, string> = { name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check',
+  sandboxInspection: 'Stored read', readProfiles: 'Exact readable profiles', readDisclosure: 'Data disclosed', readLimit: 'Read boundary',
   sandboxControl: 'Control request', generation: 'Environment generation', execution: 'Exact execution', storedEnvironmentState: 'Stored environment state', storedExecutionState: 'Stored process state', cleanupConsequence: 'Cleanup behavior', fileRetention: 'File retention',
   sandboxProfile: 'Sandbox profile', image: 'Image', command: 'Command', workingDirectory: 'Working directory', timeoutSeconds: 'Timeout (seconds)', background: 'Run in background',
   homeAccess: 'Home access', cpu: 'CPU cores', memoryMiB: 'Memory (MiB)', storageBytes: 'Storage (bytes)', initializationRequired: 'Initialization required',
@@ -51,6 +52,8 @@ const reasons: Record<string, string> = {
   credential_check_uncertain: 'The provider outcome is uncertain. This operation will not run again. Reconnect the credential before another check.',
   credential_check_target_changed: 'The credential changed while the check was in progress. The newer credential was retained. This operation will not run again.',
   sandbox_operation_witness_changed: 'The saved Sandbox target or configuration changed. Ask the agent to prepare a new action.',
+  sandbox_read_authorized: 'The exact read was authorized. Current access still governs delivery of the stored observation to the agent.',
+  sandbox_read_target_changed: 'The saved environment, receipt or selection changed. Ask the agent to prepare a new read.',
   sandbox_stop_requested: 'Stop request recorded. Process cleanup is pending; writes may continue until termination is confirmed. Canonical files are retained.',
   sandbox_reset_requested: 'Reset request recorded. Retirement is pending; writes may continue until it is confirmed. Canonical files are retained.',
   sandbox_stop_unavailable: 'The exact process is no longer available for Stop. Refresh its status before preparing another action.',
@@ -60,10 +63,14 @@ const reasons: Record<string, string> = {
   sandbox_profile_not_admitted: 'This Sandbox profile was not available to the source work. Prepare a new command in new work with an allowed profile.'
 };
 const isSandboxControl = (item?: TenantApproval) => item?.preparedAction.operation === 'stop_sandbox_process' || item?.preparedAction.operation === 'reset_sandbox_environment';
-function resultLabel(item: TenantApproval) {
-  return item.operationResult?.outcome === 'completed' ? item.preparedAction.operation === 'check_credential_connection' ? 'Check completed' : isSandboxControl(item) ? 'Request recorded' : 'Applied'
-    : item.operationResult?.outcome === 'denied' ? 'Not applied' : 'Outcome uncertain';
+const isSandboxRead = (operation?: string) => operation === 'inspect_sandbox_profiles' || operation === 'inspect_sandbox_status' || operation === 'inspect_sandbox_process' || operation === 'sandbox_read';
+export function approvalResultLabel(operation: string | undefined, outcome: string) {
+  if (outcome === 'completed') return isSandboxRead(operation) ? 'Read authorized' : operation === 'check_credential_connection' ? 'Check completed'
+    : operation === 'sandbox_control' || operation === 'stop_sandbox_process' || operation === 'reset_sandbox_environment' ? 'Request recorded' : 'Applied';
+  return outcome === 'denied' ? isSandboxRead(operation) ? 'Read not authorized' : 'Not applied' : 'Outcome uncertain';
 }
+function resultLabel(item: TenantApproval) { return approvalResultLabel(item.preparedAction.operation, item.operationResult?.outcome ?? ''); }
+
 export const approvalDate = (value: string) => <time dateTime={value}>{new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value))}</time>;
 function StatusTag({ status }: { status: Status }) { return <Tag color={status === 'pending' ? 'warning' : status === 'approved' ? 'success' : status === 'rejected' ? 'error' : undefined}>{statuses[status]}</Tag>; }
 const kindLabel = (kind: TenantApproval['kind']) => kind === 'exceptionalGrant' ? 'One-time authorization' : 'Review';
@@ -127,7 +134,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     const saved = data; const label = decision === 'approve' ? saved.kind === 'exceptionalGrant' ? 'Authorize once' : 'Approve' : decision === 'reject' ? 'Reject' : 'Cancel request';
     setConfirming(true);
     confirmation.current = confirmAction(modal, { title: `${label}?`, okText: label, cancelText: 'Keep reviewing', danger: decision !== 'approve',
-      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
+      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isSandboxRead(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
       afterClose: () => { if (active.current) setConfirming(false); },
       onOk: () => command.run(async signal => {
         if (!active.current) throw new Error('Review closed.');
@@ -140,7 +147,8 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const status = acknowledged ?? data?.status;
   const sandboxCommand = data?.preparedAction.operation === 'run_sandbox_command';
   const sandboxControl = isSandboxControl(data);
-  const savedTitle = sandboxControl ? 'Exact saved control request' : sandboxCommand ? 'Exact saved command' : 'Exact saved changes';
+  const sandboxRead = isSandboxRead(data?.preparedAction.operation);
+  const savedTitle = sandboxRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand ? 'Exact saved command' : 'Exact saved changes';
   return <Drawer open title="Approval details" aria-label="Approval details" className="access-editor-drawer" size="large" styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden
     onClose={() => { if (!busy) onClose(); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
     footer={<Flex wrap gap="var(--ac-space-compact)" justify="end">
@@ -162,7 +170,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: approvalDate(data.decision.decidedAt) }] : [])
         ]} />
         <section aria-label={savedTitle}><Typography.Title level={5}>{savedTitle}</Typography.Title>
-          {sandboxCommand || sandboxControl ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
+          {sandboxCommand || sandboxControl || sandboxRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
             { key: 'before', label: 'Before', children: change.beforeAvailable ? value(change.before) : 'Not recorded for this request' },
             { key: 'after', label: 'After', children: <Flex vertical gap="var(--ac-space-tight)">{change.afterAvailable ? value(change.after) : 'Definition default was not recorded'}{change.restoresDefault && <Typography.Text type="secondary">Restore the Definition default</Typography.Text>}</Flex> }
           ]} />)}</Flex>}

@@ -40,7 +40,7 @@ public sealed partial class TenantApprovedOperationService
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
         var audit = new AuthorizationAudit(ids.NewId(), reference.TenantId, request.ExecutorPrincipalId, TenantSandboxControlOperationRules.AuditAction,
             request.ResourceId, reason is null ? "allowed" : "denied", commit.ReasonCode, at);
-        var result = await effects.TryCommitSandboxControlAsync(next, state.Tenant.Revision, commit, audit, ct).ConfigureAwait(false);
+        var result = await effects.TryCommitLocalEffectAsync(next, state.Tenant.Revision, commit, audit, ct).ConfigureAwait(false);
         if (result is not null) return result;
         await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
         var existing = await effects.FindOperationReceiptAsync(reference.TenantId, commit.OperationId, ct).ConfigureAwait(false);
@@ -59,11 +59,5 @@ public static class TenantSandboxControlEffectRules
             || commit.Outcome == TenantOperationOutcome.Completed && commit.ReasonCode != TenantSandboxControlOperationRules.Reason(control)
             || commit.ReasonCode.Length > 128 || commit.ReasonCode.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_'))
             throw new SecurityConflictException("operation_mismatch");
-    }
-    public static void Audit(TenantSecurityState next, long expected, TenantApprovalRequest request, AuthorizationAudit audit)
-    {
-        if (next.Tenant.TenantId != request.TenantId || next.Tenant.Revision != checked(expected + 1) || audit.TenantId != request.TenantId
-            || audit.ActorPrincipalId != request.ExecutorPrincipalId || audit.Action != TenantSandboxControlOperationRules.AuditAction || audit.Target != request.ResourceId)
-            throw new ArgumentException("Invalid Sandbox control transaction.");
     }
 }

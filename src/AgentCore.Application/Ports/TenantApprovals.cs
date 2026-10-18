@@ -2,7 +2,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantSandboxApprovalVisibility(IReadOnlyList<Guid>? Instances, IReadOnlyList<string>? Profiles, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? ControlInstances = null);
+public sealed record TenantSandboxApprovalVisibility(IReadOnlyList<Guid>? Instances, IReadOnlyList<string>? Profiles, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? ControlInstances = null, IReadOnlyList<Guid>? ReadInstances = null);
 public sealed record TenantApprovalContinuationIds(Guid ActivationId, Guid RunId);
 public sealed record TenantApprovalQuery(int Page = 0, int PageSize = 20, TenantApprovalStatus? Status = null, ApprovalKind? Kind = null, Guid? SessionId = null)
 {

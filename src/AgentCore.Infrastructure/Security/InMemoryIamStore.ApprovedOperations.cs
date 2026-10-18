@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Infrastructure.Security;
 
@@ -16,7 +17,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
         TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate)
         {
             if (_operationReceipts.GetValueOrDefault(commit.OperationId) is { } previous)
                 return ValueTask.FromResult<TenantOperationReceipt?>(TenantLocalEffectRules.MatchingReceipt(previous, next.Tenant.TenantId, commit));
@@ -49,19 +50,43 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             at = (clock ?? TimeProvider.System).GetUtcNow();
             commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
-            audit = TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, commit.OperationId, request.RequestId, grant?.GrantId);
+            (SandboxLease Lease, SandboxExecution? Execution)? control = null;
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.SandboxControl is not null)
+            {
+                control = RequireSandboxControlOperation(request, run, target);
+                TenantSandboxControlOperationRules.RequirePermissionsAsync(before, sessionBacking.ReadTenantSession(request.TenantId, request.SessionId)!.Owner,
+                    request.Operation.SandboxControl.ProfileId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.SandboxRead is not null)
+            {
+                var owner = RequireSandboxReadOperation(request, run, target);
+                TenantSandboxReadOperationRules.RequireReviewerAsync(before, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
-            var change = complete ? TenantLocalEffectRules.Change(request, target.Instance) : null;
-            if (complete) _ = TenantAgentConfigurationRules.Apply(target.Instance, change!, at);
+            var configure = complete && request.Operation.IsLocalConfiguration;
+            var change = configure ? TenantLocalEffectRules.Change(request, target.Instance) : null;
+            if (configure) _ = TenantAgentConfigurationRules.Apply(target.Instance, change!, at);
             ct.ThrowIfCancellationRequested();
-            var updated = complete ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
+            var updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
                 Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).Result : target.Instance;
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()));
+            SandboxLease? pending = null; SandboxExecution? stopped = null;
+            if (complete && control is { } current)
+            {
+                pending = request.Operation.SandboxControl!.Kind == SandboxControlKind.ResetEnvironment ? TenantSandboxControlRules.Apply(current.Lease)
+                    : current.Lease with { Revision = checked(current.Lease.Revision + 1), SafeMessage = "Stop requested. Process cleanup is pending; canonical files are retained." };
+                if (request.Operation.SandboxControl.Kind == SandboxControlKind.StopProcess)
+                    stopped = TenantSandboxControlRules.ApplyStop(current.Execution!, audit with { AuditId = request.RequestId, ActorPrincipalId = decision.HumanPrincipalId });
+            }
             sessionBacking.SaveTenantOperationRun(savedRun, run.Revision);
+            if (pending is not null) sandboxBacking.SaveTenantLease(pending);
+            if (stopped is not null) sandboxBacking.SaveTenantExecution(stopped);
             if (grant is not null) _operationGrants[request.RequestId] = grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) };
             _operationReceipts.Add(receipt.OperationId, receipt); _tenants[request.TenantId] = next; _audit.Add(audit);
             return ValueTask.FromResult<TenantOperationReceipt?>(receipt);

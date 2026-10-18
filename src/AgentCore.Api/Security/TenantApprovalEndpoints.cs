@@ -49,6 +49,7 @@ public static class TenantApprovalEndpoints
             TenantOperationKind.Persona => ("Update agent persona", "update_persona"),
             TenantOperationKind.ConversationPreferences => ("Update conversation preferences", "update_preferences"),
             TenantOperationKind.CredentialConnectionCheck => ("Check credential connection", "check_credential_connection"),
+            TenantOperationKind.SandboxRead => (TenantSandboxReadOperationRules.Summary(op.SandboxRead!.Kind), AgentCore.Application.Tools.TenantSandboxReadAuthorizationContract.Operation(op.SandboxRead.Kind)),
             TenantOperationKind.SandboxControl => op.SandboxControl!.Kind == SandboxControlKind.StopProcess
                 ? ("Stop exact Sandbox process", "stop_sandbox_process") : ("Reset existing Sandbox environment", "reset_sandbox_environment"),
             TenantOperationKind.SandboxCommand => ("Run exact Sandbox command", "run_sandbox_command"),

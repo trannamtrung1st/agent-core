@@ -16,7 +16,7 @@ public sealed record TenantApprovalView(TenantApprovalRequest Request, long Secu
 public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null)
+    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -164,7 +164,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         controlIds = controlIds is null ? controlReadIds : controlReadIds is null ? controlIds : controlIds.Intersect(controlReadIds).ToArray();
         var sandboxSessions = await VisibleIds(before, human.PrincipalId, "sessions.read", "session", ct).ConfigureAwait(false);
         var sandboxProfiles = await VisibleSandboxProfiles(before, human.PrincipalId, ct).ConfigureAwait(false);
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds)).ConfigureAwait(false);
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds)).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -276,6 +276,12 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                 await controls.RequireAsync(request, run, ct).ConfigureAwait(false);
                 await controls.RequireReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
             }
+            if (request.Operation.SandboxRead is not null)
+            {
+                var reads = sandboxReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
+                await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
+            }
             var target = AccessScope.ForResource(tenant, request.ResourceType, request.ResourceId);
             var eligibility = await operations.Check(state, run, request.Permission, target, ct, purpose: ExecutionAuthorizationPurpose.ApprovalDecision).ConfigureAwait(false);
             if (eligibility.Decision == OperationDecisionKind.Denied || request.Kind == ApprovalKind.Review && eligibility.ApprovalKind == ApprovalKind.ExceptionalGrant)
@@ -310,6 +316,11 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
 
     private async ValueTask RequireRead(TenantSecurityState state, Guid human, TenantApprovalRequest request, CancellationToken ct)
     {
+        if (request.Operation.SandboxRead is not null)
+        {
+            try { await (sandboxReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }
+            catch (AccessDeniedException) { throw new AccessDeniedException("approval_unavailable"); }
+        }
         if (request.Operation.CredentialCheck is not null)
         {
             var read = await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("credentials.read"),

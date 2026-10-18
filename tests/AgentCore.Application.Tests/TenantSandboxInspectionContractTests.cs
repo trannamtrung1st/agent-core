@@ -37,7 +37,10 @@ public sealed class TenantSandboxInspectionContractTests
         var offline = ToolConfigurationGates.From(_ => false);
         var tools = ToolCatalog.For(definition, context, offline);
         Assert.Equal(3, tools.Count(t => TenantSandboxInspectionContract.IsInspection(t.Name)));
-        Assert.DoesNotContain(tools, t => t.Name == ToolCatalog.SandboxExec || t.Name == ToolCatalog.RequestAuthorization);
+        Assert.DoesNotContain(tools, t => t.Name == ToolCatalog.SandboxExec);
+        var review = Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization);
+        foreach (var operation in new[] { "inspect_sandbox_profiles", "inspect_sandbox_status", "inspect_sandbox_process" }) Assert.Contains(operation, review.ParametersJson);
+        Assert.DoesNotContain("run_sandbox_command", review.ParametersJson);
         Assert.Contains("stored", Assert.Single(tools, t => t.Name == ToolCatalog.SandboxStatus).Description);
         foreach (var name in names)
         {

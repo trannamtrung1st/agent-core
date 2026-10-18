@@ -1,5 +1,11 @@
 # Accounts, organizations, access and approvals UX
 
+## Exact Sandbox read Review presentation
+
+Use the shared inspector for reviewed profile discovery, stored environment status and exact process output. “Exact saved read” names the readable profile revisions, generation/process when relevant, disclosed data and one-read boundary. It shows no output before consent. Long names and technical IDs wrap through existing responsive Descriptions; the native Drawer, section rhythm, footer and confirmation remain shared.
+
+An independent-review requirement explains why the requester cannot decide. Allowed cancellation remains available. Approval confirms this exact stored read once, with current access checked before data returns. A stale decision requires explicit refresh and fresh confirmation. Completed consent displays “Read authorized”, separately from actual delivery; revoked access can still withhold the observation. Later reads need current policy again. Chat uses the same result-label owner and safe Sandbox read title. [Verification](reports/tenant-sandbox-read-review-verification-2026-10-18.md) covers the shared inspector only; tenant Sandbox workspace UI remains pending.
+
 ## Exact Sandbox cleanup Review presentation
 
 Stop/reset use the existing shared approval inspector. Show the exact generation/process, old readable profile/image, stored observation states, pending-cleanup consequences and retained canonical files as a compact parameter list. Approval records consent only. Completed consent uses “Request recorded”; confirmed interruption/retirement remains a separate Sandbox observation. A stale decision disables submission until explicit refresh, with no automatic decision retry. The incumbent Ant Design Drawer, Descriptions, section spacing, confirmation and footer remain shared with existing approvals. [Implementation evidence](reports/tenant-sandbox-model-controls-verification-2026-10-18.md) does not claim the pending tenant Sandbox workspace UI.

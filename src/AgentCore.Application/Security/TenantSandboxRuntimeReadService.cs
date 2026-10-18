@@ -18,7 +18,8 @@ public sealed record TenantSandboxRuntimeView(Guid SessionId, TenantSandboxLease
 public sealed partial class TenantSandboxRuntimeReadService(IIamStore security, ITenantSessionStore sessions, ITenantSandboxRuntimeStore storage,
     IdentityService identity, IamAuthorizer authorizer, TenantOperationAuthorizer? operations = null,
     TenantRunConfigurationResolver? runConfiguration = null, ITenantSandboxProfileStore? profileStore = null,
-    ISandboxImageAuthority? images = null, ISandboxReadiness? readiness = null, TimeProvider? time = null)
+    ISandboxImageAuthority? images = null, ISandboxReadiness? readiness = null, TimeProvider? time = null,
+    ITenantApprovalStore? approvalStore = null, ITenantApprovedOperationStore? effectStore = null)
 {
     public async ValueTask<TenantSandboxRuntimeView> ReadAsync(Guid tenant, Guid session, HumanSessionReference human, Guid? executionId = null, CancellationToken ct = default)
     {
@@ -54,13 +55,8 @@ public sealed partial class TenantSandboxRuntimeReadService(IIamStore security, 
             e.CommandText, e.Background, e.StartedAt, e.FinishedAt, e.ExitCode, e.Stdout, e.Stderr, e.Truncated, e.DurationMs, e.FilesystemEffectsMayHaveOccurred,
             e.TerminationConfirmed, e.RemoteTerminationConfirmed, e.DiagnosticId, e.ProcessStop is not null, e.ProcessStop?.DispatchStartedAt is not null), snapshot.SessionRevision, securityRevision);
     }
-    private static List<(string Permission, AccessScope Scope)> ReadTargets(TenantSessionRoot owner, IEnumerable<string> profiles)
-    {
-        var targets = new List<(string Permission, AccessScope Scope)> { ("sessions.read", TenantSessionRules.Scope(owner.TenantId, owner.SessionId)),
-            ("sandbox.read", AccessScope.ForResource(owner.TenantId, "agent", owner.AgentInstanceId.ToString("D"))) };
-        targets.AddRange(profiles.Select(id => ("sandbox.read", TenantSandboxProfileRules.Scope(owner.TenantId, id))));
-        return targets;
-    }
+    private static IReadOnlyList<(string Permission, AccessScope Scope)> ReadTargets(TenantSessionRoot owner, IEnumerable<string> profiles) =>
+        TenantSandboxReadOperationRules.Targets(owner, profiles);
     private async ValueTask RequireRead(TenantSecurityState state, TenantSessionRoot owner, Guid principal, IEnumerable<string> profiles, CancellationToken ct)
     {
         foreach (var target in ReadTargets(owner, profiles))

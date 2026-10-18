@@ -1,5 +1,13 @@
 # Persistence and Configuration
 
+## Tenant Sandbox read Review persistence
+
+Migration `20261018025233_TenantSandboxReadReview` extends the existing approval CHECK for typed agent-targeted `sandbox.read` Review. The 128 KiB small-operation bound remains. Read kind, exact Session, valid bounded canonical profile-reference JSON and disjoint Credential/singular-profile shadows are validated; current actual tenant/profile revision ownership and labels are repeated inside the owning store transaction. There is no new table, column, index, observation store or grant. Prior exact control payload bytes remain readable with the optional read fields absent. Disposable upgrade/reopen and malformed CHECK tests are recorded in [verification](reports/tenant-sandbox-read-review-verification-2026-10-18.md).
+
+Read consent and Sandbox control consent now reuse `TryCommitLocalEffectAsync`, including current target/source/reviewer checks, root semantic dedupe, immutable receipt, matching Run effect, security and audit in one existing store transaction. Configuration mutations remain configuration-only; controls change only their existing lease/receipt intent; read consent changes no Sandbox state. The redundant control transaction partials/port are removed. Audit permission comes from the actual operation.
+
+Prepared read JSON binds exact profile/revision pairs and semantic target identity separately from mutable factual observations. It stores readable labels and disclosure only. No stdout/stderr or observation is stored in approval, audit or operation receipt. After consent, one bounded observation enters the existing exact tool checkpoint under current access and post-I/O fences. A completed checkpoint cannot consume it again; revocation preserves the immutable consent result while withholding data. No user database migration/reset was performed; final baseline consolidation remains open.
+
 ## Tenant Sandbox reviewed control persistence
 
 Migration `20261018021925_TenantSandboxControlReview` extends the existing approval CHECK constraint for typed `sandbox.manage` Review payloads. It reuses owned profile/revision indexes and FKs, with the original 128 KiB small-operation payload bound. No table/column or alternate control queue is added. Older exact approval JSON is retained byte-for-byte; domain deserialization gives absent optional control fields their null defaults.
@@ -8,7 +16,7 @@ The existing approved-operation store atomically records local control consent w
 
 ## Tenant Sandbox model read persistence
 
-Discovery and inspection read the existing owned Session, admitted Run, lease/receipt, profile revision and verification owners. No schema, migration, cache, lifecycle writer, queue or credential-secret read is added. Human and model projections share the canonical read facade and scope construction. Model read audits use existing operation-decision audit records; they do not change security or Sandbox revisions.
+Direct discovery and inspection read the existing owned Session, admitted Run, lease/receipt, profile revision and verification owners. Those direct reads add no schema, cache, lifecycle writer, queue or credential-secret read. Human and model projections share the canonical read facade and scope construction. Direct model read audits use existing operation-decision audit records; they do not change security or Sandbox revisions. Policy-required durable consent uses the migration and existing transaction above.
 
 Read observations can enter the existing bounded tool checkpoint as data. They never contain dispatch authority, provider handles/paths, source epochs, owner initialization evidence or command text. Empty/late provider state cannot turn stored Ready into live permission. Current Role/policy and Run/security/Session/Instance fences protect new reads; later verification/permission grants cannot expand an old Run's saved profile inventory. Existing background observation/retirement workers remain the only owners of factual refresh and cleanup.
 

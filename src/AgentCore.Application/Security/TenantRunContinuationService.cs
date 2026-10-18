@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null)
 {
     // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
     public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
@@ -95,6 +95,17 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     ? sandboxResults is null ? new TenantSandboxResultRead(null, "tenant_effect_unavailable")
                         : await sandboxResults.ReadResultAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ct).ConfigureAwait(false)
                     : null;
+                string? inspection = null; string? readUnavailable = null;
+                if (request.Operation.SandboxRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
+                {
+                    try
+                    {
+                        inspection = await (sandboxReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
+                            new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes, ct).ConfigureAwait(false);
+                    }
+                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
+                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
+                }
                 var text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
                     reasonCode = reason, operationId = outcome.OperationId, applied = request.Operation.Kind == TenantOperationKind.SandboxCommand && outcome.Outcome != TenantOperationOutcome.Denied ? null : outcome.Outcome switch {
                         TenantOperationOutcome.Completed => (bool?)true, TenantOperationOutcome.Denied => false, _ => null } });
@@ -104,7 +115,8 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                         applied = outcome.Outcome == TenantOperationOutcome.Completed, controlRequestAccepted = outcome.Outcome == TenantOperationOutcome.Completed,
                         terminationConfirmed = false, filesRetained = true });
                 var paused = checkpoint.PauseBudgetClock(time.GetUtcNow());
-                var resumed = sandbox is null ? AgentRunToolCallCheckpoint.CompleteTenantAuthorization(paused, pending[0], text)
+                var resumed = request.Operation.SandboxRead is not null ? TenantSandboxContinuationProjection.CompleteRead(paused, pending[0], request, outcome, inspection, readUnavailable)
+                    : sandbox is null ? AgentRunToolCallCheckpoint.CompleteTenantAuthorization(paused, pending[0], text)
                     : TenantSandboxContinuationProjection.Complete(paused, pending[0], request, outcome, sandbox);
                 run = await runtimeStore.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
                     new AgentRunCommand.Checkpoint(run.Revision, time.GetUtcNow(), run.Claim!.Generation, resumed, null), ids.NewId(), ct, run.Claim.Generation).ConfigureAwait(false);

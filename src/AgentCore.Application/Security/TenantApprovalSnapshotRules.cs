@@ -24,6 +24,13 @@ public static class TenantApprovalSnapshotRules
         }
         if (string.IsNullOrWhiteSpace(s.AgentName) || s.AgentName.Length > 256)
             throw new ArgumentException("Invalid approval display identity.");
+        if (request.Operation.Kind == TenantOperationKind.SandboxRead)
+        {
+            if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null
+                || s.Sandbox is not null || s.SandboxControl is not null || s.SandboxRead is not { } read) throw new ArgumentException("Invalid stored read review snapshot.");
+            _ = TenantApprovalRules.ReadSnapshotLabels(request.Operation, read); return;
+        }
+        if (s.SandboxRead is not null) throw new ArgumentException("Unexpected stored read review evidence.");
         if (request.Operation.Kind == TenantOperationKind.SandboxControl)
         {
             if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null || s.Sandbox is not null

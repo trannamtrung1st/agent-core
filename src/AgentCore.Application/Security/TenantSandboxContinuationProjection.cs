@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -32,4 +33,38 @@ public static class TenantSandboxContinuationProjection
             catch (ArgumentException) when (streamBudget > 0) { }
         }
     }
+    public static AgentRunCheckpoint CompleteRead(AgentRunCheckpoint checkpoint, ModelToolCall call, TenantApprovalRequest request,
+        TenantApprovalOutcome outcome, string? observation, string? unavailableReason)
+    {
+        var original = observation is null ? null : JsonNode.Parse(observation);
+        for (var budget = 16384; ; budget /= 2)
+        {
+            var read = original?.DeepClone();
+            if (read?["execution"] is JsonObject execution)
+                foreach (var stream in new[] { "stdout", "stderr" })
+                {
+                    var text = execution[stream]?.GetValue<string>() ?? "";
+                    var clipped = ToolJsonResults.ClipUtf8Prefix(text, budget);
+                    execution[stream] = clipped;
+                    if (clipped != text) execution["truncated"] = true;
+                }
+            if (read?["profiles"] is JsonArray profiles)
+            {
+                var limit = Math.Min(profiles.Count, budget / 512);
+                while (profiles.Count > limit) { profiles.RemoveAt(profiles.Count - 1); read["truncated"] = true; }
+            }
+            var textResult = Serialize(read, read is null ? unavailableReason ?? "read_not_authorized" : null);
+            try { return AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, call, textResult); }
+            catch (ArgumentException) when (budget > 0) { }
+            catch (ArgumentException) when (budget == 0 && read is not null)
+            { return AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, call, Serialize(null, "result_budget_exhausted")); }
+        }
+        string Serialize(JsonNode? read, string? reason) => JsonSerializer.Serialize(new {
+            approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()),
+            outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()), reasonCode = outcome.ReasonCode, operationId = outcome.OperationId,
+            applied = false, readAuthorized = outcome.Outcome == TenantOperationOutcome.Completed,
+            inspection = read, inspectionUnavailable = read is null, inspectionUnavailableReason = reason
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+
 }

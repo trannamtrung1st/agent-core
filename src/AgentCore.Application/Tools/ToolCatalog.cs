@@ -205,7 +205,8 @@ public static class ToolCatalog
                     TenantSandboxAuthorizationContract.Allows(definition) ? definition.ExecutionSandboxProfiles!.Where(p => p.AdmittedForExecution == true
                         && definition.SandboxPolicy!.AllowedProfileIds.Contains(p.Id, StringComparer.Ordinal)).Select(p => p.Id).ToArray() : null,
                     TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.StopProcess),
-                    TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.ResetEnvironment)).ModelDefinition : authority.ModelDefinition);
+                    TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.ResetEnvironment),
+                    TenantSandboxReadAuthorizationContract.Allowed(definition)).ModelDefinition : authority.ModelDefinition);
         foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate, AgentCore.Application.Experience.ExperienceService.SourceTool, AgentCore.Application.Experience.ExperienceService.RecordTool })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))

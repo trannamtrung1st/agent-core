@@ -154,3 +154,23 @@ it.each(['stop_sandbox_process', 'reset_sandbox_environment'])('shows %s consent
   expect(within(dialog).getByText(/writes may continue until/)).toBeVisible();
   expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
 });
+
+it.each(['inspect_sandbox_profiles', 'inspect_sandbox_status', 'inspect_sandbox_process'])('shows %s as exact read consent without claiming a mutation or delivered output', async operation => {
+  view({ ...request, kind: 'review', status: 'approved', summary: 'Inspect stored Sandbox observation',
+    preparedAction: { ...request.preparedAction, operation },
+    operationResult: { outcome: 'completed', reasonCode: 'sandbox_read_authorized', recordedAt: '2026-10-18T03:00:00Z' },
+    review: { ...request.review, changes: [
+      { field: 'sandboxInspection', before: null, after: 'Read this exact stored observation', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readProfiles', before: null, after: 'Readable source (revision 1)', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readDisclosure', before: null, after: 'Return bounded stored stdout/stderr for the exact receipt.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readLimit', before: null, after: 'One stored observation; current access is checked before delivery.', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } });
+  const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved read' });
+  expect(within(saved).getByText('Data disclosed', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('Read boundary', { exact: true })).toBeVisible();
+  expect(within(saved).queryByText('Before', { exact: true })).not.toBeInTheDocument();
+  expect(within(saved).queryByText('Saved field', { exact: true })).not.toBeInTheDocument();
+  expect(within(dialog).getByText('Read authorized', { exact: true })).toBeVisible();
+  expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+});

@@ -1,5 +1,11 @@
 # Frontend Implementation Specification
 
+## Tenant Sandbox read Review inspection
+
+The shared approval inspector recognizes `inspect_sandbox_profiles`, `inspect_sandbox_status` and `inspect_sandbox_process`. “Exact saved read” uses the existing responsive one-column Descriptions for readable profile revisions, generation/receipt where applicable, data disclosure and one-read boundary. There are no artificial before/after rows and no captured output. It reuses the 736px viewport-capped Ant Design Drawer, existing section gaps, wrapping footer and native confirmation; no new UI wrapper, token or Sandbox page is added.
+
+Confirmation says the exact stored read is approved once and current access is checked before data returns to the agent. Read result labels are shared by inbox/detail and Chat: completed means “Read authorized”; denied means “Read not authorized”. Consent never claims observation delivery or a configuration effect. Independent-review reasons disable Approve/Reject while a permitted requester can still cancel. A stale POST disables decisions until explicit Refresh details; it never retries automatically. [Focused evidence](reports/tenant-sandbox-read-review-verification-2026-10-18.md) separates actual hosted read continuation from controlled browser projection/recovery checks at desktop and 390px widths.
+
 ## Tenant Sandbox control Review inspection
 
 The shared approval Drawer recognizes exact Stop/reset Review independently of Sandbox commands. It reuses the existing one-column parameter Descriptions, 16px section stack, viewport-capped Drawer, sticky wrapping footer, native confirmation and explicit stale refresh. Control rows show target generation/receipt, stored observations, pending-cleanup consequences and file retention, without meaningless before/after rows. No new Sandbox page or generic UI wrapper is added.

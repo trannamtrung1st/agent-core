@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -63,12 +64,27 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         at = (clock ?? TimeProvider.System).GetUtcNow();
         commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
         audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
-        audit = TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, commit.OperationId, request.RequestId, grant?.GrantId);
+        (SandboxLease Lease, SandboxExecution? Execution)? control = null;
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.SandboxControl is not null)
+        {
+            control = await RequireSandboxControlOperation(db, request, run, target, ct).ConfigureAwait(false);
+            var session = (await ReadSandboxSession(db, request.TenantId, request.SessionId, ct).ConfigureAwait(false))!;
+            await TenantSandboxControlOperationRules.RequirePermissionsAsync(before, session.Owner, request.Operation.SandboxControl.ProfileId,
+                decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        }
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.SandboxRead is not null)
+        {
+            var owner = await RequireSandboxReadOperation(db, request, run, target, ct).ConfigureAwait(false);
+            await TenantSandboxReadOperationRules.RequireReviewerAsync(before, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
+                decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        }
+        audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
-        var updated = complete ? TenantAgentConfigurationRules.Apply(target.Instance,
+        var configure = complete && request.Operation.IsLocalConfiguration;
+        var updated = configure ? TenantAgentConfigurationRules.Apply(target.Instance,
             TenantLocalEffectRules.Change(request, target.Instance), at) : target.Instance;
         var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
-        if (complete)
+        if (configure)
         {
             db.Attach(owned.Instance);
             if (request.Operation.Kind == TenantOperationKind.Persona)
@@ -78,6 +94,19 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             }
             else owned.Instance.SettingsOverridesJson = JsonSerializer.Serialize(updated.SettingsOverrides, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             owned.Instance.Revision = updated.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
+        }
+        if (complete && control is { } current)
+        {
+            var pending = request.Operation.SandboxControl!.Kind == SandboxControlKind.ResetEnvironment ? TenantSandboxControlRules.Apply(current.Lease)
+                : current.Lease with { Revision = checked(current.Lease.Revision + 1), SafeMessage = "Stop requested. Process cleanup is pending; canonical files are retained." };
+            var leaseRow = await db.Set<SandboxLeaseRow>().SingleAsync(l => l.TenantId == request.TenantId && l.SessionId == request.SessionId.ToString("D"), ct).ConfigureAwait(false);
+            db.Entry(leaseRow).CurrentValues.SetValues(SandboxRuntimePersistence.Row(pending));
+            if (request.Operation.SandboxControl.Kind == SandboxControlKind.StopProcess)
+            {
+                var stopped = TenantSandboxControlRules.ApplyStop(current.Execution!, audit with { AuditId = request.RequestId, ActorPrincipalId = decision.HumanPrincipalId });
+                var executionRow = await db.Set<SandboxExecutionRow>().SingleAsync(e => e.TenantId == request.TenantId && e.SessionId == leaseRow.SessionId && e.Id == stopped.Id.ToString("D"), ct).ConfigureAwait(false);
+                db.Entry(executionRow).CurrentValues.SetValues(SandboxRuntimePersistence.Row(stopped));
+            }
         }
         AgentRunStoreMapping.Apply(row, savedRun);
         if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });

@@ -1,5 +1,25 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Sandbox read Review projection
+
+The existing model authorization tool accepts these exact read intents, filtered by saved capability:
+
+```json
+{"operation":"inspect_sandbox_profiles"}
+```
+
+```json
+{"operation":"inspect_sandbox_status"}
+```
+
+```json
+{"operation":"inspect_sandbox_process","executionId":"aaaaaaaa-3333-4333-8333-aaaaaaaaaaaa"}
+```
+
+Extra, duplicate, null or caller-authority members reject. These operations prepare a Review only when current read policy requires it; they disclose no observation during preparation. Direct read denial `sandbox_read_review_required` names the matching intent. Existing approval detail/decision/cancel routes provide the shared inspector; there is no new prepare/execute HTTP route. Its exact saved read lists readable profile revisions, generation/receipt where applicable, disclosure and one-read boundary. No output, owner command, initialization logs or source secret is placed in approval detail. Conversation status uses the safe `sandbox_read` family.
+
+A completed operation receipt displays “Read authorized” with reason `sandbox_read_authorized`. Consent is separate from actual observation delivery. The resumed authorization result adds `readAuthorized`, `inspection`, `inspectionUnavailable` and nullable `inspectionUnavailableReason`, retaining approval/outcome/reason/operation ID and `applied:false`. `inspection` holds the ordinary bounded observation-only read result when authorized; revocation/target loss returns no observation. UTF-8 stream/profile clipping fits the existing checkpoint and preserves truncation/count evidence. Even authorized consent may return `result_budget_exhausted` if a minimal observation cannot fit. No repeated read is appended after checkpoint completion. Later reads re-evaluate current policy. [Verification](reports/tenant-sandbox-read-review-verification-2026-10-18.md).
+
 ## Tenant Sandbox control Review projection
 
 The existing approval detail/decision/cancel routes recognize `stop_sandbox_process` and `reset_sandbox_environment`, with “Stop exact Sandbox process” and “Reset existing Sandbox environment” summaries. The shared review changes name control kind, old profile/image, exact generation/execution, stored observation state, cleanup consequences and canonical-file retention. No command text, setup script, provider handle, internal target hash, source secret or unreadable selection target is disclosed.
@@ -20,7 +40,7 @@ No HTTP route changes. The existing model read names now have a canonical tenant
 
 All add `observationOnly:true` and `liveAuthorityConfirmed:false`. Discovery keeps `{profiles,totalCount,truncated,defaultProfileId,selectedProfileId,selectionRestricted,descriptionsAreInformational}`; entries expose only ID/name/clipped description/admitted revision, availability and default/selected flags. Hidden profile IDs/names/defaults are omitted. Ineligible saved pins stay NotAdmitted after later verification. Environment/receipt projections reuse canonical stored facts while initialization evidence is null, `commandText` is empty and environment status has empty receipt streams. Exact process output sets truncation when clipped; exit and termination facts remain observations, never permission or arbitrary shell-success guarantees.
 
-Only exact saved/current capability plus current Allowed read policy can disclose data under the independent executor Session, agent Sandbox and referenced-profile scopes. Original requester, ownership, claim and post-I/O witnesses apply. Missing/extra/duplicate/caller-authority arguments return the bounded invalid tool result; stale scope/witnesses return safe forbidden/conflict results without captured metadata. A policy-required read Review returns `sandbox_read_review_required`; typed read-review preparation is not enabled here. These calls contact no SDK and cannot create, probe, execute, refresh, stop or reset an environment. [Focused evidence](reports/tenant-sandbox-model-inspection-verification-2026-10-18.md).
+Only exact saved/current capability plus current Allowed read policy can directly disclose data under the independent executor Session, agent Sandbox and referenced-profile scopes. Original requester, ownership, claim and post-I/O witnesses apply. Missing/extra/duplicate/caller-authority arguments return the bounded invalid tool result; stale scope/witnesses return safe forbidden/conflict results without captured metadata. A policy-required read Review returns `sandbox_read_review_required` and the matching authorization intent above. These calls contact no SDK and cannot create, probe, execute, refresh, stop or reset an environment. [Direct-read evidence](reports/tenant-sandbox-model-inspection-verification-2026-10-18.md).
 
 ## Tenant model Sandbox authorization and result
 

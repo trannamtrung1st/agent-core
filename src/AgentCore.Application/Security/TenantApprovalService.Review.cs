@@ -41,6 +41,7 @@ public sealed partial class TenantApprovalService
         }
         var scope = AccessScope.ForResource(r.TenantId, r.ResourceType, r.ResourceId);
         var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(r.Permission));
+        var independent = policy.IndependentReview;
         var source = await operations.FindRunAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
         var waiting = source?.Status == AgentRunStatus.WaitingForApproval && source.ApprovalRequestId == r.RequestId;
         var cancel = r.Status == TenantApprovalStatus.Pending && at < r.ExpiresAt && waiting && target is not null
@@ -56,7 +57,6 @@ public sealed partial class TenantApprovalService
                 var (run, current) = await operations.ResolveAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
                 if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
                 TenantApprovalRules.Validate(r, run, target!);
-                var effective = await configuration.ResolveAsync(r.TenantId, op.InstanceId, ct).ConfigureAwait(false);
                 if (op.CredentialCheck is { } check)
                 {
                     if (credentialTargets is null) throw new AccessDeniedException("tenant_effect_unavailable");
@@ -74,7 +74,18 @@ public sealed partial class TenantApprovalService
                     await controls.RequireAsync(r, run, ct).ConfigureAwait(false);
                     await controls.RequireReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
                 }
-                else unavailable = TenantLocalEffectRules.Eligibility(run, effective.Agent, effective.Configuration.Configuration.Definition);
+                else if (op.SandboxRead is not null)
+                {
+                    var reads = sandboxReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    var effective = await configuration.ResolveAsync(r.TenantId, op.InstanceId, ct).ConfigureAwait(false);
+                    unavailable = TenantLocalEffectRules.Eligibility(run, effective.Agent, effective.Configuration.Configuration.Definition);
+                }
                 if (unavailable is null)
                 {
                     var eligible = await operations.Evaluate(state, run.Admission.ExecutionContext!, r.Permission, scope, ct).ConfigureAwait(false);
@@ -82,7 +93,7 @@ public sealed partial class TenantApprovalService
                         unavailable = "approval_authority_changed";
                     else if (!await operations.QualifiesAsync(state, r.OriginalInitiatorPrincipalId, human.PrincipalId,
                         PermissionCatalog.Get(r.Permission), scope, r.Kind, ct).ConfigureAwait(false))
-                        unavailable = policy.IndependentReview && human.PrincipalId == r.OriginalInitiatorPrincipalId ? "independent_reviewer_required" : "approver_unqualified";
+                        unavailable = independent && human.PrincipalId == r.OriginalInitiatorPrincipalId ? "independent_reviewer_required" : "approver_unqualified";
                 }
             }
             catch (AccessDeniedException ex) { unavailable = ex.ReasonCode; }
@@ -93,11 +104,23 @@ public sealed partial class TenantApprovalService
             : r.Status != TenantApprovalStatus.Approved ? "notAuthorized" : "unrecorded";
         return new(snapshot?.AgentName ?? target?.Instance.Persona.Name ?? "Unavailable agent", await Name(r.OriginalInitiatorPrincipalId).ConfigureAwait(false),
             await Name(view.Decision?.HumanPrincipalId).ConfigureAwait(false), Changes(op, snapshot), unavailable is null, cancel, unavailable,
-            policy.IndependentReview, at, execution);
+            independent, at, execution);
     }
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.SandboxRead is { } read)
+        {
+            var labels = snapshot?.SandboxRead is null ? null : TenantApprovalRules.ReadSnapshotLabels(op, snapshot.SandboxRead);
+            var changes = new List<TenantApprovalFieldChange> { new("sandboxInspection", null, TenantSandboxReadOperationRules.Summary(read.Kind), false),
+                new("readProfiles", null, labels is null ? null : labels.Count == 0 ? "No readable profiles in this saved request" : string.Join("\n", labels.Select(p => p.Name + " (revision " + p.Revision + ")")), false, labels is not null) };
+            if (read.Kind != SandboxReadKind.Profiles) changes.Add(new("generation", null, read.Generation, false));
+            if (read.ExecutionId is not null) changes.Add(new("execution", null, read.ExecutionId, false));
+            changes.Add(new("readDisclosure", null, read.Kind == SandboxReadKind.Process ? "Return bounded stored stdout/stderr and execution evidence for this exact receipt. Owner command text and initialization details are omitted."
+                : "Return only this exact readable profile set or stored environment summary. Command output and initialization details are omitted.", false));
+            changes.Add(new("readLimit", null, "One stored observation in the saved continuation. No SDK refresh, command or cleanup occurs. Stored state is not live authority; later reads require current policy again.", false));
+            return changes;
+        }
         if (op.SandboxControl is { } control)
             return [new("sandboxControl", null, control.Kind == SandboxControlKind.StopProcess ? "Stop the exact process" : "Reset the existing environment", false),
                 new("sandboxProfile", null, snapshot?.SandboxControl?.ProfileName, false, snapshot?.SandboxControl is not null),

@@ -9,7 +9,7 @@ namespace AgentCore.Application.Security;
 
 public sealed partial class TenantApprovedOperationService(IIamStore security, ITenantRunStore runs, ITenantAgentStore agents,
     ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantOperationAuthorizer operations,
-    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases, TenantSandboxControlOperationTarget? controlTargets = null)
+    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null)
 {
     // Trusted server frame only. The saved request supplies every action parameter and target.
     public async ValueTask<TenantOperationReceipt> ExecuteAsync(TenantRunReference reference, Guid requestId, Guid operationId,
@@ -43,6 +43,7 @@ public sealed partial class TenantApprovedOperationService(IIamStore security, I
             throw new SecurityConflictException("operation_mismatch");
         var existing = await effects.FindOperationReceiptAsync(reference.TenantId, operationId, ct).ConfigureAwait(false);
         if (existing is not null) return Existing(existing, request, run);
+        if (request.Operation.SandboxRead is not null) return await ExecuteReadAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);
         if (request.Operation.SandboxControl is not null) return await ExecuteControlAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);
         if (!request.Operation.IsLocalConfiguration) throw new AccessDeniedException("tenant_effect_unavailable");
         var decision = await effects.FindApprovalDecisionAsync(reference.TenantId, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");

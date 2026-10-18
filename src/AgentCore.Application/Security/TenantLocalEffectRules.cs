@@ -12,6 +12,10 @@ public static class TenantLocalEffectRules
     public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
         AgentRun run, TenantOperationCommit commit, AgentRun? source = null)
     {
+        if (request.Operation.SandboxRead is not null)
+        { TenantSandboxReadEffectRules.Validate(request, decision, grant, run, commit, source); return; }
+        if (request.Operation.SandboxControl is not null)
+        { TenantSandboxControlEffectRules.Validate(request, decision, grant, run, commit, source); return; }
         ValidateApproval(request, decision, grant, run, commit, source);
         if (!request.Operation.IsLocalConfiguration || commit.Outcome is not (TenantOperationOutcome.Completed or TenantOperationOutcome.Denied))
             throw new SecurityConflictException("operation_mismatch");
@@ -63,7 +67,7 @@ public static class TenantLocalEffectRules
         TenantApprovalRules.Validate(request, run, target, requireCurrentWitness: false, source: source);
         if (commit.Outcome == TenantOperationOutcome.Denied) return commit;
         var reason = grant is not null && grant.ExpiresAt <= at ? "grant_expired" : request.ExpiresAt <= at ? "approval_expired"
-            : ManagementPolicyResolver.Resolve(run.Admission.Configuration!.Definition, target.Instance).Allows(HarnessManagementScope.Settings) != true ? "management_unavailable"
+            : request.Operation.IsLocalConfiguration && ManagementPolicyResolver.Resolve(run.Admission.Configuration!.Definition, target.Instance).Allows(HarnessManagementScope.Settings) != true ? "management_unavailable"
             : target.Instance.Revision != request.Operation.ExpectedInstanceRevision || target.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision ? "operation_witness_changed" : null;
         return reason is null ? commit : commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = reason };
     }
@@ -88,7 +92,7 @@ public static class TenantLocalEffectRules
         return new(current.InstanceId, operation.ExpectedInstanceRevision, SetSettingsOverrides: true,
             SettingsOverrides: InstanceSettingsResolver.Patch(current.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear), AutomationPolicyChanges: []);
     }
-    public static string AuditAction(PreparedTenantOperation operation) => operation.Kind == TenantOperationKind.Persona ? "operations.persona.apply" : "operations.preferences.apply";
+    public static string AuditAction(PreparedTenantOperation operation) => operation.SandboxRead is not null ? TenantSandboxReadOperationRules.AuditAction : operation.SandboxControl is not null ? TenantSandboxControlOperationRules.AuditAction : operation.Kind == TenantOperationKind.Persona ? "operations.persona.apply" : "operations.preferences.apply";
 
     public static void ValidateTransaction(TenantSecurityState next, long expected, TenantApprovalRequest request, AuthorizationAudit audit)
     {
