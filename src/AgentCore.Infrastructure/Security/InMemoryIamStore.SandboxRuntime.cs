@@ -35,6 +35,7 @@ public sealed partial class InMemoryIamStore
         var savedSource = sandboxBacking.TenantProfile(tenant, source.Id, source.Revision);
         if (savedSource is null || sandboxBacking.TenantProfile(tenant, source.Id)?.Enabled != true)
             throw new AccessDeniedException("resource_unavailable");
+        TenantSandboxControlRules.RequireCurrentSelection(sandboxBacking.TenantLease(tenant, session.Owner.SessionId), agent, sandboxBacking.TenantProfile(tenant, source.Id));
         var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
             ? definitions.TenantPublication(tenant, definition, agent.Instance.ActiveVersion)?.Payload
             : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).GetAwaiter().GetResult();

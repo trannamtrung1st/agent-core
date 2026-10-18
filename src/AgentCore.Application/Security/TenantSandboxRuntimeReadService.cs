@@ -4,9 +4,10 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
+public sealed record TenantSandboxSelectionObservation(string ProfileId, long ProfileRevision, long InstanceRevision, string StoredPhase);
 public sealed record TenantSandboxLeaseObservation(Guid Generation, long Revision, string StoredState, string ProfileId, long ProfileRevision,
     string ProfileName, string ImageReference, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, Guid? ActiveExecutionId, Guid? LastExecutionId,
-    bool CleanupPending, string? Message, SandboxInitializationEvidence? Initialization, string StorageEnforcement = "sampled");
+    bool CleanupPending, string? Message, SandboxInitializationEvidence? Initialization, string StorageEnforcement = "sampled", string? SelectedProfileId = null, TenantSandboxSelectionObservation? Selection = null, bool SelectionRestricted = false);
 public sealed record TenantSandboxExecutionObservation(Guid ExecutionId, long Revision, Guid AgentRunId, Guid Generation, string State,
     string? ProfileId, long? ProfileRevision, string CommandText, bool Background, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt,
     int? ExitCode, string Stdout, string Stderr, bool Truncated, long? DurationMs, bool FilesystemEffectsMayHaveOccurred, bool TerminationConfirmed,
@@ -30,13 +31,19 @@ public sealed class TenantSandboxRuntimeReadService(IIamStore security, ITenantS
         var currentSession = await sessions.FindTenantSessionAsync(tenant, session, ct).ConfigureAwait(false);
         var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         await RequireRead(current, saved.Owner, human, profileIds, ct).ConfigureAwait(false);
+        var target = snapshot.Lease?.SelectionWitness is not null ? snapshot.Lease.TransitionProfileId : null;
+        var readableSelection = target is not null && (await authorizer.CheckTenantAsync(current, human.PrincipalId, PermissionCatalog.Get("sandbox.read"),
+            TenantSandboxProfileRules.Scope(tenant, target), ct).ConfigureAwait(false)).Allowed;
         var final = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         if (currentSession?.Owner != saved.Owner || currentSession.Snapshot.Revision != saved.Snapshot.Revision || current.Tenant.Revision != state.Tenant.Revision
             || final.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         var l = snapshot.Lease; var e = snapshot.Execution;
         return new(session, l is null ? null : new(l.Generation, l.Revision, l.State.ToString(), l.Profile.Id, l.Profile.Revision, l.Profile.Name,
             l.Profile.ImageReference, l.CreatedAt, l.ExpiresAt, l.ActiveExecutionId, l.LastExecutionId, l.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation || e is { ProcessStop: not null, TerminationConfirmed: false },
-            l.SafeMessage, l.Initialization), e is null ? null : new(e.Id, e.Revision, e.AgentRunId, e.Generation, e.State.ToString(), e.ProfileId, e.ProfileRevision,
+            l.SafeMessage, l.Initialization,
+            SelectedProfileId: target is null ? l.CleanupReason == "reset" ? null : l.SelectedProfileId ?? l.Profile.Id : readableSelection ? target : null,
+            Selection: readableSelection ? new(target!, l.TransitionProfileRevision!.Value, l.SelectionWitness!.InstanceRevision, l.TransitionPhase!) : null,
+            SelectionRestricted: target is not null && !readableSelection), e is null ? null : new(e.Id, e.Revision, e.AgentRunId, e.Generation, e.State.ToString(), e.ProfileId, e.ProfileRevision,
             e.CommandText, e.Background, e.StartedAt, e.FinishedAt, e.ExitCode, e.Stdout, e.Stderr, e.Truncated, e.DurationMs, e.FilesystemEffectsMayHaveOccurred,
             e.TerminationConfirmed, e.RemoteTerminationConfirmed, e.DiagnosticId, e.ProcessStop is not null, e.ProcessStop?.DispatchStartedAt is not null), snapshot.SessionRevision, state.Tenant.Revision);
     }

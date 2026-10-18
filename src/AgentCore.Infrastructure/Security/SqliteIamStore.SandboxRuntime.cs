@@ -50,6 +50,8 @@ public sealed partial class SqliteIamStore
             ?? throw new AccessDeniedException("resource_unavailable");
         var latest = await OwnedSandboxProfiles(db, tenant).Where(p => p.Id == source.Id).OrderByDescending(p => p.Revision).FirstAsync(ct).ConfigureAwait(false);
         if (!SandboxValue(latest).Enabled) throw new AccessDeniedException("resource_unavailable");
+        var selectionRow = await db.Set<SandboxLeaseRow>().AsNoTracking().SingleOrDefaultAsync(l => l.TenantId == tenant && l.SessionId == session.Owner.SessionId.ToString("D"), ct).ConfigureAwait(false);
+        TenantSandboxControlRules.RequireCurrentSelection(selectionRow is null ? null : SandboxRuntimePersistence.Value(selectionRow), agent, SandboxValue(latest));
         AgentDefinition? baseline;
         if (Guid.TryParse(agent.Instance.DefinitionId, out var definition))
         {

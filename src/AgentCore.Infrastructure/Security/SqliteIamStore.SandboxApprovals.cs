@@ -28,6 +28,7 @@ public sealed partial class SqliteIamStore
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         var row = await db.Set<SandboxLeaseRow>().AsNoTracking().SingleOrDefaultAsync(l => l.TenantId == tenant && l.SessionId == value.SessionId.ToString("D"), ct).ConfigureAwait(false);
         var lease = row is null ? null : SandboxRuntimePersistence.Value(row);
+        TenantSandboxControlRules.RequireCurrentSelection(lease, agent, SandboxValue(latest));
         TenantSandboxOperationRules.Require(value, run, agent, session, baseline, SandboxValue(source), lease, ApprovalNow, reserved);
         var pinned = TenantSandboxOperationRules.Profile(run, value.ProfileId);
         if (request.Snapshot != TenantSandboxOperationRules.Snapshot(agent, pinned, lease, reserved?.InitializesGeneration)) throw new SecurityConflictException("sandbox_operation_witness_changed");

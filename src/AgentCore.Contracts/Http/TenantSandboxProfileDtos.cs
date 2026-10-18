@@ -21,3 +21,7 @@ public sealed record TenantSandboxResetRequest(long ExpectedRevision, long Expec
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TenantSandboxProcessStopRequest(long ExpectedRevision, long ExpectedSessionRevision, Guid ExpectedGeneration,
     long ExpectedLeaseRevision, long ExpectedExecutionRevision);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record TenantSandboxProfileSwitchRequest(long ExpectedRevision, long ExpectedSessionRevision, Guid ExpectedGeneration,
+    long ExpectedLeaseRevision, [property: JsonRequired] Guid? ExpectedExecutionId, string ProfileId, long ExpectedProfileRevision, long ExpectedInstanceRevision);

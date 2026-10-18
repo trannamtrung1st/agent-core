@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant Session profile switching
+
+The shared human control facade resolves the exact current allowed target through `TenantSandboxSetupResolver` and metadata-only image eligibility. Current original-human/security fences surround preparation. Both owning stores repeat actual Session, executor, current Definition/Instance setup, profile/source metadata and reusable full-verification checks with the existing lease/security/audit write. Ready idle or already Terminated generations are eligible; active executions, pending reconciliation and failed initialization without explicit reset reject.
+
+Selection preserves old generation ownership while recording target identity and Instance/source/host pins. The existing worker only retires the old generation; foreign ownership or changed host leaves the target pending. Fresh exact Review and atomic reservation reject target/setup/source/host drift and consume the witness once. Existing canonical directories remain; a retired mount observation does not override the new command's current restricted home policy. The shared SDK then creates the selected image and runs its reviewed initialization before one command dispatch. Reset can supersede a pending switch without target-profile read and retains failed-initialization evidence. No selection action performs setup or shell work.
+
 ## Tenant human process Stop
 
 The shared human control facade resolves the actual owned active execution and commits Stop consent through existing lease/receipt/security/audit owners. A technical one-time receipt CAS fences interrupt dispatch; new commands and factual writers cannot create or rewrite that consent. Original human login and independent exact scopes are rechecked at commit, with complete generation/Session/lease/execution witnesses.

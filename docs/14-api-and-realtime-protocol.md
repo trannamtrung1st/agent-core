@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Canonical tenant Session Sandbox profile switch
+
+Authenticated `POST /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/profile` accepts strict `{expectedRevision, expectedSessionRevision, expectedGeneration, expectedLeaseRevision, expectedExecutionId, profileId, expectedProfileRevision, expectedInstanceRevision}`. `expectedExecutionId` must be present and may be null only when there is no active/latest execution. The server derives the actual tenant and Account/login/Principal. Independent current Session read/manage, agent Sandbox read/manage and old/target profile read apply, with original-login and exact witnesses repeated at commit. The target requires current allowed setup and full reusable host/source verification. Active execution, pending retirement or failed initialization without explicit reset cannot switch.
+
+`202 Accepted` returns `{sessionId, generation, profileId, profileRevision, instanceRevision, leaseRevision, sessionRevision, securityRevision, retirementConfirmed}` and the canonical Sandbox GET as Location. Acceptance saves selection and requests old retirement; it never creates an environment or starts scripts. Stored environment observations add `selectedProfileId` and optional `selection:{profileId,profileRevision,instanceRevision,storedPhase}`. Phase is `retirement` until confirmed, then `awaitingReview`. If target read is revoked, selection fields are null with `selectionRestricted:true`; authorized old facts remain readable. Private audit/source epochs and host fingerprints are omitted.
+
+A fresh exact approved command must name the still-current selected target before a new generation can initialize; changed pins do not fall back. Reset clears selection. Cookie/CSRF/no-store apply; stale witnesses and blocked lifecycle return 409, inaccessible/foreign scope 403, missing authentication 401 and missing/unknown body members 400. [Focused evidence](reports/tenant-sandbox-profile-switch-verification-2026-10-18.md).
+
 ## Canonical tenant Sandbox process Stop
 
 Authenticated `POST /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/executions/{executionId}/stop` accepts strict `{expectedRevision, expectedSessionRevision, expectedGeneration, expectedLeaseRevision, expectedExecutionRevision}`. The execution must be the exact active Core receipt; provider IDs and caller-selected identities are not accepted. Original login and independent current Session read/manage, agent Sandbox read/manage and exact profile read apply before stale witnesses and again at commit.
@@ -28,7 +36,7 @@ The protected review changes show profile/image, exact shell or argv text, worki
 
 ## Tenant Session Sandbox stored observations HTTP
 
-Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These GET endpoints perform no SDK inspection or mutation; the explicit human reset command is documented above. Model command/Stop dispatch and profile switching are separate boundaries.
+Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These GET endpoints perform no SDK inspection or mutation; the explicit human reset command is documented above. Human profile switching is documented above; model command/Stop dispatch remains separate.
 
 The environment projection contains stored generation/revision/state (`storedState`), safe profile/image identity, lifetime, active/last receipt pointers, bounded initialization evidence and stored cleanup indication. The execution projection contains exact receipt/Run/generation identity, state, profile revision, bounded command/output, timings, exit and effect/termination facts. Provider identities, mount authority/host paths and registry authorization are omitted. `liveAuthorityConfirmed=false` prevents stored Ready or Completed facts from implying current dispatch permission or provider liveness.
 

@@ -13,7 +13,7 @@ public sealed record SandboxLease(Guid SessionId, Guid AgentInstanceId, Guid Gen
     DateTimeOffset ExpiresAt, DateTimeOffset? InitializedAt = null, SandboxMountAuthority? MountAuthority = null,
     Guid? ActiveExecutionId = null, string? DiagnosticId = null, IReadOnlyList<string>? BaselineProcesses = null, Guid? LastExecutionId = null, string? SafeMessage = null, SandboxInitializationEvidence? Initialization = null,
     DateTimeOffset? LastActivityAt = null, string? CleanupReason = null, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null, string? SelectedProfileId = null, string? TransitionProfileId = null, long? TransitionProfileRevision = null, string? TransitionPhase = null, Guid? AdmissionRunId = null, string? AdmissionToolCallId = null, string? FailureCategory = null, string? FailurePhase = null,
-    Guid? TenantId = null, Guid? ExecutorPrincipalId = null, string? ProviderHostScope = null);
+    Guid? TenantId = null, Guid? ExecutorPrincipalId = null, string? ProviderHostScope = null, SandboxSelectionWitness? SelectionWitness = null);
 
 public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanceId, Guid Generation,
     Guid AgentRunId, Guid ClaimGeneration, string ToolCallId, string ActionHash, SandboxExecutionState State,
@@ -22,6 +22,10 @@ public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanc
     bool FilesystemEffectsMayHaveOccurred = false, string? DiagnosticId = null, bool Background = false, string CommandText = "", long? DurationMs = null, DateTimeOffset? DeadlineAt = null, string? ProfileId = null, long? ProfileRevision = null,
     string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false,
     bool GenerationRecycled = false, bool RemoteTerminationConfirmed = false, Guid? TenantId = null, Guid? ExecutorPrincipalId = null, long Revision = 0, Guid? ApprovalRequestId = null, Guid? OperationId = null, bool InitializesGeneration = false, DateTimeOffset? CommandStartedAt = null, SandboxProcessStop? ProcessStop = null);
+
+// Current target setup/source pins accompany the existing selected/transition profile identity.
+public sealed record SandboxSelectionWitness(Guid RequestId, long InstanceRevision, Guid? RegistryCredentialId,
+    long? RegistryCredentialRevision, long? RegistrySecretRevision, string HostScope);
 
 // Accepted human cleanup consent and a one-time technical interrupt fence on the existing receipt.
 public sealed record SandboxProcessStop(Guid RequestId, Guid PrincipalId, DateTimeOffset RequestedAt, DateTimeOffset? DispatchStartedAt = null);

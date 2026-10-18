@@ -1,5 +1,11 @@
 # System Architecture
 
+## Tenant Session profile switching
+
+Explicit human Session profile switching reuses `TenantSandboxControlService`, the existing owned lease/security/audit transaction and the existing SDK retirement worker. Independent Session read/manage, agent Sandbox read/manage and old/target profile read are required; the original login and exact Session/generation/lease/execution, Instance and profile revisions are rechecked at commit. The target must be currently allowed, enabled and fully verified for the current host and protected source epochs. Selection itself performs no provider create, initialization or command.
+
+The old generation retains its own profile and provider ownership while the existing selected/transition fields identify the pending target. A compact witness pins current Instance/source/host and the actual audit request. Active execution or unconfirmed cleanup blocks switching; failed initialization requires explicit reset. The worker may retire the accepted old target after logout, preserving canonical files. Only confirmed retirement enables fresh exact command Review and reservation for the pinned target. Changed pins require explicit reselection/reset; there is no fallback to the old profile. The saved Run admission remains a ceiling. [Focused evidence](reports/tenant-sandbox-profile-switch-verification-2026-10-18.md).
+
 ## Exact human tenant process Stop
 
 Human Sandbox reset and process Stop share `TenantSandboxControlService` and the existing scoped human/lease/security/audit transaction. Stop binds the active Core execution and exact Session, lease, generation and execution revisions. Its durable `SandboxProcessStop` consent is embedded in the existing execution receipt, linked to the actual human audit. Factual writes and new command reservations cannot mint or replace this evidence.
@@ -10,7 +16,7 @@ A separate atomic technical start on that same receipt permits one interrupt att
 
 An authenticated human may request reset of one exact owned Session generation under independent Session read/manage, agent Sandbox read/manage and exact profile read authority. The existing lease/security/audit transaction repeats current permissions and original-login validation and checks Session revision, lease revision, generation and nullable active-or-latest execution identity. Factual recovery cannot manufacture or clear reset consent or change a selected profile.
 
-Reset records `Terminating` intent on that existing generation and clears selection/switch targets; it never starts an environment, initializes a script or dispatches a command. Existing worker/CAS/provider ownership and original-host retirement proof complete teardown after request authority ends. Uncertain/foreign/mismatched-host retirement remains pending and blocks another generation. Already confirmed Terminated generations may record explicit reset to release a failed-initialization recovery gate. Initialization evidence, canonical files, Artifacts, Attachments and immutable original command/launch outcomes remain retained. In-flight process facts can become Canceled while possible file effects remain explicit. Another command requires a fresh exact Review. Profile switching and model-requested Stop/reset remain separate work.
+Reset records `Terminating` intent on that existing generation and clears selection/switch targets; it never starts an environment, initializes a script or dispatches a command. Existing worker/CAS/provider ownership and original-host retirement proof complete teardown after request authority ends. Uncertain/foreign/mismatched-host retirement remains pending and blocks another generation. Already confirmed Terminated generations may record explicit reset to release a failed-initialization recovery gate. Initialization evidence, canonical files, Artifacts, Attachments and immutable original command/launch outcomes remain retained. In-flight process facts can become Canceled while possible file effects remain explicit. Another command requires a fresh exact Review. Human profile switching is documented above; model-requested Stop/reset remains separate work.
 
 ## Tenant Sandbox recovery ownership
 
@@ -20,7 +26,7 @@ Each new owned lease also pins the trusted provider configuration scope (private
 
 The pinned Docker provider creates in a background thread that can outlive a lost Core HTTP reply. A filtered empty list therefore cannot prove that creation has stopped. The existing trusted-server adapter keeps a durable negative generation fence in its existing private provider state volume. The fence binds exact tenant/Session/executor/generation, prevents later provisioning, waits for any active provisioning call and retires only exact matching containers through the existing provider service. Core accepts its bounded scope-matching retirement proof; errors/pending/foreign responses retain reconciliation. This provider fence cannot grant access, reserve a Core effect or replay an action; it is not a second IAM/approval/Run engine.
 
-[Focused recovery evidence](reports/tenant-sandbox-recovery-verification-2026-10-18.md) distinguishes controlled SDK/provider proof from live Docker qualification. Full proposal acceptance, explicit profile switching and model-requested Stop/reset, model offering/output delivery, tenant UI and final schema/authority consolidation remain separate gates.
+[Focused recovery evidence](reports/tenant-sandbox-recovery-verification-2026-10-18.md) distinguishes controlled SDK/provider proof from live Docker qualification. Full proposal acceptance, model-requested Stop/reset, model offering/output delivery, tenant UI and final schema/authority consolidation remain separate gates.
 
 ## Disposable tenant verification retirement
 

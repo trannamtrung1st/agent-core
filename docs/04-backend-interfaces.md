@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Session profile-switch ports
+
+`TenantSandboxControlService.RequestProfileSwitchAsync` accepts the original human, security revision and `TenantSandboxProfileSwitch` with exact Session/revision, generation, lease revision, nullable active-or-latest execution, target profile/revision and Instance revision. `TryRequestTenantSandboxProfileSwitchAsync` repeats scoped human, current setup/policy and accepted reusable verification checks under the existing owning transaction/gates, saving intent, security advance and safe audit atomically. Its trusted preparation contains resolved effective setup and current host scope, never arbitrary caller scripts or provider IDs.
+
+`TenantSandboxProfileSwitchReceipt` reports the selected target and whether old retirement was already confirmed. The existing worker changes the phase from `retirement` to `awaitingReview` only after exact retirement. New generation validation consumes the selection witness only for the exact selected source/setup/host. Read projections add `selectedProfileId`, optional safe `selection` and `selectionRestricted`; pending target read is independent of old environment read. Reset clears all selection intent. No alternate executor, queue or persistence owner is added.
+
 ## Tenant process Stop ports
 
 `TenantSandboxControlService.RequestProcessStopAsync` accepts original human, current security witness and `TenantSandboxProcessStop` (Session/revision, generation, lease revision, execution/revision). `TryRequestTenantSandboxProcessStopAsync` commits actual human-scoped consent with lease/receipt revision advances, security and audit in one existing transaction. Scope checks are the same independent Session read/manage, agent Sandbox read/manage and exact profile read as reset. Consent grants cleanup of that existing target only.

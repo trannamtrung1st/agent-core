@@ -130,6 +130,7 @@ public sealed partial class OpenSandboxService
                     }
                     await SaveAsync(lease with { State = confirmed ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation,
                         ActiveExecutionId = confirmed ? null : lease.ActiveExecutionId,
+                        TransitionPhase = lease.SelectionWitness is null ? lease.TransitionPhase : confirmed ? "awaitingReview" : "retirement",
                         SafeMessage = lease.ProviderHostScope != HostScope ? "Sandbox server or workspace mapping changed. Ask the host operator to restore the original mapping or confirm retirement on its original server. This generation cannot be adopted or replayed."
                             : confirmed ? "Owned generation retirement confirmed. Canonical files and durable outcomes are retained; no command or initialization was replayed."
                             : "Owned generation retirement is pending. Writes may still occur; the saved action cannot replay." }, ct);

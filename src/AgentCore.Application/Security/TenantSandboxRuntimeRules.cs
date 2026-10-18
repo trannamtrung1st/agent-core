@@ -72,10 +72,11 @@ public static class TenantSandboxRuntimeRules
                 : !reserved.InitializesGeneration || lease.ActiveExecutionId != reserved.Id || lease.LastExecutionId != reserved.Id)
             || lease.AdmissionRunId != f.RunId || lease.AdmissionToolCallId is not { Length: > 0 and <= 128 }
             || lease.CreatedAt > at || lease.ExpiresAt <= at || lease.ExpiresAt <= lease.CreatedAt || lease.Profile.AdmittedForExecution != true || pinned != lease.Profile
-            || lease.SelectedProfileId is not null && lease.SelectedProfileId != lease.Profile.Id || lease.TransitionProfileId is not null || lease.TransitionProfileRevision is not null
+            || lease.SelectionWitness is not null || lease.SelectedProfileId is not null && lease.SelectedProfileId != lease.Profile.Id || lease.TransitionProfileId is not null || lease.TransitionProfileRevision is not null
             || run.Admission.Configuration?.Definition.SandboxPolicy?.AllowedProfileIds.Contains(lease.Profile.Id, StringComparer.Ordinal) != true
             || !RolePermissions.AllowsTool(run.Admission.Configuration.Definition, ToolCatalog.SandboxExec))
             throw new ArgumentException("Invalid exact tenant Sandbox generation reservation.");
+        if (previous?.SelectionWitness is not null) TenantSandboxControlRules.RequireSelectedProfile(previous, lease.Profile, lease.ProviderHostScope);
         if (previous is not null && (previous.State != SandboxLeaseState.Terminated || previous.Generation == lease.Generation
             || previous.TenantId != lease.TenantId || previous.AgentInstanceId != lease.AgentInstanceId || previous.ExecutorPrincipalId != lease.ExecutorPrincipalId
             || previous.AdmissionRunId == lease.AdmissionRunId && previous.AdmissionToolCallId == lease.AdmissionToolCallId
@@ -85,6 +86,7 @@ public static class TenantSandboxRuntimeRules
     public static void ValidateLease(SandboxLease value)
     {
         value.Profile.Validate();
+        TenantSandboxControlRules.ValidateSelection(value);
         if (value.TenantId is null || value.TenantId == Guid.Empty || value.ExecutorPrincipalId is null || value.ExecutorPrincipalId == Guid.Empty
             || value.SessionId == Guid.Empty || value.AgentInstanceId == Guid.Empty || value.Generation == Guid.Empty || value.Revision < 1
             || value.ProviderHostScope is not null && (value.ProviderHostScope.Length != 64 || value.ProviderHostScope.Any(c => !char.IsAsciiHexDigit(c)))
@@ -143,7 +145,7 @@ public static class TenantSandboxRuntimeRules
             || next.LastExecutionId != before.LastExecutionId || !Enum.IsDefined(next.State)
             || next.CleanupReason == "reset" && before.CleanupReason != "reset"
             || before.CleanupReason == "reset" && next.CleanupReason != "reset"
-            || next.SelectedProfileId != before.SelectedProfileId || next.TransitionProfileId != before.TransitionProfileId || next.TransitionProfileRevision != before.TransitionProfileRevision
+            || next.SelectionWitness != before.SelectionWitness || next.SelectedProfileId != before.SelectedProfileId || next.TransitionProfileId != before.TransitionProfileId || next.TransitionProfileRevision != before.TransitionProfileRevision
             || before.State == SandboxLeaseState.Terminated && next.State != SandboxLeaseState.Terminated
             || next.State == SandboxLeaseState.Ready && before.State is SandboxLeaseState.Terminating or SandboxLeaseState.Failed
             || next.State == SandboxLeaseState.Provisioning && before.State != SandboxLeaseState.Provisioning

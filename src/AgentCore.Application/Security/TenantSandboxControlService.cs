@@ -9,7 +9,8 @@ public sealed record TenantSandboxResetReceipt(Guid SessionId, Guid Generation, 
 
 // Explicit human controls grant cleanup of an exact existing target, never another command or initialization.
 public sealed partial class TenantSandboxControlService(IIamStore security, ITenantSessionStore sessions, ITenantSandboxRuntimeStore storage,
-    IdentityService identity, IamAuthorizer authorizer, IIdGenerator ids, TimeProvider time)
+    IdentityService identity, IamAuthorizer authorizer, IIdGenerator ids, TimeProvider time,
+    TenantSandboxSetupResolver? setups = null, ISandboxImageAuthority? images = null, ISandboxReadiness? readiness = null, ISandboxVerificationHost? host = null)
 {
     public async ValueTask<TenantSandboxResetReceipt> RequestResetAsync(Guid tenant, HumanSessionReference human, TenantSandboxReset reset,
         long expectedSecurityRevision, CancellationToken ct = default)
@@ -67,7 +68,7 @@ public static partial class TenantSandboxControlRules
     }
     public static SandboxLease Apply(SandboxLease lease) => lease with { Revision = checked(lease.Revision + 1),
         State = lease.State == SandboxLeaseState.Terminated ? SandboxLeaseState.Terminated : SandboxLeaseState.Terminating,
-        CleanupReason = "reset", SelectedProfileId = null, TransitionProfileId = null, TransitionProfileRevision = null, TransitionPhase = null,
+        CleanupReason = "reset", SelectedProfileId = null, TransitionProfileId = null, TransitionProfileRevision = null, TransitionPhase = null, SelectionWitness = null,
         SafeMessage = lease.State == SandboxLeaseState.Terminated ? "Reset recorded. Canonical files are retained; another command requires a fresh exact Review."
             : "Reset requested. Retirement is pending; writes may continue until confirmed. Canonical files are retained." };
 }

@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Session profile-switch state
+
+The existing lease JSON carries selected/transition profile identity plus optional `SandboxSelectionWitness` containing the actual audit request ID, Instance revision, registry Credential identity/revisions and host scope. Target IDs are not duplicated in the witness; active `Profile` remains the old generation's setup until replacement. Both stores atomically validate and save intent with one security revision and audit under their existing owner. No Core table, index or migration is added; existing leases deserialize with a null witness.
+
+Factual CAS may advance retirement state but cannot forge, replace or clear the witness/target. Foreign or pending teardown preserves `retirement`; confirmed Terminated becomes `awaitingReview`. New generation reservation checks exact profile/Instance/source/host pins and consumes intent once. Explicit reset clears it while retaining old facts/files and failed-init evidence; selecting after reset preserves reset consent until fresh reviewed replacement. Run admission, approval, current policy and source fences still apply independently.
+
 ## Tenant process Stop receipt fence
 
 Optional `SandboxExecution.ProcessStop` carries actual audit/request ID, initiating Principal, request time and nullable one-time dispatch start. It lives in the existing receipt JSON; no table, index or migration is added. Both owning stores atomically create this evidence with original-human/scoped authority, exact witnesses, lease/receipt revisions, security and audit. A bounded technical CAS may set dispatch start once for the same active acknowledged background execution. Factual writers cannot add, clear or rewrite consent/dispatch identity, and a new execution cannot inherit it. Existing generation/command deadlines and immutable original operation outcome remain unchanged.

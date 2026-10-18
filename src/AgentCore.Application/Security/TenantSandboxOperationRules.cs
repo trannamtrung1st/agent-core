@@ -39,7 +39,8 @@ public static class TenantSandboxOperationRules
             || value.RegistrySecretRevision != profile.RegistrySecretRevision || value.HomeAccess != home
             || reserved is null && ((lease?.Revision ?? 0) != value.ExpectedLeaseRevision || lease?.Generation != value.ExpectedGeneration))
             throw new SecurityConflictException("sandbox_operation_witness_changed");
-        TenantSandboxRuntimeRules.RequireCurrentPolicy(run, agent, baseline, profile, source, lease?.MountAuthority);
+        if (reserved is null && lease?.State == SandboxLeaseState.Terminated) TenantSandboxControlRules.RequireSelectedProfile(lease, profile);
+        TenantSandboxRuntimeRules.RequireCurrentPolicy(run, agent, baseline, profile, source, lease?.State == SandboxLeaseState.Terminated ? null : lease?.MountAuthority);
         StateIsolationAccess.RequireHome(new(HomeAccess: home), command.Cwd, false);
         if (reserved is not null && (lease is null || reserved.Generation != lease.Generation || reserved.AgentRunId != run.AgentRunId
             || reserved.SessionId != run.SessionId || reserved.TenantId != run.Owner.TenantId || reserved.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId

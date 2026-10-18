@@ -16,10 +16,10 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantDefinitionIntegrationTests
 {
     private sealed record RuntimeSandboxSetup(Guid Tenant, HumanSessionReference Human, TenantSessionRoot Session, AgentRun Run,
-        SandboxLease Lease, TenantSandboxRuntimeWrite Write, Guid ExecutionGrant, TenantRunConfigurationResolver Resolver);
+        SandboxLease Lease, TenantSandboxRuntimeWrite Write, Guid ExecutionGrant, TenantRunConfigurationResolver Resolver, SandboxProfile? Alternate = null);
 
     private static async Task<RuntimeSandboxSetup> PrepareRuntimeSandbox(Fixture f, bool verify = true, HomeAccess? home = null, Func<Guid, HumanSessionReference, ValueTask<Guid>>? registry = null,
-        AgentCore.Infrastructure.Sandbox.OpenSandboxOptions? options = null, string? initialization = null, bool template = false, string? instanceInitialization = null, string? imageReference = null)
+        AgentCore.Infrastructure.Sandbox.OpenSandboxOptions? options = null, string? initialization = null, bool template = false, string? instanceInitialization = null, string? imageReference = null, bool alternate = false)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var human = await SetupHuman(f, owner.AccountId, owner.OwnerPrincipalId); var p = SetupProfiles(f, options);
@@ -28,9 +28,16 @@ public sealed partial class TenantDefinitionIntegrationTests
         var profile = (await p.Profiles.SaveAsync(owner.TenantId, null, human, SetupInput("Runtime source") with { RegistryCredentialId = sourceCredential, InitializationScript = initialization,
                 ImageReference = imageReference ?? (options?.AllowLocalImageIds == true ? "sha256:" + new string('b', 64) : SetupInput("Runtime source").ImageReference) }, await Revision(), 0)).Profile;
         if (verify) await p.Verify.VerifyAsync(owner.TenantId, profile.Id, human, await Revision(), 1);
+        SandboxProfile? other = null;
+        if (alternate)
+        {
+            other = (await p.Profiles.SaveAsync(owner.TenantId, null, human, SetupInput("Alternate source") with { InitializationScript = "printf alternate-init",
+                ImageReference = options?.AllowLocalImageIds == true ? "sha256:" + new string('c', 64) : SetupInput("Alternate source").ImageReference }, await Revision(), 0)).Profile;
+            await p.Verify.VerifyAsync(owner.TenantId, other.Id, human, await Revision(), 1);
+        }
         var draft = await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, "Tenant runtime", await Revision());
         draft = await f.Service.UpdateAsync(human.PrincipalId, owner.TenantId, draft.DraftId, draft.Candidate with {
-            SandboxPolicy = new(profile.Id, [profile.Id]), Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec]), Workspace: template ? new("notes") : null),
+            SandboxPolicy = new(profile.Id, other is null ? [profile.Id] : [profile.Id, other.Id]), Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec]), Workspace: template ? new("notes") : null),
             StateIsolationPolicy = home is { } access ? new(HomeAccess: access) : draft.Candidate.StateIsolationPolicy
         }, await Revision(), draft.Revision);
         if (template)
@@ -55,6 +62,8 @@ public sealed partial class TenantDefinitionIntegrationTests
             AccessScope.ForResource(owner.TenantId, "agent", agent.Instance.InstanceId.ToString("D")), await Revision());
         role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Read source", ["sandbox.read"], await Revision());
         await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId, TenantSandboxProfileRules.Scope(owner.TenantId, profile.Id), await Revision());
+        if (other is not null) await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId,
+            TenantSandboxProfileRules.Scope(owner.TenantId, other.Id), await Revision());
         if (sourceCredential is { } credential)
         {
             role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Use exact image source", ["credentials.use"], await Revision());
@@ -73,12 +82,12 @@ public sealed partial class TenantDefinitionIntegrationTests
         var now = DateTimeOffset.UtcNow;
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
             new AgentRunCommand.Claim(run.Revision, now, f.Ids.NewId(), now.AddMinutes(5)), f.Ids.NewId());
-        var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!);
+        var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!, p => p.Id == profile.Id);
         var lease = new SandboxLease(session.Owner.SessionId, agent.Instance.InstanceId, f.Ids.NewId(), 1, pinned,
             SandboxLeaseState.Provisioning, null, now, now.AddMinutes(10), AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "sandbox-1",
             TenantId: owner.TenantId, ExecutorPrincipalId: agent.PrincipalId, ProviderHostScope: p.Host.Scope);
         return new(owner.TenantId, human, session.Owner, run, lease,
-            new(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), await Revision(), run.Revision), grant.AssignmentId, resolver);
+            new(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), await Revision(), run.Revision), grant.AssignmentId, resolver, other);
     }
     private static SandboxExecution RuntimeExecution(Fixture f, RuntimeSandboxSetup s, string call = "sandbox-1") => new(f.Ids.NewId(), s.Session.SessionId,
         s.Session.AgentInstanceId, s.Lease.Generation, s.Run.AgentRunId, s.Run.Claim!.Generation, call, new string('a', 64), SandboxExecutionState.Dispatching,

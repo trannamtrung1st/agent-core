@@ -21,7 +21,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var operations = new TenantOperationAuthorizer(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer,
             new((ITenantAuthorizationAuditStore)current, f.Ids, TimeProvider.System));
         var target = new TenantSandboxOperationTarget((ITenantSessionStore)current, (ITenantSandboxProfileStore)current, (ITenantSandboxRuntimeStore)current,
-            setup.Resolver, authorizer, current, p.Images, p.Ready, TimeProvider.System);
+            setup.Resolver, authorizer, current, p.Images, p.Ready, TimeProvider.System, p.Host);
         return (new(current, (ITenantApprovalStore)current, (ITenantAgentStore)current, operations, authorizer, f.Identity, f.Ids, TimeProvider.System,
                 setup.Resolver, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, sandboxTargets: target),
             new((ITenantRunStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, (ITenantSandboxRuntimeStore)current, target, operations, f.Ids, TimeProvider.System, p.Host));

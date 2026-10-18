@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Session profile switching
+
+InMemory and SQLite checks select an independently verified allowed target without provider effects, retire the old exact generation after logout/reopen, preserve files, reject old-profile fallback, then require fresh exact Review and reserve the selected target once. Drive the shared SDK through actual local create/mount/readiness/Profile-init/command protocol; assert the selected image, one initialization/command and no duplicate dispatch. Foreign old metadata must leave selection pending without create/kill until repaired.
+
+Exercise independent Session/agent/target permissions, raw-store source/setup/host validation, original-login retirement/relogin/password change/wrong Principal, immutable factual selection, restricted target reads and reset supersession. Failed initialization must remain blocked until explicit reset, then preserve consent/evidence through selection and fresh Review. Synthetic HTTP checks strict nullable execution witness, extra-member rejection, stale target, anonymous/legacy/foreign/CSRF denial, no-store, safe selected-target projection and pending 202 semantics. These tests do not qualify live Docker, frontend selection or model controls. [Focused evidence](reports/tenant-sandbox-profile-switch-verification-2026-10-18.md).
+
 ## Tenant human process Stop
 
 In both stores, prepare/review/reserve an actual owned background launch, settle its immutable effect, request exact human Stop, end the login, reopen and run the shared SDK worker against an authenticated controlled peer. Verify one interrupt, signal exit evidence, bounded logs, generic quiescence and safe Ready reuse; residual writers require exact container retirement. Lose the interrupt reply or reopen after atomic dispatch claim: no second interrupt or original command/setup may dispatch. Preserve files, selected profile and original operation result.

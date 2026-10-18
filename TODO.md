@@ -1,5 +1,7 @@
 # TODO
 
+Human tenant Session profile switching now pins current target setup/source/host, retires the old generation through the existing worker and requires fresh exact Review before selected initialization/command. Canonical files and pending cleanup evidence remain intact. [Focused evidence](docs/reports/tenant-sandbox-profile-switch-verification-2026-10-18.md) distinguishes controlled SDK/store/HTTP checks from live Docker qualification. This supersedes profile-switch-pending notes below only for this backend boundary. Model-requested Stop/reset/command offering/output delivery, tenant Sandbox UI, other proposal families, final authority/schema consolidation and the earlier SQLite preference reliability follow-up remain open. The full proposal stays active.
+
 The OpenSandbox cutover is synchronized with the owner-selected main snapshot
 `ed943429`. General Assistant v30 preserves main's immutable v29 and combines
 its current public-download/Drive/Office authority with sandbox execution. Combined

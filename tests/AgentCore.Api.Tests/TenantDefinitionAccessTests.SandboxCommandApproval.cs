@@ -14,8 +14,8 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantDefinitionAccessTests
 {
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Sandbox_command_approval_and_human_controls_HTTP_bind_exact_witnesses_without_SDK_dispatch(bool stopProcess)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)]
+    public async Task Tenant_Sandbox_command_approval_and_human_controls_HTTP_bind_exact_witnesses_without_SDK_dispatch(bool stopProcess, bool switchProfile)
     {
         await using var factory = new SandboxSetupFactory();
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
@@ -26,9 +26,17 @@ public sealed partial class TenantDefinitionAccessTests
             "ghcr.io/acme/tool@sha256:" + new string('a', 64))));
         var profileId = profile.GetProperty("profile").GetProperty("id").GetString()!;
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/sandbox-profiles/{profileId}/verify", new TenantSandboxVerificationRequest(await Revision(owner, tenant), 1))).StatusCode);
+        string? alternateId = null;
+        if (switchProfile)
+        {
+            var alternate = await Json(await owner.PostAsJsonAsync(api + "/sandbox-profiles", new TenantSandboxProfileSaveRequest(await Revision(owner, tenant), 0, "Selected source", "Controlled alternate setup", true,
+                "ghcr.io/acme/alternate@sha256:" + new string('b', 64))));
+            alternateId = alternate.GetProperty("profile").GetProperty("id").GetString()!;
+            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/sandbox-profiles/{alternateId}/verify", new TenantSandboxVerificationRequest(await Revision(owner, tenant), 1))).StatusCode);
+        }
         var definitions = factory.Services.GetRequiredService<TenantDefinitionService>();
         var draft = await definitions.CreateAsync(actor, tenant, "Exact Sandbox", await Revision(owner, tenant));
-        draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, [profileId]),
+        draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, alternateId is null ? [profileId] : [profileId, alternateId]),
             Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec])) }, await Revision(owner, tenant), draft.Revision);
         await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
         var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
@@ -44,7 +52,7 @@ public sealed partial class TenantDefinitionAccessTests
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var run = (await runs.FindTenantRunAsync(tenant, submitted.GetProperty("runId").GetGuid()))!;
         var at = DateTimeOffset.UtcNow; var runtime = factory.Services.GetRequiredService<ITenantRuntimeStore>();
         run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, at, Guid.NewGuid(), at.AddMinutes(5)), Guid.NewGuid());
-        var storage = factory.Services.GetRequiredService<ITenantSandboxRuntimeStore>(); var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!);
+        var storage = factory.Services.GetRequiredService<ITenantSandboxRuntimeStore>(); var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!, p => p.Id == profileId);
         var frame = new TenantRuntimeFrame(run.Owner, id, run.AgentRunId, run.Claim!.Generation);
         var lease = new SandboxLease(id, instance, Guid.NewGuid(), 1, pinned, SandboxLeaseState.Provisioning, null, at, at.AddMinutes(10),
             AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "prepare-environment", TenantId: tenant, ExecutorPrincipalId: executor,
@@ -68,6 +76,30 @@ public sealed partial class TenantDefinitionAccessTests
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other command review", slug = "other-command-review" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/approvals/{request.RequestId}")).StatusCode);
         Assert.Null((await storage.ReadTenantSandboxRuntimeAsync(tenant, id))!.Execution);
+        if (switchProfile)
+        {
+            var selectionPath = api + $"/sessions/{id}/sandbox"; var selectionObserved = await Json(await owner.GetAsync(selectionPath));
+            var change = new TenantSandboxProfileSwitchRequest(await Revision(owner, tenant), selectionObserved.GetProperty("sessionRevision").GetInt64(), lease.Generation, 2, null, alternateId!, 1, 1);
+            var switchPath = selectionPath + "/profile";
+            Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(switchPath, change with { ExpectedProfileRevision = 99 })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(switchPath, new { change.ExpectedRevision, change.ExpectedSessionRevision, change.ExpectedGeneration, change.ExpectedLeaseRevision, change.ProfileId, change.ExpectedProfileRevision, change.ExpectedInstanceRevision })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(switchPath, new { change.ExpectedRevision, change.ExpectedSessionRevision, change.ExpectedGeneration, change.ExpectedLeaseRevision, expectedExecutionId = (Guid?)null, change.ProfileId, change.ExpectedProfileRevision, change.ExpectedInstanceRevision, command = "must not execute" })).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(switchPath, change)).StatusCode);
+            using var selectionLegacy = TestOwnerCapability.CreateOwnerClient(factory);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await selectionLegacy.PostAsJsonAsync(switchPath, change)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox/profile", change)).StatusCode);
+            var csrf = owner.DefaultRequestHeaders.GetValues(AgentCore.Api.Security.IdentityHttp.CsrfHeader).ToArray(); owner.DefaultRequestHeaders.Remove(AgentCore.Api.Security.IdentityHttp.CsrfHeader);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(switchPath, change)).StatusCode); owner.DefaultRequestHeaders.Add(AgentCore.Api.Security.IdentityHttp.CsrfHeader, csrf);
+            var selectionAccepted = await owner.PostAsJsonAsync(switchPath, change); Assert.Equal(HttpStatusCode.Accepted, selectionAccepted.StatusCode); Assert.True(selectionAccepted.Headers.CacheControl?.NoStore);
+            Assert.Equal(selectionPath, selectionAccepted.Headers.Location?.OriginalString); Assert.False((await Json(selectionAccepted)).GetProperty("retirementConfirmed").GetBoolean());
+            var selectionPending = await Json(await owner.GetAsync(selectionPath)); var environment = selectionPending.GetProperty("environment");
+            Assert.Equal("Terminating", environment.GetProperty("storedState").GetString()); Assert.Equal(profileId, environment.GetProperty("profileId").GetString());
+            Assert.Equal(alternateId, environment.GetProperty("selectedProfileId").GetString()); Assert.Equal("retirement", environment.GetProperty("selection").GetProperty("storedPhase").GetString());
+            Assert.False(environment.GetProperty("selectionRestricted").GetBoolean()); Assert.DoesNotContain("hostScope", selectionPending.GetRawText());
+            Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(switchPath, change)).StatusCode);
+            Assert.Null((await storage.ReadTenantSandboxRuntimeAsync(tenant, id))!.Execution);
+            Assert.Single(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "sandbox.profile.switch"); return;
+        }
         if (stopProcess)
         {
             Assert.Equal(1, await approvals.DispatchPendingAsync());

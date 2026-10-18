@@ -19,6 +19,14 @@ public static class TenantSandboxRuntimeEndpoints
                 request.ExpectedLeaseRevision, executionId, request.ExpectedExecutionRevision), request.ExpectedRevision, ct).ConfigureAwait(false);
             return Results.Accepted($"/api/v2/tenants/{actor.TenantId}/sessions/{sessionId}/sandbox/executions/{executionId}", result);
         }));
+        group.MapPost("/profile", (Guid sessionId, TenantSandboxProfileSwitchRequest request, HttpContext http, TenantSandboxControlService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
+            var result = await service.RequestProfileSwitchAsync(actor.TenantId, human, new(sessionId, request.ExpectedSessionRevision, request.ExpectedGeneration,
+                request.ExpectedLeaseRevision, request.ExpectedExecutionId, request.ProfileId, request.ExpectedProfileRevision, request.ExpectedInstanceRevision), request.ExpectedRevision, ct).ConfigureAwait(false);
+            return Results.Accepted($"/api/v2/tenants/{actor.TenantId}/sessions/{sessionId}/sandbox", result);
+        }));
         group.MapPost("/reset", (Guid sessionId, TenantSandboxResetRequest request, HttpContext http, TenantSandboxControlService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

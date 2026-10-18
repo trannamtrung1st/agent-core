@@ -5,7 +5,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantSandboxOperationTarget(ITenantSessionStore sessions, ITenantSandboxProfileStore profiles, ITenantSandboxRuntimeStore runtime,
-    TenantRunConfigurationResolver configuration, IamAuthorizer authorizer, IIamStore security, ISandboxImageAuthority images, ISandboxReadiness readiness, TimeProvider time)
+    TenantRunConfigurationResolver configuration, IamAuthorizer authorizer, IIamStore security, ISandboxImageAuthority images, ISandboxReadiness readiness, TimeProvider time, ISandboxVerificationHost? host = null)
 {
     public async ValueTask<(TenantAgent Agent, TenantSession Session, AgentCore.Domain.Definitions.AgentDefinition Baseline,
         AgentCore.Domain.Definitions.SandboxProfile Profile, SandboxLease? Lease)> ResolveAsync(AgentRun run, string profileId, CancellationToken ct)
@@ -15,13 +15,17 @@ public sealed class TenantSandboxOperationTarget(ITenantSessionStore sessions, I
         var session = await sessions.FindTenantSessionAsync(tenant, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var profile = TenantSandboxOperationRules.Profile(run, profileId);
         var source = await profiles.FindTenantSandboxProfileAsync(tenant, profileId, profile.Revision, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        if ((await profiles.FindTenantSandboxProfileAsync(tenant, profileId, ct: ct).ConfigureAwait(false))?.Enabled != true) throw new AccessDeniedException("resource_unavailable");
+        var latest = await profiles.FindTenantSandboxProfileAsync(tenant, profileId, ct: ct).ConfigureAwait(false);
+        if (latest?.Enabled != true) throw new AccessDeniedException("resource_unavailable");
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         await TenantSandboxRuntimeRules.RequirePermissionsAsync(state, run, profile, authorizer, ct).ConfigureAwait(false);
         var available = await images.InspectAsync(profile, ct).ConfigureAwait(false);
         if (!available.Eligible || readiness.State != "Ready" || available.CredentialRevision != profile.RegistryCredentialRevision || available.SecretRevision != profile.RegistrySecretRevision)
             throw new AccessDeniedException("sandbox_source_unavailable");
         var saved = await runtime.ReadTenantSandboxRuntimeAsync(tenant, run.SessionId, ct: ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        TenantSandboxControlRules.RequireCurrentSelection(saved.Lease, agent, latest);
+        if (saved.Lease is { State: SandboxLeaseState.Terminated, SelectionWitness: { } witness } && (host is null || witness.HostScope != host.Scope))
+            throw new SecurityConflictException("sandbox_selection_changed");
         return (agent, session, baseline, source, saved.Lease);
     }
     public async ValueTask RequireAsync(TenantApprovalRequest request, AgentRun run, CancellationToken ct, SandboxExecution? reserved = null)
