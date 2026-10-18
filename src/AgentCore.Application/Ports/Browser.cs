@@ -332,6 +332,8 @@ public sealed record BrowserRequest(Guid SessionId, BrowserCommand Command)
 {
     public TenantBrowserOwner? TenantOwner { get; init; }
     public TenantBrowserCommandWitness? TenantWitness { get; init; }
+    // Trusted Core callback; runs under the native gate immediately before consuming the physical target.
+    [JsonIgnore] public Func<CancellationToken, ValueTask<string?>>? TenantDispatchCheck { get; init; }
     public BrowserOperation Operation => Command.Kind;
 }
 

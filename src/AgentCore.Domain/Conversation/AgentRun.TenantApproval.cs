@@ -10,7 +10,8 @@ public sealed partial class AgentRun
             || SideEffect.ToolCallId == "operation:" + operationId.ToString("D"))
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "A live unused exact external operation is required.");
         return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null, KnownEffectSummary,
-            Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.InFlight, "operation:" + operationId.ToString("D"), actionHash, at), null, at);
+            Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.InFlight, "operation:" + operationId.ToString("D"), actionHash, at,
+                new(generation, checked(revision + 1), at)), null, at);
     }
 
     public AgentRun ForkApprovalContinuation(Guid id, AgentRunAdmission admission, Guid requestId, DateTimeOffset at)

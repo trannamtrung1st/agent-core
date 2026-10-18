@@ -1,5 +1,15 @@
 # Backend Interfaces
 
+## Tenant Browser effect owner and store boundary
+
+`TenantBrowserEffectService.ExecuteAsync` accepts trusted actual tenant/Run, request, operation, current claim generation and exact action hash. It resolves the current saved source and semantic target, obtains a fresh physical witness, then uses `ITenantApprovedOperationStore.TryStartBrowserEffectAsync` to atomically commit the existing Run InFlight fence, security revision and dispatch audit. Current raw compound permissions, admitted/current capability ceilings, exact Review/decision and root dedupe are repeated by both stores. Review creates no ExceptionalGrant.
+
+Internal `BrowserRequest.TenantDispatchCheck` is a nonserialized Core callback. `NativePlaywrightBrowser` invokes it inside the incumbent owner/Session gate before physical witness consumption and native work; it does not reenter the provider. The callback rechecks current Run/claim, consent expiry, actual source/isolation and current executor/requester/reviewer authority, including final Run/security/expiry reads. A disabled host returns unavailable before consuming the witness. Execution is bounded by the remaining claim, approval lifetime, admitted per-tool budget and remaining checkpoint budget, including time already spent preparing.
+
+`TrySettleBrowserEffectAsync` atomically seals an immutable generic operation receipt and the matching live Run fence with security/audit. `RecoverableBrowserEffectsAsync` selects abandoned original fences, including retained deleted-Session ownership; `RecoverAsync` records unknown outcomes without provider I/O. Cancellation seals uncertainty independently before returning; late provider completion cannot upgrade the saved outcome. Retries return receipt-only with `browser_observation_not_retained`. Fresh successful transient output requires current post-I/O authority and the same uncancelled live claim, with final Run/security checks after access reads, and excludes Bytes/Downloads. SDK confirmation is not proof of application success.
+
+These are internal ports, with no public dispatch/preparation endpoint. The ordinary local effect service still rejects a first Browser dispatch; tenant model tooling and continuation/result delivery remain closed pending their adapter. [Verification](reports/tenant-browser-effect-verification-2026-10-18.md).
+
 ## Tenant Browser Review preparation and decisions
 
 `TenantApprovalService.PrepareBrowserAsync` is an internal trusted-Run operation. It requires the current Running claim/generation/revision, actual canonical Session owner, raw executor `sessions.read` plus exact agent `browser.read`, the derived primary permission and both admitted/current Definition capabilities. `TenantBrowserOperationTarget` reads an already bound provider target; preparation never enrolls an owner, changes isolation, closes a view or allocates a context. Current/pinned isolation and the host mode must match. Navigation/new-tab destinations remain beneath the existing host policy.
@@ -10,7 +20,7 @@ Tenant permission mapping is closed and typed: observations/find/wait, console/n
 
 Required oversight creates Review only, never an ExceptionalGrant. Saved action hashes bind exact arguments/target and Instance/persona revisions; semantic root correlation uses Session/tool/typed-command hash without mutable target revisions. Replacing a native target cannot bypass a terminal same-root request. Both stores repeat canonical Session/source/capability, raw executor and qualified-reviewer checks inside their existing approval transaction. Secondary read policies may require additional scoped approver authority and independent review. Inventory filters Browser read/use/Session scopes before totals/paging; direct reads enforce the same scopes.
 
-This supports preparation, stored inspection and current decisions only. There is no public preparation endpoint or model offering. `TenantApprovedOperationService` rejects this non-local family with `tenant_effect_unavailable`; no Browser effect receipt, grant or native dispatch is created. Durable dispatch/recovery, model continuation/results and the remaining resource adapters stay pending. [Focused evidence](reports/tenant-browser-review-verification-2026-10-18.md) distinguishes native HTTP proof from controlled UI presentation.
+Preparation and consent alone create no effect receipt, grant or native dispatch. The internal effect owner above now supports exact dispatch/settlement/recovery. There is no public preparation endpoint or model offering. `TenantApprovedOperationService` still rejects a first dispatch of this non-local family with `tenant_effect_unavailable`; model continuation/results and the remaining resource adapters stay pending. [Focused evidence](reports/tenant-browser-review-verification-2026-10-18.md) distinguishes native HTTP proof from controlled UI presentation.
 
 ## Tenant Browser command target port
 

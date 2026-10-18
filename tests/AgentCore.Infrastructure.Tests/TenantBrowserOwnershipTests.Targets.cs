@@ -6,6 +6,31 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantBrowserOwnershipTests
 {
+    [TenantChromiumFact]
+    public async Task Tenant_native_dispatch_check_and_disabled_host_prevent_closure_without_consuming_the_target()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tenant-browser-dispatch-gate-" + Guid.NewGuid().ToString("N"));
+        var options = new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true, FixturePort = 0, ProfileRoot = root, ProfileMode = "EphemeralSession" };
+        var browser = new NativePlaywrightBrowser(options, null); await browser.StartAsync(CancellationToken.None);
+        try
+        {
+            var owner = Owner(); Assert.Null(await browser.BindTenantIsolationAsync(owner, BrowserProfileMode.EphemeralSession));
+            Assert.Null((await Dispatch(browser, owner, new BrowserNavigate(browser.Fixture.Origin + "/browser-native.html"))).ErrorCode);
+            var command = new BrowserClose(); var prepared = await browser.PrepareTenantCommandAsync(owner, command);
+            var checks = 0; var deny = true;
+            var request = new BrowserRequest(owner.SessionId, command) { TenantOwner = owner, TenantWitness = prepared.Witness,
+                TenantDispatchCheck = _ => { checks++; return ValueTask.FromResult<string?>(deny ? "permission_denied" : null); } };
+            Assert.DoesNotContain(nameof(BrowserRequest.TenantDispatchCheck), System.Text.Json.JsonSerializer.Serialize(request));
+            options.Enabled = false;
+            Assert.Equal("permission_denied", (await browser.ExecuteAsync(request)).ErrorCode); Assert.NotNull(browser.ContextFor(owner.SessionId));
+            deny = false;
+            Assert.Equal("provider_unavailable", (await browser.ExecuteAsync(request)).ErrorCode); Assert.NotNull(browser.ContextFor(owner.SessionId));
+            Assert.Equal(2, checks); options.Enabled = true;
+            Assert.Equal(prepared.Witness, (await browser.PrepareTenantCommandAsync(owner, command)).Witness);
+        }
+        finally { await browser.StopAsync(CancellationToken.None); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static async Task<BrowserResult> Dispatch(NativePlaywrightBrowser browser, TenantBrowserOwner owner, BrowserCommand command)
     {
         var prepared = await browser.PrepareTenantCommandAsync(owner, command);

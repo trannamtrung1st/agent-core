@@ -1,5 +1,13 @@
 # Testing Strategy
 
+## Tenant Browser dispatch, settlement and recovery checks
+
+`TenantBrowserApprovalTests` covers both stores for approved one-time dispatch, SQLite reopen/receipt-only replay, duplicate callers, post-fence revocation, uncertain SDK completion, post-I/O authority/Run-cancellation output suppression, caller cancellation/late success and abandoned expired/deleted-Session recovery without native I/O. Fake-time consent expiry after saved start must deny without even invoking the Browser port. Keep existing credential external-fence regressions because their generic Run origin metadata is shared.
+
+Opt-in `TenantSessionAccessTests.Tenant_Browser_effect_HTTP_*` uses disposable actual Chromium/loopback targets: cold prepare, cookie-authenticated exact Review, resumed claim, internal dispatch, scoped receipt read and no second native action. Revoke at the native gate and exhaust the admitted one-second per-tool budget to prove no context/command consumption. Native ownership tests independently verify callback denial and disabled-host rejection do not consume the saved target.
+
+The shared inspector uses named Command completed versus unknown outcome copy; SDK completion does not imply application success. Exercise separate controlled Completed/Indeterminate projections at 1440/390/320px through the running Synthetic shell and explicit refresh, with no decision/replay POST. This presentation fixture is separate from actual backend/native effect evidence. Model offering/durable observation delivery remains unverified and closed. [Exact results and commands](reports/tenant-browser-effect-verification-2026-10-18.md); no CI or milestone acceptance is implied.
+
 ## Tenant Browser Review prerequisite checks
 
 Use `TenantBrowserApprovalTests` for both-store durable preparation/reopen/decision, raw permission and target drift, filtered inventory totals, compound independent reviewer scopes, busy preflight, canonical intent and disposable schema upgrade/CHECK coverage. `TenantSessionAccessTests.Tenant_Browser_Review_HTTP_*` opts into disposable loopback Chromium with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`; actual trusted fixture warmup, current target comparison and HTTP decision/feed projection remain distinct from a model effect. Assert unchanged command revisions and absent grants/effect receipts after consent. Retain the existing ownership/target, canonical approval and closed tool-boundary regressions.

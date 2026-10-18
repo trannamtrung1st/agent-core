@@ -15,6 +15,15 @@ public sealed partial class InMemoryMemoryStore
     }
     internal TenantSessionRoot? ResolveTenantSessionOwner(Guid sessionId)
     { lock (_gate) return tenantSessions.GetValueOrDefault(sessionId); }
+    internal void SaveRetainedTenantOperationRun(AgentRun run, long expectedRevision)
+    {
+        lock (_gate)
+        {
+            if (ReadRetainedTenantOperationRun(run.Owner.TenantId!.Value, run.AgentRunId)?.Revision != expectedRevision)
+                throw new SecurityConflictException("stale_revision");
+            AgentRuns.Runs[run.AgentRunId] = run;
+        }
+    }
     internal void SaveTenantOperationRun(AgentRun run, long expectedRevision)
     {
         lock (_gate)

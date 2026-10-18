@@ -312,6 +312,8 @@ public sealed class AgentRunFailure
     public Guid? DiagnosticId { get; }
 }
 
+public sealed record AgentRunExternalEffect(Guid Generation, long StartedRunRevision, DateTimeOffset StartedAtUtc);
+
 public sealed class AgentRunSideEffect
 {
     public static AgentRunSideEffect None { get; } = new(AgentRunSideEffectDisposition.None, null, null, null);
@@ -320,7 +322,8 @@ public sealed class AgentRunSideEffect
         AgentRunSideEffectDisposition disposition,
         string? toolCallId,
         string? actionHash,
-        DateTimeOffset? updatedAtUtc)
+        DateTimeOffset? updatedAtUtc,
+        AgentRunExternalEffect? externalEffect = null)
     {
         if (!Enum.IsDefined(disposition))
         {
@@ -356,6 +359,14 @@ public sealed class AgentRunSideEffect
             }
         }
 
+        if (externalEffect is { } origin)
+        {
+            AgentRunTime.RequireUtc(origin.StartedAtUtc, "External effect start");
+            if (origin.Generation == Guid.Empty || origin.StartedRunRevision < 1 || disposition == AgentRunSideEffectDisposition.None
+                || toolCallId?.StartsWith("operation:", StringComparison.Ordinal) != true || updatedAtUtc < origin.StartedAtUtc)
+                throw new ArgumentException("An external effect requires its exact starting claim and operation.");
+        }
+        ExternalEffect = externalEffect;
         Disposition = disposition;
         ToolCallId = toolCallId;
         ActionHash = actionHash;
@@ -369,6 +380,7 @@ public sealed class AgentRunSideEffect
     public string? ActionHash { get; }
 
     public DateTimeOffset? UpdatedAtUtc { get; }
+    public AgentRunExternalEffect? ExternalEffect { get; }
 }
 
 public sealed class AgentRunApproval

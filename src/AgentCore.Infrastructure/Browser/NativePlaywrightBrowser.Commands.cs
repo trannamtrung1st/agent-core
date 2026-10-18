@@ -24,10 +24,12 @@ public sealed partial class NativePlaywrightBrowser
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!TenantRequestAllowed(command)) return new("forbidden");
-        if (command.TenantOwner is not null && IsAvailable)
+        if (command.TenantOwner is not null)
         {
             command = command with { Command = BrowserCommandIdentity.Freeze(command.Command) };
             await using var held = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
+            if (command.TenantDispatchCheck is { } check && await check(cancellationToken).ConfigureAwait(false) is { } denied) return new(denied);
+            if (!IsAvailable) return new("provider_unavailable");
             if (ConsumeTenantWitness(command) is { } error) return new(error);
             if (TenantTargetValidatedProbe is { } probe) await probe().WaitAsync(cancellationToken).ConfigureAwait(false);
             return await ExecuteCoreAsync(command, cancellationToken, interactiveHeld: true).ConfigureAwait(false);

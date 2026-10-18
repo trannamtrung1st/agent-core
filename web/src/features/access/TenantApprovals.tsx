@@ -33,6 +33,10 @@ const fields: Record<string, string> = { name: 'Name', role: 'Role', description
   homeAccess: 'Home access', cpu: 'CPU cores', memoryMiB: 'Memory (MiB)', storageBytes: 'Storage (bytes)', initializationRequired: 'Initialization required',
   profileInitialization: 'Profile initialization script', instanceInitialization: 'Instance initialization script' };
 const reasons: Record<string, string> = {
+  browser_command_completed: "The Browser command completed. Its effect in the application has not been independently verified.",
+  browser_command_uncertain: "The Browser command may have run. Check the current application state before requesting another action. This request will not run again.",
+  browser_command_not_dispatched: 'The Browser command was not dispatched. Resolve the current state before preparing a new request.',
+  browser_source_changed: 'The Browser source or current authority changed before dispatch.',
   browser_target_changed: 'The Browser target changed. Cancel this request and prepare a new action for the current page.',
   browser_policy_changed: 'Current Browser capability or isolation policy no longer permits this action.',
   browser_target_busy: 'The Browser is busy. Refresh details when its current action finishes.',
@@ -73,7 +77,7 @@ const reasons: Record<string, string> = {
 const isSandboxControl = (item?: TenantApproval) => item?.preparedAction.operation === 'stop_sandbox_process' || item?.preparedAction.operation === 'reset_sandbox_environment';
 const isSandboxRead = (operation?: string) => operation === 'inspect_sandbox_profiles' || operation === 'inspect_sandbox_status' || operation === 'inspect_sandbox_process' || operation === 'sandbox_read';
 export function approvalResultLabel(operation: string | undefined, outcome: string) {
-  if (outcome === 'completed') return isSandboxRead(operation) ? 'Read authorized' : operation === 'check_credential_connection' ? 'Check completed'
+  if (outcome === 'completed') return operation === 'browser_command' ? 'Command completed' : isSandboxRead(operation) ? 'Read authorized' : operation === 'check_credential_connection' ? 'Check completed'
     : operation === 'sandbox_control' || operation === 'stop_sandbox_process' || operation === 'reset_sandbox_environment' ? 'Request recorded' : 'Applied';
   return outcome === 'denied' ? isSandboxRead(operation) ? 'Read not authorized' : 'Not applied' : 'Outcome uncertain';
 }

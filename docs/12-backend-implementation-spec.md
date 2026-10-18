@@ -1,5 +1,9 @@
 # Backend Implementation Specification
 
+## Tenant Browser reviewed effect implementation
+
+`TenantBrowserEffectService` now implements internal exact Review dispatch and factual settlement through the existing Run/operation-receipt store. Both stores atomically save start and settlement with security/audit; retained original claim metadata makes abandoned/deleted-Session recovery factual and provider-free. Native execution holds incumbent gates while the Core callback checks current claim/consent/source/authority, then compares and consumes the physical target. Claim, consent and admitted execution budgets bound the attempt. Transient output requires current authority and the same uncancelled claim after I/O; repeats return saved facts without output or dispatch. Unknown attempts never replay. [Ports](04-backend-interfaces.md#tenant-browser-effect-owner-and-store-boundary), [persistence](15-persistence-and-configuration.md#tenant-browser-attempt-persistence-and-recovery) and [focused evidence](reports/tenant-browser-effect-verification-2026-10-18.md) own details. This supersedes dispatch/recovery-pending statements below for the internal owner only; tenant model offering and durable result/checkpoint delivery remain closed.
+
 ## Tenant Browser target comparison and dispatch
 
 The native provider's tenant entry acquires its existing interactive Session/owner hold, copies mutable command data, compares the physical witness and advances the shared command revision before invoking native work. Private navigation/close/general paths reuse that hold without reacquiring it. Unscoped consumers retain their existing provider path. No mutable conversation state moves outside the Session mailbox.
@@ -10,7 +14,7 @@ Preparation reads cached handle identity/generation and hashes the current locat
 
 `NativePlaywrightBrowser` reuses its existing context, page, target, proxy, profile and isolation owners. Immutable tenant bindings seal Session and Instance identity under a shared registration lock. Internal requests require an exact tenant owner; unscoped access to those bindings rejects before native work. Binding a Session previously reserved by an unscoped command or agent fails rather than adopting it. Same-agent tenant Sessions may share persistent cookies/storage while tabs and targets stay Session-owned. Other tenant/agent contexts and the unscoped profile namespace remain separate. Unscoped profile reset, credential filling and unattended methods cannot enter a tenant binding.
 
-Tenant technical release closes only its owned view and preserves the saved owner/isolation selection; it cannot turn a later request into a global or default-mode context. Stored profile bytes survive ordinary release and restart. Native initialization refuses linked tenant profile path components. The scoped HTTP state owner performs only existing-handle observation with current original-human IAM and post-I/O fences; no read can initialize or claim a Browser. Canonical Browser tool/effect and approval adapters are still closed pending their typed current-authority integration.
+Tenant technical release closes only its owned view and preserves the saved owner/isolation selection; it cannot turn a later request into a global or default-mode context. Stored profile bytes survive ordinary release and restart. Native initialization refuses linked tenant profile path components. The scoped HTTP state owner performs only existing-handle observation with current original-human IAM and post-I/O fences; no read can initialize or claim a Browser. Canonical tenant model Browser tools remain closed; internal typed Review and the reviewed effect owner above now have current-authority integration.
 
 ## Tenant model Sandbox reads
 

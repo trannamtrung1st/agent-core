@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Browser attempt persistence and recovery
+
+Browser dispatch reuses AgentRuns payload JSON and TenantOperationReceipts. Optional `sideEffect.externalEffect` stores original claim `generation`, `startedRunRevision` and `startedAtUtc`; ordinary historical side effects deserialize with null. The origin is preserved by generic side-effect transitions, cancellation and expired-claim recovery (also for the existing credential-check external fence). An InFlight/Indeterminate origin-bearing operation cannot be cleared by a Browser snapshot. No table, column, index or migration is added for this checkpoint.
+
+Both stores atomically commit exact reviewed dispatch start with Run/security/audit and factual settlement with the immutable operation receipt. Existing receipt lookup grants no dispatch authority. Factual completion uses retained canonical tenant/Instance/executor/Session ownership even after Session deletion and cannot revive a terminal Run or change a newer generation. Recovery selects only matching owned original Browser fences without receipts and seals them as Indeterminate, with no provider call or replay. No URL/page content, observation body, protected bytes or SDK handle is added to the receipt/audit. Durable model observation delivery remains pending. [Disposable-store evidence](reports/tenant-browser-effect-verification-2026-10-18.md); no installed database/profile was migrated or reset.
+
 ## Tenant Browser Review persistence
 
 Migration `20261018053723_TenantBrowserCommandReview` extends the existing approval CHECK without adding tables, columns or indices. Browser rows must be Review, agent-targeted, bound to the indexed actual Session, disjoint from other typed operation payloads and Credential/Sandbox shadows, with a permission-consistent read-only boolean and bounded valid argument/target JSON. The Browser payload bound is 262,144 characters; Application intent is limited to 16 KiB UTF-8 and the canonical target to 4,096 characters. Canonical rebuild verifies the derived permission/command hash and saved display evidence; existing ownership FKs still apply.

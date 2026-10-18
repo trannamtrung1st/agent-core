@@ -48,6 +48,19 @@ it('reviews exact Browser parameters with clear consent and stale-target recover
   expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
 });
 
+it.each(['completed', 'indeterminate'])('describes a recorded Browser %s outcome without claiming application success or offering replay', async outcome => {
+  const reasonCode = outcome === 'completed' ? 'browser_command_completed' : 'browser_command_uncertain';
+  view({ ...request, kind: 'review', status: 'approved', preparedAction: { ...request.preparedAction, operation: 'browser_command' },
+    operationResult: { outcome, reasonCode, recordedAt: request.createdAt },
+    review: { ...request.review, canDecide: false, canCancel: false, executionState: 'recorded' } });
+  const dialog = await screen.findByRole('dialog'); const result = await within(dialog).findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText(outcome === 'completed' ? 'Command completed' : 'Outcome uncertain')).toBeVisible();
+  expect(within(result).getByText(outcome === 'completed' ? /has not been independently verified/ : /This request will not run again/)).toBeVisible();
+  expect(within(result).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+
 it('reviews escaped exact before/after values without exposing technical references by default', async () => {
   view(); const dialog = await screen.findByRole('dialog');
   expect(await within(dialog).findByText('Safe <script> name')).toBeVisible();

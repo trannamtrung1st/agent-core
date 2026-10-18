@@ -980,7 +980,7 @@ public sealed partial class AgentRun
             Checkpoint,
             Result,
             Failure,
-            new AgentRunSideEffect(disposition, toolCallId, actionHash, updatedAtUtc),
+            new AgentRunSideEffect(disposition, toolCallId, actionHash, updatedAtUtc, SideEffect.ExternalEffect),
             Approval,
             updatedAtUtc);
     }
@@ -988,6 +988,8 @@ public sealed partial class AgentRun
     public AgentRun AcceptBrowserSnapshot(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
     {
         RequireOperational(expectedRevision, generation);
+        if (SideEffect.ExternalEffect is not null && SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "A snapshot cannot release a durable external operation fence.");
         if (SideEffect.Disposition is not (AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate))
         {
             return this;
@@ -1129,7 +1131,8 @@ public sealed partial class AgentRun
             AgentRunSideEffectDisposition.Indeterminate,
             SideEffect.ToolCallId,
             SideEffect.ActionHash,
-            updatedAtUtc);
+            updatedAtUtc,
+            SideEffect.ExternalEffect);
     }
 
     private void RequireOperational(long expectedRevision, Guid generation)

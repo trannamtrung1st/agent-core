@@ -1,5 +1,13 @@
 # System Architecture
 
+## Tenant Browser reviewed dispatch and factual recovery
+
+`TenantBrowserEffectService` owns one exact approved command attempt outside the Session mailbox. The existing AgentRun side-effect checkpoint is its durable at-most-once fence; no Browser queue, dispatch ledger or execution engine is added. The original claim generation, start Run revision and UTC start time remain attached through cancellation and recovery. A duplicate caller receives only the immutable operation receipt, never provider authority.
+
+After durable start, Core rechecks current actual source, capabilities, isolation, executor, requester and qualified reviewer under the existing native owner/Session gate, before consuming the physical target. Claim, consent, admitted per-tool and remaining Run deadlines bound dispatch. The native provider then compares/consumes the witness and performs the typed command without releasing those gates. Host disablement prevents native work. A provider acknowledgement proves command completion only; application business success requires separate evidence.
+
+Settlement records factual Completed, Denied or Indeterminate with the existing Run/security/audit transaction. Recovery can seal an abandoned fence as Indeterminate through retained ownership after Session deletion; it never calls the Browser. Terminal/new Run frames cannot be revived. Observations are transient, fenced again by current authority and the same uncancelled live claim, and stripped of bytes/downloads. Model offering, durable observation/checkpoint delivery, protected Credential/Artifact adapters and autonomous admission remain pending. [Focused evidence](reports/tenant-browser-effect-verification-2026-10-18.md).
+
 ## Tenant Browser exact command targets
 
 Before tenant native work, the incumbent Browser provider now captures and compares an exact physical target under its existing Session/owner gates. The target binds the saved owner, provider lifetime, isolation selection, shared-context command revision, context/tab/page generation, current location hash, exact pending dialog and typed command hash. The provider consumes the technical command revision before dispatch; changed or repeated targets cannot reach the SDK. Mutable collections/upload bytes are copied before comparison and execution.

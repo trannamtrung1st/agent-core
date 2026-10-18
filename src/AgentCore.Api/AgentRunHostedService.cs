@@ -23,6 +23,7 @@ public sealed class AgentRunHostedService : BackgroundService
         AgentCore.Application.Experience.ExperienceService experience,
         AgentCore.Application.Security.TenantApprovalService approvals,
         AgentCore.Application.Security.TenantCredentialCheckService credentialChecks,
+        AgentCore.Application.Security.TenantBrowserEffectService browserEffects,
         ITenantRunExecution tenantExecution)
         : this(
             async cancellationToken =>
@@ -30,6 +31,7 @@ public sealed class AgentRunHostedService : BackgroundService
                 await experience.ReconcileAsync(cancellationToken).ConfigureAwait(false);
                 await approvals.DispatchPendingAsync(cancellationToken).ConfigureAwait(false);
                 await credentialChecks.RecoverAsync(cancellationToken).ConfigureAwait(false);
+                await browserEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await tenantExecution.ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken).ConfigureAwait(false);
                 var executed = await coordinator
                     .ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken)
