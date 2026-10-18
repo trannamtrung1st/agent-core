@@ -46,6 +46,7 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.WorkspaceRead => PrepareWorkspaceRead(op.OperationId, op.InstanceId, op.WorkspaceRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ArtifactVerification => PrepareArtifactVerification(op.OperationId, op.InstanceId, op.ArtifactVerification!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ArtifactPublication => PrepareArtifact(op.OperationId, op.InstanceId, op.ArtifactPublication!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.Persona => Prepare(op.OperationId, op.InstanceId, op.Persona!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -64,12 +65,13 @@ public static partial class TenantApprovalRules
         var context = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var op = request.Operation;
         TenantApprovalContinuationRules.Require(request, run, source);
-        if (op.ArtifactVerification is { } verification && verification.SessionId != request.SessionId
+        if (op.WorkspaceRead is { } workspace && workspace.SessionId != request.SessionId
+            || op.ArtifactVerification is { } verification && verification.SessionId != request.SessionId
             || request.RequestId == Guid.Empty || request.TenantId != context.TenantId || request.SessionId != run.SessionId
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || op.InstanceId != run.AgentInstanceId
             || target.TenantId != request.TenantId || target.Instance.InstanceId != op.InstanceId || target.PrincipalId != context.AgentPrincipalId
-            || !Enum.IsDefined(request.Kind) || (request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
+            || !Enum.IsDefined(request.Kind) || (request.Operation.WorkspaceRead is not null || request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
             || request.CreatedAt.Offset != TimeSpan.Zero || request.ExpiresAt.Offset != TimeSpan.Zero
             || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
             || Rebuild(op) != op)

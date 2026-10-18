@@ -71,6 +71,13 @@ public sealed partial class TenantApprovalService
                         PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
                     if (!read.Allowed) unavailable = "executor_read_required";
                 }
+                else if (op.WorkspaceRead is not null)
+                {
+                    var reads = workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.ArtifactVerification is not null)
                 {
                     var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -134,6 +141,13 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.WorkspaceRead is { } workspace)
+        {
+            var args = AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(workspace.ToolName, workspace.ArgumentsJson);
+            return [new("path", null, args.Path, false), new("readPage", null, workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceRead ? "One exact current UTF-8 file" : $"Up to {args.Limit} directory entries" + (args.Cursor is null ? "." : $", after {args.Cursor}."), false),
+                new("readDisclosure", null, "Return only this saved file or directory observation to the Agent. Changed source requires fresh review. No file mutation, recipient download or later discovery is authorized.", false),
+                new("readLimit", null, "One bounded observation in this exact continuation. Later reads require current policy again.", false)];
+        }
         if (op.ArtifactVerification is { } verification)
             return [new("artifactDisplayName", null, verification.DisplayName, false), new("artifactContentType", null, verification.ContentType, false),
                 new("artifactStoredByteSize", null, verification.ByteSize, false), new("artifactChecksum", null, verification.Sha256Hex, false),

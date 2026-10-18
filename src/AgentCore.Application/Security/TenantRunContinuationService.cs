@@ -103,6 +103,13 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                         : await sandboxResults.ReadResultAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ct).ConfigureAwait(false)
                     : null;
                 string? inspection = null; string? readUnavailable = null;
+                if (request.Operation.WorkspaceRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
+                {
+                    try { inspection = await (workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
+                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
+                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
+                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
+                }
                 if (request.Operation.ArtifactVerification is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
                 {
                     try { inspection = await (artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
@@ -139,6 +146,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                 var resumed = request.Operation.BrowserCommand is not null
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
                         request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched")
+                    : request.Operation.WorkspaceRead is not null ? TenantWorkspaceReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ArtifactVerification is not null ? TenantArtifactVerificationContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.CredentialRead is not null ? TenantCredentialReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.SandboxRead is not null ? TenantSandboxContinuationProjection.CompleteRead(paused, pending[0], request, outcome, inspection, readUnavailable)

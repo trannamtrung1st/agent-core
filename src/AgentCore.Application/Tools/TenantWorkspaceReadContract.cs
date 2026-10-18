@@ -33,10 +33,12 @@ public static class TenantWorkspaceReadContract
             throw new ArgumentException("Use a list limit between 1 and 256.");
         return new(path, cursor, limit);
     }
+    public static string Canonical(string tool, TenantWorkspaceReadArguments args) => tool == ToolCatalog.WorkspaceRead ? JsonSerializer.Serialize(new { path = args.Path })
+        : JsonSerializer.Serialize(new { path = args.Path, cursor = args.Cursor, limit = args.Limit }, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with {
         Description = tool.Name == ToolCatalog.WorkspaceRead
-            ? "Read current UTF-8 text at one exact absolute /home or /working file path owned by this Agent and Session. Current independent Agent permissions and operation policy apply. This grants no recipient download access. Binary formats require a supported reader. Review-required reads remain unavailable."
-            : "List bounded current children of one exact absolute /home or /working path owned by this Agent and Session. Use nextPath as the cursor to continue. Current independent Agent permissions and policy apply. Listings are observations, not snapshots. Review-required reads remain unavailable.",
+            ? "Read current UTF-8 text at one exact absolute /home or /working file path owned by this Agent and Session. Current independent Agent permissions and operation policy apply. This grants no recipient download access. Binary formats require a supported reader. If workspace_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request."
+            : "List bounded current children of one exact absolute /home or /working path owned by this Agent and Session. Use nextPath as the cursor to continue. Current independent Agent permissions and policy apply. Listings are observations, not snapshots. If workspace_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request.",
         ParametersJson = tool.Name == ToolCatalog.WorkspaceRead
             ? """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","maxLength":4095}},"required":["path"]}"""
             : """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","maxLength":4095},"cursor":{"type":"string","maxLength":4095},"limit":{"type":"integer","minimum":1,"maximum":256}},"required":["path"]}"""

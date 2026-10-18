@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Cryptography;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Execution;
@@ -10,17 +11,19 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer operations, ITenantRunStore runs,
+public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer operations, ITenantRunStore runs,
     ITenantSessionStore sessions, ITenantWorkspaceReadStore files, TenantRunConfigurationResolver configurations,
-    IIamStore security, IamAuthorizer iam, TimeProvider time)
+    IIamStore security, IamAuthorizer iam, TimeProvider time, ITenantApprovalStore approvals, IIdGenerator ids, ITenantApprovedOperationStore effects)
 {
     private sealed record Read(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent, TenantWorkspaceReference Workspace);
-    private async ValueTask<Read> Require(TenantRuntimeFrame frame, string tool, TenantWorkspaceReadArguments args, CancellationToken ct, bool audit = false)
+    private async ValueTask<Read> Require(TenantRuntimeFrame frame, string tool, TenantWorkspaceReadArguments args, CancellationToken ct, bool audit = false, bool approved = false, bool live = true)
     {
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId)
+            throw new AccessDeniedException("resource_unavailable");
         if (run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
             || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
@@ -40,6 +43,7 @@ public sealed class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer 
         {
             if (!(await iam.CheckOwnedTenantAsync(state, current.Agent.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("executor_read_required");
+            if (approved) continue;
             var decision = audit ? await operations.Check(state, run, key, scope, ct, purpose: ExecutionAuthorizationPurpose.ToolBoundary).ConfigureAwait(false)
                 : await operations.Evaluate(state, run.Admission.ExecutionContext!, key, scope, ct).ConfigureAwait(false);
             if (decision.Decision == OperationDecisionKind.RequiresApproval) throw new AccessDeniedException("workspace_read_review_required");
@@ -47,10 +51,10 @@ public sealed class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer 
         }
         return new(run, state, session, current.Agent, owner);
     }
-    private async ValueTask Fence(TenantRuntimeFrame frame, string tool, TenantWorkspaceReadArguments args, Read before, CancellationToken ct)
+    private async ValueTask Fence(TenantRuntimeFrame frame, string tool, TenantWorkspaceReadArguments args, Read before, CancellationToken ct, bool approved = false, bool live = true)
     {
         ct.ThrowIfCancellationRequested();
-        var after = await Require(frame, tool, args, ct).ConfigureAwait(false);
+        var after = await Require(frame, tool, args, ct, approved: approved, live: live).ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.State.Tenant.Revision != after.State.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
             || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Workspace != after.Workspace)
@@ -58,52 +62,67 @@ public sealed class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer 
         if ((await security.ReadTenantAsync(after.Workspace.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != after.State.Tenant.Revision)
             throw new SecurityConflictException("workspace_source_changed");
         var final = await runs.FindTenantRunAsync(after.Workspace.TenantId, frame.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
-        TenantRuntimeRules.Require(frame, after.Session.Owner, final, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, after.Session.Owner, final, time.GetUtcNow());
         if (final.Revision != after.Run.Revision) throw new SecurityConflictException("workspace_source_changed");
+    }
+    private static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    private async ValueTask<(Read Before, string Output, string Hash)> InspectCore(TenantRuntimeFrame frame, ModelToolCall call, int remainingBytes,
+        CancellationToken ct, bool approved = false, bool live = true)
+    {
+        var args = TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson);
+        var before = await Require(frame, call.Name, args, ct, !approved, approved, live).ConfigureAwait(false);
+        object Witness() => new { tool = call.Name, arguments = args };
+        string result; string fingerprint;
+        if (call.Name == ToolCatalog.WorkspaceList)
+        {
+            var page = await files.ListTenantAsync(before.Workspace, args.Path, args.Cursor, args.Limit, ct).ConfigureAwait(false);
+            fingerprint = Hash(JsonSerializer.Serialize(new { page.Items, page.NextPath, page.Truncated }));
+            var count = page.Items.Count;
+            while (true)
+            {
+                var clipped = count < page.Items.Count;
+                result = JsonSerializer.Serialize(new { path = args.Path, truncated = clipped || page.Truncated,
+                    nextPath = clipped ? count > 0 ? page.Items[count - 1].LogicalPath : null : page.NextPath,
+                    entries = page.Items.Take(count).Select(i => new { path = i.LogicalPath, directory = i.Directory, kind = i.Kind, byteSize = i.ByteSize,
+                        modifiedAt = i.UpdatedAt, linkTarget = i.LinkTarget, mode = i.Mode }), tenantWorkspaceRead = true, workspaceRead = Witness() });
+                if (Encoding.UTF8.GetByteCount(result) <= remainingBytes && (count > 0 || page.Items.Count == 0)) break;
+                if (count == 0) { result = ToolJsonResults.FitToBudget(remainingBytes, """{"error":"output_limit"}"""); break; }
+                count--;
+            }
+        }
+        else
+        {
+            var metadata = await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false);
+            var content = await files.InspectTenantAsync(before.Workspace, args.Path, checked((int)AgentWorkspaceLimits.MaxFileBytes), ct).ConfigureAwait(false);
+            if (metadata.Item != content.Item || content.Bytes.LongLength != content.Item.ByteSize
+                || (await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false)).Item != content.Item)
+                throw new SecurityConflictException("workspace_source_changed");
+            fingerprint = Hash(JsonSerializer.Serialize(new { content.Item, hash = Convert.ToHexStringLower(SHA256.HashData(content.Bytes)) }));
+            try
+            {
+                var text = new UTF8Encoding(false, true).GetString(content.Bytes);
+                if (text.Any(c => char.IsControl(c) && c is not ('\t' or '\n' or '\r' or '\f'))) throw new DecoderFallbackException();
+                result = ToolJsonResults.FitJsonWithContentField(remainingBytes, ToolJsonResults.ClipUtf8Prefix(text, Math.Max(0, remainingBytes)),
+                    (body, clipped) => JsonSerializer.Serialize(new { path = args.Path, contentType = content.Item.ContentType, byteSize = content.Item.ByteSize,
+                        truncated = clipped || body.Length < text.Length, content = body, untrusted = true, tenantWorkspaceRead = true, workspaceRead = Witness() }));
+            }
+            catch (DecoderFallbackException) { result = ToolJsonResults.FitToBudget(remainingBytes, """{"error":"unsupported_reader","message":"This file is not UTF-8 text. Use a supported reader."}"""); }
+        }
+        await Fence(frame, call.Name, args, before, ct, approved, live).ConfigureAwait(false);
+        return (before, result, fingerprint);
     }
     public async ValueTask<string> InspectAsync(TenantRuntimeFrame frame, ModelToolCall call, int remainingBytes, CancellationToken ct = default)
     {
         try
         {
-            var args = TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson);
-            var before = await Require(frame, call.Name, args, ct, true).ConfigureAwait(false);
-            object Witness() => new { tool = call.Name, arguments = args };
-            string result;
-            if (call.Name == ToolCatalog.WorkspaceList)
-            {
-                var page = await files.ListTenantAsync(before.Workspace, args.Path, args.Cursor, args.Limit, ct).ConfigureAwait(false);
-                var count = page.Items.Count;
-                while (true)
-                {
-                    var clipped = count < page.Items.Count;
-                    result = JsonSerializer.Serialize(new { path = args.Path, truncated = clipped || page.Truncated,
-                        nextPath = clipped ? count > 0 ? page.Items[count - 1].LogicalPath : null : page.NextPath,
-                        entries = page.Items.Take(count).Select(i => new { path = i.LogicalPath, directory = i.Directory, kind = i.Kind, byteSize = i.ByteSize,
-                            modifiedAt = i.UpdatedAt, linkTarget = i.LinkTarget, mode = i.Mode }), tenantWorkspaceRead = true, workspaceRead = Witness() });
-                    if (Encoding.UTF8.GetByteCount(result) <= remainingBytes && (count > 0 || page.Items.Count == 0)) break;
-                    if (count == 0) { result = ToolJsonResults.FitToBudget(remainingBytes, """{"error":"output_limit"}"""); break; }
-                    count--;
-                }
-            }
-            else
-            {
-                var metadata = await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false);
-                var content = await files.InspectTenantAsync(before.Workspace, args.Path, checked((int)AgentWorkspaceLimits.MaxFileBytes), ct).ConfigureAwait(false);
-                if (metadata.Item != content.Item || content.Bytes.LongLength != content.Item.ByteSize
-                    || (await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false)).Item != content.Item)
-                    throw new SecurityConflictException("workspace_source_changed");
-                try
-                {
-                    var text = new UTF8Encoding(false, true).GetString(content.Bytes);
-                    if (text.Any(c => char.IsControl(c) && c is not ('\t' or '\n' or '\r' or '\f'))) throw new DecoderFallbackException();
-                    result = ToolJsonResults.FitJsonWithContentField(remainingBytes, ToolJsonResults.ClipUtf8Prefix(text, Math.Max(0, remainingBytes)),
-                        (body, clipped) => JsonSerializer.Serialize(new { path = args.Path, contentType = content.Item.ContentType, byteSize = content.Item.ByteSize,
-                            truncated = clipped || body.Length < text.Length, content = body, untrusted = true, tenantWorkspaceRead = true, workspaceRead = Witness() }));
-                }
-                catch (DecoderFallbackException) { result = ToolJsonResults.FitToBudget(remainingBytes, """{"error":"unsupported_reader","message":"This file is not UTF-8 text. Use a supported reader."}"""); }
-            }
-            await Fence(frame, call.Name, args, before, ct).ConfigureAwait(false);
-            return result;
+            var observed = await InspectCore(frame, call, remainingBytes, ct).ConfigureAwait(false);
+            var exact = TenantApprovalRules.PrepareWorkspaceRead(ids.NewId(), frame.Owner.AgentInstanceId,
+                Witness(frame.SessionId, call, observed.Hash), observed.Before.Agent.Instance.Revision, observed.Before.Agent.Instance.PersonaRevision);
+            var prior = await approvals.FindRootApprovalAsync(observed.Before.Workspace.TenantId, observed.Before.Run.Admission.ExecutionContext!.RootActivationId,
+                observed.Before.Agent.PrincipalId, exact, ct).ConfigureAwait(false);
+            if (prior is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));
+            return observed.Output;
+
         }
         catch (Exception e) when (e is AccessDeniedException or SecurityConflictException)
         {
@@ -137,5 +156,6 @@ public sealed class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer 
             var before = await Require(frame, message.Name!, args, ct).ConfigureAwait(false);
             await Fence(frame, message.Name!, args, before, ct).ConfigureAwait(false);
         }
+        await RequireStoredApprovedAsync(run, messages!, ct).ConfigureAwait(false);
     }
 }

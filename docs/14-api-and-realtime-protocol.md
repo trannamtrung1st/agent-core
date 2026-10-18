@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant workspace read Review protocol
+
+The existing `approvals.request_authorization` tool offers `inspect_workspace` only for admitted/current readable workspace tool capabilities. A request uses one closed `read` object, for example `{"operation":"inspect_workspace","read":{"tool":"workspace.read","arguments":{"path":"/home/report.txt"}}}`. Listing uses `workspace.list` with its exact path, optional cursor and bounded limit. Core derives identity, workspace scope, policy and the saved source witness; the model cannot submit a permission, owner, fingerprint or grant.
+
+Existing Organization approval detail and Session conversation-approval endpoints expose operation `inspect_workspace`. The protected detail's saved-read rows identify path/page/disclosure/boundary without source body or directory names. Session status remains a minimal conversation projection; it does not authorize inspecting protected details. Existing decision, cancellation, stale-witness and no-store/CSRF rules apply. The successor checkpoint reports `applied=false`, separate `readAuthorized`, bounded `workspaceObservation`, explicit unavailable-result facts and `replayAllowed=false`. A consent receipt is not a file mutation or recipient download grant. [Exact contract](04-backend-interfaces.md#tenant-workspace-read-review).
+
 ## Tenant workspace read contract
 
 Human home reads use `/api/v2/tenants/{tenantId}/agents/{instanceId}/workspace`; scratch reads use `/api/v2/tenants/{tenantId}/sessions/{sessionId}/workspace`. Both expose GET collection (`prefix`, `cursor`, `limit`, maximum 256), `/search` (`q`, `cursor`, `limit`), `/metadata?path=...`, `/content?path=...` and `/office-preview?path=...&sheet=...&range=...`. Unknown/repeated query fields are rejected. Paths are exact absolute `/home` or `/working` paths for the bound owner; traversal aliases and the other root are rejected. Search cursors are lexical observations and may end in a directory slash.

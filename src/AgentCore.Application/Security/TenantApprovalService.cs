@@ -16,7 +16,7 @@ public sealed record TenantApprovalView(TenantApprovalRequest Request, long Secu
 public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null)
+    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -168,7 +168,9 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         var browserUse = await VisibleIds(before, human.PrincipalId, "browser.use", "agent", ct).ConfigureAwait(false);
         var artifactCreate = await VisibleIds(before, human.PrincipalId, "artifacts.create", "session", ct).ConfigureAwait(false);
         var artifactReadIds = await VisibleIds(before, human.PrincipalId, "artifacts.read", "artifact", ct).ConfigureAwait(false);
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions), artifactCreate, new(artifactReadIds, sandboxSessions)).ConfigureAwait(false);
+        var workspaceScopes = await VisibleWorkspaceScopes(before, human.PrincipalId, ct).ConfigureAwait(false);
+        var homeAgents = await VisibleIds(before, human.PrincipalId, "agents.read", "agent", ct).ConfigureAwait(false);
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeAgents, sandboxSessions)).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -201,6 +203,20 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         if (request.Status == TenantApprovalStatus.Pending && (receipt is not null || decision is not null))
             request = await approvals.FindApprovalAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         return new(request, 0, receipt, decision);
+    }
+
+    private async ValueTask<IReadOnlyList<string>?> VisibleWorkspaceScopes(TenantSecurityState state, Guid human, CancellationToken ct)
+    {
+        var permission = PermissionCatalog.Get("workspaces.read");
+        var inherited = await authorizer.CheckTenantAsync(state, human, permission, AccessScope.ForTenant(state.Tenant.TenantId), ct).ConfigureAwait(false);
+        if (inherited.Allowed) return null;
+        if (inherited.ReasonCode != "permission_denied") throw new AccessDeniedException(inherited.ReasonCode);
+        var scopes = state.Assignments.Where(a => a.PrincipalId == human && a.Scope.ResourceType == "workspace"
+            && state.Roles.Any(r => r.RoleId == a.RoleId && r.Permissions.Contains("workspaces.read", StringComparer.Ordinal))).Select(a => a.Scope).Distinct();
+        var result = new List<string>();
+        foreach (var scope in scopes)
+            if (TenantWorkspaceRules.TryParse(scope, out _, out _) && (await authorizer.CheckOwnedTenantAsync(state, human, permission, scope, ct).ConfigureAwait(false)).Allowed) result.Add(scope.ResourceId!);
+        return result;
     }
 
     private async ValueTask<IReadOnlyList<Guid>?> VisibleIds(TenantSecurityState state, Guid human, string permission, string type, CancellationToken ct)
@@ -291,6 +307,12 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                 await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
                 await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
             }
+            if (request.Operation.WorkspaceRead is not null)
+            {
+                var reads = workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
+                await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
+            }
             if (request.Operation.ArtifactVerification is not null)
             {
                 var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -345,6 +367,11 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
     {
         if (request.Operation.ArtifactPublication is not null)
             await TenantArtifactReviewRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
+        if (request.Operation.WorkspaceRead is not null)
+        {
+            try { await (workspaceReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }
+            catch (AccessDeniedException) { throw new AccessDeniedException("approval_unavailable"); }
+        }
         if (request.Operation.ArtifactVerification is not null)
         {
             try { await (artifactReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }

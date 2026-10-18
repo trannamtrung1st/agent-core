@@ -9,7 +9,7 @@ namespace AgentCore.Domain.Security;
 public enum TenantApprovalStatus { Pending, Approved, Rejected, Expired, Cancelled }
 public enum OperationGrantStatus { Available, Claimed, Consumed, Revoked, Indeterminate }
 
-public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification }
+public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification, WorkspaceRead }
 public sealed record PreparedConversationPreferences(string? ResponseLength, string? Language, bool? AskOneQuestionAtATime,
     bool ClearResponseLength = false, bool ClearLanguage = false, bool ClearAskOneQuestionAtATime = false);
 public sealed record PreparedCredentialConnectionCheck(Guid CredentialId, Guid BindingId, string Reference,
@@ -37,34 +37,38 @@ public sealed record PreparedCredentialRead(Guid SessionId, Guid? CredentialId, 
 public sealed record PreparedArtifactPublication(Guid SessionId, string ArgumentsJson);
 public sealed record PreparedArtifactVerification(Guid SessionId, Guid ArtifactId, string DisplayName, string ContentType, long ByteSize, string Sha256Hex);
 
+public sealed record PreparedWorkspaceRead(Guid SessionId, bool Working, string ToolName, string ArgumentsJson, string ObservationHash);
+
 // Exactly one typed payload is allowed. No secret or bearer authority is part of this shape.
 public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, AgentIdentity? Persona,
     long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
-    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null, PreparedSandboxControl? SandboxControl = null, PreparedSandboxRead? SandboxRead = null, PreparedBrowserCommand? BrowserCommand = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedCredentialRead? CredentialRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactPublication? ArtifactPublication = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactVerification? ArtifactVerification = null)
+    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null, PreparedSandboxControl? SandboxControl = null, PreparedSandboxRead? SandboxRead = null, PreparedBrowserCommand? BrowserCommand = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedCredentialRead? CredentialRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactPublication? ArtifactPublication = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactVerification? ArtifactVerification = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedWorkspaceRead? WorkspaceRead = null)
 {
     [JsonIgnore]
-    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification) switch {
-        (not null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.Persona,
-        (null, not null, null, null, null, null, null, null, null, null) => TenantOperationKind.ConversationPreferences,
-        (null, null, not null, null, null, null, null, null, null, null) => TenantOperationKind.CredentialConnectionCheck,
-        (null, null, null, not null, null, null, null, null, null, null) => TenantOperationKind.SandboxCommand,
-        (null, null, null, null, not null, null, null, null, null, null) => TenantOperationKind.SandboxControl,
-        (null, null, null, null, null, not null, null, null, null, null) => TenantOperationKind.SandboxRead,
-        (null, null, null, null, null, null, not null, null, null, null) => TenantOperationKind.BrowserCommand,
-        (null, null, null, null, null, null, null, not null, null, null) => TenantOperationKind.CredentialRead,
-        (null, null, null, null, null, null, null, null, not null, null) => TenantOperationKind.ArtifactPublication,
-        (null, null, null, null, null, null, null, null, null, not null) => TenantOperationKind.ArtifactVerification,
+    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification, WorkspaceRead) switch {
+        (not null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.Persona,
+        (null, not null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.ConversationPreferences,
+        (null, null, not null, null, null, null, null, null, null, null, null) => TenantOperationKind.CredentialConnectionCheck,
+        (null, null, null, not null, null, null, null, null, null, null, null) => TenantOperationKind.SandboxCommand,
+        (null, null, null, null, not null, null, null, null, null, null, null) => TenantOperationKind.SandboxControl,
+        (null, null, null, null, null, not null, null, null, null, null, null) => TenantOperationKind.SandboxRead,
+        (null, null, null, null, null, null, not null, null, null, null, null) => TenantOperationKind.BrowserCommand,
+        (null, null, null, null, null, null, null, not null, null, null, null) => TenantOperationKind.CredentialRead,
+        (null, null, null, null, null, null, null, null, not null, null, null) => TenantOperationKind.ArtifactPublication,
+        (null, null, null, null, null, null, null, null, null, not null, null) => TenantOperationKind.ArtifactVerification,
+        (null, null, null, null, null, null, null, null, null, null, not null) => TenantOperationKind.WorkspaceRead,
         _ => throw new ArgumentException("Exactly one supported operation payload is required.") };
     [JsonIgnore] public bool IsLocalConfiguration => Kind is TenantOperationKind.Persona or TenantOperationKind.ConversationPreferences;
-    [JsonIgnore] public string Permission => Kind == TenantOperationKind.ArtifactVerification ? "artifacts.read" : Kind == TenantOperationKind.ArtifactPublication ? "artifacts.create" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "sessions.read" : "credentials.read" : Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.Credential is not null ? "credentials.use" : BrowserCommand.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
-    [JsonIgnore] public string ResourceType => Kind == TenantOperationKind.ArtifactVerification ? "artifact" : Kind == TenantOperationKind.ArtifactPublication ? "session" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "session" : "credential" : Kind == TenantOperationKind.CredentialConnectionCheck || BrowserCommand?.Credential is not null ? "credential" : "agent";
-    [JsonIgnore] public string ResourceId => (Kind == TenantOperationKind.ArtifactVerification ? ArtifactVerification!.ArtifactId : Kind == TenantOperationKind.ArtifactPublication ? ArtifactPublication!.SessionId : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId ?? CredentialRead.SessionId : Kind == TenantOperationKind.CredentialConnectionCheck ? CredentialCheck!.CredentialId
+    [JsonIgnore] public string Permission => Kind == TenantOperationKind.WorkspaceRead ? "workspaces.read" : Kind == TenantOperationKind.ArtifactVerification ? "artifacts.read" : Kind == TenantOperationKind.ArtifactPublication ? "artifacts.create" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "sessions.read" : "credentials.read" : Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.Credential is not null ? "credentials.use" : BrowserCommand.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
+    [JsonIgnore] public string ResourceType => Kind == TenantOperationKind.WorkspaceRead ? "workspace" : Kind == TenantOperationKind.ArtifactVerification ? "artifact" : Kind == TenantOperationKind.ArtifactPublication ? "session" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "session" : "credential" : Kind == TenantOperationKind.CredentialConnectionCheck || BrowserCommand?.Credential is not null ? "credential" : "agent";
+    [JsonIgnore] public string ResourceId => Kind == TenantOperationKind.WorkspaceRead ? (WorkspaceRead!.Working ? "working:" + WorkspaceRead.SessionId.ToString("D") : "home:" + InstanceId.ToString("D")) : (Kind == TenantOperationKind.ArtifactVerification ? ArtifactVerification!.ArtifactId : Kind == TenantOperationKind.ArtifactPublication ? ArtifactPublication!.SessionId : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId ?? CredentialRead.SessionId : Kind == TenantOperationKind.CredentialConnectionCheck ? CredentialCheck!.CredentialId
         : Kind == TenantOperationKind.BrowserCommand && BrowserCommand!.Credential is { } c ? c.CredentialId : InstanceId).ToString("D");
 
     // Root correlation excludes mutable witnesses; grants still bind ActionHash exactly.
     [JsonIgnore]
     public string SemanticActionJson => Kind switch
     {
+        TenantOperationKind.WorkspaceRead => JsonSerializer.Serialize(new { operation = WorkspaceRead!.ToolName, sessionId = WorkspaceRead.SessionId, arguments = WorkspaceRead.ArgumentsJson }),
         TenantOperationKind.ArtifactVerification => JsonSerializer.Serialize(new { operation = "artifacts.verify", verification = ArtifactVerification }),
         TenantOperationKind.ArtifactPublication => JsonSerializer.Serialize(new { operation = "artifacts.publish", permission = Permission,
             resourceType = ResourceType, resourceId = ResourceId, artifact = ArtifactPublication }),

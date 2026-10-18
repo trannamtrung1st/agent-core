@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Workspace read consent inspector
+
+Organization and Chat reuse `TenantApprovalDetail` for `inspect_workspace`. Extend the existing saved-read classifier and native description field map; label the escaped plain-text path **Exact path**, preserve the responsive label/stack owner and wrapping footer, and distinguish decision acknowledgement from **Read authorized**. Confirmation names the saved observation and no-mutation/no-download/no-later-read boundary. Changed-source and disabled-HomeAccess states explain current decision unavailability without replay. Source bodies and directory contents stay out of preview. No markup/layout owner, token, CSS, UI kit or visual world is added. [Interaction owner](19-multi-tenant-iam-ux.md#exact-workspace-read-review).
+
 ## Tenant workspace files
 
 Instance Workspace navigation mounts `TenantWorkspaceFiles` for actual home; Chat's Session files action mounts it for actual working in the existing `SessionSandboxFrame` with a distinct sibling key. The same `WorkspaceFileTable` supplies path/type/size/actions to the incumbent Instance browser. Home uses desktop columns from 768px and compact wrapping rows below; the bounded Session inspector always uses compact rows so file actions remain visible at desktop widths. Shared native Ant Design containers own insets, 16px section gaps, 8px action/recovery gaps, table cells and focus.

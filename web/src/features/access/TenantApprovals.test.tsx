@@ -297,3 +297,19 @@ it('shows exact Credential metadata scope and page as a read, with escaped names
   expect(within(dialog).getByText('Read authorized', { exact: true })).toBeVisible(); expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
   expect(within(dialog).getByText(/no protected value or use permission is granted/)).toBeVisible();
 });
+
+it('presents workspace consent as an exact saved read with a path and truthful recorded result', async () => {
+  view({ ...request, kind: 'review', status: 'approved', summary: 'Read exact workspace observation',
+    preparedAction: { ...request.preparedAction, operation: 'inspect_workspace' },
+    operationResult: { outcome: 'completed', reasonCode: 'workspace_read_authorized', recordedAt: '2026-10-19T01:00:00Z' },
+    review: { ...request.review, changes: [
+      { field: 'path', before: null, after: '/home/notes/<script>literal</script>-試験-thử-nghiệm.txt', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readPage', before: null, after: 'One exact current UTF-8 file', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readDisclosure', before: null, after: 'One saved observation. No file changes or later discovery.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readLimit', before: null, after: 'Only this exact continuation.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    ] } });
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved read' });
+  expect(within(saved).getByText('Exact path', { exact: true })).toBeVisible(); expect(within(saved).queryByText('Saved field', { exact: true })).not.toBeInTheDocument();
+  expect(within(saved).queryByText('Before', { exact: true })).not.toBeInTheDocument(); expect(saved.querySelector('script')).toBeNull();
+  expect(within(dialog).getByText('Read authorized', { exact: true })).toBeVisible(); expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+});

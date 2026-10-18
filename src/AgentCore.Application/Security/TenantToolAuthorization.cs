@@ -133,6 +133,8 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
+        if (intent.WorkspaceRead is { } readWorkspace)
+            return await approvals.PrepareWorkspaceReadAsync(boundary.Reference, new(call.Id, readWorkspace.Tool, readWorkspace.ArgumentsJson), run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactId is { } artifactId)
             return await approvals.PrepareArtifactVerificationAsync(boundary.Reference, artifactId, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactArguments is { } artifact)

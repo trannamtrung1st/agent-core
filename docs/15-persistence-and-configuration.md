@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Tenant workspace read consent persistence
+
+`TenantWorkspaceReadReview` extends the existing approval payload/check constraint with one Review-only `PreparedWorkspaceRead`. It binds actual Session/derived workspace, a supported tool, closed canonical arguments and a lowercase SHA-256 observation witness while excluding every other operation payload. Existing owner foreign keys, root fingerprints, decision signal, local receipt and Run checkpoint remain the durable owners. No file version table, grant, content blob or new execution engine is added. The migration preserves earlier request shapes; rollback refuses while workspace-read requests remain rather than discarding their consent. Migration/shape/reopen checks use disposable SQLite only. No installed application data migration or full clean cutover is accepted by this checkpoint. [Contract](04-backend-interfaces.md#tenant-workspace-read-review).
+
 ## Human tenant workspace mutation persistence
 
 Human write/delete authorization evidence uses the existing authorization audit owner and rows. Both stores validate the actual workspace owner, original human authentication session and membership, current tenant security/Instance witnesses, independent parent/mutation permissions and writable lifecycle before appending evidence. An allowed record establishes authorization at the commit boundary; it does not claim successful filesystem execution. Audit targets contain only the qualified workspace scope, without a filename or supplied content. No new migration, file row, version, completion ledger or Agent grant is introduced.

@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant workspace read consent
+
+Exercise read/list × home/working through both real stores and the canonical filesystem, plus actual hosted model prepare → human approve/reject → successor consent/result. Required boundaries include same-size/timestamp-restored byte changes, changed directory page, independent parent policies/reviewers, deciding-human revocation, no raw-read exceptional grant, scoped inbox counts before paging, rejected-root suppression after source/policy changes, source-bound retained output, truthful result budgeting and no replay. Temporary SQLite qualification covers upgrade/reopen, mixed/forged shapes, protected rollback and actual application-host recreation with pending consent. Frontend checks reuse the shared saved-read inspector and Chat labels, with actual Synthetic browser decision and changed-source recovery. No live provider, installed migration, CI or full proposal acceptance is implied.
+
 ## Tenant model workspace reads
 
 The focused model workspace matrix covers existing read/list offering from immutable Definition capabilities, trusted claimed Run ownership, exact home/working grants with independent parent reads, no requester-authority borrowing, policy-required read denial, post-I/O revocation and checkpoint revalidation before model reuse. Exercise both real stores and the canonical filesystem. Include empty non-initializing lists, continuation without skipped entries, output-budget fallback, inert UTF-8, binary/invalid text and safe missing-path errors. Hosted Synthetic journeys upload human bytes over canonical HTTP, admit a real Run, call list/read through the model tool loop and assert exact returned text or current denial, no implicit approval and zero outbound provider attempts. HomeAccess narrowing after admission must remain effective. These checks do not accept workspace effects, exact durable read Review, source publication, autonomous origins or the full proposal.

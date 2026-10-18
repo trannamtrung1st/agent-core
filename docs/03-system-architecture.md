@@ -1,5 +1,9 @@
 # System Architecture
 
+## Tenant workspace saved-read consent
+
+The existing approval/local-effect/Run owners now support one exact saved home/working observation under Review. Private source fingerprints constrain decision and successor delivery; current compound authority and root refusal identity remain separate from mutable filesystem observations. Existing original-human visibility filters protect detail and inbox counts; Organization and Chat share the native inspector. No new mailbox, file ledger, grant engine or provider is introduced. [Exact contract](04-backend-interfaces.md#tenant-workspace-read-review), [bounded verification](reports/tenant-workspace-read-review-verification-2026-10-19.md). The full proposal remains active.
+
 ## Human tenant workspace mutations
 
 Canonical human file replacement and single-node deletion use independent `workspaces.write` / `workspaces.delete` on the exact home/working resource plus parent read. They do not require or grant workspace body-read permission, Agent capability, Sandbox execution or model approval authority. An active Instance and retained writable Session (for working) are required. A current tenant security witness protects admission; ongoing conversation snapshot revisions are not file versions and do not block an otherwise authorized upload.

@@ -83,6 +83,8 @@ public sealed partial class TenantSessionAccessTests
     {
         private readonly ScriptedLanguageModel inner = new();
         public ModelCapabilities Capabilities => inner.Capabilities;
+        public bool Reviewed { get; init; }
+        public string ReviewTool { get; init; } = ToolCatalog.WorkspaceRead;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public TaskCompletionSource? FirstRequestGate { get; init; }
         public TaskCompletionSource FirstRequestEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -91,6 +93,18 @@ public sealed partial class TenantSessionAccessTests
             Requests.Enqueue(request);
             if (Requests.Count == 1 && FirstRequestGate is { } gate)
             { FirstRequestEntered.TrySetResult(); await gate.Task.WaitAsync(cancellationToken); }
+            if (Reviewed)
+            {
+                if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization)
+                    && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("inspect_workspace")) == true)
+                {
+                    yield return new ModelToolCallEvent(new("review-workspace", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new {
+                        operation = "inspect_workspace", read = new { tool = ReviewTool, arguments = new { path = ReviewTool == ToolCatalog.WorkspaceList ? path[..path.LastIndexOf('/')] : path } } })));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+                }
+                await foreach (var item in inner.GenerateAsync(request, cancellationToken)) yield return item;
+                yield break;
+            }
             var tool = !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.WorkspaceList) ? ToolCatalog.WorkspaceList
                 : !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.WorkspaceRead) ? ToolCatalog.WorkspaceRead : null;
             if (tool is not null && request.Tools?.Any(t => t.Name == tool) == true)

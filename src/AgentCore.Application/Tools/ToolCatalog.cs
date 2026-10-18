@@ -206,7 +206,7 @@ public static class ToolCatalog
                         && definition.SandboxPolicy!.AllowedProfileIds.Contains(p.Id, StringComparer.Ordinal)).Select(p => p.Id).ToArray() : null,
                     TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.StopProcess),
                     TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.ResetEnvironment),
-                    TenantSandboxReadAuthorizationContract.Allowed(definition), TenantBrowserAuthorizationContract.Allowed(definition), TenantCredentialReadAuthorizationContract.Allows(definition, context), TenantApprovalToolContract.AllowsArtifact(definition, context), TenantArtifactVerificationContract.Allows(definition)).ModelDefinition : authority.ModelDefinition);
+                    TenantSandboxReadAuthorizationContract.Allowed(definition), TenantBrowserAuthorizationContract.Allowed(definition), TenantCredentialReadAuthorizationContract.Allows(definition, context), TenantApprovalToolContract.AllowsArtifact(definition, context), TenantArtifactVerificationContract.Allows(definition), TenantWorkspaceReadAuthorizationContract.Allowed(definition)).ModelDefinition : authority.ModelDefinition);
         foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate, AgentCore.Application.Experience.ExperienceService.SourceTool, AgentCore.Application.Experience.ExperienceService.RecordTool })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))

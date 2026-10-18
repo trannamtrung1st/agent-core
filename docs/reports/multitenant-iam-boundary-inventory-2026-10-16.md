@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant workspace read Review successor — 2026-10-19
+
+Tenant `workspace.read` and `workspace.list` now support exact durable Review through the existing approval, successor Run, consent receipt and checkpoint owners. Saved source fingerprints, independent current executor/reviewer reads, scoped inbox counts, parent policy and root refusal suppression prevent wider access or changed-file substitution. Organization and Chat share exact-path consent and truthful read-result copy. [Focused evidence](tenant-workspace-read-review-verification-2026-10-19.md) records 191 selected local cases, actual SQLite host recreation and browser approval/changed-source cancellation. This supersedes workspace-read-Review-pending notes below only for exact home/working observations. Mutation/search/virtual-resource/Office/publication conversion, autonomous origins, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant model workspace read successor — 2026-10-19
 
 Tenant model `workspace.read` and `workspace.list` now use actual claimed Run/Session ownership, independent executor parent/workspace reads, current operation policy and admitted/current capability/HomeAccess. Canonical file I/O and post-read/checkpoint fences preserve owned scope without legacy fallback. [Focused evidence](tenant-workspace-model-read-verification-2026-10-19.md) records 18 both-store cases, 61 schema/projection cases and ten hosted Synthetic journeys, including HomeAccess narrowing after admission. This supersedes model-workspace-read/list-pending notes only for current Allowed policy on exact home/working paths. Durable read Review, mutation/search/virtual-resource/Office/publication conversion, autonomous origins, other proposal families and final authority/schema cutover remain open; the full proposal stays active.

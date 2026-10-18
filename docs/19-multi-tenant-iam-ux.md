@@ -1,5 +1,9 @@
 # Accounts, organizations, access and approvals UX
 
+## Exact workspace read Review
+
+The existing shared Approval details inspector presents `inspect_workspace` as **Exact saved read**, with escaped wrapping **Exact path**, the requested file/page, disclosure and read boundary. It shows no source body or directory names. Organization and Chat share the same native Drawer, responsive descriptions, confirmation, refresh and focus owner. Approve records one read decision; **Read authorized** reports the separate consent result and grants no file changes, recipient download access or later discovery. A changed file or page disables approval with explicit fresh-read recovery; cancellation remains a separate current-authority action. No UI control supplies permission or bypasses current server checks. [Backend contract](04-backend-interfaces.md#tenant-workspace-read-review).
+
 ## Tenant workspace reading
 
 Home belongs to one actual Agent Instance; working belongs to one actual Session. Display `/home` and `/working` as separate retained file locations, never as a tenant switch or permission hierarchy. Canonical routes bind the current organization and actual owning resource. A workspace-read grant also requires independent parent read; it supplies no write/delete, Sandbox execution or model publication authority. An empty uninitialized root is an empty read, without setup side effects.
