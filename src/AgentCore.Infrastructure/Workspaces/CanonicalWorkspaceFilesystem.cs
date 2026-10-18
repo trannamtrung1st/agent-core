@@ -152,7 +152,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
     }
 
     internal async ValueTask WriteAsync(string path, ReadOnlyMemory<byte> bytes, long maxFileBytes,
-        long maxRootBytes, CancellationToken ct = default)
+        long maxRootBytes, CancellationToken ct = default, Func<CancellationToken, ValueTask>? authorizeCommit = null)
     {
         if (bytes.Length > maxFileBytes) throw AgentCoreErrors.WorkspaceQuotaExceeded();
         using var root = OpenRoot(create: true);
@@ -176,6 +176,8 @@ internal sealed partial class CanonicalWorkspaceFilesystem
                 await stream.WriteAsync(bytes, ct);
                 await stream.FlushAsync(ct);
             }
+            ct.ThrowIfCancellationRequested();
+            if (authorizeCommit is not null) await authorizeCommit(ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             // Replaces the name atomically, deliberately breaking any old hard-link
             // association like an ordinary editor. Concurrent last rename wins.
@@ -245,6 +247,14 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         var relative = Relative(path); ProtectRoot(relative);
         using var parent = Parent(root, relative);
         Remove(parent, Leaf(relative), recursive, ct);
+    }
+    internal async ValueTask DeleteAuthorizedAsync(string path, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct)
+    {
+        using var root = OpenRoot();
+        var relative = Relative(path); ProtectRoot(relative);
+        using var parent = Parent(root, relative);
+        await authorizeCommit(ct).ConfigureAwait(false); ct.ThrowIfCancellationRequested();
+        Remove(parent, Leaf(relative), recursive: false, ct);
     }
 
     internal void CopyTo(string source, CanonicalWorkspaceFilesystem destinationFilesystem, string destination, CancellationToken ct = default,

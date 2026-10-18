@@ -1,5 +1,11 @@
 # System Architecture
 
+## Human tenant workspace mutations
+
+Canonical human file replacement and single-node deletion use independent `workspaces.write` / `workspaces.delete` on the exact home/working resource plus parent read. They do not require or grant workspace body-read permission, Agent capability, Sandbox execution or model approval authority. An active Instance and retained writable Session (for working) are required. A current tenant security witness protects admission; ongoing conversation snapshot revisions are not file versions and do not block an otherwise authorized upload.
+
+The existing file adapter stages replacement bytes and rechecks original human, owner, current parent configuration/lifecycle and IAM immediately before atomic rename or single-node unlink. The existing authorization-audit owner records that authorization against actual current backing stores; this is permission evidence, not a file-effect receipt. There is no new file revision, approval engine, operation ledger or claimed database/filesystem transaction. Known completed mutations return a body-free acknowledgement; access loss afterward does not turn success into a replayable failed command or disclose stored metadata. Unexpected filesystem failures report possible mutation rather than encourage replay. File replacement retains ordinary last-rename-wins behavior; deletion remains nonrecursive. Model mutation/consent paths remain separate.
+
 ## Tenant workspace read ownership
 
 Home and Session scratch are separate canonical workspace resources: `workspace/home:{instanceId:D}` and `workspace/working:{sessionId:D}` inside their actual tenant. These addresses grant authority only after resolving the existing owning Instance or non-deleted Session; a path, GUID or scope string never establishes ownership. No per-file IAM hierarchy or Environment scope is added. Session deletion retires its working-workspace grants atomically with its other direct child grants.

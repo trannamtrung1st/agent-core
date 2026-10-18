@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Human tenant workspace mutation persistence
+
+Human write/delete authorization evidence uses the existing authorization audit owner and rows. Both stores validate the actual workspace owner, original human authentication session and membership, current tenant security/Instance witnesses, independent parent/mutation permissions and writable lifecycle before appending evidence. An allowed record establishes authorization at the commit boundary; it does not claim successful filesystem execution. Audit targets contain only the qualified workspace scope, without a filename or supplied content. No new migration, file row, version, completion ledger or Agent grant is introduced.
+
+Mutable file effects use the incumbent staged-write/atomic-rename and nonrecursive unlink primitives. Private staging may create directories or temporary bytes before the final authorization callback; rejection preserves the destination and removes the temporary file. Database evidence and filesystem effects are not one transaction. Successful effects return a body-free acknowledgement; unexpected I/O returns an explicit possible-effect conflict and must not be automatically replayed. Root quota observations retain ordinary concurrent-writer semantics. The [wire contract](14-api-and-realtime-protocol.md#human-file-mutations) owns client behavior.
+
 ## Tenant workspace read scopes
 
 `workspace/home:{instanceId:D}` and `workspace/working:{sessionId:D}` are qualified resource scopes resolved against the actual owned Instance/Session graph. Both IAM stores validate assignment ownership again at commit. Canonical Session deletion retires its working scope alongside Session/Run/Artifact grants; both stores reject bypass transactions retaining the deleted workspace grant. Existing assignment records/constraints represent these addresses; no workspace row, migration, file revision or second file store is added.

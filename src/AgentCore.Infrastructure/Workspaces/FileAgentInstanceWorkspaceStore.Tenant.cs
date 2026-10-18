@@ -3,21 +3,24 @@ using AgentCore.Application.Security;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Workspaces;
 
 public sealed partial class FileAgentInstanceWorkspaceStore : ITenantWorkspaceReadStore
 {
-    private async ValueTask<CanonicalWorkspaceFilesystem> TenantFiles(TenantWorkspaceReference owner, CancellationToken ct)
+    private async ValueTask<CanonicalWorkspaceFilesystem> TenantFiles(TenantWorkspaceReference owner, CancellationToken ct, bool write = false)
     {
         if (owner.TenantId == Guid.Empty || owner.InstanceId == Guid.Empty || owner.SessionId == Guid.Empty) throw new AccessDeniedException("resource_unavailable");
         var agent = await (tenantAgents ?? throw new AccessDeniedException("tenant_context_required")).FindTenantAgentAsync(owner.TenantId, owner.InstanceId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("resource_unavailable");
+        if (write && agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new SecurityConflictException("workspace_read_only");
         if (owner.SessionId is { } sessionId)
         {
             var session = await (tenantSessions ?? throw new AccessDeniedException("tenant_context_required")).FindTenantSessionAsync(owner.TenantId, sessionId, ct).ConfigureAwait(false)
                 ?? throw new AccessDeniedException("resource_unavailable");
             if (session.Owner.AgentInstanceId != owner.InstanceId || session.Owner.ExecutorPrincipalId != agent.PrincipalId) throw new AccessDeniedException("resource_unavailable");
+            if (write && !TenantWorkspaceMutationRules.Writable(agent, session)) throw new SecurityConflictException("workspace_read_only");
         }
         var root = owner.SessionId is { } id ? AgentWorkspacePhysicalPaths.WorkingDirectory(_root, owner.InstanceId, id)
             : AgentWorkspacePhysicalPaths.HomeDirectory(_root, owner.InstanceId);

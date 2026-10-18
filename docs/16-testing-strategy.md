@@ -1,8 +1,12 @@
 # Testing Strategy
 
+## Tenant workspace human mutations
+
+Exercise both actual memory/SQLite IAM owners and canonical home/working bytes through the authenticated HTTP upload/delete journey. Require independent write/delete plus parent read without granting body read. Cover current security witnesses, original-session CSRF/logout, permission revocation and owner lifecycle changes at the staged commit boundary, unavailable authorization evidence, unchanged targets on rejected commits and temporary-file cleanup. Known completed effects remain acknowledged after later authority loss; an unexpected I/O failure must report possible effect without exposing paths or automatically replaying. Verify immutable caller-byte capture, nonrecursive directory behavior, protected roots and escaping links through the incumbent filesystem. These checks establish human file mutation behavior; model consent/grant execution and UI controls need separate evidence.
+
 ## Tenant workspace human reads
 
-Exercise real canonical filesystem bytes through memory/SQLite ownership and authenticated HTTP for home and working. Cover empty roots without initialization, independent parent and workspace scopes, scope assignment against actual tenant owners, same-Account foreign tenants and sibling Sessions/Instances, lexical page/search bounds, exact UTF-8 download, metadata-only reads, original-human logout/revocation, source changes and authority loss after projection. Canonical Session deletion must retire working grants while retaining home/sibling grants and permitting later IAM writes. Validate internal safe links and denied escaping/root substitutions through the incumbent filesystem boundary. HTTP Office checks use real DOCX/XLSX bytes and the existing processor. Model tools, writes/deletes and frontend attachment are separate acceptance paths.
+Exercise real canonical filesystem bytes through memory/SQLite ownership and authenticated HTTP for home and working. Cover empty roots without initialization, independent parent and workspace scopes, scope assignment against actual tenant owners, same-Account foreign tenants and sibling Sessions/Instances, lexical page/search bounds, exact UTF-8 download, metadata-only reads, original-human logout/revocation, source changes and authority loss after projection. Canonical Session deletion must retire working grants while retaining home/sibling grants and permitting later IAM writes. Validate internal safe links and denied escaping/root substitutions through the incumbent filesystem boundary. HTTP Office checks use real DOCX/XLSX bytes and the existing processor. Model tools and frontend attachment are separate acceptance paths; human mutations use the matrix above.
 
 ## Tenant Artifact deletion cleanup
 

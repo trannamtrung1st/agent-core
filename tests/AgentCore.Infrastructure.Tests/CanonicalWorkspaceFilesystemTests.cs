@@ -16,6 +16,26 @@ public sealed class CanonicalWorkspaceFilesystemTests : IDisposable
     private static async Task<string> Read(CanonicalWorkspaceFilesystem fs, string path) =>
         Encoding.UTF8.GetString(await fs.ReadAsync(path, 1024 * 1024));
 
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Protected_mutation_callback_rejection_or_cancellation_keeps_destination_and_cleans_staging(bool delete, bool cancel)
+    {
+        var home = Home; await Write(home, "/home/original.txt", "original");
+        using var cancellation = new CancellationTokenSource(); var observed = false;
+        ValueTask Authorize(CancellationToken token)
+        {
+            observed = true; Assert.Equal("original", File.ReadAllText(Path.Combine(home.PhysicalRoot, "original.txt")));
+            if (cancel) { cancellation.Cancel(); return ValueTask.CompletedTask; }
+            throw AgentCoreErrors.Forbidden("Authorization changed.");
+        }
+        var error = await Record.ExceptionAsync(() => delete
+            ? home.DeleteAuthorizedAsync("/home/original.txt", Authorize, cancellation.Token).AsTask()
+            : home.WriteAsync("/home/original.txt", "replacement"u8.ToArray(), 1024, 4096, cancellation.Token, Authorize).AsTask());
+        Assert.True(observed); Assert.NotNull(error);
+        if (cancel) Assert.IsAssignableFrom<OperationCanceledException>(error); else Assert.IsType<AgentCoreException>(error);
+        Assert.Equal("original", await Read(home, "/home/original.txt"));
+        Assert.Equal(new[] { "original.txt" }, Directory.EnumerateFileSystemEntries(home.PhysicalRoot).Select(p => Path.GetFileName(p)!).ToArray());
+    }
+
     [Fact]
     public async Task Approved_asset_reads_never_follow_links_or_a_file_swapped_at_open()
     {

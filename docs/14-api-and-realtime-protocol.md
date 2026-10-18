@@ -6,7 +6,13 @@ Human home reads use `/api/v2/tenants/{tenantId}/agents/{instanceId}/workspace`;
 
 Pages and metadata reuse the existing workspace wire records: logical path, type, bytes, modified time, directory/kind/link/mode observations and bounded paging/usage. Physical roots and hidden sibling namespaces are never projected. Missing uninitialized roots list/search empty without creating files. Content downloads are attachments with sanitized filenames and `nosniff`; reads use private/no-store caching. Office processing uses the shared limits/processor and post-processing authorization fence. Mutable metadata is not an immutable version or CAS token; changed source facts during content projection return conflict and current access loss withholds the result.
 
-IAM `resourceType=workspace` uses `resourceId=home:{instanceId:D}` or `working:{sessionId:D}`. Actual tenant ownership is checked before reads and scope assignment. Human `workspaces.read` is independent from parent `agents.read` or `sessions.read`. Working grants retire with canonical Session deletion; home grants do not transfer to a Session or another Instance. No tenant workspace write/delete or model-tool offering is added by this read contract.
+IAM `resourceType=workspace` uses `resourceId=home:{instanceId:D}` or `working:{sessionId:D}`. Actual tenant ownership is checked before reads and scope assignment. Human `workspaces.read` is independent from parent `agents.read` or `sessions.read`. Working grants retire with canonical Session deletion; home grants do not transfer to a Session or another Instance. Model tools remain a separate path; the human mutation contract follows below.
+
+### Human file mutations
+
+Both canonical home and working workspace groups accept `PUT /content?path=...&expectedRevision=...` with bounded original bytes, and `DELETE /content?path=...&expectedRevision=...` for one file/link/empty directory. Paths stay within the route-bound workspace, roots cannot be replaced/deleted, and deletes are nonrecursive. Account authentication, tenant membership and CSRF remain mandatory; invalid CSRF returns `400 invalid_csrf`. The current tenant security revision is an authorization/configuration witness, not a file version. Writes are bounded to the existing per-file/root limits, and authorization is checked before body intake and immediately before publication.
+
+A known completed mutation returns 204 with no stored filename, body or metadata. Reads remain independently authorized. Missing access/current lifecycle or a stale witness stops the protected commit. Unexpected filesystem failure returns `workspace_effect_unknown` with `mutationsMayHaveOccurred: true`; clients reload current state and do not replay automatically. This does not add Agent tool/grant execution or filesystem CAS semantics.
 
 ## Tenant Artifact HTTP reads
 

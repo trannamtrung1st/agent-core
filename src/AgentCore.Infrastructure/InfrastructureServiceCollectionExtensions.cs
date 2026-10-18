@@ -295,6 +295,8 @@ public static class InfrastructureServiceCollectionExtensions
                 tenantAgents: provider.GetRequiredService<ITenantAgentStore>(), tenantSessions: provider.GetRequiredService<ITenantSessionStore>());
         });
         services.TryAddSingleton<ITenantWorkspaceReadStore>(provider => (ITenantWorkspaceReadStore)provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
+        services.TryAddSingleton<ITenantWorkspaceMutationStore>(provider => (ITenantWorkspaceMutationStore)provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
+        services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceMutationService>();
         services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceReadService>();
         services.TryAddSingleton<AdminLifecycleCoordinator>();
         services.TryAddSingleton<AgentInstanceWorkspaceService>();

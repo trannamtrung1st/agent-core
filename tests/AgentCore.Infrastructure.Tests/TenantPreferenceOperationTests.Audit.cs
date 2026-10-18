@@ -32,6 +32,7 @@ public sealed partial class TenantPreferenceOperationTests
 
     private sealed class UnavailableAudit : ITenantAuthorizationAuditStore
     {
+        public ValueTask<bool> TryRecordWorkspaceAuthorizationAsync(TenantWorkspaceHumanAuthorization proof, CancellationToken ct = default) => ValueTask.FromResult(false);
         public ValueTask<bool> TryRecordOperationAuthorizationAsync(AuthorizationAudit audit, CancellationToken ct = default) => ValueTask.FromResult(false);
     }
 }

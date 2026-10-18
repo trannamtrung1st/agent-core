@@ -1,6 +1,7 @@
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 
@@ -10,11 +11,33 @@ public static class TenantWorkspaceEndpoints
 {
     public static void Map(WebApplication app)
     {
-        MapReads(app.MapGroup("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace").RequireAuthorization(), false);
-        MapReads(app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace").RequireAuthorization(), true);
+        MapWorkspace(app.MapGroup("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace").RequireAuthorization(), false);
+        MapWorkspace(app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace").RequireAuthorization(), true);
     }
-    private static void MapReads(RouteGroupBuilder group, bool working)
+    private static void MapWorkspace(RouteGroupBuilder group, bool working)
     {
+        group.MapPut("content", (string path, long expectedRevision, HttpContext http, TenantWorkspaceMutationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            AgentWorkspaceEndpoints.Query(http, "path", "expectedRevision"); Headers(http);
+            var actor = IdentityHttp.TenantContext(http); var human = Human(http, actor); var id = Id(http, working);
+            var workspace = await service.AuthorizeAsync(actor.TenantId, id, working, human, expectedRevision, false, ct).ConfigureAwait(false);
+            path = TenantWorkspaceRules.Path(workspace, path, file: true);
+            if (http.Request.ContentLength > AgentWorkspaceLimits.MaxFileBytes) throw AgentCoreErrors.WorkspaceQuotaExceeded();
+            await using var buffer = new MemoryStream(); var block = new byte[81920];
+            while (true)
+            {
+                var count = await http.Request.Body.ReadAsync(block, ct).ConfigureAwait(false); if (count == 0) break;
+                if (buffer.Length + count > AgentWorkspaceLimits.MaxFileBytes) throw AgentCoreErrors.WorkspaceQuotaExceeded();
+                await buffer.WriteAsync(block.AsMemory(0, count), ct).ConfigureAwait(false);
+            }
+            return await MutationResult(() => service.WriteAsync(actor.TenantId, id, working, human, expectedRevision, path,
+                buffer.GetBuffer().AsMemory(0, checked((int)buffer.Length)), ct)).ConfigureAwait(false);
+        })).WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(AgentWorkspaceLimits.MaxFileBytes));
+        group.MapDelete("content", (string path, long expectedRevision, HttpContext http, TenantWorkspaceMutationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            AgentWorkspaceEndpoints.Query(http, "path", "expectedRevision"); Headers(http); var actor = IdentityHttp.TenantContext(http);
+            return await MutationResult(() => service.DeleteAsync(actor.TenantId, Id(http, working), working, Human(http, actor), expectedRevision, path, ct)).ConfigureAwait(false);
+        }));
         group.MapGet("", (string? prefix, string? cursor, int? limit, HttpContext http, TenantWorkspaceReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             AgentWorkspaceEndpoints.Query(http, "prefix", "cursor", "limit"); Headers(http);
@@ -58,6 +81,12 @@ public static class TenantWorkspaceEndpoints
         }));
     }
     private static Guid Id(HttpContext http, bool working) => Guid.Parse((string)http.Request.RouteValues[working ? "sessionId" : "instanceId"]!);
+    private static async ValueTask<IResult> MutationResult(Func<ValueTask> execute)
+    {
+        try { await execute().ConfigureAwait(false); return Results.NoContent(); }
+        catch (AgentCoreException error) when (error.Code == "workspace_effect_unknown")
+        { return Results.Json(new { reasonCode = error.Code, title = error.Message, mutationsMayHaveOccurred = true }, statusCode: 409); }
+    }
     private static HumanSessionReference Human(HttpContext http, AuthenticatedTenant actor) => new(actor.AccountId,
         IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
     private static void Headers(HttpContext http) { http.Response.Headers.CacheControl = "private, no-store"; http.Response.Headers.XContentTypeOptions = "nosniff"; }

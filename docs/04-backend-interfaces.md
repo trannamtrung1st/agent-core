@@ -1,5 +1,13 @@
 # Backend Interfaces
 
+## Human tenant workspace mutation boundary
+
+`TenantWorkspaceMutationService` authorizes the original human, actual home/working owner, independent parent read and `workspaces.write` or `workspaces.delete`. A current tenant-security revision guards intake; current Instance and Session lifecycle are rechecked before effect. Conversation snapshot revisions remain independent from mutable file operations. Write input is copied and bounded; acknowledgements carry no stored body or metadata and grant no read permission.
+
+`ITenantWorkspaceMutationStore` reuses the canonical file adapter and accepts a protected commit callback. Replacement stages bytes, then the callback repeats original-human/owner/IAM/configuration checks immediately before atomic rename. Single-node deletion repeats the callback immediately before nonrecursive unlink. The existing `ITenantAuthorizationAuditStore` validates actual current human login, owning graph, observed revisions and central IAM again, then appends only authorization evidence. Denied known-owner IAM/lifecycle attempts use the same owner. Audit contains the workspace address and actor, not file path/content, and never claims that a filesystem effect completed. No new table, mutation receipt engine or database/filesystem transaction is introduced.
+
+After a known completed primitive, the service returns without projecting private metadata or turning a factual acknowledgement into a failed replayable request. Unexpected filesystem I/O becomes `workspace_effect_unknown`; it is not evidence of no mutation. Staging directories/temporary files and concurrent last-rename behavior retain the incumbent filesystem semantics. Agent mutations and exact operation grants remain separate boundaries.
+
 ## Tenant workspace read boundary
 
 `ITenantWorkspaceReadStore` extends the existing canonical file adapter with actual `TenantWorkspaceReference` owner validation for list, bounded search and bounded inspection. Home resolves the current owned Instance; working additionally resolves the current non-deleted Session and matching executor/Instance. Reads never create a workspace or run templates. The descriptor-relative canonical filesystem retains logical path, link, hard-link, size and traversal rules; metadata/bytes are current observations rather than immutable file versions.

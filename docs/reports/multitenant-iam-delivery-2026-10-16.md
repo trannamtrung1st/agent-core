@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant workspace human mutations successor — 2026-10-19
+
+Human home and Session working files now support independently authorized raw-byte upload/replacement and nonrecursive delete through the existing canonical filesystem. Original-human, actual-owner, lifecycle and current-IAM checks repeat immediately before the protected effect, with authorization evidence in the existing audit owner. Known completed effects return a body-free acknowledgement; uncertain I/O requires reloading without automatic replay. [Focused evidence](tenant-workspace-mutations-verification-2026-10-19.md) records this bounded checkpoint. This supersedes human-workspace-mutation-pending notes only. Tenant Workspace UI, model workspace tools and exact consent/grants, source publication adapters, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant workspace human reads successor — 2026-10-19
 
 Human home and Session working reads now have actual owned workspace scopes, independent parent/workspace IAM, bounded canonical file inspection/download/Office preview and post-I/O original-human/source fences. Empty reads create no owner directories; working grants retire atomically with Session deletion. [Focused evidence](tenant-workspace-reads-verification-2026-10-19.md) records both-store filesystem boundaries and authenticated HTTP/Office workflows. This supersedes human-workspace-read-pending notes only. Tenant Workspace UI, mutations, model tools, source publication adapters, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
