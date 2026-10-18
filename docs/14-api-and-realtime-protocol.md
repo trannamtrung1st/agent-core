@@ -8,6 +8,10 @@ Pages and metadata reuse the existing workspace wire records: logical path, type
 
 IAM `resourceType=workspace` uses `resourceId=home:{instanceId:D}` or `working:{sessionId:D}`. Actual tenant ownership is checked before reads and scope assignment. Human `workspaces.read` is independent from parent `agents.read` or `sessions.read`. Working grants retire with canonical Session deletion; home grants do not transfer to a Session or another Instance. Model tools remain a separate path; the human mutation contract follows below.
 
+### Human workspace access hints
+
+`GET /access` on either canonical workspace group requires current original-human and independent actual parent read. It reads no filesystem bytes or paths and returns the bound workspace, current security revision, Instance name/revision only for home under Agent read (both null for working), Session title under Session read, independent `canRead`, `canWrite`, `canDelete` and lifecycle `readOnly`. It does not require workspace body-read permission, grant authority or initialize directories. A changed owner/security/lifecycle witness withholds the projection; hints never replace operation authorization.
+
 ### Human file mutations
 
 Both canonical home and working workspace groups accept `PUT /content?path=...&expectedRevision=...` with bounded original bytes, and `DELETE /content?path=...&expectedRevision=...` for one file/link/empty directory. Paths stay within the route-bound workspace, roots cannot be replaced/deleted, and deletes are nonrecursive. Account authentication, tenant membership and CSRF remain mandatory; invalid CSRF returns `400 invalid_csrf`. The current tenant security revision is an authorization/configuration witness, not a file version. Writes are bounded to the existing per-file/root limits, and authorization is checked before body intake and immediately before publication.

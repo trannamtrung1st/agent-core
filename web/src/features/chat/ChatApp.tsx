@@ -1,3 +1,4 @@
+import { TenantSessionFilesDrawer } from './TenantSessionFilesDrawer';
 import { tenantMayManageSession, tenantCanCreateChat, tenantRunControl } from '../../services/tenantChat';
 import { TenantConversationApprovals } from './TenantConversationApprovals';
 import type { TenantContext } from '../../services/identity';
@@ -115,6 +116,9 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
   const [sandboxOpen, setSandboxOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const filesButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setFilesOpen(false); }, [state.sessionId, tenantContext?.tenant.tenantId]);
   const sandboxButtonRef = useRef<HTMLButtonElement>(null);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
@@ -403,6 +407,8 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
               endDisabled={organization && state.liveResponseId != null}
               onSchedules={!organization && inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
               onBackgroundWork={!organization && state.sessionId ? () => setWorkOpen(true) : undefined}
+              filesButtonRef={filesButtonRef}
+              onFiles={tenantContext && state.sessionId ? () => setFilesOpen(true) : undefined}
               sandboxButtonRef={sandboxButtonRef}
               onSandbox={state.sessionId ? () => setSandboxOpen(true) : undefined}
               attentionCount={attentionCount}
@@ -577,6 +583,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
         </Layout>
         {backgroundInstanceId ? <BackgroundWorkDrawer instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
           onClose={() => setWorkOpen(false)} onAddReference={(sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label)} /> : null}
+        {tenantContext && state.sessionId && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
         {tenantContext && state.sessionId && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
         {!organization && state.sessionId && <SessionSandboxDrawer key={state.sessionId} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} readOnly={readonly} onClose={() => setSandboxOpen(false)} />}
 

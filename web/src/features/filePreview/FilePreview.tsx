@@ -163,7 +163,7 @@ export function FilePreview({
         setLoaded({ metadata: value, format, policy: undefined });
         return;
       }
-      const policy = await loadPreviewOptions('tenantId' in file ? file.tenantId : undefined, controller.signal);
+      const policy = await loadPreviewOptions(file.kind === 'tenantWorkspace' ? file.owner.tenantId : 'tenantId' in file ? file.tenantId : undefined, controller.signal);
       controller.signal.throwIfAborted();
       const limit = formatLimit(format, policy);
       if (value.byteSize > limit) throw new PreviewError('preview_too_large', `This file is ${mib(value.byteSize)}; its preview limit is ${mib(limit)}. Download the original.`);
@@ -174,7 +174,7 @@ export function FilePreview({
           value.sha256.toLowerCase() !== office.sha256.toLowerCase()
         )
           throw readFailure(409);
-        const blob = file.kind === 'home' && format === 'docx'
+        const blob = (file.kind === 'home' || file.kind === 'tenantWorkspace') && format === 'docx'
           ? liveDocumentBlob(office, limit)
           : format === 'docx'
             ? await readFile(
@@ -189,8 +189,8 @@ export function FilePreview({
         return;
       }
       const blob = await readFile(file, value, limit, controller.signal);
-      const currentMetadata = file.kind === 'home' ? {...value, byteSize: blob.size} : value;
-      if (file.kind === 'home') setMetadata(currentMetadata);
+      const currentMetadata = (file.kind === 'home' || file.kind === 'tenantWorkspace') ? {...value, byteSize: blob.size} : value;
+      if ((file.kind === 'home' || file.kind === 'tenantWorkspace')) setMetadata(currentMetadata);
       if (['text', 'markdown', 'csv'].includes(format)) {
         const text = await decodeText(blob, format, policy);
         controller.signal.throwIfAborted();
@@ -307,7 +307,7 @@ export function FilePreview({
             )}
           </Flex>
           <Flex wrap gap={token.paddingXS}>
-            {file.kind === 'home' && <Button disabled={busy} onClick={() => setAttempt(value => value + 1)}>Reload preview</Button>}
+            {(file.kind === 'home' || file.kind === 'tenantWorkspace') && <Button disabled={busy} onClick={() => setAttempt(value => value + 1)}>Reload preview</Button>}
             <Button
               icon={<DownloadOutlined />}
               loading={busy}
@@ -320,7 +320,7 @@ export function FilePreview({
             <Button onClick={onClose}>Close</Button>
           </Flex>
         </Flex>
-        {file.kind === 'home' && <Typography.Text type="secondary">Live file · other Sessions may change this path. Reload preview to read its current content.</Typography.Text>}
+        {(file.kind === 'home' || file.kind === 'tenantWorkspace') && <Typography.Text type="secondary">Live file · current content can change. Reload preview to read this path again.</Typography.Text>}
         {downloadError && (
           <Alert type="error" showIcon title="Download failed. Try again." />
         )}

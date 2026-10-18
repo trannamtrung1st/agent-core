@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant workspace human UI successor — 2026-10-19
+
+Tenant home Workspace and Session files now expose canonical browse/search, preview/download, raw-byte upload/replacement and confirmed nonrecursive deletion in the existing Ant Design interface. Independent current permissions, retained drafts with explicit recovery, read-only lifecycle and narrow-screen file actions are verified through actual Synthetic journeys. Working access hints expose no live Agent configuration facts. [Focused evidence](tenant-workspace-ui-verification-2026-10-19.md) records 90 store, eight API and 81 frontend cases, a passing build and a fresh SHIP finish review. This supersedes Workspace-UI-pending notes below only for human file management. Model workspace tools and exact consent/grants, source publication adapters, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant workspace human mutations successor — 2026-10-19
 
 Human home and Session working files now support independently authorized raw-byte upload/replacement and nonrecursive delete through the existing canonical filesystem. Original-human, actual-owner, lifecycle and current-IAM checks repeat immediately before the protected effect, with authorization evidence in the existing audit owner. Known completed effects return a body-free acknowledgement; uncertain I/O requires reloading without automatic replay. [Focused evidence](tenant-workspace-mutations-verification-2026-10-19.md) records this bounded checkpoint. This supersedes human-workspace-mutation-pending notes only. Tenant Workspace UI, model workspace tools and exact consent/grants, source publication adapters, other proposal families and final authority/schema cutover remain open; the full proposal stays active.

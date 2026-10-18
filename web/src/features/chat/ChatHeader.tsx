@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from "react";
 import { App as AntApp, Badge, Button, Flex, Tooltip, Typography } from "antd";
-import { CalendarOutlined, CodeOutlined, InboxOutlined, PoweroffOutlined } from "@ant-design/icons";
+import { CalendarOutlined, CodeOutlined, FolderOpenOutlined, InboxOutlined, PoweroffOutlined } from "@ant-design/icons";
 import { confirmAction } from "../../app/confirmAction";
 import { formatChatTime } from "./chatTime";
 
@@ -14,7 +14,7 @@ export function ChatHeader({
   speechLocale,
   onSchedules,
   onBackgroundWork,
-  onSandbox,
+  onSandbox, onFiles, filesButtonRef,
   sandboxButtonRef,
   attentionCount = 0,
   onEnd,
@@ -31,6 +31,7 @@ export function ChatHeader({
   onBackgroundWork?: () => void;
   onSandbox?: () => void;
   sandboxButtonRef?: Ref<HTMLButtonElement>;
+  onFiles?: () => void; filesButtonRef?: Ref<HTMLButtonElement>;
   attentionCount?: number;
   onEnd: () => void;
   inSession: boolean;
@@ -70,6 +71,7 @@ export function ChatHeader({
         <Flex align="center" wrap gap={8} className="chat-header-actions">
           {speechLocale}
           <Flex align="center" gap={8} className="chat-header-session-actions">
+            {onFiles && <Tooltip title="Session files"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session files" ref={filesButtonRef} icon={<FolderOpenOutlined aria-hidden />} onClick={onFiles} /></Tooltip>}
             {onSandbox && <Tooltip title="Session sandbox"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session sandbox" ref={sandboxButtonRef} icon={<CodeOutlined />} onClick={onSandbox} /></Tooltip>}
             {onBackgroundWork ? (
               <Badge count={attentionCount} size="small" offset={[-4, 4]}>

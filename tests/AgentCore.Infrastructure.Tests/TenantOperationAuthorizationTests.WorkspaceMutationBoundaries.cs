@@ -132,6 +132,9 @@ public sealed partial class TenantOperationAuthorizationTests
         var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(setup.Tenant, setup.Run.SessionId))!;
         await f.Sessions.ChangeAsync(setup.Tenant, setup.Owner, new(setup.Run.SessionId, current.Snapshot.Revision, action), (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var service = WorkspaceMutations(f, WorkspaceReader(f)); var revision = (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
+        var hints = await service.InspectAsync(setup.Tenant, target.Id, true, target.Human);
+        Assert.Equal(action != TenantSessionAction.Pause, hints.ReadOnly); Assert.False(hints.CanRead);
+        Assert.Equal(action == TenantSessionAction.Pause, hints.CanWrite); Assert.Equal(action == TenantSessionAction.Pause, hints.CanDelete);
         var effect = service.WriteAsync(setup.Tenant, target.Id, true, target.Human, revision, target.Path, "paused human edit"u8.ToArray()).AsTask();
         if (action == TenantSessionAction.Pause)
         {

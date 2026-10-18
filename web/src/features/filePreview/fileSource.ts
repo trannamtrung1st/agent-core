@@ -1,6 +1,7 @@
 import { ownerFetch } from '../../services/api';
 import { identityReadResponse, tenantApi } from '../../services/identity';
 import { tenantAgentApi, type TenantResourceDetail } from '../../services/tenantAgentConfiguration';
+import { tenantWorkspaceApi, type TenantWorkspaceOwner } from '../../services/tenantWorkspace';
 
 export type FileMetadata = {
   displayName: string;
@@ -9,6 +10,7 @@ export type FileMetadata = {
   sha256?: string;
 };
 export type FileRef =
+  | { kind: 'tenantWorkspace'; owner: TenantWorkspaceOwner; instanceId: string; path: string; metadata: FileMetadata }
   | { kind: 'tenantResource'; tenantId: string; instanceId: string; resourceKey: string; metadata: FileMetadata }
   | { kind: 'attachment'; sessionId: string; attachmentId: string }
   | { kind: 'artifact'; sessionId: string; artifactId: string; tenantId?: string }
@@ -37,6 +39,7 @@ export type FileRef =
       metadata: FileMetadata;
     };
 export const sourceLabel = {
+  tenantWorkspace: 'Workspace',
   tenantResource: 'Instance Resource',
   attachment: 'Attachment',
   artifact: 'Artifact',
@@ -48,6 +51,8 @@ export const sourceLabel = {
 const enc = encodeURIComponent;
 export function sourcePath(ref: FileRef): string {
   switch (ref.kind) {
+    case 'tenantWorkspace':
+      return tenantWorkspaceApi(ref.owner);
     case 'tenantResource':
       return tenantAgentApi(ref.tenantId, ref.instanceId, `/resources/${enc(ref.resourceKey)}`);
     case 'attachment':
@@ -109,8 +114,8 @@ export async function resolveFile(
       throw new PreviewError('preview_unavailable', 'Current resource metadata is unavailable. Reload the resource list.');
     return { displayName: item.logicalPath.split('/').at(-1)!, contentType: item.mediaType, byteSize: item.byteLength, sha256: item.contentSha256 };
   }
-  if (ref.kind === 'home') {
-    const response = await ownerFetch(`${sourcePath(ref)}/metadata?${new URLSearchParams({path: ref.path})}`, {signal});
+  if (ref.kind === 'home' || ref.kind === 'tenantWorkspace') {
+    const response = await fileReadResponse(ref, `${sourcePath(ref)}/metadata?${new URLSearchParams({path: ref.path})}`, signal);
     if (!response.ok) throw readFailure(response.status);
     const item = await response.json();
     if (item.agentInstanceId !== ref.instanceId || item.logicalPath !== ref.path || typeof item.contentType !== 'string' || !Number.isSafeInteger(item.byteSize) || item.byteSize < 0)
@@ -149,13 +154,13 @@ export async function readFile(
   maxBytes: number,
   signal: AbortSignal,
 ): Promise<Blob> {
-  if (ref.kind !== 'home' && metadata.byteSize > maxBytes)
+  if (ref.kind !== 'home' && ref.kind !== 'tenantWorkspace' && metadata.byteSize > maxBytes)
     throw new PreviewError(
       'preview_too_large',
       `This file is ${(metadata.byteSize / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB; its preview limit is ${(maxBytes / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB. Download the original.`,
     );
   const response = await fileReadResponse(ref,
-    `${sourcePath(ref)}/content${ref.kind === 'drive' ? '?' + driveReadQuery(ref) : ref.kind === 'home' ? '?' + new URLSearchParams({path: ref.path}) : ''}`,
+    `${sourcePath(ref)}/content${ref.kind === 'drive' ? '?' + driveReadQuery(ref) : ref.kind === 'home' || ref.kind === 'tenantWorkspace' ? '?' + new URLSearchParams({path: ref.path}) : ''}`,
     signal,
   );
   if (!response.ok) throw readFailure(response.status);
@@ -193,8 +198,8 @@ export async function readFile(
   }
   signal.throwIfAborted();
   const blob = new Blob(chunks, { type: metadata.contentType });
-  if (ref.kind !== 'home' && blob.size !== metadata.byteSize) throw readFailure(409);
-  if (ref.kind !== 'home' && metadata.sha256) {
+  if (ref.kind !== 'home' && ref.kind !== 'tenantWorkspace' && blob.size !== metadata.byteSize) throw readFailure(409);
+  if (ref.kind !== 'home' && ref.kind !== 'tenantWorkspace' && metadata.sha256) {
     const hash = await crypto.subtle.digest(
       'SHA-256',
       await blob.arrayBuffer(),
@@ -207,7 +212,7 @@ export async function readFile(
   return blob;
 }
 export function fileReadResponse(ref: FileRef, path: string, signal: AbortSignal): Promise<Response> {
-  return ref.kind === 'tenantResource' || ref.kind === 'artifact' && ref.tenantId ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
+  return ref.kind === 'tenantWorkspace' || ref.kind === 'tenantResource' || ref.kind === 'artifact' && ref.tenantId ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
 }
 export const fileReadLost = (error: unknown) => error instanceof PreviewError && ['preview_forbidden', 'preview_unavailable'].includes(error.code);
 export async function downloadFile(
@@ -215,7 +220,7 @@ export async function downloadFile(
   signal: AbortSignal,
 ): Promise<void> {
   const metadata = await resolveFile(ref, signal);
-  const blob = await readFile(ref, metadata, ref.kind === 'home' ? 50 * 1024 * 1024 : metadata.byteSize, signal);
+  const blob = await readFile(ref, metadata, ref.kind === 'home' || ref.kind === 'tenantWorkspace' ? 50 * 1024 * 1024 : metadata.byteSize, signal);
   signal.throwIfAborted();
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

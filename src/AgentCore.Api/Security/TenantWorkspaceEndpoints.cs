@@ -16,6 +16,11 @@ public static class TenantWorkspaceEndpoints
     }
     private static void MapWorkspace(RouteGroupBuilder group, bool working)
     {
+        group.MapGet("access", (HttpContext http, TenantWorkspaceMutationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            AgentWorkspaceEndpoints.Query(http); Headers(http); var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await service.InspectAsync(actor.TenantId, Id(http, working), working, Human(http, actor), ct).ConfigureAwait(false));
+        }));
         group.MapPut("content", (string path, long expectedRevision, HttpContext http, TenantWorkspaceMutationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             AgentWorkspaceEndpoints.Query(http, "path", "expectedRevision"); Headers(http);

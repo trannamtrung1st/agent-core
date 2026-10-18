@@ -9,14 +9,36 @@ public sealed class TenantWorkspaceMutationService(IIamStore security, ITenantAg
     ITenantWorkspaceMutationStore files, ITenantAuthorizationAuditStore audits, IdentityService identity, IamAuthorizer iam, IIdGenerator ids, TimeProvider time)
 {
     private sealed record View(TenantSecurityState State, TenantAgent Agent, TenantSession? Session, TenantWorkspaceReference Workspace);
-    private async ValueTask<View> Require(Guid tenant, Guid id, bool working, HumanSessionReference human, long expected, string permission, CancellationToken ct)
+    private async ValueTask<View> Load(Guid tenant, Guid id, bool working, HumanSessionReference human, CancellationToken ct)
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var session = working ? await sessions.FindTenantSessionAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable") : null;
         var agent = await agents.FindTenantAgentAsync(tenant, session?.Owner.AgentInstanceId ?? id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var owner = new TenantWorkspaceReference(tenant, agent.Instance.InstanceId, session?.Owner.SessionId);
         if (!TenantWorkspaceMutationRules.Matches(owner, agent, session)) throw new AccessDeniedException("resource_unavailable");
-        var view = new View(state, agent, session, owner);
+        return new(state, agent, session, owner);
+    }
+    public async ValueTask<TenantWorkspaceAccess> InspectAsync(Guid tenant, Guid id, bool working, HumanSessionReference human, CancellationToken ct = default)
+    {
+        var view = await Load(tenant, id, working, human, ct).ConfigureAwait(false);
+        var parent = working ? TenantSessionRules.Scope(tenant, id) : AccessScope.ForResource(tenant, "agent", id.ToString("D"));
+        if (!(await iam.CheckOwnedTenantAsync(view.State, human.PrincipalId, PermissionCatalog.Get(working ? "sessions.read" : "agents.read"), parent, ct).ConfigureAwait(false)).Allowed)
+            throw new AccessDeniedException("resource_unavailable");
+        var scope = TenantWorkspaceRules.Scope(view.Workspace);
+        var read = (await iam.CheckOwnedTenantAsync(view.State, human.PrincipalId, PermissionCatalog.Get("workspaces.read"), scope, ct).ConfigureAwait(false)).Allowed;
+        var writable = TenantWorkspaceMutationRules.Writable(view.Agent, view.Session);
+        var write = writable && await TenantWorkspaceMutationRules.Allowed(view.State, view.Workspace, human.PrincipalId, "workspaces.write", iam, ct).ConfigureAwait(false);
+        var delete = writable && await TenantWorkspaceMutationRules.Allowed(view.State, view.Workspace, human.PrincipalId, "workspaces.delete", iam, ct).ConfigureAwait(false);
+        var current = await Load(tenant, id, working, human, ct).ConfigureAwait(false);
+        if (current.State.Tenant.Revision != view.State.Tenant.Revision || current.Agent.Instance.Revision != view.Agent.Instance.Revision
+            || current.Session?.Snapshot.Revision != view.Session?.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
+        return new(view.Workspace, view.State.Tenant.Revision, working ? null : view.Agent.Instance.Revision, read, write, delete, !writable,
+            working ? null : view.Agent.Instance.Persona.Name, view.Session?.Snapshot.Title);
+    }
+    private async ValueTask<View> Require(Guid tenant, Guid id, bool working, HumanSessionReference human, long expected, string permission, CancellationToken ct)
+    {
+        var view = await Load(tenant, id, working, human, ct).ConfigureAwait(false);
+        var state = view.State; var agent = view.Agent; var session = view.Session; var owner = view.Workspace;
         if (!await TenantWorkspaceMutationRules.Allowed(state, owner, human.PrincipalId, permission, iam, ct).ConfigureAwait(false))
         {
             await Record(view, human, permission, false, ct).ConfigureAwait(false); throw new AccessDeniedException("resource_unavailable");

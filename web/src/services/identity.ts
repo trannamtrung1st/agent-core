@@ -27,6 +27,8 @@ const reasons: Record<string, string> = {
   account_exists: 'An account already uses this email. Sign in to accept the invitation.',
   invalid_request: 'Some values could not be saved. Check the fields and try again.',
   resource_unavailable: 'This item is unavailable or you no longer have access. Return to the list or contact an organization owner.',
+  workspace_read_only: 'This workspace is read-only. Reload its current lifecycle and access before making changes.',
+  workspace_effect_unknown: 'The file may have changed. Reload current files before deciding whether to try again. No operation was repeated.',
   definition_unavailable: 'This definition version is unavailable. Reload the available versions before choosing again.',
   definition_in_use: 'This definition is used by an Instance or retained conversation history. Keep it and deprecate an unused publication instead.',
   evaluation_required: 'Run each required evaluation before publishing.',
@@ -82,6 +84,14 @@ async function requireIdentityResponse(response: Response, path: string) {
 export async function identityBlob(path: string, signal?: AbortSignal): Promise<Blob> {
   const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal });
   await requireIdentityResponse(response, path); return response.blob();
+}
+/** Sends supplied file bytes once. An acknowledgement carries no read authority. */
+export async function identityFileMutation(path: string, method: 'PUT' | 'DELETE', body: Blob | undefined, signal: AbortSignal): Promise<void> {
+  const token = await csrfToken(); signal.throwIfAborted();
+  const response = await fetch(path, { method, body, signal, credentials: 'same-origin', cache: 'no-store',
+    headers: { 'X-AgentCore-CSRF': token, ...(body ? { 'Content-Type': 'application/octet-stream' } : {}) } });
+  await requireIdentityResponse(response, path);
+  if (response.status !== 204) throw new IdentityError(409, 'workspace_effect_unknown');
 }
 /** Raw authenticated GET for bounded file readers which own safe source-specific error parsing. */
 export async function identityReadResponse(path: string, signal: AbortSignal): Promise<Response> {

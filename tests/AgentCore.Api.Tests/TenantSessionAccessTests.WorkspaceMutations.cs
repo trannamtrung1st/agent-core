@@ -36,13 +36,24 @@ public sealed partial class TenantSessionAccessTests
             using var writer = factory.CreateClient(); await Login(writer, account.LoginKey, "strong-workspace-password");
             async Task<string> Target(string path, long? revision = null) => url + "/content?path=" + Uri.EscapeDataString(path) + "&expectedRevision=" + (revision ?? await Revision(writer, tenant));
             var bytes = Encoding.UTF8.GetBytes("Exact supplied UTF-8 thử nghiệm");
+            var hints = await Json(await writer.GetAsync(url + "/access"));
+            Assert.False(hints.GetProperty("canRead").GetBoolean()); Assert.False(hints.GetProperty("canWrite").GetBoolean());
+            Assert.False(hints.GetProperty("canDelete").GetBoolean()); Assert.False(hints.GetProperty("readOnly").GetBoolean());
+            Assert.Equal(working ? System.Text.Json.JsonValueKind.Null : System.Text.Json.JsonValueKind.String, hints.GetProperty("instanceName").ValueKind);
+            Assert.Equal(working ? System.Text.Json.JsonValueKind.Null : System.Text.Json.JsonValueKind.Number, hints.GetProperty("instanceRevision").ValueKind);
             Assert.Equal(HttpStatusCode.Forbidden, (await writer.PutAsync(await Target(logical + "/private-name.txt"), new ByteArrayContent(bytes))).StatusCode);
             Assert.False(Directory.Exists(physical));
             var role = await access.SaveRoleAsync(principal, tenant, null, "Workspace write", ["workspaces.write"], await Revision(owner, tenant));
             var scope = working ? TenantWorkspaceRules.Working(tenant, session) : TenantWorkspaceRules.Home(tenant, instance);
             await access.AssignRoleAsync(principal, tenant, member.PrincipalId, role.RoleId, scope, await Revision(owner, tenant));
+            hints = await Json(await writer.GetAsync(url + "/access"));
+            Assert.True(hints.GetProperty("canWrite").GetBoolean()); Assert.False(hints.GetProperty("canRead").GetBoolean());
+            Assert.False(hints.GetProperty("canDelete").GetBoolean());
             using (var anonymous = factory.CreateClient())
+            {
+                Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(url + "/access")).StatusCode);
                 Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PutAsync(await Target(logical + "/anonymous.txt"), new ByteArrayContent(bytes))).StatusCode);
+            }
             foreach (var (invalid, status) in new[] { (logical, HttpStatusCode.BadRequest),
                 (logical + "/../escape.txt", working ? HttpStatusCode.Forbidden : HttpStatusCode.BadRequest),
                 ((working ? "/home" : "/working") + "/wrong-root.txt", HttpStatusCode.BadRequest) })

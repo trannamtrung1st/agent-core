@@ -37,7 +37,7 @@ export async function readOfficePreview(
   range?: string,
 ): Promise<OfficePreview> {
   const query = new URLSearchParams(
-    file.kind === 'drive' ? driveReadQuery(file) : file.kind === 'home' ? new URLSearchParams({path: file.path}).toString() : '',
+    file.kind === 'drive' ? driveReadQuery(file) : file.kind === 'home' || file.kind === 'tenantWorkspace' ? new URLSearchParams({path: file.path}).toString() : '',
   );
   const selection = new URLSearchParams({
     ...(sheet ? { sheet } : {}),

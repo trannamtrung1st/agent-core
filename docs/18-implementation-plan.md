@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant workspace human UI checkpoint — 2026-10-19
+
+Tenant home Workspace and Session files now expose canonical browse/search, preview/download, raw-byte upload/replacement and confirmed nonrecursive deletion in the existing Ant Design interface. Independent current permissions, retained drafts with explicit recovery, read-only lifecycle and narrow-screen file actions are verified through actual Synthetic journeys. Working access hints expose no live Agent configuration facts. [Focused evidence](reports/tenant-workspace-ui-verification-2026-10-19.md) records 90 store, eight API and 81 frontend cases, a passing build and a fresh SHIP finish review. This supersedes Workspace-UI-pending notes below only for human file management. Model workspace tools and exact consent/grants, source publication adapters, other proposal families and final authority/schema cutover remain open; the full proposal stays active. No full proposal or milestone acceptance is claimed.
+
 ## Tenant workspace human-read checkpoint — 2026-10-19
 
 Canonical human home/working file reads now use actual owned workspace scopes and independent current parent/workspace IAM. Listing/searching does not initialize missing owner directories; downloads and Office projection reuse existing file/processor owners with original-human/source fences. Working grants retire atomically on Session deletion. [Focused evidence](reports/tenant-workspace-reads-verification-2026-10-19.md) records memory/SQLite filesystem and authenticated HTTP/Office checks. This closes human read-boundary conversion only; tenant Workspace UI, mutations, model tools, source publication adapters, other resource/transport/autonomous families and final authority/schema cutover remain open. No full proposal or milestone acceptance is claimed.

@@ -1,4 +1,3 @@
-import { DeleteOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from './adminFailure';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -7,11 +6,8 @@ import {
   App,
   Button,
   Breadcrumb,
-  Empty,
   Flex,
   Spin,
-  Table,
-  Tooltip,
   Typography,
   theme,
 } from 'antd';
@@ -23,14 +19,14 @@ import {
   type AgentWorkspaceItem,
   type AgentWorkspacePage,
 } from '../../services/agentWorkspace';
-import { artifactKind, artifactSize } from '../../services/artifacts';
+import { artifactSize } from '../../services/artifacts';
 import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import {
   AdminCollectionToolbar,
   useAdminCollectionSearch,
 } from './AdminCollectionToolbar';
 
-import { FilePreviewButton } from '../filePreview/FilePreview';
+import { WorkspaceFileTable } from '../files/WorkspaceFileTable';
 
 export function InstanceWorkspaceSection({
   instanceId,
@@ -186,114 +182,15 @@ export function InstanceWorkspaceSection({
             label="workspace items"
           />
           <Typography.Text type="secondary">Search filters loaded paths in this folder. Reload to observe current files.</Typography.Text>
-          <Table<AgentWorkspaceItem>
-            className="admin-collection-table"
-            size="small"
-            rowKey="logicalPath"
-            loading={loading}
-            dataSource={items}
-            pagination={pagination}
-            scroll={{ x: 740 }}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={
-                    search ? 'No matching items' : 'No workspace items yet'
-                  }
-                />
-              ),
-            }}
-            columns={[
-              {
-                title: 'Path',
-                dataIndex: 'logicalPath',
-                ellipsis: true,
-                width: 260,
-                render: (value: string) => <span title={value}>{value}</span>,
-              },
-              {
-                title: 'Type',
-                dataIndex: 'contentType',
-                width: 100,
-                render: (value: string, item) => (
-                  <span title={value}>
-                    {item.directory ? 'Folder' : item.kind === 'symlink' ? 'Symbolic link' : item.kind === 'special' ? 'Special file' : artifactKind(value)}
-                  </span>
-                ),
-              },
-              {
-                title: 'Size',
-                dataIndex: 'byteSize',
-                align: 'right',
-                width: 90,
-                render: artifactSize,
-              },
-              {
-                title: 'Updated',
-                dataIndex: 'updatedAt',
-                width: 165,
-                render: (value: string) => (
-                  <time dateTime={value}>
-                    {new Date(value).toLocaleString()}
-                  </time>
-                ),
-              },
-              {
-                title: 'Actions',
-                width: 152,
-                render: (_, item) => (
-                  <Flex className="admin-table-actions" gap={token.paddingXS}>
-                    {item.directory && <Tooltip title="Open folder"><Button icon={<FolderOpenOutlined aria-hidden />} aria-label={`Open ${item.logicalPath}`} disabled={loading || !!busy} onClick={() => setPrefix(item.logicalPath)} /></Tooltip>}
-                    {!item.directory && item.kind !== 'special' && (
-                      <FilePreviewButton
-                        iconOnly
-                        file={{
-                          kind: 'home',
-                          instanceId,
-                          path: item.logicalPath,
-                          metadata: {
-                            displayName: item.logicalPath.split('/').pop()!,
-                            contentType: item.contentType,
-                            byteSize: item.byteSize,
-                          },
-                        }}
-                      />
-                    )}
-                    <Tooltip title="Download">
-                      <Button
-                        icon={<DownloadOutlined aria-hidden />}
-                        aria-label={`Download ${item.logicalPath}`}
-                        disabled={!!busy || item.directory || item.kind === 'special'}
-                        onClick={() => void save(item)}
-                      />
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <Button
-                        icon={<DeleteOutlined aria-hidden />}
-                        danger
-                        aria-label={`Delete ${item.logicalPath}`}
-                        disabled={archived || !!busy || loading}
-                        onClick={() =>
-                          confirmAction(modal, {
-                            title: item.directory
-                              ? 'Delete empty folder?'
-                              : 'Delete workspace file?',
-                            content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
-                            okText: item.directory
-                              ? 'Delete folder'
-                              : 'Delete file',
-                            danger: true,
-                            onOk: () => remove(item),
-                          })
-                        }
-                      />
-                    </Tooltip>
-                  </Flex>
-                ),
-              },
-            ]}
-          />
+          <WorkspaceFileTable items={items} loading={loading} busy={!!busy} deletionDisabled={archived}
+            emptyText={search ? 'No matching items' : 'No workspace items yet'} pagination={pagination}
+            previewFile={item => ({ kind: 'home', instanceId, path: item.logicalPath, metadata: {
+              displayName: item.logicalPath.split('/').pop()!, contentType: item.contentType, byteSize: item.byteSize,
+            } })} onOpen={setPrefix} onDownload={item => void save(item)} onRemove={item => confirmAction(modal, {
+              title: item.directory ? 'Delete empty folder?' : 'Delete workspace file?',
+              content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
+              okText: item.directory ? 'Delete folder' : 'Delete file', danger: true, onOk: () => remove(item),
+            })} />
           {page.nextPath ? (
             <Button
               disabled={loading || !!busy}
