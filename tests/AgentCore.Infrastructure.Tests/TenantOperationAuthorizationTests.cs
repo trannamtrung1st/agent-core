@@ -62,6 +62,16 @@ public sealed partial class TenantOperationAuthorizationTests
         await Grant(f, setup, setup.Agent.PrincipalId, "Executor browser", ["browser.use"]);
         var sensitive = await operations.CheckAsync(new(setup.Tenant, setup.Run.AgentRunId), "browser.use", "agent", setup.Agent.Instance.InstanceId.ToString("D"));
         Assert.Equal(OperationDecisionKind.RequiresApproval, sensitive.Decision); Assert.Equal(ApprovalKind.Review, sensitive.ApprovalKind);
+        var browserCall = new ModelToolCall("closed-browser-effect", ToolCatalog.BrowserNavigate, """{"url":"http://127.0.0.1:5091/browser-native.html"}""");
+        Assert.Equal(ToolPolicyDecision.Deny, await tools.EvaluateExecutionPolicyAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId, browserCall, default, frame, default));
+        using (var browserDenied = JsonDocument.Parse((await tools.ExecuteAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId, browserCall, 16_000, admission: frame)).Text))
+            Assert.Equal("tenant_effect_unavailable", browserDenied.RootElement.GetProperty("reasonCode").GetString());
+        using var browserArgs = JsonDocument.Parse(browserCall.ArgumentsJson);
+        var browserLegacyGrant = new ToolApprovalGrant(Guid.NewGuid(), browserCall.Name, ToolActionHash.Compute(browserCall.Name, browserArgs.RootElement),
+            setup.Run.ResponseId!.Value, Guid.NewGuid(), Guid.NewGuid());
+        using var legacyBrowserDenied = JsonDocument.Parse((await tools.ExecuteAsync(setup.Run.Admission.Configuration.Definition, setup.Run.SessionId,
+            browserCall, 16_000, approvalGrant: browserLegacyGrant, admission: frame)).Text);
+        Assert.Equal("tenant_effect_unavailable", legacyBrowserDenied.RootElement.GetProperty("reasonCode").GetString());
     }
 
     private sealed record Environment(Guid Tenant, TenantSessionInitiator Owner, TenantAgent Agent, AgentRun Run);

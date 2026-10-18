@@ -4,8 +4,18 @@ namespace AgentCore.Infrastructure.Browser;
 
 public sealed partial class NativePlaywrightBrowser : IBrowserStateReader
 {
-    public ValueTask<ResourceStateObservation> ObserveAsync(Guid trustedInstanceId, CancellationToken ct = default) => ObserveCoreAsync(trustedInstanceId, null, ct);
-    public ValueTask<ResourceStateObservation> ObserveSessionAsync(Guid trustedInstanceId, Guid trustedSessionId, CancellationToken ct = default) => ObserveCoreAsync(trustedInstanceId, trustedSessionId, ct);
+    public ValueTask<ResourceStateObservation> ObserveAsync(Guid trustedInstanceId, CancellationToken ct = default) => ObserveLegacyAsync(trustedInstanceId, null, ct);
+    public ValueTask<ResourceStateObservation> ObserveSessionAsync(Guid trustedInstanceId, Guid trustedSessionId, CancellationToken ct = default) => ObserveLegacyAsync(trustedInstanceId, trustedSessionId, ct);
+    private ValueTask<ResourceStateObservation> ObserveLegacyAsync(Guid instance, Guid? session, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_bindingGate)
+        {
+            if (_tenantAgents.ContainsKey(instance) || session is { } id && _tenantSessions.ContainsKey(id))
+                throw new AgentCore.Application.Security.AccessDeniedException("browser_owner_mismatch");
+            return ObserveCoreAsync(instance, session, ct);
+        }
+    }
     private async ValueTask<ResourceStateObservation> ObserveCoreAsync(Guid trustedInstanceId, Guid? sessionId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();

@@ -42,6 +42,7 @@ public sealed partial class NativePlaywrightBrowser
     public async ValueTask ResetPersistentProfileAsync(Guid agentInstanceId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        RequireLegacyAgent(agentInstanceId);
         if (IsRuntimeReady && Volatile.Read(ref _stopped) == 0)
         {
             var closed = await ClosePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
@@ -192,12 +193,26 @@ public sealed partial class NativePlaywrightBrowser
         }
     }
 
-    public async ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    public ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_bindingGate)
+        {
+            if (_tenantSessions.ContainsKey(sessionId)) throw new AgentCore.Application.Security.AccessDeniedException("browser_owner_mismatch");
+            _legacySessions.Add(sessionId);
+        }
+        return ReleaseCoreAsync(sessionId, cancellationToken);
+    }
+
+    private async ValueTask ReleaseCoreAsync(Guid sessionId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        _sessionOwners.TryRemove(sessionId, out _);
-        _sessionModes.TryRemove(sessionId, out _);
+        if (!_tenantSessions.ContainsKey(sessionId))
+        {
+            _sessionOwners.TryRemove(sessionId, out _);
+            _sessionModes.TryRemove(sessionId, out _);
+        }
         if (_sessions.TryRemove(sessionId, out var session))
         {
             if (!session.Persistent) await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
@@ -207,9 +222,15 @@ public sealed partial class NativePlaywrightBrowser
 
     public void BindSession(Guid sessionId, Guid? agentInstanceId)
     {
-        if (_sessionOwners.TryGetValue(sessionId, out var existing) && existing != agentInstanceId)
-            throw new ArgumentException("Browser Session owner cannot change.");
-        _sessionOwners.TryAdd(sessionId, agentInstanceId);
+        lock (_bindingGate)
+        {
+            if (_tenantSessions.ContainsKey(sessionId)) throw new AgentCore.Application.Security.AccessDeniedException("browser_owner_mismatch");
+            if (agentInstanceId is { } id) RequireLegacyAgent(id);
+            if (_sessionOwners.TryGetValue(sessionId, out var existing) && existing != agentInstanceId)
+                throw new ArgumentException("Browser Session owner cannot change.");
+            _legacySessions.Add(sessionId);
+            _sessionOwners.TryAdd(sessionId, agentInstanceId);
+        }
     }
 
     public async ValueTask<IAsyncDisposable> EnterUnattendedAsync(
@@ -217,10 +238,12 @@ public sealed partial class NativePlaywrightBrowser
         IReadOnlyList<string>? origins,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (agentInstanceId == Guid.Empty)
         {
             throw new ArgumentException("Agent instance is required.", nameof(agentInstanceId));
         }
+        RequireLegacyAgent(agentInstanceId);
 
         var gate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -232,6 +255,7 @@ public sealed partial class NativePlaywrightBrowser
 
     public void AdoptUnattendedFlow(Guid agentInstanceId)
     {
+        RequireLegacyAgent(agentInstanceId);
         if (agentInstanceId != Guid.Empty && _unattendedLeases.TryGetValue(agentInstanceId, out var lease))
         {
             _unattendedOwner.Value = lease;
@@ -551,7 +575,8 @@ public sealed partial class NativePlaywrightBrowser
     private string ProfileDirectory(Guid agentInstanceId)
     {
         var root = string.IsNullOrWhiteSpace(_options.ProfileRoot) ? "data/browser-profiles" : _options.ProfileRoot;
-        var name = agentInstanceId.ToString("D");
+        var name = _tenantAgents.TryGetValue(agentInstanceId, out var owner)
+            ? Path.Combine("tenants", owner.TenantId.ToString("D"), "agents", agentInstanceId.ToString("D")) : agentInstanceId.ToString("D");
         var rootFull = Path.GetFullPath(root);
         var full = Path.GetFullPath(Path.Combine(rootFull, name));
         if (!full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.Ordinal)
@@ -560,6 +585,15 @@ public sealed partial class NativePlaywrightBrowser
             throw new IOException();
         }
 
+        if (owner is not null)
+        {
+            var part = rootFull;
+            foreach (var segment in new[] { "", "tenants", owner.TenantId.ToString("D"), "agents", agentInstanceId.ToString("D") })
+            {
+                if (segment.Length > 0) part = Path.Combine(part, segment);
+                if ((Directory.Exists(part) || File.Exists(part)) && File.GetAttributes(part).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("Browser profile path is unavailable.");
+            }
+        }
         return full;
     }
 

@@ -1,5 +1,11 @@
 # System Architecture
 
+## Tenant Browser ownership and scoped state
+
+The existing native Browser provider now accepts an immutable server-derived tenant/Instance/executor/Session owner. Actual canonical Session and SystemIdentity ownership remains in the existing stores; provider bindings are technical resource ownership, never IAM or permission snapshots. Tenant persistent profiles have a separate tenant/Instance namespace. A known tenant Session cannot be adopted through an unscoped bind, command, credential sink, observation, profile reset, unattended entry or release. A prior unscoped binding cannot be promoted into tenant ownership. Registration and command reservation share one lock; technical release preserves tenant ownership and selected isolation.
+
+The original-human Browser state facade requires current exact Session read plus agent Browser read through the central IAM authorizer, independently of Chat or administrative agent read. It observes existing handles only, then repeats human/Account/security and Session fences before returning counts. It never binds, launches, navigates, inspects page content or grants Browser use. Canonical model Browser effects, protected Credential filling, captures/rich delivery, review/dispatch and unattended admission remain pending and closed at the existing tenant tool boundary. No second provider, execution engine or authority is introduced.
+
 ## Reviewed tenant Sandbox stored reads
 
 Policy-required Sandbox discovery/status/process reads use the existing durable Review, successor, local effect transaction and tool checkpoint. The canonical Sandbox read owner prepares an exact content-free target and projects the observation after consent. No new queue, lifecycle owner or grant is introduced. Direct read tools remain closed under Review policy and direct the model to the exact authorization operation.

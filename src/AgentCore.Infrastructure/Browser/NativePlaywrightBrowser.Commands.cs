@@ -22,6 +22,8 @@ public sealed partial class NativePlaywrightBrowser
     private static string? FindPageId(SessionBrowser session) => OpenPages(session).FirstOrDefault(x => ReferenceEquals(x.Page, session.Page))?.Id;
     public async ValueTask<BrowserResult> ExecuteAsync(BrowserRequest command, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!TenantRequestAllowed(command)) return new("forbidden");
         if (!BrowserToolCatalog.TryGet(BrowserToolArguments.ToolName(command.Operation), out var metadata) || !Provider.Supports(metadata.Feature)) return new("unsupported_operation");
         if (!BrowserToolArguments.WithinOperationalLimits(command.Command, _policy.Limits)) return new("invalid");
         if (command.Command is BrowserWaitFor wait) command = command with { Command = wait with { TimeoutMs = Math.Min(wait.TimeoutMs, _policy.Limits.WaitTimeoutMs) } };

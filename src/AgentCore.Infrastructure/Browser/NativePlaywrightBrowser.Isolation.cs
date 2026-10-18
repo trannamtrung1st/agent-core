@@ -17,13 +17,21 @@ public sealed partial class NativePlaywrightBrowser : IBrowserIsolationBinding
             root.ActiveView = view;
     }
 
-    public async ValueTask<string?> BindIsolationAsync(Guid sessionId, Guid instanceId, BrowserProfileMode mode, CancellationToken ct = default)
+    public ValueTask<string?> BindIsolationAsync(Guid sessionId, Guid instanceId, BrowserProfileMode mode, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_bindingGate)
+            if (_tenantSessions.ContainsKey(sessionId) || _tenantAgents.ContainsKey(instanceId)) return ValueTask.FromResult<string?>("forbidden");
+        return BindIsolationCoreAsync(sessionId, instanceId, mode, ct);
+    }
+
+    private async ValueTask<string?> BindIsolationCoreAsync(Guid sessionId, Guid instanceId, BrowserProfileMode mode, CancellationToken ct, bool tenant = false)
     {
         ct.ThrowIfCancellationRequested();
         if (sessionId == Guid.Empty || instanceId == Guid.Empty || !Enum.IsDefined(mode)) return "forbidden";
         if (mode == BrowserProfileMode.PersistentAgent && _policy.ProfileMode != BrowserProfileMode.PersistentAgent) return "policy_denied";
         if (_sessionOwners.TryGetValue(sessionId, out var owner) && owner != instanceId) return "forbidden";
-        BindSession(sessionId, instanceId);
+        if (!tenant) BindSession(sessionId, instanceId);
         var sessionUse = _sessionUse.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
         if (!await sessionUse.WaitAsync(0, ct)) return "policy_transition_pending";
         try

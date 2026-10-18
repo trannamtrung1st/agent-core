@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser ownership and state verification
+
+Use disposable actual Chromium profiles against the loopback fixture to prove separation from a saved unscoped profile and another tenant, same-agent shared cookies/storage with Session-owned tabs, retained storage after restart, immutable owner rejection, technical release preserving isolation and linked profile-parent refusal. Opt into these native cases with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`; a skipped native case is not execution evidence. Keep the shared Browser profile/isolation consumers in the focused regression.
+
+With both canonical stores, test independent Session/Browser reads without agent administration or Chat, foreign targets, original-login logout, Account suspension, role revocation, concurrent security/Session changes and caller cancellation during collection. An unscoped reader must never supply a fallback. Exercise cookie-authenticated GET, no-store/zero-versus-unknown semantics, role removal, cross-tenant IDs, anonymous/owner-header rejection and unavailable mutation methods through the Synthetic HTTP host. These checks do not accept model Browser effects, protected Credential delivery, review or unattended admission.
+
 ## Tenant current-policy read recovery
 
 Use a deterministic source-read hook with both InMemory and disposable SQLite to change the tenant revision during policy lookup. An unrelated one-time change must discard the captured source and obtain a coherent fresh policy; a restrictive Instance change must return the new restriction without rewriting admission. Revoke requester access, cancel the Run, cancel the read and continuously change revisions to prove there is no stale-policy fallback or unbounded retry. In the hosted Synthetic preference journey, interleave one real IAM change after the model proposes its typed operation: the worker/Runtime must finish with one applied receipt/audit and the ordinary two model requests. A read retry must never replay the effect or create an approval.

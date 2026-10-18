@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant Browser physical ownership and read behavior
+
+`NativePlaywrightBrowser` reuses its existing context, page, target, proxy, profile and isolation owners. Immutable tenant bindings seal Session and Instance identity under a shared registration lock. Internal requests require an exact tenant owner; unscoped access to those bindings rejects before native work. Binding a Session previously reserved by an unscoped command or agent fails rather than adopting it. Same-agent tenant Sessions may share persistent cookies/storage while tabs and targets stay Session-owned. Other tenant/agent contexts and the unscoped profile namespace remain separate. Unscoped profile reset, credential filling and unattended methods cannot enter a tenant binding.
+
+Tenant technical release closes only its owned view and preserves the saved owner/isolation selection; it cannot turn a later request into a global or default-mode context. Stored profile bytes survive ordinary release and restart. Native initialization refuses linked tenant profile path components. The scoped HTTP state owner performs only existing-handle observation with current original-human IAM and post-I/O fences; no read can initialize or claim a Browser. Canonical Browser tool/effect and approval adapters are still closed pending their typed current-authority integration.
+
 ## Tenant model Sandbox reads
 
 The tenant tool boundary recognizes the three existing read names while preserving the legacy boundary. Model offering requires exact saved capability, valid tenant execution context, tools support and matching owned Session. It does not require `sandbox.exec`, execution configuration, eligible execution profiles or provider readiness. An explicitly authorized status read can inspect retained facts after execution configuration is removed; discovery then returns no current allowed choices. Current active claim, saved/current capability and independent read scopes are repeated at execution. There is no fallback to global Session/Profile storage. Stronger current read-review policy blocks rather than inheriting command consent or manufacturing a grant.

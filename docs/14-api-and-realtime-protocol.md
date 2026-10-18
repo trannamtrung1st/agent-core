@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Session Browser state
+
+Authenticated `GET /api/v2/tenants/{tenantId}/sessions/{sessionId}/browser` returns `{sessionId, observation, sessionRevision, securityRevision}`. The observation uses the existing resource-state shape with `kind=browser`, availability, sharing, observation time, nullable live-context/page counts and safe code. It contains no URLs, tab/frame handles, cookie/storage data, profile path or provider endpoint. A ready but unbound provider reports zero counts and unknown sharing. Unavailable or unsupported scoped readers return unknown/null counts, never inferred zero or a global-reader fallback.
+
+Current original-login membership, exact `sessions.read` and agent `browser.read` are required before and after collection. Chat, agent administrative read, Browser use/manage and profile reset remain independent. Foreign or unavailable targets are masked; changed witnesses conflict without captured detail. Responses are private no-store. This route accepts no owner, command or action DTO and has no POST mutation. It cannot bind, launch, navigate, reset, refresh a page or authorize a later effect.
+
 ## Tenant Session Sandbox control projection
 
 Authenticated `GET /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/controls` returns `{observation, instanceRevision, canReset, canStop, profiles, defaultProfileId}`. `observation` is the existing bounded stored Sandbox view with exact Session/security and generation/lease/execution revisions and `liveAuthorityConfirmed=false`. Each independently readable, currently allowed profile contributes only `{id, revision, name, imageReference, availability, canSelect}`. Unreadable/missing profiles, hidden totals and inaccessible defaults are omitted; no global catalog fallback is permitted. Availability concerns the reusable source; `canSelect` separately reflects human management, current effective setup, host/readiness and the existing exact selection shape. No environment means no reset/Stop/profile-switch action, even when readable future choices exist.

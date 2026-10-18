@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Browser ownership and state ports
+
+`TenantBrowserOwner` carries only trusted actual Tenant, Instance, executor Principal and Session IDs. `ITenantBrowserBinding` registers that immutable owner, selects the existing isolation mode and releases technical resources. `BrowserRequest.TenantOwner` must match the provider's saved binding before any tenant command; this internal port field is never accepted from a model or public request DTO. Binding does not authorize a command. Existing Core effect/approval rules must authorize future dispatch separately.
+
+`ITenantBrowserStateReader.ObserveTenantSessionAsync` returns existing handle counts without binding, provider launch, page inspection or profile-byte access. `TenantBrowserStateService` derives its owner from `ITenantSessionStore`, requires original-human `sessions.read` and exact agent `browser.read`, and fences the original login/Account, tenant revision and Session owner/revision after collection. No administrative agent read or Chat requirement is added. An unsupported scoped reader returns unavailable/unknown with null counts; it never falls back to `IBrowserStateReader`. A ready provider with no bound Session reports zero handles and unknown sharing; retained profile bytes are not login or live-context evidence.
+
 ## Tenant Session Sandbox control preflight
 
 `TenantSandboxRuntimeReadService.ReadControlsAsync` extends the original-human stored observation owner with a coherent control projection. It reads current effective Instance policy, filters allowed profile metadata through independent profile `sandbox.read`, supplies only readable default IDs and computes reset/Stop/selection hints through existing human control permission and target rules. No `agents.read` or `agents.update` requirement is added to Session Sandbox management. A hint is not a grant or command acceptance.

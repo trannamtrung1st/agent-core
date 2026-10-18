@@ -330,6 +330,7 @@ public sealed record BrowserScroll(float DeltaY, float DeltaX = 0, BrowserTarget
 
 public sealed record BrowserRequest(Guid SessionId, BrowserCommand Command)
 {
+    public TenantBrowserOwner? TenantOwner { get; init; }
     public BrowserOperation Operation => Command.Kind;
 }
 

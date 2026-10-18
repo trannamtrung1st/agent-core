@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant Browser owner and state successor — 2026-10-18
+
+Canonical provider bindings now pin actual tenant/Instance/executor/Session identity and tenant-specific profile paths. Known tenant bindings reject unscoped commands, observation, reset, protected fill, unattended use and release; old global profiles are not adopted. `GET /api/v2/tenants/{tenantId}/sessions/{sessionId}/browser` is owned by the original human with independent Session read and agent Browser read, post-I/O login/Account/security/Session fences and no native allocation. [Focused verification](tenant-browser-ownership-verification-2026-10-18.md) owns its current evidence. Browser effect/tool/review adapters, credential/capture delivery, tenant privacy/reset/decommission and autonomous admission remain pending; earlier Browser rows retain those removal/cutover obligations. This is not full Browser isolation or proposal acceptance.
+
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
 ## Approved Sandbox SDK successor — 2026-10-18

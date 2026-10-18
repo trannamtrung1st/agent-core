@@ -160,6 +160,7 @@ TenantAgentEndpoints.Map(app);
 TenantCredentialEndpoints.Map(app);
 TenantSandboxProfileEndpoints.Map(app);
 TenantSandboxRuntimeEndpoints.Map(app);
+TenantBrowserEndpoints.Map(app);
 TenantCredentialOAuthEndpoints.Map(app);
 TenantCredentialBindingEndpoints.Map(app);
 TenantSessionEndpoints.Map(app);

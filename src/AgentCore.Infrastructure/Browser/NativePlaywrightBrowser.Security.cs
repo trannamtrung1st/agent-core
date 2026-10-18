@@ -72,6 +72,8 @@ public sealed partial class NativePlaywrightBrowser
     public async ValueTask<BrowserResult> FillCredentialAsync(Guid sessionId, BrowserTarget target,
         Func<string, CancellationToken, ValueTask<string>> resolve, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+        if (!TenantRequestAllowed(new(sessionId, new BrowserObserve()))) return Result("forbidden");
         await using var held = await EnterInteractiveAsync(sessionId, ct);
         if (!IsAvailable || !_sessions.TryGetValue(sessionId, out var session)) return Result("provider_unavailable");
         await session.Gate.WaitAsync(ct);
