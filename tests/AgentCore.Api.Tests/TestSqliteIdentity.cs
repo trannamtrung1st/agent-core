@@ -21,7 +21,7 @@ internal static class TestSqliteIdentity
             var contexts = provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
             using (var db = contexts.CreateDbContext()) db.Database.Migrate();
             var store = new SqliteIamStore(contexts, provider.GetService<IDefinitionResourceContentStore>(),
-                provider.GetService<IBuiltInAgentDefinitionStore>(), provider.GetService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>());
+                provider.GetService<IBuiltInAgentDefinitionStore>(), provider.GetService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>());
             if (!store.HasBootstrapAsync().AsTask().GetAwaiter().GetResult())
             {
                 var identity = new IdentityService(store, provider.GetRequiredService<IAccountPasswordHasher>(),

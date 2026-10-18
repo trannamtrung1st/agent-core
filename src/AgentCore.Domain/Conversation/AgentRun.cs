@@ -158,7 +158,8 @@ public sealed partial class AgentRun
         }
 
         if (sideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
-            && status is not (AgentRunStatus.Running or AgentRunStatus.Failed or AgentRunStatus.Cancelled))
+            && status is not (AgentRunStatus.Running or AgentRunStatus.Failed or AgentRunStatus.Cancelled)
+            && !(status == AgentRunStatus.WaitingToRetry && ExternalResultAwaitingAdmission(owner, admission, approvalRequestId, checkpoint, sideEffect)))
         {
             throw new ArgumentException("An uncertain side effect cannot return to a runnable state.");
         }
@@ -416,7 +417,7 @@ public sealed partial class AgentRun
             CancellationRequestedAtUtc,
             KnownEffectSummary,
             Progress,
-            Checkpoint?.AwaitingRuntimeAdmission == true ? Checkpoint.WithRuntimeAdmissionPending(false) : Checkpoint,
+            Checkpoint?.AwaitingRuntimeAdmission == true && !ExternalResultAwaitingAdmission(Checkpoint, SideEffect) ? Checkpoint.WithRuntimeAdmissionPending(false) : Checkpoint,
             Result,
             Failure,
             SideEffect,
@@ -693,6 +694,10 @@ public sealed partial class AgentRun
         {
             return AsCancelled(asOfUtc, KnownEffectSummary);
         }
+
+        if (ExternalResultAwaitingAdmission(Checkpoint, SideEffect))
+            return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, asOfUtc, null, false, null, KnownEffectSummary,
+                Progress, Checkpoint, Result, Failure, SideEffect, Approval, asOfUtc);
 
         if (SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
         {
@@ -1260,7 +1265,9 @@ public sealed partial class AgentRun
             throw new ArgumentException("Updated time cannot move backwards.");
         }
 
-        if (Status == AgentRunStatus.Running && status == AgentRunStatus.Running && Claim?.Generation != claim?.Generation && checkpoint is not null)
+        if (ExternalResultAwaitingAdmission(checkpoint, sideEffect))
+            checkpoint = checkpoint!.PauseBudgetClock(updatedAtUtc);
+        else if (Status == AgentRunStatus.Running && status == AgentRunStatus.Running && Claim?.Generation != claim?.Generation && checkpoint is not null)
             checkpoint = checkpoint.PauseBudgetClock(Claim is { } expired && expired.LeaseExpiresAtUtc < updatedAtUtc
                 ? expired.LeaseExpiresAtUtc : updatedAtUtc).StampBudgetClock(updatedAtUtc);
         else if (Status == AgentRunStatus.Running && status != AgentRunStatus.Running && checkpoint is not null)

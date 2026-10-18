@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser host-recreation delivery checks
+
+Use disposable SQLite, actual native Chromium and two fully disposed/recreated application/DI hosts against one independent loopback page fixture. Exercise pending cold consent, saved completed and unknown results before mailbox delivery, revoked delivery scope and abandoned dispatch. Assert exact receipts/checkpoints, current authenticated human decision, hosted successor/model outcome, no duplicate native context/dispatch/audit and no grant. Advance only the injected store/application UTC clock past lease expiry; native worker timers remain real. A controlled execution gate stages the crash boundary without replacing the provider or adding a production endpoint. Loss of the native acknowledgement is separately controlled after actual Chromium completes.
+
+Both-store focused recovery checks must also cover repeated claim expiry and capacity deferral, preservation of the original attempt/remaining budget/counters, resumed time charging, mismatched operation rejection and cancellation. Distinguish sealed unknown delivery (model explanation, tools disabled, terminal uncertain failure) from an unsealed abandoned attempt (terminal failure, no provider/model replay). [Commands, observed outcomes and limits](reports/tenant-browser-restart-verification-2026-10-18.md).
+
 ## Tenant Browser direct read checks
 
 Both-store `TenantBrowserApprovalTests` read fixtures require actual frame/generation, independent Session and Browser reads without Browser use, fresh policy, native-gate and post-I/O revocation, caller/Run cancellation and no mutation/grant/effect receipt. Reject foreign tenant/Session and mutation/identity arguments before provider access. Force either compound read policy to Review before any binding/target observation, then prepare the exact canonical read request. Persist/compact actual read results and prove later role/policy loss withholds their data; include tiny output budgets without partial observations.

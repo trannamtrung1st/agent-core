@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Browser sealed result handoff
+
+No schema or migration is added. The existing Run checkpoint `AwaitingRuntimeAdmission` flag now also represents delivery of an exact Browser result already sealed with its immutable receipt. The flag alone grants nothing: Domain requires the matching tenant approval-resume request/operation/action hash, retained external-effect origin and factual terminal disposition. The receipt owner establishes this state only after saving the exact completed tool checkpoint under its original live claim. Older rows without the marker keep conservative recovery semantics.
+
+Native/preparation elapsed time is charged before sealing; downtime and capacity waits after sealing consume no active execution time. Claim/recovery preserve the marker and same attempt until actual mailbox admission; `ResumeAsync` clears it with the existing checkpoint command and starts the remaining clock. Steps, output, active time and remaining duration cannot reset. Sealed unknown results remain unknown and nonreplayable, even when delivered for explanation. An abandoned InFlight fence without a sealed result is recovered to factual Indeterminate and terminal failure with no provider/model replay. Cancellation remains decisive. [Actual disposable host-recreation evidence](reports/tenant-browser-restart-verification-2026-10-18.md) distinguishes sealed delivery from abandoned-fence recovery; installed data was not reset or migrated.
+
 ## Tenant Browser direct read checkpoint data
 
 Direct Allowed reads use the ordinary existing tool-result checkpoint and add no schema, receipt, grant or dispatch ledger. Core stores bounded native-shaped untrusted data with its typed read hash. The matching assistant call and actual Run scope remain provenance; model-supplied owner selectors are rejected. Snapshot and discovery compaction preserve the marker/hash on bounded receipts/excerpts, so compaction cannot bypass current permission/policy checks on later generation. Dropped output retains no partial protected content. Native read-only intent is nonserialized process state and cannot be recovered as authority.

@@ -14,6 +14,26 @@ public sealed partial class AgentRun
                 new(generation, checked(revision + 1), at)), null, at);
     }
 
+    // The owning receipt transaction seals the exact checkpoint before using this handoff.
+    // This flag supplies no dispatch authority; the current receipt and IAM remain mandatory.
+    public AgentRun AwaitApprovedExternalResultDelivery(long revision, Guid generation, Guid requestId, Guid operationId, string actionHash, DateTimeOffset at)
+    {
+        RequireOperational(revision, generation);
+        if (Owner.TenantId is null || Claim!.LeaseExpiresAtUtc <= at || Checkpoint is null || Admission.ApprovalResume is not { } resume
+            || ApprovalRequestId != requestId || resume.RequestId != requestId || resume.OperationId != operationId || resume.ActionHash != actionHash
+            || SideEffect.ToolCallId != "operation:" + operationId.ToString("D") || SideEffect.ActionHash != actionHash || SideEffect.ExternalEffect?.Generation != generation
+            || SideEffect.Disposition is not (AgentRunSideEffectDisposition.Succeeded or AgentRunSideEffectDisposition.DefinitelyFailed or AgentRunSideEffectDisposition.Indeterminate))
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "An exact sealed external result is required for delivery.");
+        return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary,
+            Progress, Checkpoint.PauseBudgetClock(at).WithRuntimeAdmissionPending(true), Result, Failure, SideEffect, Approval, at);
+    }
+    private bool ExternalResultAwaitingAdmission(AgentRunCheckpoint? checkpoint, AgentRunSideEffect sideEffect) => ExternalResultAwaitingAdmission(Owner, Admission, ApprovalRequestId, checkpoint, sideEffect);
+    private static bool ExternalResultAwaitingAdmission(AgentRunOwner owner, AgentRunAdmission admission, Guid? requestId,
+        AgentRunCheckpoint? checkpoint, AgentRunSideEffect sideEffect) => owner.TenantId is not null
+        && checkpoint?.AwaitingRuntimeAdmission == true && admission.ApprovalResume is { } resume && requestId == resume.RequestId
+        && sideEffect.ExternalEffect is not null && sideEffect.ToolCallId == "operation:" + resume.OperationId.ToString("D") && sideEffect.ActionHash == resume.ActionHash
+        && sideEffect.Disposition is AgentRunSideEffectDisposition.Succeeded or AgentRunSideEffectDisposition.DefinitelyFailed or AgentRunSideEffectDisposition.Indeterminate;
+
     public AgentRun ForkApprovalContinuation(Guid id, AgentRunAdmission admission, Guid requestId, DateTimeOffset at)
     {
         if (Status != AgentRunStatus.WaitingForApproval || CancellationRequested || Owner.TenantId is null || ApprovalRequestId != requestId || AttemptCount == 0
@@ -30,8 +50,11 @@ public sealed partial class AgentRun
     {
         RequireOperational(revision, generation);
         AgentRunTime.RequireUtc(retryAt, "Approval dispatch retry");
-        if (Admission.ApprovalResume is null || Admission.Activation.Kind != ActivationKind.ApprovalContinuation || Owner.TenantId is null || ApprovalRequestId is null || AttemptCount == 0
-            || Checkpoint is null || retryAt <= at || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+        if (Admission.ApprovalResume is not { } resume || Admission.Activation.Kind != ActivationKind.ApprovalContinuation || Owner.TenantId is null || ApprovalRequestId is null || AttemptCount == 0
+            || Checkpoint is null || retryAt <= at || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight
+            || (SideEffect.Disposition == AgentRunSideEffectDisposition.Indeterminate
+                || SideEffect.ExternalEffect is not null && SideEffect.ToolCallId == "operation:" + resume.OperationId.ToString("D"))
+                && !ExternalResultAwaitingAdmission(Checkpoint, SideEffect))
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Only a known unaccepted approval continuation can defer with its checkpoint.");
         var checkpoint = Checkpoint.PauseBudgetClock(Claim!.ClaimedAtUtc).WithRuntimeAdmissionPending(true);
         return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, retryAt, null, false, null, KnownEffectSummary,

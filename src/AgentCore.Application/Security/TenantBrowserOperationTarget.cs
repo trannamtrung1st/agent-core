@@ -54,7 +54,8 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
     public async ValueTask<TenantBrowserCommandWitness> ResolveApprovedAsync(TenantApprovalRequest request, AgentRun run, CancellationToken ct)
     {
         var saved = request.Operation.BrowserCommand ?? throw new ArgumentException("Browser operation required.");
-        var current = await PrepareAsync(run, saved.ToolName, saved.ArgumentsJson, ct, registerCold: browser is ITenantBrowserBinding && TenantApprovalRules.BrowserTarget(saved).ContextId is null).ConfigureAwait(false);
+        // Restore trusted metadata after host loss, then compare the actual target. Never restore old native handles or transition an existing view.
+        var current = await PrepareAsync(run, saved.ToolName, saved.ArgumentsJson, ct, registerCold: browser is ITenantBrowserBinding).ConfigureAwait(false);
         if (current.Command != saved || current.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
             || current.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision
             || request.Snapshot != TenantBrowserOperationRules.Snapshot(current.Agent, current.Command))

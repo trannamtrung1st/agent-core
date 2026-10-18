@@ -129,6 +129,13 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     new AgentRunCommand.Checkpoint(run.Revision, time.GetUtcNow(), run.Claim!.Generation, resumed, null), ids.NewId(), ct, run.Claim.Generation).ConfigureAwait(false);
             }
         }
+        if (run.Checkpoint is { AwaitingRuntimeAdmission: true } delivery)
+        {
+            if (runtimeStore is null || ids is null) throw new SecurityConflictException("approval_continuation_mismatch");
+            run = await runtimeStore.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                new AgentRunCommand.Checkpoint(run.Revision, time.GetUtcNow(), run.Claim!.Generation, delivery.WithRuntimeAdmissionPending(false), null),
+                ids.NewId(), ct, run.Claim.Generation).ConfigureAwait(false);
+        }
         return (run, outcome);
     }
 

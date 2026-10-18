@@ -63,7 +63,8 @@ public static class TenantBrowserContinuationProjection
         {
             var completed = Complete(checkpoint.PauseBudgetClock(at), calls[0], request, outcome, reason,
                 outcome == TenantOperationOutcome.Completed && observation?.RunRevision == before.Revision ? observation.Json : null);
-            return saved.SaveCheckpoint(saved.Revision, saved.Claim.Generation, completed, null, at);
+            var checkpointed = saved.SaveCheckpoint(saved.Revision, saved.Claim.Generation, completed, null, at);
+            return checkpointed.AwaitApprovedExternalResultDelivery(checkpointed.Revision, saved.Claim.Generation, request.RequestId, request.Operation.OperationId, request.Operation.ActionHash, at);
         }
         catch (ArgumentException) { return saved; } // Factual settlement must survive exhausted checkpoint headroom.
     }

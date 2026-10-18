@@ -57,7 +57,8 @@ public sealed partial class TenantBrowserApprovalTests
         if (!uncertain) Assert.Contains("owned observation", text);
         IIamStore reopened = sqlite ? new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: f.Clock) : f.Iam;
         service = BrowserContinuations(f, probe, reopened); await service.PrepareExternalEffectAsync(saved);
-        var resumed = await service.ResumeAsync(saved); Assert.Equal(receipt.Outcome, resumed.Outcome!.Outcome); Assert.Equal(saved.Revision, resumed.Run.Revision);
+        var resumed = await service.ResumeAsync(saved); Assert.Equal(receipt.Outcome, resumed.Outcome!.Outcome); Assert.True(saved.Checkpoint!.AwaitingRuntimeAdmission); Assert.Null(saved.Checkpoint.BudgetRecordedAtUtc);
+        Assert.Equal(saved.Revision + 1, resumed.Run.Revision); Assert.False(resumed.Run.Checkpoint!.AwaitingRuntimeAdmission);
         Assert.Equal(saved.Checkpoint!.PayloadJson, resumed.Run.Checkpoint!.PayloadJson); Assert.Equal(1, probe.Invocations); Assert.Equal(1, probe.NativeEffects);
         Assert.Null(await ((ITenantApprovalStore)reopened).FindOperationGrantAsync(s.Tenant, request.RequestId));
     }
@@ -143,6 +144,57 @@ public sealed partial class TenantBrowserApprovalTests
         await service.PrepareExternalEffectAsync(resumed.Run); var duplicate = await service.ResumeAsync(resumed.Run);
         Assert.Equal(resumed.Run.Checkpoint.PayloadJson, duplicate.Run.Checkpoint!.PayloadJson); Assert.Equal(resumed.Run.Revision, duplicate.Run.Revision);
         Assert.Equal(1, probe.NativeEffects);
+    }
+
+    [Theory]
+    [InlineData(false, false, false)] [InlineData(true, false, false)] [InlineData(false, true, false)] [InlineData(true, true, false)]
+    [InlineData(false, false, true)] [InlineData(true, false, true)] [InlineData(false, true, true)] [InlineData(true, true, true)]
+    public async Task Tenant_Browser_sealed_result_waits_for_admission_without_budget_attempt_reset_or_replay(bool sqlite, bool uncertain, bool cancel)
+    {
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var s = await Prepare(f); var probe = new EffectProbe(Probe(s)) { Uncertain = uncertain };
+        (s, var request) = await BrowserModelApproval(f, s, probe);
+        var unsealed = s.Run.BeginApprovedExternalEffect(s.Run.Revision, s.Run.Claim!.Generation, request.RequestId, request.Operation.OperationId, request.Operation.ActionHash, clock.GetUtcNow());
+        unsealed = unsealed.MarkSideEffect(unsealed.Revision, unsealed.Claim!.Generation, uncertain ? AgentRunSideEffectDisposition.Indeterminate : AgentRunSideEffectDisposition.Succeeded,
+            "operation:" + request.Operation.OperationId.ToString("D"), request.Operation.ActionHash, clock.GetUtcNow());
+        Assert.Throws<AgentRunTransitionException>(() => unsealed.DeferUnacceptedApprovalDispatch(unsealed.Revision, unsealed.Claim!.Generation, clock.GetUtcNow(), clock.GetUtcNow().AddSeconds(5)));
+        probe.AfterEffect = () => { clock.Advance(TimeSpan.FromSeconds(2)); return Task.CompletedTask; };
+        await BrowserContinuations(f, probe).PrepareExternalEffectAsync(s.Run);
+        var saved = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!;
+        Assert.True(saved.Checkpoint!.AwaitingRuntimeAdmission); Assert.Null(saved.Checkpoint.BudgetRecordedAtUtc);
+        Assert.Equal(8000, saved.Checkpoint.RemainingOverallBudgetMs); Assert.Equal(2100, saved.Checkpoint.ActiveExecutionMs);
+        Assert.Throws<AgentRunTransitionException>(() => saved.AwaitApprovedExternalResultDelivery(saved.Revision, saved.Claim!.Generation,
+            request.RequestId, Guid.NewGuid(), request.Operation.ActionHash, clock.GetUtcNow()));
+        IIamStore reopened = sqlite ? new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: clock) : f.Iam;
+        var runtime = (ITenantRuntimeStore)reopened;
+        if (cancel) saved = await runtime.ApplyTenantRuntimeCommandAsync(saved.Owner, saved.AgentRunId,
+            new AgentRunCommand.RequestCancellation(saved.Revision, clock.GetUtcNow(), null), f.Ids.NewId());
+        clock.Advance(TimeSpan.FromMinutes(6));
+        var recovered = await runtime.ApplyTenantRuntimeCommandAsync(saved.Owner, saved.AgentRunId, new AgentRunCommand.Recover(saved.Revision, clock.GetUtcNow()), f.Ids.NewId());
+        Assert.Equal(saved.AttemptCount, recovered.AttemptCount); Assert.Equal(saved.Checkpoint!.PayloadJson, recovered.Checkpoint!.PayloadJson);
+        Assert.Equal(JsonSerializer.Serialize(saved.SideEffect), JsonSerializer.Serialize(recovered.SideEffect));
+        if (cancel) { Assert.Equal(AgentRunStatus.Cancelled, recovered.Status); Assert.Equal(1, probe.NativeEffects); return; }
+        Assert.Equal(AgentRunStatus.WaitingToRetry, recovered.Status);
+        var claimed = await Claim(recovered);
+        // Capacity refusal and another host loss may defer delivery, never authorize another effect or reset the original attempt.
+        clock.Advance(TimeSpan.FromSeconds(30));
+        var deferred = await runtime.ApplyTenantRuntimeCommandAsync(claimed.Owner, claimed.AgentRunId,
+            new AgentRunCommand.DeferApprovalDispatch(claimed.Revision, clock.GetUtcNow(), claimed.Claim!.Generation, clock.GetUtcNow().AddSeconds(5)), f.Ids.NewId());
+        clock.Advance(TimeSpan.FromMinutes(6)); claimed = await Claim(deferred);
+        clock.Advance(TimeSpan.FromMinutes(6));
+        recovered = await runtime.ApplyTenantRuntimeCommandAsync(claimed.Owner, claimed.AgentRunId, new AgentRunCommand.Recover(claimed.Revision, clock.GetUtcNow()), f.Ids.NewId());
+        claimed = await Claim(recovered);
+        Assert.True(claimed.Checkpoint!.AwaitingRuntimeAdmission); Assert.Null(claimed.Checkpoint.BudgetRecordedAtUtc);
+        Assert.Equal(saved.AttemptCount, claimed.AttemptCount); Assert.Equal(saved.Checkpoint.PayloadJson, claimed.Checkpoint.PayloadJson);
+        var service = BrowserContinuations(f, probe, reopened); await service.PrepareExternalEffectAsync(claimed);
+        var resumed = (await service.ResumeAsync(claimed)).Run;
+        Assert.False(resumed.Checkpoint!.AwaitingRuntimeAdmission); Assert.Equal(clock.GetUtcNow(), resumed.Checkpoint.BudgetRecordedAtUtc);
+        Assert.Equal(8000, resumed.Checkpoint.RemainingOverallBudgetMs); Assert.Equal(2100, resumed.Checkpoint.ActiveExecutionMs);
+        clock.Advance(TimeSpan.FromSeconds(1)); var active = resumed.Checkpoint.PauseBudgetClock(clock.GetUtcNow());
+        Assert.Equal(7000, active.RemainingOverallBudgetMs); Assert.Equal(3100, active.ActiveExecutionMs);
+        Assert.Equal(1, probe.NativeEffects); Assert.Equal(1, probe.Invocations);
+        async Task<AgentRun> Claim(AgentRun run) => await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+            new AgentRunCommand.Claim(run.Revision, clock.GetUtcNow(), f.Ids.NewId(), clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
     }
 
     [Fact]
