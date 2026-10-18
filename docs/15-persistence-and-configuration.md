@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Browser Review persistence
+
+Migration `20261018053723_TenantBrowserCommandReview` extends the existing approval CHECK without adding tables, columns or indices. Browser rows must be Review, agent-targeted, bound to the indexed actual Session, disjoint from other typed operation payloads and Credential/Sandbox shadows, with a permission-consistent read-only boolean and bounded valid argument/target JSON. The Browser payload bound is 262,144 characters; Application intent is limited to 16 KiB UTF-8 and the canonical target to 4,096 characters. Canonical rebuild verifies the derived permission/command hash and saved display evidence; existing ownership FKs still apply.
+
+Approval stores repeat current actual Session, agent Definition source/capability and raw permission/reviewer checks in the existing security/Run/audit transaction. Root lookup matches semantic Session/tool/typed-command identity; changing physical context or Instance revisions does not permit a same-root approval loop. Exact action hashes still include those target/revision witnesses. No grant, effect receipt or browser profile bytes are stored by consent. Prior-family request bytes survive a disposable schema downgrade/upgrade and new requests survive store reopen; malformed Browser rows are rejected. [Evidence](reports/tenant-browser-review-verification-2026-10-18.md) is limited to disposable data. No installed database was migrated or reset; final schema consolidation remains open.
+
 ## Tenant Browser profile namespace
 
 Canonical native Browser profiles use `<Browser:ProfileRoot>/tenants/<tenant-id>/agents/<actual-instance-id>`. Trusted existing Session roots and Agent SystemIdentity records supply immutable tenant/executor ownership; Instance IDs remain globally unique. In-memory provider bindings are reconstructed from those owners and cannot replace the canonical store or carry permissions. Known tenant Session/Instance bindings reject unscoped entry; old global profile bytes at `<ProfileRoot>/<instance-id>` are never copied, adopted or read as a tenant profile. Ordinary technical release retains tenant binding/isolation and profile bytes. No Browser schema migration, data conversion or user-data deletion is performed by this extension.

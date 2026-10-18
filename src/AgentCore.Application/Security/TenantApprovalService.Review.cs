@@ -66,6 +66,12 @@ public sealed partial class TenantApprovalService
                         PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
                     if (!read.Allowed) unavailable = "executor_read_required";
                 }
+                else if (op.BrowserCommand is { } browser)
+                {
+                    independent = await TenantBrowserOperationRules.IndependentAsync(r, state, authorizer, ct).ConfigureAwait(false);
+                    await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, ct).ConfigureAwait(false);
+                    await TenantBrowserOperationRules.RequireReviewerAsync(state, op.InstanceId, browser, r.OriginalInitiatorPrincipalId, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
                 else if (op.SandboxCommand is not null)
                     await (sandboxTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, ct).ConfigureAwait(false);
                 else if (op.SandboxControl is not null)
@@ -109,6 +115,12 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.BrowserCommand is { } browser)
+            return [new("browserTool", null, browser.ToolName, false), new("browserOrigin", null, snapshot?.Browser?.Origin ?? "No live page", false, snapshot?.Browser is not null),
+                new("browserProfileMode", null, snapshot?.Browser?.ProfileMode switch { "EphemeralSession" => "Separate for this Session", "PersistentAgent" => "Shared across this agent's Sessions", _ => null }, false, snapshot?.Browser is not null),
+                new("browserArguments", null, TenantApprovalRules.BrowserDescription(browser), false),
+                new("browserEffect", null, browser.ReadOnly ? "Inspect the exact Browser target once." : "Attempt this exact Browser command once. External changes may be irreversible.", false),
+                new("browserLimit", null, "Execution is not available yet. Approving records your consent but will not run this command. If the target or policy changes, prepare a new request.", false)];
         if (op.SandboxRead is { } read)
         {
             var labels = snapshot?.SandboxRead is null ? null : TenantApprovalRules.ReadSnapshotLabels(op, snapshot.SandboxRead);

@@ -26,12 +26,20 @@ export interface TenantApproval {
 interface ApprovalPage { items: TenantApproval[]; total: number; page: number; pageSize: number }
 const statuses: Record<Status, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', expired: 'Expired' };
 const fields: Record<string, string> = { name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check',
+  browserTool: 'Browser command', browserOrigin: 'Current origin', browserProfileMode: 'Browser state', browserArguments: 'Exact parameters', browserEffect: 'Requested action', browserLimit: 'Execution boundary',
   sandboxInspection: 'Stored read', readProfiles: 'Exact readable profiles', readDisclosure: 'Data disclosed', readLimit: 'Read boundary',
   sandboxControl: 'Control request', generation: 'Environment generation', execution: 'Exact execution', storedEnvironmentState: 'Stored environment state', storedExecutionState: 'Stored process state', cleanupConsequence: 'Cleanup behavior', fileRetention: 'File retention',
   sandboxProfile: 'Sandbox profile', image: 'Image', command: 'Command', workingDirectory: 'Working directory', timeoutSeconds: 'Timeout (seconds)', background: 'Run in background',
   homeAccess: 'Home access', cpu: 'CPU cores', memoryMiB: 'Memory (MiB)', storageBytes: 'Storage (bytes)', initializationRequired: 'Initialization required',
   profileInitialization: 'Profile initialization script', instanceInitialization: 'Instance initialization script' };
 const reasons: Record<string, string> = {
+  browser_target_changed: 'The Browser target changed. Cancel this request and prepare a new action for the current page.',
+  browser_policy_changed: 'Current Browser capability or isolation policy no longer permits this action.',
+  browser_target_busy: 'The Browser is busy. Refresh details when its current action finishes.',
+  policy_transition_pending: 'The Browser isolation selection changed. Finish that transition before preparing a new action.',
+  permission_denied: 'Current permissions no longer support this action.',
+  provider_unavailable: 'The required provider is unavailable. Restore it, then prepare a new action.',
+  tenant_effect_unavailable: 'Execution is not available for this action yet. Approval alone does not run it.',
   approval_expired: 'This request has expired. Ask the agent to prepare a new action.',
   executor_unavailable: 'The agent is unavailable.', run_unavailable: 'The source work can no longer accept this decision.',
   operation_witness_changed: 'The saved target or configuration changed. Ask the agent to prepare a new action.',
@@ -145,10 +153,11 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     });
   };
   const status = acknowledged ?? data?.status;
+  const browserCommand = data?.preparedAction.operation === 'browser_command';
   const sandboxCommand = data?.preparedAction.operation === 'run_sandbox_command';
   const sandboxControl = isSandboxControl(data);
   const sandboxRead = isSandboxRead(data?.preparedAction.operation);
-  const savedTitle = sandboxRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand ? 'Exact saved command' : 'Exact saved changes';
+  const savedTitle = sandboxRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
   return <Drawer open title="Approval details" aria-label="Approval details" className="access-editor-drawer" size="large" styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden
     onClose={() => { if (!busy) onClose(); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
     footer={<Flex wrap gap="var(--ac-space-compact)" justify="end">
@@ -170,7 +179,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: approvalDate(data.decision.decidedAt) }] : [])
         ]} />
         <section aria-label={savedTitle}><Typography.Title level={5}>{savedTitle}</Typography.Title>
-          {sandboxCommand || sandboxControl || sandboxRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
+          {browserCommand || sandboxCommand || sandboxControl || sandboxRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
             { key: 'before', label: 'Before', children: change.beforeAvailable ? value(change.before) : 'Not recorded for this request' },
             { key: 'after', label: 'After', children: <Flex vertical gap="var(--ac-space-tight)">{change.afterAvailable ? value(change.after) : 'Definition default was not recorded'}{change.restoresDefault && <Typography.Text type="secondary">Restore the Definition default</Typography.Text>}</Flex> }
           ]} />)}</Flex>}

@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Stored tenant Browser Review projection
+
+Existing scoped approval list/detail and decision/cancel endpoints recognize the internally prepared Browser family. Detail returns `preparedAction.operation=browser_command`, summary `Review exact Browser command`, the derived `browser.read`/`browser.use` permission and the usual exact action/revision witnesses. The conversation approval feed uses the same `browser_command` identity. No Browser preparation/dispatch HTTP endpoint is exposed.
+
+The shared review changes name Browser command, saved current origin, state-sharing mode, readable effective parameters (including defaults), consequence and execution availability. Parameters are escaped plain text, not raw canonical JSON. Native context IDs, target JSON, provider epochs, physical witnesses and profile paths are not projected. Current target/policy/permission loss disables decisions with a safe reason; POST rechecks it independently. Inventory applies compound Browser/Session scopes before totals. Approval remains separate from an operation result, which is unrecorded while the dispatch adapter is unavailable. [Verification](reports/tenant-browser-review-verification-2026-10-18.md).
+
 ## Tenant Session Browser state
 
 Authenticated `GET /api/v2/tenants/{tenantId}/sessions/{sessionId}/browser` returns `{sessionId, observation, sessionRevision, securityRevision}`. The observation uses the existing resource-state shape with `kind=browser`, availability, sharing, observation time, nullable live-context/page counts and safe code. It contains no URLs, tab/frame handles, cookie/storage data, profile path or provider endpoint. A ready but unbound provider reports zero counts and unknown sharing. Unavailable or unsupported scoped readers return unknown/null counts, never inferred zero or a global-reader fallback.

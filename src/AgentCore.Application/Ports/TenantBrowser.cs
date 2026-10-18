@@ -29,7 +29,7 @@ public interface ITenantBrowserStateReader
 public sealed record TenantBrowserCommandWitness(TenantBrowserOwner Owner, Guid ProviderEpoch, long SelectionRevision,
     long CommandRevision, BrowserProfileMode ProfileMode, Guid? ContextId, string? TabRef, int? PageGeneration,
     Guid? DialogId, string? LocationHash, string CommandHash);
-public sealed record TenantBrowserCommandPreparation(string? ErrorCode, TenantBrowserCommandWitness? Witness = null);
+public sealed record TenantBrowserCommandPreparation(string? ErrorCode, TenantBrowserCommandWitness? Witness = null, string? Origin = null);
 public interface ITenantBrowserCommandTarget
 {
     // Inspect existing handles only; never create a context, navigate or read page content.

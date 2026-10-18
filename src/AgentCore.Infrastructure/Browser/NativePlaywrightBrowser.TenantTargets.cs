@@ -45,7 +45,8 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserCommandTarge
             await using var held = await EnterInteractiveAsync(owner.SessionId, deadline.Token).ConfigureAwait(false);
             if (ContextTransitionBlocked(owner.SessionId)) return new("policy_transition_pending");
             if (_sessions.TryGetValue(owner.SessionId, out var view) && TenantTargetBusy(view, command)) return new("browser_target_busy");
-            return new(null, CaptureTenantWitness(owner, command));
+            var witness = CaptureTenantWitness(owner, command, out var origin);
+            return new(null, witness, origin);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return new("browser_target_busy"); }
     }
@@ -54,13 +55,16 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserCommandTarge
         (SessionMode(owner.SessionId), SessionMode(owner.SessionId) == BrowserProfileMode.PersistentAgent ? owner.AgentInstanceId : owner.SessionId);
     private static bool TenantTargetBusy(SessionBrowser view, BrowserCommand command) => view.OperationActive || view.TimedOut
         || view.PendingAction is { IsCompleted: false } && command is not BrowserDialog;
-    private TenantBrowserCommandWitness CaptureTenantWitness(TenantBrowserOwner owner, BrowserCommand command)
+    private TenantBrowserCommandWitness CaptureTenantWitness(TenantBrowserOwner owner, BrowserCommand command) => CaptureTenantWitness(owner, command, out _);
+    private TenantBrowserCommandWitness CaptureTenantWitness(TenantBrowserOwner owner, BrowserCommand command, out string? origin)
     {
         var mode = SessionMode(owner.SessionId);
         _sessions.TryGetValue(owner.SessionId, out var view);
         var context = view?.Context;
         if (context is null && mode == BrowserProfileMode.PersistentAgent && _persistent.TryGetValue(owner.AgentInstanceId, out var root)) context = root.Context;
         var location = view?.Page.Url;
+        origin = location == "about:blank" ? location : Uri.TryCreate(location, UriKind.Absolute, out var uri)
+            && uri.Scheme is "http" or "https" && uri.UserInfo.Length == 0 ? uri.GetLeftPart(UriPartial.Authority) : null;
         return new(owner, _tenantProviderEpoch, _tenantSelections.GetValueOrDefault(owner.SessionId),
             _tenantCommands.GetValueOrDefault(TenantCommandKey(owner)), mode,
             context is null ? null : _tenantContexts.GetValue(context, static _ => new()).Id,

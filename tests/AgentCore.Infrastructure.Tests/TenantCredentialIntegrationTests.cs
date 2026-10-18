@@ -133,7 +133,7 @@ public sealed partial class TenantCredentialIntegrationTests
             return new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
         }
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
-        public static async Task<Fixture> Create(bool sqlite, TimeProvider? clock = null)
+        public static async Task<Fixture> Create(bool sqlite, TimeProvider? clock = null, bool builtInAuthority = false)
         {
             var f = new Fixture(clock); Directory.CreateDirectory(f.Root);
             try
@@ -143,7 +143,7 @@ public sealed partial class TenantCredentialIntegrationTests
                     f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").Options);
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
                     f.Sandboxes = new SqliteSandboxStore(f.Contexts);
-                    f.Iam = new SqliteIamStore(f.Contexts, clock: f.Clock); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
+                    f.Iam = new SqliteIamStore(f.Contexts, builtIns: builtInAuthority ? f.BuiltIns : null, clock: f.Clock); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
                     f.Memory = new SqliteMemoryStore(f.Contexts, f.Clock);
                 }
                 else
@@ -152,7 +152,7 @@ public sealed partial class TenantCredentialIntegrationTests
                     f.Legacy = credentials; f.Instances = instances;
                     var memory = new InMemoryMemoryStore(instances); f.Memory = memory;
                     f.Sandboxes = new InMemorySandboxStore();
-                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), memory, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes);
+                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), memory, builtIns: builtInAuthority ? f.BuiltIns : null, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes);
                 }
                 return f;
             }

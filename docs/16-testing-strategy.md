@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser Review prerequisite checks
+
+Use `TenantBrowserApprovalTests` for both-store durable preparation/reopen/decision, raw permission and target drift, filtered inventory totals, compound independent reviewer scopes, busy preflight, canonical intent and disposable schema upgrade/CHECK coverage. `TenantSessionAccessTests.Tenant_Browser_Review_HTTP_*` opts into disposable loopback Chromium with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`; actual trusted fixture warmup, current target comparison and HTTP decision/feed projection remain distinct from a model effect. Assert unchanged command revisions and absent grants/effect receipts after consent. Retain the existing ownership/target, canonical approval and closed tool-boundary regressions.
+
+Browser UI presentation may use an explicitly identified controlled approval projection because model offering/dispatch remains closed. Exercise readable parameters, current stale-target recovery, one exact cancellation, acknowledgement and narrow-footer containment through Playwright MCP, alongside the shared inspector tests/build. Do not count that projection as server authorization or end-to-end Browser model delivery. [Current focused results](reports/tenant-browser-review-verification-2026-10-18.md) do not claim milestone acceptance or CI.
+
 ## Tenant Browser exact target verification
 
 Using actual disposable Chromium, prepare a cold navigation and assert no context/profile allocation. Reject missing targets and changed typed arguments before native work. Race two identical saved targets and require one admitted native call; replay must reject. Change the page, shared sibling activity, isolation mode (including changing back), view ownership/release and provider lifetime to invalidate old targets. Replace a native dialog without another Core command and reject the former dialog target. Exercise a real pending Confirm action and retain inspection/dismissal controls. Verify bounded preparation/caller cancellation preserves the native call holding the gate.

@@ -28,6 +28,26 @@ function view(item = request) {
 beforeEach(() => { fetchMock.mockReset(); resetIdentityCsrf(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+it('reviews exact Browser parameters with clear consent and stale-target recovery in the shared command inspector', async () => {
+  const browser = { ...request, kind: 'review' as const, summary: 'Review exact Browser command',
+    preparedAction: { ...request.preparedAction, operation: 'browser_command' },
+    review: { ...request.review, canDecide: false, decisionUnavailableReason: 'browser_target_changed', changes: [
+      { field: 'browserTool', before: null, after: 'browser.navigate', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'browserArguments', before: null, after: 'URL: https://example.test/<script>\nOperation: goto', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'browserLimit', before: null, after: 'Approval records exact consent. Dispatch is unavailable.', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } };
+  view(browser); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Exact saved command')).toBeVisible();
+  expect(within(dialog).getByText('Exact parameters')).toBeVisible();
+  expect(within(dialog).getByText('URL: https://example.test/<script> Operation: goto')).toBeVisible();
+  expect(within(dialog).getByText('Execution boundary')).toBeVisible();
+  expect(within(dialog).getByText(/The Browser target changed/)).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+  expect(within(dialog).queryByText('Before')).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+
 it('reviews escaped exact before/after values without exposing technical references by default', async () => {
   view(); const dialog = await screen.findByRole('dialog');
   expect(await within(dialog).findByText('Safe <script> name')).toBeVisible();

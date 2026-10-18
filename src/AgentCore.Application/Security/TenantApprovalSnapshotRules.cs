@@ -24,6 +24,16 @@ public static class TenantApprovalSnapshotRules
         }
         if (string.IsNullOrWhiteSpace(s.AgentName) || s.AgentName.Length > 256)
             throw new ArgumentException("Invalid approval display identity.");
+        if (request.Operation.BrowserCommand is { } browser)
+        {
+            var target = TenantApprovalRules.BrowserTarget(browser);
+            if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null
+                || s.Sandbox is not null || s.SandboxControl is not null || s.SandboxRead is not null
+                || s.Browser != new TenantApprovalBrowserSnapshot(browser.ToolName, target.Origin, target.ProfileMode.ToString()))
+                throw new ArgumentException("Invalid Browser review snapshot.");
+            return;
+        }
+        if (s.Browser is not null) throw new ArgumentException("Unexpected Browser review evidence.");
         if (request.Operation.Kind == TenantOperationKind.SandboxRead)
         {
             if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null

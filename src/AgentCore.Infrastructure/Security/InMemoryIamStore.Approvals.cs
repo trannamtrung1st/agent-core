@@ -18,7 +18,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash)
         .OrderBy(r => r.Status is TenantApprovalStatus.Rejected or TenantApprovalStatus.Expired or TenantApprovalStatus.Cancelled ? 0 : r.Status == TenantApprovalStatus.Pending ? 1 : 2)
         .ThenBy(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId).FirstOrDefault();
-    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null)
+    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null)
     {
         ct.ThrowIfCancellationRequested(); page.Validate();
         lock (_gate)
@@ -32,6 +32,9 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && (r.Permission != "sandbox.read" || (sandboxVisibility?.ReadInstances is null || sandboxVisibility.ReadInstances.Contains(r.Operation.InstanceId))
                     && (sandboxVisibility?.Sessions is null || sandboxVisibility.Sessions.Contains(r.SessionId))
                     && (sandboxVisibility?.Profiles is null || TenantApprovalRules.ReadProfiles(r.Operation.SandboxRead!).All(p => sandboxVisibility.Profiles.Contains(p.Id))))
+                && (r.Operation.BrowserCommand is null || (browserVisibility?.ReadInstances is null || browserVisibility.ReadInstances.Contains(r.Operation.InstanceId))
+                    && (r.Operation.BrowserCommand.ReadOnly || browserVisibility?.UseInstances is null || browserVisibility.UseInstances.Contains(r.Operation.InstanceId))
+                    && (browserVisibility?.Sessions is null || browserVisibility.Sessions.Contains(r.SessionId)))
                 && (r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(r.Operation.CredentialCheck!.CredentialId))
                 && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();
             return ValueTask.FromResult(new TenantApprovalPage(rows.OrderByDescending(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId)
@@ -58,6 +61,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId, ct).Result;
             if (run is null || agent is null) return ValueTask.FromResult<TenantApprovalRequest?>(null);
             TenantApprovalRules.Validate(request, run, agent); TenantSessionRules.RequireExecutor(before, agent);
+            if (request.Operation.BrowserCommand is not null) RequireBrowserOperation(request, run, agent);
             if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
             if (request.Operation.SandboxCommand is not null) RequireSandboxOperation(request, run, agent);
             if (request.Operation.SandboxControl is not null) RequireSandboxControlOperation(request, run, agent);
@@ -113,6 +117,12 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             {
                 var owner = RequireSandboxReadOperation(request, run, agent);
                 TenantSandboxReadOperationRules.RequireReviewerAsync(before, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            if (request.Operation.BrowserCommand is { } browser && request.Status != TenantApprovalStatus.Cancelled)
+            {
+                RequireBrowserOperation(request, run, agent);
+                TenantBrowserOperationRules.RequireReviewerAsync(before, agent.Instance.InstanceId, browser, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
             if (request.Status != TenantApprovalStatus.Cancelled) TenantSessionRules.RequireExecutor(before, agent);

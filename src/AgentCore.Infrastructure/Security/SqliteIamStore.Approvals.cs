@@ -39,11 +39,17 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             AND json_extract(PayloadJson, '$.Operation.SandboxControl.ExecutionId') IS {control.ExecutionId?.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.SandboxControl.TargetHash') = {control.TargetHash}
             """)
+        : operation.BrowserCommand is { } browser ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE Permission IN ('browser.read','browser.use') AND ResourceId = {operation.ResourceId}
+            AND json_extract(PayloadJson, '$.Operation.BrowserCommand.SessionId') = {browser.SessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.BrowserCommand.ToolName') = {browser.ToolName}
+            AND json_extract(PayloadJson, '$.Operation.BrowserCommand.CommandHash') = {browser.CommandHash}
+            """)
         : db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests
             WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -72,6 +78,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         if (sandboxVisibility?.Profiles is { } profiles) query = query.Where(r => (r.Permission != "sandbox.execute" && r.Permission != "sandbox.manage") || profiles.Contains(r.SandboxProfileId!));
         if (sandboxVisibility?.Sessions is not null)
         { var ids = sandboxVisibility.Sessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "sandbox.execute" && r.Permission != "sandbox.manage" && r.Permission != "sandbox.read") || ids.Contains(r.SessionId)); }
+        if (browserVisibility?.ReadInstances is { } browserRead)
+        { var ids = browserRead.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "browser.read" && r.Permission != "browser.use") || ids.Contains(r.InstanceId)); }
+        if (browserVisibility?.UseInstances is { } browserUse)
+        { var ids = browserUse.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "browser.use" || ids.Contains(r.InstanceId)); }
+        if (browserVisibility?.Sessions is { } browserSessions)
+        { var ids = browserSessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "browser.read" && r.Permission != "browser.use") || ids.Contains(r.SessionId)); }
         if (allowedCredentials is not null)
         { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
         if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);
@@ -104,6 +116,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (row is null || target is null || row.Revision != expectedRunRevision) return false;
             var run = AgentRunStoreMapping.ToDomain(row); var agent = Owned(target);
             TenantApprovalRules.Validate(request, run, agent);
+            if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxCommand is not null) await RequireSandboxOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxControl is not null) await RequireSandboxControlOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxRead is not null) await RequireSandboxReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -163,6 +176,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 var owner = await RequireSandboxReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantSandboxReadOperationRules.RequireReviewerAsync(state, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.BrowserCommand is { } browser)
+            {
+                await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantBrowserOperationRules.RequireReviewerAsync(state, agent.Instance.InstanceId, browser, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             TenantSessionRules.RequireExecutor(state, agent); await ValidateTenantActorAsync(db, state, request.ExecutorPrincipalId, ct).ConfigureAwait(false);

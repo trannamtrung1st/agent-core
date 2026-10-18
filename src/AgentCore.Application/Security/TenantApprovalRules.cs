@@ -44,14 +44,15 @@ public static partial class TenantApprovalRules
         return new(operationId, instance, null, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), CredentialCheck: check);
     }
 
-    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => (op.Persona, op.Preferences, op.CredentialCheck, op.SandboxCommand, op.SandboxControl, op.SandboxRead) switch
+    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
-        ({ } persona, null, null, null, null, null) => Prepare(op.OperationId, op.InstanceId, persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, { } preferences, null, null, null, null) => PreparePreferences(op.OperationId, op.InstanceId, preferences, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, null, { } check, null, null, null) => PrepareCredentialCheck(op.OperationId, op.InstanceId, check, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, null, null, { } sandbox, null, null) => PrepareSandbox(op.OperationId, op.InstanceId, sandbox, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, null, null, null, { } control, null) => PrepareSandboxControl(op.OperationId, op.InstanceId, control, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, null, null, null, null, { } read) => PrepareSandboxRead(op.OperationId, op.InstanceId, read, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.Persona => Prepare(op.OperationId, op.InstanceId, op.Persona!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.ConversationPreferences => PreparePreferences(op.OperationId, op.InstanceId, op.Preferences!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.CredentialConnectionCheck => PrepareCredentialCheck(op.OperationId, op.InstanceId, op.CredentialCheck!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.SandboxCommand => PrepareSandbox(op.OperationId, op.InstanceId, op.SandboxCommand!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.SandboxControl => PrepareSandboxControl(op.OperationId, op.InstanceId, op.SandboxControl!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.SandboxRead => PrepareSandboxRead(op.OperationId, op.InstanceId, op.SandboxRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.BrowserCommand => PrepareBrowser(op.OperationId, op.InstanceId, op.BrowserCommand!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")
     };
 
@@ -64,7 +65,7 @@ public static partial class TenantApprovalRules
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || op.InstanceId != run.AgentInstanceId
             || target.TenantId != request.TenantId || target.Instance.InstanceId != op.InstanceId || target.PrincipalId != context.AgentPrincipalId
-            || !Enum.IsDefined(request.Kind) || (request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
+            || !Enum.IsDefined(request.Kind) || (request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.BrowserCommand is not null) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
             || request.CreatedAt.Offset != TimeSpan.Zero || request.ExpiresAt.Offset != TimeSpan.Zero
             || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
             || Rebuild(op) != op)

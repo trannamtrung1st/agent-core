@@ -1,5 +1,11 @@
 # Frontend Implementation Specification
 
+## Tenant Browser Review inspector compatibility
+
+Internally prepared Browser requests reuse `TenantApprovalDetail` in the inbox and conversation links. The existing viewport-capped native Drawer, responsive one-column Descriptions, section spacing, wrapping escaped text, confirmation and footer owners remain. Browser command, saved origin, sharing mode, readable effective parameters, consequence and execution availability use the same exact-command list as Sandbox commands. Do not show canonical JSON or native target handles by default. Stale target/capability/provider states have named recovery; a stale decision stays disabled while independently authorized cancellation remains available.
+
+The conversation feed labels `browser_command` explicitly. Decision acknowledgement and recorded operation results remain separate; this prerequisite does not offer Browser tools or dispatch approved commands. [Focused evidence](reports/tenant-browser-review-verification-2026-10-18.md) covers real Synthetic authentication/shell and a controlled Browser approval projection at desktop/narrow widths, independently from actual backend/native consent tests. No tokens, CSS, new surface or UI kit is introduced.
+
 ## Tenant Chat Session Sandbox inspector
 
 The existing Chat header opens `TenantSessionSandboxDrawer` for the current organization/Session, independently from Chat editing or administrative Instance update access. It reads `GET .../sessions/{id}/sandbox/controls` for one original-human coherent observation, current Instance revision, readable current profile choices and separate reset/Stop/selection hints. It does not infer these from tenant-wide role names, call administrative setup to build choices or invoke legacy owner transport. `SessionSandboxFrame` shares the incumbent 640px/full-mobile Drawer, native inset, section gap, Escape and opener-focus ownership with the existing consumer. Responsive Descriptions, native confirmation/Select and bounded `SandboxEvidence` retain their owners; background streams explicitly say combined.
