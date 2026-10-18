@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant workspace read boundary
+
+`ITenantWorkspaceReadStore` extends the existing canonical file adapter with actual `TenantWorkspaceReference` owner validation for list, bounded search and bounded inspection. Home resolves the current owned Instance; working additionally resolves the current non-deleted Session and matching executor/Instance. Reads never create a workspace or run templates. The descriptor-relative canonical filesystem retains logical path, link, hard-link, size and traversal rules; metadata/bytes are current observations rather than immutable file versions.
+
+`TenantWorkspaceReadService` requires the original authenticated human's current membership and independent parent/workspace reads, then repeats login, security and owning revisions after I/O. Content projection first bounds metadata, reads the allowed bytes, checks observed metadata consistency, processes through the existing caller-supplied projector and checks source/authority again. The same boundary supplies original downloads and Office preview. It gives no Agent tool, publication, write or deletion permission. [Wire contract](14-api-and-realtime-protocol.md#tenant-workspace-read-contract), [UX contract](19-multi-tenant-iam-ux.md#tenant-workspace-reading).
+
 ## Tenant Artifact cleanup worker port
 
 `ITenantArtifactCleanupStore.ListDeletedArtifactOwnersAsync(after, limit)` returns at most 100 canonical retained tenant/Session deletion witnesses, ordered by Session identity with an exclusive cursor. It includes owners with no published rows so an interrupted private staging write is still recoverable. It is a technical worker port, never a human/model inventory API.

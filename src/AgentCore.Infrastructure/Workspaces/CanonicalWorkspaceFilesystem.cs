@@ -82,10 +82,12 @@ internal sealed partial class CanonicalWorkspaceFilesystem
             "data_reset_required: Legacy workspace layout/data reset required. Stop the API and explicitly back up/reset the database and data roots. No existing data was moved or deleted.");
     }
 
-    internal Entry Stat(string path)
+    internal Entry Stat(string path) => Stat(path, false);
+    internal Entry StatResolved(string path) => Stat(path, true);
+    private Entry Stat(string path, bool resolveLinks)
     {
         using var root = OpenRoot();
-        var relative = Relative(path);
+        var relative = resolveLinks ? Resolve(root, Relative(path)) : Relative(path);
         if (relative.Length == 0) return Describe(path, Metadata(Fd(root)));
         using var parent = Parent(root, relative);
         var name = Leaf(relative);

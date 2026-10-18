@@ -291,8 +291,11 @@ public static class InfrastructureServiceCollectionExtensions
         {
             var options = provider.GetRequiredService<PersistenceOptions>();
             return new FileAgentInstanceWorkspaceStore(options.WorkspaceRoot,
-                provider.GetRequiredService<IAgentInstanceStore>(), provider.GetRequiredService<ISandboxStore>());
+                provider.GetRequiredService<IAgentInstanceStore>(), provider.GetRequiredService<ISandboxStore>(),
+                tenantAgents: provider.GetRequiredService<ITenantAgentStore>(), tenantSessions: provider.GetRequiredService<ITenantSessionStore>());
         });
+        services.TryAddSingleton<ITenantWorkspaceReadStore>(provider => (ITenantWorkspaceReadStore)provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
+        services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceReadService>();
         services.TryAddSingleton<AdminLifecycleCoordinator>();
         services.TryAddSingleton<AgentInstanceWorkspaceService>();
         services.TryAddSingleton<AgentCore.Application.Workspaces.SessionWorkingCleanupService>();

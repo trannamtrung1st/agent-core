@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant workspace human reads successor — 2026-10-19
+
+Human home and Session working reads now have actual owned workspace scopes, independent parent/workspace IAM, bounded canonical file inspection/download/Office preview and post-I/O original-human/source fences. Empty reads create no owner directories; working grants retire atomically with Session deletion. [Focused evidence](tenant-workspace-reads-verification-2026-10-19.md) records both-store filesystem boundaries and authenticated HTTP/Office workflows. This supersedes human-workspace-read-pending notes only. Tenant Workspace UI, mutations, model tools, source publication adapters, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant Artifact deletion cleanup successor — 2026-10-19
 
 Canonical Session deletion now drives exact tenant-owned Artifact byte cleanup through the existing supervised worker, with restart recovery, no-follow filesystem removal, per-target retries and atomic child-grant retirement. Immutable metadata, receipts and tombstones remain. [Focused evidence](tenant-artifact-cleanup-verification-2026-10-19.md) covers actual memory/SQLite boundaries, same-Account tenants and model publication → HTTP deletion → cleanup, including an actual SQLite host restart. This supersedes deleted-Session Artifact-cleanup-pending notes only. Other cleanup/resource/transport/autonomous families, source publication adapters and final authority/schema cutover remain open; the full proposal stays active.

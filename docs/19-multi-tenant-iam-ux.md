@@ -1,5 +1,11 @@
 # Accounts, organizations, access and approvals UX
 
+## Tenant workspace reading
+
+Home belongs to one actual Agent Instance; working belongs to one actual Session. Display `/home` and `/working` as separate retained file locations, never as a tenant switch or permission hierarchy. Canonical routes bind the current organization and actual owning resource. A workspace-read grant also requires independent parent read; it supplies no write/delete, Sandbox execution or model publication authority. An empty uninitialized root is an empty read, without setup side effects.
+
+The existing Workspace file list, shared read-only preview and native download are the intended presentation owners when this surface is connected. Preserve current path/filename/type/size, lexical paging/search and literal content treatment. Metadata is a current filesystem observation, not a stable version. Permission loss clears names, bytes and preview/actions; stale original-human/security/source witnesses withhold the response. Missing/inaccessible paths give safe recovery without exposing physical roots or sibling counts. Office preview reuses the common bounded processor and rechecks access after processing. This backend contract does not claim that the tenant Workspace UI or model tools are connected.
+
 ## Organization Governance policy interaction
 
 Use `/t/{tenantId}/admin/governance` under Access & Security, visible with organization-wide `tenant.governance.read`. The existing Admin shell owns headings, navigation and page insets; `AdminCollectionToolbar` and native responsive Table own search/paging. Rows identify permission family/action, current review mode, independent-review state and whether the Core default or an organization setting supplies it. Permission keys remain secondary references. Empty search has a clear-search action. Read-only governors can inspect without manage permission; platform permissions are excluded.

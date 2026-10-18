@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Tenant workspace read contract
+
+Human home reads use `/api/v2/tenants/{tenantId}/agents/{instanceId}/workspace`; scratch reads use `/api/v2/tenants/{tenantId}/sessions/{sessionId}/workspace`. Both expose GET collection (`prefix`, `cursor`, `limit`, maximum 256), `/search` (`q`, `cursor`, `limit`), `/metadata?path=...`, `/content?path=...` and `/office-preview?path=...&sheet=...&range=...`. Unknown/repeated query fields are rejected. Paths are exact absolute `/home` or `/working` paths for the bound owner; traversal aliases and the other root are rejected. Search cursors are lexical observations and may end in a directory slash.
+
+Pages and metadata reuse the existing workspace wire records: logical path, type, bytes, modified time, directory/kind/link/mode observations and bounded paging/usage. Physical roots and hidden sibling namespaces are never projected. Missing uninitialized roots list/search empty without creating files. Content downloads are attachments with sanitized filenames and `nosniff`; reads use private/no-store caching. Office processing uses the shared limits/processor and post-processing authorization fence. Mutable metadata is not an immutable version or CAS token; changed source facts during content projection return conflict and current access loss withholds the result.
+
+IAM `resourceType=workspace` uses `resourceId=home:{instanceId:D}` or `working:{sessionId:D}`. Actual tenant ownership is checked before reads and scope assignment. Human `workspaces.read` is independent from parent `agents.read` or `sessions.read`. Working grants retire with canonical Session deletion; home grants do not transfer to a Session or another Instance. No tenant workspace write/delete or model-tool offering is added by this read contract.
+
 ## Tenant Artifact HTTP reads
 
 Authenticated canonical routes:

@@ -19,9 +19,10 @@ public sealed partial class InMemoryIamStore
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); ValidateAgentActor(before, initiator.PrincipalId); EnsureReferences(next, audit, ct: ct);
             RequireHumanSession(next.Tenant.TenantId, initiator);
             if (change.Action == TenantSessionAction.Delete && next.Assignments.Any(a => a.Scope == TenantSessionRules.Scope(next.Tenant.TenantId, change.SessionId)
+                || TenantWorkspaceRules.BelongsToSession(a.Scope, change.SessionId)
                 || TenantRunRules.TryId(a.Scope, out var runId) && sessionBacking.TenantRunIds(next.Tenant.TenantId, change.SessionId).Contains(runId)
                 || TenantArtifactRules.TryId(a.Scope, out var artifact) && artifactBacking?.FindTenantAsync(next.Tenant.TenantId, change.SessionId, artifact, ct).Result is not null))
-                throw new ArgumentException("Deleting a Session must retire its direct, Run and Artifact grants.");
+                throw new ArgumentException("Deleting a Session must retire its direct, workspace, Run and Artifact grants.");
             if (change.Action == TenantSessionAction.Resume)
             {
                 var root = sessionBacking.ReadTenantSession(next.Tenant.TenantId, change.SessionId)?.Owner;

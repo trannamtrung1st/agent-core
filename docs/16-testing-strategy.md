@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant workspace human reads
+
+Exercise real canonical filesystem bytes through memory/SQLite ownership and authenticated HTTP for home and working. Cover empty roots without initialization, independent parent and workspace scopes, scope assignment against actual tenant owners, same-Account foreign tenants and sibling Sessions/Instances, lexical page/search bounds, exact UTF-8 download, metadata-only reads, original-human logout/revocation, source changes and authority loss after projection. Canonical Session deletion must retire working grants while retaining home/sibling grants and permitting later IAM writes. Validate internal safe links and denied escaping/root substitutions through the incumbent filesystem boundary. HTTP Office checks use real DOCX/XLSX bytes and the existing processor. Model tools, writes/deletes and frontend attachment are separate acceptance paths.
+
 ## Tenant Artifact deletion cleanup
 
 Exercise canonical Session deletion and actual memory/SQLite Artifact stores: live/archived/terminal retention, exact owner/deletion witness, cancellation, current child-grant retirement and rejection of bypass transactions, retained metadata/receipt identity, same-Account two-tenant and sibling byte isolation, exclusive bounded paging and per-target retry fairness. SQLite checks must include unreachable final/partial staging files, nested links without target traversal, substituted Session/tenant/blob roots, missing-path convergence and recovery through an actually recreated application host. Model publication → authenticated HTTP delete → worker purge is the integrated use case; a store reopen alone does not prove startup recovery. All destructive fixtures use dedicated temporary roots, never installed/live data.

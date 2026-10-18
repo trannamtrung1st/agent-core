@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant workspace read scopes
+
+`workspace/home:{instanceId:D}` and `workspace/working:{sessionId:D}` are qualified resource scopes resolved against the actual owned Instance/Session graph. Both IAM stores validate assignment ownership again at commit. Canonical Session deletion retires its working scope alongside Session/Run/Artifact grants; both stores reject bypass transactions retaining the deleted workspace grant. Existing assignment records/constraints represent these addresses; no workspace row, migration, file revision or second file store is added.
+
+Current file reads reuse existing Instance home and Instance/Session working namespaces beneath the canonical workspace root. Actual tenant ownership is rechecked before deriving those paths; unscoped owner readers remain excluded. Missing owner directories are not initialized by listing/searching, and no global or other-tenant owner is inferred. Path metadata and lexical cursors are observations; concurrent filesystem changes can require a fresh read and do not supply CAS authority. Office projection creates no stored copy.
+
 ## Tenant Artifact storage
 
 Migration `TenantArtifactOwnership` extends the existing `Artifacts` table with nullable `TenantId`, a `(TenantId, SessionId, CreatedAtUtc, ArtifactId)` index, a composite actual `TenantSessions` foreign key and owned-row shape constraint. Conditional Run triggers require the actual producing Run to have the same Tenant/Session and reject all subsequent owned-row mutation, including owner-marker stripping. Legacy nullable Run provenance cannot provide that conditional composite FK; no second owner table is introduced. Existing unowned records remain unowned without inferred adoption or blob relocation. Final removal of the nullable/global model remains part of the pending clean cutover.

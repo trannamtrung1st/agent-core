@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant workspace human-read checkpoint — 2026-10-19
+
+Canonical human home/working file reads now use actual owned workspace scopes and independent current parent/workspace IAM. Listing/searching does not initialize missing owner directories; downloads and Office projection reuse existing file/processor owners with original-human/source fences. Working grants retire atomically on Session deletion. [Focused evidence](reports/tenant-workspace-reads-verification-2026-10-19.md) records memory/SQLite filesystem and authenticated HTTP/Office checks. This closes human read-boundary conversion only; tenant Workspace UI, mutations, model tools, source publication adapters, other resource/transport/autonomous families and final authority/schema cutover remain open. No full proposal or milestone acceptance is claimed.
+
 ## Tenant Artifact deletion cleanup checkpoint — 2026-10-19
 
 Committed canonical Session tombstones now drive exact owned Artifact byte cleanup through the existing supervised worker. Current owner/deletion/quiescence checks, no-follow filesystem purge, bounded per-target retries and atomic child-grant retirement preserve other owners and retained factual metadata/receipts. [Focused verification](reports/tenant-artifact-cleanup-verification-2026-10-19.md) records both stores, actual same-Account tenants and model/HTTP deletion with actual SQLite application-host restart recovery. This closes only deleted-Session Artifact byte cleanup; other cleanup/resource/transport/autonomous families, source publication adapters and final authority/schema cutover remain open. No full proposal or milestone acceptance is claimed.

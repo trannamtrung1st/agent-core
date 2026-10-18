@@ -7,9 +7,9 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Infrastructure.Workspaces;
 
 /// <summary>A thin owner-validated filesystem adapter; there are no file rows or blobs.</summary>
-public sealed class FileAgentInstanceWorkspaceStore(string workspaceRoot, IAgentInstanceStore instances, ISandboxStore sandboxes,
+public sealed partial class FileAgentInstanceWorkspaceStore(string workspaceRoot, IAgentInstanceStore instances, ISandboxStore sandboxes,
     long maxFileBytes = AgentWorkspaceLimits.MaxFileBytes,
-    long maxInstanceBytes = AgentWorkspaceLimits.MaxInstanceBytes) : IAgentInstanceWorkspaceStore
+    long maxInstanceBytes = AgentWorkspaceLimits.MaxInstanceBytes, ITenantAgentStore? tenantAgents = null, ITenantSessionStore? tenantSessions = null) : IAgentInstanceWorkspaceStore
 {
     private readonly string _root = AgentWorkspacePhysicalPaths.ValidateRoot(workspaceRoot);
 

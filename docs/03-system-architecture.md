@@ -1,5 +1,11 @@
 # System Architecture
 
+## Tenant workspace read ownership
+
+Home and Session scratch are separate canonical workspace resources: `workspace/home:{instanceId:D}` and `workspace/working:{sessionId:D}` inside their actual tenant. These addresses grant authority only after resolving the existing owning Instance or non-deleted Session; a path, GUID or scope string never establishes ownership. No per-file IAM hierarchy or Environment scope is added. Session deletion retires its working-workspace grants atomically with its other direct child grants.
+
+Human reads require current Account/session/membership, independent `workspaces.read` on the exact workspace and `agents.read` for home or `sessions.read` for working. They do not copy/intersect the Agent's permissions or confer model/runtime access. `TenantWorkspaceReadService` repeats original-human, security and actual owner witnesses after filesystem I/O and any Office projection. The existing file adapter and descriptor-relative canonical filesystem own bytes and path isolation; reads never create a missing home/working directory or run templates/Sandbox setup. Mutable path metadata remains a current observation, not a file identity or CAS token. Writes/deletes, model tools and source publication remain distinct protected boundaries.
+
 ## Tenant Artifact deletion cleanup
 
 The committed canonical Session deletion tombstone authorizes technical cleanup of that exact tenant/Session Artifact byte namespace. `ITenantArtifactCleanupStore` enumerates bounded retained tombstones and revalidates the immutable owner/deletion witness and quiescent Runs before removal. `TenantArtifactCleanupService` runs through the existing supervised workspace-cleanup worker, retries after restart and isolates per-target failures. It adds no user endpoint, ambient tenant, approval engine or deletion ledger. Current human membership is not a second authority for an already committed deletion.

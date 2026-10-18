@@ -122,6 +122,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantWorkspaceRules.TryParse(a.Scope, out _, out _) && !OwnsWorkspace(a.Scope, ct)))
+            throw new ArgumentException("A workspace assignment requires its actual current tenant owner.");
         if (state.Assignments.Any(a => TenantSandboxProfileRules.TryId(a.Scope, out var profile) && FindTenantSandboxProfileAsync(state.Tenant.TenantId, profile, ct: ct).Result is null))
             throw new ArgumentException("A Sandbox profile assignment requires its actual owned profile.");
         if (state.Assignments.Any(a => TenantApprovalRules.TryApprovalId(a.Scope, out var id) && _approvals.GetValueOrDefault(id)?.TenantId != state.Tenant.TenantId))
