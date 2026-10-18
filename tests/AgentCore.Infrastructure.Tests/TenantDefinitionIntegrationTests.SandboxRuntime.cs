@@ -19,7 +19,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         SandboxLease Lease, TenantSandboxRuntimeWrite Write, Guid ExecutionGrant, TenantRunConfigurationResolver Resolver, SandboxProfile? Alternate = null);
 
     private static async Task<RuntimeSandboxSetup> PrepareRuntimeSandbox(Fixture f, bool verify = true, HomeAccess? home = null, Func<Guid, HumanSessionReference, ValueTask<Guid>>? registry = null,
-        AgentCore.Infrastructure.Sandbox.OpenSandboxOptions? options = null, string? initialization = null, bool template = false, string? instanceInitialization = null, string? imageReference = null, bool alternate = false)
+        AgentCore.Infrastructure.Sandbox.OpenSandboxOptions? options = null, string? initialization = null, bool template = false, string? instanceInitialization = null, string? imageReference = null, bool alternate = false, bool inspection = false)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var human = await SetupHuman(f, owner.AccountId, owner.OwnerPrincipalId); var p = SetupProfiles(f, options);
@@ -37,7 +37,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         }
         var draft = await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, "Tenant runtime", await Revision());
         draft = await f.Service.UpdateAsync(human.PrincipalId, owner.TenantId, draft.DraftId, draft.Candidate with {
-            SandboxPolicy = new(profile.Id, other is null ? [profile.Id] : [profile.Id, other.Id]), Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec]), Workspace: template ? new("notes") : null),
+            SandboxPolicy = new(profile.Id, other is null ? [profile.Id] : [profile.Id, other.Id]), Environment = new(Capabilities: new("Selected", inspection ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : [ToolCatalog.SandboxExec]), Workspace: template ? new("notes") : null),
             StateIsolationPolicy = home is { } access ? new(HomeAccess: access) : draft.Candidate.StateIsolationPolicy
         }, await Revision(), draft.Revision);
         if (template)

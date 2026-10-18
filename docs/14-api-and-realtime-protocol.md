@@ -1,5 +1,19 @@
 # HTTP API and Realtime Protocol
 
+## Tenant model Sandbox inspection contracts
+
+No HTTP route changes. The existing model read names now have a canonical tenant implementation:
+
+| Tool | Exact arguments | Result |
+| --- | --- | --- |
+| `sandbox.profiles` | `{}` | Visible saved profile metadata/availability, visible-only count, truncation, safe default/selection |
+| `sandbox.status` | `{}` | Stored environment, initialization state and latest receipt summary; no command/init logs/streams |
+| `sandbox.process.status` | `{executionId}` | One exact same-Session Core receipt with bounded stored output and factual process/cleanup evidence |
+
+All add `observationOnly:true` and `liveAuthorityConfirmed:false`. Discovery keeps `{profiles,totalCount,truncated,defaultProfileId,selectedProfileId,selectionRestricted,descriptionsAreInformational}`; entries expose only ID/name/clipped description/admitted revision, availability and default/selected flags. Hidden profile IDs/names/defaults are omitted. Ineligible saved pins stay NotAdmitted after later verification. Environment/receipt projections reuse canonical stored facts while initialization evidence is null, `commandText` is empty and environment status has empty receipt streams. Exact process output sets truncation when clipped; exit and termination facts remain observations, never permission or arbitrary shell-success guarantees.
+
+Only exact saved/current capability plus current Allowed read policy can disclose data under the independent executor Session, agent Sandbox and referenced-profile scopes. Original requester, ownership, claim and post-I/O witnesses apply. Missing/extra/duplicate/caller-authority arguments return the bounded invalid tool result; stale scope/witnesses return safe forbidden/conflict results without captured metadata. A policy-required read Review returns `sandbox_read_review_required`; typed read-review preparation is not enabled here. These calls contact no SDK and cannot create, probe, execute, refresh, stop or reset an environment. [Focused evidence](reports/tenant-sandbox-model-inspection-verification-2026-10-18.md).
+
 ## Tenant model Sandbox authorization and result
 
 The existing `approvals.request_authorization` model tool adds a schema-filtered operation:

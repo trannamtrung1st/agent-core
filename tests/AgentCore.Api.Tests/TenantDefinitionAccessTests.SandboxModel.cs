@@ -30,10 +30,34 @@ public sealed partial class TenantDefinitionAccessTests
         public ModelCapabilities Capabilities => inner.Capabilities;
         public string Arguments = "";
         public Func<ModelRequest, Task>? Seed;
+        public bool Inspect;
+        public Func<Task>? BeforeProcessInspection;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            bool HasRead(string name) => request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == name && !m.Text.Contains("\"error\":", StringComparison.Ordinal));
+            if (Inspect && request.Context?.Sections.All(s => s.Id != AgentCore.Application.Context.ContextSectionId.ApprovalOutcome) == true)
+            {
+                var name = !HasRead(ToolCatalog.SandboxProfiles) ? ToolCatalog.SandboxProfiles : !HasRead(ToolCatalog.SandboxStatus) ? ToolCatalog.SandboxStatus : null;
+                if (name is not null)
+                {
+                    Assert.Contains(request.Tools ?? [], t => t.Name == name);
+                    if (Seed is { } seed) { Seed = null; await seed(request); }
+                    yield return new ModelToolCallEvent(new("model-" + name, name, "{}"));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+                }
+            }
+            if (Inspect && request.Context?.Sections.Any(s => s.Id == AgentCore.Application.Context.ContextSectionId.ApprovalOutcome) == true && !HasRead(ToolCatalog.SandboxProcessStatus))
+            {
+                Assert.Contains(request.Tools ?? [], t => t.Name == ToolCatalog.SandboxProcessStatus);
+                var recorded = request.Messages.Last(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization);
+                using var result = JsonDocument.Parse(recorded.Text);
+                var executionId = result.RootElement.GetProperty("sandbox").GetProperty("executionId").GetGuid();
+                if (BeforeProcessInspection is { } before) { BeforeProcessInspection = null; await before(); }
+                yield return new ModelToolCallEvent(new("model-process-inspection", ToolCatalog.SandboxProcessStatus, JsonSerializer.Serialize(new { executionId })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
             if (request.Context?.Sections.All(s => s.Id != AgentCore.Application.Context.ContextSectionId.ApprovalOutcome) == true
                 && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("run_sandbox_command", StringComparison.Ordinal)) == true)
             {
@@ -66,13 +90,13 @@ public sealed partial class TenantDefinitionAccessTests
         }
     }
 
-    [Theory] [InlineData("approve")] [InlineData("reject")] [InlineData("cancel")] [InlineData("uncertain")] [InlineData("provision")] [InlineData("background")]
+    [Theory] [InlineData("approve")] [InlineData("reject")] [InlineData("cancel")] [InlineData("uncertain")] [InlineData("provision")] [InlineData("background")] [InlineData("inspect")]
     public async Task Tenant_Sandbox_model_request_waits_for_exact_Review_then_shared_worker_delivers_bounded_result_once(string choice)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-model-sandbox-" + Guid.NewGuid().ToString("N"));
         try
         {
-            SandboxLease lease = null!; Guid tenant = default; var commands = 0; var contacts = 0; var creates = 0; var initializations = 0; Dictionary<string,string> metadata = []; var paths = new ConcurrentQueue<string>();
+            SandboxLease lease = null!; Guid tenant = default; var commands = 0; var contacts = 0; var creates = 0; var initializations = 0; Dictionary<string,string> metadata = []; var paths = new ConcurrentQueue<string>(); var contactsAtInspection = -1;
             var builder = WebApplication.CreateSlimBuilder(); builder.Logging.ClearProviders(); await using var peer = builder.Build(); peer.Urls.Add("http://127.0.0.1:0");
             peer.Run(async http => {
                 contacts++; Assert.Equal("synthetic-model-command", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
@@ -135,7 +159,7 @@ public sealed partial class TenantDefinitionAccessTests
             var definitions = factory.Services.GetRequiredService<TenantDefinitionService>();
             var draft = await definitions.CreateAsync(actor, tenant, "Model Sandbox command", await Revision(owner, tenant));
             draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, [profileId]),
-                Environment = new(Capabilities: new("Selected", [ToolCatalog.SandboxExec])) }, await Revision(owner, tenant), draft.Revision);
+                Environment = new(Capabilities: new("Selected", choice == "inspect" ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : [ToolCatalog.SandboxExec])) }, await Revision(owner, tenant), draft.Revision);
             await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
             var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();
@@ -146,6 +170,16 @@ public sealed partial class TenantDefinitionAccessTests
                 await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, grant.Item2, await Revision(owner, tenant));
             }
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
+            if (choice == "inspect")
+            {
+                foreach (var grant in new[] { ("sandbox.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))), ("sessions.read", TenantSessionRules.Scope(tenant, session)) })
+                {
+                    var role = await access.SaveRoleAsync(actor, tenant, null, "Inspect " + grant.Item1, [grant.Item1], await Revision(owner, tenant));
+                    await access.AssignRoleAsync(actor, tenant, executor, role.RoleId, grant.Item2, await Revision(owner, tenant));
+                }
+                factory.Model.Inspect = true;
+                factory.Model.BeforeProcessInspection = async () => { contactsAtInspection = contacts; await peer.StopAsync(); };
+            }
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var storage = factory.Services.GetRequiredService<ITenantSandboxRuntimeStore>();
             factory.Model.Arguments = JsonSerializer.Serialize(new { operation = "run_sandbox_command", profileId, command = new { command = "printf model-command", cwd = "/working", timeoutSeconds = 30, background = choice == "background" } });
             if (choice != "provision") factory.Model.Seed = async request => {
@@ -204,11 +238,11 @@ public sealed partial class TenantDefinitionAccessTests
             using var payload = JsonDocument.Parse(result.Text);
             Assert.DoesNotContain("PRIVATE_PROVIDER_BODY", result.Text); Assert.DoesNotContain("model-owned", result.Text);
             Assert.Equal(choice == "provision" ? 1 : 0, creates); Assert.Equal(choice == "provision" ? 1 : 0, initializations);
-            if (choice is "approve" or "uncertain" or "provision" or "background")
+            if (choice is "approve" or "uncertain" or "provision" or "background" or "inspect")
             {
                 Assert.Equal(1, commands); var observed = payload.RootElement.GetProperty("sandbox");
                 Assert.Equal(choice == "uncertain" ? "Indeterminate" : choice == "background" ? "Running" : "Completed", observed.GetProperty("status").GetString());
-                if (choice is "approve" or "provision") Assert.Equal("controlled model output", observed.GetProperty("stdout").GetString());
+                if (choice is "approve" or "provision" or "inspect") Assert.Equal("controlled model output", observed.GetProperty("stdout").GetString());
                 Assert.Equal(JsonValueKind.Null, payload.RootElement.GetProperty("applied").ValueKind);
                 Assert.Equal(choice == "background", observed.GetProperty("combinedLogs").GetBoolean());
                 if (choice == "background") Assert.Equal("sandbox_command_started", payload.RootElement.GetProperty("reasonCode").GetString());
@@ -216,6 +250,19 @@ public sealed partial class TenantDefinitionAccessTests
                 Assert.Contains(factory.Model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Text == result.Text));
             }
             else { Assert.Equal(0, commands); Assert.Equal(0, contacts); Assert.False(payload.RootElement.GetProperty("applied").GetBoolean()); }
+            if (choice == "inspect")
+            {
+                Assert.Equal(contactsAtInspection, contacts);
+                foreach (var name in new[] { ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus })
+                {
+                    var observation = Assert.Single(messages!, m => m.Role == ModelRole.Tool && m.Name == name);
+                    using var observed = JsonDocument.Parse(observation.Text);
+                    Assert.True(observed.RootElement.GetProperty("observationOnly").GetBoolean()); Assert.False(observed.RootElement.GetProperty("liveAuthorityConfirmed").GetBoolean());
+                    Assert.DoesNotContain("model-owned", observation.Text);
+                    Assert.Contains(factory.Model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Text == observation.Text));
+                    if (name == ToolCatalog.SandboxProcessStatus) Assert.Equal("controlled model output", observed.RootElement.GetProperty("execution").GetProperty("stdout").GetString());
+                }
+            }
             Assert.Single(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "approvals.request");
             Assert.DoesNotContain(AgentRunToolCallCheckpoint.PendingCalls(messages!), c => c.Name == ToolCatalog.RequestAuthorization);
             await peer.StopAsync();

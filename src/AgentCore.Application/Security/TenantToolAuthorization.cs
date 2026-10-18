@@ -7,7 +7,7 @@ namespace AgentCore.Application.Security;
 
 public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
     TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
-    TenantPreferenceOperationService? preferences = null)
+    TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null)
 {
     // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
     public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
@@ -33,7 +33,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
-            var allowed = IamToolContracts.IsInspection(tool) || (tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name)
+            var allowed = IamToolContracts.IsInspection(tool) || (tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -47,7 +47,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         return boundary.Tenant || IsTenantTool(call.Name) || admission?.TenantId is not null
             ? boundary.Allowed ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny : null;
     }
-    public async ValueTask<string?> ExecuteAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct)
+    public async ValueTask<string?> ExecuteAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct, int remainingBytes = ToolLimits.MaxOutputBytes)
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
         if (!boundary.Tenant && !IsTenantTool(call.Name) && admission?.TenantId is null) return null;
@@ -60,6 +60,12 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
         try
         {
+            if (TenantSandboxInspectionContract.IsInspection(call.Name))
+            {
+                if (sandboxReads is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
+                var current = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+                return await sandboxReads.InspectForRunAsync(new(current.Owner, session, boundary.Reference.RunId, generation), call, remainingBytes, ct).ConfigureAwait(false);
+            }
             if (call.Name == TenantPreferenceToolContract.Name)
             {
                 if (preferences is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");

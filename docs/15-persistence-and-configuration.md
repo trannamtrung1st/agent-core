@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Sandbox model read persistence
+
+Discovery and inspection read the existing owned Session, admitted Run, lease/receipt, profile revision and verification owners. No schema, migration, cache, lifecycle writer, queue or credential-secret read is added. Human and model projections share the canonical read facade and scope construction. Model read audits use existing operation-decision audit records; they do not change security or Sandbox revisions.
+
+Read observations can enter the existing bounded tool checkpoint as data. They never contain dispatch authority, provider handles/paths, source epochs, owner initialization evidence or command text. Empty/late provider state cannot turn stored Ready into live permission. Current Role/policy and Run/security/Session/Instance fences protect new reads; later verification/permission grants cannot expand an old Run's saved profile inventory. Existing background observation/retirement workers remain the only owners of factual refresh and cleanup.
+
 ## Tenant Sandbox model continuation evidence
 
 Exact model command proposals and bounded result JSON use existing versioned `AgentRunToolCallCheckpoint` messages. The existing Sandbox Review, successor, owned execution/lease, immutable operation receipt and factual settlement retain their owners. No schema migration, table, index, alternate queue or new checkpoint format is added. Claim/security/request/action witnesses still gate actual effects; model-visible result data is never dispatch proof.

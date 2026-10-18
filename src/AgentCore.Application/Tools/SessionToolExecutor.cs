@@ -205,7 +205,7 @@ public sealed partial class SessionToolExecutor(
         ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (tenantAuthorization is not null && await tenantAuthorization.ExecuteAsync(sessionId, call, admission, cancellationToken).ConfigureAwait(false) is { } tenantResult)
+        if (tenantAuthorization is not null && await tenantAuthorization.ExecuteAsync(sessionId, call, admission, cancellationToken, remainingOutputBytes).ConfigureAwait(false) is { } tenantResult)
             return FitResult(remainingOutputBytes, tenantResult);
         if (admission?.TenantId is not null || (IamToolContracts.IsInspection(call.Name) || call.Name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name)) return TextResult(Error("forbidden", "Trusted tenant execution is required."));
         if (admission?.AgentInstanceId is { } isolationOwner)
