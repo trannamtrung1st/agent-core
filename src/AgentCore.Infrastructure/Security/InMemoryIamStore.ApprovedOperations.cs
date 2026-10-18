@@ -8,6 +8,11 @@ namespace AgentCore.Infrastructure.Security;
 public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
 {
     private readonly Dictionary<Guid, TenantOperationReceipt> _operationReceipts = [];
+    public ValueTask<TenantOperationReceipt?> FindDirectOperationReceiptAsync(Guid tenantId, Guid runId, string sourceCallId, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_operationReceipts.Values.SingleOrDefault(r =>
+            r.TenantId == tenantId && r.RunId == runId && r.SourceCallId == sourceCallId));
+    }
     public ValueTask<TenantApprovalDecision?> FindApprovalDecisionAsync(Guid tenantId, Guid requestId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_approvalDecisions.GetValueOrDefault(requestId) is { } d && d.TenantId == tenantId ? d : null); }
     public ValueTask<TenantOperationReceipt?> FindOperationReceiptAsync(Guid tenantId, Guid operationId, CancellationToken ct = default)

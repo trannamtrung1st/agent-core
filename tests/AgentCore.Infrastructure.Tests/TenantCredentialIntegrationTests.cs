@@ -145,7 +145,7 @@ public sealed partial class TenantCredentialIntegrationTests
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
                     if (artifactAuthority) f.Artifacts = new SqliteArtifactStore(f.Contexts, f.Clock, Path.Combine(f.Root, "artifacts"));
                     f.Sandboxes = new SqliteSandboxStore(f.Contexts);
-                    f.Iam = new SqliteIamStore(f.Contexts, builtIns: builtInAuthority ? f.BuiltIns : null, clock: f.Clock); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
+                    f.Iam = new SqliteIamStore(f.Contexts, builtIns: builtInAuthority ? f.BuiltIns : null, clock: f.Clock, artifactBacking: artifactAuthority ? (SqliteArtifactStore)f.Artifacts : null); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
                     f.Memory = new SqliteMemoryStore(f.Contexts, f.Clock);
                 }
                 else

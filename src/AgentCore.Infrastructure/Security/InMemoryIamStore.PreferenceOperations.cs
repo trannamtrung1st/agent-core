@@ -6,11 +6,6 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore : ITenantPreferenceOperationStore
 {
-    public ValueTask<TenantOperationReceipt?> FindPreferenceReceiptAsync(Guid tenantId, Guid runId, string sourceCallId, CancellationToken ct = default)
-    {
-        ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_operationReceipts.Values.SingleOrDefault(r =>
-            r.TenantId == tenantId && r.RunId == runId && r.SourceCallId == sourceCallId));
-    }
     public ValueTask<TenantOperationReceipt?> TryCommitPreferencesAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantPreferenceCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
@@ -19,7 +14,7 @@ public sealed partial class InMemoryIamStore : ITenantPreferenceOperationStore
         {
             var run = sessionBacking.ReadTenantRun(next.Tenant.TenantId, commit.RunId) ?? throw new AccessDeniedException("run_unavailable");
             var existing = _operationReceipts.Values.SingleOrDefault(r => r.TenantId == next.Tenant.TenantId && r.RunId == commit.RunId && r.SourceCallId == commit.SourceCallId);
-            if (existing is not null) return ValueTask.FromResult<TenantOperationReceipt?>(TenantPreferenceOperationRules.Match(existing, run, commit.SourceCallId, commit.ParametersHash));
+            if (existing is not null) return ValueTask.FromResult<TenantOperationReceipt?>(TenantLocalEffectRules.MatchDirectReceipt(existing, run, commit.SourceCallId, commit.ParametersHash));
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision || run.Revision != commit.ExpectedRunRevision)
                 return ValueTask.FromResult<TenantOperationReceipt?>(null);
             var target = FindTenantAgentAsync(before.Tenant.TenantId, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");

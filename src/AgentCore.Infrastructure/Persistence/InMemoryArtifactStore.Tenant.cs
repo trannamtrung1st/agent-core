@@ -30,22 +30,26 @@ public sealed partial class InMemoryArtifactStore : ITenantArtifactStore
         var gate = Gate(frame.SessionId); await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var sessions = _sessions ?? throw new AccessDeniedException("tenant_context_required");
-            lock (sessions.AdmissionGate)
-            {
-                var tenant = frame.Owner.TenantId!.Value;
-                var session = sessions.ReadTenantSession(tenant, frame.SessionId) ?? throw new AccessDeniedException("session_unavailable");
-                var run = sessions.ReadTenantRun(tenant, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
-                TenantRuntimeRules.Require(frame, session.Owner, run, _time.GetUtcNow()); ct.ThrowIfCancellationRequested(); ThrowIfDeleted(frame.SessionId);
-                if (_items.TryGetValue(artifactId, out var existing))
-                    return TenantArtifactRules.SamePublication(existing, next) ? existing : throw new SecurityConflictException("artifact_publication_mismatch");
-                if (bytes.Length > _maxEach || _items.Values.Where(a => a.SessionId == frame.SessionId).Sum(a => a.ByteSize) + bytes.Length > _maxSession)
-                    throw AgentCore.Application.Sessions.AgentCoreErrors.ArtifactQuotaExceeded();
-                ct.ThrowIfCancellationRequested();
-                _blobs[artifactId] = frozen; _items[artifactId] = next; return next;
-            }
+            return PublishTenantLocal(frame, next, frozen, true, ct);
         }
         finally { gate.Release(); }
+    }
+    internal ArtifactRecord PublishTenantLocal(TenantRuntimeFrame frame, ArtifactRecord next, byte[] frozen, bool allowRetry, CancellationToken ct)
+    {
+        var sessions = _sessions ?? throw new AccessDeniedException("tenant_context_required");
+        lock (sessions.AdmissionGate)
+        {
+            var tenant = frame.Owner.TenantId!.Value;
+            var session = sessions.ReadTenantSession(tenant, frame.SessionId) ?? throw new AccessDeniedException("session_unavailable");
+            var run = sessions.ReadTenantRun(tenant, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
+            TenantRuntimeRules.Require(frame, session.Owner, run, _time.GetUtcNow()); ct.ThrowIfCancellationRequested(); ThrowIfDeleted(frame.SessionId);
+            if (next != TenantArtifactRules.Record(frame, next.ArtifactId, next.DisplayName, next.ContentType, frozen, next.CreatedAt)) throw new SecurityConflictException("artifact_publication_mismatch");
+            if (_items.TryGetValue(next.ArtifactId, out var existing))
+                return allowRetry && TenantArtifactRules.SamePublication(existing, next) ? existing : throw new SecurityConflictException("artifact_publication_mismatch");
+            if (frozen.Length > _maxEach || _items.Values.Where(a => a.SessionId == frame.SessionId).Sum(a => a.ByteSize) + frozen.Length > _maxSession)
+                throw AgentCore.Application.Sessions.AgentCoreErrors.ArtifactQuotaExceeded();
+            _blobs[next.ArtifactId] = frozen; _items[next.ArtifactId] = next; return next;
+        }
     }
     public ValueTask<ArtifactRecord?> FindTenantAsync(Guid tenant, Guid session, Guid artifact, CancellationToken ct = default)
     {

@@ -48,6 +48,7 @@ public sealed partial class TenantSessionAccessTests
         public string? ProposedBrowserCommand { get; set; }
         public string? ProposedMetadataRead { get; set; }
         public string? ProposedPreferences { get; set; }
+        public string? ProposedArtifact { get; set; }
         public string? ProposedPreferenceAuthorization { get; set; }
         public TaskCompletionSource? ApprovalResponseGate { get; set; }
         public TaskCompletionSource ApprovalResponseEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -86,6 +87,17 @@ public sealed partial class TenantSessionAccessTests
                 yield return new ModelToolCallEvent(new("durable-preference-request", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization,
                     System.Text.Json.JsonSerializer.Serialize(new { operation = "update_preferences", preferences = parameters.RootElement })));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (ProposedArtifact is { } artifact && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate)
+                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate) == true)
+            {
+                yield return new ModelToolCallEvent(new("direct-artifact", AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate, artifact));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (ProposedArtifact is not null)
+            {
+                yield return new ModelTextDelta("Artifact publication was processed; its receipt records the outcome.");
+                yield return new ModelCompleted(ModelStopReason.Completed); yield break;
             }
             if (ProposedPreferences is { } preferences && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.TenantPreferenceToolContract.Name)
                 && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.TenantPreferenceToolContract.Name) == true)

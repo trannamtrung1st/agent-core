@@ -10,6 +10,11 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
 {
+    public async ValueTask<TenantOperationReceipt?> FindDirectOperationReceiptAsync(Guid tenantId, Guid runId, string sourceCallId, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return (await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenantId && r.RunId == runId.ToString("D") && r.SourceCallId == sourceCallId, ct).ConfigureAwait(false))?.Domain();
+    }
     public async ValueTask<TenantApprovalDecision?> FindApprovalDecisionAsync(Guid tenantId, Guid requestId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

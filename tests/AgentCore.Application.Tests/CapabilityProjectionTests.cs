@@ -23,8 +23,15 @@ public sealed class CapabilityProjectionTests
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage)
         };
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order().ToArray();
-        Assert.Equal(new[] { ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus }.Order(), offered);
+        Assert.Equal(new[] { ToolCatalog.ArtifactsCreate, ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions,
+            ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus,
+            ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserFind, ToolCatalog.BrowserWait, "browser.console_messages", "browser.network_requests",
+            "browser.network_request", "browser.routes", "browser.verify", "browser.generate_locator", "browser.get_config", "browser.tabs", "browser.dialog" }.Order(), offered);
         Assert.Empty(ToolCatalog.For(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll));
+        var execution = context.ExecutionContext!;
+        var unattended = new TrustedExecutionContext(execution.TenantId, execution.AgentPrincipalId, null, session, execution.RunId,
+            activation, activation, null, null, ExecutionOrigin.ScheduledOccurrence);
+        Assert.DoesNotContain(ToolCatalog.ArtifactsCreate, ToolCatalog.For(definition, context with { ExecutionContext = unattended }, ToolConfigurationGates.AllowAll).Select(t => t.Name));
     }
 
     [Theory]

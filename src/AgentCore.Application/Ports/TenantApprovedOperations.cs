@@ -11,6 +11,11 @@ public sealed record TenantBrowserEffectFence(Guid TenantId, Guid RequestId, Gui
 public sealed record TenantBrowserEffectObservation(long RunRevision, string Json);
 public sealed record TenantBrowserEffectStart(TenantBrowserEffectFence? Fence, TenantOperationReceipt? Receipt);
 
+public interface ITenantDirectOperationStore
+{
+    ValueTask<TenantOperationReceipt?> FindDirectOperationReceiptAsync(Guid tenantId, Guid runId, string sourceCallId, CancellationToken ct = default);
+}
+
 public interface ITenantApprovedOperationStore
 {
     ValueTask<TenantApprovalDecision?> FindApprovalDecisionAsync(Guid tenantId, Guid requestId, CancellationToken ct = default);

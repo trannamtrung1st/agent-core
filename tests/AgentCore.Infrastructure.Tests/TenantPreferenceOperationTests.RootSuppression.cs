@@ -71,7 +71,7 @@ public sealed partial class TenantPreferenceOperationTests
             state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision, commit,
             new(f.Ids.NewId(), setup.Tenant, setup.Agent.PrincipalId, "operations.preferences.apply", current.AgentInstanceId.ToString("D"), "allowed", "operation_completed", at)).AsTask());
         Assert.Equal("previously_rejected", denied.ReasonCode);
-        Assert.Null(await ((ITenantPreferenceOperationStore)f.Iam).FindPreferenceReceiptAsync(setup.Tenant, current.AgentRunId, "bypass-store"));
+        Assert.Null(await ((ITenantPreferenceOperationStore)f.Iam).FindDirectOperationReceiptAsync(setup.Tenant, current.AgentRunId, "bypass-store"));
         Assert.Equal(state.Tenant.Revision, await Revision());
         Assert.Equal(setup.Agent.Instance.Revision, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(setup.Tenant, current.AgentInstanceId))!.Instance.Revision);
     }

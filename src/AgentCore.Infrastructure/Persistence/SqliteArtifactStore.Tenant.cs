@@ -46,7 +46,6 @@ public sealed partial class SqliteArtifactStore : ITenantArtifactStore
         var frozen = bytes.ToArray();
         var next = TenantArtifactRules.Record(frame, artifactId, displayName, contentType, frozen, time.GetUtcNow());
         var gate = Gate(frame.SessionId); await gate.WaitAsync(ct).ConfigureAwait(false);
-        string? temp = null;
         try
         {
             ThrowIfDeleted(frame.SessionId);
@@ -55,23 +54,32 @@ public sealed partial class SqliteArtifactStore : ITenantArtifactStore
             await RequireFrame(db, frame, time.GetUtcNow(), ct).ConfigureAwait(false);
             var existing = await db.Artifacts.AsNoTracking().SingleOrDefaultAsync(a => a.ArtifactId == artifactId.ToString("D"), ct).ConfigureAwait(false);
             if (existing is not null) return TenantArtifactRules.SamePublication(FromRow(existing), next) ? FromRow(existing) : throw new SecurityConflictException("artifact_publication_mismatch");
-            var used = await db.Artifacts.Where(a => a.SessionId == frame.SessionId.ToString("D")).SumAsync(a => a.ByteSize, ct).ConfigureAwait(false);
-            if (used + bytes.Length > maxBytesSession) throw AgentCore.Application.Sessions.AgentCoreErrors.ArtifactQuotaExceeded();
-            var path = TenantPath(frame.Owner.TenantId!.Value, frame.SessionId, artifactId); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            temp = path + ".partial-" + Guid.NewGuid().ToString("N");
-            await File.WriteAllBytesAsync(temp, frozen, ct).ConfigureAwait(false);
-            if (File.Exists(path))
-            {
-                var retained = await ReadBytes(path, next, ct).ConfigureAwait(false);
-                TenantArtifactRules.RequireContent(next, retained); File.Delete(temp);
-            }
-            else File.Move(temp, path, overwrite: false);
-            temp = null;
-            await RequireFrame(db, frame, time.GetUtcNow(), ct).ConfigureAwait(false);
-            db.Artifacts.Add(ToRow(next, TenantArtifactRules.BlobKey(next.TenantId!.Value, next.SessionId, next.ArtifactId)));
+            var row = await StageTenantLocalAsync(db, frame, next, frozen, ct).ConfigureAwait(false);
+            db.Artifacts.Add(row);
             await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next;
         }
-        finally { if (temp is not null) TryDelete(temp); gate.Release(); }
+        finally { gate.Release(); }
+    }
+    // Caller owns the metadata/Run/receipt transaction. A private staged blob is not publication.
+    internal async ValueTask<ArtifactRecordRow> StageTenantLocalAsync(AgentCoreDbContext db, TenantRuntimeFrame frame,
+        ArtifactRecord next, byte[] frozen, CancellationToken ct)
+    {
+        if (next != TenantArtifactRules.Record(frame, next.ArtifactId, next.DisplayName, next.ContentType, frozen, next.CreatedAt)) throw new SecurityConflictException("artifact_publication_mismatch");
+        await RequireFrame(db, frame, time.GetUtcNow(), ct).ConfigureAwait(false); ThrowIfDeleted(frame.SessionId);
+        if (await db.Artifacts.AnyAsync(a => a.ArtifactId == next.ArtifactId.ToString("D"), ct).ConfigureAwait(false)) throw new SecurityConflictException("artifact_publication_mismatch");
+        var used = await db.Artifacts.Where(a => a.SessionId == frame.SessionId.ToString("D")).SumAsync(a => a.ByteSize, ct).ConfigureAwait(false);
+        if (frozen.Length > Math.Min(maxBytesEach, ArtifactLimits.MaxBytesEach) || used + frozen.Length > maxBytesSession) throw AgentCore.Application.Sessions.AgentCoreErrors.ArtifactQuotaExceeded();
+        var path = TenantPath(frame.Owner.TenantId!.Value, frame.SessionId, next.ArtifactId); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temp = path + ".partial-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await File.WriteAllBytesAsync(temp, frozen, ct).ConfigureAwait(false);
+            if (File.Exists(path)) { _ = await ReadBytes(path, next, ct).ConfigureAwait(false); File.Delete(temp); }
+            else File.Move(temp, path, overwrite: false);
+            await RequireFrame(db, frame, time.GetUtcNow(), ct).ConfigureAwait(false);
+            return ToRow(next, TenantArtifactRules.BlobKey(next.TenantId!.Value, next.SessionId, next.ArtifactId));
+        }
+        finally { TryDelete(temp); }
     }
     public async ValueTask<ArtifactRecord?> FindTenantAsync(Guid tenant, Guid session, Guid artifact, CancellationToken ct = default)
     {

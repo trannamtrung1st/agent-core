@@ -15,7 +15,7 @@ public sealed partial class SqliteIamStore
         var selected = new List<TenantCredentialBinding>();
         foreach (var r in TenantApprovalRules.CredentialReadReferences(value))
             selected.Add(await CredentialOperationTarget(db, request.TenantId, agent.Instance.InstanceId, r.BindingId, r.CredentialId, ct).ConfigureAwait(false));
-        TenantCredentialReadOperationRules.Require(value, run, agent, session, await SandboxBaseline(db, agent, ct).ConfigureAwait(false), selected);
+        TenantCredentialReadOperationRules.Require(value, run, agent, session, await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), selected);
         await TenantCredentialReadOperationRules.PermissionsAsync((await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!, value,
             agent.PrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
     }

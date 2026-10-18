@@ -17,6 +17,9 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && toolName == ToolCatalog.ArtifactsCreate)
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && TenantArtifactToolContract.Allows(definition) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && toolName == ToolCatalog.CredentialsList)
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -179,6 +182,10 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is { } artifactExecution && descriptor.Name == ToolCatalog.ArtifactsCreate)
+            return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
+                && artifactExecution.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage
+                && artifactExecution.SessionId == context.OwnedSessionId && TenantArtifactToolContract.Allows(definition);
         if (context?.ExecutionContext is { } credentialExecution && descriptor.Name == ToolCatalog.CredentialsList)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, CredentialMetadataAvailable: true }
                 && credentialExecution.SessionId == context.OwnedSessionId;

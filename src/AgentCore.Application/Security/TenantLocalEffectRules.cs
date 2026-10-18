@@ -9,6 +9,22 @@ namespace AgentCore.Application.Security;
 
 public static class TenantLocalEffectRules
 {
+    public static void RequireDirectRun(AgentRun run, Guid generation, DateTimeOffset at)
+    {
+        if (run.Owner.TenantId is null || run.Admission.ExecutionContext is null || run.Status != AgentRunStatus.Running
+            || run.Claim?.Generation != generation || run.Claim.LeaseExpiresAtUtc <= at || run.CancellationRequested
+            || run.SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new SecurityConflictException("tenant_runtime_unavailable");
+    }
+    public static TenantOperationReceipt MatchDirectReceipt(TenantOperationReceipt receipt, AgentRun run, string call, string parametersHash)
+    {
+        if (receipt.RequestId is not null || receipt.TenantId != run.Owner.TenantId || receipt.RunId != run.AgentRunId
+            || receipt.SessionId != run.SessionId || receipt.InstanceId != run.AgentInstanceId || receipt.RootActivationId != run.Admission.ExecutionContext!.RootActivationId
+            || receipt.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId || receipt.SourceCallId != call || receipt.ParametersHash != parametersHash)
+            throw new SecurityConflictException("operation_mismatch");
+        return receipt;
+    }
+
     public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
         AgentRun run, TenantOperationCommit commit, AgentRun? source = null)
     {

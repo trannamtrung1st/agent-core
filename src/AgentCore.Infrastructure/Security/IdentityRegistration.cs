@@ -30,7 +30,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<IIamStore>(provider => provider.GetRequiredService<PersistenceOptions>().Provider.ToUpperInvariant() switch
         {
             "SQLITE" => new SqliteIamStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetService<IDefinitionResourceContentStore>(),
-                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>(), provider.GetService<SqliteArtifactStore>()),
             "INMEMORY" => CreateInMemoryStore(provider),
             _ => throw new InvalidOperationException("Identity storage must explicitly select Sqlite or InMemory.")
         });
@@ -101,7 +101,10 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantRunExecutionAuthority>();
         services.TryAddSingleton<TenantRunContinuationService>();
         services.TryAddSingleton<ITenantPreferenceOperationStore>(p => (ITenantPreferenceOperationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantDirectOperationStore>(p => (ITenantDirectOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantPreferenceOperationService>();
+        services.TryAddSingleton<ITenantArtifactOperationStore>(p => (ITenantArtifactOperationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantArtifactOperationService>();
         services.TryAddSingleton<TenantSessionService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();

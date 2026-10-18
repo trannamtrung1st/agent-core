@@ -9,24 +9,9 @@ namespace AgentCore.Application.Security;
 
 public static class TenantPreferenceOperationRules
 {
-    public static void RequireRun(AgentRun run, Guid generation, DateTimeOffset at)
-    {
-        if (run.Owner.TenantId is null || run.Admission.ExecutionContext is null || run.Status != AgentRunStatus.Running
-            || run.Claim?.Generation != generation || run.Claim.LeaseExpiresAtUtc <= at || run.CancellationRequested
-            || run.SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
-            throw new SecurityConflictException("tenant_runtime_unavailable");
-    }
-    public static TenantOperationReceipt Match(TenantOperationReceipt receipt, AgentRun run, string call, string parametersHash)
-    {
-        if (receipt.RequestId is not null || receipt.TenantId != run.Owner.TenantId || receipt.RunId != run.AgentRunId
-            || receipt.SessionId != run.SessionId || receipt.InstanceId != run.AgentInstanceId || receipt.RootActivationId != run.Admission.ExecutionContext!.RootActivationId
-            || receipt.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId || receipt.SourceCallId != call || receipt.ParametersHash != parametersHash)
-            throw new SecurityConflictException("operation_mismatch");
-        return receipt;
-    }
     public static AgentInstance Apply(AgentRun run, TenantAgent target, TenantPreferenceCommit commit, DateTimeOffset at)
     {
-        RequireRun(run, commit.Generation, at);
+        TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
         if (run.AgentRunId != commit.RunId || run.Revision != commit.ExpectedRunRevision || target.TenantId != run.Owner.TenantId
             || target.Instance.InstanceId != run.AgentInstanceId || target.PrincipalId != run.Owner.ExecutorPrincipalId
             || commit.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200

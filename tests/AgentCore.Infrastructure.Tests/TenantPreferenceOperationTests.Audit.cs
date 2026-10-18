@@ -19,7 +19,7 @@ public sealed partial class TenantPreferenceOperationTests
         Assert.Equal(revision, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         Assert.Equal(run.Revision, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, run.AgentRunId))!.Revision);
         Assert.Equal(setup.Agent.Instance.Revision, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(setup.Tenant, run.AgentInstanceId))!.Instance.Revision);
-        Assert.Null(await ((ITenantPreferenceOperationStore)f.Iam).FindPreferenceReceiptAsync(setup.Tenant, run.AgentRunId, "audited-call"));
+        Assert.Null(await ((ITenantPreferenceOperationStore)f.Iam).FindDirectOperationReceiptAsync(setup.Tenant, run.AgentRunId, "audited-call"));
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "operations.preferences.apply");
         var recovered = await Service(f).ExecuteAsync(new(setup.Tenant, run.AgentRunId), run.Claim!.Generation, "audited-call", Preferences);
         Assert.Equal(OperationDecisionKind.Allowed, recovered.Decision); Assert.NotNull(recovered.Receipt);

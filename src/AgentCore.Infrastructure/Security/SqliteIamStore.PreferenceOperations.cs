@@ -9,11 +9,6 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore : ITenantPreferenceOperationStore
 {
-    public async ValueTask<TenantOperationReceipt?> FindPreferenceReceiptAsync(Guid tenantId, Guid runId, string sourceCallId, CancellationToken ct = default)
-    {
-        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return (await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenantId && r.RunId == runId.ToString("D") && r.SourceCallId == sourceCallId, ct).ConfigureAwait(false))?.Domain();
-    }
     public async ValueTask<TenantOperationReceipt?> TryCommitPreferencesAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantPreferenceCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
@@ -22,7 +17,7 @@ public sealed partial class SqliteIamStore : ITenantPreferenceOperationStore
         var row = await OwnedRuns(db, next.Tenant.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == commit.RunId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
         var run = AgentRunStoreMapping.ToDomain(row);
         var existing = await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == next.Tenant.TenantId && r.RunId == row.AgentRunId && r.SourceCallId == commit.SourceCallId, ct).ConfigureAwait(false);
-        if (existing is not null) return TenantPreferenceOperationRules.Match(existing.Domain(), run, commit.SourceCallId, commit.ParametersHash);
+        if (existing is not null) return TenantLocalEffectRules.MatchDirectReceipt(existing.Domain(), run, commit.SourceCallId, commit.ParametersHash);
         var tenant = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == next.Tenant.TenantId, ct).ConfigureAwait(false);
         if (tenant is null || tenant.Revision != expectedSecurityRevision || run.Revision != commit.ExpectedRunRevision) return null;
         var before = (await ReadTenantAsync(db, tenant.TenantId, ct).ConfigureAwait(false))!;

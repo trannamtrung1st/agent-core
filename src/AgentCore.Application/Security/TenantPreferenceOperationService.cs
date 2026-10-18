@@ -27,9 +27,9 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
     private async ValueTask<TenantPreferenceResult> ExecuteCoreAsync(TenantRunReference reference, Guid generation, string callId,
         TenantPreferencePatch patch, AgentRun run, TenantSecurityState state, CancellationToken ct)
     {
-        TenantPreferenceOperationRules.RequireRun(run, generation, time.GetUtcNow());
-        var saved = await effects.FindPreferenceReceiptAsync(reference.TenantId, run.AgentRunId, callId, ct).ConfigureAwait(false);
-        if (saved is not null) return new(OperationDecisionKind.Allowed, "operation_completed", TenantPreferenceOperationRules.Match(saved, run, callId, patch.ParametersHash));
+        TenantLocalEffectRules.RequireDirectRun(run, generation, time.GetUtcNow());
+        var saved = await effects.FindDirectOperationReceiptAsync(reference.TenantId, run.AgentRunId, callId, ct).ConfigureAwait(false);
+        if (saved is not null) return new(OperationDecisionKind.Allowed, "operation_completed", TenantLocalEffectRules.MatchDirectReceipt(saved, run, callId, patch.ParametersHash));
         var scope = AccessScope.ForResource(reference.TenantId, "agent", run.AgentInstanceId.ToString("D"));
         if ((await operations.Check(state, run, "agents.read", scope, ct).ConfigureAwait(false)).Decision != OperationDecisionKind.Allowed)
         {
@@ -70,9 +70,9 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
         if (receipt is null)
         {
             await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
-            receipt = await effects.FindPreferenceReceiptAsync(reference.TenantId, run.AgentRunId, callId, ct).ConfigureAwait(false);
+            receipt = await effects.FindDirectOperationReceiptAsync(reference.TenantId, run.AgentRunId, callId, ct).ConfigureAwait(false);
         }
-        return receipt is not null ? new(OperationDecisionKind.Allowed, "operation_completed", TenantPreferenceOperationRules.Match(receipt, run, callId, patch.ParametersHash))
+        return receipt is not null ? new(OperationDecisionKind.Allowed, "operation_completed", TenantLocalEffectRules.MatchDirectReceipt(receipt, run, callId, patch.ParametersHash))
             : throw new SecurityConflictException("stale_revision");
     }
     private ValueTask RecordDenial(TenantSecurityState state, AgentCore.Domain.Conversation.AgentRun run, string reason, CancellationToken ct) =>

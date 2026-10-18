@@ -18,7 +18,7 @@ public sealed partial class SqliteIamStore
         var latest = await OwnedSandboxProfiles(db, tenant).AsNoTracking().Where(p => p.Id == value.ProfileId).OrderByDescending(p => p.Revision).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         var session = await ReadSandboxSession(db, tenant, value.SessionId, ct).ConfigureAwait(false);
         if (source is null || session is null || latest is null || !SandboxValue(latest).Enabled) throw new AccessDeniedException("resource_unavailable");
-        var baseline = await SandboxBaseline(db, agent, ct).ConfigureAwait(false);
+        var baseline = await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false);
         var row = await db.Set<SandboxLeaseRow>().AsNoTracking().SingleOrDefaultAsync(l => l.TenantId == tenant && l.SessionId == value.SessionId.ToString("D"), ct).ConfigureAwait(false);
         var lease = row is null ? null : SandboxRuntimePersistence.Value(row);
         TenantSandboxControlRules.RequireCurrentSelection(lease, agent, SandboxValue(latest));
@@ -40,7 +40,7 @@ public sealed partial class SqliteIamStore
         var row = await db.Set<SandboxLeaseRow>().SingleOrDefaultAsync(l => l.TenantId == tenant && l.SessionId == value.SessionId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var receipt = value.ExecutionId is { } executionId ? await db.Set<SandboxExecutionRow>().SingleOrDefaultAsync(e => e.TenantId == tenant && e.SessionId == row.SessionId && e.Id == executionId.ToString("D"), ct).ConfigureAwait(false) : null;
         var lease = SandboxRuntimePersistence.Value(row); var execution = receipt is null ? null : SandboxRuntimePersistence.Value(receipt);
-        var baseline = await SandboxBaseline(db, agent, ct).ConfigureAwait(false);
+        var baseline = await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false);
         TenantSandboxControlOperationRules.Require(value, run, agent, baseline, session, lease, execution);
         if (request.Snapshot?.SandboxControl is not { } snapshot || snapshot.ProfileName != lease.Profile.Name || snapshot.ImageReference != lease.Profile.ImageReference)
             throw new SecurityConflictException("sandbox_operation_witness_changed");
@@ -49,7 +49,7 @@ public sealed partial class SqliteIamStore
         return (lease, execution);
     }
 
-    private async ValueTask<AgentDefinition> SandboxBaseline(AgentCoreDbContext db, TenantAgent agent, CancellationToken ct)
+    private async ValueTask<AgentDefinition> TenantAgentDefinitionBaseline(AgentCoreDbContext db, TenantAgent agent, CancellationToken ct)
     {
         AgentDefinition? baseline;
         if (Guid.TryParse(agent.Instance.DefinitionId, out var definition))
@@ -75,7 +75,7 @@ public sealed partial class SqliteIamStore
             var source = await OwnedSandboxProfiles(db, tenant).AsNoTracking().SingleOrDefaultAsync(p => p.Id == reference.Id && p.Revision == reference.Revision, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             sources.Add(SandboxValue(source));
         }
-        TenantSandboxReadOperationRules.Require(value, run, agent, await SandboxBaseline(db, agent, ct).ConfigureAwait(false), session, new(session.Owner, session.Snapshot.Revision, lease, execution), sources);
+        TenantSandboxReadOperationRules.Require(value, run, agent, await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), session, new(session.Owner, session.Snapshot.Revision, lease, execution), sources);
         var labels = TenantApprovalRules.ReadSnapshotLabels(request.Operation, request.Snapshot!.SandboxRead!);
         if (labels.Any(p => !sources.Any(s => s.Id == p.Id && s.Revision == p.Revision && s.Name == p.Name))) throw new SecurityConflictException("sandbox_read_target_changed");
         var state = (await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!;

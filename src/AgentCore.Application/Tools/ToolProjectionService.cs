@@ -26,6 +26,7 @@ public static class ToolProjectionService
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }
     private static ModelToolDefinition ForContext(ModelToolDefinition tool, AgentContext? context) => context?.ExecutionContext is null ? tool
+        : tool.Name == ToolCatalog.ArtifactsCreate ? TenantArtifactToolContract.ForModel()
         : TenantSandboxInspectionContract.IsInspection(tool.Name) ? TenantSandboxInspectionContract.ForModel(tool)
         : TenantBrowserInspectionContract.IsInspection(tool.Name) ? TenantBrowserInspectionContract.ForModel(tool) : tool;
 

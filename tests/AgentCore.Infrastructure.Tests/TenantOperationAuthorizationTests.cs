@@ -75,12 +75,12 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     private sealed record Environment(Guid Tenant, TenantSessionInitiator Owner, TenantAgent Agent, AgentRun Run);
-    private static async Task<Environment> Setup(Fixture f)
+    private static async Task<Environment> Setup(Fixture f, string templateId = "examiner", int version = 1)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var actor = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
-        var agent = await f.Agents.CreateAsync(actor.PrincipalId, owner.TenantId, "examiner", 1, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
+        var agent = await f.Agents.CreateAsync(actor.PrincipalId, owner.TenantId, templateId, version, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         var session = await f.Sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, actor, SessionMode.Text, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision, 1);
         var receipt = await f.RunService().SubmitTextAsync(owner.TenantId, session.Owner.SessionId, actor, f.Ids.NewId(), "Inspect access", (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision, 1);
         return new(owner.TenantId, actor, agent, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(owner.TenantId, receipt.RunId))!);

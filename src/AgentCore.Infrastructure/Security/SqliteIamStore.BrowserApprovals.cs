@@ -13,7 +13,7 @@ public sealed partial class SqliteIamStore
     {
         var value = request.Operation.BrowserCommand!;
         var session = await ReadSandboxSession(db, request.TenantId, value.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        var baseline = await SandboxBaseline(db, agent, ct).ConfigureAwait(false);
+        var baseline = await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false);
         TenantBrowserOperationRules.Require(value, run, agent, baseline, session);
         if (value.Credential is { } credential)
         {

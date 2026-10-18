@@ -178,13 +178,13 @@ public sealed partial class TenantPreferenceOperationTests
         Assert.Equal(revision, (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(setup.Tenant, setup.Agent.Instance.InstanceId))!.Instance.Revision);
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "operations.preferences.apply");
         Assert.Empty((await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(setup.Tenant, null, null, new(0, 100))).Items);
-        Assert.Null(await ((ITenantPreferenceOperationStore)f.Iam).FindPreferenceReceiptAsync(setup.Tenant, setup.Run.AgentRunId, "race-call"));
+        Assert.Null(await ((ITenantPreferenceOperationStore)f.Iam).FindDirectOperationReceiptAsync(setup.Tenant, setup.Run.AgentRunId, "race-call"));
     }
     private sealed class PreferenceGate(ITenantPreferenceOperationStore inner) : ITenantPreferenceOperationStore
     {
         internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Proceed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public ValueTask<TenantOperationReceipt?> FindPreferenceReceiptAsync(Guid tenant, Guid run, string call, CancellationToken ct = default) => inner.FindPreferenceReceiptAsync(tenant, run, call, ct);
+        public ValueTask<TenantOperationReceipt?> FindDirectOperationReceiptAsync(Guid tenant, Guid run, string call, CancellationToken ct = default) => inner.FindDirectOperationReceiptAsync(tenant, run, call, ct);
         public async ValueTask<TenantOperationReceipt?> TryCommitPreferencesAsync(TenantSecurityState next, long expected, TenantPreferenceCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
         { Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); return await inner.TryCommitPreferencesAsync(next, expected, commit, audit, ct); }
     }
