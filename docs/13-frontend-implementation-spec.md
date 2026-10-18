@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Organization Governance
+
+`/t/{tenantId}/admin/governance` uses the existing tenant Admin shell, permission-aware navigation and shared collection/Drawer compositions. Independent Governance read enables inspection; current server editability plus manage permission enables witnessed single-permission saves. Core minimum and current organization policy remain separate, with human-only/nondelegatable restrictions explicit. Relaxation requires the shared named confirmation. Drafts, stale/read loss and acknowledged-response recovery follow the [Governance interaction contract](19-multi-tenant-iam-ux.md#organization-governance-policy-interaction); reads never imply an approval, grant or action permission. No new kit, token or CSS is introduced.
+
 ## Tenant Credential metadata read inspection
 
 The canonical inbox and original-Chat status reuse `TenantApprovalDetail` for `inspect_credential_metadata`. Its shared “Exact saved read” descriptions show the escaped Credential scope, starting alias/maximum records, non-secret disclosure and one-page boundary. Empty scope is explicit. Approval/reject/cancel, fresh revision recovery, technical disclosure and responsive Drawer ownership stay in the existing composition. Completed consent is “Read authorized”; it is never labeled an applied change or Credential-use grant, and data delivery remains separate. Chat imports the same result labeling. No new token, layout, CSS or UI kit is introduced. [UX](19-multi-tenant-iam-ux.md#credential-metadata-read-review), [contract](14-api-and-realtime-protocol.md#tenant-reviewed-credential-metadata-intent), [verification](reports/tenant-credential-metadata-review-verification-2026-10-18.md).

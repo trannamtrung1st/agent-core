@@ -11,6 +11,12 @@ public static class TenantOperationPolicyEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/operation-policies").RequireAuthorization();
+        group.MapGet("", (int? page, int? pageSize, string? q, HttpContext http, TenantOperationPolicyService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var result = await service.ListAsync(actor.TenantId, Initiator(http, actor), page ?? 0, pageSize ?? 20, q, ct).ConfigureAwait(false);
+            return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize, result.SecurityRevision });
+        }));
         group.MapGet("/{permission}", (string permission, HttpContext http, TenantOperationPolicyService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http); return Results.Json(Safe(await service.ReadAsync(actor.TenantId, Initiator(http, actor), permission, ct).ConfigureAwait(false)));
@@ -27,6 +33,6 @@ public static class TenantOperationPolicyEndpoints
         IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
     private static object Safe(TenantOperationPolicyView view) => new { view.Permission, approvalClass = Camel(view.ApprovalClass),
         minimum = new { mode = Camel(view.Minimum.Mode), view.Minimum.IndependentReview }, effective = new { mode = Camel(view.Effective.Mode), view.Effective.IndependentReview },
-        view.PolicyRevision, view.SecurityRevision };
+        view.PolicyRevision, view.SecurityRevision, view.HumanOnly, view.Delegatable, view.CanManage };
     private static string Camel<T>(T value) where T : Enum => JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
 }

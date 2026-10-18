@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Governance read and editing
+
+`TenantOperationAuthorizationTests.Governance` verifies both stores' independent read/manage rights, bounded sorted catalog/paging/search, coherent security witnesses, immutable catalog restrictions, no inspection mutation, current revocation and exact return to minimum. Existing policy/requester tests and original-login/revocation/competition/cancellation commit races remain required for policy-owner changes. `TenantSessionAccessTests.Governance` exercises actual authenticated collection/detail/write, read-only denial, stale CAS, cross-tenant rejection, no system catalog leakage and revoked reads; the existing canonical policy HTTP case covers CSRF and the Core floor.
+
+`TenantGovernance.test.tsx`, canonical routes and command-owner checks cover separate read-only controls, below-minimum choices, confirmation/cancel, exact witnesses, stale draft retention/reload, acknowledged-but-unreadable save and read-loss retirement. Playwright MCP must exercise actual Synthetic owner/reader flows, including a competing edit, and inspect the prescribed responsive widths. Controlled frontend response fixtures and actual HTTP/browser evidence stay distinct. [Focused results](reports/tenant-governance-ui-verification-2026-10-18.md) do not establish full proposal acceptance.
+
 ## Tenant Credential metadata page Review checks
 
 Exercise exact saved scope/cursor/limit, page fitting, empty Session-target pages, approve/reject/cancel, no secret-use/grant, and scoped reviewer independence through both stores. Inbox filters all saved Credential and Session reads before totals/offset, including an undisplayed lookahead; no use permission is required. Same-root changed scope/revisions cannot bypass refusal/correlation. Current Credential/Session/lookahead read loss or source rotation blocks retained metadata before later model generation while preserving the factual receipt.

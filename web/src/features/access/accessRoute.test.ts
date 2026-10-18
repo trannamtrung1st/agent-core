@@ -53,3 +53,7 @@ describe('canonical access navigation', () => {
     for (const path of [`/t/${tenant}/admin/definitions/not-a-definition`, `${tenantDraftPath(tenant, definition, draft)}/extra`, `/t/${tenant}/admin/definitions/${definition}/drafts/${draft}/unknown`]) expect(parseAccessRoute(path)?.view).toBe('not-found');
   });
 });
+
+ it('recognizes the canonical organization Governance destination', () => {
+  expect(parseAccessRoute('/t/11111111-1111-1111-1111-111111111111/admin/governance')).toMatchObject({ view: 'tenant', page: 'governance' });
+ });
