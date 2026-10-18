@@ -112,6 +112,7 @@ Other bounded successor verification limits remain in their linked reports under
 Always keep this section. These are personal product ideas to refine, not approved implementation scope.
 
 - [ ] End chat capability/tool.
+- [ ] Long text in composer to become attachment --> prevent polluted context. [TBD]
 - [ ] Refactor legacy, compatibility, fallbacks, refactor env names, etc. [TBD]
 - [ ] **Validation/Evaluation**: agent run/turn verification, goals (session, environment), verfication/evaluation management ... [TBD]
 - [ ] **Environment instructions**: for all agents working in same context? [TBD]
