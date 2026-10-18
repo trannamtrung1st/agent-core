@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Contracts.Http;
 
 namespace AgentCore.Api.Security;
 
@@ -10,6 +11,14 @@ public static class TenantSandboxRuntimeEndpoints
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox").RequireAuthorization();
         group.MapGet("", (Guid sessionId, HttpContext http, TenantSandboxRuntimeReadService service, CancellationToken ct) => Read(sessionId, null, http, service, ct));
         group.MapGet("/executions/{executionId:guid}", (Guid sessionId, Guid executionId, HttpContext http, TenantSandboxRuntimeReadService service, CancellationToken ct) => Read(sessionId, executionId, http, service, ct));
+        group.MapPost("/reset", (Guid sessionId, TenantSandboxResetRequest request, HttpContext http, TenantSandboxResetService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
+            var result = await service.RequestAsync(actor.TenantId, human, new(sessionId, request.ExpectedSessionRevision, request.ExpectedGeneration,
+                request.ExpectedLeaseRevision, request.ExpectedExecutionId), request.ExpectedRevision, ct).ConfigureAwait(false);
+            return Results.Accepted($"/api/v2/tenants/{actor.TenantId}/sessions/{sessionId}/sandbox", result);
+        }));
     }
     private static Task<IResult> Read(Guid session, Guid? execution, HttpContext http, TenantSandboxRuntimeReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
     {

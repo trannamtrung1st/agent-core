@@ -68,5 +68,24 @@ public sealed partial class TenantDefinitionAccessTests
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other command review", slug = "other-command-review" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/approvals/{request.RequestId}")).StatusCode);
         Assert.Null((await storage.ReadTenantSandboxRuntimeAsync(tenant, id))!.Execution);
+        var sandboxPath = api + $"/sessions/{id}/sandbox"; var observed = await Json(await owner.GetAsync(sandboxPath));
+        var reset = new TenantSandboxResetRequest(await Revision(owner, tenant), observed.GetProperty("sessionRevision").GetInt64(), lease.Generation, 2, null);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(sandboxPath + "/reset", reset with { ExpectedExecutionId = Guid.NewGuid() })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(sandboxPath + "/reset", new { reset.ExpectedRevision, reset.ExpectedSessionRevision, reset.ExpectedGeneration, reset.ExpectedLeaseRevision })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(sandboxPath + "/reset", new { reset.ExpectedRevision, reset.ExpectedSessionRevision, reset.ExpectedGeneration, reset.ExpectedLeaseRevision, expectedExecutionId = (Guid?)null, command = "must not execute" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(sandboxPath + "/reset", reset)).StatusCode);
+        using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.PostAsJsonAsync(sandboxPath + "/reset", reset)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox/reset", reset)).StatusCode);
+        var accepted = await owner.PostAsJsonAsync(sandboxPath + "/reset", reset); Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+        Assert.Equal(sandboxPath, accepted.Headers.Location?.OriginalString); Assert.True(accepted.Headers.CacheControl?.NoStore);
+        var receipt = await Json(accepted); Assert.False(receipt.GetProperty("retirementConfirmed").GetBoolean());
+        Assert.Equal(3, receipt.GetProperty("leaseRevision").GetInt64()); Assert.Equal(reset.ExpectedRevision + 1, receipt.GetProperty("securityRevision").GetInt64());
+        var pending = await Json(await owner.GetAsync(sandboxPath)); Assert.Equal("Terminating", pending.GetProperty("environment").GetProperty("storedState").GetString());
+        Assert.True(pending.GetProperty("environment").GetProperty("cleanupPending").GetBoolean());
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(sandboxPath + "/reset", reset)).StatusCode);
+        Assert.Null((await storage.ReadTenantSandboxRuntimeAsync(tenant, id))!.Execution);
+        Assert.Single(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "sandbox.reset.request");
+
     }
 }

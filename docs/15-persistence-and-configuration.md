@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Tenant explicit reset intent
+
+The existing owned lease JSON carries reset consent (`CleanupReason=reset`, Terminating or already Terminated, cleared selection/transition targets). `TryRequestTenantSandboxResetAsync` writes that intent with one tenant security revision and audit in the same existing transaction/gates, rechecking original human, scoped permissions and exact Session/generation/lease/execution witnesses. No migration or second lifecycle table is introduced. Factual writes cannot mint/clear reset consent or change selected/switch target identity. A new generation may follow only confirmed termination and a fresh exact approved reservation; failed initialization remains blocked until explicit reset. Existing initialized/process/command evidence and canonical bytes remain retained through reset.
+
 ## Tenant Sandbox recovery state
 
 Owned recovery reuses the current Core lease/receipt/approval/result tables and retained Session/Run roots. The bounded cursor uses canonical Session keys; its in-memory progress is scheduling fairness, never authority. Factual CAS preserves exact generation/owner/action and immutable command deadline. Lease JSON adds immutable `ProviderHostScope` using the existing trusted host fingerprint. New owned reservations require it; generic factual CAS cannot add/change it. Older unknown scope remains readable as stored evidence but cannot be adopted or used for SDK/retirement I/O. No new Core migration, operation engine, dispatch table or human inventory is introduced.

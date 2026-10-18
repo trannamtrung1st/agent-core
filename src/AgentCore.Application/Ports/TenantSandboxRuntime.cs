@@ -10,9 +10,14 @@ public sealed record TenantSandboxRuntimeSnapshot(TenantSessionRoot Owner, long 
 public sealed record TenantSandboxExecutionFacts(TenantSessionRoot Owner, SandboxLease? Lease, SandboxExecution Execution, bool RunCancellationRequested);
 
 public sealed record TenantSandboxRecoveryPage(IReadOnlyList<SandboxLease> Items, string? NextCursor);
+public sealed record TenantSandboxReset(Guid SessionId, long ExpectedSessionRevision, Guid ExpectedGeneration,
+    long ExpectedLeaseRevision, Guid? ExpectedExecutionId);
 
 public interface ITenantSandboxRuntimeStore
 {
+    // Explicit original-human intent. Existing retirement consumes this fence; it never starts another generation.
+    ValueTask<SandboxLease?> TryRequestTenantSandboxResetAsync(AgentCore.Domain.Security.TenantSecurityState next, long expectedSecurityRevision,
+        TenantSandboxReset reset, HumanSessionReference human, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => throw new NotSupportedException();
     // Bounded technical inventory over retained owned roots, including terminal result settlement. Never a human inventory or dispatch authority.
     ValueTask<TenantSandboxRecoveryPage> ReadTenantSandboxRecoveryPageAsync(string? afterSession, int limit, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantSandboxRuntimeSnapshot?> ReadTenantSandboxRuntimeAsync(Guid tenant, Guid session, Guid? executionId = null, CancellationToken ct = default);

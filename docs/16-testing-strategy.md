@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant explicit human Sandbox reset
+
+In both stores, prepare/review/reserve actual owned foreground setup or an acknowledged background command, request exact human reset, then logout and reopen the owning store. Execute existing SDK reconciliation against authenticated controlled known-handle and negative-generation-fence peers. Confirm exact retirement with no create/command replay, retained home/working bytes, immutable previous launch outcomes and terminal process facts. Foreign handle/proof, pending proof and changed host mapping must retain cleanup until repaired on the original scope.
+
+Bypass Application prechecks to test transactional original-login retirement/relogin/password change/wrong-Principal, independent Session versus agent versus profile grants and revoked authority before stale witnesses. Rejected writes must preserve lease, security and audit; fresh explicit recovery may record reset after failed initialization while retaining evidence. Factual writes cannot mint or clear reset consent or change selection targets. Through Synthetic authenticated HTTP, verify strict nullable execution witness presence, unknown-member rejection, stale identity/revision, anonymous/legacy/foreign denial, 202 pending acceptance, no-store and read-only stored status. These controlled protocol/store checks remain separate from live Docker and frontend/model-reset acceptance.
+
 ## Disposable tenant verification fencing
 
 Exercise actual reusable-profile and Instance verification through both stores and the installed SDK/loopback peer. A lost create reply must seal exact tenant/attempt before disposable purge, including after original-human retirement or changed Instance policy. Complete all three sequential Home probes and initialization once, then prove that pending final retirement cannot promote compatibility or remove files. Reject unsupported capability before mount/create, and retain cleanup on foreign, malformed, oversized, wrong-version, pending or expired-claim replies. Recheck claims after provider I/O and preserve sibling attempt directories; cleanup cannot repeat scripts.

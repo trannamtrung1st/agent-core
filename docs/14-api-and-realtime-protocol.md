@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Canonical tenant Sandbox reset
+
+Authenticated `POST /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/reset` accepts strict `{expectedRevision, expectedSessionRevision, expectedGeneration, expectedLeaseRevision, expectedExecutionId}`. The last property must be present and may be null only when no active/latest execution exists. Unknown members reject. Server-derived Account/login/Principal, current Session read/manage, exact agent Sandbox read/manage and exact profile read are required independently; authority is checked before stale witnesses and again in the owning transaction.
+
+`202 Accepted` returns `{sessionId, generation, leaseRevision, sessionRevision, securityRevision, retirementConfirmed}` with the canonical Sandbox GET as Location. `retirementConfirmed:false` means writes may continue while the existing worker confirms teardown; poll GET for stored state. `true` means this generation was already confirmed Terminated. Reset preserves canonical files and immutable evidence and does not start another environment or run initialization. Stale generation/execution/revisions return 409; inaccessible/foreign resources return 403; missing authentication returns 401. Existing cookie/CSRF/no-store rules apply. Human reset is separate from model approval, process Stop and profile switching.
+
 ## Tenant Sandbox recorded effect meanings
 
 Existing approval `operationResult` can now record Sandbox outcomes from canonical SDK receipts: `sandbox_command_completed` means foreground process completion with bounded exit evidence and confirmed quiescence/retirement; `sandbox_command_started` means an acknowledged background launch whose process may still be Running; `sandbox_command_not_dispatched` means preflight failed before dispatch; `sandbox_command_uncertain` preserves an uncertain possibly dispatched command without replay. Completed shell transport does not guarantee the semantic success of arbitrary shell work; the exact execution receipt retains its exit/output facts.
@@ -14,7 +20,7 @@ The protected review changes show profile/image, exact shell or argv text, worki
 
 ## Tenant Session Sandbox stored observations HTTP
 
-Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These endpoints perform no SDK inspection or mutation and expose no command/reset/process operation.
+Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These GET endpoints perform no SDK inspection or mutation; the explicit human reset command is documented above. Command dispatch, process Stop and profile switching are separate boundaries.
 
 The environment projection contains stored generation/revision/state (`storedState`), safe profile/image identity, lifetime, active/last receipt pointers, bounded initialization evidence and stored cleanup indication. The execution projection contains exact receipt/Run/generation identity, state, profile revision, bounded command/output, timings, exit and effect/termination facts. Provider identities, mount authority/host paths and registry authorization are omitted. `liveAuthorityConfirmed=false` prevents stored Ready or Completed facts from implying current dispatch permission or provider liveness.
 

@@ -108,9 +108,11 @@ public sealed partial class OpenSandboxService
                         if (!execution.TerminationConfirmed || confirmed && !execution.RemoteTerminationConfirmed)
                         {
                             var denied = !execution.FilesystemEffectsMayHaveOccurred && execution.State == SandboxExecutionState.Dispatching;
+                            var reset = lease.CleanupReason == "reset" && execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running;
                             execution = await SaveReceiptAsync(execution with {
-                                State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? denied ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate : execution.State,
+                                State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? denied || reset ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate : execution.State,
                                 Phase = denied ? "notDispatched" : execution.Phase, FinishedAt = execution.FinishedAt ?? time.GetUtcNow(),
+                                CancellationReason = reset ? "humanReset" : execution.CancellationReason,
                                 RemoteTerminationConfirmed = confirmed, TerminationConfirmed = execution.TerminationConfirmed || confirmed || denied }, false, ct);
                         }
                     }

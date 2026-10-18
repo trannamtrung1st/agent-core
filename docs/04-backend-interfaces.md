@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant explicit reset ports
+
+`TenantSandboxResetService.RequestAsync` accepts the original human, expected security revision and exact `TenantSandboxReset` witnesses (Session/revision, generation, lease revision and nullable active-or-latest execution). `ITenantSandboxRuntimeStore.TryRequestTenantSandboxResetAsync` commits the reset intent, security advance and safe audit in the existing owning transaction. Both adapters independently recheck scoped authority and the original Account/session/Principal at commit. No current command execution, profile management or Credential secret use is granted by this cleanup request.
+
+`TenantSandboxResetReceipt` reports acceptance and whether retirement was already confirmed; acceptance alone never claims stopped processes. Existing recovery consumes the durable reset intent without another human login, SDK create or command replay. Exact provider scope, bounded cleanup and factual/immutable result rules remain in force. The request clears saved profile/switch selection but retains files and initialization evidence; it adds no Core table or alternative supervisor.
+
 ## Tenant Sandbox recovery ports
 
 `ITenantSandboxRuntimeStore.ReadTenantSandboxRecoveryPageAsync` is a bounded technical keyset cursor over retained actual owned lease roots, including terminal result settlement. It does not grant human enumeration, execution or claim authority. The existing SDK reconciler uses the same per-Session gate and existing CAS/factual result transactions. Stranded foreground/setup work is retired, with no replay. `TenantSandboxGenerationAuthority` separately permits retaining an idle owned generation or observing an acknowledged bounded background launch after its Run completes, under current Session/requester/executor/grantor/source/policy and exact receipt authority. It never authorizes a new command or setup.

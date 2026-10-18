@@ -72,6 +72,7 @@ public static class TenantSandboxRuntimeRules
                 : !reserved.InitializesGeneration || lease.ActiveExecutionId != reserved.Id || lease.LastExecutionId != reserved.Id)
             || lease.AdmissionRunId != f.RunId || lease.AdmissionToolCallId is not { Length: > 0 and <= 128 }
             || lease.CreatedAt > at || lease.ExpiresAt <= at || lease.ExpiresAt <= lease.CreatedAt || lease.Profile.AdmittedForExecution != true || pinned != lease.Profile
+            || lease.SelectedProfileId is not null && lease.SelectedProfileId != lease.Profile.Id || lease.TransitionProfileId is not null || lease.TransitionProfileRevision is not null
             || run.Admission.Configuration?.Definition.SandboxPolicy?.AllowedProfileIds.Contains(lease.Profile.Id, StringComparer.Ordinal) != true
             || !RolePermissions.AllowsTool(run.Admission.Configuration.Definition, ToolCatalog.SandboxExec))
             throw new ArgumentException("Invalid exact tenant Sandbox generation reservation.");
@@ -140,6 +141,8 @@ public static class TenantSandboxRuntimeRules
             || before.MountAuthority is not null && before.MountAuthority != next.MountAuthority
             || next.LastExecutionId != before.LastExecutionId || !Enum.IsDefined(next.State)
             || next.CleanupReason == "reset" && before.CleanupReason != "reset"
+            || before.CleanupReason == "reset" && next.CleanupReason != "reset"
+            || next.SelectedProfileId != before.SelectedProfileId || next.TransitionProfileId != before.TransitionProfileId || next.TransitionProfileRevision != before.TransitionProfileRevision
             || before.State == SandboxLeaseState.Terminated && next.State != SandboxLeaseState.Terminated
             || next.State == SandboxLeaseState.Ready && before.State is SandboxLeaseState.Terminating or SandboxLeaseState.Failed
             || next.State == SandboxLeaseState.Provisioning && before.State != SandboxLeaseState.Provisioning
