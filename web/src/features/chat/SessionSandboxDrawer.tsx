@@ -1,9 +1,10 @@
 import { SandboxEvidence } from "../sandbox/SandboxEvidence";
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Alert, App, Button, Collapse, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from 'antd';
+import { Alert, App, Button, Collapse, Descriptions, Empty, Flex, Spin, Tag, Typography, theme } from 'antd';
 import { confirmAction } from '../../app/confirmAction';
 import { getSandboxExecution, getSessionSandbox, resetSessionSandbox, stopSandboxExecution, type SandboxEnvironment, type SandboxExecution } from '../../services/sandboxes';
 import { DiagnosticDetails } from './DiagnosticDetails';
+import { SessionSandboxFrame } from './SessionSandboxFrame';
 
 export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, openerRef, onClose }: { sessionId: string; open: boolean; narrow: boolean; readOnly?: boolean; openerRef?: RefObject<HTMLButtonElement | null>; onClose: () => void }) {
   const { token } = theme.useToken(); const { modal, message } = App.useApp();
@@ -11,16 +12,6 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const epoch = useRef(0); const selected = useRef(sessionId); selected.current = sessionId;
-  const wasOpen = useRef(false);
-  useEffect(() => {
-    const closing = wasOpen.current && !open;
-    wasOpen.current = open;
-    if (!closing || !openerRef) return;
-    // A rapid open/close can cancel AntD's motion callback. Restore after
-    // focus-lock cleanup even when that callback never fires; a reopen cancels it.
-    const frame = requestAnimationFrame(() => { if (!wasOpen.current) openerRef.current?.focus({ preventScroll: true }); });
-    return () => cancelAnimationFrame(frame);
-  }, [open, openerRef]);
   const refresh = useRef<() => Promise<void>>(async () => {});
   const observed = useRef({ environment, execution, error, reading }); observed.current = { environment, execution, error, reading };
   useEffect(() => {
@@ -86,11 +77,7 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
               {execution.phase && <Descriptions.Item label="Last phase">{({dispatch:'Command dispatch',execution:'Command execution',processInspection:'Process inspection',retirementRequested:'Container retirement requested',retired:'Container stopped',completed:'Completed'} as Record<string,string>)[execution.phase]??'Recovery'}</Descriptions.Item>}
               <Descriptions.Item label="Termination">{execution.terminationConfirmed?'Container termination confirmed':'Container termination remains unconfirmed'}</Descriptions.Item>
             </Descriptions>;
-  return <Drawer title="Session sandbox" className="session-sandbox-drawer" open={open} onClose={onClose} size={narrow ? '100vw' : 'min(640px, 100vw)'} styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden focusable={{ focusTriggerAfterClose: !openerRef }}
-    afterOpenChange={visible => { if (!visible && openerRef?.current?.isConnected) openerRef.current.focus({ preventScroll: true }); }}>
-    <Flex vertical gap={token.padding} onKeyDown={event => {
-      if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose(); }
-    }}>
+  return <SessionSandboxFrame open={open} narrow={narrow} openerRef={openerRef} onClose={onClose}>
       {error && <Alert type="error" showIcon title={error} action={<Button loading={reading} onClick={() => void refresh.current()}>Retry</Button>} />}
       {loading ? <Spin aria-label="Loading Session sandbox" /> : !environment ? !error && <Empty description="No sandbox environment yet. An authorized command provisions the selected verified profile for this Session." /> : <>
         <Flex align="center" wrap gap={token.paddingXS}><Tag color={uncertain ? 'warning' : environment.state === 'Ready' && !ended ? 'success' : 'default'}>{ended && environment.state === 'Ready' ? 'Expired' : stateLabel[environment.state]??environment.state}</Tag><Typography.Text>{environment.profileId} · revision {environment.profileRevision}</Typography.Text></Flex>
@@ -144,6 +131,5 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
         </section>}
         <Flex wrap gap={token.paddingXS}><Button loading={reading} onClick={() => void refresh.current()}>Inspect status</Button><Button danger disabled={busy || reading || !!error || readOnly || environment.state === 'Terminated' && !initializationBlocked && !retainedSelection} loading={busy} onClick={() => confirmMutation('Reset this Session sandbox?', 'Stop processes and discard container-only packages and state. Canonical /working, /home and Artifacts are preserved. Reset clears the Session profile choice; the next command uses the effective default unless another authorized profile is selected.', () => resetSessionSandbox(sessionId, environment.generation, environment.activeExecutionId??environment.lastExecutionId))}>Reset sandbox</Button></Flex>
       </>}
-    </Flex>
-  </Drawer>;
+  </SessionSandboxFrame>;
 }

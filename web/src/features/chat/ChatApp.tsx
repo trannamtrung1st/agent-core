@@ -59,6 +59,7 @@ import { ChatHeader } from "./ChatHeader";
 import { getSession, listBackgroundSessions, listSessionAutomations, cancelSessionAutomation, type AgentRun } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { SessionSandboxDrawer } from './SessionSandboxDrawer';
+import { TenantSessionSandboxDrawer } from './TenantSessionSandboxDrawer';
 import { AutomationDrawer } from "./AutomationDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -403,7 +404,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
               onSchedules={!organization && inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
               onBackgroundWork={!organization && state.sessionId ? () => setWorkOpen(true) : undefined}
               sandboxButtonRef={sandboxButtonRef}
-              onSandbox={!organization && state.sessionId ? () => setSandboxOpen(true) : undefined}
+              onSandbox={state.sessionId ? () => setSandboxOpen(true) : undefined}
               attentionCount={attentionCount}
               onEnd={() => void hangUp()}
             />
@@ -575,6 +576,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
         </Layout>
         {backgroundInstanceId ? <BackgroundWorkDrawer instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
           onClose={() => setWorkOpen(false)} onAddReference={(sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label)} /> : null}
+        {tenantContext && state.sessionId && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
         {!organization && state.sessionId && <SessionSandboxDrawer key={state.sessionId} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} readOnly={readonly} onClose={() => setSandboxOpen(false)} />}
 
         {!organization && state.sessionId ? (
