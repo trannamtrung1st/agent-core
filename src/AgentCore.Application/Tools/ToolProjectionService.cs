@@ -21,11 +21,12 @@ public static class ToolProjectionService
             || BrowserBootstrap.Contains(t.Name)
             || always.Contains(t.Name, StringComparer.Ordinal) || skill.Contains(t.Name)
             || loaded.Contains(t.Name, StringComparer.Ordinal)
-            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (t.Name == ToolCatalog.ArtifactsVerify || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name))))
+            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantWorkspaceReadContract.IsRead(t.Name) || t.Name == ToolCatalog.ArtifactsVerify || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name))))
             .Select(t => ForContext(t, context))
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }
     private static ModelToolDefinition ForContext(ModelToolDefinition tool, AgentContext? context) => context?.ExecutionContext is null ? tool
+        : TenantWorkspaceReadContract.IsRead(tool.Name) ? TenantWorkspaceReadContract.ForModel(tool)
         : tool.Name == ToolCatalog.ArtifactsVerify ? TenantArtifactVerificationContract.ForModel()
         : tool.Name == ToolCatalog.ArtifactsCreate ? TenantArtifactToolContract.ForModel()
         : TenantSandboxInspectionContract.IsInspection(tool.Name) ? TenantSandboxInspectionContract.ForModel(tool)

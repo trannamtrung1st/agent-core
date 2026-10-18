@@ -1,5 +1,14 @@
 # Backend Interfaces
 
+## Tenant model workspace observations
+
+`TenantWorkspaceRuntimeReadService` converts the existing `workspace.read` and `workspace.list` tools for trusted claimed conversational Runs. A closed bounded schema accepts exact absolute `/home` or `/working` paths and, for listing, an optional same-root cursor and limit. Tenant, Instance, Session and executor identities come only from persisted Run/Session ownership. No legacy workspace adapter, relative cwd, virtual `/agent`/`attachments` path, write, search, Office or publication authority is implied by this conversion.
+
+Reads require the Agent’s independent current `sessions.read` and exact owned `workspaces.read`; home additionally requires parent `agents.read` and effective admitted/current HomeAccess. The requester’s permissions are never borrowed. Admitted and current tool capability, current original requester/Agent/Session lifecycle, claim generation/lease and operation policy are checked before filesystem I/O and again before returning. A policy-required Review remains unavailable until its exact durable consent path is converted. No file read initializes a workspace directory.
+
+The canonical read port supplies current bytes or bounded directory observations. UTF-8 text is inert/untrusted and fitted to the remaining output budget; binary/invalid text receives a supported-reader error. Lists fit whole entries and continue from the last emitted path. Metadata/source checks bracket content reads; mutable file observations are not snapshots, stable file identities or CAS tokens. Core-owned checkpoint markers retain the tool/path read scope; current compound permission, policy, capability, HomeAccess and execution fences repeat before retained output is reused by the model or an approval continuation. No file ledger or grant engine is added.
+
+
 ## Human tenant workspace mutation boundary
 
 `TenantWorkspaceMutationService.InspectAsync` projects actual parent-owned workspace access hints without filesystem reads. Independent read/write/delete and lifecycle hints are fenced against current private owner/security observations before projection; they never authorize later effects. Home can project Instance name/revision under Agent read. Working projects neither live Instance field under Session read; both are null.

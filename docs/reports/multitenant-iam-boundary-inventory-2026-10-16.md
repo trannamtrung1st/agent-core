@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant model workspace read successor — 2026-10-19
+
+Tenant model `workspace.read` and `workspace.list` now use actual claimed Run/Session ownership, independent executor parent/workspace reads, current operation policy and admitted/current capability/HomeAccess. Canonical file I/O and post-read/checkpoint fences preserve owned scope without legacy fallback. [Focused evidence](tenant-workspace-model-read-verification-2026-10-19.md) records 18 both-store cases, 61 schema/projection cases and ten hosted Synthetic journeys, including HomeAccess narrowing after admission. This supersedes model-workspace-read/list-pending notes only for current Allowed policy on exact home/working paths. Durable read Review, mutation/search/virtual-resource/Office/publication conversion, autonomous origins, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant workspace human UI successor — 2026-10-19
 
 Tenant home Workspace and Session files now expose canonical browse/search, preview/download, raw-byte upload/replacement and confirmed nonrecursive deletion in the existing Ant Design interface. Independent current permissions, retained drafts with explicit recovery, read-only lifecycle and narrow-screen file actions are verified through actual Synthetic journeys. Working access hints expose no live Agent configuration facts. [Focused evidence](tenant-workspace-ui-verification-2026-10-19.md) records 90 store, eight API and 81 frontend cases, a passing build and a fresh SHIP finish review. This supersedes Workspace-UI-pending notes below only for human file management. Model workspace tools and exact consent/grants, source publication adapters, other proposal families and final authority/schema cutover remain open; the full proposal stays active.

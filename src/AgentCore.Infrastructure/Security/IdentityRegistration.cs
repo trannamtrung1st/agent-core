@@ -107,6 +107,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantArtifactOperationService>();
         services.TryAddSingleton<TenantArtifactReferenceService>();
         services.TryAddSingleton<TenantArtifactRuntimeReadService>();
+        services.TryAddSingleton<TenantWorkspaceRuntimeReadService>();
         services.TryAddSingleton<TenantSessionService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();

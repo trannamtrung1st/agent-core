@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null)
 {
     // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
     public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
@@ -74,6 +74,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(run, ct).ConfigureAwait(false);
         if (credentialReads is not null) await credentialReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
         if (artifactReads is not null) await artifactReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
+        if (workspaceReads is not null) await workspaceReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
         TenantOperationReceipt? receipt = null;
         if (request!.Status == TenantApprovalStatus.Approved)
             receipt = await effects.ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,

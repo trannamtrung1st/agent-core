@@ -6,6 +6,10 @@ Canonical human file replacement and single-node deletion use independent `works
 
 The existing file adapter stages replacement bytes and rechecks original human, owner, current parent configuration/lifecycle and IAM immediately before atomic rename or single-node unlink. The existing authorization-audit owner records that authorization against actual current backing stores; this is permission evidence, not a file-effect receipt. There is no new file revision, approval engine, operation ledger or claimed database/filesystem transaction. Known completed mutations return a body-free acknowledgement; access loss afterward does not turn success into a replayable failed command or disclose stored metadata. Unexpected filesystem failures report possible mutation rather than encourage replay. File replacement retains ordinary last-rename-wins behavior; deletion remains nonrecursive. Model mutation/consent paths remain separate.
 
+## Tenant model workspace observations
+
+The existing tenant tool boundary routes converted `workspace.read`/`workspace.list` through `TenantWorkspaceRuntimeReadService` to the canonical owned filesystem port. Actual Run/Session bindings, independent executor reads, admitted/current capability and HomeAccess, current policy and post-I/O fences constrain output. Existing execution/continuation owners revalidate retained read scopes. This adds no file ledger, transport, grant engine or mailbox owner. [Contract and remaining conversion scope](04-backend-interfaces.md#tenant-model-workspace-observations).
+
 ## Tenant workspace read ownership
 
 Home and Session scratch are separate canonical workspace resources: `workspace/home:{instanceId:D}` and `workspace/working:{sessionId:D}` inside their actual tenant. These addresses grant authority only after resolving the existing owning Instance or non-deleted Session; a path, GUID or scope string never establishes ownership. No per-file IAM hierarchy or Environment scope is added. Session deletion retires its working-workspace grants atomically with its other direct child grants.
