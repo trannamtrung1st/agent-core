@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalAppUrl, parseAppRoute } from '../../app/appRoute';
-import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantApprovalPath, tenantAgentPath } from './accessRoute';
+import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantSandboxPath, tenantApprovalPath, tenantAgentPath } from './accessRoute';
 const tenant = '11111111-1111-4111-8111-111111111111';
 describe('canonical access navigation', () => {
   it('pins agent Access to the exact organization and rejects incomplete or extra subroutes', () => {
@@ -33,6 +33,12 @@ describe('canonical access navigation', () => {
     for (const route of ['/t/invalid/admin/members', `/t/${tenant}/admin/approvals/invalid`, '/account/unknown']) expect(parseAccessRoute(route)?.view).toBe('not-found');
     expect(parseAccessRoute('/c/session')).toBeNull();
     expect(parseAppRoute('/admin/instances').area).toBe('admin');
+  });
+  it('opens the exact organization Sandbox catalog and retains its item query', () => {
+    const path = tenantSandboxPath(tenant, 'p-exact-profile');
+    expect(parseAccessRoute(path.split('?')[0])).toMatchObject({ tenantId: tenant, page: 'sandboxes' });
+    expect(canonicalAppUrl(path)).toBe(path);
+    expect(parseAccessRoute(`/t/${tenant}/integrations/sandboxes/foreign`)?.view).toBe('not-found');
   });
   it('opens exact organization approval deep links', () => {
     expect(parseAccessRoute(tenantApprovalPath(tenant, tenant))).toMatchObject({ view: 'tenant', tenantId: tenant, page: 'approvals', requestId: tenant });

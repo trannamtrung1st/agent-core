@@ -2,7 +2,7 @@ import { Descriptions, Typography } from 'antd';
 import { sandboxSourceLabel, sandboxStatusLabel, type SandboxProfile } from '../../services/sandboxes';
 import { useAdminDetailLayout } from './useAdminDetailLayout';
 
-/** Shared Global profile facts; the enclosing owner renders its policy and actions. */
+/** Shared saved profile facts; the enclosing owner renders its policy and actions. */
 export function SandboxProfileDetails({ profile, instanceInitializationScript }: { profile: SandboxProfile; instanceInitializationScript?: string | null }) {
   const layout = useAdminDetailLayout();
   return <Descriptions {...layout} bordered size="small" column={1}>
@@ -13,7 +13,7 @@ export function SandboxProfileDetails({ profile, instanceInitializationScript }:
     <Descriptions.Item label="Lifecycle">Idle {profile.idleTtlSeconds} seconds after completed work · maximum lifetime {profile.maxLifetimeSeconds} seconds</Descriptions.Item>
     <Descriptions.Item label="Session /working storage">{Math.round(profile.storageBytes / 1024 / 1024)} MiB · {profile.storageBytes.toLocaleString()} bytes · sampled budget. Written files remain after enforcement.</Descriptions.Item>
     <Descriptions.Item label="Workspace mounts">Private writable /working; shared /home is read/write, read-only or absent under State &amp; Isolation. Verification uses disposable roots; each Session checks its own mounts. Home and container-only storage have separate limits.</Descriptions.Item>
-    <Descriptions.Item label="Global initialization"><Typography.Paragraph code style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{profile.initializationScript || 'No Profile script'}</Typography.Paragraph></Descriptions.Item>
+    <Descriptions.Item label="Profile initialization"><Typography.Paragraph code style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{profile.initializationScript || 'No Profile script'}</Typography.Paragraph></Descriptions.Item>
     {instanceInitializationScript !== undefined && <Descriptions.Item label="Instance initialization"><Typography.Paragraph code style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{instanceInitializationScript || 'No Instance script'}</Typography.Paragraph></Descriptions.Item>}
   </Descriptions>;
 }

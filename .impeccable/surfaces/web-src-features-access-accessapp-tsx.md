@@ -41,3 +41,7 @@ FIRST VIEWPORT: One searchable paged collection, Reload and permitted Add creden
 FORM: Existing organization access composition extension; code-led, no concept seed or new visual world. Canonical OAuth return opens the exact saved credential and displays a verified connection outcome.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+## Organization Sandbox catalog successor
+
+The scoped Integrations Sandbox catalog is now represented by [its focused surface brief](web-src-features-access-tenantsandboxes-tsx.md). It reuses this shell and the existing native access Drawer/collection owners, with shared platform profile fields/details. [Focused evidence](../../docs/reports/tenant-sandbox-catalog-ui-verification-2026-10-18.md) supersedes catalog-UI-pending notes above only; Instance Sandbox configuration/verification, Session controls UI and the wider tenant cutover remain open. Preserve the incumbent system and historical sidecar fingerprints.
