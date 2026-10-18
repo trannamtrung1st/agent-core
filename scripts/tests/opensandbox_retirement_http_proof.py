@@ -21,17 +21,16 @@ owner = ("1" * 32, "2" * 32, "3" * 32, "4" * 32)
 metadata = {**dict(zip(retirement.LABELS, owner)), retirement.CONTRACT: "4", "opensandbox.io/id": "controlled-provider"}
 current = []; deleted = []; creates = []
 provider = DockerSandboxService.__new__(DockerSandboxService)
-provider.docker_client = SimpleNamespace(api=SimpleNamespace(containers=lambda **_: current[:]),
-    containers=SimpleNamespace(get=lambda _: SimpleNamespace(attrs={"Config": {"Labels": metadata}})))
+provider.docker_client = SimpleNamespace(api=SimpleNamespace(containers=lambda **options: [item for item in current if all(item["Labels"].get(key) == value for key, value in (label.split("=", 1) for label in options["filters"]["label"]))]),
+    containers=SimpleNamespace(get=lambda identity: SimpleNamespace(attrs={"Config": {"Labels": next(item["Labels"] for item in current if item["Id"] == identity)}})))
 def delete(value):
-    assert value == "controlled-provider"
-    deleted.append(value); current.clear()
+    deleted.append(value); current[:] = [item for item in current if item["Labels"]["opensandbox.io/id"] != value]
 provider.delete_sandbox = delete
 
 def create(service, sandbox_id, request, *args, **kwargs):
     if sandbox_id == "invalid-provider":
         raise ValueError("controlled-provider-error")
-    creates.append(sandbox_id); current.append({"Id": "controlled-container", "Labels": metadata})
+    creates.append(sandbox_id); current.append({"Id": sandbox_id, "Labels": {**request.metadata, "opensandbox.io/id": sandbox_id}})
     return SimpleNamespace(id=sandbox_id)
 DockerSandboxService._provision_sandbox = create
 lifecycle = types.ModuleType("opensandbox_server.api.lifecycle")
@@ -50,7 +49,7 @@ async def proof():
         headers = {"OPEN-SANDBOX-API-KEY": "synthetic-retirement-proof-key"}
         assert (await client.post(path, json={**payload, "extra": True}, headers=headers)).status_code == 422
         capabilities = await client.get("/agent-core/generations/capabilities", headers=headers)
-        assert capabilities.status_code == 200 and capabilities.json() == {"contractVersion": 1, "retirementFencing": True}
+        assert capabilities.status_code == 200 and capabilities.json() == {"contractVersion": 1, "retirementFencing": True, "verificationFencing": True}
         try:
             provider._provision_sandbox("invalid-provider", SimpleNamespace(metadata={"agent-core-generation": "5" * 32}))
             raise AssertionError("original provider error was swallowed")
@@ -70,6 +69,23 @@ async def proof():
         foreign = await client.post(path, json={**payload, "tenant": "9" * 32}, headers=headers)
         assert foreign.status_code == 409
         assert deleted == ["controlled-provider"]
+        verification = {"tenant": owner[0], "attempt": owner[3]}
+        verify_path = "/agent-core/verifications/retire"
+        assert (await client.post(verify_path, json=verification)).status_code == 401
+        assert (await client.post(verify_path, json={**verification, "session": owner[1]}, headers=headers)).status_code == 422
+        verify_labels = {"agent-core-image-verification": owner[0] + "." + owner[3], retirement.CONTRACT: "4"}
+        for index in range(3):
+            provider._provision_sandbox("verify-" + str(index), SimpleNamespace(metadata=verify_labels))
+        result = await client.post(verify_path, json=verification, headers=headers)
+        assert result.status_code == 200 and result.json() == {"contractVersion": 1, **verification, "retired": True}
+        assert current == [] and deleted == ["controlled-provider", "verify-0", "verify-1", "verify-2"]
+        try:
+            provider._provision_sandbox("late-verify", SimpleNamespace(metadata=verify_labels))
+            raise AssertionError("retired verification was released")
+        except HTTPException as error:
+            assert error.status_code == 409
+        assert len(creates) == 4
+        assert (await client.post(verify_path, json={**verification, "tenant": "9" * 32}, headers=headers)).status_code == 409
         print("Pinned-image ASGI/auth/typed-retirement/provider-hook proof passed; Docker peer was controlled, no daemon socket mounted.")
 
 asyncio.run(proof())

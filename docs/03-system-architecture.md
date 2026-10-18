@@ -8,7 +8,13 @@ Each new owned lease also pins the trusted provider configuration scope (private
 
 The pinned Docker provider creates in a background thread that can outlive a lost Core HTTP reply. A filtered empty list therefore cannot prove that creation has stopped. The existing trusted-server adapter keeps a durable negative generation fence in its existing private provider state volume. The fence binds exact tenant/Session/executor/generation, prevents later provisioning, waits for any active provisioning call and retires only exact matching containers through the existing provider service. Core accepts its bounded scope-matching retirement proof; errors/pending/foreign responses retain reconciliation. This provider fence cannot grant access, reserve a Core effect or replay an action; it is not a second IAM/approval/Run engine.
 
-[Focused recovery evidence](reports/tenant-sandbox-recovery-verification-2026-10-18.md) distinguishes controlled SDK/provider proof from live Docker qualification. Full proposal acceptance, verification lost-create/orphan fencing, explicit process Stop/reset/profile switching, model offering/output delivery, tenant UI and final schema/authority consolidation remain separate gates.
+[Focused recovery evidence](reports/tenant-sandbox-recovery-verification-2026-10-18.md) distinguishes controlled SDK/provider proof from live Docker qualification. Full proposal acceptance, explicit process Stop/reset/profile switching, model offering/output delivery, tenant UI and final schema/authority consolidation remain separate gates.
+
+## Disposable tenant verification retirement
+
+Tenant reusable-profile and Instance verification use the same SDK and trusted provider fence owner. Their exact scope is tenant plus the existing durable verification attempt, without fabricated Session/executor identities. RW/RO/Disabled Home probes run sequentially under that attempt. The adapter verifies metadata before using or deleting each returned handle, then seals the whole attempt after success or failure. Cleanup/promotion requires a bounded exact provider proof that excludes all late creates and retires its remaining containers. An empty list alone never supplies this proof.
+
+Verification checks current original-human/source/Instance authority throughout SDK work. Cancellation or revocation stops the work and prevents captured output from promoting compatibility. Technical retry uses only the existing cleanup claim and exact original host scope; it rechecks that claim after provider I/O before purging only the disposable attempt directory. Unsupported servers fail before tenant filesystem/create effects; pending, changed-host or unproven cleanup retains files and the existing pending receipt. [Focused evidence](reports/tenant-sandbox-verification-retirement-verification-2026-10-18.md) records controlled SDK/provider proof and remaining live Docker qualification.
 
 ## Tenant approved Sandbox SDK execution
 

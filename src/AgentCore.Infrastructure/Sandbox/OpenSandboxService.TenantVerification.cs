@@ -3,8 +3,6 @@ using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Workspaces;
-using OpenSandbox;
-using OpenSandbox.Models;
 
 namespace AgentCore.Infrastructure.Sandbox;
 
@@ -41,21 +39,36 @@ public sealed partial class OpenSandboxService
             token => RequireVerificationAsync(attempt, profile, proof, token), attempt.InstanceId);
         return new(result, result.FailureCode != "cleanup");
     }
-    public async ValueTask<bool> CleanupAsync(SandboxVerificationCleanup claim, CancellationToken ct = default)
+    private async ValueTask<bool> CurrentVerificationCleanupAsync(SandboxVerificationCleanup claim, CancellationToken ct)
     {
         var current = tenantVerifications is null ? null : await tenantVerifications.FindSandboxVerificationAsync(claim.TenantId, claim.ProfileId, claim.AttemptId, ct, claim.InstanceId);
-        if (current?.Revision != claim.Revision || current.Status != SandboxVerificationStatus.CleanupPending || current.CleanupClaim != claim.ClaimId
-            || current.CleanupClaimExpiresAt is not { } expires || expires <= time.GetUtcNow() || current.HostScope != claim.HostScope || HostScope != claim.HostScope) return false;
-        var owner = VerificationOwner(claim.TenantId, claim.AttemptId);
-        await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = Connection() });
-        var candidates = await manager.ListSandboxInfosAsync(new SandboxFilter { Metadata = new Dictionary<string, string> {
-            ["agent-core-image-verification"] = owner, ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString() }, PageSize = 100 }, ct);
-        foreach (var candidate in candidates.Items)
+        return current?.Revision == claim.Revision && current.Status == SandboxVerificationStatus.CleanupPending && current.CleanupClaim == claim.ClaimId
+            && current.CleanupClaimExpiresAt is { } expires && expires > time.GetUtcNow() && current.HostScope == claim.HostScope && HostScope == claim.HostScope;
+    }
+    private async ValueTask<bool> TryRetireVerificationAsync(Guid tenant, Guid attempt, string expectedHost, CancellationToken ct)
+    {
+        if (HostScope != expectedHost) return false;
+        var owner = new { tenant = tenant.ToString("N"), attempt = attempt.ToString("N") };
+        try
         {
-            if (!VerificationMetadata(candidate.Metadata, owner)) return false;
-            await manager.KillSandboxAsync(candidate.Id, ct);
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(options.Origin(), "/agent-core/verifications/retire"));
+            request.Headers.Add("OPEN-SANDBOX-API-KEY", options.ApiKey); request.Content = System.Net.Http.Json.JsonContent.Create(owner);
+            using var response = await RetirementClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode) return false;
+            using var document = await ReadRetirementResponseAsync(response, ct);
+            if (document is null || HostScope != expectedHost) return false;
+            var value = document.RootElement;
+            return value.GetProperty("contractVersion").GetInt32() == 1 && value.GetProperty("retired").GetBoolean()
+                && value.GetProperty("tenant").GetString() == owner.tenant && value.GetProperty("attempt").GetString() == owner.attempt;
         }
-        if (candidates.Items.Count >= 100) return false;
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch { return false; }
+    }
+    public async ValueTask<bool> CleanupAsync(SandboxVerificationCleanup claim, CancellationToken ct = default)
+    {
+        if (!await CurrentVerificationCleanupAsync(claim, ct)) return false;
+        if (!await TryRetireVerificationAsync(claim.TenantId, claim.AttemptId, claim.HostScope, ct)) return false;
+        if (!await CurrentVerificationCleanupAsync(claim, ct)) return false;
         var path = Path.Combine(options.CanonicalRoot(), ".verification", claim.AttemptId.ToString("N"));
         if (Directory.Exists(path)) CanonicalWorkspaceFilesystem.PurgeOwner(path, ct);
         return true;

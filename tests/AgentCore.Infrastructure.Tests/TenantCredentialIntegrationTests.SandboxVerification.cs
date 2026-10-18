@@ -198,25 +198,32 @@ public sealed partial class TenantCredentialIntegrationTests
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var human = await SandboxHuman(f, owner.OwnerPrincipalId); var store = (ITenantSandboxVerificationStore)f.Iam;
         var builder = WebApplication.CreateSlimBuilder(); builder.Logging.ClearProviders(); await using var server = builder.Build(); server.Urls.Add("http://127.0.0.1:0");
-        var creates = 0; var lists = 0; string? profileId = null; Guid? dispatched = null;
+        var creates = 0; var retirements = 0; string? profileId = null; Guid? dispatched = null;
         server.Run(async http =>
         {
             Assert.Equal("synthetic-only-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
             var attempt = (await store.FindSandboxVerificationAsync(owner.TenantId, profileId!))!;
             var metadataOwner = owner.TenantId.ToString("N") + "." + attempt.AttemptId.ToString("N");
-            if (http.Request.Method == "POST")
+            if (http.Request.Path == "/agent-core/generations/capabilities")
             {
+                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true });
+            }
+            else if (http.Request.Path == "/agent-core/verifications/retire")
+            {
+                retirements++;
+                using var body = await System.Text.Json.JsonDocument.ParseAsync(http.Request.Body);
+                Assert.Equal(owner.TenantId.ToString("N"), body.RootElement.GetProperty("tenant").GetString());
+                Assert.Equal(attempt.AttemptId.ToString("N"), body.RootElement.GetProperty("attempt").GetString());
+                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, tenant = owner.TenantId.ToString("N"), attempt = attempt.AttemptId.ToString("N"), retired = true });
+            }
+            else
+            {
+                Assert.Equal("POST", http.Request.Method);
                 creates++; dispatched = attempt.AttemptId;
                 using var body = await System.Text.Json.JsonDocument.ParseAsync(http.Request.Body);
                 Assert.Equal(metadataOwner, body.RootElement.GetProperty("metadata").GetProperty("agent-core-image-verification").GetString());
                 await f.Identity.SignOutAsync(human.AuthenticationSessionId);
                 http.Response.StatusCode = 500; await http.Response.WriteAsync("private-upstream-sentinel");
-            }
-            else
-            {
-                Assert.Equal("GET", http.Request.Method); lists++;
-                Assert.Contains(metadataOwner, Uri.UnescapeDataString(http.Request.QueryString.Value!));
-                await http.Response.WriteAsJsonAsync(new { items = Array.Empty<object>(), pagination = new { page = 1, pageSize = 100, totalItems = 0, totalPages = 0 } });
             }
         });
         await server.StartAsync();
@@ -232,7 +239,7 @@ public sealed partial class TenantCredentialIntegrationTests
         profileId = p.Id; var revision = await Revision();
         await Assert.ThrowsAsync<AccessDeniedException>(() => v.Service.VerifyAsync(owner.TenantId, p.Id, human, revision, 1).AsTask());
         var receipt = (await store.FindSandboxVerificationAsync(owner.TenantId, p.Id))!;
-        Assert.Equal(dispatched, receipt.AttemptId); Assert.Equal(1, creates); Assert.Equal(1, lists);
+        Assert.Equal(dispatched, receipt.AttemptId); Assert.Equal(1, creates); Assert.Equal(1, retirements);
         Assert.Equal(SandboxVerificationStatus.Retired, receipt.Status); Assert.False(receipt.Active); Assert.False(receipt.Result!.Passed);
         Assert.DoesNotContain("private-upstream-sentinel", System.Text.Json.JsonSerializer.Serialize(receipt));
         Assert.Null((await store.ReadSandboxVerificationAsync(owner.TenantId, p.Id, 1)).Observation);
@@ -246,8 +253,10 @@ public sealed partial class TenantCredentialIntegrationTests
     public async Task Tenant_sandbox_verification_real_SDK_cleanup_rechecks_claim_and_purges_only_its_disposable_owner(bool sqlite)
     {
         var builder = WebApplication.CreateSlimBuilder(); builder.Logging.ClearProviders(); await using var server = builder.Build(); server.Urls.Add("http://127.0.0.1:0"); var calls = 0;
-        server.Run(async http => { calls++; Assert.Equal("GET", http.Request.Method); Assert.Equal("synthetic-only-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
-            await http.Response.WriteAsJsonAsync(new { items = Array.Empty<object>(), pagination = new { page = 1, pageSize = 100, totalItems = 0, totalPages = 0 } }); });
+        server.Run(async http => { calls++; Assert.Equal("POST", http.Request.Method); Assert.Equal("/agent-core/verifications/retire", http.Request.Path);
+            Assert.Equal("synthetic-only-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
+            using var body = await System.Text.Json.JsonDocument.ParseAsync(http.Request.Body);
+            await http.Response.WriteAsJsonAsync(new { contractVersion = 1, tenant = body.RootElement.GetProperty("tenant").GetString(), attempt = body.RootElement.GetProperty("attempt").GetString(), retired = true }); });
         await server.StartAsync(); var clock = new FakeTimeProvider(); await using var f = await Fixture.Create(sqlite, clock);
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha"); var human = await SandboxHuman(f, owner.OwnerPrincipalId);
         var options = new OpenSandboxOptions { CanonicalWorkspaceRoot = Path.Combine(f.Root, "working"), WorkspaceDockerHostRoot = Path.Combine(f.Root, "working"), Endpoint = server.Urls.Single(), ApiKey = "synthetic-only-key" };

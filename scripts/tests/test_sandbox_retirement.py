@@ -104,5 +104,79 @@ class RetirementTests(unittest.TestCase):
         self.assertFalse(retirement.retire_containers(service, OWNER))
 
 
+class VerificationRetirementTests(unittest.TestCase):
+    owner = (OWNER[0], OWNER[-1])
+
+    def labels(self):
+        return {"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "4", "opensandbox.io/id": "verification-provider"}
+
+    def test_sequential_probes_then_durable_attempt_seal_with_independent_runtime_scope(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "provider.sqlite"
+            fence = retirement.VerificationRetirement(path)
+            self.assertEqual([0, 1, 2], [fence.provision(self.owner, lambda: n, lambda _: True) for n in range(3)])
+            self.assertTrue(fence.retire(self.owner, lambda _: True))
+            reopened = retirement.VerificationRetirement(path)
+            with self.assertRaisesRegex(ValueError, "retired"):
+                reopened.provision(self.owner, lambda: self.fail("late verification"), lambda _: True)
+            with self.assertRaisesRegex(ValueError, "scope_changed"):
+                reopened.retire(("e" * 32, self.owner[-1]), lambda _: self.fail("foreign cleanup"))
+            runtime = retirement.GenerationRetirement(path)
+            self.assertEqual("runtime", runtime.provision(OWNER, lambda: "runtime", lambda _: True))
+            self.assertTrue(runtime.retire(OWNER, lambda _: True))
+
+    def test_lost_create_thread_cannot_release_late_environment_after_attempt_seal(self):
+        with tempfile.TemporaryDirectory() as root:
+            fence = retirement.VerificationRetirement(Path(root) / "provider.sqlite")
+            entered = threading.Event(); release = threading.Event(); events = []; errors = []
+            def create():
+                entered.set()
+                if not release.wait(5): raise TimeoutError("barrier")
+                events.append("created")
+            def cleanup(owner):
+                self.assertEqual(self.owner, owner); events.append("cleaned"); return True
+            def worker():
+                try:
+                    fence.provision(self.owner, create, cleanup)
+                    events.append("released")
+                except Exception as error: errors.append(error)
+            thread = threading.Thread(target=worker); thread.start()
+            try:
+                self.assertTrue(entered.wait(5))
+                self.assertFalse(fence.retire(self.owner, cleanup, wait_seconds=0))
+                release.set(); thread.join(5); self.assertFalse(thread.is_alive())
+                self.assertEqual(["created", "cleaned"], events)
+                self.assertEqual(1, len(errors)); self.assertIn("retired", str(errors[0]))
+                self.assertTrue(fence.retire(self.owner, cleanup, wait_seconds=0))
+            finally:
+                release.set(); thread.join(5)
+
+    def test_scope_rejects_mixed_or_malformed_owners_without_adopting_legacy(self):
+        self.assertIsNone(retirement.verification_scope({"agent-core-image-verification": OWNER[-1]}))
+        self.assertEqual(self.owner, retirement.verification_scope(self.labels()))
+        for key in retirement.LABELS:
+            with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), key: OWNER[0]})
+        for value in ("bad", ".".join(self.owner).upper(), 5):
+            with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), "agent-core-image-verification": value})
+        with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), retirement.CONTRACT: "3"})
+
+    def test_exact_cleanup_rechecks_labels_and_bounded_partial_batches(self):
+        current = [{"Id": str(i), "Labels": {**self.labels(), "opensandbox.io/id": str(i)}} for i in range(102)]
+        foreign = True; deleted = []
+        def listing(**options):
+            self.assertEqual(["agent-core-image-verification=" + ".".join(self.owner), retirement.CONTRACT + "=4"], options["filters"]["label"])
+            return current[:options["limit"]]
+        def get(identity):
+            labels = next(item["Labels"] for item in current if item["Id"] == identity)
+            return SimpleNamespace(attrs={"Config": {"Labels": {**labels, "agent-core-image-verification": "e" * 32 + "." + self.owner[-1]} if foreign else labels}})
+        def delete(identity):
+            deleted.append(identity); current[:] = [item for item in current if item["Id"] != identity]
+        service = SimpleNamespace(docker_client=SimpleNamespace(api=SimpleNamespace(containers=listing), containers=SimpleNamespace(get=get)), delete_sandbox=delete)
+        self.assertFalse(retirement.retire_verification(service, self.owner)); self.assertEqual([], deleted)
+        foreign = False
+        self.assertFalse(retirement.retire_verification(service, self.owner)); self.assertEqual(100, len(deleted))
+        self.assertTrue(retirement.retire_verification(service, self.owner)); self.assertEqual(102, len(deleted))
+
+
 if __name__ == "__main__":
     unittest.main()

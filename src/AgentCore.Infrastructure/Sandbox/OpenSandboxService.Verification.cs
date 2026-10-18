@@ -45,11 +45,24 @@ public sealed partial class OpenSandboxService
         CanonicalSandboxMountResolver.Mounts? mounted = null;
         SdkSandbox? sdk = null;
         var result = Observation(false, "Direct mount verification has not completed.", "mountCompatibility");
-        var safeToPurge = true;
+        var safeToPurge = true; var submitted = false;
+        Exception? authorityFailure = null;
+        using var watch = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+        async Task Watch()
+        {
+            try
+            {
+                while (true) { await Task.Delay(TimeSpan.FromMilliseconds(250), time, watch.Token); await require!(watch.Token); }
+            }
+            catch (OperationCanceledException) when (watch.IsCancellationRequested) { }
+            catch (Exception error) { authorityFailure = error; await deadline.CancelAsync(); }
+        }
+        var watcher = require is null ? Task.CompletedTask : Watch();
         OpenSandbox.Config.ConnectionConfig? connection = null;
         try
         {
             connection = Connection();
+            if (profile.TenantId is not null) await RequireTenantRetirementCapabilityAsync(deadline.Token, verification: true);
             foreach (var access in new[] { HomeAccess.ReadWrite, HomeAccess.ReadOnly, HomeAccess.Disabled })
             {
                 if (require is not null) await require(deadline.Token);
@@ -58,7 +71,7 @@ public sealed partial class OpenSandboxService
                 if (!OciImageReference.Parse(profile.ImageReference).IsLocal)
                     await RegistryAuthorizationProbe.CheckAsync(options, OciImageReference.Parse(profile.ImageReference), auth, deadline.Token);
                 if (require is not null) await require(deadline.Token);
-                phase = "provisioning"; safeToPurge = false;
+                phase = "provisioning"; safeToPurge = false; submitted = true;
                 sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions {
                     ConnectionConfig = connection, Image = profile.ImageReference, ImageAuth = auth,
                     TimeoutSeconds = Math.Min(profile.MaxLifetimeSeconds, 45 + profile.MaxCommandSeconds + ProcessCleanupGraceSeconds), ReadyTimeoutSeconds = 45,
@@ -66,9 +79,13 @@ public sealed partial class OpenSandboxService
                     Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = owner, ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) },
                     Volumes = mounted.Volumes, NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] } }, deadline.Token);
                 auth = null;
+                if (require is not null) await require(deadline.Token);
+                if (profile.TenantId is not null && !VerificationMetadata((await sdk.GetInfoAsync(deadline.Token)).Metadata, owner))
+                    throw new AccessDeniedException("verification_unavailable");
                 phase = "mountValidation";
                 var translated = await AttestMountsAsync(sdk.Id, mounted, profile.ImageReference, "agent-core-image-verification", owner, deadline.Token);
                 var authority = await CheckMountedReadinessAsync(sdk, mounted, translated, deadline.Token);
+                if (require is not null) await require(deadline.Token);
                 var lease = new SandboxLease(Guid.Empty, Guid.Empty, id, 1, profile, SandboxLeaseState.Provisioning, sdk.Id,
                     time.GetUtcNow(), time.GetUtcNow().AddSeconds(profile.MaxLifetimeSeconds),
                     BaselineProcesses: await ProcessIdentitiesAsync(sdk, deadline.Token), MountAuthority: authority);
@@ -88,13 +105,15 @@ public sealed partial class OpenSandboxService
                             CommandOptions(authority, "/working", Math.Max(1, (int)Math.Ceiling(remaining))),
                             new ExecutionHandlers { SkipAccumulation = true, OnStdout = m => { stdout.Append(m.Text); return Task.CompletedTask; },
                                 OnStderr = m => { stderr.Append(m.Text); return Task.CompletedTask; } }, token), scriptDeadline.Token, mounted);
-                        if (initialized.ExitCode != 0) throw new VerificationInitializationFailure(stage, initialized.ExitCode);
+                        if (initialized.ExitCode != 0 || initialized.Error is not null || initialized.Complete is null) throw new VerificationInitializationFailure(stage, initialized.ExitCode);
                     }
                     await ConfirmQuiescentAsync(sdk, lease, deadline.Token);
                 }
                 CanonicalSandboxMountResolver.CheckUsage(mounted, profile.StorageBytes, deadline.Token);
                 phase = "cleanup";
                 using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                if (profile.TenantId is not null && !VerificationMetadata((await sdk.GetInfoAsync(cleanup.Token)).Metadata, owner))
+                    throw new AccessDeniedException("verification_unavailable");
                 await sdk.KillAsync(cleanup.Token); safeToPurge = true;
                 await sdk.DisposeAsync(); sdk = null;
             }
@@ -113,16 +132,25 @@ public sealed partial class OpenSandboxService
         {
             result = Observation(false, $"{error.Stage} initialization failed; inspect bounded output and correct the script.", "initialization", error.ExitCode);
         }
+        catch (AccessDeniedException error) when (error.ReasonCode == "tenant_sandbox_recovery_unavailable")
+        { result = Observation(false, "Trusted Sandbox server lacks verification retirement support. Ask the host operator to update it before retrying.", "retirementUnavailable"); }
         catch (Exception error) when (error is AccessDeniedException or SecurityConflictException) { result = Observation(false, "Verification authority changed. Read current configuration before retrying.", "authority_changed"); }
         catch (OperationCanceledException) { result = Observation(false, "Verification canceled or timed out during " + phase + ".", "canceledOrTimeout"); }
         catch (AgentCoreException error) { result = Observation(false, error.Message, error.Code); }
         catch { result = Observation(false, "Verification failed during " + phase + ". Check private server readiness, daemon backing-path mapping and compatible Unix identity. Provider details are withheld.", phase); }
         finally
         {
+            await watch.CancelAsync(); await watcher;
+            if (authorityFailure is not null) result = Observation(false, "Verification authority changed during provider work. Its captured output cannot promote compatibility.", "authority_changed");
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             try
             {
-                if (sdk is not null) { await sdk.KillAsync(cleanup.Token); safeToPurge = true; }
+                if (profile.TenantId is { } tenant)
+                {
+                    // A whole-attempt fence permits normal sequential probes, then excludes every late create before purge/promotion.
+                    safeToPurge = !submitted || await TryRetireVerificationAsync(tenant, id, hostScope!, cleanup.Token);
+                }
+                else if (sdk is not null) { await sdk.KillAsync(cleanup.Token); safeToPurge = true; }
                 else if (!safeToPurge)
                 {
                     await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = connection });

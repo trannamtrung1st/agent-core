@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Disposable tenant verification fencing
+
+Exercise actual reusable-profile and Instance verification through both stores and the installed SDK/loopback peer. A lost create reply must seal exact tenant/attempt before disposable purge, including after original-human retirement or changed Instance policy. Complete all three sequential Home probes and initialization once, then prove that pending final retirement cannot promote compatibility or remove files. Reject unsupported capability before mount/create, and retain cleanup on foreign, malformed, oversized, wrong-version, pending or expired-claim replies. Recheck claims after provider I/O and preserve sibling attempt directories; cleanup cannot repeat scripts.
+
+The provider's real SQLite and deterministic thread barriers must show sequential pre-seal probes, durable reopen, scope collision refusal, independent runtime/verification families and no late environment release after attempt seal. Exact summary and actual-container metadata checks plus bounded partial batches protect cleanup. Execute the pinned-image ASGI/auth/typed-route/provider-hook proof with controlled Docker peer, networking disabled and no socket. This evidence does not qualify actual Docker binds, scripts or daemon failure.
+
 ## Tenant Sandbox restart and provider-fence recovery
 
 In both stores, admit/review/reserve actual owned commands, retain controlled stranded/completed/background facts, then construct a new SDK service and reopen SQLite. Reconcile through the actual SDK protocol peer: no command or initialization may replay. Verify exact known-handle retirement, foreign metadata refusal, no-dispatch denial, completed-effect settlement, logical-deletion cleanup and stable immutable operation outcomes. A confirmed background launch may continue after its Run completes; init-only launch evidence cannot. Current executor/source revocation and fixed deadlines must retire active background work without rewriting the original launch outcome. Exercise keyset paging independently of global/human inventories.
