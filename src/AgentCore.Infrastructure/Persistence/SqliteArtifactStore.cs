@@ -10,6 +10,7 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class ArtifactRecordRow
 {
+    public Guid? TenantId { get; set; }
     public string ArtifactId { get; set; } = "";
     public string SessionId { get; set; } = "";
     public string BlobKey { get; set; } = "";
@@ -23,7 +24,7 @@ public sealed class ArtifactRecordRow
     public long CreatedAtUtc { get; set; }
 }
 
-public sealed class SqliteArtifactStore(
+public sealed partial class SqliteArtifactStore(
     IDbContextFactory<AgentCoreDbContext> contexts,
     TimeProvider time,
     string blobRoot,
@@ -44,7 +45,7 @@ public sealed class SqliteArtifactStore(
         using var db = contexts.CreateDbContext();
         var key = artifactId.ToString("D");
         var sid = sessionId.ToString("D");
-        return db.Artifacts.AsNoTracking().Any(row => row.ArtifactId == key && row.SessionId == sid);
+        return !OwnedSession(db, sessionId) && db.Artifacts.AsNoTracking().Any(row => row.TenantId == null && row.ArtifactId == key && row.SessionId == sid);
     }
 
     public async ValueTask<ArtifactRecord> CreateAsync(
@@ -57,6 +58,7 @@ public sealed class SqliteArtifactStore(
         CancellationToken cancellationToken = default,
         Guid? agentRunId = null)
     {
+        RequireUnowned(sessionId);
         AttachmentBlobKeys.EnsureSafeRoot(blobRoot);
         Directory.CreateDirectory(blobRoot);
         ThrowIfDeleted(sessionId);
@@ -77,7 +79,7 @@ public sealed class SqliteArtifactStore(
             linked.Token.ThrowIfCancellationRequested();
             await using var db = await contexts.CreateDbContextAsync(linked.Token).ConfigureAwait(false);
             var used = await db.Artifacts.AsNoTracking()
-                .Where(row => row.SessionId == sessionId.ToString("D"))
+                .Where(row => row.TenantId == null && row.SessionId == sessionId.ToString("D"))
                 .SumAsync(row => row.ByteSize, linked.Token)
                 .ConfigureAwait(false);
             if (used + bytes.Length > maxBytesSession)
@@ -142,9 +144,10 @@ public sealed class SqliteArtifactStore(
         }
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (OwnedSession(db, sessionId)) return null;
         var row = await db.Artifacts.AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.ArtifactId == artifactId.ToString("D") && item.SessionId == sessionId.ToString("D"),
+                item => item.TenantId == null && item.ArtifactId == artifactId.ToString("D") && item.SessionId == sessionId.ToString("D"),
                 cancellationToken)
             .ConfigureAwait(false);
         return row is null ? null : FromRow(row);
@@ -160,8 +163,9 @@ public sealed class SqliteArtifactStore(
         }
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (OwnedSession(db, sessionId)) return [];
         var rows = await db.Artifacts.AsNoTracking()
-            .Where(row => row.SessionId == sessionId.ToString("D"))
+            .Where(row => row.TenantId == null && row.SessionId == sessionId.ToString("D"))
             .OrderBy(row => row.CreatedAtUtc)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -172,7 +176,8 @@ public sealed class SqliteArtifactStore(
     {
         if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Artifact limit must be between 1 and 100.");
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var query = db.Artifacts.AsNoTracking().Where(row => row.SessionId == sessionId.ToString("D"));
+        if (OwnedSession(db, sessionId)) return new ArtifactPage([], null, false);
+        var query = db.Artifacts.AsNoTracking().Where(row => row.TenantId == null && row.SessionId == sessionId.ToString("D"));
         if (agentRunId is not null) query = query.Where(row => row.AgentRunId == agentRunId.Value.ToString("D"));
         if (_deleted.ContainsKey(sessionId)) query = query.Where(_ => false);
         if (before is { } cursor)
@@ -204,6 +209,7 @@ public sealed class SqliteArtifactStore(
 
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         _deleted[sessionId] = 1;
         if (_writers.TryRemove(sessionId, out var writers))
         {
@@ -216,7 +222,7 @@ public sealed class SqliteArtifactStore(
         try
         {
             await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-            var rows = await db.Artifacts.Where(row => row.SessionId == sessionId.ToString("D")).ToListAsync(cancellationToken)
+            var rows = await db.Artifacts.Where(row => row.TenantId == null && row.SessionId == sessionId.ToString("D")).ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
             foreach (var row in rows)
             {
@@ -291,6 +297,7 @@ public sealed class SqliteArtifactStore(
     private static ArtifactRecordRow ToRow(ArtifactRecord record, string blobKey) =>
         new()
         {
+            TenantId = record.TenantId,
             ArtifactId = record.ArtifactId.ToString("D"),
             SessionId = record.SessionId.ToString("D"),
             BlobKey = blobKey,
@@ -315,5 +322,5 @@ public sealed class SqliteArtifactStore(
             string.IsNullOrEmpty(row.SourceAttachmentId) ? null : Guid.Parse(row.SourceAttachmentId),
             row.WorkspaceLogicalPath,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
-            row.AgentRunId is null ? null : Guid.Parse(row.AgentRunId));
+            row.AgentRunId is null ? null : Guid.Parse(row.AgentRunId), row.TenantId);
 }

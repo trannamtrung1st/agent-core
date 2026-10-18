@@ -1,5 +1,19 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Artifact HTTP reads
+
+Authenticated canonical routes:
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/v2/tenants/{tenantId}/sessions/{sessionId}/artifacts` | `{ items, nextCursor, hasMore }`; optional `before` Artifact GUID, `limit` 1–100 (default 20), `agentRunId` GUID |
+| GET | `/api/v2/tenants/{tenantId}/sessions/{sessionId}/artifacts/{artifactId}` | Safe immutable metadata |
+| GET | `/api/v2/tenants/{tenantId}/sessions/{sessionId}/artifacts/{artifactId}/content` | Exact checksum-verified bounded bytes; `Content-Disposition: attachment`, sanitized filename, `X-Content-Type-Options: nosniff` |
+
+All require the original live human login, current tenant membership, independent `sessions.read` and `artifacts.read` on the actual source. A Run filter additionally requires `agent-runs.read` and a Run belonging to that Session. Exact Artifact role scopes are supported; filtering occurs before pagination/cursor validation, so hidden rows supply neither cursors nor lookahead. Ordering is descending creation time then canonical Artifact ID. Metadata fields are `artifactId`, `sessionId`, `displayName`, `contentType`, `byteSize`, `sha256Hex`, `createdAt`, `agentRunId`; blob paths and unconverted provenance are excluded. Original identity/security/Session fences repeat before returning data. Responses use the existing canonical no-store policy.
+
+Unauthenticated requests return 401; unavailable/unreadable tenant/Session/Artifact/Run resources return 403 without contents, invalid bounds/binding return 400, and coherent-read security/source revision conflicts return 409. Missing/corrupt/unsafe blob content is withheld. There is no create, delete, model capture/export, rich reply or owner-header fallback on these routes. [Service/port](04-backend-interfaces.md#tenant-artifact-ports).
+
 ## Tenant protected Browser command and Credential discovery
 
 The existing model `approvals.request_authorization` branch accepts `operation=run_browser_command`, `command.tool=browser.fill_credential` and native `arguments={credentialRef,target}` only. The reference is canonical lowercase; no value, Credential/binding ID, revision, tenant, grant or owner field is accepted from the model. Core resolves and seals the exact protected witness. Existing authenticated approval inbox/detail/decision/cancel routes and the shared Browser parameter preview are reused. Primary `credentials.use` targets the actual Credential, while Browser/Session permissions remain independently required. Core derives Review or exact ExceptionalGrant from current primary Credential-use authority; the client cannot choose the kind or supply a grant. Exceptional approval still requires all independent raw Credential-read/Browser/Session scopes and a currently qualified grantor. The existing shared kind/status/result projection is reused; no token or new effect endpoint is exposed. Result facts still distinguish command completion, unverified application outcome and no replay.

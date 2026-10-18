@@ -1213,7 +1213,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("BlobKey")
                         .IsRequired()
-                        .HasMaxLength(80)
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
                     b.Property<long>("ByteSize")
@@ -1244,6 +1244,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("SourceAttachmentId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("WorkspaceLogicalPath")
                         .HasColumnType("TEXT");
 
@@ -1253,7 +1256,16 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SessionId", "AgentRunId");
 
-                    b.ToTable("Artifacts", (string)null);
+                    b.HasIndex("TenantId", "SessionId", "CreatedAtUtc", "ArtifactId");
+
+                    b.ToTable("Artifacts", null, t =>
+                        {
+                            t.HasTrigger("TR_Artifacts_TenantRun_Insert");
+
+                            t.HasTrigger("TR_Artifacts_TenantRun_Update");
+
+                            t.HasCheckConstraint("CK_Artifacts_TenantOwner", "TenantId IS NULL OR (AgentRunId IS NOT NULL AND SourceAttachmentId IS NULL AND WorkspaceLogicalPath IS NULL AND ByteSize >= 0 AND length(Sha256Hex) = 64 AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(ArtifactId, '-', '')))");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AttachmentRecordRow", b =>
@@ -3666,8 +3678,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasKey("SessionId");
 
-                    b.HasAlternateKey("TenantId", "SessionId");
-
                     b.HasIndex("SessionId", "AgentInstanceId")
                         .IsUnique();
 
@@ -3940,6 +3950,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
                         .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ArtifactRecordRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId")
+                        .HasPrincipalKey("TenantId", "SessionId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

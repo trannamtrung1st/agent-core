@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Artifact storage and human-delivery checks
+
+Use both actual InMemory and disposable migrated SQLite stores. Claim a real tenant Run, publish a stable-ID immutable Artifact through trusted fixture setup, then exercise authenticated canonical collection/metadata/attachment download. Verify exact bytes/hash/sanitized attachment headers/no-store and independent Session/Artifact/Run scope; exact Artifact assignments must filter before cursor/limit+1 paging. Reject stale generations, changed publication retries, cross-tenant/Session lookup, anonymous and old owner-header requests, revoked read authority and legacy read/create/delete bypasses.
+
+Download race cases change original login, current assignment, cancellation or logical Session existence after bytes are read but before return; no bytes may escape. Reopen SQLite storage and validate retained metadata/bytes; reject owned-row mutation/forged Run, same-size checksum tampering and symlink paths. Upgrade a disposable prior schema containing unowned historical provenance and prove no adoption or byte change. Trusted fixture publication does not demonstrate model publication, Review/grant consumption, Browser capture/export, rich Chat delivery or owned-blob cleanup. [Current evidence](reports/tenant-artifact-storage-verification-2026-10-18.md) records executed checks separately.
+
 ## Tenant Governance read and editing
 
 `TenantOperationAuthorizationTests.Governance` verifies both stores' independent read/manage rights, bounded sorted catalog/paging/search, coherent security witnesses, immutable catalog restrictions, no inspection mutation, current revocation and exact return to minimum. Existing policy/requester tests and original-login/revocation/competition/cancellation commit races remain required for policy-owner changes. `TenantSessionAccessTests.Governance` exercises actual authenticated collection/detail/write, read-only denial, stale CAS, cross-tenant rejection, no system catalog leakage and revoked reads; the existing canonical policy HTTP case covers CSRF and the Core floor.

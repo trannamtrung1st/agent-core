@@ -7,7 +7,7 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryArtifactStore : IArtifactStore
+public sealed partial class InMemoryArtifactStore : IArtifactStore
 {
     private readonly ConcurrentDictionary<Guid, ArtifactRecord> _items = new();
     private readonly ConcurrentDictionary<Guid, byte[]> _blobs = new();
@@ -29,7 +29,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
     }
 
     public bool Exists(Guid sessionId, Guid artifactId) =>
-        _items.TryGetValue(artifactId, out var record) && record.SessionId == sessionId && !_deleted.ContainsKey(sessionId);
+        _items.TryGetValue(artifactId, out var record) && record.SessionId == sessionId && record.TenantId is null && !OwnedSession(sessionId) && !_deleted.ContainsKey(sessionId);
 
     public async ValueTask<ArtifactRecord> CreateAsync(
         Guid sessionId,
@@ -41,6 +41,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
         CancellationToken cancellationToken = default,
         Guid? agentRunId = null)
     {
+        RequireUnowned(sessionId);
         ThrowIfDeleted(sessionId);
         if (bytes.Length > _maxEach)
         {
@@ -55,7 +56,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
             ThrowIfDeleted(sessionId);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
             linked.Token.ThrowIfCancellationRequested();
-            var used = _items.Values.Where(item => item.SessionId == sessionId).Sum(item => item.ByteSize);
+            var used = _items.Values.Where(item => item.SessionId == sessionId && item.TenantId is null && !OwnedSession(sessionId)).Sum(item => item.ByteSize);
             if (used + bytes.Length > _maxSession)
             {
                 OperationalDiagnostics.RecordResourceLimit("artifactSession");
@@ -109,7 +110,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
         }
 
         IReadOnlyList<ArtifactRecord> items = _items.Values
-            .Where(item => item.SessionId == sessionId)
+            .Where(item => item.SessionId == sessionId && item.TenantId is null && !OwnedSession(sessionId))
             .OrderBy(item => item.CreatedAt)
             .ToArray();
         return ValueTask.FromResult(items);
@@ -119,7 +120,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Artifact limit must be between 1 and 100.");
-        var ordered = _items.Values.Where(item => item.SessionId == sessionId && !_deleted.ContainsKey(sessionId) && (agentRunId == null || item.AgentRunId == agentRunId))
+        var ordered = _items.Values.Where(item => item.SessionId == sessionId && item.TenantId is null && !OwnedSession(sessionId) && !_deleted.ContainsKey(sessionId) && (agentRunId == null || item.AgentRunId == agentRunId))
             .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.ArtifactId.ToString("D"), StringComparer.Ordinal).ToArray();
         var offset = before is null ? 0 : Array.FindIndex(ordered, item => item.ArtifactId == before) + 1;
         if (before is not null && offset == 0) throw AgentCoreErrors.Validation("Artifact cursor does not belong to this Session.");
@@ -144,6 +145,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
 
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         _deleted[sessionId] = 1;
         if (_writers.TryRemove(sessionId, out var writers))
         {

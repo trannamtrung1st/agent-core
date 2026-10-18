@@ -435,16 +435,19 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<ArtifactRecordRow>(entity =>
         {
-            entity.ToTable("Artifacts");
+            entity.ToTable("Artifacts", t => { t.HasTrigger("TR_Artifacts_TenantRun_Insert"); t.HasTrigger("TR_Artifacts_TenantRun_Update"); t.HasCheckConstraint("CK_Artifacts_TenantOwner", "TenantId IS NULL OR (AgentRunId IS NOT NULL AND SourceAttachmentId IS NULL AND WorkspaceLogicalPath IS NULL AND ByteSize >= 0 AND length(Sha256Hex) = 64 AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(ArtifactId, '-', '')))"); });
             entity.HasKey(row => row.ArtifactId);
             entity.Property(row => row.ArtifactId).HasMaxLength(36);
             entity.Property(row => row.SessionId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.BlobKey).HasMaxLength(80).IsRequired();
+            entity.Property(row => row.BlobKey).HasMaxLength(128).IsRequired();
             entity.Property(row => row.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
             entity.HasIndex(row => row.SessionId);
             entity.Property(row => row.AgentRunId).HasMaxLength(36);
             entity.HasIndex(row => new { row.SessionId, row.AgentRunId });
+            entity.HasIndex(row => new { row.TenantId, row.SessionId, row.CreatedAtUtc, row.ArtifactId });
+            entity.HasOne<AgentCore.Infrastructure.Security.TenantSessionRecord>().WithMany().HasForeignKey(row => new { row.TenantId, row.SessionId })
+                .HasPrincipalKey(s => new { s.TenantId, s.SessionId }).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<StructuredMemoryRecord>(entity =>
         {

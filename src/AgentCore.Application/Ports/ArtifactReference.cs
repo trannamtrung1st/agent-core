@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Application.Ports;
 
 public sealed record ArtifactRecord(
@@ -10,7 +12,8 @@ public sealed record ArtifactRecord(
     Guid? SourceAttachmentId,
     string? WorkspaceLogicalPath,
     DateTimeOffset CreatedAt,
-    Guid? AgentRunId = null);
+    Guid? AgentRunId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TenantId = null);
 
 public sealed record ArtifactPage(IReadOnlyList<ArtifactRecord> Items, Guid? NextCursor, bool HasMore);
 

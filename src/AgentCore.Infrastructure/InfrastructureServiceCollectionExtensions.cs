@@ -308,17 +308,21 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ITenantSandboxWorkspacePreparer>(provider => (ITenantSandboxWorkspacePreparer)provider.GetRequiredService<ISessionWorkspace>());
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
-            services.TryAddSingleton<IArtifactStore>(provider => new SqliteArtifactStore(
+            services.TryAddSingleton<SqliteArtifactStore>(provider => new SqliteArtifactStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<TimeProvider>(),
                 persistence.ArtifactRoot));
+            services.TryAddSingleton<IArtifactStore>(provider => provider.GetRequiredService<SqliteArtifactStore>());
         }
         else
         {
-            services.TryAddSingleton<IArtifactStore>(provider =>
-                new InMemoryArtifactStore(provider.GetRequiredService<TimeProvider>()));
+            services.TryAddSingleton<InMemoryArtifactStore>(provider =>
+                new InMemoryArtifactStore(provider.GetRequiredService<TimeProvider>()).BindTenantAuthority(provider.GetRequiredService<InMemoryMemoryStore>()));
+            services.TryAddSingleton<IArtifactStore>(provider => provider.GetRequiredService<InMemoryArtifactStore>());
         }
 
+        services.TryAddSingleton<ITenantArtifactStore>(provider => (ITenantArtifactStore)provider.GetRequiredService<IArtifactStore>());
+        services.TryAddSingleton<AgentCore.Application.Security.TenantArtifactService>();
         services.TryAddSingleton<IArtifactReferenceAuthorizer>(provider =>
             new SessionArtifactAuthorizer(provider.GetService<IArtifactStore>()));
         services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName, client =>

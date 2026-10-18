@@ -21,7 +21,7 @@ public static class IamResourceScopes
             if (!TenantAgentChildScopes.TryParse(child, out _, out _) && !TenantDefinitionResourceScopes.TryParse(child, out _)) throw new AccessDeniedException("resource_unavailable");
             return child;
         }
-        if (tenantId == Guid.Empty || resourceType is not ("member" or "role" or "agent" or "definition" or "credential" or "session" or "agent-run" or "approval")
+        if (tenantId == Guid.Empty || resourceType is not ("member" or "role" or "agent" or "definition" or "credential" or "session" or "agent-run" or "approval" or "artifact")
             || !Guid.TryParse(resourceId, out var id) || id == Guid.Empty)
             throw new AccessDeniedException("resource_unavailable");
         return AccessScope.ForResource(tenantId, resourceType, id.ToString("D"));
@@ -29,7 +29,7 @@ public static class IamResourceScopes
 
     public static bool ExternalShape(AccessScope scope) => scope.ResourceType == "definition"
         ? Guid.TryParseExact(scope.ResourceId, "D", out var id) && id != Guid.Empty && scope.ResourceId == id.ToString("D")
-        : TenantSandboxProfileRules.TryId(scope, out _) || TenantApprovalRules.TryApprovalId(scope, out _) || TenantRunRules.TryId(scope, out _) || TenantSessionRules.TryId(scope, out _) || TenantCredentialRules.TryId(scope, out _) || TenantAgentChildScopes.TryParse(scope, out _, out _) || TenantDefinitionResourceScopes.TryParse(scope, out _);
+        : TenantArtifactRules.TryId(scope, out _) || TenantSandboxProfileRules.TryId(scope, out _) || TenantApprovalRules.TryApprovalId(scope, out _) || TenantRunRules.TryId(scope, out _) || TenantSessionRules.TryId(scope, out _) || TenantCredentialRules.TryId(scope, out _) || TenantAgentChildScopes.TryParse(scope, out _, out _) || TenantDefinitionResourceScopes.TryParse(scope, out _);
 
     public static bool Exists(TenantSecurityState state, AccessScope scope)
     {

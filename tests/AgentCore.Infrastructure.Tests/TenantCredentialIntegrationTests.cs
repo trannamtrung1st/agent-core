@@ -90,6 +90,7 @@ public sealed partial class TenantCredentialIntegrationTests
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "tenant-credentials-" + Guid.NewGuid().ToString("N"));
         public IIamStore Iam { get; private set; } = null!;
         public ITenantCredentialStore Credentials => (ITenantCredentialStore)Iam;
+        public IArtifactStore Artifacts { get; private set; } = null!;
         public ISandboxStore Sandboxes { get; private set; } = null!;
         public ICredentialStore Legacy { get; private set; } = null!;
         public IAgentInstanceStore Instances { get; private set; } = null!;
@@ -133,7 +134,7 @@ public sealed partial class TenantCredentialIntegrationTests
             return new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
         }
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
-        public static async Task<Fixture> Create(bool sqlite, TimeProvider? clock = null, bool builtInAuthority = false)
+        public static async Task<Fixture> Create(bool sqlite, TimeProvider? clock = null, bool builtInAuthority = false, bool artifactAuthority = false)
         {
             var f = new Fixture(clock); Directory.CreateDirectory(f.Root);
             try
@@ -142,6 +143,7 @@ public sealed partial class TenantCredentialIntegrationTests
                 {
                     f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").Options);
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
+                    if (artifactAuthority) f.Artifacts = new SqliteArtifactStore(f.Contexts, f.Clock, Path.Combine(f.Root, "artifacts"));
                     f.Sandboxes = new SqliteSandboxStore(f.Contexts);
                     f.Iam = new SqliteIamStore(f.Contexts, builtIns: builtInAuthority ? f.BuiltIns : null, clock: f.Clock); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
                     f.Memory = new SqliteMemoryStore(f.Contexts, f.Clock);
@@ -151,8 +153,9 @@ public sealed partial class TenantCredentialIntegrationTests
                     var instances = new InMemoryAgentInstanceStore(); var credentials = new InMemoryCredentialStore(instances);
                     f.Legacy = credentials; f.Instances = instances;
                     var memory = new InMemoryMemoryStore(instances); f.Memory = memory;
+                    if (artifactAuthority) f.Artifacts = new InMemoryArtifactStore(f.Clock).BindTenantAuthority(memory);
                     f.Sandboxes = new InMemorySandboxStore();
-                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), memory, builtIns: builtInAuthority ? f.BuiltIns : null, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes);
+                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), memory, builtIns: builtInAuthority ? f.BuiltIns : null, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes, artifacts: artifactAuthority ? (InMemoryArtifactStore)f.Artifacts : null);
                 }
                 return f;
             }

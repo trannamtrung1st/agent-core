@@ -114,6 +114,6 @@ public static class IdentityRegistration
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
             provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>(),
-            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>());
+            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>());
     }
 }

@@ -12,6 +12,7 @@ public sealed partial class InMemoryIamStore
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
             return ValueTask.FromResult(TenantSandboxProfileRules.TryId(scope, out var profile) ? FindTenantSandboxProfileAsync(scope.TenantId!.Value, profile, ct: ct).Result is not null
                 : TenantApprovalRules.TryApprovalId(scope, out var approval) ? _approvals.GetValueOrDefault(approval)?.TenantId == scope.TenantId
+                : TenantArtifactRules.TryId(scope, out var artifact) ? artifactBacking?.OwnsTenantArtifact(scope.TenantId!.Value, artifact) == true
                 : TenantRunRules.TryId(scope, out var run) ? sessionBacking.ReadTenantRun(scope.TenantId!.Value, run) is not null
                 : TenantSessionRules.TryId(scope, out var session) ? sessionBacking.OwnsTenantSession(scope.TenantId!.Value, session)
                 : TenantCredentialRules.TryId(scope, out var credential) ? credentials?.OwnsTenantCredential(scope.TenantId!.Value, credential) == true
