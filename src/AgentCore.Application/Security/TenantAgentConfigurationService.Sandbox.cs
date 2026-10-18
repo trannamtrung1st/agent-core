@@ -9,7 +9,7 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantAgentSandboxProfile(string Id, long Revision, string Name, string Description, string ImageReference, string Availability, string Message);
 public sealed record TenantAgentSandboxSetup(Guid InstanceId, long InstanceRevision, AgentInstanceLifecycle Lifecycle, InstanceSettingsSection? Section, IReadOnlyList<TenantAgentSandboxProfile> Profiles,
-    bool CompleteCatalog, bool CanManage, long SecurityRevision);
+    bool CompleteCatalog, bool CanManage, long SecurityRevision, string InstanceName, int DefinitionVersion);
 
 public sealed partial class TenantAgentConfigurationService
 {
@@ -47,7 +47,7 @@ public sealed partial class TenantAgentConfigurationService
         var canManage = snapshot.Agent.Instance.Lifecycle == AgentInstanceLifecycle.Active
             && (await authorizer.CheckAsync(actor, "agents.update", Scope(tenant, id), ct).ConfigureAwait(false)).Allowed
             && (await authorizer.CheckAsync(actor, "sandbox.manage", Scope(tenant, id), ct).ConfigureAwait(false)).Allowed;
-        return new(id, snapshot.Agent.Instance.Revision, snapshot.Agent.Instance.Lifecycle, section, items, complete, canManage, await ReadRevision(actor, tenant, id, ct).ConfigureAwait(false));
+        return new(id, snapshot.Agent.Instance.Revision, snapshot.Agent.Instance.Lifecycle, section, items, complete, canManage, await ReadRevision(actor, tenant, id, ct).ConfigureAwait(false), snapshot.Agent.Instance.Persona.Name, snapshot.Agent.Instance.ActiveVersion);
     }
 
     private async ValueTask<AgentDefinition> PrepareSandboxPatch(Guid actor, Guid tenant, AgentInstance current, AgentDefinition definition,

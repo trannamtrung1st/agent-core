@@ -96,7 +96,7 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
             var canUpdate = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.update"), Scope(tenant, instance), token).ConfigureAwait(false)).Allowed;
             if (settings.SecurityRevision != state.Tenant.Revision || settings.Items.Any(item => item.InstanceRevision != agent!.Instance.Revision))
                 throw new SecurityConflictException("stale_revision");
-            // Sandbox has a separate scoped read; UI/setup verification and runtime effects remain pending.
+            // Sandbox uses its separate scoped setup read and dedicated editor; generic Settings never projects its protected profile choices.
             return new(agent!, settings.Items.Where(item => item.Section != "sandboxPolicy").ToArray(), state.Tenant.Revision, canUpdate, ["sandboxPolicy"]);
         }, ct);
 

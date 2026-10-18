@@ -7,7 +7,7 @@ import { followAppLink } from '../../app/appLink';
 import { instancePath } from './adminNavigation';
 import { emptyDraft, useInstanceSettingsController, type InstanceSettingsTransport } from './useInstanceSettingsController';
 import { useAdminDraftStatus } from './AdminDraftStatus';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Alert, App, Button, Collapse, Flex, Form, Input, InputNumber, Select, Spin, Switch, Tooltip, Typography, theme } from 'antd';
 import { InfoCircleOutlined, LockOutlined, UndoOutlined } from '@ant-design/icons';
 import { confirmAction } from '../../app/confirmAction';
@@ -27,12 +27,13 @@ const nullable = new Set(['initializationScript','maxConsecutiveProactiveTurns',
 const numerics = new Set(['cpu','memoryMiB','maxCommandSeconds','idleTtlSeconds','maxLifetimeSeconds','storageBytes','maxOutputTokens', 'silenceThresholdMs', 'cooldownMs', 'maxPerSilencePeriod', 'maxConsecutiveProactiveTurns', 'maxSilentEvaluations', 'maxInactivityMs', 'speakingRate', 'maxActiveRegistrations', 'oneShotHorizonDays', 'minRecurrenceDays', 'minFixedIntervalSeconds']);
 
 
-export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext }: { instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport?: InstanceSettingsTransport; confirmationContext?: string }) {
+export type InstanceSandboxContext = { profiles: readonly Pick<SandboxProfile, 'id' | 'name' | 'availability'>[] | null; summary: (state: { dirty: boolean; busy: boolean; revision?: number }) => ReactNode };
+export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onBusyChange, onUpdated, transport, confirmationContext, sandboxContext, saveBlocked = false, externalBusy = false, refreshKey }: { instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onUpdated: () => void; transport?: InstanceSettingsTransport; confirmationContext?: string; sandboxContext?: InstanceSandboxContext; saveBlocked?: boolean; externalBusy?: boolean; refreshKey?: number }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
   const formId = useId();
   const isolation = useStateIsolationConfiguration();
-  const settings = useInstanceSettingsController(instanceId, archived, active, onUpdated, isolation?.view?.revisions.instance, isolation?.editor.saving, transport);
+  const settings = useInstanceSettingsController(instanceId, archived, active, onUpdated, isolation?.view?.revisions.instance ?? refreshKey, isolation?.editor.saving, transport);
   const coordinated = (section: string, field: string) => !!isolation && (section === 'memoryPolicy' || section === 'voice' && field === 'enabled');
   const coordinatedPage = !!isolation && (page === 'memory-policy' || page === 'voice');
   // Saved values and sparse edits share one owner with the coordinated preset preview.
@@ -54,7 +55,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
     drafts[patch.section] = { set: { ...own.set, ...patch.set }, clear: [...new Set([...own.clear, ...patch.clear])] };
   }
   const { setDrafts, error, models, defaultModelKey, save, saveAll } = settings;
-  const busy = settings.busy || !!isolation?.busy;
+  const busy = settings.busy || !!isolation?.busy || externalBusy;
   const loading = settings.loading || coordinatedPage && !isolation?.view;
   useEffect(() => { onBusyChange?.(busy || !!loading); }, [busy, loading, onBusyChange]);
   const reload = async () => { await Promise.all([settings.reload(), ...(coordinatedPage ? [isolation!.refresh().catch(() => {})] : [])]); };
@@ -69,18 +70,19 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   }
   useEffect(() => { setExpanded([]); }, [instanceId]);
   const [sandboxProfiles,setSandboxProfiles]=useState<SandboxProfile[]|null>(null);const [sandboxInventoryError,setSandboxInventoryError]=useState(false);const [catalogAttempt,setCatalogAttempt]=useState(0);
-  useEffect(()=>{if(page!=='sandbox')return;const controller=new AbortController();setSandboxProfiles(null);setSandboxInventoryError(false);
+  useEffect(()=>{if(page!=='sandbox'||sandboxContext)return;const controller=new AbortController();setSandboxProfiles(null);setSandboxInventoryError(false);
     getSandboxPlatform(controller.signal).then(p=>{if(!controller.signal.aborted)setSandboxProfiles(p.profiles);}).catch(()=>{if(!controller.signal.aborted)setSandboxInventoryError(true);});return()=>controller.abort();
-  },[page,instanceId,catalogAttempt]);
+  },[page,instanceId,catalogAttempt,!!sandboxContext]);
+  const profileChoices = sandboxContext ? sandboxContext.profiles : sandboxProfiles;
   const requested = page ? instanceSettingGroups[page] ?? [] : undefined;
   const dirtySections = Object.entries(drafts).filter(([, draft]) => Object.keys(draft.set).length + draft.clear.length > 0).map(([key]) => key);
   useAdminDraftStatus(Object.entries(instanceSettingGroups).filter(([, sections]) => sections?.some(section => dirtySections.includes(section))).map(([key]) => key));
   const independentDirty = Object.values(settings.drafts).some(draft => Object.keys(draft.set).length + draft.clear.length > 0);
   useEffect(() => { onDirtyChange?.(independentDirty); }, [independentDirty, onDirtyChange]);
   useEffect(() => { if (requested) setExpanded(current => [...new Set([...current, ...requested])]); }, [page]);
-  const configuration = useInstanceConfigurationEditor('Settings', { dirty: independentDirty, busy: busy || loading, revision: sections?.[0]?.instanceRevision, blocked: !sections ? 'Read current settings before saving.' : undefined, save: saveAll, discard: () => setDrafts({}), refresh: settings.reload });
+  const configuration = useInstanceConfigurationEditor('Settings', { dirty: independentDirty, busy: busy || loading, revision: sections?.[0]?.instanceRevision, blocked: !sections || saveBlocked ? 'Read current settings before saving.' : undefined, save: saveAll, discard: () => setDrafts({}), refresh: settings.reload });
   return <Flex vertical gap={token.padding}>
-    <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>{page==='sandbox'?'Unchanged values inherit the Definition policy and chosen Global Profile. Only edited fields become Instance overrides. The next Run adopts saved changes; a changed environment is replaced only after safe termination.':'Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.'}</Typography.Paragraph>
+    <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>{page==='sandbox'?'Unchanged values inherit the Definition policy and chosen Profile. Only edited fields become Instance overrides. The next Run adopts saved changes; a changed environment is replaced only after safe termination.':'Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.'}</Typography.Paragraph>
     <Button style={{ alignSelf: "flex-start" }} disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button>
     {coordinatedPage && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Memory policy and Voice enablement share the State &amp; Isolation draft and Save. <a href={instancePath(instanceId, 'state-isolation')} onClick={followAppLink}>Review State &amp; Isolation</a></Typography.Paragraph>}
     {coordinatedPage && isolation?.error && <Alert type="error" showIcon title={isolation.error} action={<Button onClick={() => void isolation.refresh().catch(() => {})}>Retry isolation</Button>} />}
@@ -100,7 +102,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
         {hasOverrides && <Tooltip trigger={['hover', 'focus', 'click']} title={changed ? 'Unsaved Instance overrides' : 'This section has Instance overrides.'}><InfoCircleOutlined tabIndex={0} aria-label={`${title}: Instance override`} /></Tooltip>}
       </Flex>, children: <Flex vertical gap={token.padding} role="group" aria-label={`${title} settings`}>
         {section.section === 'instructions' && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Saving replaces the complete agent instructions for this Instance. Review the inherited instructions before editing. Configures agent behavior at Runtime. Agent Core rules, permissions and approvals cannot be overridden.</Typography.Paragraph>}
-        {section.section === 'sandboxPolicy' && <Typography.Paragraph type="secondary" style={{margin:0}}>Allowed profiles inherit the Definition list unless narrowed here. Each Session chooses independently from that set; the default is its initial choice. The Profile script runs first, then the optional Instance script for every chosen profile. Limits are capped by each Global Profile. Setup scripts run once per generation and never become agent instructions.</Typography.Paragraph>}
+        {section.section === 'sandboxPolicy' && <Typography.Paragraph type="secondary" style={{margin:0}}>Allowed profiles inherit the Definition list unless narrowed here. Each Session chooses independently from that set; the default is its initial choice. The Profile script runs first, then the optional Instance script for every chosen profile. Limits are capped by each Profile. Setup scripts run once per generation and never become agent instructions.</Typography.Paragraph>}
         <Form layout="vertical" className={`admin-config-form admin-settings-form admin-settings-field-grid instance-settings-form${section.section === 'instructions' ? ' admin-settings-instructions' : section.section === 'sandboxPolicy' ? ' sandbox-settings-fields' : ''}`}>
           {(fieldOrder[section.section] ?? Object.keys(section.effective)).filter(field => field in section.effective && field !== 'allowUnreadUnsupportedTypes').map(field => {
             const inherited = section.effective[field];
@@ -132,9 +134,9 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             else if (numerics.has(field)) control = <InputNumber id={id} aria-label={label} value={typeof value === 'number' ? value : null} min={constraint?.minimum ?? undefined} max={constraint?.maximum ?? undefined} disabled={disabled} className="instance-settings-control" onChange={v => { if (v !== null || nullable.has(field)) change(section, field, v); }} />;
             else if (field === 'allowedProfileIds') control = <Select id={id} className="instance-settings-control" aria-label={label} mode="multiple" maxCount={16}
               value={Array.isArray(value) ? value : []} disabled={disabled || !constraint?.choices?.length}
-              options={(constraint?.choices ?? []).map(p => { const profile=sandboxProfiles?.find(v=>v.id===p); return {label:profile?`${profile.name} · ${sandboxStatusLabel(profile)}`:p,value:p}; })}
+              options={(constraint?.choices ?? []).map(p => { const profile=profileChoices?.find(v=>v.id===p); return {label:profile?`${profile.name} · ${sandboxStatusLabel(profile)}`:p,value:p}; })}
               onChange={v=>change(section,field,v)} />;
-            else if (field === 'profileId') control = <Select id={id} className="instance-settings-control" aria-label="Sandbox profile" value={value as string | null} disabled={disabled || !constraint?.choices?.length || page==='sandbox'&&!sandboxProfiles} options={(constraint?.choices ?? []).filter(p => { const allowed=draft.clear.includes('allowedProfileIds')?section.definitionDefaults.allowedProfileIds:draft.set.allowedProfileIds??section.effective.allowedProfileIds; return !Array.isArray(allowed)||allowed.includes(p); }).map(p => {const profile=sandboxProfiles?.find(v=>v.id===p);return {label:profile?`${profile.name} · ${sandboxStatusLabel(profile)}`:`${p} · Unavailable`,value:p,disabled:!profile||!sandboxEligible(profile)};})} onChange={v => change(section, field, v)} />;
+            else if (field === 'profileId') control = <Select id={id} className="instance-settings-control" aria-label="Sandbox profile" value={value as string | null} disabled={disabled || !constraint?.choices?.length || page==='sandbox'&&!profileChoices} options={(constraint?.choices ?? []).filter(p => { const allowed=draft.clear.includes('allowedProfileIds')?section.definitionDefaults.allowedProfileIds:draft.set.allowedProfileIds??section.effective.allowedProfileIds; return !Array.isArray(allowed)||allowed.includes(p); }).map(p => {const profile=profileChoices?.find(v=>v.id===p);return {label:profile?`${profile.name} · ${sandboxStatusLabel(profile)}`:`${p} · Unavailable`,value:p,disabled:!profile||!sandboxEligible(profile)};})} onChange={v => change(section, field, v)} />;
             else if (field === 'catalogKey') control = <Select id={id} className="instance-settings-control" aria-label={label} value={value as string | null} disabled={disabled || !models.length} allowClear options={models.map(m => ({ label: m.displayName, value: m.key }))} onChange={v => change(section, field, v ?? null)} />;
             else if (field === 'reasoningEffort') {
               const selected = (draft.clear.includes('catalogKey') ? section.definitionDefaults.catalogKey
@@ -150,17 +152,17 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
           })}
         </Form>
         <Flex wrap gap={token.paddingXS}>
-          {!configuration.managed && <Button type="primary" aria-label={`Save ${title}`} disabled={archived || busy || !changed} loading={busy} onClick={() => void save(section)}>Save</Button>}
+          {!configuration.managed && <Button type="primary" aria-label={`Save ${title}`} disabled={archived || busy || saveBlocked || !changed} loading={busy} onClick={() => void save(section)}>Save</Button>}
           {!configuration.managed && <Button aria-label={`Discard ${title} changes`} disabled={busy || archived || !changed && Object.keys(section.overrides).length > 0} onClick={() => {
             setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
           }}>Discard</Button>}
-          <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || (sharedSection ? !isolation?.view || !hasOverrides : !Object.keys(section.overrides).length)} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: `Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.${confirmationContext ? ` ${confirmationContext}` : ''}${sharedSection ? ' Review and Save the resulting draft to apply it.' : ''}`, okText: "Reset section", onOk: () => resetSection(section) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
+          <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || saveBlocked || (sharedSection ? !isolation?.view || !hasOverrides : !Object.keys(section.overrides).length)} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: `Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.${confirmationContext ? ` ${confirmationContext}` : ''}${sharedSection ? ' Review and Save the resulting draft to apply it.' : ''}`, okText: "Reset section", onOk: () => resetSection(section) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
         </Flex>
         <Typography.Text type="secondary">Instance adopted v{section.definitionVersion} · revision {section.instanceRevision}</Typography.Text>
       </Flex> };
     })} />}
     {coordinatedPage && isolation?.changed && <IsolationChangePreview changes={isolation.plan?.changes} notice={isolation.plan?.notice} blockingReasons={isolation.plan?.blockingReasons} busy={isolation.previewing} />}
-    {page === 'sandbox' && <InstanceSandboxSummary instanceId={instanceId} revision={sections?.[0]?.instanceRevision} verifySetup archived={archived} dirty={dirtySections.length > 0} />}
+    {page === 'sandbox' && (sandboxContext ? sandboxContext.summary({ dirty: dirtySections.length > 0, busy: busy || !!loading, revision: sections?.[0]?.instanceRevision }) : <InstanceSandboxSummary instanceId={instanceId} revision={sections?.[0]?.instanceRevision} verifySetup archived={archived} dirty={dirtySections.length > 0} />)}
 
   </Flex>;
 }

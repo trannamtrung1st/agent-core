@@ -49,7 +49,7 @@ it('retains a stale draft through read recovery and hides the editor when read a
 it('renders exact read-only Settings without requiring an IAM inspector or legacy catalog', async () => {
   current.canUpdate = false; await open('settings'); await screen.findByText('Read-only configuration');
   fireEvent.click(screen.getByRole('button', { name: 'Conversation' })); expect(screen.getByRole('textbox', { name: 'Language' })).toBeDisabled();
-  expect(screen.getByText('Sandbox configuration is unavailable')).toBeVisible();
+  expect(screen.getByText('Sandbox has a separate settings page')).toBeVisible();
   expect(fetchMock.mock.calls.every(([path]) => String(path).startsWith('/api/v2/'))).toBe(true);
   expect(fetchMock.mock.calls.some(([path]) => /access|sandbox|agent-instances/.test(String(path)))).toBe(false);
 });

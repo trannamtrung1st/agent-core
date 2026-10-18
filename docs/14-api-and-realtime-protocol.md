@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Instance Sandbox editor identity
+
+The existing authenticated `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/sandbox` adds `instanceName` and `definitionVersion` from the same bound Instance snapshot as `instanceRevision`, and explicitly emits `lifecycle` as `Active` or `Archived`. Existing `section`, readable `profiles`, `completeCatalog`, `canManage` and `securityRevision` retain their scoped meanings. No hidden profile/default, script, host epoch, secret or unrelated configuration is added for the heading. Partial catalogs may withhold the protected section while still exposing independently readable profile choices.
+
+The Instance page uses existing sparse `PATCH .../settings/sandboxPolicy`, exact/latest `GET .../sandbox/verification[/attemptId]?profileId=...` and `POST .../sandbox/verify`. Verification sends only `expectedRevision`, `expectedInstanceRevision`, `profileId` and `expectedProfileRevision` from a coherent saved read. Its `canVerify` hint remains independent of configuration `canManage`. A verification advances security independently of Instance configuration; consumers refresh both saved setup and evidence before a later command. Any successful but malformed settings acknowledgement retires that draft before read recovery; it never triggers automatic write or script replay. [UI/HTTP/store evidence](reports/tenant-instance-sandbox-ui-verification-2026-10-18.md).
+
 ## Tenant Sandbox read Review projection
 
 The existing model authorization tool accepts these exact read intents, filtered by saved capability:

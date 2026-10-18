@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Instance Sandbox editor projection
+
+The existing `TenantAgentConfigurationService.ReadSandboxAsync` and original-human `TenantAgentReadService` fence now project Instance name and adopted Definition version from the same bound Instance snapshot as revision/lifecycle/setup. They expose no generic configuration or hidden profile values to supply a page heading. The existing API explicitly maps lifecycle to its named wire value, consistent with other Instance views. Section/profile filtering, raw read/manage authority and post-I/O fences retain their owners.
+
+Configuration writes remain sparse `sandboxPolicy` patches through the existing exact security/Instance transaction. Instance verification remains independently authorized by `TenantSandboxInstanceVerificationService.CanVerify`; lack of `agents.update` does not remove a qualified Sandbox manager's verification action. Profile verification, exact Instance evidence and Session execution remain separate. The frontend uses these existing owners without a global inventory or owner-capability fallback. [Focused evidence](reports/tenant-instance-sandbox-ui-verification-2026-10-18.md).
+
 ## Tenant model Sandbox read Review contract
 
 The existing `approvals.request_authorization` tool accepts disjoint `inspect_sandbox_profiles`, `inspect_sandbox_status` and `inspect_sandbox_process` intents. Only the process intent accepts an exact Core `executionId`; all tenant, Session, profile, generation, policy and witness fields are server-derived. Exact saved read capabilities control offering independently of Settings management and command eligibility.

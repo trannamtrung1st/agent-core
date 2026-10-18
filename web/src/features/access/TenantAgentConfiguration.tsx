@@ -11,7 +11,7 @@ import type { InstanceSettingsTransport } from '../admin/useInstanceSettingsCont
 import { isPersonaDraftDirty, parsePersonaJson, personaFieldsToJson, syncPersonaOnTabChange, type PersonaFields } from '../admin/instanceManagedControls';
 import { TenantAgentHeading } from './TenantAgentHeading';
 import { AccessError, AccessLoading } from './AccessFeedback';
-import { tenantAccessPath } from './accessRoute';
+import { tenantAccessPath, tenantAgentPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -63,6 +63,6 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
     {view && <TenantAgentHeading view={view} />}
     <Typography.Paragraph type="secondary">Settings define behavior and capability eligibility. The agent’s own roles and approval policy still control execution.</Typography.Paragraph>
     <InstanceSettingsSection confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
-    {!!view?.unavailableSettings.length && <Alert type="info" showIcon title="Sandbox configuration is unavailable" description="The tenant Sandbox catalog and effects are not available yet. Other settings retain their normal inheritance and permission checks." />}
+    {!!view?.unavailableSettings.length && <Alert type="info" showIcon title="Sandbox has a separate settings page" description={<Typography.Link href={tenantAgentPath(tenant, id, 'sandbox')} onClick={followAppLink}>Open Sandbox configuration and saved setup verification. Independent Sandbox and profile access is required.</Typography.Link>} />}
   </Flex>;
 }

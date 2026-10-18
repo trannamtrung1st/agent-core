@@ -1,6 +1,6 @@
 import type { AdminAgentInstance, ExecutionBudgetPolicy, ExecutionBudgetLimits, SelfManagementView } from './adminApi';
 import type { SettingsSection, SettingValue, VersionPreview } from './instanceConfiguration';
-import { identityRequest, tenantApi } from './identity';
+import { IdentityCompletionError, identityRequest, tenantApi } from './identity';
 import type { InstanceSkill } from './instanceSkills';
 import type { InstanceResource } from './instanceConfiguration';
 
@@ -15,6 +15,7 @@ export async function patchTenantAgentSettings(tenant: string, id: string, secti
   if (section.securityRevision === undefined) throw new Error('Read current organization settings before saving.');
   const saved = await identityRequest<{ instance: AdminAgentInstance; securityRevision: number }>(tenantAgentApi(tenant, id, `/settings/${encodeURIComponent(section.section)}`), { method: 'PATCH', signal,
     body: { expectedRevision: section.securityRevision, expectedInstanceRevision: section.instanceRevision, set, clear } });
+  if (!saved?.instance || saved.instance.instanceId !== id || !Number.isSafeInteger(saved.instance.revision) || saved.instance.revision < 1 || !Number.isSafeInteger(saved.securityRevision) || saved.securityRevision < 1) throw new IdentityCompletionError();
   return { ...section, instanceRevision: saved.instance.revision, securityRevision: saved.securityRevision };
 }
 

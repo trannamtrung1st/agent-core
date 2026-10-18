@@ -38,7 +38,8 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PatchAsJsonAsync(path + "/settings/sandboxPolicy", new { expectedRevision = before, expectedInstanceRevision = 1, set = new { profileId }, clear = Array.Empty<string>() })).StatusCode);
         Assert.Equal(before, await Revision(owner, tenant));
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(root + $"/sandbox-profiles/{profileId}/verify", new TenantSandboxVerificationRequest(before, 1))).StatusCode);
-        view = await Json(await owner.GetAsync(path + "/sandbox")); Assert.True(view.GetProperty("completeCatalog").GetBoolean()); Assert.True(view.GetProperty("canManage").GetBoolean());
+        view = await Json(await owner.GetAsync(path + "/sandbox")); Assert.Equal(created.GetProperty("instance").GetProperty("persona").GetProperty("name").GetString(), view.GetProperty("instanceName").GetString());
+        Assert.Equal(1, view.GetProperty("definitionVersion").GetInt32()); Assert.Equal("Active", view.GetProperty("lifecycle").GetString()); Assert.True(view.GetProperty("completeCatalog").GetBoolean()); Assert.True(view.GetProperty("canManage").GetBoolean());
         Assert.Equal("Eligible", view.GetProperty("profiles")[0].GetProperty("availability").GetString());
         var body = new { expectedRevision = view.GetProperty("securityRevision").GetInt64(), expectedInstanceRevision = 1, set = new { profileId, cpu = .5, initializationScript = "echo saved-only" }, clear = Array.Empty<string>() };
         var saved = await owner.PatchAsJsonAsync(path + "/settings/sandboxPolicy", body); Assert.Equal(HttpStatusCode.OK, saved.StatusCode);

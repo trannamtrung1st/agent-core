@@ -1,0 +1,10 @@
+import type { SettingsSection } from './instanceConfiguration';
+import type { SandboxVerification } from './sandboxes';
+import type { TenantSandboxAttempt } from './tenantSandboxes';
+import { tenantAgentApi } from './tenantAgentConfiguration';
+import { identityRequest } from './identity';
+export type TenantInstanceSandboxProfile = { id: string; revision: number; name: string; description: string; imageReference: string; availability: string; message: string };
+export type TenantInstanceSandbox = { instanceId: string; instanceName: string; definitionVersion: number; instanceRevision: number; lifecycle: string; section: SettingsSection | null; profiles: TenantInstanceSandboxProfile[]; completeCatalog: boolean; canManage: boolean; securityRevision: number };
+export type TenantInstanceSandboxVerification = { instanceId: string; attempt: (TenantSandboxAttempt & { instanceId: string; instanceRevision: number }) | null; observation: SandboxVerification | null; status: string; canVerify: boolean; currentInstanceRevision: number; currentProfileRevision: number; securityRevision: number };
+export const readTenantInstanceSandbox = (tenant: string, id: string, signal?: AbortSignal) => identityRequest<TenantInstanceSandbox>(tenantAgentApi(tenant, id, '/sandbox'), { signal });
+export const instanceSandboxVerificationApi = (tenant: string, id: string, profile: string, attempt?: string) => tenantAgentApi(tenant, id, '/sandbox/verification' + (attempt ? '/' + encodeURIComponent(attempt) : '') + '?profileId=' + encodeURIComponent(profile));

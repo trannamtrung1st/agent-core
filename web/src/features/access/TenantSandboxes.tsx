@@ -13,7 +13,7 @@ import { SandboxProfileFields } from '../admin/SandboxProfileFields';
 import { SandboxProfileDetails } from '../admin/SandboxProfileDetails';
 import { showAdminFormValidation } from '../admin/adminFormFeedback';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
-import { SandboxEvidence } from '../sandbox/SandboxEvidence';
+import { SandboxVerificationDetails } from '../sandbox/SandboxVerificationDetails';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { tenantSandboxPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
@@ -78,14 +78,11 @@ function SandboxInspector({ tenant, organization, id, changed, close, saved }: {
         {evidence.error ? <AccessError error={evidence.error} retry={reload} /> : evidence.loading ? <AccessLoading /> : <section aria-label="Saved verification"><Typography.Title level={5}>Saved verification</Typography.Title>{attempt ? <><Tag>{({ Running: 'Verification in progress', Succeeded: 'Verification completed', Failed: 'Verification failed', CleanupPending: 'Cleanup pending', Expired: 'Expired', Canceled: 'Cancelled' } as Record<string, string>)[attempt.status] ?? 'Retained verification'}</Tag><Typography.Paragraph>{attempt.imageOnly ? 'Image-only check · does not establish setup compatibility.' : attempt.accepted ? 'Full verification accepted for this exact saved revision.' : 'Full verification was not accepted.'} Profile revision {attempt.profileRevision} · {new Date(attempt.startedAt).toLocaleString()}</Typography.Paragraph>{attempt.active && <Typography.Paragraph type="secondary">Cleanup or verification is still pending. Reload retained evidence; do not start another attempt.</Typography.Paragraph>}</> : <Typography.Text type="secondary">No retained verification attempt.</Typography.Text>}</section>}
         {value.canManage && <Flex wrap gap="var(--ac-space-compact)"><Button ref={editAction} disabled={busy} onClick={() => setEditing(true)}>Edit profile</Button><Button disabled={busy || command.requiresReload || verificationBlocked || !p.enabled || evidence.loading || !!evidence.error || !!attempt?.active} onClick={() => verify(true)}>Check image readiness</Button><Button disabled={busy || command.requiresReload || verificationBlocked || !p.enabled || evidence.loading || !!evidence.error || !!attempt?.active} onClick={() => verify(false)}>Verify profile</Button></Flex>}
       </>}
-      {(attempt?.result ?? p.verification) && <VerificationOutput value={(attempt?.result ?? p.verification)!} />}
+      {(attempt?.result ?? p.verification) && <SandboxVerificationDetails value={(attempt?.result ?? p.verification)!} />}
       {verificationBlocked && <Typography.Text role="status" type="secondary">Reload saved evidence before another verification attempt. A failed response never starts an automatic retry.</Typography.Text>}
     </Flex>}
     {editing && value && <SandboxEditor tenant={tenant} organization={organization} initial={value} securityRevision={value.securityRevision} close={closeEditor} saved={next => { setEditing(false); reload(); saved(next); requestAnimationFrame(() => reloadAction.current?.focus()); }} readLost={() => { setEditing(false); reload(); requestAnimationFrame(() => reloadAction.current?.focus()); }} />}
   </Drawer>;
-}
-function VerificationOutput({ value }: { value: NonNullable<SandboxProfile['verification']> }) {
-  return <Flex vertical gap="var(--ac-space-compact)"><Alert showIcon type={value.passed ? 'success' : 'warning'} title={value.message} /><Typography.Text type="secondary">Profile revision {value.profileRevision} · {new Date(value.verifiedAt).toLocaleString()} · {value.exitCode === null ? 'Exit unknown' : `Exit ${value.exitCode}`} · {(value.durationMs / 1000).toFixed(1)}s</Typography.Text><SandboxEvidence stdout={value.stdout} stderr={value.stderr} truncated={value.truncated} label="Profile verification" /></Flex>;
 }
 
 function SandboxEditor({ tenant, organization, initial, securityRevision, close, saved, readLost }: { tenant: string; organization: string; initial: TenantSandboxProfile | null; securityRevision: number; close: () => void; saved: (value: TenantSandboxProfile | null) => void; readLost: () => void }) {

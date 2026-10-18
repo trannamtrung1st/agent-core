@@ -18,7 +18,9 @@ public static partial class TenantAgentEndpoints
         group.MapGet("/agents/{instanceId:guid}/sandbox", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.ReadSandboxAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false));
+            var value = await service.ReadSandboxAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false);
+            return Results.Json(new { value.InstanceId, value.InstanceName, value.DefinitionVersion, value.InstanceRevision, lifecycle = value.Lifecycle.ToString(),
+                value.Section, value.Profiles, value.CompleteCatalog, value.CanManage, value.SecurityRevision });
         }));
         group.MapGet("/agents/{instanceId:guid}/settings", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
