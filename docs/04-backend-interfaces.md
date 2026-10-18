@@ -1,8 +1,14 @@
 # Backend Interfaces
 
+## Tenant process Stop ports
+
+`TenantSandboxControlService.RequestProcessStopAsync` accepts original human, current security witness and `TenantSandboxProcessStop` (Session/revision, generation, lease revision, execution/revision). `TryRequestTenantSandboxProcessStopAsync` commits actual human-scoped consent with lease/receipt revision advances, security and audit in one existing transaction. Scope checks are the same independent Session read/manage, agent Sandbox read/manage and exact profile read as reset. Consent grants cleanup of that existing target only.
+
+`TryStartTenantSandboxProcessStopAsync` atomically claims one accepted exact active acknowledged-background Stop on its existing receipt. It supplies no command or new execution authority. A previous start never permits another interrupt; recovery retires uncertain work instead. Saved execution observations expose only `stopRequested` and `stopDispatchStarted`, with cleanup pending until confirmed. Internal consent IDs, human identity and provider handles are withheld.
+
 ## Tenant explicit reset ports
 
-`TenantSandboxResetService.RequestAsync` accepts the original human, expected security revision and exact `TenantSandboxReset` witnesses (Session/revision, generation, lease revision and nullable active-or-latest execution). `ITenantSandboxRuntimeStore.TryRequestTenantSandboxResetAsync` commits the reset intent, security advance and safe audit in the existing owning transaction. Both adapters independently recheck scoped authority and the original Account/session/Principal at commit. No current command execution, profile management or Credential secret use is granted by this cleanup request.
+`TenantSandboxControlService.RequestResetAsync` accepts the original human, expected security revision and exact `TenantSandboxReset` witnesses (Session/revision, generation, lease revision and nullable active-or-latest execution). `ITenantSandboxRuntimeStore.TryRequestTenantSandboxResetAsync` commits the reset intent, security advance and safe audit in the existing owning transaction. Both adapters independently recheck scoped authority and the original Account/session/Principal at commit. No current command execution, profile management or Credential secret use is granted by this cleanup request.
 
 `TenantSandboxResetReceipt` reports acceptance and whether retirement was already confirmed; acceptance alone never claims stopped processes. Existing recovery consumes the durable reset intent without another human login, SDK create or command replay. Exact provider scope, bounded cleanup and factual/immutable result rules remain in force. The request clears saved profile/switch selection but retains files and initialization evidence; it adds no Core table or alternative supervisor.
 

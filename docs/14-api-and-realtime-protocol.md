@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Canonical tenant Sandbox process Stop
+
+Authenticated `POST /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/executions/{executionId}/stop` accepts strict `{expectedRevision, expectedSessionRevision, expectedGeneration, expectedLeaseRevision, expectedExecutionRevision}`. The execution must be the exact active Core receipt; provider IDs and caller-selected identities are not accepted. Original login and independent current Session read/manage, agent Sandbox read/manage and exact profile read apply before stale witnesses and again at commit.
+
+`202 Accepted` returns `{sessionId, executionId, generation, leaseRevision, executionRevision, sessionRevision, securityRevision, terminationConfirmed:false}` with the exact execution GET as Location. Poll stored observations; acceptance is not confirmed termination. Execution observations add safe `stopRequested` and `stopDispatchStarted` booleans. Environment cleanup remains pending until stopped writers are confirmed, even while stored state is Executing. Stale/repeated/terminal-target requests return 409, inaccessible/foreign targets 403, missing authentication 401, invalid/unknown members 400. Existing cookie/CSRF/no-store rules apply.
+
+The shared supervisor interrupts once when current authority permits safe background reuse, then confirms status and generic process quiescence. Uncertain dispatch, foreground/provisioning or lost authority uses exact generation retirement; no shell command or initialization replays. Stop preserves selection, canonical files and immutable original effect outcomes. Reset remains an independent explicit generation cleanup request.
+
 ## Canonical tenant Sandbox reset
 
 Authenticated `POST /api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox/reset` accepts strict `{expectedRevision, expectedSessionRevision, expectedGeneration, expectedLeaseRevision, expectedExecutionId}`. The last property must be present and may be null only when no active/latest execution exists. Unknown members reject. Server-derived Account/login/Principal, current Session read/manage, exact agent Sandbox read/manage and exact profile read are required independently; authority is checked before stale witnesses and again in the owning transaction.
@@ -20,7 +28,7 @@ The protected review changes show profile/image, exact shell or argv text, worki
 
 ## Tenant Session Sandbox stored observations HTTP
 
-Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These GET endpoints perform no SDK inspection or mutation; the explicit human reset command is documented above. Command dispatch, process Stop and profile switching are separate boundaries.
+Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These GET endpoints perform no SDK inspection or mutation; the explicit human reset command is documented above. Model command/Stop dispatch and profile switching are separate boundaries.
 
 The environment projection contains stored generation/revision/state (`storedState`), safe profile/image identity, lifetime, active/last receipt pointers, bounded initialization evidence and stored cleanup indication. The execution projection contains exact receipt/Run/generation identity, state, profile revision, bounded command/output, timings, exit and effect/termination facts. Provider identities, mount authority/host paths and registry authorization are omitted. `liveAuthorityConfirmed=false` prevents stored Ready or Completed facts from implying current dispatch permission or provider liveness.
 

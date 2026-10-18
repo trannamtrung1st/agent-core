@@ -14,8 +14,8 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantDefinitionAccessTests
 {
-    [Fact]
-    public async Task Tenant_Sandbox_command_approval_HTTP_projects_exact_review_and_decision_without_claiming_execution()
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_Sandbox_command_approval_and_human_controls_HTTP_bind_exact_witnesses_without_SDK_dispatch(bool stopProcess)
     {
         await using var factory = new SandboxSetupFactory();
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
@@ -68,6 +68,38 @@ public sealed partial class TenantDefinitionAccessTests
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other command review", slug = "other-command-review" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/approvals/{request.RequestId}")).StatusCode);
         Assert.Null((await storage.ReadTenantSandboxRuntimeAsync(tenant, id))!.Execution);
+        if (stopProcess)
+        {
+            Assert.Equal(1, await approvals.DispatchPendingAsync());
+            run = (await runs.FindTenantRunAsync(tenant, run.AgentRunId))!; at = DateTimeOffset.UtcNow;
+            run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, at, Guid.NewGuid(), at.AddMinutes(5)), Guid.NewGuid());
+            frame = new(run.Owner, id, run.AgentRunId, run.Claim!.Generation);
+            var execution = (await factory.Services.GetRequiredService<TenantSandboxApprovedOperationService>().ReserveAsync(frame, request.RequestId)).Execution;
+            var snapshot = (await storage.ReadTenantSandboxRuntimeAsync(tenant, id))!;
+            var stop = new TenantSandboxProcessStopRequest(await Revision(owner, tenant), snapshot.SessionRevision, snapshot.Lease!.Generation, snapshot.Lease.Revision, execution.Revision);
+            var stopPath = api + $"/sessions/{id}/sandbox/executions/{execution.Id}/stop";
+            Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(stopPath, stop with { ExpectedExecutionRevision = 99 })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(stopPath, new { stop.ExpectedRevision, stop.ExpectedSessionRevision, stop.ExpectedGeneration, stop.ExpectedLeaseRevision, stop.ExpectedExecutionRevision, providerId = "forged" })).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(stopPath, stop)).StatusCode);
+            using var oldOwner = TestOwnerCapability.CreateOwnerClient(factory);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await oldOwner.PostAsJsonAsync(stopPath, stop)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox/executions/{execution.Id}/stop", stop)).StatusCode);
+            var csrf = owner.DefaultRequestHeaders.GetValues(AgentCore.Api.Security.IdentityHttp.CsrfHeader).ToArray();
+            owner.DefaultRequestHeaders.Remove(AgentCore.Api.Security.IdentityHttp.CsrfHeader);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(stopPath, stop)).StatusCode);
+            owner.DefaultRequestHeaders.Add(AgentCore.Api.Security.IdentityHttp.CsrfHeader, csrf);
+            var acceptedStop = await owner.PostAsJsonAsync(stopPath, stop); Assert.Equal(HttpStatusCode.Accepted, acceptedStop.StatusCode); Assert.True(acceptedStop.Headers.CacheControl?.NoStore);
+            Assert.Equal(api + $"/sessions/{id}/sandbox/executions/{execution.Id}", acceptedStop.Headers.Location?.OriginalString);
+            var pendingStop = await Json(acceptedStop); Assert.False(pendingStop.GetProperty("terminationConfirmed").GetBoolean());
+            var stoppedView = await Json(await owner.GetAsync(acceptedStop.Headers.Location));
+            Assert.True(stoppedView.GetProperty("execution").GetProperty("stopRequested").GetBoolean());
+            Assert.False(stoppedView.GetProperty("execution").GetProperty("stopDispatchStarted").GetBoolean());
+            Assert.True(stoppedView.GetProperty("environment").GetProperty("cleanupPending").GetBoolean());
+            Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(stopPath, stop)).StatusCode);
+            Assert.Single(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "sandbox.process.stop.request");
+            return;
+        }
+
         var sandboxPath = api + $"/sessions/{id}/sandbox"; var observed = await Json(await owner.GetAsync(sandboxPath));
         var reset = new TenantSandboxResetRequest(await Revision(owner, tenant), observed.GetProperty("sessionRevision").GetInt64(), lease.Generation, 2, null);
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(sandboxPath + "/reset", reset with { ExpectedExecutionId = Guid.NewGuid() })).StatusCode);

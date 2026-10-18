@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant human process Stop
+
+The shared human control facade resolves the actual owned active execution and commits Stop consent through existing lease/receipt/security/audit owners. A technical one-time receipt CAS fences interrupt dispatch; new commands and factual writers cannot create or rewrite that consent. Original human login and independent exact scopes are rechecked at commit, with complete generation/Session/lease/execution witnesses.
+
+The existing SDK worker first checks current execution/source/mount authority. An acknowledged background launch with an unclaimed Stop uses the shared SDK interruption, bounded status/log path and generic process quiescence. Confirmed safe generations return Ready, including after the originating Run completes; residual writers recycle through exact container retirement. A previous dispatch claim after restart, a foreground/unacknowledged launch or lost authority uses exact retirement without another interrupt or original-command/setup replay. The active foreground watcher treats Stop as revoked dispatch authority and cancels its request. Finalization reads the latest retained consent, including a reset that supersedes Stop, and preserves files and immutable original effect outcomes.
+
 ## Tenant Sandbox SDK execution and outcome integration
 
 `OpenSandboxService.CommandExecution` shares command streaming, bounded output, storage monitoring and finalization for legacy and canonical tenant callers. Tenant storage branches explicitly use `ITenantSandboxRuntimeStore` with exact receipt/lease revisions; they do not supply a legacy Profile. Before dispatch and in the existing watcher, `TenantSandboxExecutionAuthority` checks the fresh claimed Run, original requester, raw scoped executor authority, saved qualified human decision, admitted/current policy and exact source epochs. The saved deadline remains fixed while current claim renewal is checked dynamically.

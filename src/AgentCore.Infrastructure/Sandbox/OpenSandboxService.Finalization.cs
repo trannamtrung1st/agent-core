@@ -79,18 +79,19 @@ public sealed partial class OpenSandboxService
         var runCancelled = lease.TenantId is { } tenant
             ? (await TenantRuntime.ReadTenantSandboxExecutionFactsAsync(tenant, lease.SessionId, execution.Id, CancellationToken.None))?.RunCancellationRequested == true
             : await RunCancellationRequestedAsync(lease.SessionId, lease.AgentInstanceId, execution.AgentRunId, CancellationToken.None);
-        var cancelled = error is OperationCanceledException || runCancelled;
+        var cancelled = error is OperationCanceledException || runCancelled || execution.ProcessStop is not null || lease.CleanupReason == "reset";
         execution = execution with {
             State = execution.ExitCode is not null && execution.State is SandboxExecutionState.Completed or SandboxExecutionState.Canceled ? execution.State
                 : cancelled && remote ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate,
             FinishedAt = execution.FinishedAt ?? time.GetUtcNow(),
             FailureCategory = cancelled ? "cancellation" : ClassifyFailure(error, execution.Phase),
-            CancellationReason = cancelled ? runCancelled ? "runCancellation" : "requestCancellation" : execution.CancellationReason,
+            CancellationReason = lease.CleanupReason == "reset" ? "humanReset" : execution.ProcessStop is not null ? "humanStop"
+                : cancelled ? runCancelled ? "runCancellation" : "requestCancellation" : execution.CancellationReason,
             DiagnosticId = execution.DiagnosticId ?? Guid.CreateVersion7().ToString("D"), RemoteTerminationConfirmed = remote, TerminationConfirmed = remote };
         execution = await SaveReceiptAsync(execution, false, CancellationToken.None);
         lease = await SaveAsync(lease with { State = remote ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation,
             ActiveExecutionId = remote ? null : execution.Id, DiagnosticId = execution.DiagnosticId,
-            CleanupReason = cancelled ? "cancelled" : execution.InitializesGeneration && execution.CommandStartedAt is null
+            CleanupReason = lease.CleanupReason == "reset" ? "reset" : execution.ProcessStop is not null ? "processStop" : cancelled ? "cancelled" : execution.InitializesGeneration && execution.CommandStartedAt is null
                 ? lease.Initialization?.State == "Failed" ? "initializationFailed" : "setupFailed" : "executionFailed",
             FailurePhase = execution.InitializesGeneration && execution.CommandStartedAt is null ? lease.TransitionPhase : lease.FailurePhase,
             FailureCategory = execution.FailureCategory, SafeMessage = remote

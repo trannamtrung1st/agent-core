@@ -19,6 +19,7 @@ public sealed class TenantSandboxExecutionAuthority(TenantOperationAuthorizer op
             ?? throw new AccessDeniedException("resource_unavailable");
         TenantRuntimeRules.Require(frame, saved.Owner, run, time.GetUtcNow());
         var execution = saved.Execution ?? throw new AccessDeniedException("resource_unavailable");
+        if (execution.ProcessStop is not null) throw new AccessDeniedException("sandbox_stop_requested");
         var lease = saved.Lease ?? throw new AccessDeniedException("resource_unavailable");
         var request = await approvals.FindApprovalAsync(tenant, execution.ApprovalRequestId ?? Guid.Empty, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("sandbox_approval_mismatch");

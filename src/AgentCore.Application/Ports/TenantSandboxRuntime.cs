@@ -13,11 +13,19 @@ public sealed record TenantSandboxRecoveryPage(IReadOnlyList<SandboxLease> Items
 public sealed record TenantSandboxReset(Guid SessionId, long ExpectedSessionRevision, Guid ExpectedGeneration,
     long ExpectedLeaseRevision, Guid? ExpectedExecutionId);
 
+public sealed record TenantSandboxProcessStop(Guid SessionId, long ExpectedSessionRevision, Guid ExpectedGeneration,
+    long ExpectedLeaseRevision, Guid ExecutionId, long ExpectedExecutionRevision);
+
 public interface ITenantSandboxRuntimeStore
 {
     // Explicit original-human intent. Existing retirement consumes this fence; it never starts another generation.
     ValueTask<SandboxLease?> TryRequestTenantSandboxResetAsync(AgentCore.Domain.Security.TenantSecurityState next, long expectedSecurityRevision,
         TenantSandboxReset reset, HumanSessionReference human, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => throw new NotSupportedException();
+    ValueTask<TenantSandboxRuntimeSnapshot?> TryRequestTenantSandboxProcessStopAsync(AgentCore.Domain.Security.TenantSecurityState next, long expectedSecurityRevision,
+        TenantSandboxProcessStop stop, HumanSessionReference human, AgentCore.Domain.Security.AuthorizationAudit audit, CancellationToken ct = default) => throw new NotSupportedException();
+    // Claims only an existing exact accepted Stop. A previous claim never authorizes another interrupt.
+    ValueTask<SandboxExecution?> TryStartTenantSandboxProcessStopAsync(Guid tenant, Guid session, Guid execution, Guid stopRequestId,
+        long expectedExecutionRevision, long expectedLeaseRevision, DateTimeOffset at, CancellationToken ct = default) => throw new NotSupportedException();
     // Bounded technical inventory over retained owned roots, including terminal result settlement. Never a human inventory or dispatch authority.
     ValueTask<TenantSandboxRecoveryPage> ReadTenantSandboxRecoveryPageAsync(string? afterSession, int limit, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantSandboxRuntimeSnapshot?> ReadTenantSandboxRuntimeAsync(Guid tenant, Guid session, Guid? executionId = null, CancellationToken ct = default);

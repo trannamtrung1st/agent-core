@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant human process Stop
+
+In both stores, prepare/review/reserve an actual owned background launch, settle its immutable effect, request exact human Stop, end the login, reopen and run the shared SDK worker against an authenticated controlled peer. Verify one interrupt, signal exit evidence, bounded logs, generic quiescence and safe Ready reuse; residual writers require exact container retirement. Lose the interrupt reply or reopen after atomic dispatch claim: no second interrupt or original command/setup may dispatch. Preserve files, selected profile and original operation result.
+
+Exercise foreign metadata, changed original host, executor/source revocation, reset during status/finalization and foreground Stop. Pending/foreign retirement cannot claim stopped writers; repair only the original scope. Raw store checks must reject retired/replaced human identity, independently missing/revoked scopes, stale execution/generation and factual consent forgery. Technical dispatch has one winner and survives SQLite reopen. Synthetic HTTP checks strict body, current target, CSRF/auth/foreign denial, 202 pending acceptance, safe status booleans and stale retry. Controlled SDK protocol evidence remains separate from Docker, model Stop and frontend acceptance.
+
 ## Tenant explicit human Sandbox reset
 
 In both stores, prepare/review/reserve actual owned foreground setup or an acknowledged background command, request exact human reset, then logout and reopen the owning store. Execute existing SDK reconciliation against authenticated controlled known-handle and negative-generation-fence peers. Confirm exact retirement with no create/command replay, retained home/working bytes, immutable previous launch outcomes and terminal process facts. Foreign handle/proof, pending proof and changed host mapping must retain cleanup until repaired on the original scope.

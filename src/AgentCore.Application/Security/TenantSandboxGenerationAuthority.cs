@@ -33,7 +33,9 @@ public sealed class TenantSandboxGenerationAuthority(IIamStore security, ITenant
             throw new AccessDeniedException("sandbox_generation_authority_lost");
         if (lease.State == SandboxLeaseState.Ready)
         {
-            if (lease.ActiveExecutionId is not null || lease.LastExecutionId != execution.Id || execution.State != SandboxExecutionState.Completed || !execution.TerminationConfirmed)
+            var completed = execution.State == SandboxExecutionState.Completed
+                || execution.State == SandboxExecutionState.Canceled && execution.ProcessStop?.DispatchStartedAt is not null;
+            if (lease.ActiveExecutionId is not null || lease.LastExecutionId != execution.Id || !completed || !execution.TerminationConfirmed)
                 throw new AccessDeniedException("sandbox_generation_authority_lost");
         }
         else if (lease.State != SandboxLeaseState.Executing || lease.ActiveExecutionId != execution.Id || !execution.Background || execution.ProviderCommandId is null

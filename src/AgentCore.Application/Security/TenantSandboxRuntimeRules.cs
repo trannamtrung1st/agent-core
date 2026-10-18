@@ -103,7 +103,7 @@ public static class TenantSandboxRuntimeRules
         ValidateExecution(execution);
         if (execution.TenantId != f.Owner.TenantId || execution.ExecutorPrincipalId != f.Owner.ExecutorPrincipalId || execution.SessionId != f.SessionId
             || execution.AgentInstanceId != f.Owner.AgentInstanceId || execution.AgentRunId != f.RunId || execution.ClaimGeneration != f.Generation
-            || execution.Revision != 1 || execution.Generation != lease.Generation || execution.ProfileId != lease.Profile.Id || execution.ProfileRevision != lease.Profile.Revision
+            || execution.ProcessStop is not null || execution.Revision != 1 || execution.Generation != lease.Generation || execution.ProfileId != lease.Profile.Id || execution.ProfileRevision != lease.Profile.Revision
             || execution.State != SandboxExecutionState.Dispatching || execution.ProviderCommandId is not null || execution.FinishedAt is not null
             || lease.TenantId != execution.TenantId || lease.ExecutorPrincipalId != execution.ExecutorPrincipalId || execution.StartedAt > at
             || (execution.InitializesGeneration ? lease.State != SandboxLeaseState.Provisioning || lease.ActiveExecutionId != execution.Id
@@ -123,6 +123,7 @@ public static class TenantSandboxRuntimeRules
             || value.CommandStartedAt is not null && (value.DeadlineAt is null || value.DeadlineAt <= value.CommandStartedAt)
             || value.InitializesGeneration && value.CommandStartedAt is null && (value.DeadlineAt is not null || value.ProviderCommandId is not null
                 || value.ExitCode is not null || value.State is SandboxExecutionState.Running or SandboxExecutionState.Completed)
+            || value.ProcessStop is { } stop && (stop.RequestId == Guid.Empty || stop.PrincipalId == Guid.Empty || stop.RequestedAt < value.StartedAt || stop.DispatchStartedAt < stop.RequestedAt)
             || value.Revision < 1 || value.Generation == Guid.Empty || value.SessionId == Guid.Empty || value.AgentInstanceId == Guid.Empty || value.AgentRunId == Guid.Empty
             || value.ClaimGeneration == Guid.Empty || string.IsNullOrWhiteSpace(value.ToolCallId) || value.ToolCallId.Length > 128 || value.ToolCallId.Any(char.IsControl)
             || value.ActionHash is not { Length: 64 } || value.ActionHash.Any(c => !char.IsAsciiHexDigit(c)) || !Enum.IsDefined(value.State)
@@ -156,7 +157,7 @@ public static class TenantSandboxRuntimeRules
         if (before.TenantId != next.TenantId || before.ExecutorPrincipalId != next.ExecutorPrincipalId || before.SessionId != next.SessionId || before.AgentInstanceId != next.AgentInstanceId
             || before.Generation != next.Generation || before.Id != next.Id || before.AgentRunId != next.AgentRunId || before.ClaimGeneration != next.ClaimGeneration
             || before.ApprovalRequestId != next.ApprovalRequestId || before.OperationId != next.OperationId
-            || before.InitializesGeneration != next.InitializesGeneration || before.CommandStartedAt != next.CommandStartedAt
+            || before.InitializesGeneration != next.InitializesGeneration || before.CommandStartedAt != next.CommandStartedAt || before.ProcessStop != next.ProcessStop
             || before.ToolCallId != next.ToolCallId || before.ActionHash != next.ActionHash || before.CommandText != next.CommandText || before.StartedAt != next.StartedAt
             || before.ProfileId != next.ProfileId || before.ProfileRevision != next.ProfileRevision || before.Background != next.Background || before.DeadlineAt != next.DeadlineAt
             || next.Revision != checked(before.Revision + 1) || before.ProviderCommandId is not null && next.ProviderCommandId != before.ProviderCommandId

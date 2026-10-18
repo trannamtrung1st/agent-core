@@ -45,6 +45,8 @@ public sealed partial class TenantDefinitionIntegrationTests
     [InlineData(false, "instanceChanged")] [InlineData(true, "instanceChanged")]
     [InlineData(false, "backgroundIncomplete")] [InlineData(true, "backgroundIncomplete")]
     [InlineData(false, "backgroundError")] [InlineData(true, "backgroundError")]
+    [InlineData(false, "humanStop")] [InlineData(true, "humanStop")]
+    [InlineData(false, "humanReset")] [InlineData(true, "humanReset")]
     public async Task Tenant_Sandbox_SDK_keeps_launch_uncertainty_and_authority_boundaries_without_replay(bool sqlite, string outcome)
     {
         await SandboxSdkScenario(sqlite, outcome);
@@ -94,6 +96,18 @@ public sealed partial class TenantDefinitionIntegrationTests
                     var argv = json.RootElement.GetProperty("argv").EnumerateArray().Select(p => p.GetString()).ToArray();
                     var userCommand = argv.Contains("agent-core-command");
                     if (userCommand) { dispatches++; commandBody = json.RootElement.Clone(); }
+                    if (userCommand && outcome is "humanStop" or "humanReset")
+                    {
+                        var current = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, s.Session.SessionId))!;
+                        var controls = new TenantSandboxControlService(f.Iam, (ITenantSessionStore)f.Iam, storage, f.Identity, f.Authorizer, f.Ids, TimeProvider.System);
+                        var securityRevision = (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
+                        if (outcome == "humanStop") await controls.RequestProcessStopAsync(s.Tenant, s.Human, new(s.Session.SessionId, current.SessionRevision,
+                            current.Lease!.Generation, current.Lease.Revision, current.Execution!.Id, current.Execution.Revision), securityRevision);
+                        else await controls.RequestResetAsync(s.Tenant, s.Human, new(s.Session.SessionId, current.SessionRevision,
+                            current.Lease!.Generation, current.Lease.Revision, current.Execution!.Id), securityRevision);
+                        try { await Task.Delay(Timeout.InfiniteTimeSpan, http.RequestAborted); } catch (OperationCanceledException) { }
+                        return;
+                    }
                     if (userCommand && outcome == "callerCanceled") callerCancellation.Cancel();
                     if (userCommand && outcome == "duringCommandRevoked")
                         await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, s.ExecutionGrant, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
@@ -159,7 +173,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             }
             else result = await sdk.ExecuteApprovedAsync(frame, request.RequestId);
             var denied = outcome is "foreign" or "revoked" or "instanceChanged";
-            var uncertain = outcome is "uncertain" or "deleted" or "callerCanceled" or "duringCommandRevoked" or "cleanupForeign" or "absent" or "backgroundIncomplete" or "backgroundError";
+            var uncertain = outcome is "uncertain" or "deleted" or "callerCanceled" or "duringCommandRevoked" or "cleanupForeign" or "absent" or "backgroundIncomplete" or "backgroundError" or "humanStop" or "humanReset";
             Assert.Equal(denied ? 0 : 1, dispatches);
             if (!denied)
             {
@@ -186,13 +200,21 @@ public sealed partial class TenantDefinitionIntegrationTests
             else if (outcome == "background") { Assert.Equal("Running", result.Status); Assert.Equal("sandbox_command_started", effect.ReasonCode); }
             else if (!denied)
             {
-                Assert.Equal(outcome is "deleted" or "callerCanceled" ? "Canceled" : "Indeterminate", result.Status);
+                Assert.Equal(outcome is "deleted" or "callerCanceled" or "humanStop" or "humanReset" ? "Canceled" : "Indeterminate", result.Status);
                 Assert.Equal(outcome is "cleanupForeign" or "absent" ? 0 : 1, deletes);
                 Assert.DoesNotContain("PRIVATE_SDK_BODY", result.Stderr);
                 if (outcome == "cleanupForeign") { Assert.False(result.TerminationConfirmed); Assert.Equal("NeedsReconciliation", result.EnvironmentState); }
                 if (outcome == "absent") Assert.True(result.TerminationConfirmed);
             }
             else { Assert.Equal("sandbox_command_not_dispatched", effect.ReasonCode); Assert.False(result.FilesystemEffectsMayHaveOccurred); Assert.Equal(0, deletes); }
+            if (outcome is "humanStop" or "humanReset")
+            {
+                var stopped = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!;
+                Assert.Equal(SandboxLeaseState.Terminated, stopped.Lease!.State);
+                Assert.Equal(outcome == "humanReset" ? "reset" : "processStop", stopped.Lease.CleanupReason);
+                Assert.Equal(outcome, stopped.Execution!.CancellationReason);
+                if (outcome == "humanStop") { Assert.NotNull(stopped.Execution.ProcessStop); Assert.Null(stopped.Execution.ProcessStop.DispatchStartedAt); }
+            }
             var before = contacts;
             if (outcome is "revoked" or "deleted" or "duringCommandRevoked") await Assert.ThrowsAsync<AccessDeniedException>(() => sdk.ExecuteApprovedAsync(frame, request.RequestId).AsTask());
             else Assert.Equal(result.ExecutionId, (await sdk.ExecuteApprovedAsync(frame, request.RequestId)).ExecutionId);

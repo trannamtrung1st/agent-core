@@ -17,3 +17,7 @@ public sealed record TenantSandboxInstanceVerificationRequest(long ExpectedRevis
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TenantSandboxResetRequest(long ExpectedRevision, long ExpectedSessionRevision, Guid ExpectedGeneration,
     long ExpectedLeaseRevision, [property: JsonRequired] Guid? ExpectedExecutionId);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record TenantSandboxProcessStopRequest(long ExpectedRevision, long ExpectedSessionRevision, Guid ExpectedGeneration,
+    long ExpectedLeaseRevision, long ExpectedExecutionRevision);

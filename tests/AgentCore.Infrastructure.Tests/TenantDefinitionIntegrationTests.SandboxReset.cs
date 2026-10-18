@@ -81,11 +81,11 @@ public sealed partial class TenantDefinitionIntegrationTests
             var saved = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!; remote = saved.Lease!;
             await Assert.ThrowsAsync<ArgumentException>(() => storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, remote with { Revision = remote.Revision + 1, CleanupReason = "reset" }, remote.Revision).AsTask());
             var reset = new TenantSandboxReset(frame.SessionId, saved.SessionRevision, remote.Generation, remote.Revision, execution.Id);
-            var humanReset = new TenantSandboxResetService(f.Iam, (ITenantSessionStore)f.Iam, storage, f.Identity, f.Authorizer, f.Ids, TimeProvider.System);
+            var humanReset = new TenantSandboxControlService(f.Iam, (ITenantSessionStore)f.Iam, storage, f.Identity, f.Authorizer, f.Ids, TimeProvider.System);
             var securityRevision = (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
-            await Assert.ThrowsAsync<SecurityConflictException>(() => humanReset.RequestAsync(s.Tenant, s.Human, reset with { ExpectedGeneration = Guid.NewGuid() }, securityRevision).AsTask());
-            await Assert.ThrowsAsync<SecurityConflictException>(() => humanReset.RequestAsync(s.Tenant, s.Human, reset with { ExpectedExecutionId = null }, securityRevision).AsTask());
-            var accepted = await humanReset.RequestAsync(s.Tenant, s.Human, reset, securityRevision);
+            await Assert.ThrowsAsync<SecurityConflictException>(() => humanReset.RequestResetAsync(s.Tenant, s.Human, reset with { ExpectedGeneration = Guid.NewGuid() }, securityRevision).AsTask());
+            await Assert.ThrowsAsync<SecurityConflictException>(() => humanReset.RequestResetAsync(s.Tenant, s.Human, reset with { ExpectedExecutionId = null }, securityRevision).AsTask());
+            var accepted = await humanReset.RequestResetAsync(s.Tenant, s.Human, reset, securityRevision);
             Assert.False(accepted.RetirementConfirmed); Assert.Equal(remote.Revision + 1, accepted.LeaseRevision); Assert.Equal(securityRevision + 1, accepted.SecurityRevision); Assert.Equal(0, contacts);
             Assert.Single(await f.Iam.ReadAuditAsync(s.Tenant, 200), a => a.Action == "sandbox.reset.request");
             var pending = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!.Lease!;
@@ -179,11 +179,13 @@ public sealed partial class TenantDefinitionIntegrationTests
     }
 
 
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Sandbox_reset_requires_independent_exact_scopes_and_revocation_precedes_stale_witnesses(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Sandbox_human_control_requires_independent_exact_scopes_and_revocation_precedes_stale_witnesses(bool sqlite, bool stopProcess)
     {
         await using var f = await Fixture.Create(sqlite); var s = await PrepareRuntimeSandbox(f); await ReadySandbox(f, s);
         var storage = (ITenantSandboxRuntimeStore)f.Iam;
+        SandboxExecution? execution = null;
+        if (stopProcess) { execution = RuntimeExecution(f, s); Assert.True(await storage.TryReserveTenantSandboxExecutionAsync(s.Write, execution, DateTimeOffset.UtcNow)); }
         async ValueTask<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
         var role = await f.Access.SaveRoleAsync(s.Human.PrincipalId, s.Tenant, null, "Membership", ["members.read"], await Revision());
         var account = await f.Identity.RegisterAsync("reset-manager@example.test", "Reset manager", "strong-manager-password");
@@ -199,30 +201,43 @@ public sealed partial class TenantDefinitionIntegrationTests
         await Grant("Read one environment", ["sandbox.read"], agentScope);
         await Grant("Read one Session", ["sessions.read"], TenantSessionRules.Scope(s.Tenant, s.Session.SessionId));
         await Grant("Read exact source", ["sandbox.read"], TenantSandboxProfileRules.Scope(s.Tenant, s.Lease.Profile.Id));
-        var service = new TenantSandboxResetService(f.Iam, (ITenantSessionStore)f.Iam, storage, f.Identity, f.Authorizer, f.Ids, TimeProvider.System);
+        var service = new TenantSandboxControlService(f.Iam, (ITenantSessionStore)f.Iam, storage, f.Identity, f.Authorizer, f.Ids, TimeProvider.System);
         var saved = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, s.Session.SessionId))!;
-        var reset = new TenantSandboxReset(s.Session.SessionId, saved.SessionRevision, saved.Lease!.Generation, saved.Lease.Revision, null);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.RequestAsync(s.Tenant, human, reset, 0).AsTask());
+        var reset = new TenantSandboxReset(s.Session.SessionId, saved.SessionRevision, saved.Lease!.Generation, saved.Lease.Revision, execution?.Id);
+        var action = stopProcess ? "sandbox.process.stop.request" : "sandbox.reset.request";
+        async Task Act(TenantSandboxReset change, long revision)
+        {
+            if (stopProcess) await service.RequestProcessStopAsync(s.Tenant, human, new(change.SessionId, change.ExpectedSessionRevision, change.ExpectedGeneration,
+                change.ExpectedLeaseRevision, execution!.Id, execution.Revision), revision);
+            else await service.RequestResetAsync(s.Tenant, human, change, revision);
+        }
+        async Task Raw(TenantSecurityState state, long revision, AuthorizationAudit audit)
+        {
+            if (stopProcess) await storage.TryRequestTenantSandboxProcessStopAsync(state, revision, new(reset.SessionId, reset.ExpectedSessionRevision, reset.ExpectedGeneration,
+                reset.ExpectedLeaseRevision, execution!.Id, execution.Revision), human, audit);
+            else await storage.TryRequestTenantSandboxResetAsync(state, revision, reset, human, audit);
+        }
+        await Assert.ThrowsAsync<AccessDeniedException>(() => Act(reset, 0));
         await Grant("Manage exact Session", ["sessions.manage"], TenantSessionRules.Scope(s.Tenant, s.Session.SessionId));
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.RequestAsync(s.Tenant, human, reset, 0).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => Act(reset, 0));
         var manage = await Grant("Manage exact environment", ["sandbox.manage"], agentScope);
         var currentRevision = await Revision();
-        await Assert.ThrowsAsync<SecurityConflictException>(() => service.RequestAsync(s.Tenant, human, reset with { ExpectedGeneration = f.Ids.NewId() }, currentRevision).AsTask());
+        await Assert.ThrowsAsync<SecurityConflictException>(() => Act(reset with { ExpectedGeneration = f.Ids.NewId() }, currentRevision));
         await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, manage, await Revision());
         var before = (await f.Iam.ReadTenantAsync(s.Tenant))!; var audits = (await f.Iam.ReadAuditAsync(s.Tenant, 200)).Count;
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.RequestAsync(s.Tenant, human, reset with { ExpectedGeneration = Guid.Empty }, 0).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => Act(reset with { ExpectedGeneration = Guid.Empty }, 0));
         var next = before with { Tenant = before.Tenant with { Revision = before.Tenant.Revision + 1 } };
-        await Assert.ThrowsAsync<AccessDeniedException>(() => storage.TryRequestTenantSandboxResetAsync(next, before.Tenant.Revision, reset, human,
-            new(f.Ids.NewId(), s.Tenant, human.PrincipalId, "sandbox.reset.request", reset.SessionId.ToString("D"), "allowed", "human_reset", DateTimeOffset.UtcNow)).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => Raw(next, before.Tenant.Revision,
+            new(f.Ids.NewId(), s.Tenant, human.PrincipalId, action, (execution?.Id ?? reset.SessionId).ToString("D"), "allowed", stopProcess ? "human_stop" : "human_reset", DateTimeOffset.UtcNow)));
         Assert.Equal(saved.Lease, (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, s.Session.SessionId))!.Lease);
         Assert.Equal(before.Tenant.Revision, await Revision()); Assert.Equal(audits, (await f.Iam.ReadAuditAsync(s.Tenant, 200)).Count);
         await Grant("Restore exact environment management", ["sandbox.manage"], agentScope);
         // Cleanup remains available when the old source no longer permits execution.
         await SetupProfiles(f).Profiles.SaveAsync(s.Tenant, s.Lease.Profile.Id, s.Human, SetupInput("Disabled source") with { Enabled = false }, await Revision(), 1);
-        var witness = await Revision(); var requested = await service.RequestAsync(s.Tenant, human, reset, witness);
-        Assert.False(requested.RetirementConfirmed);
-        await Assert.ThrowsAsync<SecurityConflictException>(() => service.RequestAsync(s.Tenant, human, reset, witness).AsTask());
-        Assert.Single(await f.Iam.ReadAuditAsync(s.Tenant, 200), a => a.Action == "sandbox.reset.request");
+        var witness = await Revision(); await Act(reset, witness);
+        Assert.False((await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, s.Session.SessionId))!.Execution?.TerminationConfirmed == true);
+        await Assert.ThrowsAsync<SecurityConflictException>(() => Act(reset, witness));
+        Assert.Single(await f.Iam.ReadAuditAsync(s.Tenant, 200), a => a.Action == action);
     }
 
 }

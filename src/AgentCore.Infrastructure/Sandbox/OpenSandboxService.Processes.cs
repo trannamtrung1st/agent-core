@@ -96,7 +96,7 @@ public sealed partial class OpenSandboxService
                 throw AgentCoreErrors.Conflict("Background command completion outcome is unconfirmed; inspect canonical files; effects may have occurred.");
             execution = execution with { State = stop ? SandboxExecutionState.Canceled : SandboxExecutionState.Completed,
                 ExitCode = status.ExitCode, FinishedAt = time.GetUtcNow(), Phase = "processInspection",
-                FailureCategory = stop ? "cancellation" : null, CancellationReason = stop ? "processStop" : null };
+                FailureCategory = stop ? "cancellation" : null, CancellationReason = stop ? execution.ProcessStop is null ? "processStop" : "humanStop" : null };
             execution = await SaveReceiptAsync(execution, false, ct);
             FinalizationCheckpoint?.Invoke("commandCompleted");
             (lease, execution) = await FinalizeCompletedExecutionAsync(sdk, lease, execution, definition,

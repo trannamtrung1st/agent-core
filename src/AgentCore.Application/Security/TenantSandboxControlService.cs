@@ -7,23 +7,23 @@ namespace AgentCore.Application.Security;
 public sealed record TenantSandboxResetReceipt(Guid SessionId, Guid Generation, long LeaseRevision, long SessionRevision,
     long SecurityRevision, bool RetirementConfirmed);
 
-// Explicit human reset is consent to retire this exact generation, never consent to another command or initialization.
-public sealed class TenantSandboxResetService(IIamStore security, ITenantSessionStore sessions, ITenantSandboxRuntimeStore storage,
+// Explicit human controls grant cleanup of an exact existing target, never another command or initialization.
+public sealed partial class TenantSandboxControlService(IIamStore security, ITenantSessionStore sessions, ITenantSandboxRuntimeStore storage,
     IdentityService identity, IamAuthorizer authorizer, IIdGenerator ids, TimeProvider time)
 {
-    public async ValueTask<TenantSandboxResetReceipt> RequestAsync(Guid tenant, HumanSessionReference human, TenantSandboxReset reset,
+    public async ValueTask<TenantSandboxResetReceipt> RequestResetAsync(Guid tenant, HumanSessionReference human, TenantSandboxReset reset,
         long expectedSecurityRevision, CancellationToken ct = default)
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, reset.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        await TenantSandboxResetRules.RequirePermissionsAsync(state, session.Owner, null, human, authorizer, ct).ConfigureAwait(false);
+        await TenantSandboxControlRules.RequirePermissionsAsync(state, session.Owner, null, human, authorizer, ct).ConfigureAwait(false);
         var saved = await storage.ReadTenantSandboxRuntimeAsync(tenant, reset.SessionId, ct: ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var lease = saved.Lease ?? throw new AccessDeniedException("resource_unavailable");
-        await TenantSandboxResetRules.RequirePermissionsAsync(state, session.Owner, lease.Profile.Id, human, authorizer, ct).ConfigureAwait(false);
+        await TenantSandboxControlRules.RequirePermissionsAsync(state, session.Owner, lease.Profile.Id, human, authorizer, ct).ConfigureAwait(false);
         // Authority precedes stale witnesses and repeats in the owning transaction, including the original login.
         var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         if (state.Tenant.Revision != expectedSecurityRevision || current.Tenant.Revision != expectedSecurityRevision) throw new SecurityConflictException("stale_revision");
-        TenantSandboxResetRules.Require(reset, session, lease);
+        TenantSandboxControlRules.Require(reset, session, lease);
         if (saved.Owner != session.Owner || saved.SessionRevision != session.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
         var next = state with { Tenant = state.Tenant with { Revision = checked(expectedSecurityRevision + 1) } };
         var audit = new AuthorizationAudit(ids.NewId(), tenant, human.PrincipalId, "sandbox.reset.request", reset.SessionId.ToString("D"), "allowed", "human_reset", time.GetUtcNow());
@@ -33,7 +33,7 @@ public sealed class TenantSandboxResetService(IIamStore security, ITenantSession
     }
 }
 
-public static class TenantSandboxResetRules
+public static partial class TenantSandboxControlRules
 {
     public static async ValueTask RequirePermissionsAsync(TenantSecurityState state, TenantSessionRoot owner, string? profile,
         HumanSessionReference human, IamAuthorizer authorizer, CancellationToken ct)

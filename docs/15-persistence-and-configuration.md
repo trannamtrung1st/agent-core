@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant process Stop receipt fence
+
+Optional `SandboxExecution.ProcessStop` carries actual audit/request ID, initiating Principal, request time and nullable one-time dispatch start. It lives in the existing receipt JSON; no table, index or migration is added. Both owning stores atomically create this evidence with original-human/scoped authority, exact witnesses, lease/receipt revisions, security and audit. A bounded technical CAS may set dispatch start once for the same active acknowledged background execution. Factual writers cannot add, clear or rewrite consent/dispatch identity, and a new execution cannot inherit it. Existing generation/command deadlines and immutable original operation outcome remain unchanged.
+
+Recovery sees a saved dispatch start as an uncertain interrupt, never another interrupt grant. It retires the same generation if confirmation was not durably completed. Normal confirmed Stop/quiescence may retain the generation for a fresh exact command Review; possible file effects and prior launch outcome stay explicit. Reset superseding Stop retains its own consent through SDK finalization/recovery.
+
 ## Tenant explicit reset intent
 
 The existing owned lease JSON carries reset consent (`CleanupReason=reset`, Terminating or already Terminated, cleared selection/transition targets). `TryRequestTenantSandboxResetAsync` writes that intent with one tenant security revision and audit in the same existing transaction/gates, rechecking original human, scoped permissions and exact Session/generation/lease/execution witnesses. No migration or second lifecycle table is introduced. Factual writes cannot mint/clear reset consent or change selected/switch target identity. A new generation may follow only confirmed termination and a fresh exact approved reservation; failed initialization remains blocked until explicit reset. Existing initialized/process/command evidence and canonical bytes remain retained through reset.

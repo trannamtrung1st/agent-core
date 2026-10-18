@@ -10,7 +10,7 @@ public sealed record TenantSandboxLeaseObservation(Guid Generation, long Revisio
 public sealed record TenantSandboxExecutionObservation(Guid ExecutionId, long Revision, Guid AgentRunId, Guid Generation, string State,
     string? ProfileId, long? ProfileRevision, string CommandText, bool Background, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt,
     int? ExitCode, string Stdout, string Stderr, bool Truncated, long? DurationMs, bool FilesystemEffectsMayHaveOccurred, bool TerminationConfirmed,
-    bool RemoteTerminationConfirmed, string? DiagnosticId);
+    bool RemoteTerminationConfirmed, string? DiagnosticId, bool StopRequested = false, bool StopDispatchStarted = false);
 public sealed record TenantSandboxRuntimeView(Guid SessionId, TenantSandboxLeaseObservation? Environment, TenantSandboxExecutionObservation? Execution,
     long SessionRevision, long SecurityRevision, bool LiveAuthorityConfirmed = false);
 
@@ -35,10 +35,10 @@ public sealed class TenantSandboxRuntimeReadService(IIamStore security, ITenantS
             || final.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         var l = snapshot.Lease; var e = snapshot.Execution;
         return new(session, l is null ? null : new(l.Generation, l.Revision, l.State.ToString(), l.Profile.Id, l.Profile.Revision, l.Profile.Name,
-            l.Profile.ImageReference, l.CreatedAt, l.ExpiresAt, l.ActiveExecutionId, l.LastExecutionId, l.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation,
+            l.Profile.ImageReference, l.CreatedAt, l.ExpiresAt, l.ActiveExecutionId, l.LastExecutionId, l.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation || e is { ProcessStop: not null, TerminationConfirmed: false },
             l.SafeMessage, l.Initialization), e is null ? null : new(e.Id, e.Revision, e.AgentRunId, e.Generation, e.State.ToString(), e.ProfileId, e.ProfileRevision,
             e.CommandText, e.Background, e.StartedAt, e.FinishedAt, e.ExitCode, e.Stdout, e.Stderr, e.Truncated, e.DurationMs, e.FilesystemEffectsMayHaveOccurred,
-            e.TerminationConfirmed, e.RemoteTerminationConfirmed, e.DiagnosticId), snapshot.SessionRevision, state.Tenant.Revision);
+            e.TerminationConfirmed, e.RemoteTerminationConfirmed, e.DiagnosticId, e.ProcessStop is not null, e.ProcessStop?.DispatchStartedAt is not null), snapshot.SessionRevision, state.Tenant.Revision);
     }
     private async ValueTask RequireRead(TenantSecurityState state, TenantSessionRoot owner, HumanSessionReference human, IEnumerable<string> profiles, CancellationToken ct)
     {

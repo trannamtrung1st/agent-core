@@ -83,7 +83,9 @@ public sealed partial class OpenSandboxService
                     if (execution?.ApprovalRequestId is not null && approvedSandbox is not null && (!HasPendingFinalization(execution) || execution.TerminationConfirmed))
                         await approvedSandbox.SettleAsync(lease.TenantId!.Value, lease.SessionId, execution.Id, ct);
                     if (lease.State == SandboxLeaseState.Terminated) continue;
-                    if (execution is not null && lease.State is SandboxLeaseState.Ready or SandboxLeaseState.Executing)
+                    var stopPending = execution is { ProcessStop: not null, TerminationConfirmed: false };
+                    if (execution is not null && (lease.State is SandboxLeaseState.Ready or SandboxLeaseState.Executing)
+                        && (!stopPending || execution is { Background: true, State: SandboxExecutionState.Running, Phase: "execution", ProcessStop.DispatchStartedAt: null }))
                     {
                         try
                         {
@@ -94,12 +96,21 @@ public sealed partial class OpenSandboxService
                             { await using var connected = await ConnectAsync(lease, ct); continue; }
                             // Only a confirmed background launch is observed; stranded foreground/provisioning work is retired.
                             if (execution.Background)
-                            { await RefreshProcessLockedAsync(lease, execution, false, ct); continue; }
+                            {
+                                if (stopPending)
+                                {
+                                    var claimed = await TenantRuntime.TryStartTenantSandboxProcessStopAsync(lease.TenantId!.Value, lease.SessionId, execution.Id,
+                                        execution.ProcessStop!.RequestId, execution.Revision, lease.Revision, time.GetUtcNow(), ct);
+                                    if (claimed is null) continue;
+                                    execution = claimed;
+                                }
+                                await RefreshProcessLockedAsync(lease, execution, stopPending, ct); continue;
+                            }
                         }
                         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                         catch { lease = await ReadLeaseAsync(lease, ct) ?? lease; }
                     }
-                    lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminating, CleanupReason = lease.CleanupReason ?? "authorityOrLifetime",
+                    lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminating, CleanupReason = lease.CleanupReason ?? (stopPending ? "processStop" : "authorityOrLifetime"),
                         CleanupPasses = checked(lease.CleanupPasses + 1), LastCleanupAttemptAt = time.GetUtcNow() }, ct);
                     var confirmed = await TryTerminateRemoteAsync(lease, ct);
                     if (execution is not null)
@@ -109,10 +120,11 @@ public sealed partial class OpenSandboxService
                         {
                             var denied = !execution.FilesystemEffectsMayHaveOccurred && execution.State == SandboxExecutionState.Dispatching;
                             var reset = lease.CleanupReason == "reset" && execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running;
+                            var stopped = execution.ProcessStop is not null && execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running;
                             execution = await SaveReceiptAsync(execution with {
-                                State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? denied || reset ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate : execution.State,
+                                State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? denied || reset || stopped ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate : execution.State,
                                 Phase = denied ? "notDispatched" : execution.Phase, FinishedAt = execution.FinishedAt ?? time.GetUtcNow(),
-                                CancellationReason = reset ? "humanReset" : execution.CancellationReason,
+                                CancellationReason = reset ? "humanReset" : stopped ? "humanStop" : execution.CancellationReason,
                                 RemoteTerminationConfirmed = confirmed, TerminationConfirmed = execution.TerminationConfirmed || confirmed || denied }, false, ct);
                         }
                     }
