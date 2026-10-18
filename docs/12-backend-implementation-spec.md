@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant Browser target comparison and dispatch
+
+The native provider's tenant entry acquires its existing interactive Session/owner hold, copies mutable command data, compares the physical witness and advances the shared command revision before invoking native work. Private navigation/close/general paths reuse that hold without reacquiring it. Unscoped consumers retain their existing provider path. No mutable conversation state moves outside the Session mailbox.
+
+Preparation reads cached handle identity/generation and hashes the current location; it does not launch a context or inspect DOM/profile bytes. Persistent siblings share a command revision; ephemeral Sessions retain separate revisions. Isolation changes, a replaced/released view, another command, a replacement dialog or provider restart invalidate the old witness. Dialog controls are allowed through a pending dialog action while unrelated target preparation remains busy. Resolution compares the saved dialog identity again when capturing the exact SDK dialog reference, so a page event between target consumption and dispatch cannot retarget the command. Preparation timeout/cancellation does not close the native operation holding the gate. A physical target may be consumed without confirmed effect; that is not permission to create a fresh grant or retry an uncertain operation. Durable Browser model preparation/Review/dispatch and result recovery remain pending.
+
 ## Tenant Browser physical ownership and read behavior
 
 `NativePlaywrightBrowser` reuses its existing context, page, target, proxy, profile and isolation owners. Immutable tenant bindings seal Session and Instance identity under a shared registration lock. Internal requests require an exact tenant owner; unscoped access to those bindings rejects before native work. Binding a Session previously reserved by an unscoped command or agent fails rather than adopting it. Same-agent tenant Sessions may share persistent cookies/storage while tabs and targets stay Session-owned. Other tenant/agent contexts and the unscoped profile namespace remain separate. Unscoped profile reset, credential filling and unattended methods cannot enter a tenant binding.

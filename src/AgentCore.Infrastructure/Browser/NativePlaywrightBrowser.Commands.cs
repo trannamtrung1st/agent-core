@@ -24,13 +24,26 @@ public sealed partial class NativePlaywrightBrowser
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!TenantRequestAllowed(command)) return new("forbidden");
+        if (command.TenantOwner is not null && IsAvailable)
+        {
+            command = command with { Command = BrowserCommandIdentity.Freeze(command.Command) };
+            await using var held = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
+            if (ConsumeTenantWitness(command) is { } error) return new(error);
+            if (TenantTargetValidatedProbe is { } probe) await probe().WaitAsync(cancellationToken).ConfigureAwait(false);
+            return await ExecuteCoreAsync(command, cancellationToken, interactiveHeld: true).ConfigureAwait(false);
+        }
+        return await ExecuteCoreAsync(command, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<BrowserResult> ExecuteCoreAsync(BrowserRequest command, CancellationToken cancellationToken, bool interactiveHeld = false)
+    {
         if (!BrowserToolCatalog.TryGet(BrowserToolArguments.ToolName(command.Operation), out var metadata) || !Provider.Supports(metadata.Feature)) return new("unsupported_operation");
         if (!BrowserToolArguments.WithinOperationalLimits(command.Command, _policy.Limits)) return new("invalid");
         if (command.Command is BrowserWaitFor wait) command = command with { Command = wait with { TimeoutMs = Math.Min(wait.TimeoutMs, _policy.Limits.WaitTimeoutMs) } };
-        if (command.Operation == BrowserOperation.Navigate) return await NavigateAsync(command, cancellationToken);
+        if (command.Operation == BrowserOperation.Navigate) return await NavigateAsync(command, cancellationToken, interactiveHeld);
         if (command.Operation == BrowserOperation.Close)
         {
-            var closed = await CloseAsync(command.SessionId, cancellationToken);
+            var closed = await CloseAsync(command.SessionId, cancellationToken, interactiveHeld);
             return closed.Status is "closed" or "already_closed" ? new(null, Status: closed.Status,
                 DataJson: JsonSerializer.Serialize(new { status = closed.Status }), EffectAttempted: closed.Status == "closed",
                 EffectConfirmedBySdk: closed.Status == "closed") : new(closed.Status, Status: closed.Status,
@@ -54,7 +67,7 @@ public sealed partial class NativePlaywrightBrowser
                     coordinateEvidenceUnavailableReasons = capture.UnavailableReasons,
                     captureDiagnostics = capture.Diagnostics }, JsonSerializerOptions.Web));
         }
-        await using var interactive = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
+        await using var interactive = interactiveHeld ? NoInteractiveHold.Instance : await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         ActivateView(session);
         if (ContextTransitionBlocked(command.SessionId)) { session.Gate.Release(); return new("policy_transition_pending"); }
@@ -211,6 +224,8 @@ public sealed partial class NativePlaywrightBrowser
                 case BrowserDialog args:
                     {
                         var dialog = session.Dialog;
+                        if (command.TenantWitness is { } expected && expected.DialogId != (dialog is null ? null : _tenantDialogs.GetValue(dialog, static _ => new()).Id))
+                            return new("browser_target_changed");
                         if (dialog is null) return new("dialog_missing");
                         // A modal blocks page JS, including the live storage/password secret collector.
                         // Mask the entire untrusted message rather than trusting stale pre-dialog evidence.

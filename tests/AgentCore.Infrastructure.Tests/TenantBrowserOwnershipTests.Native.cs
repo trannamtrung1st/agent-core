@@ -20,7 +20,7 @@ public sealed partial class TenantBrowserOwnershipTests
     {
         Assert.Null(await browser.BindTenantIsolationAsync(owner, BrowserProfileMode.PersistentAgent));
         var url = browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html";
-        Assert.Null((await browser.ExecuteAsync(new(owner.SessionId, new BrowserNavigate(url)) { TenantOwner = owner })).ErrorCode);
+        Assert.Null((await Dispatch(browser, owner, new BrowserNavigate(url))).ErrorCode);
     }
     private static Microsoft.Playwright.IPage Page(NativePlaywrightBrowser browser, TenantBrowserOwner owner) =>
         browser.ContextFor(owner.SessionId)!.Pages.Single(p => p.Url.EndsWith("/browser-native.html", StringComparison.Ordinal));
@@ -54,16 +54,16 @@ public sealed partial class TenantBrowserOwnershipTests
                 Assert.Same(browser.ContextFor(a.SessionId), browser.ContextFor(sibling.SessionId));
                 var pages = browser.ContextFor(a.SessionId)!.Pages;
                 foreach (var page in pages) Assert.Equal("tenant-A", await page.EvaluateAsync<string?>("localStorage.getItem('owner')"));
-                var ownTab = Assert.Single((await browser.ExecuteAsync(new(a.SessionId, new BrowserTabs("list")) { TenantOwner = a })).Pages!);
-                Assert.NotNull((await browser.ExecuteAsync(new(b.SessionId, new BrowserTabs("switch", ownTab.PageId)) { TenantOwner = b })).ErrorCode);
-                Assert.NotNull((await browser.ExecuteAsync(new(sibling.SessionId, new BrowserTabs("switch", ownTab.PageId)) { TenantOwner = sibling })).ErrorCode);
+                var ownTab = Assert.Single((await Dispatch(browser, a, new BrowserTabs("list"))).Pages!);
+                Assert.NotNull((await Dispatch(browser, b, new BrowserTabs("switch", ownTab.PageId))).ErrorCode);
+                Assert.NotNull((await Dispatch(browser, sibling, new BrowserTabs("switch", ownTab.PageId))).ErrorCode);
                 Assert.Throws<AccessDeniedException>(() => browser.BindTenantSession(a with { TenantId = b.TenantId, SessionId = Guid.NewGuid() }));
                 var state = await browser.ObserveTenantSessionAsync(a); Assert.Equal(1, state.LiveContexts); Assert.Equal(1, state.OpenPages);
                 await browser.ReleaseTenantAsync(a);
                 Assert.Equal("tenant-A", await browser.ContextFor(sibling.SessionId)!.Pages.Single().EvaluateAsync<string?>("localStorage.getItem('owner')"));
                 Assert.Equal("forbidden", (await browser.ExecuteAsync(new(sibling.SessionId, new BrowserObserve()))).ErrorCode);
                 // Technical release keeps the trusted owner and selected isolation mode.
-                var reopenedView = await browser.ExecuteAsync(new(a.SessionId, new BrowserNavigate(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html")) { TenantOwner = a });
+                var reopenedView = await Dispatch(browser, a, new BrowserNavigate(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html"));
                 Assert.Null(reopenedView.ErrorCode); Assert.Same(browser.ContextFor(a.SessionId), browser.ContextFor(sibling.SessionId));
             }
             finally { await browser.StopAsync(CancellationToken.None); }
@@ -95,7 +95,7 @@ public sealed partial class TenantBrowserOwnershipTests
         try
         {
             Assert.True(browser.IsAvailable); Assert.Null(await browser.BindTenantIsolationAsync(owner, BrowserProfileMode.PersistentAgent));
-            var result = await browser.ExecuteAsync(new(owner.SessionId, new BrowserNavigate(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html")) { TenantOwner = owner });
+            var result = await Dispatch(browser, owner, new BrowserNavigate(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html"));
             Assert.Equal("profile_unavailable", result.ErrorCode); Assert.Equal("retained", await File.ReadAllTextAsync(marker));
             Assert.Null(browser.ContextFor(owner.SessionId));
         }

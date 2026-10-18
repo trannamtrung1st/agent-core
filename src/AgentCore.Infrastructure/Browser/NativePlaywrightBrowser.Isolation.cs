@@ -46,19 +46,19 @@ public sealed partial class NativePlaywrightBrowser : IBrowserIsolationBinding
                 if (_persistent.TryGetValue(instanceId, out var retained)
                     && retained.PendingContextMutation is { Completion.IsCompletedSuccessfully: false } pending
                     && (pending.SessionId == sessionId || pending.SessionId == Guid.Empty)) return "policy_transition_pending";
-                _sessionModes[sessionId] = mode; return null;
+                SelectSessionMode(sessionId, mode); return null;
             }
             if (ContextTransitionBlocked(sessionId) || mode == BrowserProfileMode.PersistentAgent
                 && _persistent.TryGetValue(instanceId, out var root) && root.PendingContextMutation is { Completion.IsCompletedSuccessfully: false })
                 return "policy_transition_pending";
             if (SessionMode(sessionId) == mode && (existing is null || existing.Persistent == (mode == BrowserProfileMode.PersistentAgent)))
-            { _sessionModes[sessionId] = mode; return null; }
+            { SelectSessionMode(sessionId, mode); return null; }
             // Metadata may tighten while native work is in flight. Never force-close that operation or reuse its context.
             var use = _contextUse.GetOrAdd(instanceId, static _ => new SemaphoreSlim(1, 1));
             if (!await use.WaitAsync(0, ct)) return "policy_transition_pending";
             try
             {
-            if (existing is null) { _sessionModes[sessionId] = mode; return null; }
+            if (existing is null) { SelectSessionMode(sessionId, mode); return null; }
             if (!await existing.Gate.WaitAsync(0, ct)) return "policy_transition_pending";
             try
             {
@@ -85,7 +85,7 @@ public sealed partial class NativePlaywrightBrowser : IBrowserIsolationBinding
                     if (closed.Status is not ("closed" or "already_closed")) return "policy_transition_pending";
                 }
                 _sessions.TryRemove(new KeyValuePair<Guid, SessionBrowser>(sessionId, existing));
-                _sessionModes[sessionId] = mode;
+                SelectSessionMode(sessionId, mode);
                 return null;
             }
             finally { existing.Gate.Release(); }

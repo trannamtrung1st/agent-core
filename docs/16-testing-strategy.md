@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser exact target verification
+
+Using actual disposable Chromium, prepare a cold navigation and assert no context/profile allocation. Reject missing targets and changed typed arguments before native work. Race two identical saved targets and require one admitted native call; replay must reject. Change the page, shared sibling activity, isolation mode (including changing back), view ownership/release and provider lifetime to invalidate old targets. Replace a native dialog without another Core command and reject the former dialog target. Exercise a real pending Confirm action and retain inspection/dismissal controls. Verify bounded preparation/caller cancellation preserves the native call holding the gate.
+
+Inject a lost close acknowledgement against an existing disposable context and assert one attempted close and no repeat with its consumed target. Keep exact upload-byte/collection snapshot invariants, shared legacy profile/isolation consumers, current state-read authorization and the closed model effect boundary in the focused regression. HTTP active-state fixtures derive a live target through the trusted internal port; this is not a reviewed model effect or a new public command API.
+
 ## Tenant Browser ownership and state verification
 
 Use disposable actual Chromium profiles against the loopback fixture to prove separation from a saved unscoped profile and another tenant, same-agent shared cookies/storage with Session-owned tabs, retained storage after restart, immutable owner rejection, technical release preserving isolation and linked profile-parent refusal. Opt into these native cases with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`; a skipped native case is not execution evidence. Keep the shared Browser profile/isolation consumers in the focused regression.

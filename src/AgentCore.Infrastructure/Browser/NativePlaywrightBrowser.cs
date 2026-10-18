@@ -203,9 +203,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
     private async ValueTask<BrowserResult> NavigateAsync(
         BrowserRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool interactiveHeld = false)
     {
-        await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
+        await using var interactive = interactiveHeld ? NoInteractiveHold.Instance : await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable)
         {
             return Unavailable();

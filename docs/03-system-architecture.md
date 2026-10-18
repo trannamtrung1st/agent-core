@@ -1,5 +1,11 @@
 # System Architecture
 
+## Tenant Browser exact command targets
+
+Before tenant native work, the incumbent Browser provider now captures and compares an exact physical target under its existing Session/owner gates. The target binds the saved owner, provider lifetime, isolation selection, shared-context command revision, context/tab/page generation, current location hash, exact pending dialog and typed command hash. The provider consumes the technical command revision before dispatch; changed or repeated targets cannot reach the SDK. Mutable collections/upload bytes are copied before comparison and execution.
+
+This witness is physical target CAS, not IAM, human consent, a role or an operation grant. It is process-local and deliberately invalid after provider restart. Durable Browser Review must retain its own exact semantic operation/target and dispatch history, revalidate current authority and obtain a matching live physical target before native work. It cannot persist or treat this transient witness as approval authority. Canonical model Browser effects remain closed; no approval state, grant, effect receipt or new execution engine is introduced by this prerequisite.
+
 ## Tenant Browser ownership and scoped state
 
 The existing native Browser provider now accepts an immutable server-derived tenant/Instance/executor/Session owner. Actual canonical Session and SystemIdentity ownership remains in the existing stores; provider bindings are technical resource ownership, never IAM or permission snapshots. Tenant persistent profiles have a separate tenant/Instance namespace. A known tenant Session cannot be adopted through an unscoped bind, command, credential sink, observation, profile reset, unattended entry or release. A prior unscoped binding cannot be promoted into tenant ownership. Registration and command reservation share one lock; technical release preserves tenant ownership and selected isolation.

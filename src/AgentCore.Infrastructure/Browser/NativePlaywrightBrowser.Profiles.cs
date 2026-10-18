@@ -16,9 +16,9 @@ namespace AgentCore.Infrastructure.Browser;
 
 public sealed partial class NativePlaywrightBrowser
 {
-    private async ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    private async ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default, bool interactiveHeld = false)
     {
-        await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        await using var interactive = interactiveHeld ? NoInteractiveHold.Instance : await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (Volatile.Read(ref _stopped) == 1 || !IsRuntimeReady)
         {

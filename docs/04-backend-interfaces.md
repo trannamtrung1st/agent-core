@@ -1,5 +1,13 @@
 # Backend Interfaces
 
+## Tenant Browser command target port
+
+`ITenantBrowserCommandTarget.PrepareTenantCommandAsync` accepts only an already bound trusted `TenantBrowserOwner` and typed `BrowserCommand`. It observes existing native handles without binding/provisioning, navigation, page-content or profile-byte reads. It returns a `TenantBrowserCommandWitness` or a safe unavailable/unsupported/busy result. Preparation waits at most one second for incumbent gates; caller cancellation propagates and never retires the command already using those gates.
+
+A ready provider requires that exact witness in internal `BrowserRequest.TenantWitness`. Owner, provider epoch, isolation-selection revision/mode, shared command revision, context identity, active tab/generation, location hash, pending-dialog identity and typed argument hash must still match. Comparison/consumption and native work retain the existing Session/owner gates throughout, using private call forwarding rather than reentrant public execution. Simultaneous use admits at most one native attempt. Every admitted attempt consumes the physical target, including a failed/uncertain response; no automatic retry occurs. Dialog inspect/accept/dismiss remain eligible while their triggering native action is pending.
+
+`BrowserCommandIdentity` freezes mutable argument collections and upload buffers; hashes bind actual bytes without base64-materializing them. The witness contains no raw URL, page/dialog text, command arguments or secret value. Missing/changed targets yield `browser_target_required`/`browser_target_changed`; busy target preparation yields `browser_target_busy`. These are internal port facts, never user-editable HTTP/model authority. Core still needs current IAM, durable Review and an exact dispatch/effect fence before enabling tenant Browser tools.
+
 ## Tenant Browser ownership and state ports
 
 `TenantBrowserOwner` carries only trusted actual Tenant, Instance, executor Principal and Session IDs. `ITenantBrowserBinding` registers that immutable owner, selects the existing isolation mode and releases technical resources. `BrowserRequest.TenantOwner` must match the provider's saved binding before any tenant command; this internal port field is never accepted from a model or public request DTO. Binding does not authorize a command. Existing Core effect/approval rules must authorize future dispatch separately.

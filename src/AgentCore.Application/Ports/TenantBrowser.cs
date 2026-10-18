@@ -24,3 +24,14 @@ public interface ITenantBrowserStateReader
     // Existing handles only; no binding, native launch, page inspection or filesystem read.
     ValueTask<ResourceStateObservation> ObserveTenantSessionAsync(TenantBrowserOwner owner, CancellationToken ct = default);
 }
+
+// Physical target CAS only. This is neither human consent nor an operation grant.
+public sealed record TenantBrowserCommandWitness(TenantBrowserOwner Owner, Guid ProviderEpoch, long SelectionRevision,
+    long CommandRevision, BrowserProfileMode ProfileMode, Guid? ContextId, string? TabRef, int? PageGeneration,
+    Guid? DialogId, string? LocationHash, string CommandHash);
+public sealed record TenantBrowserCommandPreparation(string? ErrorCode, TenantBrowserCommandWitness? Witness = null);
+public interface ITenantBrowserCommandTarget
+{
+    // Inspect existing handles only; never create a context, navigate or read page content.
+    ValueTask<TenantBrowserCommandPreparation> PrepareTenantCommandAsync(TenantBrowserOwner owner, BrowserCommand command, CancellationToken ct = default);
+}

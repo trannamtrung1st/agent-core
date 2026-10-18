@@ -51,7 +51,10 @@ public sealed partial class TenantSessionAccessTests
             // Trusted native fixture warmup is distinct from an IAM-authorized model effect.
             var native = Assert.IsType<NativePlaywrightBrowser>(browser);
             Assert.True(native.Fixture.IsAvailable); Assert.Equal(native.Fixture.Origin, browser.HostPolicy.NavigationOrigins.Single());
-            Assert.Null((await browser.ExecuteAsync(new(first, new BrowserNavigate(fixtureUrl)) { TenantOwner = scope })).ErrorCode);
+            var command = new BrowserNavigate(fixtureUrl);
+            var prepared = await Assert.IsAssignableFrom<ITenantBrowserCommandTarget>(browser).PrepareTenantCommandAsync(scope, command);
+            Assert.Null(prepared.ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(new(first, command) { TenantOwner = scope, TenantWitness = prepared.Witness })).ErrorCode);
             var revision = await Revision(owner, tenant);
             var read = await owner.GetAsync(api + $"/sessions/{first}/browser"); Assert.Equal(HttpStatusCode.OK, read.StatusCode); Assert.True(read.Headers.CacheControl?.NoStore);
             var view = await Json(read); Assert.Equal(1, view.GetProperty("observation").GetProperty("liveContexts").GetInt32());

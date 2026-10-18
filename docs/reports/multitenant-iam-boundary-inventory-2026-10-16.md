@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant Browser exact target successor — 2026-10-18
+
+The existing native tenant entry now compares and consumes an exact transient physical command target under its incumbent Session/owner gates. This rejects argument drift, duplicate use and changed native identity without SDK replay, while retaining pending-dialog controls. [Focused evidence](tenant-browser-target-verification-2026-10-18.md) records actual local Chromium and existing protected store/HTTP regressions. This is a provider prerequisite, not durable Review or grant/effect execution. Browser model/effect/approval adapters and the earlier Browser removal/cutover obligations remain open.
+
 ## Tenant Browser owner and state successor — 2026-10-18
 
 Canonical provider bindings now pin actual tenant/Instance/executor/Session identity and tenant-specific profile paths. Known tenant bindings reject unscoped commands, observation, reset, protected fill, unattended use and release; old global profiles are not adopted. `GET /api/v2/tenants/{tenantId}/sessions/{sessionId}/browser` is owned by the original human with independent Session read and agent Browser read, post-I/O login/Account/security/Session fences and no native allocation. [Focused verification](tenant-browser-ownership-verification-2026-10-18.md) owns its current evidence. Browser effect/tool/review adapters, credential/capture delivery, tenant privacy/reset/decommission and autonomous admission remain pending; earlier Browser rows retain those removal/cutover obligations. This is not full Browser isolation or proposal acceptance.
