@@ -13,6 +13,7 @@ export function ChatFileCard({
   metadataFailed = false,
   onDownload,
   onRetryMetadata,
+  onReadLost,
 }: {
   displayName?: string;
   description?: string;
@@ -22,6 +23,7 @@ export function ChatFileCard({
   metadataFailed?: boolean;
   onDownload: () => void;
   onRetryMetadata?: () => void;
+  onReadLost?: () => void;
 }) {
   return (
     <div
@@ -64,6 +66,7 @@ export function ChatFileCard({
             file={fileRef}
             iconOnly
             label={`Preview ${displayName}`}
+            onReadLost={onReadLost}
           />
         )}
         {displayName ? (

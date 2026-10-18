@@ -57,6 +57,22 @@ public sealed partial class TenantSessionAccessTests
             using var download = await owner.GetAsync(url + $"/{id}/content"); Assert.Equal(HttpStatusCode.OK, download.StatusCode);
             Assert.Equal(bytes, await download.Content.ReadAsByteArrayAsync()); Assert.Equal("attachment", download.Content.Headers.ContentDisposition!.DispositionType);
             Assert.DoesNotContain("..", download.Content.Headers.ContentDisposition.ToString()); Assert.Equal("nosniff", Assert.Single(download.Headers.GetValues("X-Content-Type-Options"))); Assert.True(download.Headers.CacheControl?.NoStore);
+            var office = factory.Services.GetRequiredService<IOfficeProcessor>();
+            var officeIds = new List<Guid>();
+            foreach (var format in new[] { "docx", "xlsx" })
+            {
+                var officeId = Guid.NewGuid(); officeIds.Add(officeId);
+                var original = format == "docx" ? office.CreateDocument(new("Report", [new("Section", ["Exact readable Office text"], null)]), default).Bytes
+                    : office.CreateWorkbook(new([new("Sheet", [[new("text", Text: "Exact readable Office text")]])]), default).Bytes;
+                await factory.Services.GetRequiredService<ITenantArtifactStore>().CreateTenantAsync(new(run.Owner, session, runId, run.Claim!.Generation), officeId,
+                    "report." + format, format == "docx" ? OfficeLimits.DocumentMime : OfficeLimits.SpreadsheetMime, original);
+                var preview = await Json(await owner.GetAsync(url + $"/{officeId}/office-preview"));
+                Assert.Equal(format, preview.GetProperty("format").GetString());
+                Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(original)), preview.GetProperty("sha256").GetString());
+                if (format == "docx") Assert.False(preview.GetProperty("emptyBody").GetBoolean());
+                else Assert.Equal("Exact readable Office text", preview.GetProperty("rows")[0][0].GetProperty("value").GetString());
+                Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(api + $"/sessions/{Guid.NewGuid()}/artifacts/{officeId}/office-preview")).StatusCode);
+            }
             Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(url + "?limit=101")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(api + $"/sessions/{Guid.NewGuid()}/artifacts/{id}/content")).StatusCode);
             var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Artifact Beta", slug = "artifact-beta" }))).GetProperty("tenantId").GetGuid();
@@ -77,6 +93,14 @@ public sealed partial class TenantSessionAccessTests
             role = await access.SaveRoleAsync(human, tenant, null, "Exact Artifact reader", ["artifacts.read"], await Revision(owner, tenant));
             var grant = await access.AssignRoleAsync(human, tenant, member.PrincipalId, role.RoleId, TenantArtifactRules.Scope(tenant, id), await Revision(owner, tenant));
             Assert.Equal(bytes, await reader.GetByteArrayAsync(url + $"/{id}/content"));
+            foreach (var officeId in officeIds)
+            {
+                Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(url + $"/{officeId}/office-preview")).StatusCode);
+                var officeGrant = await access.AssignRoleAsync(human, tenant, member.PrincipalId, role.RoleId, TenantArtifactRules.Scope(tenant, officeId), await Revision(owner, tenant));
+                Assert.Equal(HttpStatusCode.OK, (await reader.GetAsync(url + $"/{officeId}/office-preview")).StatusCode);
+                await access.RevokeAssignmentAsync(human, tenant, officeGrant.AssignmentId, await Revision(owner, tenant));
+                Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(url + $"/{officeId}/office-preview")).StatusCode);
+            }
             await access.RevokeAssignmentAsync(human, tenant, grant.AssignmentId, await Revision(owner, tenant));
             Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(url + $"/{id}/content")).StatusCode);
             Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);

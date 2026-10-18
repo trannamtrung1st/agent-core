@@ -9,6 +9,23 @@ const record = (sessionId = "s1", artifactId = "a1") => ({ sessionId, artifactId
 const response = (value = record()) => ({ ok: true, status: 200, json: async () => value });
 
 describe("artifact HTTP", () => {
+  it('reads tenant metadata with current identity and no owner fallback or cross-identity cache', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(response()).mockResolvedValueOnce(response())
+      .mockResolvedValueOnce({ ok: false, status: 403 }).mockResolvedValueOnce(response());
+    vi.stubGlobal('fetch', fetchMock);
+    const { getArtifact } = await import('./artifacts');
+    await getArtifact('s1', 'a1', 'tenant-a'); await getArtifact('s1', 'a1', 'tenant-a');
+    await expect(getArtifact('s1', 'a1', 'tenant-a')).rejects.toMatchObject({ status: 403 });
+    await getArtifact('s1', 'a1', 'tenant-b');
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/v2/tenants/tenant-a/sessions/s1/artifacts/a1', '/api/v2/tenants/tenant-a/sessions/s1/artifacts/a1',
+      '/api/v2/tenants/tenant-a/sessions/s1/artifacts/a1', '/api/v2/tenants/tenant-b/sessions/s1/artifacts/a1',
+    ]);
+    for (const [, options] of fetchMock.mock.calls) expect(options).toMatchObject({ credentials: 'same-origin', cache: 'no-store' });
+    expect(fetchMock.mock.calls.every(([, options]) => !options.headers)).toBe(true);
+  });
+
   it("deduplicates authenticated metadata, scopes by session, and never reads a body on render", async () => {
     const fetchMock = vi.fn().mockImplementation(async (url: string) => response(record(url.includes("s2") ? "s2" : "s1")));
     vi.stubGlobal("fetch", fetchMock);

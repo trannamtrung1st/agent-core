@@ -138,7 +138,8 @@ public sealed record ModelResultReceived(
     EventContext Context,
     Guid ResponseId,
     ModelGenerationEvent Event,
-    TaskCompletionSource Processed) : SessionInput(Context);
+    TaskCompletionSource Processed,
+    IArtifactReferenceAuthorizer? ArtifactReferences = null) : SessionInput(Context);
 
 public sealed record CancelResponseReceived(
     EventContext Context,

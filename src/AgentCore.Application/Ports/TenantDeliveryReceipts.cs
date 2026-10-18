@@ -3,8 +3,9 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Application.Ports;
 
 // Trusted transport evidence, constructed only after current recipient authorization. Never a wire DTO.
+public sealed record TenantDeliveredBlock(string BlockId, ResponseBlockKind Kind, Guid? ArtifactId = null);
 public sealed record TenantDeliveryReceipt(TenantSessionRoot Owner, TenantSessionInitiator Human, long SecurityRevision,
-    Guid EntryId, long EntrySequence, Guid ResponseId, int PublishedEnd, int ReceivedEnd);
+    Guid EntryId, long EntrySequence, Guid ResponseId, int PublishedEnd, int ReceivedEnd, IReadOnlyList<TenantDeliveredBlock>? Blocks = null);
 
 public interface ITenantDeliveryReceiptStore
 {

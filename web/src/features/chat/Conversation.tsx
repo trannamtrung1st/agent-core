@@ -22,6 +22,7 @@ function isScrolledToBottom(scroll: Element): boolean {
 export function Conversation({
   agentName,
   sessionId,
+  tenantId,
   entries,
   liveUserTranscript = null,
   activity,
@@ -34,6 +35,7 @@ export function Conversation({
 }: {
   agentName: string;
   sessionId: string | null;
+  tenantId?: string;
   entries: HistoryEntry[];
   liveUserTranscript?: string | null;
   activity: AgentActivityState;
@@ -251,6 +253,7 @@ export function Conversation({
               backgroundSource={entry.responseId ? completionSources[entry.responseId] : null}
               agentName={agentName}
               sessionId={sessionId}
+              tenantId={tenantId}
               turnAnchor={index === lastUserIndex && !liveUserTranscript}
             />
           ))

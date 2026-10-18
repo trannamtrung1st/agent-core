@@ -44,14 +44,8 @@ public sealed partial class SessionRuntime
     {
         var saved = durable.Entries.ToDictionary(e => e.EntryId);
         foreach (var entry in _tenantReceiptEvidence.Values)
-            if (!saved.TryGetValue(entry.EntryId, out var prior) || prior.ReceivedTextEndExclusive < entry.ReceivedTextEndExclusive) saved[entry.EntryId] = entry;
-        return proposed with { Entries = proposed.Entries.Select(entry =>
-        {
-            if (!saved.TryGetValue(entry.EntryId, out var prior) || prior.ResponseId != entry.ResponseId || prior.Sequence != entry.Sequence
-                || prior.ReceivedTextEndExclusive <= entry.ReceivedTextEndExclusive) return entry;
-            var longer = (prior.Envelope?.DisplayText ?? prior.Text).Length > (entry.Envelope?.DisplayText ?? entry.Text).Length;
-            return entry with { ReceivedTextEndExclusive = prior.ReceivedTextEndExclusive,
-                Text = longer ? prior.Text : entry.Text, Envelope = longer ? prior.Envelope : entry.Envelope };
-        }).ToArray() };
+            saved[entry.EntryId] = saved.TryGetValue(entry.EntryId, out var prior) ? TenantDeliveryReceiptRules.Carry(prior, entry) : entry;
+        return proposed with { Entries = proposed.Entries.Select(entry => saved.TryGetValue(entry.EntryId, out var prior)
+            ? TenantDeliveryReceiptRules.Carry(entry, prior) : entry).ToArray() };
     }
 }

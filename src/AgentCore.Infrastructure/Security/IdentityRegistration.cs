@@ -105,6 +105,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantPreferenceOperationService>();
         services.TryAddSingleton<ITenantArtifactOperationStore>(p => (ITenantArtifactOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantArtifactOperationService>();
+        services.TryAddSingleton<TenantArtifactReferenceService>();
         services.TryAddSingleton<TenantSessionService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();

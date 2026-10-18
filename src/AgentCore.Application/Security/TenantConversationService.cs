@@ -15,8 +15,14 @@ public sealed record TenantConversationView(TenantSessionRoot Owner, string Titl
     PublicAgentDescriptor Agent, SessionModelSelection? Model);
 
 public sealed class TenantConversationService(IIamStore security, ITenantSessionStore sessions, ITenantConversationStore content,
-    IdentityService identity, IamAuthorizer authorizer)
+    IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null)
 {
+    public async ValueTask<bool> CanReadArtifactReferenceAsync(Guid tenant, Guid session, TenantSessionInitiator human, string? reference, CancellationToken ct = default)
+    {
+        if (artifactAccess is null || !Guid.TryParse(reference, out var id) || id == Guid.Empty) return false;
+        try { await artifactAccess.ReadAsync(tenant, session, id, human, ct).ConfigureAwait(false); return true; }
+        catch (AccessDeniedException) { return false; }
+    }
     public async ValueTask<TenantConversationRecipient> AuthorizeRecipientAsync(Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct = default)
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -53,8 +59,9 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
             var key = (permission, type, id);
             if (!cache.TryGetValue(key, out var allowed))
             {
-                allowed = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(permission),
-                    AccessScope.ForResource(tenant, type, id), ct).ConfigureAwait(false)).Allowed;
+                allowed = type == "artifact" ? await CanReadArtifactReferenceAsync(tenant, session, human, id, ct).ConfigureAwait(false)
+                    : (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(permission),
+                        AccessScope.ForResource(tenant, type, id), ct).ConfigureAwait(false)).Allowed;
                 cache.Add(key, allowed);
             }
             return allowed;
@@ -64,9 +71,12 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
             var projected = PublicHistory.FromEntry(entry);
             var blocks = new List<PublicResponseBlock>();
             foreach (var block in projected.Blocks)
-                if (block.Kind == "markdown" && block.AttachmentId is null && block.ArtifactId is null
+                if (block.Kind == "unknown" && block.AttachmentId is null && block.ArtifactId is null && block.Text == block.FallbackText
+                        && block.FallbackText is "[Unavailable artifact]" or "[Unsupported content]"
+                    || block.Kind == "markdown" && block.AttachmentId is null && block.ArtifactId is null
                     || block.Kind == "attachment" && block.ArtifactId is null && await CanRead("attachments.read", "attachment", block.AttachmentId).ConfigureAwait(false)
-                    || block.Kind == "artifact" && block.AttachmentId is null && await CanRead("artifacts.read", "artifact", block.ArtifactId).ConfigureAwait(false)) blocks.Add(block);
+                    || block.Kind == "artifact" && block.AttachmentId is null && await CanRead("artifacts.read", "artifact", block.ArtifactId).ConfigureAwait(false))
+                    blocks.Add(block.Kind == "artifact" ? block with { ArtifactId = Guid.Parse(block.ArtifactId!).ToString("D"), Text = "", FallbackText = "File" } : block);
             var attachments = new List<PublicHistoryAttachment>();
             foreach (var attachment in projected.Attachments ?? [])
                 if (await CanRead("attachments.read", "attachment", attachment.AttachmentId.ToString("D")).ConfigureAwait(false)) attachments.Add(attachment);

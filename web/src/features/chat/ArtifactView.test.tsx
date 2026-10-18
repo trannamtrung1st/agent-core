@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArtifactView } from './ArtifactView';
+import { IdentityError } from '../../services/identity';
 import {
   artifactKind,
   artifactSize,
@@ -31,6 +32,17 @@ beforeEach(() => {
 });
 
 describe('Artifact card', () => {
+  it('binds tenant metadata and download to the same source and removes private names after read loss', async () => {
+    vi.mocked(downloadArtifact).mockRejectedValueOnce(new IdentityError(403, 'resource_unavailable'));
+    render(<ArtifactView tenantId="tenant-a" sessionId="s1" artifactId="id" />);
+    const button = await screen.findByRole('button', { name: 'Download scrum-project-plan.md' });
+    expect(getArtifact).toHaveBeenCalledWith('s1', 'id', 'tenant-a', expect.any(AbortSignal));
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByText('scrum-project-plan.md')).not.toBeInTheDocument());
+    expect(screen.getByText('File unavailable')).toBeInTheDocument();
+    expect(downloadArtifact).toHaveBeenCalledWith('s1', 'id', expect.any(AbortSignal), 'tenant-a');
+  });
+
   it('loads quietly then shows Core metadata and an accessible Download without fetching content', async () => {
     let resolve!: (value: typeof file) => void;
     vi.mocked(getArtifact).mockReturnValue(

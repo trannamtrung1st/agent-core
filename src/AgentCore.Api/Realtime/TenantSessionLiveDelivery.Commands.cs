@@ -17,13 +17,21 @@ public sealed partial class TenantSessionLiveDelivery
     public Task<CommandAck> ReceiveAsync(string connection, ClientCommand<ResponseReceiptPayload> command, ITenantDeliveryReceiptControl control, CancellationToken ct)
         => ExecuteAsync(connection, command, "response.received", _ => null, (_, _, _) => Task.CompletedTask, async (subscription, _, token) =>
         {
-            if (command.Payload is not { } body || body.BlockIds is { Length: > 0 }
+            if (command.Payload is not { } body || body.BlockIds is { Length: > 32 }
                 || !Guid.TryParse(command.ResponseId, out var response) || !subscription.Delivery.TryGetValue(response, out var delivered)
-                || body.TextEndExclusive < delivered.ReceivedEnd || body.TextEndExclusive > delivered.PublishedEnd || body.TextEndExclusive < 0)
-                return Reject(command.EventId, "InvalidReceipt", "A text receipt must acknowledge a delivered prefix on this attachment.", "Validation");
+                || body.TextEndExclusive < delivered.ReceivedEnd || body.TextEndExclusive > delivered.PublishedEnd || body.TextEndExclusive < 0
+                || (body.BlockIds ?? []).Distinct(StringComparer.Ordinal).Count() != (body.BlockIds?.Length ?? 0)
+                || (body.BlockIds ?? []).Any(id => !delivered.Blocks.ContainsKey(id)))
+                return Reject(command.EventId, "InvalidReceipt", "A receipt must acknowledge text or blocks delivered on this attachment.", "Validation");
             var recipient = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, token).ConfigureAwait(false);
+            var blocks = (body.BlockIds ?? []).Select(id => delivered.Blocks[id]).ToArray();
+            foreach (var block in blocks.Where(b => b.ArtifactId is not null))
+                if (!await access.CanReadArtifactReferenceAsync(subscription.Tenant, subscription.Session, subscription.Human, block.ArtifactId!.Value.ToString("D"), token).ConfigureAwait(false))
+                    return Reject(command.EventId, "InvalidReceipt", "Current file access is required for this receipt.", "Authorization");
+            var after = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, token).ConfigureAwait(false);
+            if (after.SecurityRevision != recipient.SecurityRevision || after.Owner != recipient.Owner) throw new SecurityConflictException("stale_revision");
             await control.ReceiveAsync(new(recipient.Owner, subscription.Human, recipient.SecurityRevision, delivered.EntryId,
-                delivered.EntrySequence, response, delivered.PublishedEnd, body.TextEndExclusive), token).ConfigureAwait(false);
+                delivered.EntrySequence, response, delivered.PublishedEnd, body.TextEndExclusive, blocks), token).ConfigureAwait(false);
             subscription.Delivery.AddOrUpdate(response, delivered with { ReceivedEnd = body.TextEndExclusive },
                 (_, old) => old with { ReceivedEnd = Math.Max(old.ReceivedEnd, body.TextEndExclusive) });
             return new() { EventId = command.EventId, Accepted = true };

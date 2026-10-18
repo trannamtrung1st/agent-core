@@ -22,7 +22,8 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     }
     private sealed class Subscription(Guid tenant, Guid session, TenantSessionInitiator human, Guid attachment)
     {
-        public sealed record Delivered(Guid EntryId, long EntrySequence, int PublishedEnd, int ReceivedEnd);
+        public sealed record Delivered(Guid EntryId, long EntrySequence, int PublishedEnd, int ReceivedEnd)
+        { public ConcurrentDictionary<string, TenantDeliveredBlock> Blocks { get; } = new(); }
         public Guid Tenant { get; } = tenant;
         public Guid Session { get; } = session;
         public TenantSessionInitiator Human { get; } = human;
@@ -44,6 +45,12 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
         {
             if (KnownRuns.TryAdd(response, run)) ResponseOrder.Enqueue(response); else KnownRuns[response] = run;
             while (ResponseOrder.Count > 128) KnownRuns.TryRemove(ResponseOrder.Dequeue(), out _);
+        }
+        public void ObserveBlock(Guid response, string block, string kind, string? artifact)
+        {
+            if (!Delivery.TryGetValue(response, out var delivered) || delivered.Blocks.Count >= 32) return;
+            if (kind == "artifact" && Guid.TryParse(artifact, out var id)) delivered.Blocks.TryAdd(block, new(block, ResponseBlockKind.ArtifactReference, id));
+            else if (kind is "markdown" or "unknown") delivered.Blocks.TryAdd(block, new(block, kind == "markdown" ? ResponseBlockKind.Markdown : ResponseBlockKind.Unknown));
         }
     }
     private readonly ConcurrentDictionary<string, Connection> _connections = new();
@@ -127,7 +134,10 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", mapped, ct).ConfigureAwait(false);
                     foreach (var entry in entries.Where(e => e.Role == ConversationRole.Assistant && e.DeliveryMode == SessionMode.Text
                         && e.ResponseId is not null && e.Status is EntryStatus.Streaming or EntryStatus.Completed))
+                    {
                         subscription.ObserveDelivery(entry.ResponseId!.Value, entry.EntryId, entry.Sequence, entry.Text.Length);
+                        foreach (var block in entry.Blocks) subscription.ObserveBlock(entry.ResponseId.Value, block.BlockId, block.Kind, block.ArtifactId);
+                    }
                     if (active is { } response) subscription.ObserveRun(response, source!.Run.AgentRunId);
                     return;
                 }
@@ -182,6 +192,15 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             if (state.Closed || subscription is null || subscription.Tenant != source.Run.Owner.TenantId || subscription.Session != source.Run.SessionId) return;
             var recipient = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, bounded.Token).ConfigureAwait(false);
             if (recipient.Mode != SessionMode.Text) { state.Current = null; return; }
+            if (output.Payload is BlockUpsertOutput { Kind: "artifact" } block)
+            {
+                var allowed = await access.CanReadArtifactReferenceAsync(subscription.Tenant, subscription.Session, subscription.Human, block.ArtifactId, bounded.Token).ConfigureAwait(false);
+                if (!allowed) return;
+                output = output with { Payload = block with { Text = "", FallbackText = "File", ArtifactId = Guid.Parse(block.ArtifactId!).ToString("D") } };
+                var after = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, bounded.Token).ConfigureAwait(false);
+                if (after.SecurityRevision != recipient.SecurityRevision || after.SessionRevision != recipient.SessionRevision || after.Owner != recipient.Owner)
+                    throw new SecurityConflictException("stale_revision");
+            }
             if (state.Closed || state.Current != subscription) return;
             await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence), bounded.Token).ConfigureAwait(false);
             if (output.Payload is ResponseStartedOutput && output.ResponseId is { } response) subscription.ObserveRun(response, source.Run.AgentRunId);
@@ -191,6 +210,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                 if (output.Payload is TextDeltaOutput delta && subscription.Delivery.TryGetValue(delivered, out var bound) && bound.PublishedEnd == delta.TextStart)
                     subscription.Delivery.AddOrUpdate(delivered, bound with { PublishedEnd = delta.TextStart + delta.Text.Length },
                         (_, old) => old with { PublishedEnd = Math.Max(old.PublishedEnd, delta.TextStart + delta.Text.Length) });
+                if (output.Payload is BlockUpsertOutput publishedBlock) subscription.ObserveBlock(delivered, publishedBlock.BlockId, publishedBlock.Kind, publishedBlock.ArtifactId);
             }
         }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException or OperationCanceledException)
@@ -206,6 +226,8 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     {
         ResponseStartedOutput or TextDeltaOutput or TextCompletedOutput or ResponseInterruptedOutput or StateChangedOutput or DurableApprovalPendingOutput => payload,
         BlockUpsertOutput { Kind: "markdown", AttachmentId: null, ArtifactId: null } => payload,
+        BlockUpsertOutput { Kind: "artifact", AttachmentId: null, ArtifactId: not null } => payload,
+        BlockUpsertOutput { Kind: "unknown", AttachmentId: null, ArtifactId: null } => payload,
         ResponseCompletedOutput completed => completed with { MemoryReceipts = null, EffectReceipts = null },
         _ => null // Rich resource, approval, provider and voice payloads require their own recipient-aware conversion.
     };

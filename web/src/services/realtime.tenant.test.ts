@@ -6,7 +6,7 @@ vi.mock('./tenantChat', async importOriginal => ({
   tenantTextWitness: tenant.witness
 }));
 import { emptySession, useSessionStore } from '../state/sessionStore';
-import { realtimeTestHooks, sendDraft } from './realtime';
+import { realtimeTestHooks, sendDraft, reportCommittedEntries } from './realtime';
 const hooks = realtimeTestHooks!;
 beforeEach(() => {
   tenant.witness.mockReset(); hooks.resetOutput();
@@ -30,4 +30,12 @@ it('does not restore an old rejected send into a different conversation', async 
   useSessionStore.setState({ sessionId: 'session-two', attachmentId: 'attachment-two', entries: [], draft: 'New conversation draft' });
   resolve({ accepted: false, error: { category: 'Session', code: 'Conflict', message: 'Not admitted' } }); await sending;
   expect(useSessionStore.getState().draft).toBe('New conversation draft'); expect(useSessionStore.getState().entries).toEqual([]);
+});
+
+it('acknowledges only the bounded rendered block list with the current tenant attachment', async () => {
+  const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke } as never);
+  reportCommittedEntries([{ role: 'assistant', responseId: 'response-one', text: 'Published.', status: 'completed', blocks: [{ blockId: 'b1' }] }]);
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('ResponseReceived', expect.objectContaining({
+    attachmentId: 'attachment-one', responseId: 'response-one', payload: { textEndExclusive: 10, blockIds: ['b1'] }
+  })));
 });

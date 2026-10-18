@@ -10,6 +10,8 @@ public sealed partial class InMemoryIamStore : ITenantDeliveryReceiptStore
     {
         RequireHumanSession(proof.Owner.TenantId, proof.Human);
         if (_tenants[proof.Owner.TenantId].Tenant.Revision != proof.SecurityRevision) throw new SecurityConflictException("stale_revision");
+        TenantDeliveryReceiptRules.RequireBlocksAsync(proof, _tenants[proof.Owner.TenantId], new IamAuthorizer(this), async (id, token) =>
+            artifactBacking is not null && await artifactBacking.FindTenantAsync(proof.Owner.TenantId, proof.Owner.SessionId, id, token).ConfigureAwait(false) is not null, CancellationToken.None).GetAwaiter().GetResult();
     }
     public ValueTask SaveTenantRuntimeReceiptAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
         TenantDeliveryReceipt proof, CancellationToken ct = default)

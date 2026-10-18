@@ -1,5 +1,5 @@
 import { ownerFetch } from '../../services/api';
-import { identityReadResponse } from '../../services/identity';
+import { identityReadResponse, tenantApi } from '../../services/identity';
 import { tenantAgentApi, type TenantResourceDetail } from '../../services/tenantAgentConfiguration';
 
 export type FileMetadata = {
@@ -11,7 +11,7 @@ export type FileMetadata = {
 export type FileRef =
   | { kind: 'tenantResource'; tenantId: string; instanceId: string; resourceKey: string; metadata: FileMetadata }
   | { kind: 'attachment'; sessionId: string; attachmentId: string }
-  | { kind: 'artifact'; sessionId: string; artifactId: string }
+  | { kind: 'artifact'; sessionId: string; artifactId: string; tenantId?: string }
   | { kind: 'home'; instanceId: string; path: string; metadata: FileMetadata }
   | {
       kind: 'resource';
@@ -53,7 +53,8 @@ export function sourcePath(ref: FileRef): string {
     case 'attachment':
       return `/api/v2/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`;
     case 'artifact':
-      return `/api/v2/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`;
+      return ref.tenantId ? tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`)
+        : `/api/v2/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`;
     case 'home':
       return `/api/v2/agent-instances/${enc(ref.instanceId)}/workspace`;
     case 'resource':
@@ -117,7 +118,7 @@ export async function resolveFile(
     return {displayName: ref.path.split('/').pop()!, contentType: item.contentType, byteSize: item.byteSize};
   }
   if ('metadata' in ref) return ref.metadata;
-  const response = await ownerFetch(sourcePath(ref), { signal });
+  const response = await fileReadResponse(ref, sourcePath(ref), signal);
   if (!response.ok) throw readFailure(response.status);
   const raw = await response.json();
   if (
@@ -206,7 +207,7 @@ export async function readFile(
   return blob;
 }
 export function fileReadResponse(ref: FileRef, path: string, signal: AbortSignal): Promise<Response> {
-  return ref.kind === 'tenantResource' ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
+  return ref.kind === 'tenantResource' || ref.kind === 'artifact' && ref.tenantId ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
 }
 export const fileReadLost = (error: unknown) => error instanceof PreviewError && ['preview_forbidden', 'preview_unavailable'].includes(error.code);
 export async function downloadFile(

@@ -443,6 +443,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
               <div className="conversation-scroll">
                 <div className="conversation-column">
                   <Conversation
+                    tenantId={tenantContext?.tenant.tenantId}
                 afterEntries={organization && tenantContext && state.sessionId ? <TenantConversationApprovals key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} session={state.sessionId} /> : undefined}
                     agentName={state.agentName}
                     sessionId={state.sessionId}

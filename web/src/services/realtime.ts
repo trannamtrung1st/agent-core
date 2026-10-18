@@ -1423,7 +1423,7 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
 
   try {
     const ack = await dispatchHubCommand((sequence) => invoke("ResponseReceived", "response.received",
-      chatTenantId ? { textEndExclusive: offset } : { textEndExclusive: offset, blockIds: renderedBlockIds(id) }, sequence, id));
+      { textEndExclusive: offset, blockIds: chatTenantId ? renderedBlockIds(id).slice(0, 32) : renderedBlockIds(id) }, sequence, id));
     if (ack?.accepted) { lastReceiptOffset = offset; lastReceiptResponseId = id; lastReceiptBlockSignature = blockSignature; }
   } catch { /* A lost acknowledgement grants no receipt credit. Fresh attach can retry rendered text. */ }
 }

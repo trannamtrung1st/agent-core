@@ -55,15 +55,23 @@ public sealed class TenantArtifactService(IIamStore security, ITenantSessionStor
         await Fence(state, saved, human, ct).ConfigureAwait(false); return item;
     }
     public async ValueTask<TenantArtifactContent> ReadContentAsync(Guid tenant, Guid session, Guid artifact, HumanSessionReference human, CancellationToken ct = default)
+        => await ProjectContentAsync(tenant, session, artifact, human, _ => int.MaxValue,
+            (source, _) => ValueTask.FromResult(source), ct).ConfigureAwait(false);
+
+    public async ValueTask<T> ProjectContentAsync<T>(Guid tenant, Guid session, Guid artifact, HumanSessionReference human,
+        Func<ArtifactRecord, int> limit, Func<TenantArtifactContent, CancellationToken, ValueTask<T>> project, CancellationToken ct = default)
     {
         var (state, saved) = await Require(tenant, session, human, ct).ConfigureAwait(false);
         var item = await artifacts.FindTenantAsync(tenant, session, artifact, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         await RequireArtifact(state, human.PrincipalId, item, ct).ConfigureAwait(false);
+        var maximum = limit(item);
+        if (item.ByteSize > maximum) throw new Sessions.AgentCoreException("preview_too_large", "The file exceeds its preview limit. Download the original.", 413);
         byte[] bytes;
         try { bytes = await artifacts.ReadTenantContentAsync(tenant, session, artifact, ct).ConfigureAwait(false); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new AccessDeniedException("resource_unavailable"); }
         TenantArtifactRules.RequireContent(item, bytes);
+        var result = await project(new(item, bytes), ct).ConfigureAwait(false);
         if (await artifacts.FindTenantAsync(tenant, session, artifact, ct).ConfigureAwait(false) != item) throw new AccessDeniedException("resource_unavailable");
-        await Fence(state, saved, human, ct).ConfigureAwait(false); return new(item, bytes);
+        await Fence(state, saved, human, ct).ConfigureAwait(false); return result;
     }
 }

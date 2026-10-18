@@ -52,6 +52,13 @@ public interface IArtifactStore
 public interface IArtifactReferenceAuthorizer
 {
     bool IsAuthorized(Guid sessionId, string artifactId);
+    // Called by the model worker before its result enters the Runtime mailbox.
+    ValueTask<IArtifactReferenceAuthorizer> PrepareAsync(Guid sessionId, IReadOnlyList<string> artifactIds, CancellationToken ct = default) => ValueTask.FromResult(this);
+}
+
+public sealed class PreparedArtifactReferences(Guid session, IReadOnlySet<Guid> allowed) : IArtifactReferenceAuthorizer
+{
+    public bool IsAuthorized(Guid sessionId, string artifactId) => sessionId == session && Guid.TryParse(artifactId, out var id) && allowed.Contains(id);
 }
 
 public sealed class FixtureArtifactReferenceAuthorizer : IArtifactReferenceAuthorizer

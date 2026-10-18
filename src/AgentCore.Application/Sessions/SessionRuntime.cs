@@ -249,7 +249,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
         _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
-        _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
+        _artifacts = artifacts ?? (runtimeOwner is null ? new FixtureArtifactReferenceAuthorizer() : new PreparedArtifactReferences(snapshot.SessionId, new HashSet<Guid>()));
         _tools = tools ?? new SessionToolExecutor();
         _browserLease = browserLease;
         if (browserLease is IBrowserProfileBinding binding)
@@ -4159,9 +4159,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ModelGenerationEvent evt,
         CancellationToken cancellationToken)
     {
+        IArtifactReferenceAuthorizer? references = null;
+        if (_runtimeOwner is not null && evt is ModelSemanticResponseReady ready)
+        {
+            var artifactIds = (ready.Response.Blocks ?? []).Where(b => b.Kind == ModelResponseBlockKind.ArtifactReference)
+                .Take(32).Select(b => b.ArtifactId ?? b.Text ?? string.Empty).ToArray();
+            if (artifactIds.Length > 0) references = await _artifacts.PrepareAsync(SessionId, artifactIds, cancellationToken).ConfigureAwait(false);
+        }
         var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
-        var admitted = TryMailbox(new ModelResultReceived(WorkerContext(cause), responseId, evt, processed));
+        var admitted = TryMailbox(new ModelResultReceived(WorkerContext(cause), responseId, evt, processed, references));
         if (!admitted)
         {
             EndWork();
@@ -4279,7 +4286,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     .ConfigureAwait(false);
                 break;
             case ModelSemanticResponseReady ready when _usesResponseContract:
-                await HandleSemanticReadyAsync(input.Context, input.ResponseId, ready.Response, cancellationToken)
+                await HandleSemanticReadyAsync(input.Context, input.ResponseId, ready.Response, cancellationToken, input.ArtifactReferences)
                     .ConfigureAwait(false);
                 break;
             case ModelTextDelta when _usesResponseContract:
@@ -5077,7 +5084,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         EventContext context,
         Guid responseId,
         ModelSemanticResponse semantic,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IArtifactReferenceAuthorizer? preparedReferences = null)
     {
         Guid? finalizingOperationId = null;
         if (_structuredOutput)
@@ -5216,7 +5224,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             mapped = SemanticResponseMapper.ToEnvelope(
                 decision.Chat,
                 admission.BoundSessionId,
-                _artifacts,
+                preparedReferences ?? _artifacts,
                 AttachmentAllowed);
         }
         catch (ArgumentException ex)

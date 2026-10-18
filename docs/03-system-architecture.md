@@ -710,3 +710,7 @@ The optional `agent.state.inspect` tool requires the frozen Definition grant, cu
 An already-used request-isolated Session retains its fresh-request boundary if the Instance later relaxes conversation scope. The new authored policy can govern a fresh Session; it cannot admit a second independent request into the old strict Session while child work is settling.
 
 Stored profile Evidence can be omitted independently of explicit Session speech locale. Initial and between-call continuity projection intersects live restrictions with admitted policy; revoked Profile/Experience/Continuity sections are removed, and narrowed Memory scopes are refreshed through their existing reader. This preserves ordinary within-Session transcript history and does not erase historical learned data.
+
+## Tenant Artifact reference delivery
+
+Tenant model workers preflight bounded rich references against the actual Session-owned Artifact and current executor Session/read policy before posting a frozen authorization set to the mailbox. The mailbox maps synchronously without store I/O. Each human recipient independently passes the canonical current Artifact read owner; publication consent grants neither Agent read nor human download access. Live delivery and protected history share these source rules. Existing Session receipts preserve only exact sent block facts and merge monotonically through later writer snapshots.

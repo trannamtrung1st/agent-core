@@ -13,6 +13,8 @@ public sealed partial class SqliteIamStore : ITenantDeliveryReceiptStore
         await RequireHumanSessionAsync(db, proof.Owner.TenantId, proof.Human, ct).ConfigureAwait(false);
         var state = await ReadTenantAsync(db, proof.Owner.TenantId, ct).ConfigureAwait(false);
         if (state?.Tenant.Revision != proof.SecurityRevision) throw new SecurityConflictException("stale_revision");
+        await TenantDeliveryReceiptRules.RequireBlocksAsync(proof, state, new IamAuthorizer(this), async (id, token) =>
+            await db.Artifacts.AsNoTracking().AnyAsync(a => a.TenantId == proof.Owner.TenantId && a.SessionId == proof.Owner.SessionId.ToString("D") && a.ArtifactId == id.ToString("D"), token).ConfigureAwait(false), ct).ConfigureAwait(false);
     }
     public async ValueTask SaveTenantRuntimeReceiptAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
         TenantDeliveryReceipt proof, CancellationToken ct = default)
@@ -38,7 +40,7 @@ public sealed partial class SqliteIamStore : ITenantDeliveryReceiptStore
             ?? throw new AccessDeniedException("receipt_unavailable");
         var entry = SqliteMemoryStore.ToEntry(row); var updated = TenantDeliveryReceiptRules.Apply(proof, root.Domain(), entry);
         if (updated == entry) return session.Revision;
-        row.ReceivedTextEndExclusive = updated.ReceivedTextEndExclusive; session.Revision = checked(session.Revision + 1);
+        row.ReceivedTextEndExclusive = updated.ReceivedTextEndExclusive; row.EnvelopeJson = updated.Envelope is null ? null : ResponseEnvelopeJson.Serialize(updated.Envelope); session.Revision = checked(session.Revision + 1);
         await CommitReceiptAsync(db, tx, ct).ConfigureAwait(false); return session.Revision;
     }
     private static async Task CommitReceiptAsync(AgentCoreDbContext db, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx, CancellationToken ct)

@@ -27,7 +27,12 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, false, "approve")] [InlineData(true, false, "approve")]
     [InlineData(false, true, "reject")] [InlineData(true, true, "reject")]
     [InlineData(false, false, "cancel")] [InlineData(true, false, "cancel")]
-    public async Task Artifact_model_HTTP_exact_review_or_grant_publishes_one_saved_file_through_the_actual_successor_Run(bool sqlite, bool review, string choice)
+    public Task Artifact_model_HTTP_exact_review_or_grant_publishes_one_saved_file_through_the_actual_successor_Run(bool sqlite, bool review, string choice) => ArtifactReviewFlow(sqlite, review, choice, false);
+
+    [Theory] [InlineData(false, true)] [InlineData(true, true)] [InlineData(false, false)] [InlineData(true, false)]
+    public Task Reviewed_Artifact_successor_can_publish_a_rich_reference_only_with_independent_read_authority(bool sqlite, bool review) => ArtifactReviewFlow(sqlite, review, "approve", true);
+
+    private async Task ArtifactReviewFlow(bool sqlite, bool review, string choice, bool rich)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-artifact-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var proof = !sqlite && choice == "approve" && Environment.GetEnvironmentVariable("AGENTCORE_ARTIFACT_UI_PROOF") == "1";
@@ -35,7 +40,7 @@ public sealed partial class TenantSessionAccessTests
         try
         {
             var content = "# Exact proposed file\n<script>alert('literal')</script>\nUTF-8: thử nghiệm" + (proof ? "\n" + string.Join("\n", Enumerable.Range(1, 35).Select(i => $"{i}: Exact saved content for the operations team — literal UTF-8 thử nghiệm.")) + "\n" + new string('x', 600) : "");
-            var model = new ApprovalRecordingModel { ProposedArtifactAuthorization = JsonSerializer.Serialize(new { operation = "publish_artifact", artifact = new { displayName = "reviewed-report.md", contentType = "text/markdown", content } }) };
+            var model = new ApprovalRecordingModel { ProposedArtifactAuthorization = JsonSerializer.Serialize(new { operation = "publish_artifact", artifact = new { displayName = "reviewed-report.md", contentType = "text/markdown", content } }), EmitArtifactReference = rich };
             var enabled = true;
             void Configure(IServiceCollection services)
             {
@@ -56,6 +61,11 @@ public sealed partial class TenantSessionAccessTests
             var access = factory.Services.GetRequiredService<TenantAccessService>();
             var role = await access.SaveRoleAsync(human, tenant, null, "Artifact creation in this Session", review ? ["sessions.read", "artifacts.create"] : ["sessions.read"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, TenantSessionRules.Scope(tenant, session), await Revision(owner, tenant));
+            if (rich)
+            {
+                var readRole = await access.SaveRoleAsync(human, tenant, null, "Independent Artifact read", ["artifacts.read"], await Revision(owner, tenant));
+                await access.AssignRoleAsync(human, tenant, executor, readRole.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
+            }
             if (review) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/artifacts.create", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             var accepted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Publish this exact file after review", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode); var source = (await Json(accepted)).GetProperty("runId").GetGuid();
@@ -96,7 +106,13 @@ public sealed partial class TenantSessionAccessTests
             var grant = await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId);
             if (choice == "approve" && !review) Assert.Equal(OperationGrantStatus.Consumed, grant!.Status); else Assert.Null(grant);
             Assert.Equal(review, (await factory.Services.GetRequiredService<IamAuthorizer>().CheckAsync(executor, "artifacts.create", TenantSessionRules.Scope(tenant, session))).Allowed);
-            Assert.False((await factory.Services.GetRequiredService<IamAuthorizer>().CheckAsync(executor, "artifacts.read", AccessScope.ForTenant(tenant))).Allowed);
+            Assert.Equal(rich, (await factory.Services.GetRequiredService<IamAuthorizer>().CheckAsync(executor, "artifacts.read", AccessScope.ForTenant(tenant))).Allowed);
+            if (rich)
+            {
+                var saved = (await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(tenant, session, null, null, 50))!.History.Items.Single(e => e.ResponseId == done.ResponseId);
+                Assert.Equal(request.Operation.OperationId.ToString("D"), Assert.Single(saved.Envelope!.Blocks).ArtifactId);
+                Assert.False(Assert.Single(saved.Envelope.Blocks).DisplayDelivered);
+            }
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
             if (proof)
             {

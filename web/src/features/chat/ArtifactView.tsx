@@ -8,13 +8,16 @@ import {
 } from '../../services/artifacts';
 
 import { ChatFileCard } from './ChatFileCard';
+import { IdentityError } from '../../services/identity';
 
 export function ArtifactView({
   sessionId,
   artifactId,
+  tenantId,
 }: {
   sessionId: string | null;
   artifactId: string;
+  tenantId?: string;
 }) {
   const [file, setFile] = useState<ArtifactMetadata | null>(null);
   const [metadataFailed, setMetadataFailed] = useState(false);
@@ -25,12 +28,13 @@ export function ArtifactView({
 
   useEffect(() => {
     let cancelled = false;
+    const metadataRequest = new AbortController();
     setFile(null);
     setMetadataFailed(!sessionId);
     setDownloadFailed(false);
     setDownloading(false);
     if (sessionId)
-      void getArtifact(sessionId, artifactId)
+      void (tenantId ? getArtifact(sessionId, artifactId, tenantId, metadataRequest.signal) : getArtifact(sessionId, artifactId))
         .then((value) => {
           if (!cancelled) setFile(value);
         })
@@ -39,10 +43,11 @@ export function ArtifactView({
         });
     return () => {
       cancelled = true;
+      metadataRequest.abort();
       download.current?.abort();
       download.current = null;
     };
-  }, [sessionId, artifactId, attempt]);
+  }, [tenantId, sessionId, artifactId, attempt]);
 
   async function startDownload() {
     if (!sessionId || !file || download.current) return;
@@ -51,9 +56,13 @@ export function ArtifactView({
     setDownloading(true);
     setDownloadFailed(false);
     try {
-      await downloadArtifact(sessionId, artifactId, controller.signal);
-    } catch {
-      if (!controller.signal.aborted) setDownloadFailed(true);
+      if (tenantId) await downloadArtifact(sessionId, artifactId, controller.signal, tenantId);
+      else await downloadArtifact(sessionId, artifactId, controller.signal);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        if (error instanceof IdentityError && [401, 403, 404].includes(error.status)) { setFile(null); setMetadataFailed(true); }
+        else setDownloadFailed(true);
+      }
     } finally {
       if (!controller.signal.aborted) {
         download.current = null;
@@ -72,13 +81,14 @@ export function ArtifactView({
       }
       fileRef={
         file && sessionId
-          ? { kind: 'artifact', sessionId, artifactId }
+          ? { kind: 'artifact', sessionId, artifactId, ...(tenantId ? { tenantId } : {}) }
           : undefined
       }
       downloading={downloading}
       downloadFailed={downloadFailed}
       metadataFailed={metadataFailed}
       onDownload={() => void startDownload()}
+      onReadLost={() => { setFile(null); setMetadataFailed(true); }}
       onRetryMetadata={
         sessionId ? () => setAttempt((value) => value + 1) : undefined
       }

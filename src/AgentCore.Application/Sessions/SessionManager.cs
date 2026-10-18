@@ -1021,7 +1021,8 @@ public sealed class SessionRuntimeFactory(
     IBrowserLease? browserLease = null,
     IAgentRunAuthority? runAuthority = null,
     ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null,
-    AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null)
+    AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
+    AgentCore.Application.Security.TenantArtifactReferenceService? tenantArtifacts = null)
 {
     private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
 
@@ -1034,7 +1035,7 @@ public sealed class SessionRuntimeFactory(
         return new(snapshot, languageModel, brain, new AgentCore.Application.Security.TenantRuntimeMemoryStore(runtimeStorage, frame), output, ids, time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!), new AgentCore.Application.Security.TenantAgentRunStore(runtimeStorage, tenantRuns, ids, frame),
             classifier, policy: policy, tools: new SessionToolExecutor(configurationGate: tools.ConfigurationGate, tenantAuthorization: tenantTools),
-            modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: new TenantUnavailableArtifacts(),
+            modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: tenantArtifacts?.Bind(frame) ?? new TenantUnavailableArtifacts(),
             runAuthority: authority, runtimeOwner: frame.Owner,
             tenantContinuations: tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."));
     }

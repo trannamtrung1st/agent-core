@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Application.Admin;
 
 namespace AgentCore.Api.Security;
 
@@ -23,6 +24,22 @@ public static class TenantArtifactEndpoints
             var actor = IdentityHttp.TenantContext(http); var content = await service.ReadContentAsync(actor.TenantId, sessionId, artifactId, Human(http, actor), ct).ConfigureAwait(false);
             http.Response.Headers.XContentTypeOptions = "nosniff";
             return Results.File(content.Bytes, content.Artifact.ContentType, content.Artifact.DisplayName);
+        }));
+        group.MapGet("/{artifactId:guid}/office-preview", (Guid sessionId, Guid artifactId, string? sheet, string? range, HttpContext http,
+            TenantArtifactService service, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            http.Response.Headers.XContentTypeOptions = "nosniff";
+            try
+            {
+                return await service.ProjectContentAsync(actor.TenantId, sessionId, artifactId, Human(http, actor),
+                    item => policy.OfficeLimit(item.DisplayName, item.ContentType),
+                    (source, token) => ValueTask.FromResult(OfficePreviewEndpoints.Project(source.Artifact.DisplayName,
+                        source.Artifact.ContentType, source.Bytes, sheet, range, office, policy, token)), ct).ConfigureAwait(false);
+            }
+            catch (AgentCore.Application.Sessions.AgentCoreException ex) { return OfficePreviewEndpoints.Problem(ex); }
+            catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException or System.Xml.XmlException)
+            { return Results.Problem(statusCode: 400, title: "invalid_office_package", detail: "This Office package could not be interpreted safely. Download the original."); }
         }));
     }
     private static HumanSessionReference Human(HttpContext http, AuthenticatedTenant actor) => new(actor.AccountId,

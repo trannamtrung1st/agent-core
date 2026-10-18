@@ -163,7 +163,7 @@ export function FilePreview({
         setLoaded({ metadata: value, format, policy: undefined });
         return;
       }
-      const policy = await loadPreviewOptions(file.kind === 'tenantResource' ? file.tenantId : undefined, controller.signal);
+      const policy = await loadPreviewOptions('tenantId' in file ? file.tenantId : undefined, controller.signal);
       controller.signal.throwIfAborted();
       const limit = formatLimit(format, policy);
       if (value.byteSize > limit) throw new PreviewError('preview_too_large', `This file is ${mib(value.byteSize)}; its preview limit is ${mib(limit)}. Download the original.`);
@@ -267,6 +267,7 @@ export function FilePreview({
       centered
       destroyOnHidden
       title={
+        <Flex align="center" style={{ minWidth: 0, minHeight: token.controlHeightLG, paddingInlineEnd: token.controlHeightLG + token.paddingXS }}>
         <Typography.Text
           strong
           className="single-line-ellipsis"
@@ -274,6 +275,7 @@ export function FilePreview({
         >
           {metadata?.displayName ?? 'File preview'}
         </Typography.Text>
+        </Flex>
       }
       styles={{ body: { minWidth: 0 } }}
     >

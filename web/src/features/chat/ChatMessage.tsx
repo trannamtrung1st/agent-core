@@ -13,6 +13,7 @@ export function ChatMessage({
   entry,
   agentName,
   sessionId,
+  tenantId,
   turnAnchor = false,
   backgroundSource = null,
   timestamp = messageTimestamp(entry)
@@ -20,6 +21,7 @@ export function ChatMessage({
   entry: HistoryEntry;
   agentName: string;
   sessionId: string | null;
+  tenantId?: string;
   turnAnchor?: boolean;
   backgroundSource?: string | null;
   timestamp?: string;
@@ -41,7 +43,7 @@ export function ChatMessage({
   const blocks = hasBlocks && entry.blocks ? (
     <div className="entry-blocks">
       {entry.blocks.map((block) => (
-        <RichBlock key={block.blockId} sessionId={sessionId} block={block} />
+        <RichBlock key={block.blockId} sessionId={sessionId} tenantId={tenantId} block={block} />
       ))}
     </div>
   ) : null;
@@ -166,7 +168,7 @@ function MemoryReceiptLine({ receipt, count }: { receipt: MemoryReceiptView; cou
   );
 }
 
-function RichBlock({ sessionId, block }: { sessionId: string | null; block: HistoryBlock }) {
+function RichBlock({ sessionId, tenantId, block }: { sessionId: string | null; tenantId?: string; block: HistoryBlock }) {
   if (block.kind === "unknown") {
     return (
       <div className="entry-block" data-kind="unknown">
@@ -201,7 +203,7 @@ function RichBlock({ sessionId, block }: { sessionId: string | null; block: Hist
   if (block.kind === "artifact" && block.artifactId) {
     return (
       <div className="entry-block" data-kind="artifact">
-        <ArtifactView key={`${sessionId}:${block.artifactId}`} sessionId={sessionId} artifactId={block.artifactId} />
+        <ArtifactView key={`${tenantId ?? ''}:${sessionId}:${block.artifactId}`} tenantId={tenantId} sessionId={sessionId} artifactId={block.artifactId} />
       </div>
     );
   }

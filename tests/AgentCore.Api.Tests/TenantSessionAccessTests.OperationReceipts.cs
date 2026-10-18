@@ -49,6 +49,7 @@ public sealed partial class TenantSessionAccessTests
         public string? ProposedMetadataRead { get; set; }
         public string? ProposedPreferences { get; set; }
         public string? ProposedArtifact { get; set; }
+        public bool EmitArtifactReference { get; set; }
         public string? ProposedArtifactAuthorization { get; set; }
         public string? ProposedPreferenceAuthorization { get; set; }
         public TaskCompletionSource? ApprovalResponseGate { get; set; }
@@ -94,6 +95,21 @@ public sealed partial class TenantSessionAccessTests
             {
                 yield return new ModelToolCallEvent(new("reviewed-artifact", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization, publication));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (EmitArtifactReference && (ProposedArtifactAuthorization is not null || ProposedArtifact is not null))
+            {
+                var result = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == (ProposedArtifactAuthorization is null
+                    ? AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate : AgentCore.Application.Tools.ToolCatalog.RequestAuthorization));
+                if (result is not null)
+                {
+                    using var parsed = System.Text.Json.JsonDocument.Parse(result.Text);
+                    if (parsed.RootElement.TryGetProperty("operationId", out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String && value.TryGetGuid(out var id)
+                        && parsed.RootElement.TryGetProperty("applied", out var applied) && applied.ValueKind == System.Text.Json.JsonValueKind.True)
+                    {
+                        yield return new ModelSemanticResponseReady(new("The file was published.", new(ModelSpeechMode.None, null), [new(ModelResponseBlockKind.ArtifactReference, ArtifactId: id.ToString("N").ToUpperInvariant())]));
+                        yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+                    }
+                }
             }
             if (ProposedArtifactAuthorization is not null)
             {
