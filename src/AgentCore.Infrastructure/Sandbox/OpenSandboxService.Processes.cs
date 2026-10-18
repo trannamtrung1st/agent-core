@@ -44,7 +44,7 @@ public sealed partial class OpenSandboxService
             // The commit path may already have persisted a terminal receipt before
             // propagating cancellation. Never replace that evidence with this
             // wrapper's older dispatch snapshot or repeat confirmed cleanup.
-            var retained = await store.GetExecutionAsync(lease.SessionId, execution.Id, CancellationToken.None);
+            var retained = await ReadReceiptAsync(lease, execution.Id, CancellationToken.None);
             if (retained is { TerminationConfirmed: true, State: SandboxExecutionState.Completed or SandboxExecutionState.Canceled or SandboxExecutionState.Indeterminate })
             {
                 if (error is OperationCanceledException) throw;
@@ -75,11 +75,20 @@ public sealed partial class OpenSandboxService
             var logs = await BoundedBackgroundLogsAsync(lease, execution.ProviderCommandId, ct);
             execution = execution with { Stdout = logs.Text, Truncated = logs.Truncated };
         }
+        // Discard captured status/logs if authority changed during provider I/O, including a still-running process.
+        await ValidateProcessAuthorityAsync(lease, execution, ct);
         if (status.Running == false)
         {
-            var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);
-            if (session is null || session.DurablyDeletedAt is not null || session.ArchivedAt is not null || session.LifecycleStatus != SessionLifecycleStatus.Active)
-                throw AgentCoreErrors.Conflict("Process owner is no longer active; no further process execution is authorized; files retain any writes.");
+            AgentCore.Domain.Definitions.AgentDefinition definition;
+            if (lease.TenantId is not null)
+                definition = (await TenantGeneration.RequireAsync(lease, execution, ct)).Admission.Configuration!.Definition;
+            else
+            {
+                var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);
+                if (session is null || session.DurablyDeletedAt is not null || session.ArchivedAt is not null || session.LifecycleStatus != SessionLifecycleStatus.Active)
+                    throw AgentCoreErrors.Conflict("Process owner is no longer active; no further process execution is authorized; files retain any writes.");
+                definition = session.Definition;
+            }
             // The pinned execd reports Go's -1 when an explicitly interrupted
             // process was signal-terminated. Running=false is confirmed termination;
             // preserve that provider evidence without inventing a normal exit code.
@@ -90,7 +99,7 @@ public sealed partial class OpenSandboxService
                 FailureCategory = stop ? "cancellation" : null, CancellationReason = stop ? "processStop" : null };
             execution = await SaveReceiptAsync(execution, false, ct);
             FinalizationCheckpoint?.Invoke("commandCompleted");
-            (lease, execution) = await FinalizeCompletedExecutionAsync(sdk, lease, execution, session.Definition,
+            (lease, execution) = await FinalizeCompletedExecutionAsync(sdk, lease, execution, definition,
                 token => ValidateProcessAuthorityAsync(lease, execution, token), ct);
             return FinalizedResult(lease, execution);
         }
@@ -98,6 +107,7 @@ public sealed partial class OpenSandboxService
     }
     private async ValueTask ValidateProcessAuthorityAsync(SandboxLease lease, SandboxExecution execution, CancellationToken ct)
     {
+        if (lease.TenantId is not null) { RequireTenantProviderScope(lease); await TenantGeneration.RequireAsync(lease, execution, ct); return; }
         var owner = await sessions.LoadMetadataAsync(lease.SessionId, ct);
         var run = owner?.ProfileId is { } profile ? await runs.GetAsync(new(lease.AgentInstanceId, profile), execution.AgentRunId, ct) : null;
         if (lease.ExpiresAt <= time.GetUtcNow() || (execution.DeadlineAt ?? execution.StartedAt.AddSeconds(lease.Profile.MaxCommandSeconds)) <= time.GetUtcNow())

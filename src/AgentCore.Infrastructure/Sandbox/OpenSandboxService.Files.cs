@@ -28,13 +28,21 @@ public sealed partial class OpenSandboxService
     {
         if (lease.TenantId is not null)
         {
-            var ownedExecutionId = lease.ActiveExecutionId ?? throw new AgentCore.Application.Security.AccessDeniedException("sandbox_approval_context_required");
-            var ownedRun = await TenantRuntimeRun(lease.TenantId.Value, lease.AdmissionRunId ?? Guid.Empty, ct)
+            RequireTenantProviderScope(lease);
+            var ownedExecutionId = lease.ActiveExecutionId ?? lease.LastExecutionId ?? throw new AgentCore.Application.Security.AccessDeniedException("sandbox_approval_context_required");
+            var facts = await TenantRuntime.ReadTenantSandboxExecutionFactsAsync(lease.TenantId.Value, lease.SessionId, ownedExecutionId, ct)
+                ?? throw new AgentCore.Application.Security.AccessDeniedException("resource_unavailable");
+            var ownedRun = await TenantRuntimeRun(lease.TenantId.Value, facts.Execution.AgentRunId, ct)
                 ?? throw new AgentCore.Application.Security.AccessDeniedException("run_unavailable");
-            var authority = await TenantExecution.RequireAsync(new(ownedRun.Owner, lease.SessionId, ownedRun.AgentRunId,
-                ownedRun.Claim?.Generation ?? Guid.Empty), ownedExecutionId, ct);
-            if (authority.Lease.Generation != lease.Generation || authority.Lease.MountAuthority != lease.MountAuthority)
-                throw new AgentCore.Application.Security.SecurityConflictException("sandbox_operation_witness_changed");
+            if (lease.State == SandboxLeaseState.Ready || facts.Execution.Background && ownedRun.SideEffect.Disposition == AgentRunSideEffectDisposition.Succeeded)
+                await TenantGeneration.RequireAsync(lease, facts.Execution, ct);
+            else
+            {
+                var authority = await TenantExecution.RequireAsync(new(ownedRun.Owner, lease.SessionId, ownedRun.AgentRunId,
+                    ownedRun.Claim?.Generation ?? Guid.Empty), ownedExecutionId, ct);
+                if (authority.Lease.Generation != lease.Generation || authority.Lease.MountAuthority != lease.MountAuthority)
+                    throw new AgentCore.Application.Security.SecurityConflictException("sandbox_operation_witness_changed");
+            }
             _ = ResolveMounts(lease); return;
         }
         var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);

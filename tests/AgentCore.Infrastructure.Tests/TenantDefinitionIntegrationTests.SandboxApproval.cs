@@ -24,7 +24,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             setup.Resolver, authorizer, current, p.Images, p.Ready, TimeProvider.System);
         return (new(current, (ITenantApprovalStore)current, (ITenantAgentStore)current, operations, authorizer, f.Identity, f.Ids, TimeProvider.System,
                 setup.Resolver, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, sandboxTargets: target),
-            new((ITenantRunStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, (ITenantSandboxRuntimeStore)current, target, operations, f.Ids, TimeProvider.System));
+            new((ITenantRunStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, (ITenantSandboxRuntimeStore)current, target, operations, f.Ids, TimeProvider.System, p.Host));
     }
     private static TenantSessionInitiator SandboxHuman(RuntimeSandboxSetup s) => new(s.Human.AccountId, s.Human.AuthenticationSessionId, s.Human.PrincipalId);
     private static async Task ReadySandbox(Fixture f, RuntimeSandboxSetup s)

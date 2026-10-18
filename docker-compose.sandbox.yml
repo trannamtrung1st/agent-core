@@ -38,6 +38,12 @@ services:
         bind:
           create_host_path: false
       - ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}:${AGENTCORE_SANDBOX_WORKSPACE_ROOT}
+      - type: bind
+        source: ./deploy/sandbox/retirement.py
+        target: /opt/agent-core/retirement.py
+        read_only: true
+        bind:
+          create_host_path: false
       - opensandbox-metadata:/var/lib/opensandbox
       - opensandbox-auth:/run/agent-core-auth
     restart: unless-stopped

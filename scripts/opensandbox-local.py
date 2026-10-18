@@ -78,6 +78,10 @@ def up(args):
         if subprocess.run(["docker", "image", "inspect", PINS[component]],capture_output=True).returncode:
             run("docker", "pull", PINS[component])
     current = owned(args.name)
+    if current is not None:
+        mounts = {m.get("Destination") for m in current.get("Mounts", [])}
+        if str(state / "canonical-workspaces") not in mounts or "/opt/agent-core/retirement.py" not in mounts:
+            raise RuntimeError("Existing owned runner lacks the canonical workspace/tenant retirement adapter. Explicitly reconcile its workloads and recreate that runner with retained state; it was not started or replaced.")
     if current is None:
         run("docker", "run", "-d", "--name", args.name, "--label", LABEL + "=" + args.name,
             "--network", "bridge", "-p", f"127.0.0.1:{args.port}:8080",
@@ -91,11 +95,14 @@ def up(args):
             "--env", "AGENTCORE_SANDBOX_RUNNER=1",
             "--mount", f"type=bind,src={ROOT}/deploy/sandbox/server-bootstrap.py,dst=/opt/agent-core/server-bootstrap.py,readonly",
             "--mount", f"type=bind,src={ROOT}/deploy/sandbox/compatibility.py,dst=/opt/agent-core/compatibility.py,readonly",
+            "--mount", f"type=bind,src={ROOT}/deploy/sandbox/retirement.py,dst=/opt/agent-core/retirement.py,readonly",
             "--entrypoint", "python", PINS["server"], "/opt/agent-core/server-bootstrap.py")
     elif not current["State"]["Running"]:
         run("docker", "start", args.name)
     if not any(m.get("Destination") == str(state / "canonical-workspaces") for m in owned(args.name).get("Mounts", [])):
         raise RuntimeError("Existing runner needs the mounted-workspace contract. Stop its owned workloads/server, then recreate it with the updated runner; retain the state volume.")
+    if not any(m.get("Destination") == "/opt/agent-core/retirement.py" for m in owned(args.name).get("Mounts", [])):
+        raise RuntimeError("Existing owned runner lacks the tenant retirement-fence adapter. Explicitly reconcile its workloads and recreate that runner with retained state before tenant provisioning; no existing workload was changed.")
     env = environment(args, state, tag)
     for attempt in range(90):
         try:

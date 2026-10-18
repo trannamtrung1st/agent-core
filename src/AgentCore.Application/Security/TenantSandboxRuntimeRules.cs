@@ -11,6 +11,11 @@ namespace AgentCore.Application.Security;
 
 public static class TenantSandboxRuntimeRules
 {
+    public static void RecoveryPage(string? afterSession, int limit)
+    {
+        if (limit is < 1 or > 100 || afterSession is not null && (!Guid.TryParseExact(afterSession, "D", out var id) || id == Guid.Empty || afterSession != id.ToString("D")))
+            throw new ArgumentException("Use a bounded canonical technical Sandbox cursor.");
+    }
     public static int InitialLifetimeSeconds(SandboxProfile profile, SandboxCommandRequest command)
     {
         var setup = string.IsNullOrWhiteSpace(profile.InitializationScript) && string.IsNullOrWhiteSpace(profile.InstanceInitializationScript) ? 0 : profile.MaxCommandSeconds;
@@ -62,7 +67,7 @@ public static class TenantSandboxRuntimeRules
         var pinned = run.Admission.Configuration?.Definition.ExecutionSandboxProfiles?.SingleOrDefault(p => p.Id == lease.Profile.Id);
         if (lease.TenantId != f.Owner.TenantId || lease.ExecutorPrincipalId != f.Owner.ExecutorPrincipalId || lease.SessionId != f.SessionId || lease.AgentInstanceId != f.Owner.AgentInstanceId
             || lease.Profile.TenantId != lease.TenantId || lease.Generation == Guid.Empty || lease.Revision != checked(expectedRevision + 1)
-            || lease.State != SandboxLeaseState.Provisioning || lease.ProviderId is not null
+            || lease.State != SandboxLeaseState.Provisioning || lease.ProviderId is not null || lease.ProviderHostScope is not { Length: 64 }
             || (reserved is null ? lease.ActiveExecutionId is not null || lease.LastExecutionId is not null
                 : !reserved.InitializesGeneration || lease.ActiveExecutionId != reserved.Id || lease.LastExecutionId != reserved.Id)
             || lease.AdmissionRunId != f.RunId || lease.AdmissionToolCallId is not { Length: > 0 and <= 128 }
@@ -81,6 +86,7 @@ public static class TenantSandboxRuntimeRules
         value.Profile.Validate();
         if (value.TenantId is null || value.TenantId == Guid.Empty || value.ExecutorPrincipalId is null || value.ExecutorPrincipalId == Guid.Empty
             || value.SessionId == Guid.Empty || value.AgentInstanceId == Guid.Empty || value.Generation == Guid.Empty || value.Revision < 1
+            || value.ProviderHostScope is not null && (value.ProviderHostScope.Length != 64 || value.ProviderHostScope.Any(c => !char.IsAsciiHexDigit(c)))
             || value.Profile.TenantId != value.TenantId || !TenantSandboxProfileRules.ValidId(value.Profile.Id) || value.ExpiresAt <= value.CreatedAt
             || value.ExpiresAt > value.CreatedAt.AddSeconds(value.Profile.MaxLifetimeSeconds) || !Enum.IsDefined(value.State)
             || value.AdmissionRunId is null || value.AdmissionRunId == Guid.Empty || value.AdmissionToolCallId is not { Length: > 0 and <= 128 }
@@ -128,7 +134,7 @@ public static class TenantSandboxRuntimeRules
     {
         ValidateLease(next);
         if (before.TenantId != next.TenantId || before.ExecutorPrincipalId != next.ExecutorPrincipalId || before.SessionId != next.SessionId
-            || before.AgentInstanceId != next.AgentInstanceId || before.Generation != next.Generation || before.Profile != next.Profile
+            || before.AgentInstanceId != next.AgentInstanceId || before.Generation != next.Generation || before.Profile != next.Profile || before.ProviderHostScope != next.ProviderHostScope
             || next.Revision != checked(before.Revision + 1) || next.AdmissionRunId != before.AdmissionRunId || next.AdmissionToolCallId != before.AdmissionToolCallId
             || next.CreatedAt != before.CreatedAt || next.ActiveExecutionId is not null && next.ActiveExecutionId != before.ActiveExecutionId
             || before.MountAuthority is not null && before.MountAuthority != next.MountAuthority

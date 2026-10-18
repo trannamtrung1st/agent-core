@@ -1,5 +1,15 @@
 # Backend Interfaces
 
+## Tenant Sandbox recovery ports
+
+`ITenantSandboxRuntimeStore.ReadTenantSandboxRecoveryPageAsync` is a bounded technical keyset cursor over retained actual owned lease roots, including terminal result settlement. It does not grant human enumeration, execution or claim authority. The existing SDK reconciler uses the same per-Session gate and existing CAS/factual result transactions. Stranded foreground/setup work is retired, with no replay. `TenantSandboxGenerationAuthority` separately permits retaining an idle owned generation or observing an acknowledged bounded background launch after its Run completes, under current Session/requester/executor/grantor/source/policy and exact receipt authority. It never authorizes a new command or setup.
+
+Background `OnInit` records `launchPending`; only an error-free complete SDK acknowledgement promotes it to `execution`. Recovery cannot infer a launch acknowledgement from an initialization event. Command/process facts remain separate from the immutable original effect outcome.
+
+New generation reservation uses the existing `ISandboxVerificationHost` fingerprint for immutable `SandboxLease.ProviderHostScope`. SDK I/O checks that exact configured host/mapping scope; factual writes cannot rewrite it. A mismatched or missing binding retains reconciliation without querying a new provider and cannot use its 404 as retirement evidence.
+
+New generation entry first checks the private authenticated retirement capability before tenant filesystem or SDK create effects. The private trusted server's generation retirement endpoint binds all four tenant/Session/executor/generation values and returns a bounded exact-scope proof only after its durable negative fence excludes late provisioning and exact owned containers have been retired. Unsupported, foreign, malformed or pending proof cannot clear reconciliation. The existing worker retains pending factual state and operation uncertainty without requiring the retired initiator's execution authority.
+
 ## Tenant Sandbox SDK and factual completion ports
 
 `ITenantSandboxCommandExecutor.ExecuteApprovedAsync` takes only a trusted `TenantRuntimeFrame` and saved request ID. The shared SDK adapter acquires the existing Session gate and one approved reservation, loads the exact saved command, revalidates current execution authority and dispatches once. A retained reservation is an observation/factual settlement path and never permission to repeat SDK dispatch. It supports an existing owned Ready generation or a new generation when the exact saved Review includes initialization.

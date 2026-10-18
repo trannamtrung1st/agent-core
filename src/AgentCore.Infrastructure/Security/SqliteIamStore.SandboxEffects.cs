@@ -7,6 +7,17 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
+    public async ValueTask<AgentCore.Application.Ports.TenantSandboxRecoveryPage> ReadTenantSandboxRecoveryPageAsync(string? afterSession, int limit, CancellationToken ct = default)
+    {
+        TenantSandboxRuntimeRules.RecoveryPage(afterSession, limit);
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var query = db.Set<SandboxLeaseRow>().AsNoTracking().Where(l => l.TenantId != null && db.Set<TenantSessionRecord>().Any(root =>
+            root.SessionId == l.SessionId && root.TenantId == l.TenantId && root.AgentInstanceId == l.AgentInstanceId && root.ExecutorPrincipalId == l.ExecutorPrincipalId));
+        if (afterSession is not null) query = query.Where(l => string.Compare(l.SessionId, afterSession) > 0);
+        var rows = await query.OrderBy(l => l.SessionId).Take(limit + 1).ToArrayAsync(ct).ConfigureAwait(false);
+        var items = rows.Select(SandboxRuntimePersistence.Value).ToArray();
+        return new(items.Take(limit).ToArray(), items.Length > limit ? items[limit - 1].SessionId.ToString("D") : null);
+    }
     public async ValueTask<AgentCore.Application.Ports.TenantSandboxExecutionFacts?> ReadTenantSandboxExecutionFactsAsync(Guid tenant, Guid session, Guid executionId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

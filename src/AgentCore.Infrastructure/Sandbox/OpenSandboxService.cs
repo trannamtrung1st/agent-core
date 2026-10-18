@@ -24,7 +24,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     ILogger<OpenSandboxService>? logger = null, SandboxImageAuthority? imageAuthority = null, IAgentRunAuthority? runAuthority = null, IAgentDefinitionStore? definitions = null, ITenantSandboxVerificationStore? tenantVerifications = null,
     AgentCore.Application.Security.TenantSandboxImageAuthorization? verificationAuthority = null,
     ITenantSandboxRuntimeStore? tenantRuntime = null, AgentCore.Application.Security.TenantSandboxApprovedOperationService? approvedSandbox = null,
-    AgentCore.Application.Security.TenantSandboxExecutionAuthority? tenantExecutionAuthority = null, ITenantRunStore? tenantRuns = null) : ISandboxService, ITenantSandboxVerifier, ITenantSandboxCommandExecutor
+    AgentCore.Application.Security.TenantSandboxExecutionAuthority? tenantExecutionAuthority = null, ITenantRunStore? tenantRuns = null, AgentCore.Application.Security.TenantSandboxGenerationAuthority? tenantGenerationAuthority = null) : ISandboxService, ITenantSandboxVerifier, ITenantSandboxCommandExecutor
 {
     private SandboxImageAuthority Images => imageAuthority ?? new(options, store, time);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();
@@ -313,8 +313,14 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         && (lease.TenantId is null || metadata.GetValueOrDefault("agent-core-tenant") == lease.TenantId.Value.ToString("N")
             && metadata.GetValueOrDefault("agent-core-session") == lease.SessionId.ToString("N")
             && metadata.GetValueOrDefault("agent-core-executor") == lease.ExecutorPrincipalId?.ToString("N"));
+    private void RequireTenantProviderScope(SandboxLease lease)
+    {
+        if (lease.TenantId is not null && lease.ProviderHostScope != HostScope)
+            throw new AgentCore.Application.Security.AccessDeniedException("sandbox_host_scope_changed");
+    }
     private async Task<SdkSandbox> ConnectAsync(SandboxLease lease, CancellationToken ct)
     {
+        RequireTenantProviderScope(lease);
         if (lease.MountAuthority is null) throw CanonicalSandboxMountResolver.Incompatible("Environment mount authority is absent; reset and reverify the profile.");
         if (lease.ProviderId is null) throw AgentCoreErrors.Conflict("Sandbox provisioning requires reconciliation.");
         var sdk = await SdkSandbox.ConnectAsync(new SandboxConnectOptions { SandboxId = lease.ProviderId, ConnectionConfig = Connection() }, ct);
@@ -341,7 +347,8 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     private Task<bool> TryTerminateAsync(SandboxLease lease, CancellationToken ct) => TryTerminateRemoteAsync(lease, ct);
     private async Task<bool> TryTerminateRemoteAsync(SandboxLease lease, CancellationToken ct)
     {
-        if (lease.ProviderId is null) return false;
+        if (lease.TenantId is not null && lease.ProviderHostScope != HostScope) return false;
+        if (lease.ProviderId is null) return lease.TenantId is not null && await TryRetireTenantGenerationAsync(lease, ct);
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct); budget.CancelAfter(TimeSpan.FromSeconds(20));
         string failure = "transport"; int? status = null;
         // DELETE is idempotent for this exact durable provider identity. A lost
@@ -455,6 +462,12 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     }
     public async ValueTask ReconcileAsync(CancellationToken ct = default)
     {
+        using (var tenantPass = CancellationTokenSource.CreateLinkedTokenSource(ct))
+        {
+            tenantPass.CancelAfter(TimeSpan.FromSeconds(15));
+            try { await ReconcileTenantGenerationsAsync(tenantPass.Token); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { /* Continue existing cleanup with its remaining pass budget. */ }
+        }
         foreach (var item in await store.ListLeasesAsync(ct))
         {
             var gate = Gate(item.SessionId); if (!await gate.WaitAsync(0, ct)) continue;

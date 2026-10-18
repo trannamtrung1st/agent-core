@@ -126,7 +126,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 CanonicalWorkspaceRoot = root, WorkspaceDockerHostRoot = root };
             var mount = new CanonicalSandboxMountResolver(options).Resolve(s.Session.AgentInstanceId, s.Session.SessionId,
                 s.Run.Admission.Configuration!.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, create: true);
-            s = s with { Lease = s.Lease with { MountAuthority = mount.Authority } };
+            s = s with { Lease = s.Lease with { MountAuthority = mount.Authority, ProviderHostScope = new SandboxVerificationHost(options).Scope } };
             Assert.True(await storage.TryReserveTenantSandboxLeaseAsync(s.Write, s.Lease, 0, DateTimeOffset.UtcNow));
             Assert.True(await storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant, s.Lease with { Revision = 2,
                 State = SandboxLeaseState.Ready, ProviderId = "owned-environment", BaselineProcesses = [] }, 1));

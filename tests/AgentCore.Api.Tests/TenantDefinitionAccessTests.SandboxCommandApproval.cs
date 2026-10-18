@@ -47,7 +47,8 @@ public sealed partial class TenantDefinitionAccessTests
         var storage = factory.Services.GetRequiredService<ITenantSandboxRuntimeStore>(); var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!);
         var frame = new TenantRuntimeFrame(run.Owner, id, run.AgentRunId, run.Claim!.Generation);
         var lease = new SandboxLease(id, instance, Guid.NewGuid(), 1, pinned, SandboxLeaseState.Provisioning, null, at, at.AddMinutes(10),
-            AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "prepare-environment", TenantId: tenant, ExecutorPrincipalId: executor);
+            AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "prepare-environment", TenantId: tenant, ExecutorPrincipalId: executor,
+            ProviderHostScope: factory.Services.GetRequiredService<ISandboxVerificationHost>().Scope);
         Assert.True(await storage.TryReserveTenantSandboxLeaseAsync(new(frame, await Revision(owner, tenant), run.Revision), lease, 0, at));
         Assert.True(await storage.TrySaveTenantSandboxLeaseFactsAsync(tenant, lease with { Revision = 2, State = SandboxLeaseState.Ready }, 1));
         var approvals = factory.Services.GetRequiredService<TenantApprovalService>();

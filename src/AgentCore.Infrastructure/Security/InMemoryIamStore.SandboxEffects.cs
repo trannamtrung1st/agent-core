@@ -5,6 +5,21 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
+    public ValueTask<AgentCore.Application.Ports.TenantSandboxRecoveryPage> ReadTenantSandboxRecoveryPageAsync(string? afterSession, int limit, CancellationToken ct = default)
+    {
+        TenantSandboxRuntimeRules.RecoveryPage(afterSession, limit); ct.ThrowIfCancellationRequested();
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (sandboxBacking.TenantGate)
+        {
+            var items = sandboxBacking.TenantRecoveryLeases(afterSession, limit + 1);
+            foreach (var lease in items)
+            {
+                var owner = sessionBacking.ResolveTenantSessionOwner(lease.SessionId);
+                if (owner is null || owner.TenantId != lease.TenantId || owner.ExecutorPrincipalId != lease.ExecutorPrincipalId || owner.AgentInstanceId != lease.AgentInstanceId)
+                    throw new AccessDeniedException("resource_unavailable");
+            }
+            return ValueTask.FromResult(new AgentCore.Application.Ports.TenantSandboxRecoveryPage(items.Take(limit).ToArray(), items.Count > limit ? items[limit - 1].SessionId.ToString("D") : null));
+        }
+    }
     public ValueTask<AgentCore.Application.Ports.TenantSandboxExecutionFacts?> ReadTenantSandboxExecutionFactsAsync(Guid tenant, Guid session, Guid executionId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();

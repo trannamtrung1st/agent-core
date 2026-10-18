@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Sandbox restart and provider-fence recovery
+
+In both stores, admit/review/reserve actual owned commands, retain controlled stranded/completed/background facts, then construct a new SDK service and reopen SQLite. Reconcile through the actual SDK protocol peer: no command or initialization may replay. Verify exact known-handle retirement, foreign metadata refusal, no-dispatch denial, completed-effect settlement, logical-deletion cleanup and stable immutable operation outcomes. A confirmed background launch may continue after its Run completes; init-only launch evidence cannot. Current executor/source revocation and fixed deadlines must retire active background work without rewriting the original launch outcome. Exercise keyset paging independently of global/human inventories.
+
+Lose the actual SDK create reply, then return pending, foreign and exact matching trusted-provider retirement proofs. Only the exact proof may clear cleanup; retries must not send another create. An old server without the capability must deny before filesystem or SDK create. The provider's real SQLite fence and deterministic provisioning-thread barriers verify retirement before/while/after creation and durable reopen. The pinned-image ASGI/auth/provider-hook proof uses actual installed vendor classes and authentication, with a controlled Docker peer, disabled networking and no daemon socket. It does not establish a live Docker bind, daemon outage or production isolation acceptance.
+
 ## Tenant Sandbox first-generation regression
 
 Use actual owned Definition/Instance/Session/Run/Review services in both stores with immutable template bytes, real disposable directories and the installed SDK against an authenticated loopback peer. Assert first-generation reservation, exact ownership metadata/mount request, Profile-then-Instance setup, one command, delayed fixed command deadline, factual effect settlement/reopen and no SDK work on retry. The peer's mount/readiness and command responses are controlled; this is not Docker or shell qualification.

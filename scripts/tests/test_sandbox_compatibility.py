@@ -58,6 +58,18 @@ class CompatibilityTests(unittest.TestCase):
         self.assertNotIn("agent-core-source-user", LABELS)
         self.assertEqual(prepared, compat.prepare_create(prepared, 501, 20, ROOTS, lambda _: {"Id": IMAGE_ID, "Os": "linux", "Config": {"User": "1000:1000"}}))
 
+    def test_tenant_verification_owner_is_prepared_and_attested_without_accepting_a_composite_runtime_generation(self):
+        kwargs, _, attrs, expected, info = fixture()
+        owner = "a" * 32 + "." + "b" * 32
+        owned = {compat.MARKER: "4", "agent-core-image-verification": owner}
+        prepared = compat.prepare_create({**kwargs, "labels": owned}, 501, 20, ROOTS,
+            lambda _: {"Id": IMAGE_ID, "Os": "linux", "Config": {"User": "1000:1000"}})
+        self.assertEqual("501:20", prepared["user"])
+        attrs["Config"]["Labels"] = prepared["labels"]
+        expected.update(ownerLabel="agent-core-image-verification", ownerValue=owner)
+        self.assertEqual(4, compat.attest(attrs, expected, info, 501, 20, ROOTS)["contractVersion"])
+        self.assertFalse(compat.managed({compat.MARKER: "4", "agent-core-generation": owner}))
+
     def test_unowned_container_creation_is_unchanged(self):
         kwargs = {"labels": {"unrelated": "true"}}
         self.assertIs(kwargs, compat.prepare_create(kwargs, 0, 0, [], lambda _: self.fail("must not inspect")))

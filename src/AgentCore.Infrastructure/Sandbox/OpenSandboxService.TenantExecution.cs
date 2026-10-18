@@ -41,8 +41,11 @@ public sealed partial class OpenSandboxService
                 if (current.Request.RequestId != requestId) throw new SecurityConflictException("sandbox_approval_mismatch");
                 var command = TenantApprovalRules.SandboxCommand(current.Request.Operation.SandboxCommand!);
                 lease = current.Lease; receipt = current.Execution;
+                RequireTenantProviderScope(lease);
                 if (receipt.InitializesGeneration)
                 {
+                    // Older servers must fail before filesystem effects or SDK create; empty inventory cannot prove retirement.
+                    await RequireTenantRetirementCapabilityAsync(ct);
                     // This single fresh reservation owns template seeding, create and exact ordered initialization.
                     receipt = await SaveReceiptAsync(receipt with { FilesystemEffectsMayHaveOccurred = true }, false, ct);
                     lease = await ProvisionApprovedGenerationAsync(frame, lease, receipt, ct);

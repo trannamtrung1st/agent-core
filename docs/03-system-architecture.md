@@ -1,5 +1,15 @@
 # System Architecture
 
+## Tenant Sandbox recovery ownership
+
+The existing OpenSandbox worker also consumes a bounded technical cursor over actual retained tenant Session/lease roots. The cursor grants no human inventory, command, initialization, claim renewal or IAM authority. It uses the same per-Session SDK gate, factual CAS and existing immutable operation result settlement. Stranded foreground/provisioning work is retired without replay; idle reuse and background observation require current original requester/executor/grantor, source, policy, Session and generation authority. A previously acknowledged background launch may be observed after its originating Run completes, within its fixed deadline. Launch initiation alone is not an acknowledgement.
+
+Each new owned lease also pins the trusted provider configuration scope (private endpoint, Core/daemon workspace mapping and compatibility contract). Factual CAS cannot add or change that binding. SDK effects and retirement must match it; a different mapping cannot confirm an old provider's absence with an unrelated 404. Unknown older scope remains unbound and cannot be implicitly adopted.
+
+The pinned Docker provider creates in a background thread that can outlive a lost Core HTTP reply. A filtered empty list therefore cannot prove that creation has stopped. The existing trusted-server adapter keeps a durable negative generation fence in its existing private provider state volume. The fence binds exact tenant/Session/executor/generation, prevents later provisioning, waits for any active provisioning call and retires only exact matching containers through the existing provider service. Core accepts its bounded scope-matching retirement proof; errors/pending/foreign responses retain reconciliation. This provider fence cannot grant access, reserve a Core effect or replay an action; it is not a second IAM/approval/Run engine.
+
+[Focused recovery evidence](reports/tenant-sandbox-recovery-verification-2026-10-18.md) distinguishes controlled SDK/provider proof from live Docker qualification. Full proposal acceptance, verification lost-create/orphan fencing, explicit process Stop/reset/profile switching, model offering/output delivery, tenant UI and final schema/authority consolidation remain separate gates.
+
 ## Tenant approved Sandbox SDK execution
 
 The existing `OpenSandboxService` now implements the trusted tenant command executor over an existing owned Ready generation or a freshly reserved owned generation. The existing approved reservation is the one dispatch fence; repeat observers cannot send another SDK command. The command comes only from the saved typed Review. `TenantSandboxExecutionAuthority` rechecks current Run/requester/executor/grantor, exact Session/profile/source/setup/home and receipt ownership before SDK work and throughout the existing storage watcher. Provider metadata must match the exact tenant, Session, executor and generation.

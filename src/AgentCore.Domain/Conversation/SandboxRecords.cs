@@ -13,7 +13,7 @@ public sealed record SandboxLease(Guid SessionId, Guid AgentInstanceId, Guid Gen
     DateTimeOffset ExpiresAt, DateTimeOffset? InitializedAt = null, SandboxMountAuthority? MountAuthority = null,
     Guid? ActiveExecutionId = null, string? DiagnosticId = null, IReadOnlyList<string>? BaselineProcesses = null, Guid? LastExecutionId = null, string? SafeMessage = null, SandboxInitializationEvidence? Initialization = null,
     DateTimeOffset? LastActivityAt = null, string? CleanupReason = null, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null, string? SelectedProfileId = null, string? TransitionProfileId = null, long? TransitionProfileRevision = null, string? TransitionPhase = null, Guid? AdmissionRunId = null, string? AdmissionToolCallId = null, string? FailureCategory = null, string? FailurePhase = null,
-    Guid? TenantId = null, Guid? ExecutorPrincipalId = null);
+    Guid? TenantId = null, Guid? ExecutorPrincipalId = null, string? ProviderHostScope = null);
 
 public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanceId, Guid Generation,
     Guid AgentRunId, Guid ClaimGeneration, string ToolCallId, string ActionHash, SandboxExecutionState State,

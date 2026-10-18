@@ -76,7 +76,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!);
         var lease = new SandboxLease(session.Owner.SessionId, agent.Instance.InstanceId, f.Ids.NewId(), 1, pinned,
             SandboxLeaseState.Provisioning, null, now, now.AddMinutes(10), AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "sandbox-1",
-            TenantId: owner.TenantId, ExecutorPrincipalId: agent.PrincipalId);
+            TenantId: owner.TenantId, ExecutorPrincipalId: agent.PrincipalId, ProviderHostScope: p.Host.Scope);
         return new(owner.TenantId, human, session.Owner, run, lease,
             new(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), await Revision(), run.Revision), grant.AssignmentId, resolver);
     }

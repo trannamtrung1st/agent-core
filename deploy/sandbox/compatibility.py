@@ -15,7 +15,8 @@ SCOPE = re.compile(r"(?:[0-9a-f]{32}/)?(?:agent-[0-9a-f]{32}/(?:home|sessions/se
 
 def managed(labels):
     return labels.get(MARKER) == CONTRACT and sum(k in labels for k in OWNER_LABELS) == 1 and all(
-        re.fullmatch(r"[0-9a-f]{32}", labels[k]) for k in OWNER_LABELS if k in labels)
+        re.fullmatch(r"[0-9a-f]{32}" if key == "agent-core-generation" else r"(?:[0-9a-f]{32}\.)?[0-9a-f]{32}", labels[key])
+        for key in OWNER_LABELS if key in labels)
 
 
 def validate_source(source, roots):
@@ -131,7 +132,7 @@ def install(app, config):
     class Expected(BaseModel):
         model_config = ConfigDict(extra="forbid")
         ownerLabel: str = Field(pattern=r"^agent-core-(generation|image-verification)$")
-        ownerValue: str = Field(pattern=r"^[0-9a-f]{32}$")
+        ownerValue: str = Field(pattern=r"^(?:[0-9a-f]{32}\.)?[0-9a-f]{32}$")
         uid: int = Field(gt=0)
         gid: int = Field(gt=0)
         image: str = Field(max_length=512)

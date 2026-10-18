@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Sandbox recovery state
+
+Owned recovery reuses the current Core lease/receipt/approval/result tables and retained Session/Run roots. The bounded cursor uses canonical Session keys; its in-memory progress is scheduling fairness, never authority. Factual CAS preserves exact generation/owner/action and immutable command deadline. Lease JSON adds immutable `ProviderHostScope` using the existing trusted host fingerprint. New owned reservations require it; generic factual CAS cannot add/change it. Older unknown scope remains readable as stored evidence but cannot be adopted or used for SDK/retirement I/O. No new Core migration, operation engine, dispatch table or human inventory is introduced.
+
+The existing trusted Docker server stores technical generation bindings and negative retirement fences in `/var/lib/opensandbox/agent-core-retirements.sqlite`, within its existing private persistent provider metadata volume. Each generation binds one exact tenant/Session/executor tuple and may transition only to retired. A scope mismatch cannot replace that binding. Per-generation locks supervise the existing provider provisioning call; a retirement record commits before waiting, so late queued work cannot escape the fence. SQLite is per-operation and closes its connections; locks hold no Core conversation state. Tombstones survive trusted-server restart and confer no IAM, Review or effect authority.
+
 ## Failed multi-step downgrade recovery
 
 A refused lossy older migration does not undo already completed safe newer Down steps. Inspect retained data with schema-appropriate reads, then apply the normal forward migrations before opening stores with the current EF model. The focused credential migration regression now verifies unchanged retained payload at the intermediate schema, refusal of the protected Credential target and successful forward recovery before typed reads. This uses only a disposable test database; it adds no compatibility fallback or user-data conversion. [Recovery evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md).

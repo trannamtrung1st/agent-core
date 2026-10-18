@@ -33,7 +33,7 @@ public sealed partial class OpenSandboxService
                 OnStdout = async m => { stdout.Append(m.Text); await SaveOutputAsync(); },
                 OnStderr = async m => { stderr.Append(m.Text); await SaveOutputAsync(); },
                 OnInit = async init => {
-                    receipt = receipt with { ProviderCommandId = init.Id, State = SandboxExecutionState.Running, Phase = "execution" };
+                    receipt = receipt with { ProviderCommandId = init.Id, State = SandboxExecutionState.Running, Phase = command.Background ? "launchPending" : "execution" };
                     receipt = await SaveReceiptAsync(receipt, false, ct);
                 }
             };
@@ -48,7 +48,7 @@ public sealed partial class OpenSandboxService
                 throw execution.Error?.Name?.Contains("Timeout", StringComparison.OrdinalIgnoreCase) == true
                     ? new TimeoutException("Command timeout; termination requires confirmation.")
                     : new InvalidOperationException("Command termination was not confirmed.");
-            receipt = receipt with { ProviderCommandId = execution.Id ?? receipt.ProviderCommandId, Stdout = stdout.Text, Stderr = stderr.Text,
+            receipt = receipt with { ProviderCommandId = execution.Id ?? receipt.ProviderCommandId, Phase = "execution", Stdout = stdout.Text, Stderr = stderr.Text,
                 Truncated = stdout.Truncated || stderr.Truncated, State = command.Background ? SandboxExecutionState.Running : SandboxExecutionState.Completed,
                 ExitCode = execution.ExitCode, FinishedAt = command.Background ? null : time.GetUtcNow() };
             if (!command.Background) receipt = receipt with { DurationMs = Math.Max(0, execution.Complete?.ExecutionTimeMs ?? (long)(time.GetUtcNow() - (receipt.CommandStartedAt ?? receipt.StartedAt)).TotalMilliseconds) };

@@ -30,6 +30,14 @@ public sealed partial class TenantDefinitionIntegrationTests
     [InlineData(false, "privateRotated")] [InlineData(true, "privateRotated")]
     public async Task Tenant_Sandbox_private_source_is_rechecked_after_probe_before_SDK_secret_dispatch(bool sqlite, string outcome) => await ProvisioningScenario(sqlite, outcome);
 
+    [Theory] [InlineData(false, "recoverUnknown")] [InlineData(true, "recoverUnknown")]
+    [InlineData(false, "recoverForeignProof")] [InlineData(true, "recoverForeignProof")]
+    [InlineData(false, "recoverPending")] [InlineData(true, "recoverPending")]
+    public async Task Tenant_Sandbox_lost_create_reply_requires_exact_provider_fence_proof_before_recovery(bool sqlite, string outcome) => await ProvisioningScenario(sqlite, outcome);
+
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_Sandbox_old_server_without_retirement_capability_is_denied_before_filesystem_or_create(bool sqlite) => await ProvisioningScenario(sqlite, "retirementUnsupported");
+
     private static async Task ProvisioningScenario(bool sqlite, string outcome)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-provision-sdk-" + Guid.NewGuid().ToString("N"));
@@ -42,7 +50,8 @@ public sealed partial class TenantDefinitionIntegrationTests
             var privateSource = outcome.StartsWith("private", StringComparison.Ordinal);
             var protector = new AgentCore.Infrastructure.Credentials.LocalCredentialProtector(root + "-keys");
             var credentials = new TenantCredentialService(f.Iam, (ITenantCredentialStore)f.Iam, f.Authorizer, protector, f.Ids, TimeProvider.System);
-            var registryProbes = 0;
+            var registryProbes = 0; var recoveryPass = false; var retirementRequests = 0;
+            var recovering = outcome.StartsWith("recover", StringComparison.Ordinal);
             RuntimeSandboxSetup s = null!; JsonElement creation = default; Dictionary<string,string> metadata = [];
             var creates = 0; var dispatches = 0; var initializations = 0; var deletes = 0; var mountProbes = 0; var scripts = new List<string>();
             host.Run(async http =>
@@ -57,13 +66,26 @@ public sealed partial class TenantDefinitionIntegrationTests
                     http.Response.StatusCode = 200; return;
                 }
                 Assert.Equal("synthetic-sdk-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
-                if (http.Request.Method == "POST" && path == "/v1/sandboxes")
+                if (path == "/agent-core/generations/capabilities")
+                {
+                    if (outcome == "retirementUnsupported") { http.Response.StatusCode = 404; return; }
+                    await http.Response.WriteAsJsonAsync(new { contractVersion = 1, retirementFencing = true });
+                }
+                else if (path == "/agent-core/generations/retire")
+                {
+                    retirementRequests++; using var json = await JsonDocument.ParseAsync(http.Request.Body); var expected = json.RootElement;
+                    foreach (var key in new[] { "tenant", "session", "executor", "generation" }) Assert.Equal(metadata["agent-core-" + key], expected.GetProperty(key).GetString());
+                    await http.Response.WriteAsJsonAsync(new { contractVersion = 1, retired = recoveryPass && outcome != "recoverPending",
+                        tenant = outcome == "recoverForeignProof" && recoveryPass ? Guid.Empty.ToString("N") : expected.GetProperty("tenant").GetString(),
+                        session = expected.GetProperty("session").GetString(), executor = expected.GetProperty("executor").GetString(), generation = expected.GetProperty("generation").GetString() });
+                }
+                else if (http.Request.Method == "POST" && path == "/v1/sandboxes")
                 {
                     creates++; using var json = await JsonDocument.ParseAsync(http.Request.Body); creation = json.RootElement.Clone();
                     metadata = creation.GetProperty("metadata").Deserialize<Dictionary<string,string>>()!;
                     if (outcome == "revokedDuringCreate") await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, s.ExecutionGrant, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
                     if (outcome == "foreignCreated") metadata["agent-core-tenant"] = Guid.Empty.ToString("N");
-                    if (outcome == "createUnknown") { http.Response.StatusCode = 500; await http.Response.WriteAsync("PRIVATE_CREATE_BODY"); return; }
+                    if (outcome == "createUnknown" || recovering) { http.Response.StatusCode = 500; await http.Response.WriteAsync("PRIVATE_CREATE_BODY"); return; }
                     await http.Response.WriteAsJsonAsync(new { id = "created-environment", status = new { state = "Running" }, createdAt = DateTimeOffset.UtcNow, entrypoint = new[] { "/bin/sh" }, metadata });
                 }
                 else if (path.Contains("/endpoints/")) await http.Response.WriteAsJsonAsync(new { endpoint = new Uri(host.Urls.Single()).Authority });
@@ -143,6 +165,13 @@ public sealed partial class TenantDefinitionIntegrationTests
             var result = await sdk.ExecuteApprovedAsync(frame, request.RequestId);
             var saved = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!;
             Assert.True(saved.Execution!.InitializesGeneration); Assert.Equal(saved.Execution.Generation, saved.Lease!.Generation);
+            if (outcome == "retirementUnsupported")
+            {
+                Assert.Equal((0, 0, 0, 0), (creates, dispatches, initializations, deletes)); Assert.False(Directory.Exists(working));
+                Assert.Equal(SandboxLeaseState.Terminated, saved.Lease.State); Assert.False(saved.Execution.FilesystemEffectsMayHaveOccurred);
+                Assert.Equal(AgentCore.Domain.Security.TenantOperationOutcome.Denied, (await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId))!.Outcome);
+                return;
+            }
             Assert.Equal(outcome is "occupiedTemplate" or "privateRotated" ? 0 : 1, creates);
             Assert.Equal(privateSource ? 1 : 0, registryProbes);
             Assert.True(dispatches == (completed ? 1 : 0), JsonSerializer.Serialize(new { creates, dispatches, initializations, mountProbes, saved.Lease, saved.Execution }));
@@ -163,8 +192,8 @@ public sealed partial class TenantDefinitionIntegrationTests
             else
             {
                 Assert.Null(saved.Execution.CommandStartedAt); Assert.Null(saved.Execution.DeadlineAt);
-                Assert.Equal(outcome is "createUnknown" or "foreignCreated" or "occupiedTemplate" or "privateRotated" ? SandboxLeaseState.NeedsReconciliation : SandboxLeaseState.Terminated, saved.Lease.State);
-                Assert.Equal(outcome is "createUnknown" or "foreignCreated" or "occupiedTemplate" or "privateRotated" ? 0 : 1, deletes);
+                Assert.Equal(recovering || outcome is "createUnknown" or "foreignCreated" or "occupiedTemplate" or "privateRotated" ? SandboxLeaseState.NeedsReconciliation : SandboxLeaseState.Terminated, saved.Lease.State);
+                Assert.Equal(recovering || outcome is "createUnknown" or "foreignCreated" or "occupiedTemplate" or "privateRotated" ? 0 : 1, deletes);
             }
             var retained = JsonSerializer.Serialize(new { result, saved, effect, Audit = await f.Iam.ReadAuditAsync(s.Tenant, 200) });
             foreach (var secret in new[] { "PRIVATE_CREATE_BODY", "PRIVATE_REGISTRY_ORIGINAL", "PRIVATE_REGISTRY_ROTATED" }) Assert.DoesNotContain(secret, retained);
@@ -172,6 +201,17 @@ public sealed partial class TenantDefinitionIntegrationTests
             if (outcome is "revokedDuringCreate" or "revokedDuringInitialization" or "privateRotated") Assert.Equal("sourceAuthorizationChanged", saved.Execution.FailureCategory);
             if (outcome == "mountFailure") Assert.Equal("mountFailure", saved.Execution.FailureCategory);
             if (outcome is "initializationFailed" or "instanceInitializationFailed") Assert.Equal("initializationFailed", saved.Lease.CleanupReason);
+            if (recovering)
+            {
+                Assert.Equal(1, retirementRequests); recoveryPass = true;
+                await sdk.ReconcileAsync();
+                var recovered = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!;
+                Assert.Equal(outcome == "recoverUnknown" ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation, recovered.Lease!.State);
+                Assert.Equal(outcome == "recoverUnknown", recovered.Execution!.RemoteTerminationConfirmed);
+                Assert.Equal(outcome == "recoverUnknown", recovered.Execution.TerminationConfirmed);
+                Assert.Equal(effect, await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Tenant, request.Operation.OperationId));
+                Assert.Equal(2, retirementRequests); saved = recovered;
+            }
             var counts = (creates, dispatches, initializations, deletes);
             try { await sdk.ExecuteApprovedAsync(frame, request.RequestId); }
             catch (Exception error) when (error is AccessDeniedException or SecurityConflictException) { }

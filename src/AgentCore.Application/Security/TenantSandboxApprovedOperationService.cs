@@ -9,7 +9,7 @@ public sealed record TenantSandboxExecutionStart(bool Reserved, SandboxExecution
 
 public sealed class TenantSandboxApprovedOperationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     ITenantApprovedOperationStore decisions, ITenantSandboxRuntimeStore runtime, TenantSandboxOperationTarget targets,
-    TenantOperationAuthorizer operations, IIdGenerator ids, TimeProvider time)
+    TenantOperationAuthorizer operations, IIdGenerator ids, TimeProvider time, ISandboxVerificationHost? host = null)
 {
     public async ValueTask<SandboxExecution> StartCommandAsync(TenantRuntimeFrame frame, Guid executionId, CancellationToken ct = default)
     {
@@ -100,7 +100,8 @@ public sealed class TenantSandboxApprovedOperationService(ITenantRunStore runs, 
             at.AddSeconds(TenantSandboxRuntimeRules.InitialLifetimeSeconds(TenantSandboxOperationRules.Profile(run, value.ProfileId), command)),
             Initialization: new("Pending", value.ProfileId, value.ProfileRevision, TenantSandboxOperationRules.Profile(run, value.ProfileId).InstanceRevision),
             ActiveExecutionId: executionId, LastExecutionId: executionId, SelectedProfileId: value.ProfileId, TransitionPhase: "provisioning",
-            AdmissionRunId: frame.RunId, AdmissionToolCallId: call, TenantId: tenant, ExecutorPrincipalId: frame.Owner.ExecutorPrincipalId) : null;
+            AdmissionRunId: frame.RunId, AdmissionToolCallId: call, TenantId: tenant, ExecutorPrincipalId: frame.Owner.ExecutorPrincipalId,
+            ProviderHostScope: host?.Scope ?? throw new AccessDeniedException("sandbox_host_unavailable")) : null;
         var execution = new SandboxExecution(executionId, frame.SessionId, frame.Owner.AgentInstanceId, generation?.Generation ?? lease!.Generation, run.AgentRunId, frame.Generation,
             call, request.Operation.ActionHash, SandboxExecutionState.Dispatching, at, Background: command.Background,
             CommandText: command.Command ?? JsonSerializer.Serialize(command.Argv), DeadlineAt: initializes ? null : at.AddSeconds(command.TimeoutSeconds!.Value),

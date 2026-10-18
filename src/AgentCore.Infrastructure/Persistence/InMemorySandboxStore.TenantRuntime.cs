@@ -17,6 +17,9 @@ public sealed partial class InMemorySandboxStore
     }
     private bool OwnedSession(Guid session) => tenantSessions?.RetainedTenantSessionOwnerSnapshot(session) is not null;
     private bool OwnedInstance(Guid instance) => tenantInstances?.IsTenantOwned(instance) == true;
+    internal IReadOnlyList<SandboxLease> TenantRecoveryLeases(string? afterSession, int count) => _leases.Values
+        .Where(l => l.TenantId is not null && (afterSession is null || string.CompareOrdinal(l.SessionId.ToString("D"), afterSession) > 0))
+        .OrderBy(l => l.SessionId.ToString("D"), StringComparer.Ordinal).Take(count).Select(FreezeLease).ToArray();
     internal SandboxLease? TenantLease(Guid tenant, Guid session) => _leases.GetValueOrDefault(session) is { } lease && lease.TenantId == tenant ? FreezeLease(lease) : null;
     internal SandboxExecution? TenantExecution(Guid tenant, Guid session, Guid execution) => _executions.GetValueOrDefault(execution) is { } value
         && value.TenantId == tenant && value.SessionId == session ? value : null;

@@ -58,6 +58,8 @@ def main():
     import uvicorn
 
     install(app, app_config)
+    from retirement import install as install_retirement
+    install_retirement(app)
     server = app_config.server
     uvicorn.run(app, host=server.host, port=server.port, date_header=False,
                 timeout_keep_alive=server.timeout_keep_alive,

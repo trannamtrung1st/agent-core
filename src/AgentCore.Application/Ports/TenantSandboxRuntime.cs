@@ -9,8 +9,12 @@ public sealed record TenantSandboxApprovalReservation(TenantSandboxRuntimeWrite 
 public sealed record TenantSandboxRuntimeSnapshot(TenantSessionRoot Owner, long SessionRevision, SandboxLease? Lease, SandboxExecution? Execution);
 public sealed record TenantSandboxExecutionFacts(TenantSessionRoot Owner, SandboxLease? Lease, SandboxExecution Execution, bool RunCancellationRequested);
 
+public sealed record TenantSandboxRecoveryPage(IReadOnlyList<SandboxLease> Items, string? NextCursor);
+
 public interface ITenantSandboxRuntimeStore
 {
+    // Bounded technical inventory over retained owned roots, including terminal result settlement. Never a human inventory or dispatch authority.
+    ValueTask<TenantSandboxRecoveryPage> ReadTenantSandboxRecoveryPageAsync(string? afterSession, int limit, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantSandboxRuntimeSnapshot?> ReadTenantSandboxRuntimeAsync(Guid tenant, Guid session, Guid? executionId = null, CancellationToken ct = default);
     ValueTask<SandboxExecution?> FindTenantSandboxOperationAsync(Guid tenant, Guid session, Guid run, string toolCallId, CancellationToken ct = default);
     // Exact technical evidence remains readable after logical Session retirement; this grants no new effect or human read.
