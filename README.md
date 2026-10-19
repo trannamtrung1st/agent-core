@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Tenant workspace source publication now uses the existing atomic Artifact/Run/consent owners, with capability-specific model offering and a shared exact source inspector. [Focused verification](docs/reports/tenant-workspace-artifact-model-verification-2026-10-19.md) covers both stores, actual model/HTTP review and grants, stale source/access refusal, SQLite host recreation and live Synthetic download/preview. This is a bounded checkpoint; the full tenant IAM proposal remains active.
+
 ## Tenant Office mutation checkpoint — 2026-10-19
 
 Conversational DOCX/XLSX create/edit now use the canonical tenant workspace mutation, exact Review/primary write grant and incumbent Office processor/file owners. [Focused evidence](docs/reports/tenant-office-mutation-verification-2026-10-19.md) records both-store model/HTTP flows, actual pending-consent SQLite host recreation, guarded create-new/edit source checks, abandoned-dispatch no-replay and the shared Synthetic browser journey. This supersedes Office-create/edit-pending notes below for this conversational path only. Source publication, virtual resources, autonomous/resource/transport families and final clean authority/schema cutover remain open; the full proposal stays active.

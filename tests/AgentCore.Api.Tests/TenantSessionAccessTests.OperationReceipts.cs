@@ -49,6 +49,7 @@ public sealed partial class TenantSessionAccessTests
         public string? ProposedMetadataRead { get; set; }
         public string? ProposedPreferences { get; set; }
         public string? ProposedArtifact { get; set; }
+        public string ArtifactPublicationTool { get; set; } = AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate;
         public bool EmitArtifactReference { get; set; }
         public bool VerifyPublishedArtifact { get; set; }
         public string? ProposedArtifactAuthorization { get; set; }
@@ -92,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             if (ProposedArtifactAuthorization is { } publication && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization)
-                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("publish_artifact")) == true)
+                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization && (t.ParametersJson.Contains("publish_artifact") || t.ParametersJson.Contains("publish_workspace_artifact"))) == true)
             {
                 yield return new ModelToolCallEvent(new("reviewed-artifact", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization, publication));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
@@ -133,7 +134,7 @@ public sealed partial class TenantSessionAccessTests
             if (EmitArtifactReference && (ProposedArtifactAuthorization is not null || ProposedArtifact is not null))
             {
                 var result = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == (ProposedArtifactAuthorization is null
-                    ? AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate : AgentCore.Application.Tools.ToolCatalog.RequestAuthorization));
+                    ? ArtifactPublicationTool : AgentCore.Application.Tools.ToolCatalog.RequestAuthorization));
                 if (result is not null)
                 {
                     using var parsed = System.Text.Json.JsonDocument.Parse(result.Text);
@@ -150,10 +151,10 @@ public sealed partial class TenantSessionAccessTests
                 yield return new ModelTextDelta("The saved file publication decision was processed. Its receipt records the outcome.");
                 yield return new ModelCompleted(ModelStopReason.Completed); yield break;
             }
-            if (ProposedArtifact is { } artifact && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate)
-                && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate) == true)
+            if (ProposedArtifact is { } artifact && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ArtifactPublicationTool)
+                && request.Tools?.Any(t => t.Name == ArtifactPublicationTool) == true)
             {
-                yield return new ModelToolCallEvent(new("direct-artifact", AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate, artifact));
+                yield return new ModelToolCallEvent(new("direct-artifact", ArtifactPublicationTool, artifact));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             if (ProposedArtifact is not null)

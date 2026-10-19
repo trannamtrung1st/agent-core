@@ -146,17 +146,20 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_workspace_Artifact_internal_conversion_does_not_enable_a_legacy_model_effect(bool sqlite)
+    public async Task Tenant_workspace_Artifact_model_route_publishes_exact_owned_binary_bytes(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
         var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), artifactPublications: SourcePublicationService(f)));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId,
             SupportsTools: true, AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation);
-        var call = new ModelToolCall("unconverted-export", ToolCatalog.ArtifactsCreateFromWorkspace, """{"path":"/working/source.bin","displayName":"published.bin"}""");
+        await SeedRuntimeWorkspace(f, s, true, "source.bin", [0, 255, 128, 3]);
+        var call = new ModelToolCall("converted-export", ToolCatalog.ArtifactsCreateFromWorkspace, """{"path":"/working/source.bin","displayName":"published.bin"}""");
         using var output = System.Text.Json.JsonDocument.Parse((await executor.ExecuteAsync(s.Run.Admission.Configuration!.Definition, frame.SessionId, call, 16000, admission: admission)).Text);
-        Assert.Equal("tenant_effect_unavailable", output.RootElement.GetProperty("reasonCode").GetString());
-        Assert.Empty((await ((ITenantArtifactStore)f.Artifacts).ListTenantAsync(s.Tenant, frame.SessionId, null, null, 20)).Items);
+        Assert.True(output.RootElement.GetProperty("applied").GetBoolean());
+        var artifact = Assert.Single((await ((ITenantArtifactStore)f.Artifacts).ListTenantAsync(s.Tenant, frame.SessionId, null, null, 20)).Items);
+        Assert.Equal(artifact.ArtifactId, output.RootElement.GetProperty("operationId").GetGuid());
+        Assert.Equal(new byte[] { 0, 255, 128, 3 }, await ((ITenantArtifactStore)f.Artifacts).ReadTenantContentAsync(s.Tenant, frame.SessionId, artifact.ArtifactId));
     }
 
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]

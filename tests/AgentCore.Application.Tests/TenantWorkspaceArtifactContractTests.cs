@@ -10,6 +10,25 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantWorkspaceArtifactContractTests
 {
     [Fact]
+    public async Task Source_projection_offers_only_the_admitted_variant_in_a_current_human_message()
+    {
+        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.ArtifactsCreateFromWorkspace);
+        var session = Guid.NewGuid(); var activation = Guid.NewGuid();
+        var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
+            ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage) };
+        var tools = ToolProjectionService.Project(definition, context, ToolConfigurationGates.AllowAll);
+        var source = Assert.Single(tools, t => t.Name == ToolCatalog.ArtifactsCreateFromWorkspace);
+        Assert.Equal(TenantWorkspaceArtifactContract.ForModel(), source);
+        Assert.DoesNotContain(tools, t => t.Name == ToolCatalog.ArtifactsCreate);
+        using var schema = JsonDocument.Parse(Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
+        var variants = schema.RootElement.GetProperty("oneOf").EnumerateArray().Select(b => b.GetProperty("properties").GetProperty("operation").GetProperty("enum")[0].GetString()).ToArray();
+        Assert.Contains("publish_workspace_artifact", variants); Assert.DoesNotContain("publish_artifact", variants);
+        foreach (var invalid in new[] { context with { ModelSupportsTools = false }, context with { OwnedSessionId = Guid.NewGuid() },
+            context with { ExecutionContext = new(context.ExecutionContext!.TenantId, context.ExecutionContext.AgentPrincipalId, context.ExecutionContext.OriginalInitiatorPrincipalId, session, Guid.NewGuid(), Guid.NewGuid(), activation, context.ExecutionContext.RunId, activation, AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation) } })
+            Assert.DoesNotContain(ToolProjectionService.Project(definition, invalid, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.ArtifactsCreateFromWorkspace);
+    }
+
+    [Fact]
     public void Source_contract_preserves_exact_path_and_canonicalizes_only_metadata_and_field_order()
     {
         var a = TenantWorkspaceArtifactContract.Parse("""{"displayName":"../report.docx","path":"/working/Báo cáo.docx"}""");

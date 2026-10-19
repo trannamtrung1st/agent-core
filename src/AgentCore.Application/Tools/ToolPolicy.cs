@@ -26,6 +26,9 @@ public static class ToolPolicy
         if (admission?.TenantId is not null && toolName == ToolCatalog.ArtifactsVerify)
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantArtifactVerificationContract.Allows(definition) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
+        if (admission?.TenantId is not null && toolName == ToolCatalog.ArtifactsCreateFromWorkspace)
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && TenantWorkspaceArtifactContract.Allows(definition) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && toolName == ToolCatalog.ArtifactsCreate)
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantArtifactToolContract.Allows(definition) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -203,6 +206,10 @@ public static class ToolPolicy
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && verification.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation
                 && verification.SessionId == context.OwnedSessionId && TenantArtifactVerificationContract.Allows(definition);
+        if (context?.ExecutionContext is { } sourceExecution && descriptor.Name == ToolCatalog.ArtifactsCreateFromWorkspace)
+            return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
+                && sourceExecution.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage
+                && sourceExecution.SessionId == context.OwnedSessionId && TenantWorkspaceArtifactContract.Allows(definition);
         if (context?.ExecutionContext is { } artifactExecution && descriptor.Name == ToolCatalog.ArtifactsCreate)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && artifactExecution.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage

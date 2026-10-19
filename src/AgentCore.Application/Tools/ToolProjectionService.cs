@@ -21,7 +21,7 @@ public static class ToolProjectionService
             || BrowserBootstrap.Contains(t.Name)
             || always.Contains(t.Name, StringComparer.Ordinal) || skill.Contains(t.Name)
             || loaded.Contains(t.Name, StringComparer.Ordinal)
-            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name == ToolCatalog.ArtifactsVerify || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name))))
+            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name is ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreateFromWorkspace || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name))))
             .Select(t => ForContext(t, context))
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }
@@ -29,6 +29,7 @@ public static class ToolProjectionService
         : TenantWorkspaceMutationContract.IsMutation(tool.Name) ? TenantWorkspaceMutationContract.ForModel(tool)
         : TenantWorkspaceReadContract.IsRead(tool.Name) ? TenantWorkspaceReadContract.ForModel(tool)
         : tool.Name == ToolCatalog.ArtifactsVerify ? TenantArtifactVerificationContract.ForModel()
+        : tool.Name == ToolCatalog.ArtifactsCreateFromWorkspace ? TenantWorkspaceArtifactContract.ForModel()
         : tool.Name == ToolCatalog.ArtifactsCreate ? TenantArtifactToolContract.ForModel()
         : TenantSandboxInspectionContract.IsInspection(tool.Name) ? TenantSandboxInspectionContract.ForModel(tool)
         : TenantBrowserInspectionContract.IsInspection(tool.Name) ? TenantBrowserInspectionContract.ForModel(tool) : tool;

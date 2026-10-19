@@ -114,7 +114,7 @@ const artifactRequest: TenantApproval = { ...request, summary: 'Publish exact fi
   review: { ...request.review, changes: [
     { field: 'artifactDisplayName', before: null, after: 'reviewed-report.md', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
     { field: 'artifactContentType', before: null, after: 'text/markdown', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
-    { field: 'artifactByteSize', before: null, after: 90, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'artifactByteSize', before: null, after: new TextEncoder().encode('# Exact file\n<script>alert("literal")</script>\nUTF-8: thử nghiệm').length, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
     { field: 'artifactContent', before: null, after: '# Exact file\n<script>alert("literal")</script>\nUTF-8: thử nghiệm', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
   ] } };
 
@@ -404,4 +404,33 @@ it('keeps every Excel create sheet and typed value separately reviewable', async
   expect(within(saved).getByRole('textbox', { name: 'Sheet 1 · name' })).toHaveValue('First'); expect(within(saved).getByRole('textbox', { name: 'Sheet 2 · name' })).toHaveValue('Second');
   expect(within(saved).getByRole('textbox', { name: 'Sheet 1 · typed cells in row order' })).toHaveValue('Row 1, column 1\nType: text\nText: Exact value');
   expect(within(saved).getByRole('textbox', { name: 'Sheet 2 · typed cells in row order' })).toHaveValue('No stored cells');
+});
+
+const sourceRequest: TenantApproval = { ...artifactRequest, review: { ...artifactRequest.review, changes: [
+  ...artifactRequest.review.changes.slice(0, 2),
+  ...Object.entries({ artifactByteSize: 0, artifactSourcePath: '/working/試験-thử-nghiệm.docx', artifactChecksum: 'a'.repeat(64), publicationDisclosure: 'Copy only the exact saved workspace bytes. Publication grants no file-read or download access.' }).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false }))
+] } };
+it('reviews workspace publication metadata without an inline body and confirms exact source checks', async () => {
+  view(sourceRequest); const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved file' });
+  expect(within(saved).getByText('Exact source path')).toBeVisible(); expect(within(saved).getByText('/working/試験-thử-nghiệm.docx')).toBeVisible();
+  expect(within(saved).getByText('Stored bytes')).toBeVisible(); expect(within(saved).getByText('0', { exact: true })).toBeVisible();
+  expect(within(saved).queryByRole('textbox')).not.toBeInTheDocument(); expect(within(saved).queryByText('Saved field')).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Authorize once' }));
+  const confirm = (await screen.findAllByText('Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/Current source and access are checked again/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it.each(['missing', 'duplicate', 'mixed', 'unknown', 'hidden', 'invalid-size'])('withholds %s source publication preview and decisions but keeps cancellation', async failure => {
+  let changes = sourceRequest.review.changes;
+  if (failure === 'missing') changes = changes.filter(c => c.field !== 'artifactSourcePath');
+  if (failure === 'duplicate') changes = [...changes, changes[0]];
+  if (failure === 'mixed') changes = [...changes, artifactRequest.review.changes[3]];
+  if (failure === 'unknown') changes = [...changes, { ...changes[0], field: 'privateWitness' }];
+  if (failure === 'hidden') changes = changes.map(c => c.field === 'artifactChecksum' ? { ...c, afterAvailable: false } : c);
+  if (failure === 'invalid-size') changes = changes.map(c => c.field === 'artifactByteSize' ? { ...c, after: -1 } : c);
+  view({ ...sourceRequest, review: { ...sourceRequest.review, changes } }); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Saved file publication unavailable')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
 });

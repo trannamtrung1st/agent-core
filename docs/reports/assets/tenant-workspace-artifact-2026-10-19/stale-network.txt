@@ -1,0 +1,12 @@
+2268. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/access/me => [FAILED] net::ERR_ABORTED
+2270. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/access/me => [200] OK
+2272. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals/01a152d2-6661-7c58-9e79-613cfe6f7ce8 => [FAILED] net::ERR_ABORTED
+2273. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals?page=0&pageSize=20&status=pending => [FAILED] net::ERR_ABORTED
+2274. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals/01a152d2-6661-7c58-9e79-613cfe6f7ce8 => [200] OK
+2275. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals?page=0&pageSize=20&status=pending => [200] OK
+2276. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals/01a152d2-6661-7c58-9e79-613cfe6f7ce8 => [200] OK
+2278. [POST] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals/01a152d2-6661-7c58-9e79-613cfe6f7ce8/cancel => [200] OK
+2279. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals/01a152d2-6661-7c58-9e79-613cfe6f7ce8 => [200] OK
+2280. [GET] http://127.0.0.1:5179/api/v2/tenants/01a152d2-6661-768f-b0f9-4757277a6c21/approvals?page=0&pageSize=20&status=pending => [200] OK
+
+Note: 2082 static requests not shown, run with "static" option to see them.

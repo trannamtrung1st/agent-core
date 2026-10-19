@@ -34,7 +34,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
-            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
+            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -61,10 +61,12 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
         try
         {
-            if (call.Name == ToolCatalog.ArtifactsCreate)
+            if (call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace)
             {
                 if (artifactPublications is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
-                var result = await artifactPublications.ExecuteAsync(boundary.Reference!, generation, call.Id, call.ArgumentsJson, ct).ConfigureAwait(false);
+                var result = call.Name == ToolCatalog.ArtifactsCreateFromWorkspace
+                    ? await artifactPublications.ExecuteWorkspaceAsync(boundary.Reference!, generation, call.Id, call.ArgumentsJson, ct).ConfigureAwait(false)
+                    : await artifactPublications.ExecuteAsync(boundary.Reference!, generation, call.Id, call.ArgumentsJson, ct).ConfigureAwait(false);
                 return JsonSerializer.Serialize(new { decision = JsonNamingPolicy.CamelCase.ConvertName(result.Decision.ToString()),
                     reasonCode = result.ReasonCode, applied = result.Receipt is not null, operationId = result.Receipt?.OperationId });
             }
@@ -130,6 +132,8 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
             return JsonSerializer.Serialize(new { operations = items.Select(Project).ToArray() });
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException) { return Error("invalid", "invalid_arguments"); }
+        catch (AccessDeniedException ex) when (call.Name == ToolCatalog.ArtifactsCreateFromWorkspace && ex.ReasonCode == "artifact_source_review_required")
+        { return JsonSerializer.Serialize(new { decision = "requiresApproval", reasonCode = ex.ReasonCode, applied = false, operationId = (Guid?)null }); }
         catch (AccessDeniedException ex) { return Error("forbidden", ex.ReasonCode); }
         catch (SecurityConflictException ex) { return Error("conflict", ex.ReasonCode); }
     }

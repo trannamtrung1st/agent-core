@@ -3820,7 +3820,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     {
                                     if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
                                     // Tenant Workspace mutations and Artifact publication own their durable Run/effect receipts.
-                                    effectFenced = !(_runtimeOwner is not null && (TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name == ToolCatalog.ArtifactsCreate))
+                                    effectFenced = !(_runtimeOwner is not null && (TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace))
                                         && (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
                                     effectHash = actionHash;
                                     var skipDispatch = false;
