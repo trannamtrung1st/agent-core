@@ -23,6 +23,9 @@ public static class ToolPolicy
         if (admission?.TenantId is not null && TenantWorkspaceReadContract.IsRead(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantWorkspaceReadContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
+        if (admission?.TenantId is not null && toolName == ToolCatalog.AttachmentsRead)
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && TenantAttachmentReadContract.Allows(definition) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && toolName == ToolCatalog.ArtifactsVerify)
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantArtifactVerificationContract.Allows(definition) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -202,6 +205,10 @@ public static class ToolPolicy
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && workspaceExecution.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation
                 && workspaceExecution.SessionId == context.OwnedSessionId && TenantWorkspaceReadContract.Allows(definition, descriptor.Name);
+        if (context?.ExecutionContext is { } attachment && descriptor.Name == ToolCatalog.AttachmentsRead)
+            return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
+                && attachment.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation
+                && attachment.SessionId == context.OwnedSessionId && TenantAttachmentReadContract.Allows(definition) && ToolCatalog.SessionHasAttachments(context);
         if (context?.ExecutionContext is { } verification && descriptor.Name == ToolCatalog.ArtifactsVerify)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && verification.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation

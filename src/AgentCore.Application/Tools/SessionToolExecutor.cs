@@ -205,6 +205,12 @@ public sealed partial class SessionToolExecutor(
         ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (tenantAuthorization is not null && call.Name == ToolCatalog.AttachmentsRead
+            && await tenantAuthorization.ExecuteAttachmentAsync(sessionId, call, admission, cancellationToken, remainingOutputBytes).ConfigureAwait(false) is { } tenantAttachment)
+        {
+            var fitted = FitResult(remainingOutputBytes, tenantAttachment.Text);
+            return fitted.Text == tenantAttachment.Text ? tenantAttachment : fitted;
+        }
         if (tenantAuthorization is not null && await tenantAuthorization.ExecuteAsync(sessionId, call, admission, cancellationToken, remainingOutputBytes).ConfigureAwait(false) is { } tenantResult)
         {
             var result = FitResult(remainingOutputBytes, tenantResult);

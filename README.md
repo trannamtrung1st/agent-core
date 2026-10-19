@@ -1,6 +1,6 @@
 # Agent Core MVP
 
-Tenant Attachment storage/cleanup, internal atomic binding and scoped conversational input processing now reuse the existing owners with current independent Agent IAM/policy and checkpoint source fences. [Input-context qualification](docs/reports/tenant-attachment-context-verification-2026-10-19.md) separates these internal paths from still-pending public file messages, model reread/Review, composer and Attachment publication. The full proposal stays active.
+Tenant Attachment input and model reads under Allowed policy now use actual owned sources, current independent Agent IAM/policy and canonical Runtime/checkpoint fences. [Model read qualification](docs/reports/tenant-attachment-read-verification-2026-10-19.md) builds on [input-context qualification](docs/reports/tenant-attachment-context-verification-2026-10-19.md). Public file messages, exact read Review, composer and Attachment publication remain unfinished; the full proposal stays active.
 
 Tenant exact resource export now reuses scoped source reads and the existing atomic Artifact publication/consent owners. [Qualification](docs/reports/tenant-resource-artifact-verification-2026-10-19.md) records the focused evidence. Other virtual resource/Attachment/Browser adapters, autonomous/transport families and final authority/schema cutover remain open; the full proposal stays active.
 

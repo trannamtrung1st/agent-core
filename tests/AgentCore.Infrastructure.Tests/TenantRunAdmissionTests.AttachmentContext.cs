@@ -17,9 +17,9 @@ public sealed partial class TenantRunAdmissionTests
     private static TenantAttachmentRuntimeContextService ContextService(Fixture f, ITenantAttachmentStore? files = null, IAttachmentProcessor? processor = null) =>
         new(AttachmentOperations(f), (ITenantSessionStore)f.Iam, files ?? (ITenantAttachmentStore)f.Attachments, f.RunConfiguration(), f.Authorizer,
             processor ?? new AttachmentProcessor(f.Attachments, new OfficeProcessor()), f.Clock);
-    private static async Task<(Environment Setup, AgentRun Run, SessionSnapshot Snapshot, Guid Id, RoleAssignment Grant)> ContextCase(Fixture f, string[]? permissions = null)
+    private static async Task<(Environment Setup, AgentRun Run, SessionSnapshot Snapshot, Guid Id, RoleAssignment Grant)> ContextCase(Fixture f, string[]? permissions = null, bool denyReadCapability = false)
     {
-        var s = await Setup(f); var id = await Upload(f, s);
+        var s = await Setup(f, denyReadCapability ? "general-assistant" : "examiner", denyReadCapability ? 32 : 1); var id = await Upload(f, s);
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Agent input reads", permissions ?? ["sessions.read", "attachments.read"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         var grant = await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.PrincipalId, role.RoleId, AccessScope.ForTenant(s.Tenant), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         var receipt = await f.RunService().SubmitMessageAsync(s.Tenant, s.Session, s.Owner, f.Ids.NewId(), "Read the file", [id], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);

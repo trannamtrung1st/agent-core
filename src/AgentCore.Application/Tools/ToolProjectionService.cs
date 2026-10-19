@@ -28,6 +28,7 @@ public static class ToolProjectionService
     private static ModelToolDefinition ForContext(ModelToolDefinition tool, AgentContext? context) => context?.ExecutionContext is null ? tool
         : TenantWorkspaceMutationContract.IsMutation(tool.Name) ? TenantWorkspaceMutationContract.ForModel(tool)
         : TenantWorkspaceReadContract.IsRead(tool.Name) ? TenantWorkspaceReadContract.ForModel(tool)
+        : tool.Name == ToolCatalog.AttachmentsRead ? TenantAttachmentReadContract.ForModel(tool)
         : tool.Name == ToolCatalog.ArtifactsVerify ? TenantArtifactVerificationContract.ForModel()
         : tool.Name == ToolCatalog.ArtifactsCreateFromWorkspace ? TenantWorkspaceArtifactContract.ForModel()
         : tool.Name == ToolCatalog.ArtifactsCreate ? TenantArtifactToolContract.ForModel()

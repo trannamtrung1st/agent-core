@@ -129,12 +129,12 @@ public sealed partial class TenantRunAdmissionTests
     private sealed class Diagnostics : IDiagnosticIdSource { public Guid NewId() => Guid.NewGuid(); }
 
     private sealed record Environment(Guid Tenant, TenantSessionInitiator Owner, TenantAgent Agent, Guid Session);
-    private static async Task<Environment> Setup(Fixture f)
+    private static async Task<Environment> Setup(Fixture f, string template = "examiner", int version = 1)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var actor = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
-        var agent = await f.Agents.CreateAsync(actor.PrincipalId, owner.TenantId, "examiner", 1, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
+        var agent = await f.Agents.CreateAsync(actor.PrincipalId, owner.TenantId, template, version, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         var session = await f.Sessions.CreateAsync(owner.TenantId, agent.Instance.InstanceId, actor, SessionMode.Text, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision, 1);
         return new(owner.TenantId, actor, agent, session.Owner.SessionId);
     }

@@ -1532,4 +1532,10 @@ Pending uploads expire after one hour; bytes are bounded to 25 MiB each and 250 
 
 Public message HTTP/Hub contracts remain text-only in this checkpoint; the internal `SubmitMessageAsync` binding path is exercised independently. Canonical worker context can now process eligible bound input under current Agent IAM/policy, with typed source provenance kept inside Application and the existing private checkpoint. No new public DTO, vendor request field, permission token or Attachment workspace alias is added.
 
-Human metadata/download/Office preview authority remains independent. Automatic input extraction does not offer or authorize `attachments.read`; model reread and durable exact Review require their own conversion before public attachment messages/composer are enabled. Supported input processing does not establish complete Office/PDF coverage or recipient download permission. [Focused qualification](reports/tenant-attachment-context-verification-2026-10-19.md).
+Human metadata/download/Office preview authority remains independent. Automatic input extraction does not offer or authorize `attachments.read`; explicit rereads are qualified below, while durable exact Review remains required before public attachment messages/composer are enabled. Supported input processing does not establish complete Office/PDF coverage or recipient download permission. [Focused qualification](reports/tenant-attachment-context-verification-2026-10-19.md).
+
+## Tenant Attachment model read scope
+
+The model tool `attachments.read` accepts the existing closed Attachment ID/Office-window arguments and now resolves actual bound same-Session sources through scoped authorization. Text/PDF/Office observations and inert notices are bounded JSON; sanitized image parts remain provider-neutral request-local content. Internal source provenance is private checkpoint evidence, not a new public DTO, bearer permission, source path or download grant. Human original-byte downloads keep their separate authority.
+
+Only Allowed policy is converted for this explicit reread. `attachment_read_review_required` returns no bytes and does not create an approval automatically. Public HTTP/Hub file message ingress, exact read Review and composer remain separate integrations. [Qualification](reports/tenant-attachment-read-verification-2026-10-19.md).

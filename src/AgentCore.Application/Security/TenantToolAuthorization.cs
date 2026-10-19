@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
     TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
     TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserReadService? browserReads = null,
-    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null)
+    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? tenantAttachments = null, IOfficeProcessor? office = null)
 {
     // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
     public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
@@ -34,7 +34,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
-            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
+            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -48,8 +48,31 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         return boundary.Tenant || IsTenantTool(call.Name) || admission?.TenantId is not null
             ? boundary.Allowed ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny : null;
     }
+    public async ValueTask<ToolExecutionResult?> ExecuteAttachmentAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct, int remainingBytes = ToolLimits.MaxOutputBytes)
+    {
+        if (call.Name != ToolCatalog.AttachmentsRead) return null;
+        var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
+        if (!boundary.Tenant && admission?.TenantId is null) return null;
+        if (!boundary.Allowed || tenantAttachments is null || admission?.AgentRunGeneration is not { } generation)
+        {
+            if (boundary.Reference is { } reference)
+                await authorizer.RecordFailureAsync(reference, "attachments.read", boundary.Reason == "allowed" ? "tenant_effect_unavailable" : boundary.Reason,
+                    AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ToolBoundary, ct, session).ConfigureAwait(false);
+            return new(Error("forbidden", boundary.Reason == "allowed" ? "tenant_effect_unavailable" : boundary.Reason));
+        }
+        try
+        {
+            var run = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+            return await tenantAttachments.InspectReadAsync(new(run.Owner, session, run.AgentRunId, generation), call.ArgumentsJson,
+                admission.SupportsVision, remainingBytes, office, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is JsonException or ArgumentException) { return new(Error("invalid", "invalid_arguments")); }
+        catch (AccessDeniedException e) { return new(Error("forbidden", e.ReasonCode)); }
+        catch (SecurityConflictException e) { return new(Error("conflict", e.ReasonCode)); }
+    }
     public async ValueTask<string?> ExecuteAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct, int remainingBytes = ToolLimits.MaxOutputBytes)
     {
+        if (call.Name == ToolCatalog.AttachmentsRead) return (await ExecuteAttachmentAsync(session, call, admission, ct, remainingBytes).ConfigureAwait(false))?.Text;
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
         if (!boundary.Tenant && !IsTenantTool(call.Name) && admission?.TenantId is null) return null;
         if (!boundary.Allowed)

@@ -2745,6 +2745,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
         var messages = restored ? restoredMessages!.ToList() : new List<ModelMessage>();
         if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
+        if (restored && _runtimeOwner is not null && _boundAgentRun is { } attachmentRun)
+            messages = await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment binding is required."))
+                .RehydrateReadImagesAsync(attachmentRun, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
         var executionState = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint);
         var attachmentSources = AgentCore.Application.Security.TenantAttachmentContextRules.Merge(executionState.TenantAttachmentSources, request.TenantAttachmentSources);
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)

@@ -5,7 +5,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantAttachmentRuntimeContextService(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
+public sealed partial class TenantAttachmentRuntimeContextService(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
     ITenantAttachmentStore files, TenantRunConfigurationResolver configurations, IamAuthorizer iam, IAttachmentProcessor processor, TimeProvider time)
 {
     private sealed record View(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent);
@@ -43,7 +43,7 @@ public sealed class TenantAttachmentRuntimeContextService(TenantOperationAuthori
     private static TenantRuntimeFrame Frame(AgentRun run) => new(run.Owner, run.SessionId, run.AgentRunId,
         run.Claim?.Generation ?? throw new AccessDeniedException("tenant_runtime_unavailable"));
 
-    public async ValueTask<TenantAttachmentContext> PrepareAsync(AgentRun run, SessionSnapshot snapshot, bool vision, CancellationToken ct = default)
+    public async ValueTask<TenantAttachmentContext> PrepareAsync(AgentRun run, SessionSnapshot snapshot, bool vision, CancellationToken ct = default, bool processCurrentContents = true)
     {
         var frame = Frame(run); var view = await Load(frame, ct).ConfigureAwait(false);
         if (snapshot.SessionId != frame.SessionId || snapshot.AgentInstanceId != frame.Owner.AgentInstanceId || snapshot.ProfileId is not null)
@@ -61,7 +61,7 @@ public sealed class TenantAttachmentRuntimeContextService(TenantOperationAuthori
             var source = await files.FindTenantAsync(frame.Owner.TenantId!.Value, frame.SessionId, candidate.Ref.AttachmentId, ct).ConfigureAwait(false);
             if (source is null || source.State != AttachmentState.Bound || source.EntryId != candidate.Entry.EntryId) continue;
             string? version = null;
-            if (current.Contains(candidate.Entry.EntryId))
+            if (processCurrentContents && current.Contains(candidate.Entry.EntryId))
             {
                 if (!source.Readable || AttachmentMedia.IsImage(source.ContentType) && !vision)
                     contents.Add(new(source.AttachmentId, processor.Version, AttachmentProcessKind.Unsupported, source.DisplayName, source.ContentType,
@@ -110,5 +110,7 @@ public sealed class TenantAttachmentRuntimeContextService(TenantOperationAuthori
     {
         var sources = AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantAttachmentSources;
         await RequireSourcesAsync(run, sources, ct).ConfigureAwait(false);
+        if (run.Checkpoint is not null && AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages))
+            await RequireReadResultsAsync(run, messages!, ct).ConfigureAwait(false);
     }
 }

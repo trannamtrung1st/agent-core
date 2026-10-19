@@ -18,9 +18,13 @@ public sealed partial class SessionRuntime
         _boundAgentRun?.ResponseId == responseId ? _boundAgentRun.CapabilityLoadCount : 0;
 
     private async Task<AgentContext> CapabilityProjectionContextAsync(AgentTrigger trigger, ILanguageModel model,
-        IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill> catalog, IReadOnlyList<string> skills, IReadOnlyList<string> loaded, CancellationToken ct) =>
-        new(ExecutionDefinition, _snapshot.Entries, _snapshot.Summary, _profile, _snapshot.Mode, _snapshot.PendingTopic,
-            false, null, trigger, SessionAttachments: await BuildSessionAttachmentManifestAsync(ct),
+        IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill> catalog, IReadOnlyList<string> skills, IReadOnlyList<string> loaded, CancellationToken ct)
+    {
+        var tenantFiles = _runtimeOwner is not null && _boundAgentRun is { } run
+            ? await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment binding is required."))
+                .PrepareAsync(run, _snapshot, model.Capabilities.Vision, ct, processCurrentContents: false).ConfigureAwait(false) : null;
+        return new(ExecutionDefinition, tenantFiles?.History ?? _snapshot.Entries, _snapshot.Summary, _profile, _snapshot.Mode, _snapshot.PendingTopic,
+            false, null, trigger, SessionAttachments: tenantFiles?.Manifest ?? await BuildSessionAttachmentManifestAsync(ct),
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
             PinnedSkillCatalog: catalog, ActiveSkillKeys: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
             DetachedExecution: IsInitialBackgroundRun, OwnedSessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId,
@@ -36,6 +40,7 @@ public sealed partial class SessionRuntime
             ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
             { ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
                 Configuration = _boundAgentRun?.Admission.Configuration };
+    }
 
     private async Task<CapabilityLoadMailboxResult> RequestCapabilityLoadAsync(EventContext cause, Guid responseId,
         string json, AgentContext context, CancellationToken ct, bool dialogRecovery = false)

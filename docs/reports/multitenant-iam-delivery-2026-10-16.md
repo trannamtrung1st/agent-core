@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant Attachment model read checkpoint — 2026-10-19
+
+Scoped conversational reads under Allowed policy now preserve incumbent media/Office behavior and current source/authority checks across the canonical tool loop and retained checkpoints. [Qualification](tenant-attachment-read-verification-2026-10-19.md) supersedes model reread-pending notes only for this bounded path. Public file messages, exact read Review, composer and Attachment publication remain unfinished; other proposal families and final obsolete-authority/schema cutover stay open. The full goal remains active.
+
 ## Tenant Attachment runtime input context — 2026-10-19
 
 Canonical internal conversational file input now uses current independent executor IAM/policy, actual owned sources, incumbent guarded processing and existing Runtime/checkpoint source fences. [Qualification](tenant-attachment-context-verification-2026-10-19.md) supersedes the initial input-processing and blanket dispatch-refusal notes only. Public Attachment messages, model reread/Review, composer and Attachment publication remain unfinished; other proposal families and final obsolete-authority/schema cutover stay open. The full goal remains active.
