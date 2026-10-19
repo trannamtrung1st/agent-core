@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant workspace mutation primitive checkpoint — 2026-10-19
+
+The canonical tenant filesystem now supplies guarded UTF-8 patch, ordered structure and owned home/working tree-copy primitives with current owner/lifecycle checks and repeatable authority callbacks. [Focused evidence](reports/tenant-workspace-primitives-verification-2026-10-19.md) distinguishes actual both-store filesystem workflows from the still-pending model offering, exact mutation Review/grants and durable effect/recovery integration. This is their adapter prerequisite, not model mutation or full-proposal acceptance. The full goal remains active.
+
 ## Tenant workspace search checkpoint — 2026-10-19
 
 Tenant `workspace.search` now uses canonical owned filesystem reads and exact durable Review for filename/UTF-8 content searches. Saved query/glob/result bounds and private traversal fingerprints include negative matches; current compound authority, source checks and refusal suppression remain enforced. [Focused evidence](reports/tenant-workspace-search-verification-2026-10-19.md) records the executed qualification. This supersedes earlier search-pending notes only. Model mutations, virtual resources/Office/source publication, autonomous origins, other proposal families and final authority/schema cutover remain open; the full proposal stays active.

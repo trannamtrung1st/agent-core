@@ -193,6 +193,12 @@ public sealed partial class TenantOperationAuthorizationTests
         { if (beforeEffect is not null) await beforeEffect(); await inner.WriteTenantAsync(owner, path, bytes, token => Commit(authorizeCommit, token), ct); if (afterEffect is not null) await afterEffect(); }
         public async ValueTask DeleteTenantAsync(TenantWorkspaceReference owner, string path, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default)
         { await inner.DeleteTenantAsync(owner, path, token => Commit(authorizeCommit, token), ct); if (afterEffect is not null) await afterEffect(); }
+        public ValueTask<WorkspacePatchResult> PatchTenantAsync(TenantWorkspaceReference owner, string path, IReadOnlyList<WorkspaceTextEdit> edits, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) =>
+            inner.PatchTenantAsync(owner, path, edits, token => Commit(authorizeCommit, token), ct);
+        public ValueTask<WorkspaceStructureResult> StructureTenantAsync(TenantWorkspaceReference owner, IReadOnlyList<WorkspaceStructuralOperation> operations, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) =>
+            inner.StructureTenantAsync(owner, operations, token => Commit(authorizeCommit, token), ct);
+        public ValueTask CopyTenantAsync(TenantWorkspaceReference sourceOwner, string source, TenantWorkspaceReference destinationOwner, string destination, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) =>
+            inner.CopyTenantAsync(sourceOwner, source, destinationOwner, destination, token => Commit(authorizeCommit, token), ct);
     }
     private sealed class WorkspaceAuditUnavailable : ITenantAuthorizationAuditStore
     {

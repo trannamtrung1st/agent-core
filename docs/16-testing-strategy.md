@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant workspace mutation primitive checks
+
+Exercise actual owned home/working files with both IAM stores: human upload, independently authorized Agent patch, ordered structure, cross-root copy, retained empty directories and stopping a failed batch. Add commit-time permission/lifecycle loss, changed source while patch staging, frozen edits/operations, byte-growth/overlap rejection, no-overwrite/partial failure and foreign Tenant/Instance/working-Session rejection. Distinguish trusted internal callback qualification from pending model offering, exact durable grants and effect recovery.
+
 ## Tenant workspace read consent
 
 Include converted `workspace.search`: actual UTF-8 content/name results, relative glob, binary/large-file skipping, complete-record byte fitting, bounded traversal, negative-match source changes, same-size restored timestamps, exact query identity, post-I/O revocation and SQLite pending-consent host recreation. Search must use canonical tenant reads without initializing a missing root or widening to another owned scope.

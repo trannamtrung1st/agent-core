@@ -1,5 +1,9 @@
 # System Architecture
 
+## Tenant workspace mutation adapter ownership
+
+The existing canonical filesystem supplies typed tenant patch, structure and home/working copy primitives. Actual owner/lifecycle validation remains in its incumbent adapter; repeatable caller-authority callbacks fence each operation and final patch replacement. Batches retain the factual completed prefix and possible preparation/partial effects; no rollback, file ledger, provider or second execution owner is added. Model offering and durable mutation Review/grant/effect recovery remain pending integration with the existing approval/Run/receipt owners. [Port contract](04-backend-interfaces.md#tenant-canonical-workspace-mutation-primitives), [bounded evidence](reports/tenant-workspace-primitives-verification-2026-10-19.md).
+
 ## Tenant workspace saved-read consent
 
 Converted filename/content search uses the same current-read and saved-consent owners. Its private bounded traversal digest includes negative evidence; requested query/glob/limits define the action without a search index or persisted result body. [Search verification](reports/tenant-workspace-search-verification-2026-10-19.md) distinguishes this path from pending mutation/virtual-resource/Office/publication conversion.

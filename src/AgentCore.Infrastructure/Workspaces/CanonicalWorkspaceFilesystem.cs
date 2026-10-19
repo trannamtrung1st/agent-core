@@ -258,8 +258,20 @@ internal sealed partial class CanonicalWorkspaceFilesystem
     }
 
     internal void CopyTo(string source, CanonicalWorkspaceFilesystem destinationFilesystem, string destination, CancellationToken ct = default,
-        long maxFileBytes = long.MaxValue, long maxRootBytes = long.MaxValue)
+        long maxFileBytes = long.MaxValue, long maxRootBytes = long.MaxValue) =>
+        CopyToCoreAsync(source, destinationFilesystem, destination, null, ct, maxFileBytes, maxRootBytes).GetAwaiter().GetResult();
+
+    internal ValueTask CopyToAuthorizedAsync(string source, CanonicalWorkspaceFilesystem destinationFilesystem, string destination,
+        Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct, long maxFileBytes, long maxRootBytes) =>
+        CopyToCoreAsync(source, destinationFilesystem, destination, authorizeCommit ?? throw new ArgumentNullException(nameof(authorizeCommit)), ct, maxFileBytes, maxRootBytes);
+
+    private async ValueTask CopyToCoreAsync(string source, CanonicalWorkspaceFilesystem destinationFilesystem, string destination,
+        Func<CancellationToken, ValueTask>? authorizeCommit, CancellationToken ct, long maxFileBytes, long maxRootBytes)
     {
+        // The first check also protects destination-root/parent creation. Copy is
+        // one coarse tree operation; cancellation may retain a partial tree.
+        if (authorizeCommit is not null) await authorizeCommit(ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
         using var root = OpenRoot(); using var destinationRoot = destinationFilesystem.OpenRoot(create: true);
         var from = Relative(source); var to = destinationFilesystem.Relative(destination);
         ProtectRoot(from); ProtectRoot(to);
@@ -270,6 +282,8 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         if (LStat(destinationParent, Leaf(to)) is not null) throw AgentCoreErrors.Conflict("Workspace destination already exists.");
         var count = 0;
         var remaining = maxRootBytes - Measure(destinationRoot, ct).Bytes;
+        if (authorizeCommit is not null) await authorizeCommit(ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
         CopyEntry(root, sourceParent, Leaf(from), destinationParent, Leaf(to), ref count, ref remaining, maxFileBytes, ct);
     }
 

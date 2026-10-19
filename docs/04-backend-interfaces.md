@@ -1,5 +1,13 @@
 # Backend Interfaces
 
+## Tenant canonical workspace mutation primitives
+
+`ITenantWorkspaceMutationStore` extends the incumbent canonical filesystem adapter with bounded UTF-8 patching, ordered mkdir/copy/move/delete batches and actual owned home/working tree copy. Paths and all batch syntax are validated before mutation. A repeatable trusted callback checks current source-read/destination-write/delete authority; actual tenant/Instance/Session ownership and destination lifecycle are independently rechecked by the adapter. Cross-copy never crosses Tenant, Instance or two distinct working Sessions. No read initializes a root.
+
+Patch freezes edits, requires unique current strict-UTF-8 matches (including overlapping ambiguity), checks byte growth before materializing replacement text and compares source bytes again before protected rename. This remains ordinary concurrent filesystem behavior, not a file version or CAS. Structural authorization repeats before each ordered operation; refusal stops before that operation and reports the known completed prefix. Copy is one coarse bounded tree effect, retains no-overwrite semantics and can leave partial effects on failure/cancellation. No automatic replay, rollback, file ledger, new provider or database/filesystem transaction is introduced.
+
+These are internal typed filesystem primitives, not model offering or durable mutation authorization. The model effect/review/grant/receipt integration remains a separate required boundary.
+
 ## Tenant workspace read Review
 
 The same read boundary includes `workspace.search` over an exact absolute home/working path, literal 1–200 character query, optional bounded relative glob and 1–50 result limit. It retains filename and strict UTF-8 content matching with the existing 200-file, 4096-entry, depth-8 and 256-KiB content-scan limits. A private hash covers observed pages, scanned bytes (including nonmatches), skipped-file metadata, unavailable observations and coverage bounds. Search consent binds canonical query/glob/limit and that traversal, not future discovery. Preview includes only requested scope/query/bounds, never matching names or snippets. Direct and approved results retain current compound authority; changed saved traversal requires fresh review.

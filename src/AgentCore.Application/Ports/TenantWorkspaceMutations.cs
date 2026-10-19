@@ -14,4 +14,12 @@ public interface ITenantWorkspaceMutationStore
         Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
     ValueTask DeleteTenantAsync(TenantWorkspaceReference owner, string path,
         Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
+    // Callbacks are repeatable current-authority checks, never permission snapshots.
+    // Patch/copy callers must independently authorize source reads as well as destination writes.
+    ValueTask<WorkspacePatchResult> PatchTenantAsync(TenantWorkspaceReference owner, string path, IReadOnlyList<WorkspaceTextEdit> edits,
+        Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
+    ValueTask<WorkspaceStructureResult> StructureTenantAsync(TenantWorkspaceReference owner, IReadOnlyList<WorkspaceStructuralOperation> operations,
+        Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
+    ValueTask CopyTenantAsync(TenantWorkspaceReference sourceOwner, string source, TenantWorkspaceReference destinationOwner, string destination,
+        Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
 }
