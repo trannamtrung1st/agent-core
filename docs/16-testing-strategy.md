@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant Agent decommission qualification
+
+`TenantAgentDecommissionTests` checks both stores for original-human/ref/revision fences, binding/grant retirement, exact physical cleanup, pending-reset blocking, hidden Sandbox mount preservation, unknown cleanup after logout/store reopen, idempotent factual readback and irreversible SQLite guards/down/up/model parity. `TenantBrowserOwnershipTests.Decommission` opts into actual disposable Chromium with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`, confirming owned closure/profile absence and unaffected live sibling context. `TenantDefinitionIntegrationTests.Decommission` verifies retired markers preserve identity fencing while releasing inactive Instance references from Definition retirement. Canonical decommission HTTP tests cover cookie/CSRF/strict bodies, actual deletion facts and SQLite application-host recreation. Controlled legacy mount staging is an authority/cleanup fence test, not real Docker qualification. [Evidence](reports/tenant-agent-decommission-verification-2026-10-20.md).
+
 ## Tenant Browser profile reset UI checks
 
 `TenantBrowserProfilePanel.test.tsx` exercises captured named confirmation and witnesses, one POST, deliberate GET readback, pending/unknown/confirmed facts, network/malformed/mismatched replies, stale/revoked authority, read-only/archived/busy state, independent binding denial, focus/cancellation and unmount/late-owner retirement. Incumbent Connections component cases remain affected consumers.

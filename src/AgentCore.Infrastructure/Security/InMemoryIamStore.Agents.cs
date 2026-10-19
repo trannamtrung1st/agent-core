@@ -12,7 +12,7 @@ public sealed partial class InMemoryIamStore
         ct.ThrowIfCancellationRequested();
         lock (_gate) lock (instances.CredentialGate)
         {
-            var identity = _tenants.GetValueOrDefault(tenantId)?.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == instanceId);
+            var identity = _tenants.GetValueOrDefault(tenantId)?.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == instanceId && i.Status != IdentityStatus.Removed);
             var instance = identity is null ? null : instances.FindTenantBackingAsync(instanceId, ct).Result;
             return ValueTask.FromResult(instance is null || identity is null ? null : new TenantAgent(tenantId, identity.SystemIdentityId, identity.PrincipalId, instance));
         }
@@ -25,7 +25,7 @@ public sealed partial class InMemoryIamStore
         lock (_gate) lock (instances.CredentialGate)
         {
             var allowed = allowedInstanceIds?.ToHashSet();
-            var rows = (_tenants.GetValueOrDefault(tenantId)?.SystemIdentities ?? []).Where(i => i.Kind == SystemIdentityKind.Agent
+            var rows = (_tenants.GetValueOrDefault(tenantId)?.SystemIdentities ?? []).Where(i => i.Kind == SystemIdentityKind.Agent && i.Status != IdentityStatus.Removed
                 && i.AgentInstanceId is { } id && (allowed is null || allowed.Contains(id)))
                 .Select(i => new TenantAgent(tenantId, i.SystemIdentityId, i.PrincipalId, instances.FindTenantBackingAsync(i.AgentInstanceId!.Value, ct).Result
                     ?? throw new InvalidOperationException("An owned agent lost its backing Instance.")))
@@ -65,11 +65,11 @@ public sealed partial class InMemoryIamStore
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
             ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var current = instances.FindTenantBackingAsync(instanceId, ct).Result;
-            if (!before.SystemIdentities.Any(i => i.AgentInstanceId == instanceId) || current is null || current.Revision != expectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
+            if (!before.SystemIdentities.Any(i => i.AgentInstanceId == instanceId && i.Status != IdentityStatus.Removed) || current is null || current.Revision != expectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
             RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, initiator);
             var updated = instances.SetTenantLifecycleAsync(instanceId, expectedInstanceRevision, lifecycle, at, ct).Result;
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
-            var identity = next.SystemIdentities.Single(i => i.AgentInstanceId == instanceId);
+            var identity = next.SystemIdentities.Single(i => i.AgentInstanceId == instanceId && i.Status != IdentityStatus.Removed);
             return ValueTask.FromResult<TenantAgent?>(new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, updated));
         }
     }

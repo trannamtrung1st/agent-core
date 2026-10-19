@@ -1,5 +1,7 @@
 # Implementation Plan
 
+Canonical Agent decommission now has [backend/native/HTTP qualification](reports/tenant-agent-decommission-verification-2026-10-20.md) through original-human IAM, archived/reference/revision checks, irreversible existing owner tombstones and supervised profile/workspace cleanup. Actual Chromium closure, hidden-mount refusal, logout/reopen recovery and SQLite host recreation are covered. This supersedes backend Agent/profile-decommission-pending statements only. The frontend decommission control, autonomous Browser/background/transport adapters, general System guardrails/audit, remaining proposal families and final authority/schema cutover remain open; the full original goal stays active.
+
 Canonical System Browser privacy now uses the original live platform human, raw `system.governance.manage`, immutable deployment ceilings and the existing global policy/canonical audit transaction. Its System editor preserves saved/effective startup facts and explicit stale/lost readback without replay. [Focused qualification](reports/system-browser-privacy-verification-2026-10-20.md) supersedes Browser-privacy-administration-pending notes below only. Profile decommission/autonomous Browser adapters, remaining proposal families, general System guardrails/audit and final obsolete-authority/schema consolidation remain open; the full original goal stays active.
 
 ## Tenant Browser human reset UI checkpoint — 2026-10-20

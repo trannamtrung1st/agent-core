@@ -1,5 +1,13 @@
 # Backend Interfaces
 
+## Tenant Agent decommission
+
+Original live humans can inspect exact Agent decommission preflight and retire an archived, unreferenced Agent under independent raw `agents.read` and `agents.delete`. The owning IAM transaction repeats human/session/status, current permission, security/Instance revisions and incumbent live Session, learned-memory, Automation/occurrence, Run/Approval/Activation blockers. Pending Browser reset also blocks retirement. No grant or model identity substitutes for the human.
+
+Retirement uses the existing SystemIdentity/Principal `Removed` status, archived backing Instance and canonical `agents.decommission` audit receipt. This retained owner tombstone permanently fences ID reuse and restore; live inventory/configuration/resource discovery excludes it. Exact Agent, home/Skill/resource assignments and executor assignments retire atomically with credential bindings and local child configuration. Retained history is not cascaded. Same-operation readback requires current original-human authority and exact target/actor/Instance witness; it cannot repeat logical retirement.
+
+Committed tombstones drive bounded technical cleanup in the incumbent supervised resource sweep. This cleanup can retry exact retired roots after logout/restart, unlike a user-requested profile reset with an uncertain outcome. Existing native profile close/path/lock/absence checks and the canonical no-follow workspace purge remain the sinks. Live or uncertain Sandbox mounts block workspace purge. Cleanup never launches a Browser or grants resource use; saved decommission acknowledgement and physical cleanup completion stay distinct. The existing Instance row remains as the FK-backed owner marker, without a parallel ownership/deletion table.
+
 ## System Browser privacy administration
 
 `BrowserPrivacyService` now owns only trusted host startup activation, projection and policy preparation. `IBrowserPrivacyStore` is read-only; it cannot save through a singleton owner or Admin history. Human writes use `SystemBrowserPrivacyService` and `ISystemBrowserPrivacyStore.TrySaveSystemBrowserPrivacyAsync` on the existing IAM adapter. The command contains expected policy revision, closed mode, exact origin lists and explicit exposure acknowledgement. Original Account/login/global User Principal, raw `system.governance.manage` and immutable deployment ceilings repeat in the owning policy/audit transaction. No tenant role, model, exceptional grant or owner capability substitutes.

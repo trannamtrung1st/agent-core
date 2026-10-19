@@ -46,7 +46,7 @@ public static class IamResourceScopes
         {
             "member" => state.Users.Any(u => u.UserId == id),
             "role" => state.Roles.Any(r => r.RoleId == id),
-            "agent" => state.SystemIdentities.Any(i => i.Kind == SystemIdentityKind.Agent && i.AgentInstanceId == id),
+            "agent" => state.SystemIdentities.Any(i => i.Kind == SystemIdentityKind.Agent && i.Status != IdentityStatus.Removed && i.AgentInstanceId == id),
             _ => false
         };
     }

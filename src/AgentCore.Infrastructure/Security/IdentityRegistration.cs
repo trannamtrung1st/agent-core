@@ -41,6 +41,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAccessService>();
         services.TryAddSingleton<ITenantAgentStore>(provider => (ITenantAgentStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAgentService>();
+        services.TryAddSingleton<ITenantAgentDecommissionStore>(p => (ITenantAgentDecommissionStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantAgentDecommissionService>();
+        services.TryAddSingleton<TenantAgentDecommissionCleanup>();
         services.TryAddSingleton<TenantAgentAccessService>();
         services.TryAddSingleton<TenantAgentConfigurationService>();
         services.TryAddSingleton<TenantAgentReadService>();
@@ -136,6 +139,6 @@ public static class IdentityRegistration
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
             provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>(),
-            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>());
+            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>());
     }
 }

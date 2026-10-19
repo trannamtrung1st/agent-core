@@ -7,6 +7,11 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed partial class InMemoryCredentialStore
 {
     private readonly Dictionary<Guid, Guid> _tenantBindingOwners = [];
+    internal void RetireTenantBindings(Guid tenant, Guid instance)
+    {
+        lock (instances.CredentialGate) foreach (var id in _bindings.Values.Where(b => b.AgentInstanceId == instance && _tenantBindingOwners.GetValueOrDefault(b.BindingId) == tenant).Select(b => b.BindingId).ToArray())
+        { _bindings.Remove(id); _tenantBindingOwners.Remove(id); }
+    }
     internal IReadOnlyList<TenantCredentialBinding> ReadTenantBindings(Guid tenant, Guid instance)
     {
         lock (instances.CredentialGate) return _bindings.Values.Where(b => b.AgentInstanceId == instance && _tenantBindingOwners.GetValueOrDefault(b.BindingId) == tenant)

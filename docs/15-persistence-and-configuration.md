@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Agent decommission persistence
+
+The existing SystemIdentity/Principal `Removed` statuses, archived backing Instance and canonical `agents.decommission` audit receipt jointly identify permanent retirement. The Instance revision and tenant security revision advance atomically with the receipt, executor/target/home/child assignment retirement, credential unbinding and local child configuration purge. The backing row remains an immutable identity-use tombstone, preserving existing foreign keys and preventing global ID adoption; live reads exclude it. Retained Session and execution history are not cascaded. Retired Instance markers cease to count as live Definition references, while genuine Instance/Session/execution references remain protected. Incumbent Session, learned-memory, Automation/occurrence, Run/Approval/Activation blockers stay decisive; a pending Browser profile reset also blocks.
+
+Migration `20261020090000_TenantAgentDecommission` adds trigger guards for removed identity mutation/deletion and native identity/Instance revival. It adds no table, column or second ledger. Empty downgrade/upgrade remains structural; downgrade refuses when removed tenant Agents exist. Cleanup scans the existing tombstone/receipt in bounded pages with a rotating cursor and time budget. Native close/profile deletion and workspace purge are technical idempotent retirement work, gated again by the actual immutable owner. Failures leave the marker for the next sweep/restart; a successful logical response alone does not prove bytes were removed.
+
 ## System Browser privacy state
 
 Browser privacy remains one genuinely global host resource in the existing BrowserPrivacy table. Canonical writes now commit its CAS revision and a body-free AuthorizationAudit with `TenantId=null`, the actual platform human Principal, action `system.browser.privacy.update`, target `host` and reason `policy_saved_restart_required`. The former LocalOwner/Admin-history save path is removed. There is no new policy table, dual write, data conversion or permission snapshot.

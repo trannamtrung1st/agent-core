@@ -34,7 +34,7 @@ public static class IamStateRules
         foreach (var identity in previous)
             if (!next.SystemIdentities.Any(i => i.SystemIdentityId == identity.SystemIdentityId
                 && i.TenantId == identity.TenantId && i.PrincipalId == identity.PrincipalId && i.Kind == identity.Kind
-                && i.AgentInstanceId == identity.AgentInstanceId))
+                && i.AgentInstanceId == identity.AgentInstanceId && (identity.Status != IdentityStatus.Removed || i.Status == IdentityStatus.Removed)))
                 throw new ArgumentException("Agent identity backing and ownership are immutable; retain a status tombstone.");
     }
     public static TenantSecurityState Freeze(TenantSecurityState state)

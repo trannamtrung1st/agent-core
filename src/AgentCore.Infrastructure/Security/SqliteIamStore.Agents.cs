@@ -91,12 +91,12 @@ public sealed partial class SqliteIamStore
         public required IamSystemIdentityRow Identity { get; init; }
         public required AgentInstanceRecord Instance { get; init; }
     }
-    private static IQueryable<AgentJoin> OwnedAgents(AgentCoreDbContext db, Guid tenantId)
+    private static IQueryable<AgentJoin> OwnedAgents(AgentCoreDbContext db, Guid tenantId, bool includeRemoved = false)
     {
         if (tenantId == Guid.Empty) throw new ArgumentException("A tenant is required.");
         return from identity in db.Set<IamSystemIdentityRow>().AsNoTracking()
             join instance in db.AgentInstances.AsNoTracking() on identity.AgentInstanceId equals instance.InstanceId
-            where identity.TenantId == tenantId && identity.Kind == SystemIdentityKind.Agent
+            where identity.TenantId == tenantId && identity.Kind == SystemIdentityKind.Agent && (includeRemoved || identity.Status != IdentityStatus.Removed)
             select new AgentJoin { Identity = identity, Instance = instance };
     }
     private static TenantAgent Owned(AgentJoin row) => new(row.Identity.TenantId!.Value, row.Identity.SystemIdentityId, row.Identity.PrincipalId, SqliteAgentInstanceStore.Map(row.Instance));

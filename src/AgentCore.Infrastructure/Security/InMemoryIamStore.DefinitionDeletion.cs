@@ -42,7 +42,8 @@ public sealed partial class InMemoryIamStore
         lock (definitionReferences.AdmissionGate)
         {
             var key = id.ToString("D");
-            if (instances.CountByDefinition(key) > 0 || definitionReferences.HasDefinitionHistory(key))
+            var retired = _tenants.Values.SelectMany(t => t.SystemIdentities).Where(i => i.Status == IdentityStatus.Removed).Select(i => i.AgentInstanceId!.Value).ToHashSet();
+            if (instances.CountByDefinition(key, retired) > 0 || definitionReferences.HasDefinitionHistory(key))
                 throw new SecurityConflictException("definition_in_use");
             return change();
         }

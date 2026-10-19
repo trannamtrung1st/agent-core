@@ -21,6 +21,7 @@ public static partial class TenantAgentEndpoints
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}").RequireAuthorization();
         MapConfiguration(group);
+        MapDecommission(group);
         group.MapGet("/agents/{instanceId:guid}/access", (Guid instanceId, int? audiencePage, int? executionPage, int? principalPage,
             string? q, string? authorityScope, HttpContext http, TenantAgentAccessService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

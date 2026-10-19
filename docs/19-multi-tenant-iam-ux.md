@@ -1,5 +1,9 @@
 # Accounts, organizations, access and approvals UX
 
+## Agent decommission status
+
+The backend now exposes exact retained decommission preflight and irreversible archived-owner retirement with separate physical-cleanup facts. The frontend control is still pending. Its eventual confirmation must use the coherent current Agent/organization and witnesses, explain Browser/profile/home/local-child cleanup plus retained history/reference blockers, and keep committed retirement separate from pending physical cleanup. Readback must not replay a new logical deletion. [Backend qualification](reports/tenant-agent-decommission-verification-2026-10-20.md), [HTTP contract](14-api-and-realtime-protocol.md#tenant-agent-decommission-http).
+
 ## Platform Browser privacy
 
 The canonical `/system/browser-privacy` page is a System area named Platform, outside every organization. Account navigation exposes it only with `system.governance.manage`; server reads/writes independently reauthorize. A tenant Owner is not a platform governor. Unknown System routes fail closed rather than entering Chat. The former `/admin/platform/browser-privacy` page has no alias. The same existing privacy editor, AdminShell, panel, responsive details/form and native confirmation remain the presentation owners.

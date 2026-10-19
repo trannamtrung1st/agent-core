@@ -1,5 +1,9 @@
 # Observability and Operations
 
+## Tenant Agent decommission recovery
+
+Canonical backend decommission requires an archived, unreferenced Agent and a current original human with `agents.read` and `agents.delete`. Inspect the exact [HTTP preflight](14-api-and-realtime-protocol.md#tenant-agent-decommission-http); do not convert retained-history blockers into cascaded deletion. A committed result reports physical cleanup separately. The existing supervised resource sweep retries only exact retired owner roots; logout/restart does not revoke that technical mandate. Live or uncertain Sandbox mounts keep workspace bytes, and uncertain Browser closure keeps profile cleanup pending. Inspect current retained facts rather than replaying logical deletion with a new operation. Never delete a user profile/workspace manually to make a check pass. This qualification used disposable roots only and did not restart any user host.
+
 ## Tenant Browser persistent-profile reset operations
 
 Open the actual Agent’s Connections page and use its independently authorized **Browser state** section for current profile facts and explicit named reset. Every request outcome requires deliberate **Reload Browser state** before another reset; a lost reply is never repeated automatically. The [UI qualification](reports/tenant-browser-profile-reset-ui-verification-2026-10-20.md) records local evidence.

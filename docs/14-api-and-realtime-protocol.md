@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Agent decommission HTTP
+
+Authenticated `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/decommission` requires the current original human and raw `agents.read` on that exact owned Agent. It returns coherent Agent name/lifecycle, Instance/security revisions, decommissioned flag, current deletion hint/blocker and recorded operation ID. An exact retired owner is available only through this deliberate retained-fact projection; ordinary inventory/configuration routes exclude it.
+
+`DELETE /api/v2/tenants/{tenantId}/agents/{instanceId}` accepts strictly `{expectedRevision,expectedInstanceRevision,operationId}`. Cookie/CSRF/no-store rules apply. Current original-human `agents.read` and `agents.delete`, an archived Agent, exact revisions and no incumbent references are required. The same checks repeat in the owning transaction. Success returns the operation ID, `status=decommissioned` and separate `cleanupStatus=completed|pending`. Completed means native profile absence and workspace purge were confirmed for this attempt; pending means committed retirement remains authoritative and technical cleanup will retry. Caller cancellation/logout after commit does not revoke that mandate. Same-operation readback cannot repeat logical retirement; a different actor/target/Instance witness or a new operation on an already retired target conflicts. The obsolete security witness is not reapplied to factual same-operation readback; current authority is still required.
+
+Missing authentication is401; missing current human/resource authority403; stale revisions, active lifecycle, retained references or pending profile reset409; malformed/unknown body fields400. Direct endpoints never resolve tenant ownership or actors from body fields or old owner headers. This backend checkpoint adds no frontend decommission control. [Lifecycle contract](04-backend-interfaces.md#tenant-agent-decommission).
+
 ## System Browser privacy HTTP
 
 Authenticated GET and PUT `/api/v2/system/browser/privacy` require the actual original live platform human and raw `system.governance.manage`. A tenant Owner, tenant agent or old owner header grants no access. The server derives the global User Principal from the cookie Account/session; no actor or tenant fields are accepted. PUT strictly accepts `{expectedRevision,mode,unmaskedOrigins,trustedGraphicsOrigins,acknowledgeExposure}`; mode is exactly Protected, Unmasked or Disabled. Unknown fields reject. All state-changing cookie/CSRF/no-store rules apply. The retired `/api/v2/admin/browser/privacy` has no alias; there is no tenant privacy override endpoint.

@@ -321,7 +321,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<AdminDeletionReferenceCounts> CountInstanceAsync(
+    internal static async Task<AdminDeletionReferenceCounts> CountInstanceAsync(
         AgentCoreDbContext db,
         string instanceId,
         CancellationToken cancellationToken)
@@ -370,7 +370,8 @@ public sealed class SqliteAdminLifecycleDeletion(
             await runs.CountAsync(cancellationToken).ConfigureAwait(false),
             await runs.CountAsync(item => item.Status == (int)AgentRunStatus.WaitingForApproval, cancellationToken).ConfigureAwait(false),
             await db.Activations.CountAsync(item => sessionIds.Contains(item.SessionId), cancellationToken).ConfigureAwait(false),
-            await db.AgentInstances.CountAsync(item => item.DefinitionId == definitionId, cancellationToken)
+            await db.AgentInstances.CountAsync(item => item.DefinitionId == definitionId
+                && !db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().Any(i => i.AgentInstanceId == item.InstanceId && i.TenantId != null && i.Status == AgentCore.Domain.Security.IdentityStatus.Removed), cancellationToken)
                 .ConfigureAwait(false));
     }
 

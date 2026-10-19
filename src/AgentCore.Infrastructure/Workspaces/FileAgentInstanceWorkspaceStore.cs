@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Workspaces;
 /// <summary>A thin owner-validated filesystem adapter; there are no file rows or blobs.</summary>
 public sealed partial class FileAgentInstanceWorkspaceStore(string workspaceRoot, IAgentInstanceStore instances, ISandboxStore sandboxes,
     long maxFileBytes = AgentWorkspaceLimits.MaxFileBytes,
-    long maxInstanceBytes = AgentWorkspaceLimits.MaxInstanceBytes, ITenantAgentStore? tenantAgents = null, ITenantSessionStore? tenantSessions = null) : IAgentInstanceWorkspaceStore
+    long maxInstanceBytes = AgentWorkspaceLimits.MaxInstanceBytes, ITenantAgentStore? tenantAgents = null, ITenantSessionStore? tenantSessions = null) : IAgentInstanceWorkspaceStore, ITenantAgentWorkspaceCleanup
 {
     private readonly string _root = AgentWorkspacePhysicalPaths.ValidateRoot(workspaceRoot);
 
@@ -92,6 +92,15 @@ public sealed partial class FileAgentInstanceWorkspaceStore(string workspaceRoot
         if ((await sandboxes.ListLeasesAsync(cancellationToken)).Any(lease => lease.AgentInstanceId == instanceId && lease.State != SandboxLeaseState.Terminated))
             throw AgentCoreErrors.Conflict("Live or uncertain sandbox mounts block Instance filesystem cleanup.");
         CanonicalWorkspaceFilesystem.PurgeOwner(AgentWorkspacePhysicalPaths.AgentRoot(_root, instanceId), cancellationToken);
+    }
+    public async ValueTask PurgeDecommissionedAgentAsync(TenantBrowserAgentOwner owner, Func<CancellationToken, ValueTask<bool>> stillDecommissioned, CancellationToken ct = default)
+    {
+        owner.Validate();
+        if (!await stillDecommissioned(ct)) throw AgentCoreErrors.Conflict("Agent retirement is not committed.");
+        if ((await sandboxes.ListLeasesAsync(ct)).Any(l => l.AgentInstanceId == owner.AgentInstanceId && l.State != SandboxLeaseState.Terminated))
+            throw AgentCoreErrors.Conflict("Live or uncertain sandbox mounts block Instance filesystem cleanup.");
+        if (!await stillDecommissioned(ct)) throw AgentCoreErrors.Conflict("Agent retirement changed.");
+        CanonicalWorkspaceFilesystem.PurgeOwner(AgentWorkspacePhysicalPaths.AgentRoot(_root, owner.AgentInstanceId), ct);
     }
     public ValueTask DeleteInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
         DeleteInstanceContentAsync(instanceId, cancellationToken);

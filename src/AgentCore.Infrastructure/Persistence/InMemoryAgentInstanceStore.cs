@@ -37,12 +37,12 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 
     internal InMemoryAdminEventStore? EventStore { get; set; }
 
-    internal int CountByDefinition(string definitionId)
+    internal int CountByDefinition(string definitionId, IReadOnlySet<Guid>? retired = null)
     {
         lock (_gate)
         {
             return _instances.Values.Count(item =>
-                string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal));
+                string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal) && retired?.Contains(item.InstanceId) != true);
         }
     }
 
