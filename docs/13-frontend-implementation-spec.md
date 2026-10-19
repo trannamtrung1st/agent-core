@@ -1,5 +1,11 @@
 # Frontend Implementation Specification
 
+## Exact workspace mutation review
+
+Organization and original Chat reuse `TenantApprovalDetail` for `mutate_workspace`. Its existing responsive Drawer, section gaps, confirmation, revision recovery and footer own layout and decisions. A focused saved-mutation preview shows the native action, complete exact path/source/destination, explicit recursive intent and ordered batch steps. Write replacement text and patch find/replacement literals use labeled read-only native text areas, retaining complete content with bounded scrolling. These are supplied proposals, not current private file contents. Render escaped text only, with no Markdown, HTML execution or implicit file reads. Malformed/unavailable saved parameters disable approval and retain cancellation/refresh recovery.
+
+Review retains Agent authority; one-time authorization covers only the primary mutation permission. Parent/source reads and secondary mutations remain independent. Confirmation names the exact once-only action, no role/read/download/later-operation grant and current-source checks. Copy/batch failure may leave earlier or partial effects, without rollback/replay. Approved is a decision; completed means the saved mutation finished, denied means no mutation was applied, and uncertain means effects may remain. Changed-source recovery requires cancelling the stale request and asking for a fresh exact action. Both surfaces share operation/result labels and the same preview; no new kit, token, CSS or shell is introduced.
+
 ## Workspace read consent inspector
 
 Search reuses these same saved-read rows: the exact requested path, literal query, relative glob, match count and scan bounds. Matching filenames and content snippets are excluded from protected preview. No new component or layout is required.

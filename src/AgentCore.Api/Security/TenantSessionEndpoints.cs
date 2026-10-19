@@ -23,6 +23,7 @@ public static class TenantSessionEndpoints
             return Results.Json(new { items = result.Items.Select(item => new { item.RequestId, item.RunId, item.ResponseId,
                 operation = item.Operation switch { AgentCore.Domain.Security.TenantOperationKind.Persona => "update_persona",
                     AgentCore.Domain.Security.TenantOperationKind.WorkspaceRead => "inspect_workspace",
+                    AgentCore.Domain.Security.TenantOperationKind.WorkspaceMutation => "mutate_workspace",
                     AgentCore.Domain.Security.TenantOperationKind.ArtifactVerification => "verify_artifact",
                     AgentCore.Domain.Security.TenantOperationKind.ArtifactPublication => "publish_artifact",
                     AgentCore.Domain.Security.TenantOperationKind.CredentialRead => "inspect_credential_metadata",

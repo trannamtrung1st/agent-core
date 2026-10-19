@@ -75,7 +75,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                 var result = await workspaceMutations.ExecuteAsync(new(current.Owner, session, current.AgentRunId, generation), call, ct).ConfigureAwait(false);
                 return JsonSerializer.Serialize(new { decision = JsonNamingPolicy.CamelCase.ConvertName(result.Decision.ToString()), reasonCode = result.ReasonCode,
                     outcome = result.IsUncertain ? "indeterminate" : result.Receipt is null ? "notDispatched" : JsonNamingPolicy.CamelCase.ConvertName(result.Receipt.Outcome.ToString()),
-                    applied = result.Receipt?.Outcome == AgentCore.Domain.Security.TenantOperationOutcome.Completed, operationId = result.OperationId, replayAllowed = false });
+                    applied = result.IsUncertain ? (bool?)null : result.Receipt?.Outcome == AgentCore.Domain.Security.TenantOperationOutcome.Completed, operationId = result.OperationId, replayAllowed = false });
             }
             if (TenantWorkspaceReadContract.IsRead(call.Name))
             {
@@ -139,10 +139,11 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (!boundary.Tenant || !boundary.Allowed || call.Name != ToolCatalog.RequestAuthorization || boundary.Reference is null || approvals is null || configuration is null)
             throw new AccessDeniedException("tenant_context_required");
         var intent = TenantApprovalToolContract.Parse(call);
-        if (intent.WorkspaceMutation is not null) throw new AccessDeniedException("tenant_effect_unavailable"); // Saved continuation support precedes model offering.
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
+        if (intent.WorkspaceMutation is { } mutation)
+            return await approvals.PrepareWorkspaceMutationAsync(boundary.Reference, new(call.Id, mutation.Tool, mutation.ArgumentsJson), run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.WorkspaceRead is { } readWorkspace)
             return await approvals.PrepareWorkspaceReadAsync(boundary.Reference, new(call.Id, readWorkspace.Tool, readWorkspace.ArgumentsJson), run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactId is { } artifactId)

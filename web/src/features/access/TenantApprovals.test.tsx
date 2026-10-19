@@ -28,6 +28,56 @@ function view(item = request) {
 beforeEach(() => { fetchMock.mockReset(); resetIdentityCsrf(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+const mutationRequest = (tool: string, args: unknown): TenantApproval => ({ ...request, summary: 'Change exact workspace paths', preparedAction: { ...request.preparedAction, operation: 'mutate_workspace' },
+  review: { ...request.review, changes: [
+    { field: 'workspaceMutationTool', before: null, after: tool, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'workspaceMutationArguments', before: null, after: JSON.stringify(args), beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+  ] } });
+it.each(['review', 'exceptionalGrant'] as const)('reviews exact workspace literal and %s confirmation without exposing current bytes or granting read access', async kind => {
+  const content = '<script>literal only</script>\nExact UTF-8: thử nghiệm';
+  view({ ...mutationRequest('workspace.write', { path: '/working/very-long-exact-review-path.txt', content }), kind });
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByText('/working/very-long-exact-review-path.txt')).toBeVisible();
+  expect(within(saved).getByRole('textbox', { name: 'Exact replacement text' })).toHaveValue(content);
+  expect(within(saved).getByRole('textbox', { name: 'Exact replacement text' })).toHaveAttribute('readonly');
+  expect(within(saved).queryByText('Before')).not.toBeInTheDocument(); expect(saved.querySelector('script')).toBeNull();
+  fireEvent.click(within(dialog).getByRole('button', { name: kind === 'review' ? 'Approve' : 'Authorize once' }));
+  const confirm = (await screen.findAllByText(kind === 'review' ? 'Approve?' : 'Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/No role, file read, recipient download or later mutation authority/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it('keeps ordered batch paths and recursive intent visible and disables incomplete saved mutation decisions', async () => {
+  const rendered = view(mutationRequest('workspace.batch', { operations: [{ op: 'mkdir', path: '/home/new' }, { op: 'delete', path: '/home/old', recursive: true }] }));
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getAllByRole('listitem')).toHaveLength(2); expect(within(saved).getByText('Yes — recursive deletion')).toBeVisible();
+  expect(within(saved).getByText('Partial effects can remain')).toBeVisible(); rendered.unmount();
+  view(mutationRequest('workspace.copy', { source: '/home/a', destination: '/working/b', unexpected: true }));
+  const invalid = await screen.findByRole('dialog'); expect(await within(invalid).findByText('Saved workspace changes unavailable')).toBeVisible();
+  expect(within(invalid).getByRole('button', { name: 'Authorize once' })).toBeDisabled(); expect(within(invalid).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+it.each(['completed', 'denied', 'indeterminate'])('labels a workspace %s result separately from approval', async outcome => {
+  view({ ...mutationRequest('workspace.mkdir', { path: '/working/new' }), status: 'approved', operationResult: { outcome, reasonCode: outcome === 'completed' ? 'workspace_mutation_completed' : outcome === 'denied' ? 'workspace_mutation_not_applied' : 'workspace_mutation_uncertain', recordedAt: request.createdAt } });
+  const result = await screen.findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText(outcome === 'completed' ? 'Workspace changes completed' : outcome === 'denied' ? 'Workspace changes not applied' : 'Workspace outcome uncertain')).toBeVisible();
+});
+it('shows proposed patch literals and empty replacement explicitly without inventing a current-file Before value', async () => {
+  view(mutationRequest('workspace.patch', { path: '/home/reviewed.txt', edits: [{ oldText: 'Exact supplied match', newText: '' }, { oldText: '<script>match only</script>', newText: 'literal replacement' }] }));
+  const saved = await screen.findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByRole('textbox', { name: 'Find exact text, edit 1' })).toHaveValue('Exact supplied match');
+  expect(within(saved).getByRole('textbox', { name: 'Replacement text, edit 1' })).toHaveValue(''); expect(within(saved).getByText('Empty text')).toBeVisible();
+  expect(within(saved).getByRole('textbox', { name: 'Find exact text, edit 2' })).toHaveValue('<script>match only</script>');
+  expect(within(saved).getAllByRole('textbox')).toHaveLength(4); expect(within(saved).queryByText('Before')).not.toBeInTheDocument();
+});
+it('keeps a full-size saved literal intact and shows exact cross-root copy paths', async () => {
+  const content = 'a'.repeat(32768); const rendered = view(mutationRequest('workspace.write', { path: '/working/large.txt', content }));
+  const text = await screen.findByRole('textbox', { name: 'Exact replacement text' }); expect(text).toHaveValue(content); rendered.unmount();
+  view(mutationRequest('workspace.copy', { source: '/home/exact-source.bin', destination: '/working/exact-copy.bin' }));
+  const saved = await screen.findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByText('/home/exact-source.bin')).toBeVisible(); expect(within(saved).getByText('/working/exact-copy.bin')).toBeVisible();
+  expect(within(saved).queryByRole('textbox')).not.toBeInTheDocument(); expect(within(saved).getByText('Partial effects can remain')).toBeVisible();
+});
+
 const artifactVerificationRequest: TenantApproval = { ...request, kind: 'review', summary: 'Verify file metadata',
   preparedAction: { ...request.preparedAction, operation: 'verify_artifact' }, review: { ...request.review, changes: [
     { field: 'artifactDisplayName', before: null, after: 'private-report.md', beforeAvailable: false, afterAvailable: true, restoresDefault: false },

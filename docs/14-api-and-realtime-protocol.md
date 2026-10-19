@@ -1,5 +1,17 @@
 # HTTP API and Realtime Protocol
 
+## Exact tenant workspace mutation consent
+
+Human-attributed conversational execution offers only admitted mutation capabilities under `approvals.request_authorization`. `mutate_workspace` accepts one closed `{ mutation: { tool, arguments } }` proposal; supported tools are write, patch, mkdir, copy, move, delete and ordered batch, each using its incumbent closed argument schema. The bounded envelope is checked before the ordinary 16 KiB authorization bound so a complete 32 KiB UTF-8 literal write can be reviewed without truncation; mutation arguments remain at most 64 KiB and the envelope adds at most 256 bytes. Caller tenant/principal/permission/grant/witness fields are forbidden. Core derives actual ownership, compound permission targets and private source observations.
+
+```json
+{"operation":"mutate_workspace","mutation":{"tool":"workspace.write","arguments":{"path":"/working/reviewed.txt","content":"Exact reviewed literal text"}}}
+```
+
+Organization detail and original-conversation status use operation `mutate_workspace`. Protected detail exposes proposed tool/arguments and bounded effect/disclosure copy through existing review changes, never current private file bytes or observation hashes. Existing exact decision/cancel witnesses, independent visibility, no-store and CSRF rules apply. Approving records consent; off-mailbox execution independently checks current authority and sources. A repeated refused operation stays suppressed in the same execution root.
+
+The body-free successor checkpoint separates decision, completed/denied/indeterminate outcome, `applied:true/false/null`, possible partial effects and `replayAllowed:false`. Direct mutation output likewise uses `applied:null` for uncertainty. Exact receipts grant no read/download/later-operation authority. No new transport or file-effect ledger is introduced.
+
 ## Tenant direct workspace mutation results
 
 In a claimed conversational tenant Run, admitted/current mutation capabilities accept closed exact absolute `/home` or `/working` child paths. Core derives source read, destination write, delete and parent scopes. Only an individual copy may cross those two owned roots. Each mutation must be the sole pending model call. Current policy requiring Review or missing authority produces no dispatch; these direct calls supply no approval authority.

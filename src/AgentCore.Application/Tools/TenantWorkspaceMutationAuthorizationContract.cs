@@ -1,4 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Tools;
@@ -9,9 +13,25 @@ public sealed record TenantWorkspaceMutationIntent(string Tool, string Arguments
         && TenantWorkspaceMutationContract.Parse(value.SessionId, Tool, ArgumentsJson).CanonicalArguments == value.ArgumentsJson;
 }
 
-// Closed saved-intent validation for trusted continuation. Model offering is wired separately.
+// Closed exact proposal; identity, permission and witnesses are derived by Core.
 public static class TenantWorkspaceMutationAuthorizationContract
 {
+    public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => context?.ExecutionContext is { OriginalInitiatorPrincipalId: not null,
+        Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation }
+        ? new[] { ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch }
+            .Where(t => TenantWorkspaceMutationContract.Allows(definition, t)).ToArray() : [];
+    public static JsonNode Schema(IReadOnlyList<string> tools)
+    {
+        var branches = new JsonArray();
+        foreach (var tool in tools)
+            branches.Add(new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = new JsonObject {
+                ["tool"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(tool) },
+                ["arguments"] = JsonNode.Parse(TenantWorkspaceMutationContract.ForModel(ToolRegistry.Get(tool).ModelDefinition).ParametersJson) },
+                ["required"] = new JsonArray("tool", "arguments") });
+        return new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = new JsonObject {
+            ["operation"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("mutate_workspace") },
+            ["mutation"] = new JsonObject { ["oneOf"] = branches } }, ["required"] = new JsonArray("operation", "mutation") };
+    }
     public static TenantWorkspaceMutationIntent Parse(JsonElement root)
     {
         TenantApprovalToolContract.Require(root, ["operation", "mutation"]);

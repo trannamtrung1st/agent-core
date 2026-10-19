@@ -1,5 +1,11 @@
 # Accounts, organizations, access and approvals UX
 
+## Exact workspace mutation Review
+
+The existing Organization inbox and original-Chat approval link open the same exact saved workspace change. Show full paths, proposed literal replacement/edit text and every ordered operation before a decision. No current private file body, directory listing or observation hash is disclosed. Read-only literal controls preserve all content, keyboard access and narrow-screen wrapping. Current server qualification plus complete saved-parameter presentation governs the decision controls; cancellation remains available when current source changes.
+
+Review and exceptional one-time authorization remain distinct. An exception covers only the primary write/delete permission for this operation; it confers no prerequisite read, secondary mutation, role, recipient download or later authority. Confirmation names that boundary and partial-copy/batch consequences. Keep decision acknowledgement separate from the eventual completed/denied/uncertain result, and never offer replay of uncertain effects. Refresh after races; cancel stale consent and prepare a fresh exact action through a new request rather than silently changing saved parameters. [Presentation owner](13-frontend-implementation-spec.md#exact-workspace-mutation-review).
+
 ## Exact workspace read Review
 
 Search reuses these same saved-read rows: the exact requested path, literal query, relative glob, match count and scan bounds. Matching filenames and content snippets are excluded from protected preview. No new component or layout is required.

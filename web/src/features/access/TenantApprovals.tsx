@@ -6,6 +6,7 @@ import { navigateToAppPath } from '../../app/appRoute';
 import { identityRequest, IdentityError, tenantApi, type TenantContext } from '../../services/identity';
 import { adminCollectionPagination } from '../admin/AdminCollectionToolbar';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
+import { WorkspaceMutationPreview, savedWorkspaceMutation } from './WorkspaceMutationPreview';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { tenantApprovalPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
@@ -36,7 +37,11 @@ const fields: Record<string, string> = { path: 'Exact path', name: 'Name', role:
   artifactStoredByteSize: 'Stored bytes', artifactChecksum: 'File checksum (SHA-256)', artifactDisplayName: 'File name', artifactContentType: 'File type', artifactByteSize: 'UTF-8 bytes' };
 const reasons: Record<string, string> = {
   workspace_read_authorized: 'Consent was recorded for one exact saved workspace observation. It grants no file changes, recipient download access or later-read authority.',
-  workspace_source_changed: 'The saved file or directory changed. Request a fresh exact read.',
+  workspace_source_changed: 'The saved workspace source or target changed. Cancel this request and ask for a fresh exact action.',
+  workspace_mutation_completed: 'The exact saved workspace changes completed. File read and recipient download access remain separate.',
+  workspace_mutation_uncertain: 'Earlier or partial changes may remain. This operation will not run again. Inspect current state under separate file read authority before requesting another action.',
+  workspace_mutation_not_applied: 'The saved workspace mutation was not applied.',
+  home_read_only: 'Home is read-only under the current State & Isolation policy.',
   home_access_disabled: 'Home access is disabled by the current State & Isolation policy.',
   artifact_metadata_read_authorized: 'The exact metadata inspection was authorized. File contents and download access require separate authority.',
   artifact_source_changed: 'The saved file or current access changed. Refresh details before continuing.',
@@ -87,6 +92,7 @@ const reasons: Record<string, string> = {
 const isSandboxControl = (item?: TenantApproval) => item?.preparedAction.operation === 'stop_sandbox_process' || item?.preparedAction.operation === 'reset_sandbox_environment';
 const isReadOperation = (operation?: string) => operation === 'inspect_workspace' || operation === 'verify_artifact' || operation === 'inspect_credential_metadata' || operation === 'inspect_sandbox_profiles' || operation === 'inspect_sandbox_status' || operation === 'inspect_sandbox_process' || operation === 'sandbox_read';
 export function approvalResultLabel(operation: string | undefined, outcome: string) {
+  if (operation === 'mutate_workspace') return outcome === 'completed' ? 'Workspace changes completed' : outcome === 'denied' ? 'Workspace changes not applied' : 'Workspace outcome uncertain';
   if (operation === 'verify_artifact' && (outcome === 'completed' || outcome === 'denied')) return outcome === 'completed' ? 'Metadata inspection authorized' : 'Metadata not authorized';
   if (operation === 'publish_artifact' && (outcome === 'completed' || outcome === 'denied')) return outcome === 'completed' ? 'File published' : 'File not published';
   if (outcome === 'completed') return operation === 'browser_command' ? 'Command completed' : isReadOperation(operation) ? 'Read authorized' : operation === 'check_credential_connection' ? 'Check completed'
@@ -160,14 +166,17 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     return () => window.clearTimeout(timer);
   }, [data]);
   const busy = command.busy || confirming;
+  const workspaceMutation = data?.preparedAction.operation === 'mutate_workspace';
+  const mutationField = (name: string) => { const field = data?.review.changes.find(change => change.field === name); return field?.afterAvailable ? field.after : undefined; };
+  const mutation = workspaceMutation ? savedWorkspaceMutation(mutationField('workspaceMutationTool'), mutationField('workspaceMutationArguments')) : null;
   const blocked = !fresh || loading || !!acknowledged || expired || busy || command.requiresReload;
   const decide = (decision: 'approve' | 'reject' | 'cancel') => {
-    if (!data || blocked || (decision === 'cancel' ? !data.review.canCancel : !data.review.canDecide)) return;
+    if (!data || blocked || (workspaceMutation && !mutation && decision !== 'cancel') || (decision === 'cancel' ? !data.review.canCancel : !data.review.canDecide)) return;
     const saved = data; const label = decision === 'approve' ? saved.kind === 'exceptionalGrant' ? 'Authorize once' : 'Approve' : decision === 'reject' ? 'Reject' : 'Cancel request';
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setConfirming(true);
     confirmation.current = confirmAction(modal, { title: `${label}?`, okText: label, cancelText: 'Keep reviewing', danger: decision !== 'approve',
-      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.preparedAction.operation === 'inspect_workspace' ? 'Approve one exact saved workspace observation for this continuation. This grants no file changes, recipient download access or later-read authority.' : saved.preparedAction.operation === 'verify_artifact' ? 'Approve one exact metadata inspection of this saved file. This grants no file creation, contents, download access or later-read authority.' : saved.preparedAction.operation === 'publish_artifact' ? `${saved.kind === 'exceptionalGrant' ? 'Authorize' : 'Approve'} publication of only this exact saved file once, before expiry. No role or file read access is granted. Execution checks current access again.` : saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
+      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.preparedAction.operation === 'mutate_workspace' ? 'Authorize only these exact saved workspace changes once. Current source and access are checked again. No role, file read, recipient download or later mutation authority is granted. Earlier or partial copy/batch effects may remain; uncertain work will not be repeated.' : saved.preparedAction.operation === 'inspect_workspace' ? 'Approve one exact saved workspace observation for this continuation. This grants no file changes, recipient download access or later-read authority.' : saved.preparedAction.operation === 'verify_artifact' ? 'Approve one exact metadata inspection of this saved file. This grants no file creation, contents, download access or later-read authority.' : saved.preparedAction.operation === 'publish_artifact' ? `${saved.kind === 'exceptionalGrant' ? 'Authorize' : 'Approve'} publication of only this exact saved file once, before expiry. No role or file read access is granted. Execution checks current access again.` : saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
       afterClose: () => { if (active.current) setConfirming(false); },
       onOk: () => command.run(async signal => {
         if (!active.current) throw new Error('Review closed.');
@@ -186,12 +195,12 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const artifactChecksum = data?.review.changes.find(change => change.field === 'artifactChecksum');
   const artifactPublication = data?.preparedAction.operation === 'publish_artifact';
   const fileContent = data?.review.changes.find(change => change.field === 'artifactContent');
-  const savedTitle = artifactPublication ? 'Exact saved file' : savedRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
+  const savedTitle = artifactPublication ? 'Exact saved file' : workspaceMutation ? 'Exact saved workspace changes' : savedRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
   return <Drawer open title="Approval details" aria-label="Approval details" className="access-editor-drawer" size="large" styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden
     onClose={() => { if (!busy) onClose(); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
     footer={<Flex wrap gap="var(--ac-space-compact)" justify="end">
       <Button ref={refreshButton} onClick={reload} disabled={busy} loading={loading} icon={<ReloadOutlined aria-hidden />}>Refresh details</Button>
-      {status === 'pending' && <><Button danger disabled={blocked || !data?.review.canCancel} onClick={() => decide('cancel')}>Cancel request</Button><Button danger disabled={blocked || !data?.review.canDecide} onClick={() => decide('reject')}>Reject</Button><Button type="primary" disabled={blocked || !data?.review.canDecide} onClick={() => decide('approve')}>{data?.kind === 'exceptionalGrant' ? 'Authorize once' : 'Approve'}</Button></>}
+      {status === 'pending' && <><Button danger disabled={blocked || !data?.review.canCancel} onClick={() => decide('cancel')}>Cancel request</Button><Button danger disabled={blocked || (workspaceMutation && !mutation) || !data?.review.canDecide} onClick={() => decide('reject')}>Reject</Button><Button type="primary" disabled={blocked || (workspaceMutation && !mutation) || !data?.review.canDecide} onClick={() => decide('approve')}>{data?.kind === 'exceptionalGrant' ? 'Authorize once' : 'Approve'}</Button></>}
     </Flex>}>
     <Flex vertical gap="var(--ac-space-section)">
       {acknowledged && <Alert type="success" showIcon title={`${statuses[acknowledged]} decision recorded.`} description="The operation result is separate and may still be pending. Refresh details to check it." />}
@@ -199,7 +208,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
       {error !== undefined && <AccessError error={error} retry={reload} />}
       {!data ? loading ? <AccessLoading /> : null : <>
         <Flex vertical align="start" gap="var(--ac-space-compact)"><Typography.Text strong>{data.summary}</Typography.Text><Typography.Text>{data.review.agentName}</Typography.Text><Flex wrap gap="var(--ac-space-tight)"><StatusTag status={status!} /><Tag color={data.kind === 'exceptionalGrant' ? 'warning' : undefined}>{kindLabel(data.kind)}</Tag></Flex></Flex>
-        <Alert type={data.kind === 'exceptionalGrant' ? 'warning' : 'info'} showIcon title={kindLabel(data.kind)} description={data.kind === 'exceptionalGrant' ? 'This request was prepared because the agent lacked permission. Authorizing once permits only the action shown, before it expires. It does not assign a role.' : 'This request was prepared for review with agent permission. Your decision reviews this action only.'} />
+        <Alert type={data.kind === 'exceptionalGrant' ? 'warning' : 'info'} showIcon title={kindLabel(data.kind)} description={workspaceMutation && data.kind === 'exceptionalGrant' ? 'The agent lacks the primary mutation permission. Authorize only these changes once; independent source reads and secondary changes still require current permission. No role is assigned.' : data.kind === 'exceptionalGrant' ? 'This request was prepared because the agent lacked permission. Authorizing once permits only the action shown, before it expires. It does not assign a role.' : 'This request was prepared for review with agent permission. Your decision reviews this action only.'} />
         <Descriptions {...layout} column={1} size="small" items={[
           { key: 'organization', label: 'Organization', children: organization },
           { key: 'requester', label: 'Requested by', children: data.review.requesterName ?? 'No original person' },
@@ -208,7 +217,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: approvalDate(data.decision.decidedAt) }] : [])
         ]} />
         <section aria-label={savedTitle}><Typography.Title level={5}>{savedTitle}</Typography.Title>
-          {artifactPublication ? <Flex vertical gap="var(--ac-space-default)">
+          {workspaceMutation ? <WorkspaceMutationPreview proposal={mutation} /> : artifactPublication ? <Flex vertical gap="var(--ac-space-default)">
             <Descriptions {...layout} column={1} size="small" items={data.review.changes.filter(change => change.field !== 'artifactContent').map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} />
             <Flex vertical gap="var(--ac-space-compact)"><label htmlFor={contentId}>Exact file content</label>
               {fileContent?.afterAvailable && typeof fileContent.after === 'string' ? <Input.TextArea id={contentId} readOnly value={fileContent.after} autoSize={{ minRows: 6, maxRows: 12 }} /> : <Typography.Text>Content was not recorded for this request.</Typography.Text>}

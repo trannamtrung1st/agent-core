@@ -8,6 +8,21 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantWorkspaceMutationAuthorizationContractTests
 {
     [Fact]
+    public async Task Mutation_only_capability_offers_only_its_closed_intent_for_human_tenant_execution()
+    {
+        var definition = await CapabilityProjectionTests.Definition();
+        definition = definition with { SelfManagement = AgentCore.Domain.Definitions.HarnessManagementPolicy.Disabled,
+            Environment = definition.Environment! with { Capabilities = null, ToolAllowlist = [ToolCatalog.WorkspaceWrite] } };
+        var session = Guid.NewGuid(); var activation = Guid.NewGuid();
+        var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
+            ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage) };
+        var tool = Assert.Single(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.Contains("mutate_workspace", tool.ParametersJson); Assert.Contains("workspace.write", tool.ParametersJson); Assert.DoesNotContain("workspace.delete", tool.ParametersJson);
+        Assert.DoesNotContain("inspect_workspace", tool.ParametersJson); Assert.DoesNotContain("update_persona", tool.ParametersJson);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = new(context.ExecutionContext.TenantId, context.ExecutionContext.AgentPrincipalId, null, session, context.ExecutionContext.RunId, activation, activation, null, null, AgentCore.Domain.Conversation.ExecutionOrigin.ScheduledOccurrence) }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+    }
+    [Fact]
     public void Exact_mutation_envelope_accepts_full_32_KiB_literal_without_the_normal_16_KiB_truncation()
     {
         var content = new string('a', 32768); var session = Guid.NewGuid();
