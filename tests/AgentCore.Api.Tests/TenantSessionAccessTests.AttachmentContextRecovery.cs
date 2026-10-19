@@ -68,7 +68,12 @@ public sealed partial class TenantSessionAccessTests
     private static async Task<AgentRun> AttachmentTerminal(ITenantRunStore runs, Guid tenant, Guid id)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-        while (true) { var run = (await runs.FindTenantRunAsync(tenant, id, timeout.Token))!; if (run.IsTerminal) return run; await Task.Delay(50, timeout.Token); }
+        try { while (true) { var run = (await runs.FindTenantRunAsync(tenant, id, timeout.Token))!; if (run.IsTerminal) return run; await Task.Delay(50, timeout.Token); } }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            var run = await runs.FindTenantRunAsync(tenant, id);
+            throw new Xunit.Sdk.XunitException($"Run did not become terminal: status={run?.Status}; revision={run?.Revision}; attempt={run?.AttemptCount}; claim={run?.Claim}; checkpoint={run?.Checkpoint is not null}; effect={run?.SideEffect.Disposition}; failure={run?.Failure?.Code}");
+        }
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_attachment_context_revocation_after_first_model_request_prevents_tool_execution_and_followup(bool sqlite)

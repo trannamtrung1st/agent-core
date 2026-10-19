@@ -17,9 +17,11 @@ public static class TenantOfficeReadContract
         string? Text(string key, int max) => !root.TryGetProperty(key, out var value) ? null : value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text && text.Length <= max
             ? text : throw new ArgumentException("Use bounded exact Office inspection parameters.");
         var path = Text("path", 512) ?? throw new ArgumentException("path is required.");
+        var attachment = TenantAttachmentVirtualReadContract.IsPath(path);
+        if (attachment) _ = Security.TenantAttachmentArtifactRules.Id(path);
         if (TenantWorkspaceReadContract.IsResourcePath(path)) Security.TenantResourceSourceTarget.ValidatePath(path);
-        if ((!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal) && !TenantWorkspaceReadContract.IsResourcePath(path))
-            || !path.EndsWith(document ? ".docx" : ".xlsx", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Use an exact owned home/working Office file path.");
+        if (!attachment && ((!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal) && !TenantWorkspaceReadContract.IsResourcePath(path))
+            || !path.EndsWith(document ? ".docx" : ".xlsx", StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("Use an exact owned Office file path.");
         int Number(string key, int fallback, int min, int max) => !root.TryGetProperty(key, out var value) ? fallback
             : value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var count) && count >= min && count <= max ? count : throw new ArgumentException("Use bounded Office pagination.");
         if (document) return new(path, Limit: Number("limit", 20, 1, 100), Offset: Number("offset", 0, 0, int.MaxValue));
@@ -31,6 +33,6 @@ public static class TenantOfficeReadContract
         ? JsonSerializer.Serialize(new { path = args.Path, offset = args.Offset, limit = args.Limit })
         : JsonSerializer.Serialize(new { path = args.Path, sheet = args.Sheet, range = args.Range, cursor = args.Cursor }, Json);
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with {
-        Description = tool.Description + " Use one exact absolute owned /home or /working file path, or an admitted read-only /agent/resources/... or /agent/instance/resources/... file. Current independent Agent read permissions and policy apply, with no file changes, publication or recipient download authority. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent binds this saved source and pagination only. Do not repeat a refused request."
+        Description = tool.Description + " Use one exact absolute owned /home or /working file path, or an admitted read-only /agent/resources/... or /agent/instance/resources/... file. Current independent Agent read permissions and policy apply, with no file changes, publication or recipient download authority. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent binds this saved source and pagination only. Do not repeat a refused request." + TenantAttachmentVirtualReadContract.Description
     };
 }

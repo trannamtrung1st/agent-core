@@ -7,7 +7,8 @@ namespace AgentCore.Application.Tools;
 
 public sealed record TenantWorkspaceReadIntent(string Tool, string ArgumentsJson)
 {
-    public bool Matches(PreparedTenantOperation operation) => operation.WorkspaceRead is { } value && value.ToolName == Tool && value.ArgumentsJson == ArgumentsJson;
+    public bool Matches(PreparedTenantOperation operation) => operation.WorkspaceRead is { } value && value.ToolName == Tool && value.ArgumentsJson == ArgumentsJson
+        || operation.AttachmentRead is not null && TenantAttachmentVirtualReadContract.Matches(Tool, ArgumentsJson, operation);
 }
 public static class TenantWorkspaceReadAuthorizationContract
 {

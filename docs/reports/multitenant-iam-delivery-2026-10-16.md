@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Exact tenant Attachment virtual file reads — 2026-10-19
+
+Workspace UTF-8 and Office file inspection now use exact bound originals through canonical Attachment source/read/Review/successor/checkpoint owners. Normalized consent shares canonical Attachment source/window and refusal roots; direct retained observations revalidate the original reader too. [Focused qualification](tenant-attachment-virtual-read-verification-2026-10-19.md) records the measured boundaries. This supersedes virtual-file-read implementation pending notes only; intermittent pre-model/Run timeout findings remain an execution qualification gap. Namespace browsing/search and human materialization, other resource/Browser adapters, autonomous/background/event/transport families and final obsolete-authority/schema cutover remain open. The full proposal stays active; no milestone acceptance is claimed.
+
 ## Exact tenant Attachment publication checkpoint — 2026-10-19
 
 Bound Attachment originals now use the existing source-export tool and canonical Artifact/Run/receipt transaction with independent current source reads, creation policy and exact Review/creation-only grants. The shared inspector recognizes converted resource/Attachment sources, requires the canonical original filename, and preserves cancellation for unavailable detail. Typed live delivery plus durable receipts, raw-byte integrity and pending-consent SQLite host recreation have focused evidence. This supersedes exact conversational Attachment-publication-pending notes only. Attachment virtual overlays/legacy human materialization, other Browser/resource adapters, autonomous/background/events/transports and final obsolete-authority/schema removal remain open. The full goal stays active; no full Attachment, milestone or proposal acceptance is claimed. [Focused qualification](tenant-attachment-artifact-verification-2026-10-19.md).

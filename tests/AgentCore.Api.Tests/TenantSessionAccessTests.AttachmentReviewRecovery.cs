@@ -19,17 +19,21 @@ public sealed partial class TenantSessionAccessTests
     [InlineData("text", "capability")] [InlineData("png", "capability")]
     [InlineData("text", "pending")] [InlineData("png", "pending")]
     [InlineData("text", "provided")] [InlineData("png", "provided")]
+    [InlineData("virtual-text", "pending")] [InlineData("virtual-text", "allowed")]
+    [InlineData("virtual-text", "revoke")] [InlineData("virtual-text", "source")]
     public async Task Tenant_attachment_Review_checkpoint_rechecks_consent_bytes_and_images_after_actual_SQLite_host_recreation(string format, string boundary)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-attachment-review-restart-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        var virtualRead = format.StartsWith("virtual-", StringComparison.Ordinal);
+        var readTool = virtualRead ? ToolCatalog.WorkspaceRead : ToolCatalog.AttachmentsRead;
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); AttachmentReadCase value; Guid runId, sourceId; TenantApprovalRequest consent;
         try
         {
             var provided = boundary == "provided";
-            var initial = new AttachmentReadModel { ReviewRead = true, HoldAfterRead = true, ReadSubmittedSelector = provided };
+            var initial = new AttachmentReadModel { ReadTool = readTool, ReviewRead = true, HoldAfterRead = true, ReadSubmittedSelector = provided };
             await using (var first = new NativeTenantSqliteFactory(root, initial, s => s.Replace(ServiceDescriptor.Singleton<TimeProvider>(clock))))
             {
-                using var owner = first.CreateClient(); value = await PrepareAttachmentRead(first.Services, owner, format, recoveryBudget: true, explicitCapability: boundary == "capability"); var v = value.Execution;
+                using var owner = first.CreateClient(); value = await PrepareAttachmentRead(first.Services, owner, virtualRead ? format[8..] : format, recoveryBudget: true, explicitCapability: boundary == "capability", virtualTool: virtualRead ? readTool : null); var v = value.Execution;
                 if (!provided)
                 {
                 var bound = await first.Services.GetRequiredService<TenantRunService>().SubmitMessageAsync(v.Tenant, v.Session, v.Human, Guid.NewGuid(), "Keep this file available", [v.Id], await Revision(owner, v.Tenant), 1);
@@ -37,7 +41,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(AgentRunStatus.Completed, (await AttachmentTerminal(first.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, bound.RunId)).Status);
                 }
                 Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PutAsJsonAsync($"/api/v2/tenants/{v.Tenant}/operation-policies/attachments.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, v.Tenant), expectedPolicyRevision = 0 })).StatusCode);
-                initial.Requests.Clear(); initial.ReadEnabled = true; initial.Arguments = System.Text.Json.JsonSerializer.Serialize(new { attachmentId = v.Id });
+                initial.Requests.Clear(); initial.ReadEnabled = true; initial.Arguments = virtualRead ? System.Text.Json.JsonSerializer.Serialize(new { path = "/attachments/" + v.Id.ToString("D") }) : System.Text.Json.JsonSerializer.Serialize(new { attachmentId = v.Id });
                 var session = (await first.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(v.Tenant, v.Session))!;
                 var sent = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{v.Tenant}/sessions/{v.Session}/messages", new {
                     messageId = Guid.NewGuid(), text = provided ? "" : "Read that earlier file", attachmentIds = provided ? new[] { v.Id } : Array.Empty<Guid>(), expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = session.Snapshot.Revision }));
@@ -63,7 +67,7 @@ public sealed partial class TenantSessionAccessTests
                 }
             }
             clock.Advance(AgentRunCoordinator.ClaimDuration + TimeSpan.FromSeconds(2));
-            var model = new AttachmentReadModel { ReviewRead = true, ReadEnabled = true, ReadSubmittedSelector = provided }; var enabled = false; var e = value.Execution;
+            var model = new AttachmentReadModel { ReadTool = readTool, ReviewRead = true, ReadEnabled = true, ReadSubmittedSelector = provided }; var enabled = false; var e = value.Execution;
             await using var second = new NativeTenantSqliteFactory(root, model, s => {
                 s.Replace(ServiceDescriptor.Singleton<TimeProvider>(clock));
                 s.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new AttachmentExecutionGate(() => Volatile.Read(ref enabled), new TenantRunExecution(

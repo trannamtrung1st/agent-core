@@ -125,14 +125,17 @@ public sealed partial class TenantAttachmentRuntimeContextService
     {
         if (message.Role != ModelRole.Tool) return false;
         if (message.Name == ToolCatalog.AttachmentsRead) return true;
+        if (TenantAttachmentVirtualReadContract.IsTool(message.Name ?? "")) return Observation(message) is not null;
         if (message.Name != ToolCatalog.RequestAuthorization) return false;
         try { using var doc = JsonDocument.Parse(message.Text); return doc.RootElement.TryGetProperty("attachmentObservation", out var data) && data.ValueKind != JsonValueKind.Null; }
         catch (JsonException) { throw new AccessDeniedException("attachment_source_changed"); }
     }
     private static TenantAttachmentReadObservation? Observation(ModelMessage message)
     {
-        if (message.Role != ModelRole.Tool || message.Name != ToolCatalog.AttachmentsRead) return null;
-        return ObservationPayload(message.Text);
+        if (message.Role != ModelRole.Tool || message.Name != ToolCatalog.AttachmentsRead && !TenantAttachmentVirtualReadContract.IsTool(message.Name ?? "")) return null;
+        var observation = ObservationPayload(message.Text);
+        if (observation is not null) _ = VirtualObservation(message, observation);
+        return observation;
     }
     private static TenantAttachmentReadObservation? ObservationPayload(string json)
     {
@@ -156,6 +159,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
             if (Observation(message) is { } observation)
             {
                 var frame = Frame(run); var current = await RequireRead(frame, TenantAttachmentReadContract.Parse(observation.ArgumentsJson), ct).ConfigureAwait(false);
+                if (VirtualObservation(message, observation) is { } source) await RequireVirtual(frame, source.Tool, source.ArgumentsJson, ct).ConfigureAwait(false);
                 await ReadFence(frame, current.View, observation, ct).ConfigureAwait(false);
             }
         await RequireStoredApprovedReadsAsync(run, messages, ct).ConfigureAwait(false);

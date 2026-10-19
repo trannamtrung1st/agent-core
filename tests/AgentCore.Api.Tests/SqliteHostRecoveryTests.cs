@@ -1692,17 +1692,18 @@ internal sealed class SqliteKestrelProcess : IAsyncDisposable
     }
 }
 
-internal sealed class DiagnosticLineLoggerProvider : ILoggerProvider
+internal sealed class DiagnosticLineLoggerProvider(LogLevel minimum = LogLevel.Error) : ILoggerProvider
 {
     public List<string> Lines { get; } = [];
+    public List<Exception> Errors { get; } = [];
 
-    public ILogger CreateLogger(string categoryName) => new DiagnosticLineLogger(Lines);
+    public ILogger CreateLogger(string categoryName) => new DiagnosticLineLogger(Lines, Errors, minimum);
 
     public void Dispose()
     {
     }
 
-    private sealed class DiagnosticLineLogger(List<string> lines) : ILogger
+    private sealed class DiagnosticLineLogger(List<string> lines, List<Exception> errors, LogLevel minimum) : ILogger
     {
         public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 
@@ -1715,7 +1716,7 @@ internal sealed class DiagnosticLineLoggerProvider : ILoggerProvider
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            if (logLevel < LogLevel.Error)
+            if (logLevel < minimum)
             {
                 return;
             }
@@ -1723,6 +1724,7 @@ internal sealed class DiagnosticLineLoggerProvider : ILoggerProvider
             lock (lines)
             {
                 lines.Add(formatter(state, exception) + " " + exception?.GetType().Name);
+                if (exception is not null) errors.Add(exception);
             }
         }
     }

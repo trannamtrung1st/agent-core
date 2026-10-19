@@ -10,6 +10,7 @@ using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
 namespace AgentCore.Api.Tests;
@@ -22,6 +23,7 @@ public sealed partial class TenantSessionAccessTests
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public bool ReadEnabled { get; set; }
         public bool ReviewRead { get; set; }
+        public string ReadTool { get; init; } = ToolCatalog.AttachmentsRead;
         public bool ReadSubmittedSelector { get; init; }
         public bool HoldAfterRead { get; init; }
         public string Arguments { get; set; } = "{}";
@@ -30,7 +32,7 @@ public sealed partial class TenantSessionAccessTests
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             Requests.Enqueue(request);
-            var tool = ReviewRead ? ToolCatalog.RequestAuthorization : ToolCatalog.AttachmentsRead;
+            var tool = ReviewRead ? ToolCatalog.RequestAuthorization : ReadTool;
             if (ReadEnabled && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == tool))
             {
                 Assert.Contains(request.Tools!, t => t.Name == tool);
@@ -43,7 +45,9 @@ public sealed partial class TenantSessionAccessTests
                     var id = Guid.Parse(Assert.Single(references.Split(", ")));
                     var input = System.Text.Json.Nodes.JsonNode.Parse(arguments)!.AsObject(); input["attachmentId"] = id.ToString("D"); arguments = input.ToJsonString();
                 }
-                var args = ReviewRead ? JsonSerializer.Serialize(new { operation = "read_attachment", read = JsonSerializer.Deserialize<JsonElement>(arguments) }) : arguments;
+                var args = !ReviewRead ? arguments : ReadTool == ToolCatalog.AttachmentsRead
+                    ? JsonSerializer.Serialize(new { operation = "read_attachment", read = JsonSerializer.Deserialize<JsonElement>(arguments) })
+                    : JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool = ReadTool, arguments = JsonSerializer.Deserialize<JsonElement>(arguments) } });
                 yield return new ModelToolCallEvent(new("read-bound-source", tool, args));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
@@ -52,21 +56,22 @@ public sealed partial class TenantSessionAccessTests
         }
     }
     private sealed record AttachmentReadCase(AttachmentExecutionCase Execution, byte[] Bytes, Guid Instance);
-    private static async Task<AttachmentReadCase> PrepareAttachmentRead(IServiceProvider services, HttpClient owner, string format, bool recoveryBudget = false, bool explicitCapability = false, string? displayNameOverride = null)
+    private static async Task<AttachmentReadCase> PrepareAttachmentRead(IServiceProvider services, HttpClient owner, string format, bool recoveryBudget = false, bool explicitCapability = false, string? displayNameOverride = null, string? virtualTool = null)
     {
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
         JsonElement agent;
-        if (explicitCapability)
+        if (explicitCapability || virtualTool is not null)
         {
             var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Attachment reader", expectedRevision = await Revision(owner, tenant) }));
             var draftId = draft.GetProperty("draftId").GetGuid();
             var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
             candidate["environment"] = JsonSerializer.SerializeToNode(new {
                 harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
-                capabilities = new { mode = "Selected", resolvedCapabilities = new[] { ToolCatalog.AttachmentsRead } },
-                projection = new { alwaysCapabilities = Array.Empty<string>() } });
+                capabilities = new { mode = "Selected", resolvedCapabilities = virtualTool is null ? new[] { ToolCatalog.AttachmentsRead } : new[] { ToolCatalog.AttachmentsRead, virtualTool } },
+                projection = new { alwaysCapabilities = virtualTool is null ? Array.Empty<string>() : new[] { virtualTool } } });
             var saved = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));
+            Assert.True(saved.TryGetProperty("revision", out _), saved.GetRawText());
             await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));
             agent = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }));
         }
@@ -87,7 +92,7 @@ public sealed partial class TenantSessionAccessTests
         else if (format == "pdf") { bytes = "%PDF-1.7\n1 0 obj << /Type /Page >> endobj\nBT (Private read body) Tj ET\n%%EOF"u8.ToArray(); name = "read.pdf"; type = "application/pdf"; }
         else if (format.StartsWith("png", StringComparison.Ordinal)) { using var bitmap = new SKBitmap(2, 2); bitmap.Erase(SKColors.Red); using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100); bytes = encoded.ToArray(); name = "read.png"; type = "image/png"; }
         else if (format == "binary") { bytes = [0, 1, 2, 255, 254]; name = "read.bin"; type = "application/octet-stream"; }
-        else { bytes = "Private read body → thử nghiệm"u8.ToArray(); name = "read.txt"; type = "text/plain"; }
+        else { bytes = format == "large-text" ? System.Text.Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("Private read body → thử nghiệm\n", 300))) : "Private read body → thử nghiệm"u8.ToArray(); name = "read.txt"; type = "text/plain"; }
         name = displayNameOverride ?? name;
         using var body = new MultipartFormDataContent(); var file = new ByteArrayContent(bytes); file.Headers.ContentType = new MediaTypeHeaderValue(type); body.Add(file, "file", name);
         var id = (await Json(await owner.PostAsync(api + $"/sessions/{session}/attachments?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision=1", body))).GetProperty("attachmentId").GetGuid();
@@ -107,7 +112,9 @@ public sealed partial class TenantSessionAccessTests
         var root = Path.Combine(Path.GetTempPath(), "tenant-attachment-model-read-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var model = new AttachmentReadModel(); await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model) : new NativeTenantMemoryFactory(root, model);
+            var model = new AttachmentReadModel(); var diagnostics = new DiagnosticLineLoggerProvider();
+            void Configure(IServiceCollection services) => services.AddLogging(logs => logs.AddProvider(diagnostics));
+            await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             using var owner = factory.CreateClient(); var value = await PrepareAttachmentRead(factory.Services, owner, format); var v = value.Execution;
             var bound = await factory.Services.GetRequiredService<TenantRunService>().SubmitMessageAsync(v.Tenant, v.Session, v.Human, Guid.NewGuid(), "Keep this file available", [v.Id], await Revision(owner, v.Tenant), 1);
             Assert.Equal(AgentRunStatus.Completed, (await AttachmentTerminal(factory.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, bound.RunId)).Status);
@@ -118,7 +125,7 @@ public sealed partial class TenantSessionAccessTests
             var sent = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{v.Tenant}/sessions/{v.Session}/messages", new {
                 messageId = Guid.NewGuid(), text = "Read that earlier file", expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = session.Snapshot.Revision }));
             var run = await AttachmentTerminal(factory.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, sent.GetProperty("runId").GetGuid());
-            Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}: {run.Failure?.Summary}; requests={model.Requests.Count}; tools={string.Join(",", model.Requests.FirstOrDefault()?.Tools?.Select(t => t.Name) ?? [])}"); Assert.Equal(2, model.Requests.Count);
+            Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}: {run.Failure?.Summary}; requests={model.Requests.Count}; tools={string.Join(",", model.Requests.FirstOrDefault()?.Tools?.Select(t => t.Name) ?? [])}; diagnostics={string.Join("\n", diagnostics.Lines)}; errors={string.Join("\n", diagnostics.Errors.Select(e => e.ToString()))}"); Assert.Equal(2, model.Requests.Count);
             var first = model.Requests.First(); Assert.DoesNotContain("Private read body", string.Join("\n", first.Messages.Select(m => m.Text)));
             Assert.Contains(first.Tools!, t => t.Name == ToolCatalog.AttachmentsRead && t.Description.Contains("current Agent Session/Attachment"));
             var result = model.Requests.Last().Messages.Single(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AttachmentsRead);

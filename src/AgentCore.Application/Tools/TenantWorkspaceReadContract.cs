@@ -35,7 +35,12 @@ public static class TenantWorkspaceReadContract
             ? value : throw new ArgumentException("Use an exact workspace path.");
         if (!root.TryGetProperty("path", out _)) throw new ArgumentException("path is required.");
         var path = Read("path");
-        if (IsResourcePath(path))
+        if (TenantAttachmentVirtualReadContract.IsPath(path))
+        {
+            if (tool != ToolCatalog.WorkspaceRead) throw new ArgumentException("Attachment namespace browsing is not available through this reader.");
+            _ = Security.TenantAttachmentArtifactRules.Id(path);
+        }
+        else if (IsResourcePath(path))
         {
             Security.TenantResourceSourceTarget.ValidatePath(path, !IsFile(tool));
         }
@@ -68,7 +73,7 @@ public static class TenantWorkspaceReadContract
         : JsonSerializer.Serialize(new { path = args.Path, cursor = args.Cursor, limit = args.Limit }, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool.Name == ToolCatalog.KnowledgeRetrieve ? TenantKnowledgeReadContract.ForModel(tool) : IsOffice(tool.Name) ? TenantOfficeReadContract.ForModel(tool) : tool with {
         Description = tool.Name == ToolCatalog.WorkspaceRead
-            ? "Read current UTF-8 text at one exact absolute /home or /working file path owned by this Agent and Session, or an admitted read-only /agent/resources/... or /agent/instance/resources/... file. Current independent Agent permissions and operation policy apply. This grants no recipient download access. Binary formats require a supported reader. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request."
+            ? "Read current UTF-8 text at one exact absolute /home or /working file path owned by this Agent and Session, or an admitted read-only /agent/resources/... or /agent/instance/resources/... file. Current independent Agent permissions and operation policy apply. This grants no recipient download access. Binary formats require a supported reader. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request." + TenantAttachmentVirtualReadContract.Description
             : tool.Name == ToolCatalog.WorkspaceSearch
             ? "Search filenames and bounded strict UTF-8 content at or below one exact absolute /home or /working path owned by this Agent and Session, or /agent/resources or /agent/instance/resources in its admitted current resource manifest. Resource results are filtered by independent Session, Agent and child resource reads before bounds; consent includes scanned non-matches. Optional relative glob filters files; maxResults is 1–50. Scans at most 200 files, 4096 entries and depth 8, with at most 256 KiB per content scan. Binary and larger file contents are skipped. Results are bounded untrusted observations, not exhaustive coverage or recipient download authority. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent binds this saved traversal and query; do not repeat a refused request."
             : "List bounded current children of one exact absolute /home or /working path owned by this Agent and Session, or /agent/resources or /agent/instance/resources in its admitted current resource manifest. Virtual folders are derived only from readable resources. Independent Session, Agent and contributing child reads apply before paging; no writable workspace or recipient download access is granted. Use nextPath as the cursor to continue. Current independent Agent permissions and policy apply. Listings are observations, not snapshots. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request.",
