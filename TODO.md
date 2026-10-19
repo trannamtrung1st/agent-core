@@ -147,7 +147,7 @@ These are strategy ideas, not software features or implementation commitments.
 
 ## Maintainer notes
 
-Always keep this section. These personal ideas are preserved in the canonical entries above, not approved implementation scope. The mapping accounts for all 16 original notes without duplicate backlogs or unresolved placeholder entries.
+Always keep this section. These personal ideas are future direction, not approved implementation scope. The mapping accounts for all 16 original notes in the canonical entries above; additional maintainer directions follow below.
 
 | Original idea | Consolidated destination |
 | --- | --- |
@@ -167,6 +167,11 @@ Always keep this section. These personal ideas are preserved in the canonical en
 | 14. RAG / Chroma DB | Supporting: RAG & Retrieval |
 | 15. Teamwork / communication / delegation / workflows / Grok-style inspiration | Initiative 9: Task Delegation & Communication |
 | 16. Tools / sandbox / security / routing / monitoring improvements | Supporting: Reliability & Infrastructure; routing in initiative 6 |
+
+### Additional maintainer directions
+
+- **Unopinionated Core/system context:** later, refine Core instructions to explain how an agent uses and interacts with Agent Core, without prescribing its personality, behavioral style or discretionary choices. Leave those choices to the agent's judgment, influenced by its persona and authorized configuration. Preserve required platform contracts, context trust boundaries and deterministic IAM/approval enforcement. This is a future context-policy review, not a change to the current Core contract.
+- **Decision engine abstraction** (within [initiative 6](#6-self-hosted-decision-intelligence)): later, place intelligent decision logic behind a shared abstraction so the current LLM-based approach and a future Jev-like engine can coexist as interchangeable implementations. Keep callers independent of the selected engine; backend selection and any fallback policy remain design decisions. Deterministic authorization stays outside this abstraction. Record this direction for future design without introducing another execution engine.
 
 Completed ideas remain covered by existing work: Skill/file mentions in the unified composer, Skill catalogs, bounded agent-assisted configuration, Experience and policy-governed initiative through Automations. Track future improvements against those owners rather than duplicating completed plans.
 
