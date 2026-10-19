@@ -102,6 +102,7 @@ public sealed partial class TenantOperationAuthorizationTests
     }
     private sealed class OfficeCommitHook(ITenantWorkspaceMutationStore inner, Func<Task> afterProcessing) : ITenantWorkspaceMutationStore
     {
+        public ValueTask<bool> TryWriteNewTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) => inner.TryWriteNewTenantAsync(owner, path, bytes, authorizeCommit, ct);
         public int Processed { get; private set; }
         public ValueTask TransformOfficeTenantAsync(TenantWorkspaceReference owner, string path, bool create, Func<ReadOnlyMemory<byte>, CancellationToken, byte[]> process, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default)
         {

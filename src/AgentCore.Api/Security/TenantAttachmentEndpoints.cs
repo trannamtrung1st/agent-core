@@ -8,9 +8,16 @@ namespace AgentCore.Api.Security;
 
 public static class TenantAttachmentEndpoints
 {
+    public sealed record MaterializeRequest(long ExpectedRevision);
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments").RequireAuthorization();
+        group.MapPost("/{attachmentId:guid}/materialize", (Guid sessionId, Guid attachmentId, MaterializeRequest body, HttpContext http, TenantAttachmentMaterializationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var result = await service.MaterializeAsync(actor.TenantId, sessionId, attachmentId, Human(http, actor), body.ExpectedRevision, ct).ConfigureAwait(false);
+            return Results.Json(result, statusCode: StatusCodes.Status201Created);
+        }));
         group.MapGet("", (Guid sessionId, Guid? before, int? limit, HttpContext http, TenantAttachmentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http); var page = await service.ListAsync(actor.TenantId, sessionId, Human(http, actor), before, limit ?? 20, ct).ConfigureAwait(false);

@@ -117,6 +117,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantAttachmentStore>(p => (ITenantAttachmentStore)p.GetRequiredService<IAttachmentStore>());
         services.TryAddSingleton<ITenantAttachmentMutationStore>(p => (ITenantAttachmentMutationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAttachmentService>();
+        services.TryAddSingleton<TenantAttachmentMaterializationService>();
         services.TryAddSingleton<TenantSessionService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();

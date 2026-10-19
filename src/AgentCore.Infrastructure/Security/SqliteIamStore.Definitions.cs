@@ -32,10 +32,7 @@ public sealed partial class SqliteIamStore
         if (TenantArtifactRules.TryId(scope, out var artifact))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-            return await db.Artifacts.AsNoTracking().AnyAsync(a => a.TenantId == scope.TenantId && a.ArtifactId == artifact.ToString("D")
-            && db.Set<TenantSessionRecord>().Any(root => root.TenantId == a.TenantId && root.SessionId == a.SessionId
-                && db.Sessions.Any(saved => saved.SessionId == root.SessionId && saved.DurablyDeletedAtUtc == null))
-            && db.AgentRuns.Any(r => r.TenantId == a.TenantId && r.SessionId == a.SessionId && r.AgentRunId == a.AgentRunId), ct).ConfigureAwait(false);
+            return await SqliteArtifactStore.OwnedTenant(db, scope.TenantId!.Value).AnyAsync(a => a.ArtifactId == artifact.ToString("D"), ct).ConfigureAwait(false);
         }
         if (TenantRunRules.TryId(scope, out var run))
         {

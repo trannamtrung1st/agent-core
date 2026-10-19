@@ -189,6 +189,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         private async ValueTask Commit(Func<CancellationToken, ValueTask> authorize, CancellationToken ct)
         { if (beforeCommit is not null) await beforeCommit(); await authorize(ct); }
+        public ValueTask<bool> TryWriteNewTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) => inner.TryWriteNewTenantAsync(owner, path, bytes, authorizeCommit, ct);
         public ValueTask TransformOfficeTenantAsync(TenantWorkspaceReference owner, string path, bool create, Func<ReadOnlyMemory<byte>, CancellationToken, byte[]> process, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) => inner.TransformOfficeTenantAsync(owner, path, create, process, authorizeCommit, ct);
         public async ValueTask WriteTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default)
         { if (beforeEffect is not null) await beforeEffect(); await inner.WriteTenantAsync(owner, path, bytes, token => Commit(authorizeCommit, token), ct); if (afterEffect is not null) await afterEffect(); }

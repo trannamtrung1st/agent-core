@@ -1230,6 +1230,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("CreatedByPrincipalId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1268,7 +1271,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                             t.HasTrigger("TR_Artifacts_TenantRun_Update");
 
-                            t.HasCheckConstraint("CK_Artifacts_TenantOwner", "TenantId IS NULL OR (AgentRunId IS NOT NULL AND SourceAttachmentId IS NULL AND WorkspaceLogicalPath IS NULL AND ByteSize >= 0 AND length(Sha256Hex) = 64 AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(ArtifactId, '-', '')))");
+                            t.HasCheckConstraint("CK_Artifacts_TenantOwner", "TenantId IS NULL OR (((AgentRunId IS NOT NULL AND CreatedByPrincipalId IS NULL AND SourceAttachmentId IS NULL AND WorkspaceLogicalPath IS NULL) OR (AgentRunId IS NULL AND CreatedByPrincipalId IS NOT NULL AND SourceAttachmentId IS NOT NULL AND WorkspaceLogicalPath IS NOT NULL AND WorkspaceLogicalPath = '/working/' || DisplayName AND instr(DisplayName, '/') = 0 AND instr(DisplayName, char(92)) = 0)) AND ByteSize >= 0 AND length(Sha256Hex) = 64 AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(ArtifactId, '-', '')))");
                         });
                 });
 

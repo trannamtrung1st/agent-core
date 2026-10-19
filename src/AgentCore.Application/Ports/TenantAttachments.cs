@@ -22,6 +22,7 @@ public interface ITenantAttachmentStore
 public interface ITenantAttachmentMutationStore
 {
     ValueTask<AttachmentRecord?> TryUploadAttachmentAsync(TenantAttachmentMutation mutation, TenantAttachmentUpload upload, CancellationToken ct = default);
+    ValueTask<ArtifactRecord?> TryPublishMaterializationAsync(TenantAttachmentMutation mutation, AttachmentRecord source, ArtifactRecord artifact, ReadOnlyMemory<byte> bytes, CancellationToken ct = default);
     ValueTask<bool> TryAbortAttachmentAsync(TenantAttachmentMutation mutation, Guid attachmentId, CancellationToken ct = default);
 }
 // Technical cleanup is derived only from retained expiry/deletion; no human/model supplied path or deletion authority.

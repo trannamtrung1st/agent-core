@@ -1506,3 +1506,8 @@ Prepared native user text preserves only hidden IDs explicitly submitted in curr
 ### Attachment context authority versus conversation revision
 
 `TenantAttachmentRuntimeContextService` fences actual current Run revision/claim, tenant security revision, Instance revision, Session owner/mode/lifecycle/archive/deletion and bound original identity/integrity. It does not equate an assistant-progress save with an authority change merely because the Session snapshot revision advanced. Existing fresh independent IAM/policy/capability checks and exact source/byte checks remain required; this distinction does not retry a model request, reuse a stale permission snapshot or widen historical source discovery. The Runtime's model-preparation supervisor settles unexpected pre-provider faults through its existing mailbox failure owner.
+
+
+### Human tenant materialization port
+
+`TenantAttachmentMaterializationService` orchestrates immutable original reads and `ITenantWorkspaceMutationStore.TryWriteNewTenantAsync` through repeatable current-human/source guards. `ITenantAttachmentMutationStore.TryPublishMaterializationAsync` extends the incumbent IAM transaction owner: it validates the actual original HumanSession, current compound authority, exact source/checksum, Session/Instance/security witnesses and closed human Artifact provenance before staging bytes and atomically publishing metadata, security revision and authorization audit. It never synthesizes a Run. Nullable `ArtifactRecord.CreatedByPrincipalId` is provenance, not read authority. A Run-owned tenant Artifact must have no human/source/working provenance; a human materialization must have all three and no Run. Both stores retain equivalent ownership, quotas, cleanup and immutability.

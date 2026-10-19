@@ -441,7 +441,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<ArtifactRecordRow>(entity =>
         {
-            entity.ToTable("Artifacts", t => { t.HasTrigger("TR_Artifacts_TenantRun_Insert"); t.HasTrigger("TR_Artifacts_TenantRun_Update"); t.HasCheckConstraint("CK_Artifacts_TenantOwner", "TenantId IS NULL OR (AgentRunId IS NOT NULL AND SourceAttachmentId IS NULL AND WorkspaceLogicalPath IS NULL AND ByteSize >= 0 AND length(Sha256Hex) = 64 AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(ArtifactId, '-', '')))"); });
+            entity.ToTable("Artifacts", t => { t.HasTrigger("TR_Artifacts_TenantRun_Insert"); t.HasTrigger("TR_Artifacts_TenantRun_Update"); t.HasCheckConstraint("CK_Artifacts_TenantOwner", "TenantId IS NULL OR (((AgentRunId IS NOT NULL AND CreatedByPrincipalId IS NULL AND SourceAttachmentId IS NULL AND WorkspaceLogicalPath IS NULL) OR (AgentRunId IS NULL AND CreatedByPrincipalId IS NOT NULL AND SourceAttachmentId IS NOT NULL AND WorkspaceLogicalPath IS NOT NULL AND WorkspaceLogicalPath = '/working/' || DisplayName AND instr(DisplayName, '/') = 0 AND instr(DisplayName, char(92)) = 0)) AND ByteSize >= 0 AND length(Sha256Hex) = 64 AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(ArtifactId, '-', '')))"); });
             entity.HasKey(row => row.ArtifactId);
             entity.Property(row => row.ArtifactId).HasMaxLength(36);
             entity.Property(row => row.SessionId).HasMaxLength(36).IsRequired();

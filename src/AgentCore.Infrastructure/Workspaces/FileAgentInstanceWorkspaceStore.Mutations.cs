@@ -5,6 +5,14 @@ namespace AgentCore.Infrastructure.Workspaces;
 
 public sealed partial class FileAgentInstanceWorkspaceStore : ITenantWorkspaceMutationStore
 {
+    public async ValueTask<bool> TryWriteNewTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes,
+        Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default)
+    {
+        path = TenantWorkspaceRules.Path(owner, path, file: true);
+        var files = await TenantFiles(owner, ct, write: true).ConfigureAwait(false);
+        return await files.TryWriteNewAsync(path, bytes, maxFileBytes, RootBudget(owner), ct,
+            async token => { await TenantFiles(owner, token, write: true).ConfigureAwait(false); await authorizeCommit(token).ConfigureAwait(false); }).ConfigureAwait(false);
+    }
     public async ValueTask WriteTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes,
         Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default)
     {

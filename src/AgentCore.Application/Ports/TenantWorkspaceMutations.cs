@@ -10,6 +10,8 @@ public sealed record TenantWorkspaceHumanAuthorization(TenantWorkspaceReference 
 
 public interface ITenantWorkspaceMutationStore
 {
+    ValueTask<bool> TryWriteNewTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes,
+        Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
     ValueTask WriteTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes,
         Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
     // The byte processor is pure; ownership, quotas, source comparison and commit authority remain in this filesystem owner.

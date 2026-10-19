@@ -13,7 +13,8 @@ public sealed record ArtifactRecord(
     string? WorkspaceLogicalPath,
     DateTimeOffset CreatedAt,
     Guid? AgentRunId = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TenantId = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TenantId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? CreatedByPrincipalId = null);
 
 public sealed record ArtifactPage(IReadOnlyList<ArtifactRecord> Items, Guid? NextCursor, bool HasMore);
 

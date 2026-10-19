@@ -147,6 +147,9 @@ public sealed partial class TenantOperationAuthorizationTests
             var key = TenantArtifactRules.BlobKey(setup.Tenant, frame.SessionId, Guid.Parse(foreign));
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Artifacts (ArtifactId,TenantId,SessionId,AgentRunId,BlobKey,DisplayName,ContentType,ByteSize,Sha256Hex,CreatedAtUtc) VALUES ({foreign},{setup.Tenant},{sid},{foreign},{key},{"forged"},{"text/plain"},{record.ByteSize},{record.Sha256Hex},{0L})"));
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261018123638_TenantCredentialMetadataReview"));
+            // EF commits each successful narrowing step before a later guard refuses the broader downgrade.
+            // Restore the current schema before exercising the current adapter again.
+            await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         }
         var path = Path.Combine(f.Root, "artifacts", TenantArtifactRules.BlobKey(setup.Tenant, frame.SessionId, id));
         await File.WriteAllBytesAsync(path, Enumerable.Repeat((byte)'x', bytes.Length).ToArray());

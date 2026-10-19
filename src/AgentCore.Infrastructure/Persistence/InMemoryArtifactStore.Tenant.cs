@@ -18,7 +18,8 @@ public sealed partial class InMemoryArtifactStore : ITenantArtifactStore
     { if (OwnedSession(session)) throw new AccessDeniedException("tenant_context_required"); }
     internal bool OwnsTenantArtifact(Guid tenant, Guid artifact) => _items.TryGetValue(artifact, out var item)
         && item.TenantId == tenant && !_deleted.ContainsKey(item.SessionId) && _sessions?.OwnsTenantSession(tenant, item.SessionId) == true
-        && item.AgentRunId is { } run && _sessions.ReadTenantRun(tenant, run)?.SessionId == item.SessionId;
+        && (item.AgentRunId is { } run && _sessions.ReadTenantRun(tenant, run)?.SessionId == item.SessionId
+            || item.AgentRunId is null && item.CreatedByPrincipalId is not null && item.SourceAttachmentId is not null && item.WorkspaceLogicalPath is not null);
 
     public async ValueTask<ArtifactRecord> CreateTenantAsync(TenantRuntimeFrame frame, Guid artifactId, string displayName,
         string contentType, ReadOnlyMemory<byte> bytes, CancellationToken ct = default)
@@ -50,6 +51,14 @@ public sealed partial class InMemoryArtifactStore : ITenantArtifactStore
                 throw AgentCore.Application.Sessions.AgentCoreErrors.ArtifactQuotaExceeded();
             _blobs[next.ArtifactId] = frozen; _items[next.ArtifactId] = next; return next;
         }
+    }
+    internal ArtifactRecord PublishHumanLocal(TenantAttachmentMutation proof, AttachmentRecord source, ArtifactRecord next, byte[] frozen, CancellationToken ct)
+    {
+        TenantAttachmentMaterializationRules.Publication(proof, source, next, frozen); ct.ThrowIfCancellationRequested(); ThrowIfDeleted(next.SessionId);
+        if (_items.ContainsKey(next.ArtifactId)) throw new SecurityConflictException("artifact_publication_mismatch");
+        if (frozen.Length > _maxEach || _items.Values.Where(a => a.SessionId == next.SessionId).Sum(a => a.ByteSize) + frozen.Length > _maxSession)
+            throw AgentCore.Application.Sessions.AgentCoreErrors.ArtifactQuotaExceeded();
+        _blobs[next.ArtifactId] = frozen; _items[next.ArtifactId] = next; return next;
     }
     public ValueTask<ArtifactRecord?> FindTenantAsync(Guid tenant, Guid session, Guid artifact, CancellationToken ct = default)
     {

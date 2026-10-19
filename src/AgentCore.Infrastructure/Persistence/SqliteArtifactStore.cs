@@ -20,6 +20,7 @@ public sealed class ArtifactRecordRow
     public string Sha256Hex { get; set; } = "";
     public string? SourceAttachmentId { get; set; }
     public string? AgentRunId { get; set; }
+    public Guid? CreatedByPrincipalId { get; set; }
     public string? WorkspaceLogicalPath { get; set; }
     public long CreatedAtUtc { get; set; }
 }
@@ -298,6 +299,7 @@ public sealed partial class SqliteArtifactStore(
         new()
         {
             TenantId = record.TenantId,
+            CreatedByPrincipalId = record.CreatedByPrincipalId,
             ArtifactId = record.ArtifactId.ToString("D"),
             SessionId = record.SessionId.ToString("D"),
             BlobKey = blobKey,
@@ -322,5 +324,5 @@ public sealed partial class SqliteArtifactStore(
             string.IsNullOrEmpty(row.SourceAttachmentId) ? null : Guid.Parse(row.SourceAttachmentId),
             row.WorkspaceLogicalPath,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
-            row.AgentRunId is null ? null : Guid.Parse(row.AgentRunId), row.TenantId);
+            row.AgentRunId is null ? null : Guid.Parse(row.AgentRunId), row.TenantId, row.CreatedByPrincipalId);
 }

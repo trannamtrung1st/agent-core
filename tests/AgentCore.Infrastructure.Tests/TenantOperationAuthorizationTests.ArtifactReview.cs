@@ -136,7 +136,10 @@ public sealed partial class TenantOperationAuthorizationTests
             Assert.Equal(275, Assert.IsType<SqliteException>(error.InnerException).SqliteExtendedErrorCode);
         }
         await using (var db = await f.Contexts!.CreateDbContextAsync())
+        {
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261018140554_TenantArtifactOwnership"));
+            await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+        }
         Assert.Equal(request, await ((ITenantApprovalStore)reopened).FindApprovalAsync(setup.Tenant, request.RequestId));
         await ApprovalService(f).DecideAsync(setup.Tenant, request.RequestId, setup.Owner, true, request.Operation.ActionHash, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, 1);
         await ApprovalService(f).DispatchPendingAsync(); run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, frame.RunId))!;
