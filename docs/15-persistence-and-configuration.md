@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Workspace source publication transaction boundary
+
+The incumbent direct Artifact transaction can materialize an exact owned workspace source under current Allowed authority. The source capsule on `TenantArtifactCommit` is Application-only ephemeral evidence, never a serialized byte payload, callback checkpoint, provider DTO or second ledger. Native source validation must not call IAM/database owners while they hold their existing transaction/locks. The owning stores repeat current raw parent/workspace reads, operation policy, admitted/current capability and HomeAccess; SQLite also repeats native source validation after private byte staging and claim validation before metadata commit. Failed staging/transactions may leave unreachable private bytes under existing cleanup semantics; they grant no visibility.
+
+`PreparedArtifactPublication` has an optional private source witness for exact source preparation/root correlation; null is omitted so existing inline canonical action JSON and semantic fingerprints remain unchanged. Source observations change the exact prepared action, while semantic correlation binds source intent independently of refreshed bytes. This internal conversion adds no schema migration and does not persist source consent: its approval shape, qualified Review, model adapter and shared inspector remain pending. Existing tenant Artifact rows keep `WorkspaceLogicalPath` and `SourceAttachmentId` null, with output metadata/bytes owned by the actual Session/Run.
+
 ## Office workspace read consent shape
 
 Exact DOCX/XLSX inspection reuses `PreparedWorkspaceRead` and the existing approval, read-consent receipt and Run checkpoint owners. Its canonical argument JSON binds DOCX offset/limit or XLSX sheet/range/cursor; only the private whole-source observation hash is retained for consent, never the current source body. `TenantWorkspaceOfficeReadReview` extends the existing approval check constraint to the two supported inspection tools, preserves earlier shapes and must refuse downgrade while an Office read request remains. No new table, stored Office result, file version or read-session store is introduced. Migration and reopen qualification use disposable databases only.

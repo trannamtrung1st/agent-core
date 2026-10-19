@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public static class TenantArtifactOperationRules
 {
     public const string AuditAction = "operations.artifact.publish";
-    public static TenantArtifactArguments Validate(AgentRun run, TenantAgent target, TenantArtifactCommit commit, DateTimeOffset at)
+    public static TenantArtifactPublicationArguments Validate(AgentRun run, TenantAgent target, TenantArtifactCommit commit, DateTimeOffset at)
     {
         TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
         if (run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is null || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
@@ -18,10 +18,14 @@ public static class TenantArtifactOperationRules
             || target.TenantId != run.Owner.TenantId || target.Instance.InstanceId != run.AgentInstanceId || target.PrincipalId != run.Owner.ExecutorPrincipalId
             || target.Instance.Revision != commit.ExpectedInstanceRevision || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200)
             throw new SecurityConflictException("operation_mismatch");
-        var args = TenantArtifactToolContract.Parse(commit.ArgumentsJson);
+        var publication = new PreparedArtifactPublication(run.SessionId, commit.ArgumentsJson, commit.Source);
+        var args = TenantArtifactToolContract.ParsePublication(publication);
         if (args.ParametersHash != commit.ParametersHash || args.CanonicalArguments != commit.ArgumentsJson
             || commit.ActionHash != TenantArtifactToolContract.ActionHash(run.SessionId, args.ParametersHash)) throw new SecurityConflictException("operation_mismatch");
-        if (!TenantArtifactToolContract.Allows(run.Admission.Configuration!.Definition)) throw new AccessDeniedException("capability_unavailable");
+        if ((commit.Source is null) != (commit.SourceContent is null) || commit.SourceContent is { } source &&
+            (source.Observation.Owner != TenantArtifactSourceRules.Owner(run, args.SourcePath!) || TenantArtifactSourceRules.Witness(source.Observation) != commit.Source))
+            throw new SecurityConflictException("operation_mismatch");
+        if (!TenantArtifactToolContract.AllowsPublication(run.Admission.Configuration!.Definition, publication)) throw new AccessDeniedException("capability_unavailable");
         return args;
     }
     public static async ValueTask RequireAuthorityAsync(TenantSecurityState state, AgentRun run, IamAuthorizer iam, CancellationToken ct)

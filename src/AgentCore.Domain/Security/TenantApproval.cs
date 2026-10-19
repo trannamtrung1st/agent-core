@@ -34,7 +34,9 @@ public sealed record PreparedBrowserCommand(Guid SessionId, string ToolName, str
 
 public sealed record PreparedCredentialRead(Guid SessionId, Guid? CredentialId, string ArgumentsJson, string ReferencesJson);
 
-public sealed record PreparedArtifactPublication(Guid SessionId, string ArgumentsJson);
+public sealed record PreparedArtifactSource(bool Working, string Path, string ContentType, long ByteSize, string Sha256Hex, string ObservationHash);
+public sealed record PreparedArtifactPublication(Guid SessionId, string ArgumentsJson,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactSource? Source = null);
 public sealed record PreparedArtifactVerification(Guid SessionId, Guid ArtifactId, string DisplayName, string ContentType, long ByteSize, string Sha256Hex);
 
 public sealed record PreparedWorkspaceRead(Guid SessionId, bool Working, string ToolName, string ArgumentsJson, string ObservationHash);
@@ -75,7 +77,7 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
         TenantOperationKind.WorkspaceRead => JsonSerializer.Serialize(new { operation = WorkspaceRead!.ToolName, sessionId = WorkspaceRead.SessionId, arguments = WorkspaceRead.ArgumentsJson }),
         TenantOperationKind.ArtifactVerification => JsonSerializer.Serialize(new { operation = "artifacts.verify", verification = ArtifactVerification }),
         TenantOperationKind.ArtifactPublication => JsonSerializer.Serialize(new { operation = "artifacts.publish", permission = Permission,
-            resourceType = ResourceType, resourceId = ResourceId, artifact = ArtifactPublication }),
+            resourceType = ResourceType, resourceId = ResourceId, artifact = ArtifactPublication is { Source: not null } publication ? publication with { Source = null } : ArtifactPublication }),
         TenantOperationKind.Persona => JsonSerializer.Serialize(new { operation = "agents.persona.update", permission = Permission,
             resourceType = ResourceType, resourceId = ResourceId,
             persona = new { Persona!.Name, Persona.Role, Persona.Description, Persona.Tone } }),

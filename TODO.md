@@ -1,6 +1,6 @@
 # TODO
 
-Workspace-to-Artifact publication now has a verified [canonical source-capture prerequisite](docs/reports/tenant-workspace-artifact-source-verification-2026-10-19.md): exact owned binary/Office bytes, bounded native source revalidation and no authority or effect side channel. Model export, publication/consent wiring and its end-to-end qualification remain open. The full proposal remains active.
+Workspace-to-Artifact conversion has the verified [canonical source-capture prerequisite](docs/reports/tenant-workspace-artifact-source-verification-2026-10-19.md) and an [internal current-Allowed transaction](docs/reports/tenant-workspace-artifact-publication-store-verification-2026-10-19.md) through the incumbent Artifact/Run/receipt owner. Exact source bytes, independent compound reads, current policy/HomeAccess and native source fences remain mandatory. Model export, exact source consent/schema/shared inspector conversion and its end-to-end qualification remain open. The full proposal remains active.
 
 Current conversational Workspace mutation Review/grants, guarded execution and retained factual recovery are implemented through the existing consent/Run/grant/receipt/canonical filesystem owners. [Model/shared review qualification](docs/reports/tenant-workspace-mutation-review-verification-2026-10-19.md) and [controlled abandoned-effect host recovery](docs/reports/tenant-workspace-approved-recovery-verification-2026-10-19.md) supersede mutation-pending notes in the historical checkpoints below.
 

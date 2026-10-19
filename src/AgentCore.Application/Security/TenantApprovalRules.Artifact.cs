@@ -10,7 +10,7 @@ public static partial class TenantApprovalRules
 {
     public static PreparedTenantOperation PrepareArtifact(Guid operationId, Guid instance, PreparedArtifactPublication artifact, long instanceRevision, long personaRevision)
     {
-        var args = TenantArtifactToolContract.Parse(artifact.ArgumentsJson);
+        var args = TenantArtifactToolContract.ParsePublication(artifact);
         if (operationId == Guid.Empty || instance == Guid.Empty || artifact.SessionId == Guid.Empty || instanceRevision < 1 || personaRevision < 1
             || args.CanonicalArguments != artifact.ArgumentsJson) throw new ArgumentException("Invalid exact Artifact publication.");
         var json = JsonSerializer.Serialize(new { operation = "artifacts.publish", permission = "artifacts.create", resourceType = "session",

@@ -10,7 +10,7 @@ namespace AgentCore.Application.Tools;
 
 public sealed record TenantArtifactArguments(string DisplayName, string ContentType, string Content, string CanonicalArguments, string ParametersHash);
 
-public static class TenantArtifactToolContract
+public static partial class TenantArtifactToolContract
 {
     public const string Permission = "artifacts.create";
     public const int MaxArgumentBytes = 65_536;

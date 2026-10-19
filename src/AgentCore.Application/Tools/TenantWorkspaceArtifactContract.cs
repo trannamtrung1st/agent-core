@@ -1,0 +1,43 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Conversation;
+
+namespace AgentCore.Application.Tools;
+
+public sealed record TenantWorkspaceArtifactArguments(string Path, string DisplayName, string? ContentType, string CanonicalArguments, string ParametersHash);
+
+public static class TenantWorkspaceArtifactContract
+{
+    private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+    public static TenantWorkspaceArtifactArguments Parse(string arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments) || Encoding.UTF8.GetByteCount(arguments) > TenantArtifactToolContract.MaxArgumentBytes)
+            throw new ArgumentException("Artifact source arguments exceed the bound.");
+        using var doc = JsonDocument.Parse(arguments); var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) throw new ArgumentException("Use exact Artifact source fields.");
+        var properties = root.EnumerateObject().ToArray();
+        if (properties.Length is < 2 or > 3 || properties.Any(p => p.Name is not ("path" or "displayName" or "contentType"))
+            || properties.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() != properties.Length) throw new ArgumentException("Use exact Artifact source fields.");
+        string Read(string key) => root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()! : throw new ArgumentException("Invalid Artifact source field.");
+        var path = Read("path"); var name = Read("displayName"); var type = root.TryGetProperty("contentType", out _) ? Read("contentType") : null;
+        if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal)
+            || path.IndexOfAny(['*', '?', '[', ']']) >= 0) throw new ArgumentException("Use an exact owned workspace file path.");
+        try { TenantWorkspaceRules.Path(new(Guid.Empty, Guid.Empty, path.StartsWith("/working/", StringComparison.Ordinal) ? Guid.Empty : null), path, file: true); }
+        catch (Sessions.AgentCoreException) { throw new ArgumentException("Use an exact owned workspace file path."); }
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || type is not null && (string.IsNullOrWhiteSpace(type) || type.Length > 200
+            || type.Any(char.IsControl) || !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(type, out _))) throw new ArgumentException("Invalid Artifact source metadata.");
+        name = WorkspaceFileNames.Sanitize(name);
+        type = type?.Trim();
+        var canonical = JsonSerializer.Serialize(new { path, displayName = name, contentType = type }, Json);
+        return new(path, name, type, canonical, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ToolCatalog.ArtifactsCreateFromWorkspace + "\n" + canonical))));
+    }
+    public static bool Allows(AgentDefinition definition) => RolePermissions.AllowsTool(definition, ToolCatalog.ArtifactsCreateFromWorkspace);
+}

@@ -1,4 +1,3 @@
-using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
@@ -26,16 +25,26 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
         await ValidateTenantActorAsync(db, before, target.PrincipalId, ct).ConfigureAwait(false);
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) await ValidateTenantActorAsync(db, before, requester, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow(); var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
-        var prepared = TenantApprovalRules.PrepareArtifact(commit.OperationId, run.AgentInstanceId, new(run.SessionId, args.CanonicalArguments), target.Instance.Revision, target.Instance.PersonaRevision);
+        var publication = new PreparedArtifactPublication(run.SessionId, args.CanonicalArguments, commit.Source);
+        var prepared = TenantApprovalRules.PrepareArtifact(commit.OperationId, run.AgentInstanceId, publication, target.Instance.Revision, target.Instance.PersonaRevision);
         var correlated = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), target.PrincipalId, prepared).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated.Domain()));
-        if (!AgentCore.Application.Tools.TenantArtifactToolContract.Allows(await TenantAgentDefinitionBaseline(db, target, ct).ConfigureAwait(false))) throw new AccessDeniedException("capability_unavailable");
+        var definition = await TenantAgentDefinitionBaseline(db, target, ct).ConfigureAwait(false);
+        if (!AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
         await TenantArtifactOperationRules.RequireAuthorityAsync(before, run, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        if (args.SourcePath is { } path)
+        {
+            var session = await ReadSandboxSession(db, before.Tenant.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+            TenantArtifactSourceRules.Require(run, target, definition, session, path);
+            await TenantArtifactSourceRules.RequireAuthorityAsync(before, run, path, new IamAuthorizer(this), false, ct).ConfigureAwait(false);
+        }
         TenantArtifactOperationRules.Transaction(next, expectedSecurityRevision, run, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
-        var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = Encoding.UTF8.GetBytes(args.Content);
-        var artifact = TenantArtifactRules.Record(frame, commit.OperationId, args.DisplayName, args.ContentType, bytes, at);
+        var materialized = await TenantArtifactSourceRules.MaterializeAsync(run, publication, commit.SourceContent, ct).ConfigureAwait(false);
+        var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = materialized.Bytes;
+        var artifact = TenantArtifactRules.Record(frame, commit.OperationId, materialized.DisplayName, materialized.ContentType, bytes, at);
         var staged = await (artifactBacking ?? throw new AccessDeniedException("tenant_effect_unavailable")).StageTenantLocalAsync(db, frame, artifact, bytes, ct).ConfigureAwait(false);
+        if (commit.SourceContent is { } currentSource) await currentSource.RequireCurrentAsync(ct).ConfigureAwait(false);
         at = (clock ?? TimeProvider.System).GetUtcNow(); _ = TenantArtifactOperationRules.Validate(run, target, commit, at);
         var savedRun = run.RecordDirectLocalEffect(run.Revision, commit.Generation, commit.OperationId, commit.ActionHash, at);
         audit = TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, commit.OperationId);
