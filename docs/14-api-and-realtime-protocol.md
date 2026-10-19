@@ -1503,3 +1503,8 @@ Tenant model `workspace.list` and `workspace.search` accept `/agent/resources`, 
 ```json
 {"operation":"inspect_workspace","read":{"tool":"workspace.search","arguments":{"path":"/agent/instance/resources","query":"renewal","glob":"**/*.txt","maxResults":10}}}
 ```
+
+
+## Tenant knowledge read protocol
+
+Tenant model `knowledge.retrieve` accepts only `{ "identity": "exact admitted identity" }`. The result retains `identity`, `title`, `citation`, bounded `content` and `truncated`, adding untrusted/source witness markers for current checkpoint validation. Caller-supplied path, owner, tenant, source key or citation fields are rejected. `resource_read_review_required` uses existing `inspect_workspace` with `read.tool=knowledge.retrieve` and the same exact `read.arguments`; the shared preview remains body-free. Existing `readAuthorized`/`workspaceObservation` continuation fields apply. Approval grants no file/role/publication/download authority; later reads require current policy again. [Focused qualification](reports/tenant-knowledge-read-verification-2026-10-19.md).

@@ -20,7 +20,9 @@ public sealed partial class TenantOperationAuthorizationTests
     public Task Tenant_resource_Office_read_Review_uses_the_existing_processor_and_exact_successor(bool sqlite, string format) => ResourceReadReviewJourney(sqlite, "resources.read", format);
     [Theory] [InlineData(false)] [InlineData(true)]
     public Task Tenant_resource_inherited_read_Review_keeps_admitted_Definition_source(bool sqlite) => ResourceReadReviewJourney(sqlite, "resources.read", inherited: true);
-    private async Task ResourceReadReviewJourney(bool sqlite, string policy, string? format = null, bool inherited = false)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public Task Tenant_knowledge_read_Review_uses_exact_source_and_existing_successor(bool sqlite, bool inherited) => ResourceReadReviewJourney(sqlite, "resources.read", inherited: inherited, knowledge: true);
+    private async Task ResourceReadReviewJourney(bool sqlite, string policy, string? format = null, bool inherited = false, bool knowledge = false)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var processor = new AgentCore.Infrastructure.Office.OfficeProcessor();
         const string body = "Private bound resource: thử nghiệm";
@@ -31,7 +33,7 @@ public sealed partial class TenantOperationAuthorizationTests
             var inheritedResource = setup.Run.Admission.Configuration!.Resources.First(r => r.Key.StartsWith("definition:", StringComparison.Ordinal) && r.MediaType.StartsWith("text/", StringComparison.Ordinal) && r.ByteLength < 4000);
             v = new(setup, inheritedResource.Key, inheritedResource.VirtualPath, (await f.RunContent.ReadAsync(inheritedResource.ContentSha256))!);
         }
-        else v = format is null ? await ResourceSourceCase(f) : await ResourceSourceCase(f, data: format == "docx"
+        else v = format is null ? await ResourceSourceCase(f, kind: knowledge ? AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Knowledge : AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference) : await ResourceSourceCase(f, data: format == "docx"
             ? processor.CreateDocument(new(null, [new(null, [body], null)]), default).Bytes
             : processor.CreateWorkbook(new([new("Sheet", [[new("text", Text: body)]])]), default).Bytes,
             logicalPath: "source." + format, mediaType: format == "docx" ? OfficeLimits.DocumentMime : OfficeLimits.SpreadsheetMime);
@@ -40,8 +42,9 @@ public sealed partial class TenantOperationAuthorizationTests
         await Policies(f).SaveAsync(s.Tenant, s.Owner, policy, new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var runtime = (ITenantRuntimeStore)f.Iam; var runs = (ITenantRunStore)f.Iam; var reads = WorkspaceRuntimeReads(f, office: processor);
         var path = v.Path;
-        var tool = format == "docx" ? ToolCatalog.OfficeDocumentInspect : format == "xlsx" ? ToolCatalog.OfficeSpreadsheetInspect : ToolCatalog.WorkspaceRead;
-        var json = JsonSerializer.Serialize(new { path });
+        var tool = knowledge ? ToolCatalog.KnowledgeRetrieve : format == "docx" ? ToolCatalog.OfficeDocumentInspect : format == "xlsx" ? ToolCatalog.OfficeSpreadsheetInspect : ToolCatalog.WorkspaceRead;
+        var identity = inherited ? AgentCore.Domain.Definitions.RoleEnvironments.Of(s.Run.Admission.Configuration!.Definition).KnowledgeList.Single(k => AgentCore.Domain.Definitions.KnowledgeSourcePaths.ResolveBackingPath(k) == s.Run.Admission.Configuration.Resources.Single(r => r.Key == v.Key).LogicalPath).Identity : v.Key;
+        var json = knowledge ? JsonSerializer.Serialize(new { identity }) : JsonSerializer.Serialize(new { path });
         var call = new ModelToolCall("inspect-exact-workspace", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool, arguments = JsonSerializer.Deserialize<JsonElement>(json) } }));
         var run = (await runs.FindTenantRunAsync(s.Tenant, frame.RunId))!;
         run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, f.Clock.GetUtcNow(), frame.Generation,
@@ -66,6 +69,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.True(AgentRunToolCallCheckpoint.TryRead(result.Run.Checkpoint, out var messages)); var text = Assert.Single(messages!, m => m.Role == ModelRole.Tool).Text;
         using var doc = JsonDocument.Parse(text); Assert.True(doc.RootElement.GetProperty("readAuthorized").GetBoolean()); Assert.False(doc.RootElement.GetProperty("applied").GetBoolean());
         var data = doc.RootElement.GetProperty("workspaceObservation"); Assert.True(data.GetProperty("tenantWorkspaceRead").GetBoolean());
+        if (knowledge) { Assert.Equal(identity, data.GetProperty("identity").GetString()); Assert.Equal(request.Operation.WorkspaceRead.Knowledge!.Citation, data.GetProperty("citation").GetString()); }
         if (format is null) Assert.Equal(Encoding.UTF8.GetString(v.Bytes), data.GetProperty("content").GetString());
         else Assert.Contains("Private bound resource", data.GetRawText());
         Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, request.RequestId));
@@ -75,14 +79,14 @@ public sealed partial class TenantOperationAuthorizationTests
         await f.Access.RevokeAssignmentAsync(s.Owner.PrincipalId, s.Tenant, grant.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         await Assert.ThrowsAsync<AccessDeniedException>(() => reads.RequireStoredAsync(result.Run).AsTask());
     }
-    private static async Task<(ResourceCase Resource, TenantRuntimeFrame Frame, TenantWorkspaceRuntimeReadService Reads, TenantApprovalService Approvals, TenantApprovalRequest Request)> PendingResourceRead(Fixture f)
+    private static async Task<(ResourceCase Resource, TenantRuntimeFrame Frame, TenantWorkspaceRuntimeReadService Reads, TenantApprovalService Approvals, TenantApprovalRequest Request)> PendingResourceRead(Fixture f, bool knowledge = false)
     {
-        var v = await ResourceSourceCase(f); var s = v.Setup; var frame = await ClaimArtifactRun(f, s);
+        var v = await ResourceSourceCase(f, kind: knowledge ? AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Knowledge : AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference); var s = v.Setup; var frame = await ClaimArtifactRun(f, s);
         await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read", "resources.read"]);
         await Policies(f).SaveAsync(s.Tenant, s.Owner, "resources.read", new(OperationApprovalMode.Always, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 0);
         var reads = WorkspaceRuntimeReads(f); var approvals = ApprovalService(f, workspaceReads: reads);
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
-        var read = new ModelToolCall("resource-review", ToolCatalog.WorkspaceRead, JsonSerializer.Serialize(new { path = v.Path }));
+        var read = new ModelToolCall("resource-review", knowledge ? ToolCatalog.KnowledgeRetrieve : ToolCatalog.WorkspaceRead, knowledge ? JsonSerializer.Serialize(new { identity = v.Key }) : JsonSerializer.Serialize(new { path = v.Path }));
         var call = new ModelToolCall("resource-authorization", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new {
             operation = "inspect_workspace", read = new { tool = read.Name, arguments = JsonSerializer.Deserialize<JsonElement>(read.ArgumentsJson) } }));
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,

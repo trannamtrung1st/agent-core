@@ -1,5 +1,8 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+Successor checkpoint: tenant knowledge retrieval now uses actual admitted/current resource sources, independent child/Agent/Session reads and incumbent durable Review/successor/checkpoint owners. [Qualification](tenant-knowledge-read-verification-2026-10-19.md) supersedes `knowledge.retrieve` pending notes only. Other virtual resources/publication adapters, autonomous/transport families and final authority/schema removal remain open.
+
+
 Successor checkpoint: resource namespace browsing/search now filters current admitted children before results/bounds and uses exact all-member Review through existing consent/Run/receipt/checkpoint owners. [Qualification](tenant-resource-namespace-verification-2026-10-19.md) supersedes namespace-list/search pending notes only. Other virtual resources/publication adapters, autonomous/transport families and final authority/schema removal remain open.
 
 

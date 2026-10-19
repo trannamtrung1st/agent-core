@@ -15,11 +15,11 @@ public sealed partial class TenantOperationAuthorizationTests
     private sealed record ResourceCase(Environment Setup, string Key, string Path, byte[] Bytes);
     private static TenantResourceSourceTarget ResourceSources(Fixture f, ITenantResourceSourceContentStore? content = null, IBuiltInAgentDefinitionStore? currentBuiltIns = null) =>
         new(Operations(f), (ITenantSessionStore)f.Iam, f.RunConfiguration(currentBuiltIns), content ?? (ITenantResourceSourceContentStore)f.RunContent, f.Authorizer, f.Clock);
-    private static async Task<ResourceCase> ResourceSourceCase(Fixture f, Environment? existing = null, byte[]? data = null, string logicalPath = "source.txt", string mediaType = "text/plain")
+    private static async Task<ResourceCase> ResourceSourceCase(Fixture f, Environment? existing = null, byte[]? data = null, string logicalPath = "source.txt", string mediaType = "text/plain", AgentDefinitionResourceKind kind = AgentDefinitionResourceKind.Reference)
     {
         var s = existing ?? await Setup(f, "general-assistant", 32); byte[] bytes = data ?? Encoding.UTF8.GetBytes("Private bound resource: thử nghiệm");
         var added = await f.AgentConfiguration().UpsertResourceAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId,
-            (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1, new(null, null, logicalPath, AgentDefinitionResourceKind.Reference, mediaType, bytes), initiator: s.Owner);
+            (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1, new(null, null, logicalPath, kind, mediaType, bytes), initiator: s.Owner);
         var resource = added.Resource!;
         var agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant, s.Agent.Instance.InstanceId))!;
         var session = await f.Sessions.CreateAsync(s.Tenant, agent.Instance.InstanceId, s.Owner, SessionMode.Text,

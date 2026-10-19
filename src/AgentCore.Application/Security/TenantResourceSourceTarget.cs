@@ -33,10 +33,22 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         CaptureCore(frame, tool, path, approved, live, false, ct);
     internal ValueTask<TenantResourceSource> CaptureForSearchAsync(TenantRuntimeFrame frame, string path, bool approved, bool live, CancellationToken ct) =>
         CaptureCore(frame, ToolCatalog.WorkspaceSearch, path, approved, live, true, ct);
-    private async ValueTask<TenantResourceSource> CaptureCore(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, bool search, CancellationToken ct)
+    internal async ValueTask<TenantResourceSource> CaptureKnowledgeAsync(TenantRuntimeFrame frame, string identity, bool approved, bool live, CancellationToken ct)
+    {
+        var (run, _) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct).ConfigureAwait(false);
+        var selected = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration!.Definition, run.Admission.Configuration.Resources, identity);
+        return await CaptureCore(frame, ToolCatalog.KnowledgeRetrieve, selected.Resource.VirtualPath, approved, live, false, ct, identity).ConfigureAwait(false);
+    }
+    internal async ValueTask<Source> RequireKnowledgeMetadataAsync(TenantRuntimeFrame frame, string identity, CancellationToken ct, bool approved, bool live, bool audit)
+    {
+        var (run, _) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct).ConfigureAwait(false);
+        var selected = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration!.Definition, run.Admission.Configuration.Resources, identity);
+        return await RequireMetadataAsync(frame, ToolCatalog.KnowledgeRetrieve, selected.Resource.VirtualPath, ct, approved, live, audit, knowledgeIdentity: identity).ConfigureAwait(false);
+    }
+    private async ValueTask<TenantResourceSource> CaptureCore(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, bool search, CancellationToken ct, string? knowledgeIdentity = null)
     {
         ValidatePath(path);
-        var before = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search).ConfigureAwait(false);
+        var before = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search, knowledgeIdentity: knowledgeIdentity).ConfigureAwait(false);
         var resource = before.Observation.Resource;
         DefinitionResourcePolicies.ValidateContentSize(resource.ByteLength);
         byte[] bytes;
@@ -52,7 +64,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         { throw new AccessDeniedException("resource_content_unavailable"); }
         // Freeze before checking post-I/O authority; callers receive only a defensive copy of these verified bytes.
         var captured = new TenantResourceSource(before.Observation, bytes);
-        var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search).ConfigureAwait(false);
+        var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search, knowledgeIdentity: knowledgeIdentity).ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.Security.Tenant.Revision != after.Security.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
             || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Observation != after.Observation)
@@ -64,7 +76,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         ct.ThrowIfCancellationRequested();
         return captured;
     }
-    internal async ValueTask<Source> RequireMetadataAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct, bool approved = false, bool live = true, bool audit = false, bool search = false)
+    internal async ValueTask<Source> RequireMetadataAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct, bool approved = false, bool live = true, bool audit = false, bool search = false, string? knowledgeIdentity = null)
     {
         ValidatePath(path);
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
@@ -77,6 +89,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended) throw new AccessDeniedException("resource_unavailable");
+        if (tool == ToolCatalog.KnowledgeRetrieve && knowledgeIdentity is null) throw new AccessDeniedException("knowledge_source_unavailable");
         if (!(TenantWorkspaceReadContract.IsFile(tool) || search && tool == ToolCatalog.WorkspaceSearch) || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool))
             throw new AccessDeniedException("capability_unavailable");
         var admitted = run.Admission.Configuration.Resources.Where(r => r.VirtualPath == path).Take(2).ToArray();
@@ -97,6 +110,12 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
         if (current.Snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantWorkspaceReadContract.Allows(current.Definition, tool))
             throw new AccessDeniedException("capability_unavailable");
+        if (tool == ToolCatalog.KnowledgeRetrieve)
+        {
+            var pinned = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration.Definition, run.Admission.Configuration.Resources, knowledgeIdentity!);
+            var liveSource = TenantKnowledgeReadContract.Resolve(current.Definition, current.Resources, knowledgeIdentity!);
+            if (pinned.Resource != resource || liveSource.Resource != resource || pinned.Source != liveSource.Source) throw new SecurityConflictException("knowledge_source_changed");
+        }
         var actual = current.Resources.SingleOrDefault(r => r.Key == resource.Key);
         if (actual != resource || resource.Key.StartsWith("definition:", StringComparison.Ordinal)
             && (current.Snapshot.Agent.Instance.DefinitionId != run.DefinitionId || current.Snapshot.Agent.Instance.ActiveVersion != run.DefinitionVersion))

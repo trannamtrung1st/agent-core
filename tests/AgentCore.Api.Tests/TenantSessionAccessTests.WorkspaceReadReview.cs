@@ -44,7 +44,12 @@ public sealed partial class TenantSessionAccessTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public Task Tenant_resource_namespace_pending_consent_survives_actual_SQLite_host_recreation(bool search) => WorkspaceReadReviewFlow(true, false, !search, "approve", restart: true, search: search, resource: true);
 
-    private async Task WorkspaceReadReviewFlow(bool sqlite, bool working, bool list, string decision, bool restart = false, bool search = false, bool resource = false)
+    [Theory] [InlineData(false, "approve")] [InlineData(true, "approve")] [InlineData(false, "reject")] [InlineData(true, "reject")]
+    public Task Tenant_knowledge_model_HTTP_returns_only_exact_approved_source(bool sqlite, string decision) => WorkspaceReadReviewFlow(sqlite, false, false, decision, resource: true, knowledge: true);
+    [Fact]
+    public Task Tenant_knowledge_pending_consent_survives_actual_SQLite_host_recreation() => WorkspaceReadReviewFlow(true, false, false, "approve", restart: true, resource: true, knowledge: true);
+
+    private async Task WorkspaceReadReviewFlow(bool sqlite, bool working, bool list, string decision, bool restart = false, bool search = false, bool resource = false, bool knowledge = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-workspace-read-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var proof = !sqlite && !working && !list && !search && decision == "approve" && !resource && System.Environment.GetEnvironmentVariable("AGENTCORE_WORKSPACE_READ_UI_PROOF") == "1";
@@ -54,7 +59,7 @@ public sealed partial class TenantSessionAccessTests
         {
             var path = (resource ? "/agent/instance/resources/" : working ? "/working/" : "/home/") + (proof ? "quarterly-workspace-read-review-with-long-name-and-international-試験-thử-nghiệm-2026.txt" : "reviewed-note.txt");
             const string body = "Exact saved workspace body: thử nghiệm. No wider file scope.";
-            var model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead };
+            var model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = knowledge ? ToolCatalog.KnowledgeRetrieve : search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead };
             void Configure(IServiceCollection services) { if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5179"]; }
             await using WebApplicationFactory<Program> initial = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             WebApplicationFactory<Program> factory = initial; if (proof) factory.UseKestrel(0);
@@ -64,16 +69,17 @@ public sealed partial class TenantSessionAccessTests
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var agent = await Json(await owner.PostAsJsonAsync(api + "/agents", new { templateId = "general-assistant", version = 32, expectedRevision = await Revision(owner, tenant) }));
             var instance = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = agent.GetProperty("principalId").GetGuid();
-            var instanceRevision = 1L;
+            var instanceRevision = 1L; string? knowledgeIdentity = null;
             if (resource)
             {
                 var savedResponse = await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
-                    input = new { logicalPath = "reviewed-note.txt", kind = AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = "text/plain", content = Encoding.UTF8.GetBytes(body) } });
+                    input = new { logicalPath = "reviewed-note.txt", kind = knowledge ? AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Knowledge : AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = "text/plain", content = Encoding.UTF8.GetBytes(body) } });
                 Assert.True(savedResponse.IsSuccessStatusCode, await savedResponse.Content.ReadAsStringAsync());
                 var saved = await Json(savedResponse);
                 Assert.Equal(path, saved.GetProperty("resource").GetProperty("virtualPath").GetString());
                 path = saved.GetProperty("resource").GetProperty("virtualPath").GetString()!;
                 instanceRevision = saved.GetProperty("instanceRevision").GetInt64();
+                if (knowledge) model.KnowledgeIdentity = knowledgeIdentity = saved.GetProperty("resource").GetProperty("key").GetString();
                 if (search)
                 {
                     var named = await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision,
@@ -105,7 +111,7 @@ public sealed partial class TenantSessionAccessTests
             }
             if (restart)
             {
-                await factory.DisposeAsync(); model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead };
+                await factory.DisposeAsync(); model = new WorkspaceRecordingModel(path) { Reviewed = true, KnowledgeIdentity = knowledgeIdentity, ReviewTool = knowledge ? ToolCatalog.KnowledgeRetrieve : search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead };
                 recreated = new NativeTenantSqliteFactory(root, model); recreatedOwner = recreated.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
                 factory = recreated; owner = recreatedOwner; await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
                 runs = factory.Services.GetRequiredService<ITenantRunStore>();
@@ -148,6 +154,7 @@ public sealed partial class TenantSessionAccessTests
                 }
                 else if (list) Assert.Equal(path, Assert.Single(data.GetProperty("entries").EnumerateArray()).GetProperty("path").GetString());
                 else Assert.Equal(body, data.GetProperty("content").GetString());
+                if (knowledge) { Assert.Equal(knowledgeIdentity, data.GetProperty("identity").GetString()); Assert.Equal(path, data.GetProperty("citation").GetString()); }
                 var receipt = await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId);
                 Assert.Equal(TenantWorkspaceReadOperationRules.Reason, receipt!.ReasonCode); Assert.Equal(done.AgentRunId, receipt.RunId);
             }

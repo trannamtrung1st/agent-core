@@ -11,7 +11,7 @@ public sealed record TenantWorkspaceReadIntent(string Tool, string ArgumentsJson
 }
 public static class TenantWorkspaceReadAuthorizationContract
 {
-    public static IReadOnlyList<string> Allowed(AgentDefinition definition) => new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch, ToolCatalog.OfficeDocumentInspect, ToolCatalog.OfficeSpreadsheetInspect }.Where(t => TenantWorkspaceReadContract.Allows(definition, t)).ToArray();
+    public static IReadOnlyList<string> Allowed(AgentDefinition definition) => new[] { ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch, ToolCatalog.OfficeDocumentInspect, ToolCatalog.OfficeSpreadsheetInspect }.Where(t => TenantWorkspaceReadContract.Allows(definition, t)).ToArray();
     public static JsonNode Schema(IReadOnlyList<string> allowed)
     {
         var branches = new JsonArray();

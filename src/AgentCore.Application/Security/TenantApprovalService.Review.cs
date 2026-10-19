@@ -155,6 +155,10 @@ public sealed partial class TenantApprovalService
         if (op.WorkspaceRead is { } workspace)
         {
             var args = AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(workspace.ToolName, workspace.ArgumentsJson);
+            if (workspace.Knowledge is { } knowledge)
+                return [new("path", null, knowledge.Path, false), new("readPage", null, $"Knowledge: {knowledge.Title}; identity {knowledge.Identity}; citation {knowledge.Citation}.", false),
+                    new("readDisclosure", null, "Return only this saved approved knowledge text to the Agent. Changed identity, citation, binding or source requires fresh review. No file changes, later discovery or recipient download access.", false),
+                    new("readLimit", null, "One bounded knowledge observation in this exact continuation. Later reads require current policy again.", false)];
             var page = workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.OfficeDocumentInspect ? $"Word document excerpt: offset {args.Offset}; up to {args.Limit} elements."
                 : workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.OfficeSpreadsheetInspect ? $"Excel content: sheet {args.Sheet ?? (args.Range is null ? "workbook order" : "first worksheet")}; " + (args.Range is not null ? $"exact range {args.Range}." : args.Cursor is not null ? $"sparse continuation cursor {args.Cursor}." : "first sparse page.")
                 : workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceRead ? "One exact current UTF-8 file"

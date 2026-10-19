@@ -40,10 +40,12 @@ public sealed record PreparedArtifactPublication(Guid SessionId, string Argument
 public sealed record PreparedArtifactVerification(Guid SessionId, Guid ArtifactId, string DisplayName, string ContentType, long ByteSize, string Sha256Hex);
 
 public sealed record PreparedResourceReadMember(string Key, long Revision);
+public sealed record PreparedKnowledgeReadSource(string Identity, string Title, string Citation, string Path);
 public sealed record PreparedWorkspaceRead(Guid SessionId, bool Working, string ToolName, string ArgumentsJson, string ObservationHash,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ResourceKey = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ResourceRevision = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ResourceMembersJson = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ResourceMembersJson = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedKnowledgeReadSource? Knowledge = null);
 public sealed record PreparedWorkspaceMutation(Guid SessionId, bool Working, string ToolName, string ArgumentsJson,
     string ObservationHash, string Permission, string TargetsJson);
 

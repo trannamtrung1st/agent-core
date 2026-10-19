@@ -84,6 +84,7 @@ public sealed partial class TenantSessionAccessTests
         private readonly ScriptedLanguageModel inner = new();
         public ModelCapabilities Capabilities => inner.Capabilities;
         public bool Reviewed { get; init; }
+        public string? KnowledgeIdentity { get; set; }
         public string ReviewTool { get; init; } = ToolCatalog.WorkspaceRead;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public TaskCompletionSource? FirstRequestGate { get; init; }
@@ -98,7 +99,7 @@ public sealed partial class TenantSessionAccessTests
                 if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization)
                     && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization && t.ParametersJson.Contains("inspect_workspace")) == true)
                 {
-                    var readArgs = ReviewTool == ToolCatalog.WorkspaceSearch ? JsonSerializer.Serialize(new { path = path[..path.LastIndexOf('/')], query = "saved", glob = "**/*.txt", maxResults = 10 })
+                    var readArgs = ReviewTool == ToolCatalog.KnowledgeRetrieve ? JsonSerializer.Serialize(new { identity = KnowledgeIdentity }) : ReviewTool == ToolCatalog.WorkspaceSearch ? JsonSerializer.Serialize(new { path = path[..path.LastIndexOf('/')], query = "saved", glob = "**/*.txt", maxResults = 10 })
                         : JsonSerializer.Serialize(new { path = ReviewTool == ToolCatalog.WorkspaceList ? path[..path.LastIndexOf('/')] : path });
                     yield return new ModelToolCallEvent(new("review-workspace", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new {
                         operation = "inspect_workspace", read = new { tool = ReviewTool, arguments = JsonSerializer.Deserialize<JsonElement>(readArgs) } })));

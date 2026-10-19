@@ -980,3 +980,8 @@ Exact admitted resource text and Office files now flow through the incumbent rea
 ## Tenant resource namespace checkpoint — 2026-10-19
 
 Resource namespace browsing/search now uses raw child filtering and exact collection Review through the incumbent read/consent/successor/checkpoint owners. This supersedes resource namespace browsing/search pending notes only. Other virtual resource and publication adapters, autonomous/transport families, final legacy authority/schema removal and full proposal acceptance remain open. This checkpoint does not start or claim milestone acceptance. [Focused qualification](reports/tenant-resource-namespace-verification-2026-10-19.md).
+
+
+## Tenant knowledge read checkpoint — 2026-10-19
+
+Tenant knowledge retrieval now uses the actual pinned/current resource source, exact child IAM and incumbent durable read Review/successor/checkpoint owners. This supersedes `knowledge.retrieve` pending notes only. Other virtual resources/publication adapters, autonomous/transport families, final legacy authority/schema removal and full proposal acceptance remain open. This checkpoint does not start or claim milestone acceptance. [Focused qualification](reports/tenant-knowledge-read-verification-2026-10-19.md).

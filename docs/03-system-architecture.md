@@ -794,3 +794,8 @@ The workspace read owner consumes the pinned resource source for exact admitted 
 ## Tenant resource namespace read and consent
 
 The incumbent workspace reader now derives bounded resource folders/pages and search results from the actual scoped admitted/current manifest. Current raw child reads filter the namespace before results or bounds. Collection consent is one Session-rooted observation with exact compound child witnesses, reusing the existing approval/Run/receipt/checkpoint owners. No directory IAM entity, file index or alternative effect engine is introduced. Other virtual resources, publication adapters and autonomous/transport families remain separate conversions. [Focused qualification](reports/tenant-resource-namespace-verification-2026-10-19.md).
+
+
+## Tenant knowledge source boundary
+
+Tenant `knowledge.retrieve` reuses the exact resource source, workspace read/Review, successor and checkpoint owners. The only model selector is an exact admitted identity. Core maps friendly Definition identities to their admitted logical source and keyed identities to their exact origin; equal display paths never merge origins. Current source kind/text eligibility, reference/title/citation, capability and independent Session/Agent/resource-child reads repeat before and after byte I/O and on retained delivery. No tenant path reaches the legacy resolver fallback, and no new authority/effect engine is introduced. [Focused qualification](reports/tenant-knowledge-read-verification-2026-10-19.md).

@@ -813,3 +813,8 @@ The existing shared `inspect_workspace` preview also presents exact admitted `/a
 ## Resource namespace approval contract
 
 The existing shared `inspect_workspace` preview presents the literal virtual resource root/cursor or search query/glob/bounds using the same path/page/disclosure fields. A namespace request is rooted in its actual conversation and requires current independent Agent/Session and every contributing resource read; it grants no directory-wide authority. Search consent includes scanned non-matches, while private names/snippets stay out of the approval preview. Changed members disable decision and missing child reads hide the request before counts. Existing completed/denied/observation-unavailable copy remains shared. No new frontend composition or visual tokens are introduced; backend/HTTP evidence does not claim a fresh resource-specific browser presentation pass. [Focused qualification](reports/tenant-resource-namespace-verification-2026-10-19.md).
+
+
+## Knowledge source approval contract
+
+The existing shared `inspect_workspace` preview presents the exact virtual source path and a readable knowledge summary containing title, admitted identity and citation, using its existing path/page/disclosure rows. Source body text is not part of the approval preview. Changed identity/reference/citation/binding/source disables decision; missing independent reads hides details/counts. Existing read-authorized, denied and observation-unavailable presentation remains shared. This backend contract adds no frontend composition, CSS or theme token and does not claim a new browser presentation pass. [Focused qualification](reports/tenant-knowledge-read-verification-2026-10-19.md).

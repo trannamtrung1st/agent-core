@@ -26,6 +26,12 @@ public static class TenantWorkspaceReadOperationRules
     public static void Require(PreparedWorkspaceRead value, AgentRun run, TenantAgent agent, AgentDefinition current, TenantSession session)
     {
         var args = TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson);
+        if (value.ToolName == ToolCatalog.KnowledgeRetrieve)
+        {
+            var selected = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration!.Definition, run.Admission.Configuration.Resources, args.Identity!);
+            if (selected.Source != value.Knowledge || selected.Resource.Key != value.ResourceKey) throw new SecurityConflictException("knowledge_source_changed");
+            args = args with { Path = selected.Resource.VirtualPath };
+        }
         var owner = new TenantWorkspaceReference(agent.TenantId, agent.Instance.InstanceId, value.Working ? value.SessionId : null);
         if (value.ResourceMembersJson is not null)
         {
