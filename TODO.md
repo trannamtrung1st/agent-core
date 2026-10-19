@@ -1,6 +1,6 @@
 # TODO
 
-Tenant `knowledge.retrieve` now resolves only exact admitted/current knowledge sources through resource-child IAM and incumbent durable read consent/checkpoints. [Current qualification](docs/reports/tenant-knowledge-read-verification-2026-10-19.md) supersedes knowledge-retrieve pending notes below. Other virtual resources/publication adapters, autonomous/transport families and final legacy authority/schema cutover remain pending. The full proposal stays active.
+Tenant exact resource export now reuses scoped source reads and the existing atomic Artifact publication/consent owners. [Qualification](docs/reports/tenant-resource-artifact-verification-2026-10-19.md) records the focused evidence. Other virtual resource/Attachment/Browser adapters, autonomous/transport families and final authority/schema cutover remain open; the full proposal stays active.
 
 
 Pinned resource reads now have an internal current tenant/Instance source boundary and verified immutable byte facet. [Focused verification](docs/reports/tenant-resource-source-verification-2026-10-19.md) covers independent source IAM/policy, same-Account isolation, late revocation/expiry and native blob safety. Model `/agent` projection, namespace browsing and durable resource-read consent remain pending; this prerequisite does not grant read authority. The full proposal remains active.

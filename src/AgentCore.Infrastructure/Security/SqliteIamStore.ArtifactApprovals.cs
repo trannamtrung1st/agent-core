@@ -15,6 +15,8 @@ public sealed partial class SqliteIamStore
         var session = await ReadSandboxSession(db, request.TenantId, request.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var args = TenantArtifactReviewRules.Require(request, run, agent, await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), session, source);
         await TenantArtifactReviewRules.ExecutorAsync((await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!, request, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        if (request.Operation.ArtifactPublication?.Source is { ResourceKey: { } key } saved) TenantResourceRevisionRules.Require(key, saved.ResourceRevision, run, agent,
+            await SqliteAgentInstanceStore.ReadResourcesAsync(db, agent.Instance.InstanceId, ct).ConfigureAwait(false));
         return args;
     }
 }

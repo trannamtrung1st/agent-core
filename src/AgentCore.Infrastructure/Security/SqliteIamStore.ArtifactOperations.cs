@@ -35,8 +35,10 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
         if (args.SourcePath is { } path)
         {
             var session = await ReadSandboxSession(db, before.Tenant.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-            TenantArtifactSourceRules.Require(run, target, definition, session, path);
-            await TenantArtifactSourceRules.RequireAuthorityAsync(before, run, path, new IamAuthorizer(this), false, ct).ConfigureAwait(false);
+            TenantArtifactSourceRules.Require(run, target, definition, session, path, commit.Source);
+            if (commit.Source?.ResourceKey is { } sourceKey) TenantResourceRevisionRules.Require(sourceKey, commit.Source.ResourceRevision, run, target,
+                await SqliteAgentInstanceStore.ReadResourcesAsync(db, target.Instance.InstanceId, ct).ConfigureAwait(false));
+            await TenantArtifactSourceRules.RequireAuthorityAsync(before, run, path, new IamAuthorizer(this), false, ct, ownedSources: true).ConfigureAwait(false);
         }
         TenantArtifactOperationRules.Transaction(next, expectedSecurityRevision, run, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);

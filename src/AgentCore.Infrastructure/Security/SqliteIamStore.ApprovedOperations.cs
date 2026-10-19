@@ -107,7 +107,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             try
             {
                 _ = await RequireArtifactOperation(db, request, run, target, ct, source).ConfigureAwait(false);
-                try { await TenantArtifactReviewRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false); }
+                try { await TenantArtifactReviewRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct, ownedSources: true).ConfigureAwait(false); }
                 catch (AccessDeniedException) { throw new AccessDeniedException("grantor_authority_lost"); }
                 var artifact = await TenantArtifactSourceRules.MaterializeAsync(run, request.Operation.ArtifactPublication, commit.ArtifactSourceContent, ct).ConfigureAwait(false);
                 var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = artifact.Bytes;

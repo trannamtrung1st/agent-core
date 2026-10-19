@@ -99,4 +99,25 @@ public sealed class TenantWorkspaceArtifactContractTests
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(oldSemantic))), current.OperationFingerprint);
         Assert.Equal(oldPayload.ArgumentsJson, JsonSerializer.Deserialize<PreparedArtifactPublication>(JsonSerializer.Serialize(oldPayload))!.ArgumentsJson);
     }
+    [Theory] [InlineData("/agent/resources/policy.md")] [InlineData("/agent/instance/resources/literal[resource]?.docx")]
+    public void Resource_publication_uses_literal_path_and_exact_source_witness(string path)
+    {
+        var args = TenantWorkspaceArtifactContract.Parse(JsonSerializer.Serialize(new { path, displayName = "copy.bin" }));
+        var key = "instance:" + Guid.NewGuid().ToString("D");
+        var source = new PreparedArtifactSource(false, path, "text/plain", 4, new('a', 64), new('b', 64), key, 1);
+        var first = TenantApprovalRules.PrepareArtifact(Guid.NewGuid(), Guid.NewGuid(), new(Guid.NewGuid(), args.CanonicalArguments, source), 1, 1);
+        Assert.Equal(path, args.Path); Assert.Equal(key, first.ArtifactPublication!.Source!.ResourceKey);
+        Assert.Throws<ArgumentException>(() => TenantArtifactSourceRules.ValidateWitness(source with { ResourceKey = null }, path));
+        Assert.Throws<ArgumentException>(() => TenantArtifactSourceRules.ValidateWitness(source with { ResourceRevision = -1 }, path));
+        Assert.Throws<ArgumentException>(() => TenantArtifactSourceRules.ValidateWitness(source with { Working = true }, path));
+    }
+
+    [Fact]
+    public void Resource_source_fields_are_omitted_for_existing_workspace_witnesses()
+    {
+        var old = new { Working = false, Path = "/home/file.txt", ContentType = "text/plain", ByteSize = 4L, Sha256Hex = new string('a', 64), ObservationHash = new string('b', 64) };
+        var value = new PreparedArtifactSource(old.Working, old.Path, old.ContentType, old.ByteSize, old.Sha256Hex, old.ObservationHash);
+        Assert.Equal(JsonSerializer.Serialize(old), JsonSerializer.Serialize(value));
+    }
+
 }

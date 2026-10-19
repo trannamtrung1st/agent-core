@@ -1,6 +1,6 @@
 # Agent Core MVP
 
-Tenant knowledge retrieval now uses exact current resource sources and durable read Review alongside scoped file and namespace readers. [Qualification](docs/reports/tenant-knowledge-read-verification-2026-10-19.md) records the focused evidence. Other virtual resources/publication adapters, autonomous/transport families and final authority/schema cutover remain open; the full proposal stays active.
+Tenant exact resource export now reuses scoped source reads and the existing atomic Artifact publication/consent owners. [Qualification](docs/reports/tenant-resource-artifact-verification-2026-10-19.md) records the focused evidence. Other virtual resource/Attachment/Browser adapters, autonomous/transport families and final authority/schema cutover remain open; the full proposal stays active.
 
 
 Tenant workspace source publication now uses the existing atomic Artifact/Run/consent owners, with capability-specific model offering and a shared exact source inspector. [Focused verification](docs/reports/tenant-workspace-artifact-model-verification-2026-10-19.md) covers both stores, actual model/HTTP review and grants, stale source/access refusal, SQLite host recreation and live Synthetic download/preview. This is a bounded checkpoint; the full tenant IAM proposal remains active.

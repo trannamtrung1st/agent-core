@@ -2,13 +2,13 @@ namespace AgentCore.Application.Ports;
 
 // Private source evidence, not authority. Callers separately require current IAM, ownership and a live Run/consent.
 public sealed record TenantWorkspaceArtifactObservation(TenantWorkspaceReference Owner, string Path, string ContentType,
-    long ByteSize, string Sha256Hex, string ObservationHash);
+    long ByteSize, string Sha256Hex, string ObservationHash, string? ResourceKey = null, long? ResourceRevision = null);
 
 public interface ITenantWorkspaceArtifactSource
 {
     TenantWorkspaceArtifactObservation Observation { get; }
     byte[] CopyContent();
-    // Filesystem-only: must not reenter IAM/database owners from inside publication transactions/locks.
+    // Storage-only: checks mutable files or immutable captured bytes; never reenter IAM/database owners inside publication transactions/locks.
     ValueTask RequireCurrentAsync(CancellationToken ct = default);
 }
 

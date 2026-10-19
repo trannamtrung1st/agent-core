@@ -1,5 +1,7 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+Successor checkpoint: exact admitted resource files now support publication through independent source IAM and the existing atomic Artifact/Run/receipt and consent owners. [Qualification](tenant-resource-artifact-verification-2026-10-19.md) supersedes resource-file source publication pending notes only. Other virtual resource/adapters, autonomous/transport families and final authority/schema removal remain open.
+
 Successor checkpoint: tenant knowledge retrieval now uses actual admitted/current resource sources, independent child/Agent/Session reads and incumbent durable Review/successor/checkpoint owners. [Qualification](tenant-knowledge-read-verification-2026-10-19.md) supersedes `knowledge.retrieve` pending notes only. Other virtual resources/publication adapters, autonomous/transport families and final authority/schema removal remain open.
 
 

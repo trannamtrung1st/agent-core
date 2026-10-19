@@ -15,9 +15,17 @@ public sealed record TenantArtifactMaterialization(string DisplayName, string Co
 public static class TenantArtifactSourceRules
 {
     public static PreparedArtifactSource Witness(TenantWorkspaceArtifactObservation value) => new(value.Owner.SessionId is not null,
-        value.Path, value.ContentType, value.ByteSize, value.Sha256Hex, value.ObservationHash);
+        value.Path, value.ContentType, value.ByteSize, value.Sha256Hex, value.ObservationHash, value.ResourceKey, value.ResourceRevision);
     public static void ValidateWitness(PreparedArtifactSource value, string path)
     {
+        if (TenantWorkspaceReadContract.IsResourcePath(path))
+        {
+            TenantResourceSourceTarget.ValidatePath(path);
+            if (value.Working || value.ResourceKey is not { } key || value.ResourceRevision is null or < 0
+                || !TenantAgentChildScopes.IsResourceKey(key))
+                throw new ArgumentException("Use an exact resource source witness.");
+        }
+        else if (value.ResourceKey is not null || value.ResourceRevision is not null) throw new ArgumentException("Unexpected resource source witness.");
         if (value.Path != path || value.Working != path.StartsWith("/working/", StringComparison.Ordinal) || value.ByteSize < 0
             || value.ByteSize > Math.Min(AgentWorkspaceLimits.MaxFileBytes, ArtifactLimits.MaxBytesEach)
             || !Hex(value.Sha256Hex) || !Hex(value.ObservationHash) || string.IsNullOrWhiteSpace(value.ContentType) || value.ContentType.Length > 200
@@ -27,19 +35,31 @@ public static class TenantArtifactSourceRules
     private static bool Hex(string value) => value is { Length: 64 } && value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
     public static TenantWorkspaceReference Owner(AgentRun run, string path) => new(run.Owner.TenantId!.Value, run.AgentInstanceId,
         path.StartsWith("/working/", StringComparison.Ordinal) ? run.SessionId : null);
-    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(AgentRun run, string path)
-        => Targets(run.Owner.TenantId!.Value, run.AgentInstanceId, run.SessionId, path.StartsWith("/working/", StringComparison.Ordinal));
-    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, Guid session, bool working)
+    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(AgentRun run, string path, string? resourceKey = null)
+    {
+        if (TenantWorkspaceReadContract.IsResourcePath(path))
+            resourceKey ??= run.Admission.Configuration!.Resources.SingleOrDefault(r => r.VirtualPath == path)?.Key ?? throw new AccessDeniedException("resource_unavailable");
+        return Targets(run.Owner.TenantId!.Value, run.AgentInstanceId, run.SessionId, path.StartsWith("/working/", StringComparison.Ordinal), resourceKey);
+    }
+    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, Guid session, bool working, string? resourceKey = null)
     {
         yield return ("sessions.read", TenantSessionRules.Scope(tenant, session));
         var owner = new TenantWorkspaceReference(tenant, instance, working ? session : null);
         if (owner.SessionId is null) yield return ("agents.read", AccessScope.ForResource(owner.TenantId, "agent", owner.InstanceId.ToString("D")));
-        yield return ("workspaces.read", TenantWorkspaceRules.Scope(owner));
+        yield return resourceKey is null ? ("workspaces.read", TenantWorkspaceRules.Scope(owner))
+            : ("resources.read", TenantAgentChildScopes.Scope(tenant, instance, "resource", resourceKey));
     }
-    public static void Require(AgentRun run, TenantAgent agent, AgentDefinition current, TenantSession session, string path)
+    public static void Require(AgentRun run, TenantAgent agent, AgentDefinition current, TenantSession session, string path, PreparedArtifactSource? source = null)
     {
         TenantWorkspaceEffectRules.Session(run, agent, session);
-        TenantWorkspaceRules.Path(Owner(run, path), path, file: true);
+        if (TenantWorkspaceReadContract.IsResourcePath(path))
+        {
+            TenantResourceSourceTarget.ValidatePath(path);
+            var pinned = run.Admission.Configuration!.Resources.SingleOrDefault(r => r.VirtualPath == path) ?? throw new AccessDeniedException("resource_unavailable");
+            if (source is not null && (source.ResourceKey != pinned.Key || source.ResourceRevision is null or < 0 || source.Sha256Hex != pinned.ContentSha256
+                || source.ByteSize != pinned.ByteLength || source.ContentType != pinned.MediaType)) throw new SecurityConflictException("resource_source_changed");
+        }
+        else TenantWorkspaceRules.Path(Owner(run, path), path, file: true);
         current = InstanceSettingsResolver.Resolve(current, agent.Instance.SettingsOverrides);
         if (run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
             || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation))
@@ -47,17 +67,24 @@ public static class TenantArtifactSourceRules
         if (!TenantWorkspaceArtifactContract.Allows(run.Admission.Configuration!.Definition) || !TenantWorkspaceArtifactContract.Allows(current))
             throw new AccessDeniedException("capability_unavailable");
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy ?? StateIsolationPolicy.Default;
-        TenantWorkspaceEffectRules.RequireHome(isolation, path, false);
+        if (!TenantWorkspaceReadContract.IsResourcePath(path)) TenantWorkspaceEffectRules.RequireHome(isolation, path, false);
     }
-    public static async ValueTask RequireAuthorityAsync(TenantSecurityState state, AgentRun run, string path, IamAuthorizer iam, bool approved, CancellationToken ct)
+    public static async ValueTask RequireAuthorityAsync(TenantSecurityState state, AgentRun run, string path, IamAuthorizer iam, bool approved, CancellationToken ct, bool ownedSources = false)
     {
         foreach (var (key, scope) in Targets(run, path))
         {
             if (!(await iam.CheckOwnedTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("executor_read_required");
-            if (!approved && await TenantSandboxReadOperationRules.NeedsReviewAsync(state, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false))
+            if (!approved && await NeedsReviewAsync(state, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, key, scope, iam, ct, ownedSources).ConfigureAwait(false))
                 throw new AccessDeniedException("artifact_source_review_required");
         }
+    }
+    internal static async ValueTask<bool> NeedsReviewAsync(TenantSecurityState state, Guid? requester, string key, AccessScope scope,
+        IamAuthorizer iam, CancellationToken ct, bool ownedSources)
+    {
+        var permission = PermissionCatalog.Get(key); var policy = TenantOperationPolicyService.Effective(state, permission);
+        return policy.Mode == OperationApprovalMode.Always || policy.Mode == OperationApprovalMode.WhenRequesterLacksPermission && requester is { } human
+            && !(await (ownedSources ? iam.CheckOwnedTenantAsync(state, human, permission, scope, ct) : iam.CheckTenantAsync(state, human, permission, scope, ct)).ConfigureAwait(false)).Allowed;
     }
     public static async ValueTask<TenantArtifactMaterialization> MaterializeAsync(AgentRun run, PreparedArtifactPublication publication,
         ITenantWorkspaceArtifactSource? source, CancellationToken ct)

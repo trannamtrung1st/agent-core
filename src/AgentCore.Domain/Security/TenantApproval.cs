@@ -34,7 +34,9 @@ public sealed record PreparedBrowserCommand(Guid SessionId, string ToolName, str
 
 public sealed record PreparedCredentialRead(Guid SessionId, Guid? CredentialId, string ArgumentsJson, string ReferencesJson);
 
-public sealed record PreparedArtifactSource(bool Working, string Path, string ContentType, long ByteSize, string Sha256Hex, string ObservationHash);
+public sealed record PreparedArtifactSource(bool Working, string Path, string ContentType, long ByteSize, string Sha256Hex, string ObservationHash,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ResourceKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ResourceRevision = null);
 public sealed record PreparedArtifactPublication(Guid SessionId, string ArgumentsJson,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactSource? Source = null);
 public sealed record PreparedArtifactVerification(Guid SessionId, Guid ArtifactId, string DisplayName, string ContentType, long ByteSize, string Sha256Hex);

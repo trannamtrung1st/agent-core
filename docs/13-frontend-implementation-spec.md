@@ -818,3 +818,7 @@ The existing shared `inspect_workspace` preview presents the literal virtual res
 ## Knowledge source approval contract
 
 The existing shared `inspect_workspace` preview presents the exact virtual source path and a readable knowledge summary containing title, admitted identity and citation, using its existing path/page/disclosure rows. Source body text is not part of the approval preview. Changed identity/reference/citation/binding/source disables decision; missing independent reads hides details/counts. Existing read-authorized, denied and observation-unavailable presentation remains shared. This backend contract adds no frontend composition, CSS or theme token and does not claim a new browser presentation pass. [Focused qualification](reports/tenant-knowledge-read-verification-2026-10-19.md).
+
+## Resource publication approval contract
+
+The existing six-row Artifact source inspector also presents exact admitted `/agent/resources/...` and `/agent/instance/resources/...` files. Source path/checksum remain visible and source body text remains absent. Missing source reads hide detail/counts; changed binding/source or revoked authority disables decision. Creation-only grants do not imply source reads or download access. Existing pending/completed/denied/uncertain result presentation remains shared. This adds no frontend composition or visual tokens and does not claim a new browser presentation pass. [Focused qualification](reports/tenant-resource-artifact-verification-2026-10-19.md).

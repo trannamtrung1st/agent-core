@@ -33,6 +33,8 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         CaptureCore(frame, tool, path, approved, live, false, ct);
     internal ValueTask<TenantResourceSource> CaptureForSearchAsync(TenantRuntimeFrame frame, string path, bool approved, bool live, CancellationToken ct) =>
         CaptureCore(frame, ToolCatalog.WorkspaceSearch, path, approved, live, true, ct);
+    internal ValueTask<TenantResourceSource> CaptureForArtifactAsync(TenantRuntimeFrame frame, string path, bool approved, bool live, CancellationToken ct) =>
+        CaptureCore(frame, ToolCatalog.ArtifactsCreateFromWorkspace, path, approved, live, false, ct, publication: true);
     internal async ValueTask<TenantResourceSource> CaptureKnowledgeAsync(TenantRuntimeFrame frame, string identity, bool approved, bool live, CancellationToken ct)
     {
         var (run, _) = await operations.ResolveAsync(new(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId), ct).ConfigureAwait(false);
@@ -45,10 +47,10 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         var selected = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration!.Definition, run.Admission.Configuration.Resources, identity);
         return await RequireMetadataAsync(frame, ToolCatalog.KnowledgeRetrieve, selected.Resource.VirtualPath, ct, approved, live, audit, knowledgeIdentity: identity).ConfigureAwait(false);
     }
-    private async ValueTask<TenantResourceSource> CaptureCore(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, bool search, CancellationToken ct, string? knowledgeIdentity = null)
+    private async ValueTask<TenantResourceSource> CaptureCore(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, bool search, CancellationToken ct, string? knowledgeIdentity = null, bool publication = false)
     {
         ValidatePath(path);
-        var before = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search, knowledgeIdentity: knowledgeIdentity).ConfigureAwait(false);
+        var before = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search, knowledgeIdentity: knowledgeIdentity, publication: publication).ConfigureAwait(false);
         var resource = before.Observation.Resource;
         DefinitionResourcePolicies.ValidateContentSize(resource.ByteLength);
         byte[] bytes;
@@ -64,7 +66,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         { throw new AccessDeniedException("resource_content_unavailable"); }
         // Freeze before checking post-I/O authority; callers receive only a defensive copy of these verified bytes.
         var captured = new TenantResourceSource(before.Observation, bytes);
-        var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search, knowledgeIdentity: knowledgeIdentity).ConfigureAwait(false);
+        var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search, knowledgeIdentity: knowledgeIdentity, publication: publication).ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.Security.Tenant.Revision != after.Security.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
             || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Observation != after.Observation)
@@ -76,7 +78,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         ct.ThrowIfCancellationRequested();
         return captured;
     }
-    internal async ValueTask<Source> RequireMetadataAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct, bool approved = false, bool live = true, bool audit = false, bool search = false, string? knowledgeIdentity = null)
+    internal async ValueTask<Source> RequireMetadataAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct, bool approved = false, bool live = true, bool audit = false, bool search = false, string? knowledgeIdentity = null, bool publication = false)
     {
         ValidatePath(path);
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
@@ -90,7 +92,9 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended) throw new AccessDeniedException("resource_unavailable");
         if (tool == ToolCatalog.KnowledgeRetrieve && knowledgeIdentity is null) throw new AccessDeniedException("knowledge_source_unavailable");
-        if (!(TenantWorkspaceReadContract.IsFile(tool) || search && tool == ToolCatalog.WorkspaceSearch) || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool))
+        bool Allows(AgentDefinition definition) => publication && tool == ToolCatalog.ArtifactsCreateFromWorkspace
+            ? TenantWorkspaceArtifactContract.Allows(definition) : !publication && TenantWorkspaceReadContract.Allows(definition, tool);
+        if (!(TenantWorkspaceReadContract.IsFile(tool) || search && tool == ToolCatalog.WorkspaceSearch || publication && tool == ToolCatalog.ArtifactsCreateFromWorkspace) || !Allows(run.Admission.Configuration!.Definition))
             throw new AccessDeniedException("capability_unavailable");
         var admitted = run.Admission.Configuration.Resources.Where(r => r.VirtualPath == path).Take(2).ToArray();
         var resource = admitted.Length == 1 ? admitted[0] : throw new AccessDeniedException("resource_unavailable");
@@ -108,7 +112,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             if (decision.Decision != OperationDecisionKind.Allowed) throw new AccessDeniedException(decision.ReasonCode);
         }
         var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-        if (current.Snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantWorkspaceReadContract.Allows(current.Definition, tool))
+        if (current.Snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !Allows(current.Definition))
             throw new AccessDeniedException("capability_unavailable");
         if (tool == ToolCatalog.KnowledgeRetrieve)
         {

@@ -32,7 +32,9 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             if (args.SourcePath is { } path)
             {
                 var session = sessionBacking.ReadTenantSession(before.Tenant.TenantId, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
-                TenantArtifactSourceRules.Require(run, target, definition, session, path);
+                TenantArtifactSourceRules.Require(run, target, definition, session, path, commit.Source);
+                if (commit.Source?.ResourceKey is { } sourceKey) TenantResourceRevisionRules.Require(sourceKey, commit.Source.ResourceRevision, run, target,
+                    instances.ReadTenantResourcesAsync(target.Instance.InstanceId, ct).Result);
                 TenantArtifactSourceRules.RequireAuthorityAsync(before, run, path, new IamAuthorizer(this), false, ct).GetAwaiter().GetResult();
             }
             TenantArtifactOperationRules.Transaction(next, expectedSecurityRevision, run, audit);

@@ -9,7 +9,7 @@ namespace AgentCore.Application.Security;
 // Source preparation only; publication/Run/receipt authority stays with the existing Artifact owner.
 public sealed record TenantArtifactSourceObservationTarget(AgentRun Run, TenantSecurityState State, TenantAgent Agent, ITenantWorkspaceArtifactSource Source);
 public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
-    TenantRunConfigurationResolver configurations, ITenantWorkspaceArtifactSourceStore files, IamAuthorizer iam, TimeProvider time)
+    TenantRunConfigurationResolver configurations, ITenantWorkspaceArtifactSourceStore files, IamAuthorizer iam, TimeProvider time, TenantResourceSourceTarget? resources = null)
 {
     public async ValueTask<ITenantWorkspaceArtifactSource> CaptureAsync(TenantRuntimeFrame frame, TenantWorkspaceArtifactArguments args, CancellationToken ct = default) =>
         (await CaptureCoreAsync(frame, args, false, true, ct).ConfigureAwait(false)).Source;
@@ -33,7 +33,12 @@ public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operati
         }
         var before = await Require().ConfigureAwait(false);
         ITenantWorkspaceArtifactSource source;
-        try { source = await files.CaptureArtifactSourceTenantAsync(TenantArtifactSourceRules.Owner(before.Run, args.Path), args.Path, ct).ConfigureAwait(false); }
+        try
+        {
+            source = TenantWorkspaceReadContract.IsResourcePath(args.Path)
+                ? new ResourceArtifactSource(await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).CaptureForArtifactAsync(frame, args.Path, review, live, ct).ConfigureAwait(false))
+                : await files.CaptureArtifactSourceTenantAsync(TenantArtifactSourceRules.Owner(before.Run, args.Path), args.Path, ct).ConfigureAwait(false);
+        }
         catch (Exception e) when (e is AgentCoreException or IOException or UnauthorizedAccessException) { throw new AccessDeniedException("artifact_content_unavailable"); }
         var after = await Require().ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.State.Tenant.Revision != after.State.Tenant.Revision
@@ -43,6 +48,17 @@ public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operati
         var witness = TenantArtifactSourceRules.Witness(source.Observation); TenantArtifactSourceRules.ValidateWitness(witness, args.Path);
         if (source.Observation.Owner != TenantArtifactSourceRules.Owner(after.Run, args.Path)) throw new SecurityConflictException("workspace_source_changed");
         return new(after.Run, after.State, after.Agent, source);
+    }
+
+    private sealed class ResourceArtifactSource(TenantResourceSource captured) : ITenantWorkspaceArtifactSource
+    {
+        public TenantWorkspaceArtifactObservation Observation { get; } = new(new(captured.Observation.TenantId, captured.Observation.InstanceId),
+            captured.Observation.Resource.VirtualPath, captured.Observation.Resource.MediaType, captured.Observation.Resource.ByteLength,
+            captured.Observation.Resource.ContentSha256, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(captured.Observation))),
+            captured.Observation.Resource.Key, captured.Observation.ResourceRevision);
+        public byte[] CopyContent() => captured.CopyContent();
+        // Resource bytes are immutable and hash-verified; binding/revision checks belong to the atomic store owner.
+        public ValueTask RequireCurrentAsync(CancellationToken ct = default) { ct.ThrowIfCancellationRequested(); return ValueTask.CompletedTask; }
     }
 
     public async ValueTask<ITenantWorkspaceArtifactSource> RequireSavedAsync(TenantApprovalRequest request, AgentRun run, CancellationToken ct = default)

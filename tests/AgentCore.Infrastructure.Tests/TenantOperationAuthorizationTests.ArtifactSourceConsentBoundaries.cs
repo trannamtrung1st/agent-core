@@ -12,16 +12,20 @@ public sealed partial class TenantOperationAuthorizationTests
 {
     private sealed record SourceConsentCase(Environment Setup, TenantRuntimeFrame Frame, TenantApprovalService Approvals,
         TenantApprovalRequest Request, string Arguments, byte[] Bytes, bool Working, RoleAssignment RawReads, TenantSessionInitiator Reviewer);
-    private static async Task<SourceConsentCase> SourceConsent(Fixture f, bool working = false, bool grant = false, string policy = "workspaces.read", bool independent = false)
+    private static async Task<SourceConsentCase> SourceConsent(Fixture f, bool working = false, bool grant = false, string policy = "workspaces.read", bool independent = false, bool resource = false)
     {
-        var s = await Setup(f, "general-assistant", 32); var frame = await ClaimArtifactRun(f, s);
-        await GrantPublication(f, s, grant ? ["sessions.read"] : null); var reads = await GrantWorkspaceRuntimeReads(f, s);
-        byte[] bytes = [0, 255, 128, 3]; await SeedRuntimeWorkspace(f, s, working, "source.bin", bytes);
+        var s = await Setup(f, "general-assistant", 32); byte[] bytes = resource ? "Exact resource source body"u8.ToArray() : [0, 255, 128, 3];
+        var bound = resource ? await ResourceSourceCase(f, s, bytes) : null;
+        if (bound is not null) { s = bound.Setup; working = false; if (policy == "workspaces.read") policy = "resources.read"; }
+        else await SeedRuntimeWorkspace(f, s, working, "source.bin", bytes);
+        var frame = await ClaimArtifactRun(f, s);
+        await GrantPublication(f, s, grant ? ["sessions.read"] : null);
+        var reads = await GrantWorkspaceRuntimeReads(f, s, resource ? ["sessions.read", "agents.read", "resources.read"] : null);
         var reviewer = independent ? await User(f, s, "source-reviewer@example.test",
-            ["sessions.read", "agents.read", "workspaces.read", "artifacts.create", "approvals.read", "approvals.approve", "approvals.grant_exception"]) : s.Owner;
+            ["sessions.read", "agents.read", resource ? "resources.read" : "workspaces.read", "artifacts.create", "approvals.read", "approvals.approve", "approvals.grant_exception"]) : s.Owner;
         await Policies(f).SaveAsync(s.Tenant, s.Owner, policy, new(OperationApprovalMode.Always, independent), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision,
             (await f.Iam.ReadTenantAsync(s.Tenant))!.OperationPolicies.SingleOrDefault(p => p.PermissionKey == policy)?.Revision ?? 0);
-        var args = JsonSerializer.Serialize(new { path = (working ? "/working/" : "/home/") + "source.bin", displayName = "published.bin" });
+        var args = JsonSerializer.Serialize(new { path = bound?.Path ?? (working ? "/working/" : "/home/") + "source.bin", displayName = "published.bin" });
         var approvals = ApprovalService(f, artifactSources: ArtifactSources(f)); var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, frame.RunId))!;
         var request = (await approvals.PrepareWorkspaceArtifactAsync(new(s.Tenant, frame.RunId), args, run.Revision, frame.Generation)).Request!;
         Assert.NotNull(request); return new(s, frame, approvals, request, args, bytes, working, reads, reviewer);

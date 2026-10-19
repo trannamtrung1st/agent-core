@@ -31,8 +31,8 @@ public sealed partial class TenantOperationAuthorizationTests
         }
         await using (var db = f.Contexts!.CreateDbContext())
         {
-            var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); Assert.EndsWith("TenantKnowledgeReadReview", migrations[^1]);
-            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[^2]));
+            var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); var own = Array.FindIndex(migrations, m => m.EndsWith("TenantKnowledgeReadReview", StringComparison.Ordinal)); Assert.True(own > 0);
+            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[own - 1]));
             Assert.False(db.Database.HasPendingModelChanges());
         }
         var reopened = new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: f.Clock);

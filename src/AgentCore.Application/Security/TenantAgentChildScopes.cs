@@ -25,6 +25,11 @@ public static class TenantAgentChildScopes
             || value[..36] != instance.ToString("D")) return false;
         key = value[37..];
         if (scope.ResourceType == "skill") return SkillKeys.IsValid(key);
+        return IsResourceKey(key);
+    }
+
+    public static bool IsResourceKey(string key)
+    {
         var offset = key.StartsWith("instance:", StringComparison.Ordinal) ? 9 : key.StartsWith("definition:", StringComparison.Ordinal) ? 11 : -1;
         return offset > 0 && Guid.TryParseExact(key[offset..], "D", out var id) && id != Guid.Empty && key[offset..] == id.ToString("D");
     }

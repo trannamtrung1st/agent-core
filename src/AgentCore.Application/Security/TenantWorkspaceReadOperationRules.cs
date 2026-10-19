@@ -66,20 +66,7 @@ public static class TenantWorkspaceReadOperationRules
             return;
         }
         if (value.ResourceKey is not { } key) return;
-        if (key.StartsWith("instance:", StringComparison.Ordinal))
-        {
-            var current = resources.InstanceResources.SingleOrDefault(r => "instance:" + r.ResourceId.ToString("D") == key);
-            var pinned = run.Admission.Configuration!.Resources.SingleOrDefault(r => r.Key == key);
-            if (current is null || !current.Enabled || current.Revision != value.ResourceRevision || pinned is null
-                || current.ContentSha256 != pinned.ContentSha256 || current.ByteLength != pinned.ByteLength || current.MediaType != pinned.MediaType
-                || current.LogicalPath != pinned.LogicalPath || current.Kind != pinned.Kind) throw new SecurityConflictException("resource_source_changed");
-        }
-        else
-        {
-            var current = resources.DefinitionStates.SingleOrDefault(r => "definition:" + r.ResourceId.ToString("D") == key);
-            if ((current?.Revision ?? 0) != value.ResourceRevision || current?.EnabledOverride == false
-                || agent.Instance.DefinitionId != run.DefinitionId || agent.Instance.ActiveVersion != run.DefinitionVersion) throw new SecurityConflictException("resource_source_changed");
-        }
+        TenantResourceRevisionRules.Require(key, value.ResourceRevision, run, agent, resources);
     }
     public static async ValueTask PermissionsAsync(TenantSecurityState state, Guid instance, PreparedWorkspaceRead value, Guid principal, IamAuthorizer iam, CancellationToken ct)
     {

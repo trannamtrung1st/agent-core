@@ -106,7 +106,8 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var mutationSessionsJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         var resourceOwners = await db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE TenantId = {tenantId} AND
-            (Permission = 'resources.read' OR json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS 'text')
+            (Permission = 'resources.read' OR json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS 'text'
+                OR json_type(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS 'text')
             """).AsNoTracking().Select(r => r.InstanceId).Distinct().ToArrayAsync(ct).ConfigureAwait(false);
         var ownedResources = new HashSet<string>(StringComparer.Ordinal);
         foreach (var owner in resourceOwners)
@@ -158,8 +159,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 AND ({artifactCreateJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactCreateJson})))
                 AND (json_type(PayloadJson, '$.Operation.ArtifactPublication.Source') IS NOT 'object' OR (
                     ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
-                    AND ({workspaceJson} = 'null' OR CASE WHEN json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
-                        THEN 'working:' || SessionId ELSE 'home:' || InstanceId END IN (SELECT value FROM json_each({workspaceJson})))
+                    AND ((json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS NULL
+                        AND ({workspaceJson} = 'null' OR CASE WHEN json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
+                            THEN 'working:' || SessionId ELSE 'home:' || InstanceId END IN (SELECT value FROM json_each({workspaceJson}))))
+                        OR (json_type(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS 'text'
+                            AND (InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey')) IN (SELECT value FROM json_each({ownedResourceJson}))
+                            AND ({resourceJson} = 'null' OR (InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey')) IN (SELECT value FROM json_each({resourceJson})))))
                     AND (json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
                         OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))))
                 AND EXISTS (SELECT 1 FROM TenantSessions AS root JOIN Sessions AS saved ON saved.SessionId = root.SessionId
@@ -281,7 +286,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.ArtifactPublication is not null)
             {
                 await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
-                await TenantArtifactReviewRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+                await TenantArtifactReviewRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct, ownedSources: true).ConfigureAwait(false);
             }
             if (request.Operation.SandboxControl is not null)
             {

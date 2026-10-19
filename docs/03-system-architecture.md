@@ -799,3 +799,7 @@ The incumbent workspace reader now derives bounded resource folders/pages and se
 ## Tenant knowledge source boundary
 
 Tenant `knowledge.retrieve` reuses the exact resource source, workspace read/Review, successor and checkpoint owners. The only model selector is an exact admitted identity. Core maps friendly Definition identities to their admitted logical source and keyed identities to their exact origin; equal display paths never merge origins. Current source kind/text eligibility, reference/title/citation, capability and independent Session/Agent/resource-child reads repeat before and after byte I/O and on retained delivery. No tenant path reaches the legacy resolver fallback, and no new authority/effect engine is introduced. [Focused qualification](reports/tenant-knowledge-read-verification-2026-10-19.md).
+
+## Tenant resource export boundary
+
+Tenant resource export reuses the canonical pinned/current source and existing Artifact publication, Run and receipt owners. An exact literal virtual source path resolves to its actual immutable resource; independent Session/Agent/child reads, current source policy and binding/revision fences remain separate from creation authority. Verified frozen bytes cross the storage-only materializer; source revision validation stays in the owning store transaction. No virtual writable filesystem or alternate effect engine is added. [Focused qualification](reports/tenant-resource-artifact-verification-2026-10-19.md).

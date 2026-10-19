@@ -985,3 +985,7 @@ Resource namespace browsing/search now uses raw child filtering and exact collec
 ## Tenant knowledge read checkpoint — 2026-10-19
 
 Tenant knowledge retrieval now uses the actual pinned/current resource source, exact child IAM and incumbent durable read Review/successor/checkpoint owners. This supersedes `knowledge.retrieve` pending notes only. Other virtual resources/publication adapters, autonomous/transport families, final legacy authority/schema removal and full proposal acceptance remain open. This checkpoint does not start or claim milestone acceptance. [Focused qualification](reports/tenant-knowledge-read-verification-2026-10-19.md).
+
+## Tenant resource publication checkpoint — 2026-10-19
+
+Exact resource publication now uses actual pinned/current sources and the incumbent atomic Artifact/Run/receipt and exact consent owners. This supersedes resource-file source publication pending notes only. Other virtual resource and Attachment/Browser adapters, autonomous/transport families, final legacy authority/schema removal and full proposal acceptance remain open. This bounded checkpoint does not start or claim milestone acceptance. [Focused qualification](reports/tenant-resource-artifact-verification-2026-10-19.md).

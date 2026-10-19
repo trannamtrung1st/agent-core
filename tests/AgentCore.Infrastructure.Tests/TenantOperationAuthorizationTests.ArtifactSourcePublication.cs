@@ -15,9 +15,9 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantOperationAuthorizationTests
 {
     private static TenantArtifactOperationService SourcePublicationService(Fixture f, ITenantArtifactOperationStore? effects = null,
-        ITenantWorkspaceArtifactSourceStore? files = null) => new(effects ?? (ITenantArtifactOperationStore)f.Iam,
+        ITenantWorkspaceArtifactSourceStore? files = null, TenantResourceSourceTarget? resourceSources = null) => new(effects ?? (ITenantArtifactOperationStore)f.Iam,
         Operations(f), f.RunConfiguration(), f.Ids, f.Clock, f.Authorizer, (ITenantApprovalStore)f.Iam,
-        new(Operations(f), (ITenantSessionStore)f.Iam, f.RunConfiguration(), files ?? WorkspaceReader(f), f.Authorizer, f.Clock));
+        new(Operations(f), (ITenantSessionStore)f.Iam, f.RunConfiguration(), files ?? WorkspaceReader(f), f.Authorizer, f.Clock, resourceSources ?? ResourceSources(f)));
 
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_Artifact_publication_commits_exact_Office_bytes_and_one_durable_receipt(bool sqlite)

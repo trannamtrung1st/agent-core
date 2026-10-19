@@ -17,8 +17,8 @@ public static class TenantWorkspaceArtifactContract
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public static ModelToolDefinition ForModel() => new(ToolCatalog.ArtifactsCreateFromWorkspace,
-        "Publish one immutable copy of an exact existing owned /home or /working file in the current human-message Run. Core derives the actual Agent, Session and source evidence. Copies raw bytes without interpreting Office packages, up to the configured file bound and 50 MiB ceiling; source files are unchanged. Requires current independent source reads, export capability, HomeAccess and Allowed creation/source policy. Review or missing authority creates no file. When offered, request publish_workspace_artifact through approvals.request_authorization with artifact containing these exact arguments as the sole call. Consent binds the saved source bytes and metadata; a changed source cannot be adapted or replayed. A refused operation must not be repeated in this task. After an applied publication, operationId is the Artifact identity. You may propose it as an artifact reference; Core separately checks current Agent read authority and policy, then each recipient needs independent file access. A receipt or approval grants no read/download authority.",
-        """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","description":"Exact existing owned /home/ or /working/ file path; no glob or traversal.","minLength":7,"maxLength":4095},"displayName":{"type":"string","minLength":1,"maxLength":200},"contentType":{"type":"string","minLength":1,"maxLength":200}},"required":["path","displayName"]}""");
+        "Publish one immutable copy of an exact existing owned /home or /working file or admitted /agent/resources/... or /agent/instance/resources/... file in the current human-message Run. Core derives the actual Agent, Session and source evidence. Copies raw bytes without interpreting Office packages, up to the configured file bound and 50 MiB ceiling; source files are unchanged. Requires current independent source reads, export capability and Allowed creation/source policy. HomeAccess applies to home files; resource files require exact child resources.read. Review or missing authority creates no file. When offered, request publish_workspace_artifact through approvals.request_authorization with artifact containing these exact arguments as the sole call. Consent binds the saved source bytes and metadata; a changed source cannot be adapted or replayed. A refused operation must not be repeated in this task. After an applied publication, operationId is the Artifact identity. You may propose it as an artifact reference; Core separately checks current Agent read authority and policy, then each recipient needs independent file access. A receipt or approval grants no read/download authority.",
+        """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","description":"Exact existing /home/ or /working/ file or admitted resource file path; no traversal. Resource paths match literally.","minLength":7,"maxLength":4095},"displayName":{"type":"string","minLength":1,"maxLength":200},"contentType":{"type":"string","minLength":1,"maxLength":200}},"required":["path","displayName"]}""");
     public static TenantWorkspaceArtifactArguments Parse(string arguments)
     {
         if (string.IsNullOrWhiteSpace(arguments) || Encoding.UTF8.GetByteCount(arguments) > TenantArtifactToolContract.MaxArgumentBytes)
@@ -31,10 +31,14 @@ public static class TenantWorkspaceArtifactContract
         string Read(string key) => root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()! : throw new ArgumentException("Invalid Artifact source field.");
         var path = Read("path"); var name = Read("displayName"); var type = root.TryGetProperty("contentType", out _) ? Read("contentType") : null;
-        if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal)
-            || path.IndexOfAny(['*', '?', '[', ']']) >= 0) throw new ArgumentException("Use an exact owned workspace file path.");
-        try { TenantWorkspaceRules.Path(new(Guid.Empty, Guid.Empty, path.StartsWith("/working/", StringComparison.Ordinal) ? Guid.Empty : null), path, file: true); }
-        catch (Sessions.AgentCoreException) { throw new ArgumentException("Use an exact owned workspace file path."); }
+        if (TenantWorkspaceReadContract.IsResourcePath(path)) TenantResourceSourceTarget.ValidatePath(path);
+        else
+        {
+            if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith("/working/", StringComparison.Ordinal)
+                || path.IndexOfAny(['*', '?', '[', ']']) >= 0) throw new ArgumentException("Use an exact owned workspace file path.");
+            try { TenantWorkspaceRules.Path(new(Guid.Empty, Guid.Empty, path.StartsWith("/working/", StringComparison.Ordinal) ? Guid.Empty : null), path, file: true); }
+            catch (Sessions.AgentCoreException) { throw new ArgumentException("Use an exact owned workspace file path."); }
+        }
         if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || type is not null && (string.IsNullOrWhiteSpace(type) || type.Length > 200
             || type.Any(char.IsControl) || !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(type, out _))) throw new ArgumentException("Invalid Artifact source metadata.");
         name = WorkspaceFileNames.Sanitize(name);
