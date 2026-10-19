@@ -108,6 +108,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantArtifactReferenceService>();
         services.TryAddSingleton<TenantArtifactRuntimeReadService>();
         services.TryAddSingleton<TenantWorkspaceRuntimeReadService>();
+        services.TryAddSingleton<TenantResourceSourceTarget>();
+        services.TryAddSingleton<ITenantResourceSourceContentStore>(p => (ITenantResourceSourceContentStore)p.GetRequiredService<IDefinitionResourceContentStore>());
         services.TryAddSingleton<ITenantWorkspaceOperationStore>(p => (ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantWorkspaceMutationEffectService>();
         services.TryAddSingleton<TenantWorkspaceMutationTarget>();

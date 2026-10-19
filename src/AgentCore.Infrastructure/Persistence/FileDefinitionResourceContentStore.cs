@@ -5,7 +5,7 @@ using AgentCore.Infrastructure.Workspaces;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class FileDefinitionResourceContentStore(string root) : IDefinitionResourceContentStore
+public sealed class FileDefinitionResourceContentStore(string root) : IDefinitionResourceContentStore, ITenantResourceSourceContentStore
 {
     public async ValueTask StoreVerifiedAsync(string contentSha256, byte[] content, CancellationToken cancellationToken = default)
     {
@@ -48,6 +48,24 @@ public sealed class FileDefinitionResourceContentStore(string root) : IDefinitio
 
         var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         DefinitionResourceContentHasher.EnsureMatches(contentSha256, bytes);
+        return bytes;
+    }
+
+    public async ValueTask<byte[]?> ReadVerifiedResourceSourceAsync(string contentSha256, long expectedByteSize, CancellationToken ct = default)
+    {
+        DefinitionResourcePolicies.ValidateContentSize(expectedByteSize);
+        _ = ResolvePath(contentSha256);
+        AttachmentBlobKeys.EnsureSafeRoot(root);
+        if (contentSha256 != contentSha256.ToLowerInvariant()) throw AgentCoreErrors.Validation("Use a canonical content hash.");
+        // Reuse the native descriptor-relative primitive, without its writable workspace layout or marker.
+        // No-follow leaf/parents, owned hard-link checks and pre-allocation bounds apply to this blob root.
+        byte[] bytes;
+        try { bytes = await new CanonicalWorkspaceFilesystem(root, "/home").ReadUnlinkedAsync("/home/" + contentSha256, expectedByteSize, ct).ConfigureAwait(false); }
+        catch (AgentCoreException e) when (e.Code == "NotFound") { return null; }
+        AgentInstanceResourceService.Verify(contentSha256, expectedByteSize, bytes);
+        var current = await new CanonicalWorkspaceFilesystem(root, "/home").CaptureArtifactSourceAsync("/home/" + contentSha256, expectedByteSize, false, ct).ConfigureAwait(false);
+        if (current.ByteSize != expectedByteSize || current.Sha256Hex != contentSha256)
+            throw AgentCoreErrors.Persistence("Resource content changed during its read.");
         return bytes;
     }
 

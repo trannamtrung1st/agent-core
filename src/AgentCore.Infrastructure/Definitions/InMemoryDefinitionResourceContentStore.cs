@@ -4,7 +4,7 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.Definitions;
 
-public sealed class InMemoryDefinitionResourceContentStore : IDefinitionResourceContentStore
+public sealed class InMemoryDefinitionResourceContentStore : IDefinitionResourceContentStore, ITenantResourceSourceContentStore
 {
     private readonly ConcurrentDictionary<string, byte[]> _blobs = new(StringComparer.Ordinal);
 
@@ -32,5 +32,14 @@ public sealed class InMemoryDefinitionResourceContentStore : IDefinitionResource
         }
 
         return ValueTask.FromResult<byte[]?>(content.ToArray());
+    }
+    public async ValueTask<byte[]?> ReadVerifiedResourceSourceAsync(string contentSha256, long expectedByteSize, CancellationToken ct = default)
+    {
+        AgentCore.Application.Admin.DefinitionResourcePolicies.ValidateContentSize(expectedByteSize);
+        if (contentSha256.Length != 64 || contentSha256.Any(c => !char.IsAsciiHexDigit(c)) || contentSha256 != contentSha256.ToLowerInvariant())
+            throw AgentCore.Application.Sessions.AgentCoreErrors.Validation("Use a canonical content hash.");
+        var bytes = await ReadAsync(contentSha256, ct).ConfigureAwait(false);
+        if (bytes is not null) AgentCore.Application.Admin.AgentInstanceResourceService.Verify(contentSha256, expectedByteSize, bytes);
+        return bytes;
     }
 }

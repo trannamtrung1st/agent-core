@@ -20,6 +20,8 @@ public sealed class DefinitionResourceInfrastructureDiTests
         Assert.NotNull(definitions);
         Assert.NotNull(resources);
         Assert.NotNull(content);
+        Assert.Same(content, provider.GetRequiredService<ITenantResourceSourceContentStore>());
+        Assert.NotNull(provider.GetRequiredService<AgentCore.Application.Security.TenantResourceSourceTarget>());
         Assert.NotNull(provider.GetRequiredService<IIamStore>());
     }
 

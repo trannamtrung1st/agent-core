@@ -100,12 +100,16 @@ public sealed partial class TenantCredentialIntegrationTests
             (ITenantDefinitionStore)Iam, BuiltIns, Identity, Authorizer);
         public TenantSessionService SessionService(ITenantSessionStore sessions) => new(Iam, (ITenantAgentStore)Iam, sessions, (ITenantRunStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns,
             Identity, Authorizer, ModelCatalogFactory.Create("Synthetic", null, null), new(), Ids, Clock, Artifacts as ITenantArtifactStore);
+        public IAgentDefinitionResourceAdminStore Resources { get; private set; } = null!;
         public IDefinitionResourceContentStore RunContent { get; } = new InMemoryDefinitionResourceContentStore();
         public TenantRunService RunService(ITenantRunStore? runs = null) => new(Iam, (ITenantSessionStore)Iam, runs ?? (ITenantRunStore)Iam,
             RunConfiguration(),
             Identity, Authorizer, ModelCatalogFactory.Synthetic(), Ids, Clock);
         public TenantRunConfigurationResolver RunConfiguration(IBuiltInAgentDefinitionStore? currentBuiltIns = null) =>
             new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, currentBuiltIns ?? BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam);
+        public TenantAgentConfigurationService AgentConfiguration() => new(Iam, (ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam,
+            BuiltIns, RunResourceCatalog(), Authorizer, ModelCatalogFactory.Synthetic(), AgentCore.Application.Tools.ToolConfigurationGates.AllowAll,
+            new(new AgentCore.Infrastructure.Persistence.InMemoryTriggerStore(), Memory), Ids, Clock, content: RunContent, identity: Identity);
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);
@@ -123,7 +127,7 @@ public sealed partial class TenantCredentialIntegrationTests
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
             var root = Path.Combine(directory!.FullName, "agents");
-            return new(new InMemoryAgentDefinitionResourceAdminStore(new InMemoryAgentDefinitionAdminStore(Ids), RunContent, Ids),
+            return new(Resources,
                 BuiltIns, new FileApprovedKnowledgeCatalog(root), RunContent);
         }
         internal IBuiltInAgentDefinitionStore BuiltIns => _builtIns ??= LoadBuiltIns();
@@ -145,7 +149,8 @@ public sealed partial class TenantCredentialIntegrationTests
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
                     if (artifactAuthority) f.Artifacts = new SqliteArtifactStore(f.Contexts, f.Clock, Path.Combine(f.Root, "artifacts"));
                     f.Sandboxes = new SqliteSandboxStore(f.Contexts);
-                    f.Iam = new SqliteIamStore(f.Contexts, builtIns: builtInAuthority ? f.BuiltIns : null, clock: f.Clock, artifactBacking: artifactAuthority ? (SqliteArtifactStore)f.Artifacts : null); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
+                    f.Resources = new SqliteAgentDefinitionResourceAdminStore(f.Contexts, f.RunContent, f.Ids);
+                    f.Iam = new SqliteIamStore(f.Contexts, definitionContent: f.RunContent, builtIns: builtInAuthority ? f.BuiltIns : null, inheritedResources: builtInAuthority ? f.RunResourceCatalog() : null, clock: f.Clock, artifactBacking: artifactAuthority ? (SqliteArtifactStore)f.Artifacts : null); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
                     f.Memory = new SqliteMemoryStore(f.Contexts, f.Clock);
                 }
                 else
@@ -155,7 +160,9 @@ public sealed partial class TenantCredentialIntegrationTests
                     var memory = new InMemoryMemoryStore(instances); f.Memory = memory;
                     if (artifactAuthority) f.Artifacts = new InMemoryArtifactStore(f.Clock).BindTenantAuthority(memory);
                     f.Sandboxes = new InMemorySandboxStore();
-                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), memory, builtIns: builtInAuthority ? f.BuiltIns : null, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes, artifacts: artifactAuthority ? (InMemoryArtifactStore)f.Artifacts : null);
+                    var definitions = new InMemoryAgentDefinitionAdminStore(f.Ids);
+                    var resources = new InMemoryAgentDefinitionResourceAdminStore(definitions, f.RunContent, f.Ids); definitions.ResourceStore = resources; f.Resources = resources;
+                    f.Iam = new InMemoryIamStore(instances, definitions, memory, builtIns: builtInAuthority ? f.BuiltIns : null, inheritedResources: builtInAuthority ? f.RunResourceCatalog() : null, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes, artifacts: artifactAuthority ? (InMemoryArtifactStore)f.Artifacts : null);
                 }
                 return f;
             }

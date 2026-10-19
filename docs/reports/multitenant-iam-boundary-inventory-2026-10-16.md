@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Internal pinned-resource source successor — 2026-10-19
+
+The current resource source resolves actual tenant/Instance bindings and admitted immutable resource identity, with independent executor Session/Agent/exact-child `resources.read` IAM and policy. The incumbent content-addressed resource store now has a bounded verified read facet; no public raw-hash endpoint, new file index or alternate ownership engine is added. [Focused evidence](tenant-resource-source-verification-2026-10-19.md) covers source capture, current authority and both-store/native boundaries only. Public model namespace/read-consent conversion and remaining resource/autonomous/transport/final authority cutover rows stay pending. Historical rows below are not promoted by this prerequisite.
+
 ## Tenant Office mutation successor checkpoint — 2026-10-19
 
 Conversational DOCX/XLSX create/edit now use the canonical tenant workspace mutation, exact Review/primary write grant and incumbent Office processor/file owners. [Focused evidence](tenant-office-mutation-verification-2026-10-19.md) records both-store model/HTTP flows, actual pending-consent SQLite host recreation, guarded create-new/edit source checks, abandoned-dispatch no-replay and the shared Synthetic browser journey. This supersedes Office-create/edit-pending notes below for this conversational path only. Source publication, virtual resources, autonomous/resource/transport families and final clean authority/schema cutover remain open; the full proposal stays active.

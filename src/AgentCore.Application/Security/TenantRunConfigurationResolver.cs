@@ -8,6 +8,9 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Security;
 
+public sealed record TenantRunResourceConfiguration(TenantAgentConfigurationSnapshot Snapshot, AgentDefinition Baseline,
+    AgentDefinition Definition, IReadOnlyList<EffectiveAgentResource> Resources);
+
 public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, ITenantCredentialBindingStore bindings,
     ITenantSandboxProfileStore? sandboxProfiles = null, ISandboxImageAuthority? sandboxImages = null, ISandboxReadiness? sandboxReadiness = null, IamAuthorizer? authorizer = null)
@@ -31,7 +34,7 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
         };
         return (agent, effective);
     }
-    public async ValueTask<(TenantAgent Agent, ResolvedAgentRunConfiguration Configuration)> ResolveAsync(Guid tenant, Guid instance, CancellationToken ct)
+    public async ValueTask<TenantRunResourceConfiguration> CurrentResourcesAsync(Guid tenant, Guid instance, CancellationToken ct = default)
     {
         var state = await agents.ReadTenantAgentConfigurationAsync(tenant, instance, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("resource_unavailable");
@@ -49,9 +52,6 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
                 ?? throw new AccessDeniedException("definition_unavailable");
             published = await inheritedResources.ListAsync(baseline, ct).ConfigureAwait(false);
         }
-        var bound = await bindings.ReadTenantCredentialBindingsAsync(tenant, instance, ct).ConfigureAwait(false)
-            ?? throw new AccessDeniedException("resource_unavailable");
-        if (bound.Agent.Instance.Revision != owner.Revision) throw new SecurityConflictException("stale_revision");
         var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
         var manifest = AgentInstanceResourceService.Resolve(effective, published, state.Resources, state.Skills);
         var environment = RoleEnvironments.Of(effective);
@@ -60,9 +60,18 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
             .Concat(manifest.Where(r => r.Key.StartsWith("instance:", StringComparison.Ordinal) && r.Kind == AgentDefinitionResourceKind.Knowledge)
                 .Select(r => new KnowledgeSourceRef(r.Key, r.LogicalPath, r.VirtualPath, r.LogicalPath))).ToArray();
         effective = effective with { Environment = environment with { KnowledgeSources = knowledge } };
-        effective = await BindSandboxProfilesAsync(tenant, state.Agent, effective, ct).ConfigureAwait(false);
-        var configuration = new AgentRunConfiguration(effective, owner.Revision, owner.PersonaRevision, manifest,
-            bound.Bindings.Select(b => b.Binding).ToArray(), InstanceSettingsResolver.Sources(baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision));
+        return new(state, baseline, effective, manifest);
+    }
+    public async ValueTask<(TenantAgent Agent, ResolvedAgentRunConfiguration Configuration)> ResolveAsync(Guid tenant, Guid instance, CancellationToken ct)
+    {
+        var resources = await CurrentResourcesAsync(tenant, instance, ct).ConfigureAwait(false);
+        var state = resources.Snapshot; var owner = state.Agent.Instance;
+        var bound = await bindings.ReadTenantCredentialBindingsAsync(tenant, instance, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("resource_unavailable");
+        if (bound.Agent.Instance.Revision != owner.Revision) throw new SecurityConflictException("stale_revision");
+        var effective = await BindSandboxProfilesAsync(tenant, state.Agent, resources.Definition, ct).ConfigureAwait(false);
+        var configuration = new AgentRunConfiguration(effective, owner.Revision, owner.PersonaRevision, resources.Resources,
+            bound.Bindings.Select(b => b.Binding).ToArray(), InstanceSettingsResolver.Sources(resources.Baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision));
         return (state.Agent, new(configuration, owner.Persona, EffectiveSkillCatalogResolver.Resolve(effective, state.Skills), owner.ExecutionBudgets));
     }
 }
