@@ -1,8 +1,14 @@
 # Accounts, organizations, access and approvals UX
 
-## Agent decommission status
+## Agent lifecycle interaction contract
 
-The backend now exposes exact retained decommission preflight and irreversible archived-owner retirement with separate physical-cleanup facts. The frontend control is still pending. Its eventual confirmation must use the coherent current Agent/organization and witnesses, explain Browser/profile/home/local-child cleanup plus retained history/reference blockers, and keep committed retirement separate from pending physical cleanup. Readback must not replay a new logical deletion. [Backend qualification](reports/tenant-agent-decommission-verification-2026-10-20.md), [HTTP contract](14-api-and-realtime-protocol.md#tenant-agent-decommission-http).
+Lifecycle is the single canonical Instance destination for archive, restore and permanent decommission. Inventory and contextual navigation provide its link; Access owns audience/execution roles. Show the coherent current Agent name, organization and saved lifecycle before actions. Native responsive details and shared panels/confirmations preserve the existing Admin layout through 320px and wrap long names.
+
+Archive/restore retain identity, history and saved state, with independent current update access. Only archived owners expose Permanent retirement; exact deletion access and reference/profile-reset blockers determine availability. Confirm the actual Agent/organization and explain irreversible identity retirement, bindings/local configuration and Browser/home/workspace cleanup. Retained Sessions and execution references prevent retirement. Cancel makes no mutation and returns focus to the action.
+
+One confirmation owns one witness/operation attempt. Known success may refresh current facts. Stale, lost or malformed completion disables further commands until the user chooses Reload lifecycle, then any new command needs a fresh confirmation. Readback never replays a command. Preserve acknowledged retirement even if its subsequent read is denied; remove inaccessible Agent details. Distinguish saved identity retirement from completed/pending physical cleanup. A later read proves logical retirement only and explicitly leaves cleanup unconfirmed. Navigation retires in-flight ownership and destroys the confirmation. Completion falls back to Reload focus when its original action is unavailable.
+
+[Frontend implementation](13-frontend-implementation-spec.md#tenant-agent-lifecycle), [backend qualification](reports/tenant-agent-decommission-verification-2026-10-20.md), [UI qualification](reports/tenant-agent-lifecycle-ui-verification-2026-10-20.md), [HTTP contract](14-api-and-realtime-protocol.md#tenant-agent-decommission-http).
 
 ## Platform Browser privacy
 

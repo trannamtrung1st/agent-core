@@ -5,7 +5,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record TenantAgentDecommissionView(Guid InstanceId, string AgentName, string Lifecycle, long InstanceRevision,
-    long SecurityRevision, bool Decommissioned, bool CanDecommission, string? Blocker, Guid? OperationId);
+    long SecurityRevision, bool Decommissioned, bool CanDecommission, string? Blocker, Guid? OperationId, bool CanUpdate, string OrganizationName);
 public sealed record TenantAgentDecommissionResult(Guid OperationId, string Status, string CleanupStatus);
 
 public sealed class TenantAgentDecommissionService(IIamStore security, ITenantAgentDecommissionStore store,
@@ -28,10 +28,11 @@ public sealed class TenantAgentDecommissionService(IIamStore security, ITenantAg
         var blocker = retired ? "agent_decommissioned" : agent.Instance.Lifecycle != AgentInstanceLifecycle.Archived ? "archive_required"
             : snapshot.References.HasReferences ? "agent_in_use" : agent.Instance.BrowserProfileReset?.Status == "pending" ? "browser_profile_busy" : null;
         var canDecommission = blocker is null && await TenantAgentDecommissionRules.Allowed(after.State, human.PrincipalId, instance, authorizer, true, ct);
+        var canUpdate = !retired && (await authorizer.CheckAsync(human.PrincipalId, "agents.update", TenantAgentDecommissionRules.Scope(tenant, instance), ct)).Allowed;
         var final = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct);
         if (final.Tenant.Revision != after.State.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         return new(instance, agent.Instance.Persona.Name, agent.Instance.Lifecycle.ToString(), agent.Instance.Revision, after.State.Tenant.Revision,
-            retired, canDecommission, blocker, snapshot.Receipt?.AuditId);
+            retired, canDecommission, blocker, snapshot.Receipt?.AuditId, canUpdate, after.State.Tenant.Name);
     }
     public ValueTask<TenantAgentDecommissionResult> DecommissionAsync(Guid tenant, Guid instance, HumanSessionReference human,
         long expectedSecurityRevision, long expectedInstanceRevision, Guid operation, CancellationToken ct = default) =>

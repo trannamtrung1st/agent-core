@@ -5,7 +5,7 @@ import { followAppLink } from '../../app/appLink';
 import { identityRequest, tenantApi, type Page, type Role, type TenantContext } from '../../services/identity';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { permissionFamily, permissionLabel } from './Roles';
-import { tenantAccessPath } from './accessRoute';
+import { tenantAccessPath, tenantAgentPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
 
@@ -36,7 +36,7 @@ export function TenantAgentAccess({ context, id }: { context: TenantContext; id:
     <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button onClick={state.reload} disabled={command.busy}>Reload access</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={state.reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : view && <>
-      <Flex wrap align="center" gap="var(--ac-space-compact)" className="admin-draft-section-heading"><Typography.Title level={4}>{view.name}</Typography.Title><Tag>{view.lifecycle}</Tag>{view.canUpdate && <Button disabled={disabled} onClick={() => decide(view.lifecycle === 'Active' ? 'Archive instance' : 'Restore instance', `${view.lifecycle === 'Active' ? 'Archive' : 'Restore'} ${view.name}? Its identity and history are retained.`, () => command.run(signal => identityRequest(tenantApi(tenant, `/agents/${id}/lifecycle`), { method: 'PUT', signal, body: { lifecycle: view.lifecycle === 'Active' ? 1 : 0, expectedRevision: view.securityRevision, expectedInstanceRevision: view.instanceRevision } }), () => changed('Instance status updated.')), view.lifecycle === 'Active')}>{view.lifecycle === 'Active' ? 'Archive instance' : 'Restore instance'}</Button>}</Flex>
+      <Flex wrap align="center" gap="var(--ac-space-compact)" className="admin-draft-section-heading"><Typography.Title level={4}>{view.name}</Typography.Title><Tag>{view.lifecycle}</Tag><Typography.Link href={tenantAgentPath(tenant,id,'lifecycle')} onClick={followAppLink}>Lifecycle</Typography.Link></Flex>
       <Alert type="info" showIcon title="Chat and execution authority are separate." description="Chat access lets someone reach this agent. Its instructions and judgment guide its response. Its own roles determine protected operations; human-only permissions remain unavailable to agents." />
       <section aria-label="Who can chat"><Flex vertical className="admin-draft-form-section"><Typography.Title level={4}>Who can chat?</Typography.Title>
         {!view.audience.items.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chat-bearing assignments on this page." />}

@@ -36,7 +36,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.BadRequest,(await DecommissionDelete(owner,path,new{expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=1,operationId=Guid.NewGuid(),actorPrincipalId=Guid.NewGuid()})).StatusCode);
             Assert.Equal(HttpStatusCode.Conflict,(await DecommissionDelete(owner,path,new{expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=1,operationId=Guid.NewGuid()})).StatusCode);
             var archived=await owner.PutAsJsonAsync(path+"/lifecycle",new{lifecycle=1,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=1});archived.EnsureSuccessStatusCode();
-            preflight=await Json(await owner.GetAsync(path+"/decommission"));Assert.True(preflight.GetProperty("canDecommission").GetBoolean());
+            preflight=await Json(await owner.GetAsync(path+"/decommission"));Assert.True(preflight.GetProperty("canDecommission").GetBoolean());Assert.True(preflight.GetProperty("canUpdate").GetBoolean());Assert.Equal((await Json(await owner.GetAsync(api+"/access/me"))).GetProperty("tenant").GetProperty("name").GetString(),preflight.GetProperty("organizationName").GetString());
             using var anonymous=factory.CreateClient(new WebApplicationFactoryClientOptions{BaseAddress=new("https://localhost")});Assert.Equal(HttpStatusCode.Unauthorized,(await anonymous.GetAsync(path+"/decommission")).StatusCode);
             var profile=Path.Combine(root,"profiles","tenants",tenant.ToString("D"),"agents",id.ToString("D"));Directory.CreateDirectory(profile);await File.WriteAllTextAsync(Path.Combine(profile,"sentinel"),"private profile");
             var home=AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(root,"workspaces"),id);Directory.CreateDirectory(home);await File.WriteAllTextAsync(Path.Combine(home,"sentinel"),"private home");
@@ -46,7 +46,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(0,(await Json(await owner.GetAsync(api+"/agents"))).GetProperty("total").GetInt32());Assert.Equal(HttpStatusCode.Forbidden,(await owner.GetAsync(path)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden,(await owner.PutAsJsonAsync(path+"/lifecycle",new{lifecycle=0,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=3})).StatusCode);
             var replay=await DecommissionDelete(owner,path,command);replay.EnsureSuccessStatusCode();Assert.Equal(operation,(await Json(replay)).GetProperty("operationId").GetGuid());
-            var saved=await Json(await owner.GetAsync(path+"/decommission"));Assert.True(saved.GetProperty("decommissioned").GetBoolean());Assert.False(saved.GetProperty("canDecommission").GetBoolean());
+            var saved=await Json(await owner.GetAsync(path+"/decommission"));Assert.True(saved.GetProperty("decommissioned").GetBoolean());Assert.False(saved.GetProperty("canDecommission").GetBoolean());Assert.False(saved.GetProperty("canUpdate").GetBoolean());
             var audit=await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant,200);Assert.Single(audit,a=>a.Action=="agents.decommission"&&a.AuditId==operation);
         }finally{SqliteConnection.ClearAllPools();Directory.Delete(root,true);}
     }

@@ -61,11 +61,13 @@ test('create, grant exact chat and independent execution, inspect permissions, r
     await page.getByRole('button', { name: 'Reload access', exact: true }).click(); await audience.getByRole('button', { name: /^Revoke Agent-specific Chat/ }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Revoke role', exact: true }).click(); await expect(audience.getByText('Agent-specific Chat', { exact: true })).toHaveCount(0);
     expect((await check(f.member.principalId, 'agents.chat', true)).allowed).toBe(false);
+    await page.goto(`${f.path}/${id}/lifecycle`);
     await page.getByRole('button', { name: 'Archive instance', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Archive instance', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Restore instance', exact: true })).toBeVisible(); await expect(audience.getByText('Can chat', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Restore instance', exact: true })).toBeVisible();
+    await page.goto(`${f.path}/${id}/access`); await expect(audience.getByText('Can chat', { exact: true })).toHaveCount(0); await page.goto(`${f.path}/${id}/lifecycle`);
     await page.getByRole('button', { name: 'Restore instance', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Restore instance', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Archive instance', exact: true })).toBeVisible();
-    await page.reload(); await expect(authority.getByText('Credential metadata reader', { exact: true })).toBeVisible();
+    await page.goto(`${f.path}/${id}/access`); await page.reload(); await expect(authority.getByText('Credential metadata reader', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); expect(errors).toEqual([]); expect(legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });

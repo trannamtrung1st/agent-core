@@ -1,5 +1,15 @@
 # Frontend Implementation Specification
 
+## Tenant Agent Lifecycle
+
+`TenantAgentLifecycle` is the single canonical UI owner for archive, restore and permanent decommission at `/t/{tenantId}/admin/agents/{instanceId}/lifecycle`. Instance navigation and inventory link to it; Access retains audience/execution roles and links to Lifecycle. The established AdminShell, AgentConfigurationPanel, responsive Descriptions, native Alerts/Buttons and shared `confirmAction` own presentation without new CSS or tokens.
+
+A coherent original-human read supplies Agent name, organization context, lifecycle, exact security/Instance witnesses, independent update/deletion hints and blockers. Archive/restore require current update authority. Archived decommission remains distinct and requires deletion authority; history/reference or pending profile-reset blockers explain why it is unavailable. Confirmations name the exact Agent and organization; irreversible retirement explains identity, bindings/local configuration, Browser/home/workspace cleanup and retained references.
+
+Each confirmed action sends its captured witnesses once and retires them. A validated success refreshes current facts; stale, failed, lost or malformed completion requires explicit Reload lifecycle before a new confirmation and operation. No command is replayed by readback. Known retirement and completed/pending cleanup acknowledgement survive a failed follow-up read, while a fresh read or full reload cannot infer physical cleanup from logical retirement alone. Denied reads remove protected content. Abort/unmount suppresses late responses and destroys its confirmation. Cancel restores the action focus; an unavailable original action returns focus to Reload lifecycle.
+
+[UX contract](19-multi-tenant-iam-ux.md#agent-lifecycle-interaction-contract), [wire contract](14-api-and-realtime-protocol.md#tenant-agent-decommission-http), [focused evidence](reports/tenant-agent-lifecycle-ui-verification-2026-10-20.md). This completes the canonical human Lifecycle UI only; full proposal cutover remains open.
+
 ## Tenant Browser profile management
 
 Agent Connections reuses `TenantBrowserProfilePanel` as an independent **Browser state** section, composed with the existing `AgentConfigurationPanel`, Ant Design Alert/Flex/Button and shared centered `confirmAction`. It observes current server-projected Agent name/lifecycle and persistent-profile facts without a Credential-binding prerequisite. The inherited bounded column, section gap, wrapping panel heading/actions and native confirmation own layout; no new CSS/token/theme or generic wrapper is added.
