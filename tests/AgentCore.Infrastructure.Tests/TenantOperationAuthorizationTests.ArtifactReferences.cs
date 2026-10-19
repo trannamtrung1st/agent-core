@@ -8,10 +8,24 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantOperationAuthorizationTests
 {
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Artifact_reference_preflight_requires_actual_source_current_claim_and_independent_read_not_creation(bool sqlite)
+    [Theory] [InlineData(false, "customer-support", 3)] [InlineData(true, "customer-support", 3)]
+    [InlineData(false, "general-assistant", 32)] [InlineData(true, "general-assistant", 32)]
+    public async Task Artifact_reference_preflight_requires_actual_source_current_claim_and_independent_read_not_creation(bool sqlite, string template, int version)
     {
-        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var setup = await Setup(f, "customer-support", 3);
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var setup = await Setup(f, template, version);
+        var configuration = f.RunConfiguration();
+        if (template == "general-assistant")
+        {
+            configuration = f.RunConfiguration(new ResourceExportOnlyBuiltIns(f.BuiltIns));
+            var currentSession = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(setup.Tenant, setup.Run.SessionId))!;
+            var admission = await new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, configuration,
+                f.Identity, f.Authorizer, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), f.Ids, f.Clock)
+                .SubmitTextAsync(setup.Tenant, currentSession.Owner.SessionId, setup.Owner, f.Ids.NewId(), "Source-export-only response", (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision, currentSession.Snapshot.Revision);
+            setup = setup with { Run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, admission.RunId))! };
+            Assert.True(AgentCore.Application.Tools.TenantWorkspaceArtifactContract.Allows(setup.Run.Admission.Configuration!.Definition));
+            Assert.False(AgentCore.Application.Tools.TenantArtifactToolContract.Allows(setup.Run.Admission.Configuration.Definition));
+            Assert.False(AgentCore.Application.Agents.RolePermissions.AllowsTool(setup.Run.Admission.Configuration.Definition, AgentCore.Application.Tools.ToolCatalog.ArtifactsVerify));
+        }
         var frame = await ClaimArtifactRun(f, setup); await GrantPublication(f, setup);
         var store = (ITenantArtifactStore)f.Artifacts;
         var own = await store.CreateTenantAsync(frame, f.Ids.NewId(), "own.md", "text/plain", new byte[] { 1 });
@@ -20,7 +34,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var other = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, admitted.RunId))!;
         var otherFrame = await ClaimArtifactRun(f, setup with { Run = other });
         var foreign = await store.CreateTenantAsync(otherFrame, f.Ids.NewId(), "other.md", "text/plain", new byte[] { 2 });
-        var service = new TenantArtifactReferenceService(store, (ITenantSessionStore)f.Iam, Operations(f), f.RunConfiguration(), f.Authorizer, f.Clock);
+        var service = new TenantArtifactReferenceService(store, (ITenantSessionStore)f.Iam, Operations(f), configuration, f.Authorizer, f.Clock);
         var bound = service.Bind(frame);
         Assert.False((await bound.PrepareAsync(frame.SessionId, [own.ArtifactId.ToString("D")])).IsAuthorized(frame.SessionId, own.ArtifactId.ToString("D")));
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Independent Artifact read", ["artifacts.read"], (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);

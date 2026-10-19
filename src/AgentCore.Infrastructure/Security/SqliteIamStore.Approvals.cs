@@ -176,7 +176,15 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 ({artifactReadJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactReadJson})))
                 AND ({artifactCreateJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactCreateJson})))
                 AND (json_type(PayloadJson, '$.Operation.ArtifactPublication.Source') IS NOT 'object' OR (
-                    ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
+                    ((json_type(PayloadJson, '$.Operation.ArtifactPublication.Source.AttachmentId') IS 'text'
+                        AND ({attachmentJson} = 'null' OR json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.AttachmentId') IN (SELECT value FROM json_each({attachmentJson})))
+                        AND ({attachmentSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({attachmentSessionJson})))
+                        AND EXISTS (SELECT 1 FROM Attachments AS file WHERE file.TenantId = TenantApprovalRequests.TenantId
+                            AND file.SessionId = TenantApprovalRequests.SessionId AND file.State = 'Bound' AND file.ContentDeletedAtUtc IS NULL
+                            AND file.AttachmentId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.ArtifactPublication.Source.AttachmentId')
+                            AND file.EntryId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.ArtifactPublication.Source.EntryId')))
+                    OR (json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.AttachmentId') IS NULL
+                        AND ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
                     AND ((json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey') IS NULL
                         AND ({workspaceJson} = 'null' OR CASE WHEN json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
                             THEN 'working:' || SessionId ELSE 'home:' || InstanceId END IN (SELECT value FROM json_each({workspaceJson}))))
@@ -184,7 +192,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                             AND (InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey')) IN (SELECT value FROM json_each({ownedResourceJson}))
                             AND ({resourceJson} = 'null' OR (InstanceId || ':' || json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.ResourceKey')) IN (SELECT value FROM json_each({resourceJson})))))
                     AND (json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
-                        OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))))
+                        OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))))))
                 AND EXISTS (SELECT 1 FROM TenantSessions AS root JOIN Sessions AS saved ON saved.SessionId = root.SessionId
                     WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId
                     AND root.AgentInstanceId = TenantApprovalRequests.InstanceId AND root.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL))) AND

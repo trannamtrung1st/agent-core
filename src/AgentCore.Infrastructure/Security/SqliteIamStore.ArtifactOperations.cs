@@ -38,6 +38,11 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
             TenantArtifactSourceRules.Require(run, target, definition, session, path, commit.Source);
             if (commit.Source?.ResourceKey is { } sourceKey) TenantResourceRevisionRules.Require(sourceKey, commit.Source.ResourceRevision, run, target,
                 await SqliteAgentInstanceStore.ReadResourcesAsync(db, target.Instance.InstanceId, ct).ConfigureAwait(false));
+            if (commit.Source is { AttachmentId: { } attachmentId } attachmentSource)
+            {
+                var attachment = await SqliteAttachmentStore.Owned(db, run.Owner.TenantId!.Value, run.SessionId).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false);
+                TenantAttachmentArtifactRules.Require(attachmentSource, session.Owner, attachment is null ? null : SqliteAttachmentStore.Domain(attachment));
+            }
             await TenantArtifactSourceRules.RequireAuthorityAsync(before, run, path, new IamAuthorizer(this), false, ct, ownedSources: true).ConfigureAwait(false);
         }
         TenantArtifactOperationRules.Transaction(next, expectedSecurityRevision, run, audit);

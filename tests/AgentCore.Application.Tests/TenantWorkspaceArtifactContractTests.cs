@@ -120,4 +120,23 @@ public sealed class TenantWorkspaceArtifactContractTests
         Assert.Equal(JsonSerializer.Serialize(old), JsonSerializer.Serialize(value));
     }
 
+    [Theory] [InlineData("/attachments")] [InlineData("/attachments/00000000-0000-0000-0000-000000000000")]
+    [InlineData("/attachments/AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")] [InlineData("/attachments/11111111-1111-1111-1111-111111111111/name.txt")]
+    [InlineData("/attachments/../secret")]
+    public void Attachment_export_rejects_noncanonical_alias_or_directory_paths(string path) =>
+        Assert.Throws<ArgumentException>(() => TenantWorkspaceArtifactContract.Parse(JsonSerializer.Serialize(new { path, displayName = "copy" })));
+
+    [Fact]
+    public void Attachment_export_binds_source_entry_and_excludes_other_source_families()
+    {
+        var id = Guid.NewGuid(); var entry = Guid.NewGuid(); var path = "/attachments/" + id.ToString("D");
+        var args = TenantWorkspaceArtifactContract.Parse(JsonSerializer.Serialize(new { path, displayName = "copy" }));
+        var source = new PreparedArtifactSource(true, path, "text/plain", 4, new('a', 64), new('b', 64), AttachmentId: id, EntryId: entry, AttachmentName: "Original.txt");
+        TenantArtifactSourceRules.ValidateWitness(source, args.Path);
+        foreach (var invalid in new[] { source with { EntryId = null }, source with { AttachmentName = null }, source with { AttachmentId = Guid.NewGuid() }, source with { Working = false },
+            source with { ResourceKey = "instance:" + Guid.NewGuid(), ResourceRevision = 1 }, source with { ByteSize = 26214401 } })
+            Assert.Throws<ArgumentException>(() => TenantArtifactSourceRules.ValidateWitness(invalid, args.Path));
+        Assert.Throws<ArgumentException>(() => TenantArtifactSourceRules.ValidateWitness(source with { Path = "/working/file" }, "/working/file"));
+    }
+
 }

@@ -462,3 +462,25 @@ it('shows exact Attachment source and page as escaped read consent with separate
   expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
   expect(document.querySelector('script')).toBeNull();
 });
+
+it.each(['/agent/resources/試験-thử-nghiệm.docx', '/agent/instance/resources/report.docx', '/attachments/11111111-1111-1111-1111-111111111111'])('reviews converted source publication %s through the shared inspector and confirmation', async path => {
+  view({ ...sourceRequest, review: { ...sourceRequest.review, changes: [...sourceRequest.review.changes.map(c => c.field === 'artifactSourcePath' ? { ...c, after: path } : c), ...(path.startsWith('/attachments/') ? [{ ...sourceRequest.review.changes[0], field: 'artifactSourceName', after: '原本 thử nghiệm.txt' }] : [])] } });
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved file' });
+  expect(within(saved).getByText(path)).toBeVisible(); if (path.startsWith('/attachments/')) expect(within(saved).getByText('原本 thử nghiệm.txt')).toBeVisible(); expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeEnabled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Authorize once' }));
+  const confirm = (await screen.findAllByText('Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/exact saved source bytes/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+});
+it.each(['/attachments/00000000-0000-0000-0000-000000000000', '/attachments/11111111-1111-1111-1111-111111111111/file.txt', '/agent/resources/../secret'])('keeps malformed source %s unavailable with cancellation', async path => {
+  view({ ...sourceRequest, review: { ...sourceRequest.review, changes: [...sourceRequest.review.changes.map(c => c.field === 'artifactSourcePath' ? { ...c, after: path } : c), ...(path.startsWith('/attachments/') ? [{ ...sourceRequest.review.changes[0], field: 'artifactSourceName', after: '原本 thử nghiệm.txt' }] : [])] } });
+  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Saved file publication unavailable')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+
+it('withholds a saved Attachment publication missing its canonical original filename', async () => {
+  const path = '/attachments/11111111-1111-1111-1111-111111111111';
+  view({ ...sourceRequest, review: { ...sourceRequest.review, changes: sourceRequest.review.changes.map(c => c.field === 'artifactSourcePath' ? { ...c, after: path } : c) } });
+  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Saved file publication unavailable')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});

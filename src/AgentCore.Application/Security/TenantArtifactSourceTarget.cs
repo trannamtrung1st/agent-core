@@ -9,7 +9,7 @@ namespace AgentCore.Application.Security;
 // Source preparation only; publication/Run/receipt authority stays with the existing Artifact owner.
 public sealed record TenantArtifactSourceObservationTarget(AgentRun Run, TenantSecurityState State, TenantAgent Agent, ITenantWorkspaceArtifactSource Source);
 public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
-    TenantRunConfigurationResolver configurations, ITenantWorkspaceArtifactSourceStore files, IamAuthorizer iam, TimeProvider time, TenantResourceSourceTarget? resources = null)
+    TenantRunConfigurationResolver configurations, ITenantWorkspaceArtifactSourceStore files, IamAuthorizer iam, TimeProvider time, TenantResourceSourceTarget? resources = null, ITenantAttachmentStore? attachments = null)
 {
     public async ValueTask<ITenantWorkspaceArtifactSource> CaptureAsync(TenantRuntimeFrame frame, TenantWorkspaceArtifactArguments args, CancellationToken ct = default) =>
         (await CaptureCoreAsync(frame, args, false, true, ct).ConfigureAwait(false)).Source;
@@ -35,7 +35,10 @@ public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operati
         ITenantWorkspaceArtifactSource source;
         try
         {
-            source = TenantWorkspaceReadContract.IsResourcePath(args.Path)
+            source = TenantAttachmentArtifactRules.IsPath(args.Path)
+                ? await (attachments as ITenantAttachmentArtifactSourceStore ?? throw new AccessDeniedException("tenant_effect_unavailable"))
+                    .CaptureAttachmentArtifactSourceTenantAsync(before.Session.Owner, TenantAttachmentArtifactRules.Id(args.Path), ct).ConfigureAwait(false)
+                : TenantWorkspaceReadContract.IsResourcePath(args.Path)
                 ? new ResourceArtifactSource(await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).CaptureForArtifactAsync(frame, args.Path, review, live, ct).ConfigureAwait(false))
                 : await files.CaptureArtifactSourceTenantAsync(TenantArtifactSourceRules.Owner(before.Run, args.Path), args.Path, ct).ConfigureAwait(false);
         }
@@ -46,6 +49,8 @@ public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operati
             || before.Session.Owner != after.Session.Owner || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision)
             throw new SecurityConflictException("workspace_source_changed");
         var witness = TenantArtifactSourceRules.Witness(source.Observation); TenantArtifactSourceRules.ValidateWitness(witness, args.Path);
+        if (witness.AttachmentId is { } id) TenantAttachmentArtifactRules.Require(witness, after.Session.Owner,
+            await attachments!.FindTenantAsync(reference.TenantId, frame.SessionId, id, ct).ConfigureAwait(false));
         if (source.Observation.Owner != TenantArtifactSourceRules.Owner(after.Run, args.Path)) throw new SecurityConflictException("workspace_source_changed");
         return new(after.Run, after.State, after.Agent, source);
     }

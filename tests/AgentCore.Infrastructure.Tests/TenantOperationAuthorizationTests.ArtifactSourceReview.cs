@@ -12,7 +12,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantOperationAuthorizationTests
 {
     private static TenantArtifactSourceTarget ArtifactSources(Fixture f, ITenantWorkspaceArtifactSourceStore? files = null) =>
-        new(Operations(f), (ITenantSessionStore)f.Iam, f.RunConfiguration(), files ?? WorkspaceReader(f), f.Authorizer, f.Clock, ResourceSources(f));
+        new(Operations(f), (ITenantSessionStore)f.Iam, f.RunConfiguration(), files ?? WorkspaceReader(f), f.Authorizer, f.Clock, ResourceSources(f), (ITenantAttachmentStore)f.Attachments);
 
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_Artifact_source_consent_copies_only_the_saved_package_under_compound_source_Review(bool sqlite, bool grant)

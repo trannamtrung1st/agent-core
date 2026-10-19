@@ -71,7 +71,7 @@ public static class TenantArtifactReviewRules
         }
     }
     public static IEnumerable<(string Permission, AccessScope Scope)> SourceTargets(TenantApprovalRequest request) => request.Operation.ArtifactPublication?.Source is { } source
-        ? TenantArtifactSourceRules.Targets(request.TenantId, request.Operation.InstanceId, request.SessionId, source.Working, source.ResourceKey) : [];
+        ? TenantArtifactSourceRules.Targets(request.TenantId, request.Operation.InstanceId, request.SessionId, source.Working, source.ResourceKey, source.AttachmentId) : [];
     public static async ValueTask<bool> IndependentAsync(TenantSecurityState state, TenantApprovalRequest request, IamAuthorizer iam, CancellationToken ct)
     {
         if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get("artifacts.create")).IndependentReview) return true;
@@ -93,5 +93,5 @@ public static class TenantArtifactReviewRules
     private static readonly HashSet<string> Denials = new(StringComparer.Ordinal) { "approval_expired", "grant_expired", "grantor_authority_lost",
         "operation_authority_changed", "operation_witness_changed", "requester_unavailable", "root_operation_conflict", "executor_read_required",
         "capability_unavailable", "resource_unavailable", "artifact_direct_chat_required", "approver_unqualified", "approval_unavailable", "tenant_effect_unavailable", "artifact_publication_mismatch", "artifact_content_unavailable",
-        "workspace_source_changed", "resource_source_changed", "resource_content_unavailable", "home_access_disabled", "independent_reviewer_required" };
+        "workspace_source_changed", "attachment_source_changed", "attachment_content_unavailable", "resource_source_changed", "resource_content_unavailable", "home_access_disabled", "independent_reviewer_required" };
 }

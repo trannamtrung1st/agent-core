@@ -36,7 +36,10 @@ public sealed record PreparedCredentialRead(Guid SessionId, Guid? CredentialId, 
 
 public sealed record PreparedArtifactSource(bool Working, string Path, string ContentType, long ByteSize, string Sha256Hex, string ObservationHash,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ResourceKey = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ResourceRevision = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? ResourceRevision = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? AttachmentId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? EntryId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AttachmentName = null);
 public sealed record PreparedArtifactPublication(Guid SessionId, string ArgumentsJson,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactSource? Source = null);
 public sealed record PreparedArtifactVerification(Guid SessionId, Guid ArtifactId, string DisplayName, string ContentType, long ByteSize, string Sha256Hex);

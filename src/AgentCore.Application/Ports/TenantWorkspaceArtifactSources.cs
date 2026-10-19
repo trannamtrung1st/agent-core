@@ -2,7 +2,8 @@ namespace AgentCore.Application.Ports;
 
 // Private source evidence, not authority. Callers separately require current IAM, ownership and a live Run/consent.
 public sealed record TenantWorkspaceArtifactObservation(TenantWorkspaceReference Owner, string Path, string ContentType,
-    long ByteSize, string Sha256Hex, string ObservationHash, string? ResourceKey = null, long? ResourceRevision = null);
+    long ByteSize, string Sha256Hex, string ObservationHash, string? ResourceKey = null, long? ResourceRevision = null,
+    Guid? AttachmentId = null, Guid? EntryId = null, string? AttachmentName = null);
 
 public interface ITenantWorkspaceArtifactSource
 {
@@ -15,4 +16,9 @@ public interface ITenantWorkspaceArtifactSource
 public interface ITenantWorkspaceArtifactSourceStore
 {
     ValueTask<ITenantWorkspaceArtifactSource> CaptureArtifactSourceTenantAsync(TenantWorkspaceReference owner, string path, CancellationToken ct = default);
+}
+
+public interface ITenantAttachmentArtifactSourceStore
+{
+    ValueTask<ITenantWorkspaceArtifactSource> CaptureAttachmentArtifactSourceTenantAsync(TenantSessionRoot owner, Guid attachmentId, CancellationToken ct = default);
 }

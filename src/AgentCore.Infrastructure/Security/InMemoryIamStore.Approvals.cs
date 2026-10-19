@@ -38,7 +38,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && (r.Operation.ArtifactPublication is null || sessionBacking.OwnsTenantSession(r.TenantId, r.SessionId)
                     && (sandboxVisibility?.Sessions is null || sandboxVisibility.Sessions.Contains(r.SessionId))
                     && (artifactCreateSessions is null || artifactCreateSessions.Contains(r.SessionId))
-                    && (r.Operation.ArtifactPublication.Source is null || ArtifactSourceApprovalVisible(r, workspaceReadVisibility)))
+                    && (r.Operation.ArtifactPublication.Source is null || ArtifactSourceApprovalVisible(r, workspaceReadVisibility, attachmentReadVisibility)))
                 && (r.Operation.WorkspaceRead is null || WorkspaceApprovalVisible(r, workspaceReadVisibility))
                 && (r.Operation.WorkspaceMutation is null || WorkspaceMutationApprovalVisible(r, workspaceMutationVisibility))
                 && (r.Operation.AttachmentRead is null || attachmentBacking is not null

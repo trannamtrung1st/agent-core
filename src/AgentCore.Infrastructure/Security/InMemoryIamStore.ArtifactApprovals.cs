@@ -15,13 +15,24 @@ public sealed partial class InMemoryIamStore
         TenantArtifactReviewRules.ExecutorAsync(_tenants[request.TenantId], request, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
         if (request.Operation.ArtifactPublication?.Source is { ResourceKey: { } key } saved) TenantResourceRevisionRules.Require(key, saved.ResourceRevision, run, agent,
             instances.ReadTenantResourcesAsync(agent.Instance.InstanceId).Result);
+        if (request.Operation.ArtifactPublication?.Source is { AttachmentId: { } attachmentId } attachmentSource)
+            TenantAttachmentArtifactRules.Require(attachmentSource, session.Owner, attachmentBacking?.RetainedTenant(run.Owner.TenantId!.Value, run.SessionId, attachmentId));
         return args;
     }
-    private bool ArtifactSourceApprovalVisible(TenantApprovalRequest request, TenantWorkspaceReadApprovalVisibility? visible)
+    private bool ArtifactSourceApprovalVisible(TenantApprovalRequest request, TenantWorkspaceReadApprovalVisibility? visible, TenantAttachmentReadApprovalVisibility? attachments)
     {
         var source = request.Operation.ArtifactPublication!.Source!;
         var session = sessionBacking.ReadTenantSession(request.TenantId, request.SessionId);
         var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId).Result;
+        if (source.AttachmentId is { } attachmentId)
+        {
+            var item = attachmentBacking?.RetainedTenant(request.TenantId, request.SessionId, attachmentId);
+            return session is not null && session.Snapshot.DurablyDeletedAt is null && agent is not null && agent.PrincipalId == request.ExecutorPrincipalId
+                && session.Owner.AgentInstanceId == agent.Instance.InstanceId && session.Owner.ExecutorPrincipalId == agent.PrincipalId
+                && item is { State: AttachmentState.Bound } && item.EntryId == source.EntryId
+                && (attachments?.Attachments is null || attachments.Attachments.Contains(attachmentId))
+                && (attachments?.Sessions is null || attachments.Sessions.Contains(request.SessionId));
+        }
         var scope = TenantWorkspaceRules.Scope(new(request.TenantId, request.Operation.InstanceId, source.Working ? request.SessionId : null));
         return session is not null && session.Snapshot.DurablyDeletedAt is null && agent is not null && agent.PrincipalId == request.ExecutorPrincipalId
             && session.Owner.AgentInstanceId == agent.Instance.InstanceId && session.Owner.ExecutorPrincipalId == agent.PrincipalId

@@ -199,8 +199,9 @@ public sealed partial class TenantApprovalService
             var args = AgentCore.Application.Tools.TenantArtifactToolContract.ParsePublication(publication);
             if (publication.Source is { } source)
                 return [new("artifactDisplayName", null, args.DisplayName, false), new("artifactContentType", null, args.ContentType ?? source.ContentType, false),
-                    new("artifactSourcePath", null, source.Path, false), new("artifactByteSize", null, source.ByteSize, false), new("artifactChecksum", null, source.Sha256Hex, false),
-                    new("publicationDisclosure", null, "Copy only the exact saved workspace bytes into one immutable file in this conversation. Publication grants no file-read or download access.", false)];
+                    new("artifactSourcePath", null, source.Path, false),
+                    ..(source.AttachmentName is { } originalName ? new TenantApprovalFieldChange[] { new("artifactSourceName", null, originalName, false) } : []), new("artifactByteSize", null, source.ByteSize, false), new("artifactChecksum", null, source.Sha256Hex, false),
+                    new("publicationDisclosure", null, "Copy only the exact saved source bytes into one immutable file in this conversation. Publication grants no file-read or download access.", false)];
             return [new("artifactDisplayName", null, args.DisplayName, false), new("artifactContentType", null, args.ContentType, false),
                 new("artifactByteSize", null, System.Text.Encoding.UTF8.GetByteCount(args.Content!), false), new("artifactContent", null, args.Content, false)];
         }
