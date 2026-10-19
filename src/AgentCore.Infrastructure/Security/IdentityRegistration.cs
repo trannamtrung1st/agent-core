@@ -30,7 +30,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<IIamStore>(provider => provider.GetRequiredService<PersistenceOptions>().Provider.ToUpperInvariant() switch
         {
             "SQLITE" => new SqliteIamStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetService<IDefinitionResourceContentStore>(),
-                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>(), provider.GetService<SqliteArtifactStore>()),
+                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>(), provider.GetService<SqliteArtifactStore>(), provider.GetService<SqliteAttachmentStore>()),
             "INMEMORY" => CreateInMemoryStore(provider),
             _ => throw new InvalidOperationException("Identity storage must explicitly select Sqlite or InMemory.")
         });
@@ -113,6 +113,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantWorkspaceOperationStore>(p => (ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantWorkspaceMutationEffectService>();
         services.TryAddSingleton<TenantWorkspaceMutationTarget>();
+        services.TryAddSingleton<ITenantAttachmentStore>(p => (ITenantAttachmentStore)p.GetRequiredService<IAttachmentStore>());
+        services.TryAddSingleton<ITenantAttachmentMutationStore>(p => (ITenantAttachmentMutationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantAttachmentService>();
         services.TryAddSingleton<TenantSessionService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();
@@ -125,6 +128,6 @@ public static class IdentityRegistration
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
             provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>(),
-            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>());
+            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>());
     }
 }

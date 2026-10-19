@@ -122,7 +122,7 @@ internal sealed record IntakeResult(
     byte[] Prefix,
     byte[] Suffix);
 
-public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStore
+public sealed partial class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStore
 {
     private readonly ConcurrentDictionary<Guid, AttachmentRecord> _items = new();
     private readonly ConcurrentDictionary<Guid, byte[]> _blobs = new();
@@ -136,6 +136,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         bool allowStoreUnread,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -187,6 +188,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
 
     public async ValueTask AbortPendingAsync(Guid sessionId, Guid attachmentId, CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -215,6 +217,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         IReadOnlyList<Guid> attachmentIds,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         await ValidateBindableAsync(sessionId, attachmentIds, cancellationToken).ConfigureAwait(false);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -244,6 +247,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         IReadOnlyList<Guid> attachmentIds,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         cancellationToken.ThrowIfCancellationRequested();
         if (attachmentIds.Count > AttachmentLimits.MaxPerMessage)
         {
@@ -283,6 +287,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         IReadOnlyList<Guid> attachmentIds,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         await ValidateBindableAsync(sessionId, attachmentIds, cancellationToken).ConfigureAwait(false);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -334,6 +339,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         Guid sessionId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         cancellationToken.ThrowIfCancellationRequested();
         var now = time.GetUtcNow();
         IReadOnlyList<AttachmentRecord> items = _items.Values
@@ -351,6 +357,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         Guid sessionId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<AttachmentRecord> items = _items.Values
             .Where(item => item.SessionId == sessionId)
@@ -364,6 +371,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         Guid attachmentId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         cancellationToken.ThrowIfCancellationRequested();
         if (!_items.TryGetValue(attachmentId, out var record) || record.SessionId != sessionId)
         {
@@ -378,6 +386,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         Guid attachmentId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         cancellationToken.ThrowIfCancellationRequested();
         if (!_items.TryGetValue(attachmentId, out var record)
             || record.SessionId != sessionId
@@ -391,6 +400,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
 
     public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var pair in _items)
         {
@@ -410,7 +420,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         var now = time.GetUtcNow();
         foreach (var pair in _items)
         {
-            if (pair.Value.State == AttachmentState.Pending
+            if (pair.Value.TenantId is null && pair.Value.State == AttachmentState.Pending
                 && pair.Value.ExpiresAt is { } expires
                 && expires <= now)
             {

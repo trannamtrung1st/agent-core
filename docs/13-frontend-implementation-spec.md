@@ -822,3 +822,9 @@ The existing shared `inspect_workspace` preview presents the exact virtual sourc
 ## Resource publication approval contract
 
 The existing six-row Artifact source inspector also presents exact admitted `/agent/resources/...` and `/agent/instance/resources/...` files. Source path/checksum remain visible and source body text remains absent. Missing source reads hide detail/counts; changed binding/source or revoked authority disables decision. Creation-only grants do not imply source reads or download access. Existing pending/completed/denied/uncertain result presentation remains shared. This adds no frontend composition or visual tokens and does not claim a new browser presentation pass. [Focused qualification](reports/tenant-resource-artifact-verification-2026-10-19.md).
+
+## Tenant Attachment storage boundary
+
+Canonical tenant Attachment HTTP reads reuse the incumbent safe Attachment metadata shape and guarded Office preview projection. A successful upload returns identity only; it does not imply later metadata, preview, download or message-binding access. DOCX preview supplies bounded package metadata and a separately authorized original download; XLSX preview supplies bounded sheet/range rows. Pending expiry, read loss and read-only lifecycle require fresh current access rather than a cached success assumption.
+
+This backend storage checkpoint adds no tenant composer, attachment chip, binding or processing UI and no visual tokens/components. Existing Attachment UI descriptions below describe their incumbent path until separately converted and browser-qualified. Continue reusing the established Ant Design components and preview owners. [Current backend evidence](reports/tenant-attachment-storage-verification-2026-10-19.md).

@@ -23,6 +23,8 @@ Office + Google Drive v1 implementation is closed after [current-head local qual
 
 ### Tenant integration evidence
 
+- **Human Attachments:** Canonical upload/read/download/Office preview, pending abort and expiry/deleted-Session cleanup use actual owned Attachment/IAM/file stores. [Focused evidence](docs/reports/tenant-attachment-storage-verification-2026-10-19.md). Tenant message binding, processing/model tools, composer and Attachment publication remain open.
+
 These grouped checkpoints replace overlapping progress narratives. Later linked successors supersede earlier pending statements only within their measured scope; the IAM delivery ledger remains the implementation tracker. Controlled SDK, store-reopen, actual application-host recreation, native browser and live Docker evidence retain the distinctions recorded in each report. No new checks or acceptance are claimed by this consolidation.
 
 - **Workspace reads and human files:** Canonical human browse/search/preview/download/upload/replacement/nonrecursive delete and model read/list/search with exact durable Review are locally verified. Evidence: [human mutations](docs/reports/tenant-workspace-mutations-verification-2026-10-19.md), [human UI](docs/reports/tenant-workspace-ui-verification-2026-10-19.md), [model reads](docs/reports/tenant-workspace-model-read-verification-2026-10-19.md), [read Review](docs/reports/tenant-workspace-read-review-verification-2026-10-19.md), [search](docs/reports/tenant-workspace-search-verification-2026-10-19.md).

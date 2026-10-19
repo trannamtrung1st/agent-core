@@ -1512,3 +1512,18 @@ Tenant model `knowledge.retrieve` accepts only `{ "identity": "exact admitted id
 ## Tenant resource export protocol
 
 Tenant `artifacts.create_from_workspace` and the existing `publish_workspace_artifact` authorization variant accept an exact admitted `/agent/resources/...` or `/agent/instance/resources/...` file alongside owned home/working files. Arguments remain closed `path`, `displayName` and optional `contentType`; source key/hash/revision/owner are derived by Core. Resource paths match literally, with no glob or traversal. `artifact_source_review_required` uses the same saved-source publication request. Existing publication receipt and Artifact reference/delivery contracts apply; source consent grants no later read or recipient download authority. [Focused qualification](reports/tenant-resource-artifact-verification-2026-10-19.md).
+
+## Human tenant Attachment HTTP contract
+
+All routes below use `/api/v2/tenants/{tenantId}/sessions/{sessionId}/attachments`, current cookie authentication and the existing mutation CSRF policy. Core resolves the actual tenant Session/Agent and original current human; supplied IDs and expected revisions are witnesses only.
+
+| Route | Contract |
+| --- | --- |
+| GET collection | Optional `before` attachment UUID and `limit` (default 20, 1–100); returns `{items,nextCursor,hasMore}` after permission filtering, without a total count. Requires raw Session read plus each returned child read. |
+| GET `/{attachmentId}` | Existing safe Attachment response, lowercase state and no physical/blob key or uploader identity. Requires independent Session and exact-child read. |
+| GET `/{attachmentId}/content` | Verified immutable original bytes with safe filename, declared/detected media type and `nosniff`; same independent reads, rechecked after I/O. |
+| GET `/{attachmentId}/office-preview` | Existing guarded DOCX/XLSX processor and preview limits. Optional exact `sheet` / `range`; authority/source rechecked after processing. DOCX default projection carries format/hash/warnings/empty-body metadata; XLSX carries bounded rows. |
+| POST collection | Multipart with exactly one `file` and no extra form fields. Query: fresh `uploadId`, current `expectedRevision` and `expectedSessionRevision`. Authorization occurs before multipart buffering and repeats at commit. Requires independent Session read and Session-primary `attachments.create`. Returns 201 with `{attachmentId}` only. |
+| DELETE `/{attachmentId}` | Abort only an unbound pending upload. Query: fresh `requestId`, `expectedRevision`, `expectedSessionRevision`. Requires raw Session read plus child read/delete and writable lifecycle; returns 204. Same factual request replay adds no second effect. |
+
+Pending uploads expire after one hour; bytes are bounded to 25 MiB each and 250 MiB per Session, including resident expired/aborted/private staged bytes until cleanup. Unsupported safe binary content stays inert. Type/signature mismatch refuses publication. Quota returns 413 `AttachmentQuotaExceeded`; uncertain native upload returns 409 `attachment_effect_unknown`, with reload and same-upload-identity retry guidance. Same upload identity with changed content conflicts. A successful upload grants no read, model, binding or publication authority. Tenant SendText still refuses Attachment IDs; that conversion is pending. [Executed qualification](reports/tenant-attachment-storage-verification-2026-10-19.md).

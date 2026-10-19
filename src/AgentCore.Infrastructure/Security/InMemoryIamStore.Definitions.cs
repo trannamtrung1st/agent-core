@@ -13,6 +13,7 @@ public sealed partial class InMemoryIamStore
             return ValueTask.FromResult(TenantWorkspaceRules.TryParse(scope, out _, out _) ? OwnsWorkspace(scope, ct)
                 : TenantSandboxProfileRules.TryId(scope, out var profile) ? FindTenantSandboxProfileAsync(scope.TenantId!.Value, profile, ct: ct).Result is not null
                 : TenantApprovalRules.TryApprovalId(scope, out var approval) ? _approvals.GetValueOrDefault(approval)?.TenantId == scope.TenantId
+                : TenantAttachmentRules.TryId(scope, out var attachment) ? attachmentBacking?.OwnsTenantAttachment(scope.TenantId!.Value, attachment) == true
                 : TenantArtifactRules.TryId(scope, out var artifact) ? artifactBacking?.OwnsTenantArtifact(scope.TenantId!.Value, artifact) == true
                 : TenantRunRules.TryId(scope, out var run) ? sessionBacking.ReadTenantRun(scope.TenantId!.Value, run) is not null
                 : TenantSessionRules.TryId(scope, out var session) ? sessionBacking.OwnsTenantSession(scope.TenantId!.Value, session)

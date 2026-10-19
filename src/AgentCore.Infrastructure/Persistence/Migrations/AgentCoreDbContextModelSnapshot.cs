@@ -1280,13 +1280,16 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("BlobKey")
                         .IsRequired()
-                        .HasMaxLength(80)
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
                     b.Property<long?>("BoundAtUtc")
                         .HasColumnType("INTEGER");
 
                     b.Property<long>("ByteSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("ContentDeletedAtUtc")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ContentType")
@@ -1327,13 +1330,34 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("UploadRequestId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("UploadedByPrincipalId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("AttachmentId");
 
                     b.HasIndex("SessionId");
 
+                    b.HasIndex("UploadedByPrincipalId");
+
                     b.HasIndex("State", "ExpiresAtUtc");
 
-                    b.ToTable("Attachments", (string)null);
+                    b.HasIndex("TenantId", "SessionId", "UploadRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "SessionId", "CreatedAtUtc", "AttachmentId");
+
+                    b.ToTable("Attachments", null, t =>
+                        {
+                            t.HasTrigger("TR_Attachments_Tenant_Insert");
+                            t.HasTrigger("TR_Attachments_Tenant_Update");
+                            t.HasCheckConstraint("CK_Attachments_TenantOwner", "TenantId IS NULL OR (UploadRequestId IS NOT NULL AND UploadedByPrincipalId IS NOT NULL AND ByteSize BETWEEN 0 AND 26214400 AND length(Sha256Hex) = 64 AND Sha256Hex NOT GLOB '*[^0-9a-f]*' AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(AttachmentId, '-', '')) AND ((State = 'Pending' AND EntryId IS NULL AND ExpiresAtUtc IS NOT NULL AND BoundAtUtc IS NULL AND StageForNextTurn = 0) OR (State = 'Bound' AND EntryId IS NOT NULL AND ExpiresAtUtc IS NULL AND BoundAtUtc IS NOT NULL)))");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationRecord", b =>
@@ -3959,6 +3983,20 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ArtifactRecordRow", b =>
                 {
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId")
+                        .HasPrincipalKey("TenantId", "SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AttachmentRecordRow", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.Principal", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedByPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "SessionId")

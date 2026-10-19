@@ -30,6 +30,10 @@ public sealed partial class TenantSessionService
                 if (TenantArtifactRules.TryId(assignment.Scope, out var artifact)
                     && await artifacts.FindTenantAsync(tenant, change.SessionId, artifact, ct).ConfigureAwait(false) is not null)
                     artifactScopes.Add(assignment.Scope);
+        if (change.Action == TenantSessionAction.Delete && attachments is not null)
+            foreach (var assignment in state.Assignments)
+                if (TenantAttachmentRules.TryId(assignment.Scope, out var attachment) && await attachments.OwnsTenantAsync(tenant, change.SessionId, attachment, ct).ConfigureAwait(false))
+                    artifactScopes.Add(assignment.Scope);
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) },
             Assignments = change.Action == TenantSessionAction.Delete ? state.Assignments.Where(a => a.Scope != scope
                 && !TenantWorkspaceRules.BelongsToSession(a.Scope, change.SessionId) && !artifactScopes.Contains(a.Scope)

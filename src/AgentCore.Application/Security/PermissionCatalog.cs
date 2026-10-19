@@ -6,7 +6,7 @@ public sealed record PermissionDefinition(string Key, string ResourceType, bool 
     bool Delegatable = true, bool SystemOnly = false, PermissionApprovalClass ApprovalClass = PermissionApprovalClass.Mutation)
 {
     public IReadOnlyList<string> ResourceTypes => Key is "sandbox.read" or "sandbox.manage"
-        ? [ResourceType, "sandbox-profile"] : Key == "artifacts.create" ? [ResourceType, "session"] : [ResourceType];
+        ? [ResourceType, "sandbox-profile"] : Key is "artifacts.create" or "attachments.create" ? [ResourceType, "session"] : [ResourceType];
     // Access inspection/assignment and exact-action decisions govern the target resource itself.
     // Ordinary operation permissions apply only to their catalog-owned resource family.
     public bool AppliesToResource(string? resourceType) => !SystemOnly && (resourceType is not null && ResourceTypes.Contains(resourceType, StringComparer.Ordinal)

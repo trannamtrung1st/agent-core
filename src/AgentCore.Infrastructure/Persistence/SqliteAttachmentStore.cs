@@ -8,6 +8,10 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class AttachmentRecordRow
 {
+    public Guid? TenantId { get; set; }
+    public Guid? UploadRequestId { get; set; }
+    public Guid? UploadedByPrincipalId { get; set; }
+    public long? ContentDeletedAtUtc { get; set; }
     public string AttachmentId { get; set; } = "";
     public string SessionId { get; set; } = "";
     public string BlobKey { get; set; } = "";
@@ -32,7 +36,7 @@ public sealed class MessageAttachmentRow
     public int Ordinal { get; set; }
 }
 
-public sealed class SqliteAttachmentStore(
+public sealed partial class SqliteAttachmentStore(
     IDbContextFactory<AgentCoreDbContext> contexts,
     TimeProvider time,
     string blobRoot) : IAttachmentStore
@@ -47,6 +51,7 @@ public sealed class SqliteAttachmentStore(
         bool allowStoreUnread,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         AttachmentBlobKeys.EnsureSafeRoot(blobRoot);
         Directory.CreateDirectory(blobRoot);
         var gate = Gate(sessionId);
@@ -126,6 +131,7 @@ public sealed class SqliteAttachmentStore(
 
     public async ValueTask AbortPendingAsync(Guid sessionId, Guid attachmentId, CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -160,6 +166,7 @@ public sealed class SqliteAttachmentStore(
         IReadOnlyList<Guid> attachmentIds,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         await ValidateBindableAsync(sessionId, attachmentIds, cancellationToken).ConfigureAwait(false);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -190,6 +197,7 @@ public sealed class SqliteAttachmentStore(
         IReadOnlyList<Guid> attachmentIds,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         if (attachmentIds.Count > AttachmentLimits.MaxPerMessage)
         {
             throw AgentCoreErrors.Validation("A message may include at most 10 attachments.");
@@ -231,6 +239,7 @@ public sealed class SqliteAttachmentStore(
         IReadOnlyList<Guid> attachmentIds,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -297,6 +306,7 @@ public sealed class SqliteAttachmentStore(
         Guid sessionId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var now = time.GetUtcNow().ToUnixTimeMilliseconds();
         var rows = await db.Attachments.AsNoTracking()
@@ -315,6 +325,7 @@ public sealed class SqliteAttachmentStore(
         Guid sessionId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var rows = await db.Attachments.AsNoTracking()
             .Where(item => item.SessionId == sessionId.ToString("D"))
@@ -329,6 +340,7 @@ public sealed class SqliteAttachmentStore(
         Guid attachmentId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var row = await db.Attachments.AsNoTracking().FirstOrDefaultAsync(
                 item => item.AttachmentId == attachmentId.ToString("D") && item.SessionId == sessionId.ToString("D"),
@@ -342,6 +354,7 @@ public sealed class SqliteAttachmentStore(
         Guid attachmentId,
         CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         var record = await GetAsync(sessionId, attachmentId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Session was not found.");
         var path = ResolvePath(record.BlobKey);
@@ -355,6 +368,7 @@ public sealed class SqliteAttachmentStore(
 
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        RequireUnowned(sessionId);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -390,7 +404,7 @@ public sealed class SqliteAttachmentStore(
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var now = time.GetUtcNow().ToUnixTimeMilliseconds();
         var expired = await db.Attachments
-            .Where(item => item.State == nameof(AttachmentState.Pending) && item.ExpiresAtUtc != null && item.ExpiresAtUtc <= now)
+            .Where(item => item.TenantId == null && item.State == nameof(AttachmentState.Pending) && item.ExpiresAtUtc != null && item.ExpiresAtUtc <= now)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         if (expired.Count == 0)
@@ -459,6 +473,7 @@ public sealed class SqliteAttachmentStore(
     private static AttachmentRecordRow ToRow(AttachmentRecord record) =>
         new()
         {
+            TenantId = record.TenantId, UploadRequestId = record.UploadRequestId, UploadedByPrincipalId = record.UploadedByPrincipalId,
             AttachmentId = record.AttachmentId.ToString("D"),
             SessionId = record.SessionId.ToString("D"),
             BlobKey = record.BlobKey,
@@ -490,5 +505,5 @@ public sealed class SqliteAttachmentStore(
             row.StageForNextTurn,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             row.ExpiresAtUtc is { } expires ? DateTimeOffset.FromUnixTimeMilliseconds(expires) : null,
-            row.BoundAtUtc is { } bound ? DateTimeOffset.FromUnixTimeMilliseconds(bound) : null);
+            row.BoundAtUtc is { } bound ? DateTimeOffset.FromUnixTimeMilliseconds(bound) : null, row.TenantId, row.UploadRequestId, row.UploadedByPrincipalId);
 }

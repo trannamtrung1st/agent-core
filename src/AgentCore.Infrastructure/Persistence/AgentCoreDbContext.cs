@@ -418,15 +418,20 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<AttachmentRecordRow>(entity =>
         {
-            entity.ToTable("Attachments");
+            entity.ToTable("Attachments", t => { t.HasTrigger("TR_Attachments_Tenant_Insert"); t.HasTrigger("TR_Attachments_Tenant_Update"); t.HasCheckConstraint("CK_Attachments_TenantOwner", "TenantId IS NULL OR (UploadRequestId IS NOT NULL AND UploadedByPrincipalId IS NOT NULL AND ByteSize BETWEEN 0 AND 26214400 AND length(Sha256Hex) = 64 AND Sha256Hex NOT GLOB '*[^0-9a-f]*' AND BlobKey = 'tenants/' || lower(replace(TenantId, '-', '')) || '/' || lower(replace(SessionId, '-', '')) || '/' || lower(replace(AttachmentId, '-', '')) AND ((State = 'Pending' AND EntryId IS NULL AND ExpiresAtUtc IS NOT NULL AND BoundAtUtc IS NULL AND StageForNextTurn = 0) OR (State = 'Bound' AND EntryId IS NOT NULL AND ExpiresAtUtc IS NULL AND BoundAtUtc IS NOT NULL)))"); });
             entity.HasKey(row => row.AttachmentId);
             entity.Property(row => row.AttachmentId).HasMaxLength(36);
             entity.Property(row => row.SessionId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.BlobKey).HasMaxLength(80).IsRequired();
+            entity.Property(row => row.BlobKey).HasMaxLength(128).IsRequired();
             entity.Property(row => row.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
             entity.HasIndex(row => row.SessionId);
             entity.HasIndex(row => new { row.State, row.ExpiresAtUtc });
+            entity.HasIndex(row => new { row.TenantId, row.SessionId, row.CreatedAtUtc, row.AttachmentId });
+            entity.HasIndex(row => new { row.TenantId, row.SessionId, row.UploadRequestId }).IsUnique();
+            entity.HasOne<AgentCore.Infrastructure.Security.TenantSessionRecord>().WithMany().HasForeignKey(row => new { row.TenantId, row.SessionId })
+                .HasPrincipalKey(root => new { root.TenantId, root.SessionId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AgentCore.Domain.Security.Principal>().WithMany().HasForeignKey(row => row.UploadedByPrincipalId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<MessageAttachmentRow>(entity =>
         {

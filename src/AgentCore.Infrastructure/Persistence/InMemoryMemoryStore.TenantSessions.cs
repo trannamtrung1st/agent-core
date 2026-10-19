@@ -38,6 +38,8 @@ public sealed partial class InMemoryMemoryStore
             && !AgentRuns.Runs.Values.Any(r => r.SessionId == target.Owner.SessionId && !r.IsTerminal);
     }
     private IEnumerable<AgentCore.Domain.Conversation.SessionSnapshot> LegacySessions => _sessions.Values.Where(s => !tenantSessions.ContainsKey(s.SessionId));
+    internal bool TenantSessionDeleted(Guid tenant, Guid id)
+    { lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot) && snapshot.DurablyDeletedAt is not null; }
     internal bool OwnsTenantSession(Guid tenant, Guid id)
     { lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot) && snapshot.DurablyDeletedAt is null; }
     internal bool RequiresTenantContext(Guid session, Guid instance)

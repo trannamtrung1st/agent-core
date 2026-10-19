@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant human Attachment storage checkpoint — 2026-10-19
+
+Canonical human tenant Attachment intake, exact metadata/download/Office preview, pending abort and retained-expiry/deleted-Session cleanup now use existing Attachment/IAM/filesystem/supervision owners. [Focused qualification](reports/tenant-attachment-storage-verification-2026-10-19.md) separates both-store and authenticated HTTP/native recovery evidence from unconverted tenant message binding, processing/model tools, composer and Attachment publication. This supersedes human Attachment storage/cleanup pending notes only. Other virtual resources/Browser adapters, autonomous/transport families and final obsolete-authority/schema removal remain open; the full proposal stays active and no milestone acceptance is claimed.
+
 ## Tenant Office mutation checkpoint — 2026-10-19
 
 Conversational DOCX/XLSX create/edit now use the canonical tenant workspace mutation, exact Review/primary write grant and incumbent Office processor/file owners. [Focused evidence](reports/tenant-office-mutation-verification-2026-10-19.md) records both-store model/HTTP flows, actual pending-consent SQLite host recreation, guarded create-new/edit source checks, abandoned-dispatch no-replay and the shared Synthetic browser journey. This supersedes Office-create/edit-pending notes below for this conversational path only. Source publication, virtual resources, autonomous/resource/transport families and final clean authority/schema cutover remain open; the full proposal stays active.

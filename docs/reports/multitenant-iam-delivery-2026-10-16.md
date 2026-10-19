@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Human tenant Attachment storage checkpoint — 2026-10-19
+
+Canonical human upload, permission-filtered metadata/download/Office preview, pending abort and retained-expiry/deleted-Session cleanup now use existing Attachment/IAM/filesystem/supervision owners. [Focused evidence](tenant-attachment-storage-verification-2026-10-19.md) supersedes human Attachment storage/cleanup pending notes only. Tenant message binding, processing/model tools, composer and Attachment publication remain unconverted. Other virtual resource/Browser adapters, autonomous/background/events/transport families and final obsolete-authority/schema cutover remain open. The full proposal stays active; no milestone or production acceptance is claimed.
+
 ## Tenant workspace direct mutation checkpoint — 2026-10-19
 
 Tenant conversational Runs now offer guarded direct write, patch, mkdir, copy and non-destructive ordered batch under current Allowed policy. The existing Run side-effect and immutable receipt owners prevent duplicate dispatch, preserve body-free outcomes and recover abandoned/uncertain attempts without file replay. Both-store qualification covers commit-time revocation, exact call identity, concurrency, receipt-unavailable recovery and SQLite shape/rollback/reopen. [Focused evidence](tenant-workspace-effects-verification-2026-10-19.md) records the executed local qualification and remaining proposal boundaries. This supersedes earlier direct-model-mutation/effect-recovery-pending notes only. Exact mutation Review/exceptional grants remain open; policy-required delete/move/destructive batch and other protected mutations return no dispatch. Virtual resources/Office/source publication, autonomous origins, other proposal families and the final authority/schema cutover remain open. The full proposal stays active.

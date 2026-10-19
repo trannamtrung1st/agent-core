@@ -22,6 +22,13 @@ public sealed partial class SqliteIamStore
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
             return await db.Set<TenantApprovalRecord>().AnyAsync(r => r.TenantId == scope.TenantId && r.RequestId == approval, ct).ConfigureAwait(false);
         }
+        if (TenantAttachmentRules.TryId(scope, out var attachment))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+            return await db.Attachments.AnyAsync(a => a.TenantId == scope.TenantId && a.AttachmentId == attachment.ToString("D")
+                && db.Set<TenantSessionRecord>().Any(root => root.TenantId == a.TenantId && root.SessionId == a.SessionId
+                    && db.Sessions.Any(saved => saved.SessionId == root.SessionId && saved.DurablyDeletedAtUtc == null)), ct).ConfigureAwait(false);
+        }
         if (TenantArtifactRules.TryId(scope, out var artifact))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

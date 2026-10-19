@@ -118,7 +118,10 @@ public sealed record AttachmentRecord(
     bool StageForNextTurn,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ExpiresAt,
-    DateTimeOffset? BoundAt);
+    DateTimeOffset? BoundAt,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? TenantId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? UploadRequestId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? UploadedByPrincipalId = null);
 
 public static class FixtureAttachmentReferenceAuthorizer
 {

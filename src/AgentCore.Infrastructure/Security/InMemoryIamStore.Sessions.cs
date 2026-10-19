@@ -21,8 +21,9 @@ public sealed partial class InMemoryIamStore
             if (change.Action == TenantSessionAction.Delete && next.Assignments.Any(a => a.Scope == TenantSessionRules.Scope(next.Tenant.TenantId, change.SessionId)
                 || TenantWorkspaceRules.BelongsToSession(a.Scope, change.SessionId)
                 || TenantRunRules.TryId(a.Scope, out var runId) && sessionBacking.TenantRunIds(next.Tenant.TenantId, change.SessionId).Contains(runId)
+                || TenantAttachmentRules.TryId(a.Scope, out var attachment) && attachmentBacking?.RetainedTenant(next.Tenant.TenantId, change.SessionId, attachment) is not null
                 || TenantArtifactRules.TryId(a.Scope, out var artifact) && artifactBacking?.FindTenantAsync(next.Tenant.TenantId, change.SessionId, artifact, ct).Result is not null))
-                throw new ArgumentException("Deleting a Session must retire its direct, workspace, Run and Artifact grants.");
+                throw new ArgumentException("Deleting a Session must retire its direct, workspace, Run, Artifact and attachment grants.");
             if (change.Action == TenantSessionAction.Resume)
             {
                 var root = sessionBacking.ReadTenantSession(next.Tenant.TenantId, change.SessionId)?.Owner;

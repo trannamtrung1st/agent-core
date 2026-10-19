@@ -162,6 +162,7 @@ TenantSandboxProfileEndpoints.Map(app);
 TenantSandboxRuntimeEndpoints.Map(app);
 TenantBrowserEndpoints.Map(app);
 TenantArtifactEndpoints.Map(app);
+TenantAttachmentEndpoints.Map(app);
 TenantWorkspaceEndpoints.Map(app);
 TenantCredentialOAuthEndpoints.Map(app);
 TenantCredentialBindingEndpoints.Map(app);

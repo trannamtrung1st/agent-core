@@ -26,12 +26,14 @@ public sealed partial class SqliteIamStore
             if (change.Action == TenantSessionAction.Delete)
             {
                 var runIds = await db.AgentRuns.Where(r => r.TenantId == root.TenantId && r.SessionId == root.SessionId).Select(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
+                var attachmentIds = await db.Attachments.Where(a => a.TenantId == root.TenantId && a.SessionId == root.SessionId).Select(a => a.AttachmentId).ToArrayAsync(ct).ConfigureAwait(false);
                 var artifactIds = await db.Artifacts.Where(a => a.TenantId == root.TenantId && a.SessionId == root.SessionId).Select(a => a.ArtifactId).ToArrayAsync(ct).ConfigureAwait(false);
                 if (next.Assignments.Any(a => a.Scope == TenantSessionRules.Scope(root.TenantId, change.SessionId)
                     || TenantWorkspaceRules.BelongsToSession(a.Scope, change.SessionId)
                     || TenantRunRules.TryId(a.Scope, out var runId) && runIds.Contains(runId.ToString("D"))
+                    || TenantAttachmentRules.TryId(a.Scope, out var attachment) && attachmentIds.Contains(attachment.ToString("D"))
                     || TenantArtifactRules.TryId(a.Scope, out var artifact) && artifactIds.Contains(artifact.ToString("D"))))
-                    throw new ArgumentException("Deleting a Session must retire its direct, workspace, Run and Artifact grants.");
+                    throw new ArgumentException("Deleting a Session must retire its direct, workspace, Run, Artifact and attachment grants.");
             }
             if (change.Action == TenantSessionAction.Resume)
             {

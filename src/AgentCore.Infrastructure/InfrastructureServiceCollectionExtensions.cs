@@ -197,10 +197,11 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IExternalEventStore>(provider => new SqliteExternalEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
-            services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
+            services.TryAddSingleton<SqliteAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<TimeProvider>(),
-                persistence.AttachmentRoot));
+                provider.GetRequiredService<PersistenceOptions>().AttachmentRoot));
+            services.TryAddSingleton<IAttachmentStore>(p => p.GetRequiredService<SqliteAttachmentStore>());
         }
         else
         {
@@ -236,8 +237,8 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IExternalEventStore, InMemoryExternalEventStore>();
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
-            services.TryAddSingleton<IAttachmentStore>(provider =>
-                new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));
+            services.TryAddSingleton<InMemoryAttachmentStore>(provider => new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()).BindTenantAuthority(provider.GetRequiredService<InMemoryMemoryStore>()));
+            services.TryAddSingleton<IAttachmentStore>(p => p.GetRequiredService<InMemoryAttachmentStore>());
             services.TryAddSingleton<InMemoryDefinitionResourceContentStore>();
             services.TryAddSingleton<IDefinitionResourceContentStore>(provider =>
                 provider.GetRequiredService<InMemoryDefinitionResourceContentStore>());
@@ -330,6 +331,8 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.TryAddSingleton<ITenantArtifactStore>(provider => (ITenantArtifactStore)provider.GetRequiredService<IArtifactStore>());
+        services.TryAddSingleton<ITenantAttachmentCleanupStore>(p => (ITenantAttachmentCleanupStore)p.GetRequiredService<IAttachmentStore>());
+        services.TryAddSingleton<AgentCore.Application.Workspaces.TenantAttachmentCleanupService>();
         services.TryAddSingleton<ITenantArtifactCleanupStore>(provider => (ITenantArtifactCleanupStore)provider.GetRequiredService<IArtifactStore>());
         services.TryAddSingleton<AgentCore.Application.Workspaces.TenantArtifactCleanupService>();
         services.TryAddSingleton<AgentCore.Application.Security.TenantArtifactService>();

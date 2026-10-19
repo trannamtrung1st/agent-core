@@ -15,7 +15,7 @@ public sealed record TenantSessionMetadataPage(IReadOnlyList<TenantSessionMetada
 
 public sealed partial class TenantSessionService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions, ITenantRunStore runs,
     ITenantDefinitionStore definitions, IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer,
-    IModelCatalog models, VoiceAvailability voice, IIdGenerator ids, TimeProvider time, ITenantArtifactStore? artifacts = null)
+    IModelCatalog models, VoiceAvailability voice, IIdGenerator ids, TimeProvider time, ITenantArtifactStore? artifacts = null, ITenantAttachmentStore? attachments = null)
 {
     public async ValueTask<TenantSessionMetadata> CreateAsync(Guid tenant, Guid instance, TenantSessionInitiator initiator, SessionMode mode,
         long expectedSecurityRevision, long expectedInstanceRevision, string? modelKey = null, string? reasoningEffort = null, CancellationToken ct = default)

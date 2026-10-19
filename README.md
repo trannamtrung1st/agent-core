@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Human tenant Attachment upload, exact reads/download/Office preview, pending abort and retained-expiry/deleted-Session cleanup now use canonical ownership and current IAM. [Focused qualification](docs/reports/tenant-attachment-storage-verification-2026-10-19.md) records this backend checkpoint. Tenant message binding, processing/model tools, composer and Attachment publication remain pending; the full proposal stays active.
+
 Tenant exact resource export now reuses scoped source reads and the existing atomic Artifact publication/consent owners. [Qualification](docs/reports/tenant-resource-artifact-verification-2026-10-19.md) records the focused evidence. Other virtual resource/Attachment/Browser adapters, autonomous/transport families and final authority/schema cutover remain open; the full proposal stays active.
 
 
