@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant workspace Artifact source capture checks
+
+The source-storage prerequisite is qualified separately from publication. Execute actual owned home/working files under both in-memory and SQLite tenant authorities; verify frozen binary/DOCX/XLSX bytes, source checksum, unchanged Run and no Artifact creation. Native cases cover empty/missing files, the configured and 50 MiB ceilings, source/link/parent/root substitution, external hard-link refusal, unrelated sibling stability and cancellation. Captured source evidence supplies no IAM, consent or recipient read authority. [Executed source-capture evidence](reports/tenant-workspace-artifact-source-verification-2026-10-19.md) does not establish model export, Artifact transaction/Review integration or milestone acceptance.
+
 ## Tenant Office mutation checks
 
 Exercise all four Office tools through actual Synthetic model/HTTP/native bytes with both stores under Allowed, Review and exact primary grants. Verify independent read denial, complete inert supplied proposals, rejection, stale-source/current-access refusal, grant consumption, no Artifact and zero provider HTTP. Include pending-consent actual SQLite host recreation, predecessor upgrade/prior-consent preservation/forgery/guarded downgrade, native occupied creation/concurrent edit/revocation/corrupt-source refusal and every new tool name in abandoned-dispatch discovery without processing/replay. Browser qualification must perform a real decision/confirmation and separate result in the shared Organization/Chat inspector, plus changed-source cancellation at representative desktop/mobile/breakpoint sizes. [Executed evidence](reports/tenant-office-mutation-verification-2026-10-19.md) scopes visual acceptance separately from backend and unit coverage. The full proposal remains open.

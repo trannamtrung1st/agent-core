@@ -774,3 +774,7 @@ Tenant model workers preflight bounded rich references against the actual Sessio
 ## Tenant Artifact metadata verification
 
 The existing `artifacts.verify` tool now uses the tenant read adapter over the canonical owned Artifact query. The current claimed Run, Session, admitted/current capability and independent executor Session/Artifact reads gate safe metadata; the body is never read. Current policy may require exact durable Review. The existing approval, successor Run, local consent receipt and checkpoint owners return one witnessed metadata observation, with no new role or download authority. Retained metadata is revalidated before continuation/model reuse. Recipient rich references and original downloads keep independent current access checks; metadata consent does not authorize them.
+
+## Workspace source evidence for Artifact publication
+
+The canonical workspace filesystem remains the source-byte owner. A bounded captured-source facet supplies immutable byte-copy access and repeatable native source validation; it is not an authority snapshot or a separate effect engine. Native validation must not reenter IAM while an Artifact owner holds its own transaction/lock. Application and the existing publication owner independently retain current IAM, actual tenant/Session/Instance, capability, HomeAccess, consent and Run-claim checks. This source-storage prerequisite does not itself enable tenant model exports. [Source contract](04-backend-interfaces.md#tenant-workspace-artifact-source-boundary).
