@@ -6,8 +6,8 @@ namespace AgentCore.Api.Realtime;
 
 public sealed partial class TenantSessionRuntimeHost : ITenantDeliveryReceiptControl
 {
-    private readonly HashSet<Guid> _receipting = [];
-    private long _receiptEpoch;
+    private readonly HashSet<Guid> _quiescentWrites = [];
+    private long _sessionWriteEpoch;
 
     public async ValueTask ReceiveAsync(TenantDeliveryReceipt proof, CancellationToken ct = default)
     {
@@ -20,14 +20,14 @@ public sealed partial class TenantSessionRuntimeHost : ITenantDeliveryReceiptCon
                 live = _live.GetValueOrDefault(proof.Owner.SessionId);
                 if (live is null)
                 {
-                    if (!_receipting.Add(proof.Owner.SessionId)) throw new SecurityConflictException("stale_revision");
-                    _receiptEpoch = checked(_receiptEpoch + 1);
+                    if (!_quiescentWrites.Add(proof.Owner.SessionId)) throw new SecurityConflictException("stale_revision");
+                    _sessionWriteEpoch = checked(_sessionWriteEpoch + 1);
                 }
             }
             if (live is null)
             {
                 try { await ((ITenantDeliveryReceiptStore)storage).SaveTenantQuiescentReceiptAsync(proof, ct).ConfigureAwait(false); return; }
-                finally { lock (_gate) { _receipting.Remove(proof.Owner.SessionId); _receiptEpoch = checked(_receiptEpoch + 1); } }
+                finally { lock (_gate) { _quiescentWrites.Remove(proof.Owner.SessionId); _sessionWriteEpoch = checked(_sessionWriteEpoch + 1); } }
             }
             if (live.Run.Owner.TenantId != proof.Owner.TenantId || live.Run.Owner.AgentInstanceId != proof.Owner.AgentInstanceId
                 || live.Run.Owner.ExecutorPrincipalId != proof.Owner.ExecutorPrincipalId) throw new AccessDeniedException("receipt_unavailable");

@@ -39,12 +39,13 @@ public sealed partial class InMemoryIamStore
     }
     public ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(sessionBacking.ReadTenantSession(tenantId, sessionId)); }
-    public ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true, SessionSurface? surface = null)
+    public ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true, SessionSurface? surface = null, Guid? instanceId = null, bool recentFirst = false)
     {
         ct.ThrowIfCancellationRequested();
         if (tenantId == Guid.Empty || page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
         if (surface is not null and not SessionSurface.ChatList and not SessionSurface.BackgroundWork) throw new ArgumentOutOfRangeException(nameof(surface));
-        lock (_gate) return ValueTask.FromResult(sessionBacking.ListTenantSessions(tenantId, allowedIds, page, pageSize, includeArchived, surface));
+        if (instanceId == Guid.Empty) throw new ArgumentException("Agent Instance is required.");
+        lock (_gate) return ValueTask.FromResult(sessionBacking.ListTenantSessions(tenantId, allowedIds, page, pageSize, includeArchived, surface, instanceId, recentFirst));
     }
     public ValueTask<bool> TryCreateTenantSessionAsync(TenantSecurityState next, long expectedSecurityRevision, TenantSessionRoot owner,
         SessionSnapshot snapshot, TenantSessionInitiator initiator, long expectedInstanceRevision, AuthorizationAudit audit, CancellationToken ct = default)

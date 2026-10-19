@@ -1237,6 +1237,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case AgentRunControlReceived control:
                     await HandleAgentRunControlAsync(control, cancellationToken).ConfigureAwait(false);
                     break;
+                case TenantForegroundReceived tenantForeground:
+                    HandleTenantForeground(tenantForeground);
+                    break;
                 case ContinueInChatReceived foreground:
                     HandleContinueInChat(foreground);
                     break;
@@ -1383,6 +1386,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case AgentRunControlReceived control:
                 control.Completed.TrySetException(AgentCoreErrors.Conflict("Session mailbox is unavailable."));
+                break;
+            case TenantForegroundReceived tenantForeground:
+                tenantForeground.Completed.TrySetResult(false);
                 break;
             case ContinueInChatReceived foreground:
                 foreground.Committed.TrySetResult(false);
@@ -6247,6 +6253,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public AgentRun? AdmissionResult { get; set; }
         public Action<AgentRun>? OnAdmitted { get; set; }
         public TenantDeliveryReceipt? Receipt { get; init; }
+        public TenantSessionForeground? Foreground { get; init; }
         public AgentRunOutcomeCommit? RunOutcome { get; } = runOutcome;
         public IReadOnlyList<Guid>? CompletionSourceRunIds { get; } = completionSourceRunIds ?? (completionSourceRunId is { } id ? [id] : null);
         public TaskCompletionSource Applied { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -6339,7 +6346,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         TaskCompletionSource<bool>? ended = null,
         bool userConversationTerminal = false,
         AgentRun? admittedRun = null,
-        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null)
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null)
     {
         if (_tenantCancellationCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
         { ended?.TrySetResult(false); return; }
@@ -6357,7 +6364,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, Receipt = tenantReceipt };
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, Receipt = tenantReceipt, Foreground = tenantForeground };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -6394,10 +6401,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (input.Error is not null)
             {
-                if (job.Receipt is not null)
+                if (job.Receipt is not null || job.Foreground is not null)
                 {
-                    // A revoked/stale recipient must not fail the independently authorized Run or leak
-                    // uncommitted receipt credit into a later ordinary snapshot.
+                    // A refused human receipt/surface change must not fail the independently
+                    // authorized Run or leak uncommitted state into an ordinary snapshot.
                     job.Ended?.TrySetException(input.Error); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
@@ -6462,7 +6469,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (job.Receipt is { } receipt && saved.Entries.SingleOrDefault(e => e.EntryId == receipt.EntryId) is { } received)
                     _tenantReceiptEvidence[received.EntryId] = received;
                 AdoptPersisted(job.Proposed, saved, job.Kind);
-                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved);
+                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { Surfaces = _snapshot.Surfaces | saved.Surfaces };
                 foreach (var entry in saved.Entries)
                 {
                     if (entry.Role == ConversationRole.User)
@@ -6733,8 +6740,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
             .Where(id => !_admittedAgentInputs.ContainsKey(id)).ToArray() };
-        if (_runtimeOwner?.TenantId is not null) toSave = CarryTenantReceipts(toSave, _durableSnapshot);
-        if (job.Receipt is { } receipt)
+        if (_runtimeOwner?.TenantId is not null) toSave = CarryTenantReceipts(toSave, _durableSnapshot) with { Surfaces = toSave.Surfaces | _durableSnapshot.Surfaces };
+        if (job.Foreground is { } foreground)
+        {
+            toSave = toSave with { Surfaces = SessionOrigin.ContinueInChat(toSave.Surfaces) };
+            await ((ITenantRuntimeForegroundWriter)_store).SaveForegroundAsync(toSave, _durableRevision, foreground, cancellationToken).ConfigureAwait(false);
+        }
+        else if (job.Receipt is { } receipt)
             await ((ITenantRuntimeReceiptWriter)_store).SaveReceiptAsync(toSave, _durableRevision, receipt, cancellationToken).ConfigureAwait(false);
         else if (job.RunOutcome is { } outcome)
             await _agentRuns.CommitOutcomeAsync(toSave, _durableRevision, outcome.Owner, outcome.AgentRunId,

@@ -22,7 +22,7 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantSessionAccessTests
 {
-    private sealed class TenantBackgroundModel : ILanguageModel
+    private class TenantBackgroundModel : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(true, true, true);
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
@@ -30,7 +30,7 @@ public sealed partial class TenantSessionAccessTests
         public static ExecutionOrigin Origin(ModelRequest request) => request.Context?.Sections.Any(s=>s.Id==ContextSectionId.CoreBackgroundReport)==true
             ? ExecutionOrigin.CompletionReport : request.Context?.Sections.Any(s=>s.Id==ContextSectionId.CoreBackground)==true
                 ? ExecutionOrigin.ImmediateBackground : ExecutionOrigin.UserMessage;
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public virtual async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request); await Task.Yield(); cancellationToken.ThrowIfCancellationRequested();
             var origin = Origin(request);

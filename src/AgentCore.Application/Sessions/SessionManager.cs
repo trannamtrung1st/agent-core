@@ -1033,7 +1033,7 @@ public sealed class SessionRuntimeFactory(
     {
         if (snapshot.SessionId != frame.SessionId || snapshot.AgentInstanceId != frame.Owner.AgentInstanceId || snapshot.ProfileId is not null)
             throw new AgentCore.Application.Security.AccessDeniedException("tenant_runtime_scope_mismatch");
-        return new(snapshot, languageModel, brain, new AgentCore.Application.Security.TenantRuntimeMemoryStore(runtimeStorage, frame), output, ids, time,
+        return new(snapshot, languageModel, brain, new AgentCore.Application.Security.TenantRuntimeMemoryStore(runtimeStorage, frame, ids), output, ids, time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!), new AgentCore.Application.Security.TenantAgentRunStore(runtimeStorage, tenantRuns, ids, frame),
             classifier, policy: policy, tools: new SessionToolExecutor(configurationGate: tools.ConfigurationGate, tenantAuthorization: tenantTools),
             modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: tenantArtifacts?.Bind(frame) ?? new TenantUnavailableArtifacts(),

@@ -49,13 +49,14 @@ public sealed partial class InMemoryMemoryStore
         lock (_gate) return tenantSessions.TryGetValue(id, out var owner) && owner.TenantId == tenant && _sessions.TryGetValue(id, out var snapshot)
             && snapshot.DurablyDeletedAt is null ? new(owner, snapshot with { Definition = AgentDefinitionAdminSnapshots.Freeze(snapshot.Definition), Entries = [] }) : null;
     }
-    internal TenantSessionPage ListTenantSessions(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int size, bool includeArchived = true, SessionSurface? surface = null)
+    internal TenantSessionPage ListTenantSessions(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int size, bool includeArchived = true, SessionSurface? surface = null, Guid? instanceId = null, bool recentFirst = false)
     {
         lock (_gate)
         {
-            var roots = tenantSessions.Values.Where(s => s.TenantId == tenant && (allowed is null || allowed.Contains(s.SessionId))
+            var roots = tenantSessions.Values.Where(s => s.TenantId == tenant && (instanceId is null || s.AgentInstanceId == instanceId) && (allowed is null || allowed.Contains(s.SessionId))
                 && _sessions.TryGetValue(s.SessionId, out var snapshot) && snapshot.DurablyDeletedAt is null && (includeArchived || snapshot.ArchivedAt is null)
                 && (surface is null || snapshot.Surfaces.HasFlag(surface.Value))).OrderBy(s => s.SessionId).ToArray();
+            if (recentFirst) roots = roots.OrderByDescending(s => _sessions[s.SessionId].UpdatedAt).ThenBy(s => s.SessionId).ToArray();
             return new(roots.Skip(page * size).Take(size).Select(s => ReadTenantSession(tenant, s.SessionId)!).ToArray(), roots.Length, page, size);
         }
     }
@@ -77,6 +78,17 @@ public sealed partial class InMemoryMemoryStore
             snapshot = snapshot with { Definition = AgentDefinitionAdminSnapshots.Freeze(snapshot.Definition) };
             Store(snapshot); tenantSessions.Add(owner.SessionId, owner);
             Volatile.Write(ref tenantSessionOwnership, tenantSessionOwnership.Add(owner.SessionId, owner)); return true;
+        }
+    }
+    internal void ContinueTenantQuiescent(TenantSessionForeground request, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            var current = _sessions[request.Owner.SessionId];
+            if (AgentRuns.Runs.Values.Any(r => r.SessionId == current.SessionId && r.Status == AgentRunStatus.Running))
+                throw new SecurityConflictException("session_in_use");
+            if (current.Surfaces.HasFlag(SessionSurface.ChatList)) return;
+            Store(current with { Surfaces = SessionOrigin.ContinueInChat(current.Surfaces), Revision = checked(current.Revision + 1), UpdatedAt = at });
         }
     }
     internal TenantSession? ChangeTenantSession(Guid tenant, TenantSessionChange change, DateTimeOffset at)

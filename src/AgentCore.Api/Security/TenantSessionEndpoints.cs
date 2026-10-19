@@ -55,6 +55,13 @@ public static class TenantSessionEndpoints
             return Results.Json(new { items = page.Items.Select(HttpMapping.ToHistoryItem), page.NextAfter, page.HasMore,
                 page.HasOlder, page.NextBefore, page.SessionRevision, page.SecurityRevision });
         }));
+        group.MapPost("/{sessionId:guid}/continue-in-chat", (Guid sessionId, Witness body, HttpContext http,
+            TenantSessionForegroundService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            await service.ContinueAsync(actor.TenantId, sessionId, Initiator(http, actor), body.ExpectedRevision, body.ExpectedSessionRevision, ct).ConfigureAwait(false);
+            return Results.Json(new { sessionId });
+        }));
         group.MapPost("/{sessionId:guid}/messages", (Guid sessionId, MessageRequest body, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

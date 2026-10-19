@@ -29,13 +29,13 @@ public sealed partial class InMemoryMemoryStore
             return _sessions[frame.SessionId] with { Entries = entries };
         }
     }
-    internal void SaveTenantRuntime(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, DateTimeOffset at)
+    internal void SaveTenantRuntime(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, DateTimeOffset at, bool foreground = false)
     {
         lock (_gate)
         {
             var run = ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
             TenantRuntimeRules.Require(frame, tenantSessions[frame.SessionId], run, at);
-            var current = _sessions[frame.SessionId]; TenantRuntimeRules.ValidateSnapshot(frame, current, snapshot);
+            var current = _sessions[frame.SessionId]; TenantRuntimeRules.ValidateSnapshot(frame, current, snapshot, foreground);
             var window = CloneForCompare(current, frame.SessionId, snapshot.Entries);
             if (current.Revision == snapshot.Revision && SameContent(window, snapshot)) return;
             if (current.Revision != expectedRevision || snapshot.Revision != expectedRevision + 1) throw AgentCoreErrors.Conflict("Stale Session revision.");

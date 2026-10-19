@@ -1,12 +1,27 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Background Activity and Continue API
+
+All routes below require the original authenticated human tenant context. Readable ownership and permissions are checked again by the use case, including after awaited reads. None uses the legacy local owner capability/profile.
+
+| Route | Contract |
+| --- | --- |
+| GET `/api/v2/tenants/{tenantId}/agents/{instanceId}/activity/sessions` | `page`, `pageSize` (1–100), optional `backgroundOnly`; `{items,total,page,pageSize,securityRevision}`. All-surface exact-Agent Sessions including archived/zero-run contexts, updated descending then ID, filtered before totals/paging. |
+| GET `.../activity/sessions/{sessionId}` | Exact Session metadata, immutable `origin`, `surfaces`, independently readable `initialRunId`, `canManage`, `canContinue` and security revision; no attachment side effect. |
+| GET `.../activity/sessions/{sessionId}/background` | `{session,initialRun,initialTitle,completionDelivery}`. Initial Run/result and completion facts are null without Run read; targetSessionId is null without parent read. Initial result stays fixed as later Chat runs are added. |
+| GET `.../activity/sessions/{sessionId}/runs` | Bounded permission-filtered Run page, creation descending then ID. Normalized task/progress/outcome/failure, attempts and current cancel hint; no claim/checkpoint/token/effect body. |
+| GET `.../activity/sessions/{sessionId}/runs/{runId}` | Exact Run with independent Run read and full tenant/Agent/Session validation. |
+| POST `/api/v2/tenants/{tenantId}/sessions/{sessionId}/continue-in-chat` | CSRF plus `{expectedRevision,expectedSessionRevision}`; 200 `{sessionId}` only after visibility commit on the same Session. Requires current Session read/manage and Agent chat, active executor/Instance and eligible BackgroundWork. Active work uses its Runtime mailbox; quiescent work reserves against dispatch. |
+
+Run/Session outcomes use the existing camel-case wire names. Completion delivery maps queued reporting to `admitted` and preserves `pending`, `claimed`, `handled`, `delivered`, `skipped` and `notRequested`; delivered still means durable conversation output, separate from received-prefix evidence. `surfaces` use the incumbent `ChatList`/`BackgroundWork` labels. Stale witnesses return 409, authority/ownership/lifecycle refusal remains masked, and a refused Continue does not foreground work. A lost response requires saved-fact readback before a fresh-witness action. No attach, resume, cloned work or changed approval root is implicit in Continue. [Backend qualification](reports/tenant-background-activity-verification-2026-10-20.md); tenant Activity/Background UI is still pending.
+
 ## Tenant immediate-background runtime core
 
 Canonical tenant UserTurn models may use `background.start`; an admitted immediate child uses `work.complete` and cannot fan out. Arguments contain task/title/report intent only; Core supplies actual tenant/executor/original-human/root/parent references. Current independent creation permissions and policy apply. Creation Review and other protected/native background effect adapters remain closed.
 
 A requested meaningful terminal child result can produce one factual Core-formatted report in the original parent conversation through the existing tenant text subscription/history DTOs. No new wire event or model generation is introduced. Report readiness waits for other parent work, and its pinned input boundary does not consume later human messages. The saved completion receipt means durable conversation output; actual client received-prefix acknowledgement remains its separate existing receipt. Child events do not become parent events.
 
-Canonical `GET /api/v2/tenants/{tenantId}/sessions` is the Chat collection: `ChatList` filtering happens before total/paging. Background-only Sessions remain independently readable through authorized metadata and `/messages` history, but cannot be attached as chat or accept human input implicitly. Explicit tenant Continue in chat and Activity are still pending. [Runtime, real MessagePack and browser evidence](reports/tenant-background-runtime-verification-2026-10-20.md) does not accept the full autonomous/voice/rich-input protocol or whole proposal.
+Canonical `GET /api/v2/tenants/{tenantId}/sessions` is the Chat collection: `ChatList` filtering happens before total/paging. Background-only Sessions remain independently readable through authorized metadata and `/messages` history, but cannot be attached as chat or accept human input implicitly. The explicit tenant Continue and Activity backend above is converted; tenant UI is still pending. [Runtime, real MessagePack and browser evidence](reports/tenant-background-runtime-verification-2026-10-20.md) does not accept the full autonomous/voice/rich-input protocol or whole proposal.
 
 ## Tenant Agent decommission HTTP
 

@@ -128,6 +128,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAttachmentService>();
         services.TryAddSingleton<TenantAttachmentMaterializationService>();
         services.TryAddSingleton<TenantSessionService>();
+        services.TryAddSingleton<TenantSessionForegroundService>();
+        services.TryAddSingleton<TenantActivityService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();
         return services;

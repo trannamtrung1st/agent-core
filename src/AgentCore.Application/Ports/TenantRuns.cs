@@ -8,8 +8,12 @@ public sealed record TenantRunAdmissionResult(bool Created, AgentRun Run, Guid E
 
 // Existing entry/Activation/Run rows, owning Session, security revision and audit commit atomically.
 // Trusted internal data only; public use-case results project safe metadata.
+public sealed record TenantRunPage(IReadOnlyList<AgentRun> Items, int Total, int Page, int PageSize);
+
 public interface ITenantRunStore
 {
+    ValueTask<TenantRunPage> ListTenantSessionRunsAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default) => throw new NotSupportedException();
+    ValueTask<CompletionInboxItem?> FindTenantCompletionAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantSessionRoot?> ResolveTenantSessionOwnerAsync(Guid sessionId, CancellationToken ct = default);
     ValueTask<AgentRun?> TryCancelTenantRunAsync(TenantSecurityState next, long expectedSecurityRevision, Guid runId, long expectedRunRevision,
         TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, ConversationEntry? response = null);
