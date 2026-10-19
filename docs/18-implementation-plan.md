@@ -970,3 +970,8 @@ The existing Artifact owner now supports capability-specific model workspace pub
 ## Tenant pinned-resource source prerequisite — 2026-10-19
 
 The internal exact resource source now binds current tenant/Instance ownership, admitted origin, current compound read IAM/policy and immutable verified bytes, with post-I/O and late metadata/claim fences. [Qualification](reports/tenant-resource-source-verification-2026-10-19.md) records both-store integration, native limits/isolation, source races and shared admission regressions. No new public model namespace, consent variant, table or read grant is introduced. Resource namespace projection and durable read Review remain the next dependent work; other proposal families and final clean authority/schema cutover remain open. This does not start or claim a milestone gate.
+
+
+## Tenant exact resource read consent checkpoint — 2026-10-19
+
+Exact admitted resource text and Office files now flow through the incumbent read/consent/successor/checkpoint owners under current independent Session, Agent and resource-child authority. [Qualification](reports/tenant-resource-read-consent-verification-2026-10-19.md) supersedes exact resource-leaf model/Office/read-Review-pending notes only. Resource namespace listing/search, other resource/publication adapters, autonomous/transport families and final legacy authority/schema cutover remain open. The full proposal remains active; this does not claim milestone acceptance.

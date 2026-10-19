@@ -15,11 +15,11 @@ public sealed partial class TenantOperationAuthorizationTests
     private sealed record ResourceCase(Environment Setup, string Key, string Path, byte[] Bytes);
     private static TenantResourceSourceTarget ResourceSources(Fixture f, ITenantResourceSourceContentStore? content = null, IBuiltInAgentDefinitionStore? currentBuiltIns = null) =>
         new(Operations(f), (ITenantSessionStore)f.Iam, f.RunConfiguration(currentBuiltIns), content ?? (ITenantResourceSourceContentStore)f.RunContent, f.Authorizer, f.Clock);
-    private static async Task<ResourceCase> ResourceSourceCase(Fixture f, Environment? existing = null, byte[]? data = null)
+    private static async Task<ResourceCase> ResourceSourceCase(Fixture f, Environment? existing = null, byte[]? data = null, string logicalPath = "source.txt", string mediaType = "text/plain")
     {
         var s = existing ?? await Setup(f, "general-assistant", 32); byte[] bytes = data ?? Encoding.UTF8.GetBytes("Private bound resource: thử nghiệm");
         var added = await f.AgentConfiguration().UpsertResourceAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId,
-            (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1, new(null, null, "source.txt", AgentDefinitionResourceKind.Reference, "text/plain", bytes), initiator: s.Owner);
+            (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1, new(null, null, logicalPath, AgentDefinitionResourceKind.Reference, mediaType, bytes), initiator: s.Owner);
         var resource = added.Resource!;
         var agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant, s.Agent.Instance.InstanceId))!;
         var session = await f.Sessions.CreateAsync(s.Tenant, agent.Instance.InstanceId, s.Owner, SessionMode.Text,
@@ -140,8 +140,9 @@ public sealed partial class TenantOperationAuthorizationTests
         var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read", "resources.read"]);
         var probe = new ResourceContentProbe((ITenantResourceSourceContentStore)f.RunContent);
         await Assert.ThrowsAsync<AccessDeniedException>(() => ResourceSources(f, probe).CaptureAsync(frame, ToolCatalog.WorkspaceRead, v.Path + ".other").AsTask());
-        foreach (var invalid in new[] { "/home/source.txt", "/agent/resources", "/agent/resources/../source.txt", "/agent/resources//source.txt", "/agent/resources/*", "/agent/resources/source.txt/", "/agent/resources/a\\b", "/agent/resources/a\nfile" })
+        foreach (var invalid in new[] { "/home/source.txt", "/agent/resources", "/agent/resources/../source.txt", "/agent/resources//source.txt", "/agent/resources/source.txt/", "/agent/resources/a\\b", "/agent/resources/a\nfile" })
             await Assert.ThrowsAsync<ArgumentException>(() => ResourceSources(f, probe).CaptureAsync(frame, ToolCatalog.WorkspaceRead, invalid).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => ResourceSources(f, probe).CaptureAsync(frame, ToolCatalog.WorkspaceRead, "/agent/resources/*").AsTask());
         await f.AgentConfiguration().ChangeResourceAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.Instance.InstanceId, v.Key, false, false,
             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, s.Agent.Instance.Revision, 1, initiator: s.Owner);
         Assert.Equal("resource_source_changed", (await Assert.ThrowsAsync<SecurityConflictException>(() => ResourceSources(f, probe).CaptureAsync(frame, ToolCatalog.WorkspaceRead, v.Path).AsTask())).ReasonCode);
@@ -159,7 +160,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal("resource_source_changed", error.ReasonCode); Assert.Equal(2, current.Reads);
     }
     [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_resource_source_data_does_not_enable_unconverted_model_namespace_access(bool sqlite)
+    public async Task Tenant_resource_source_model_read_uses_the_scoped_source_without_legacy_fallback(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await ResourceSourceCase(f); var s = v.Setup;
         var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read", "resources.read"]);
@@ -169,8 +170,9 @@ public sealed partial class TenantOperationAuthorizationTests
             SupportsTools: true, AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation);
         var call = new ModelToolCall("unconverted-resource", ToolCatalog.WorkspaceRead, System.Text.Json.JsonSerializer.Serialize(new { path = v.Path }));
         var result = (await executor.ExecuteAsync(s.Run.Admission.Configuration!.Definition, frame.SessionId, call, 16000, admission: admission)).Text;
-        using var parsed = System.Text.Json.JsonDocument.Parse(result); Assert.True(parsed.RootElement.TryGetProperty("error", out _));
-        Assert.DoesNotContain("Private bound resource", result);
+        using var parsed = System.Text.Json.JsonDocument.Parse(result); Assert.Equal(Encoding.UTF8.GetString(v.Bytes), parsed.RootElement.GetProperty("content").GetString());
+        Assert.True(parsed.RootElement.GetProperty("tenantWorkspaceRead").GetBoolean());
+        Assert.False(parsed.RootElement.TryGetProperty("writable", out _));
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]

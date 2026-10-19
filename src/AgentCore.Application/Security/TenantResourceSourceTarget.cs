@@ -21,16 +21,18 @@ public sealed class TenantResourceSource
 }
 
 // Resolve only an exact admitted resource through the actual current tenant/Instance binding.
-// The public workspace projection and durable read consent remain separate consumers of this source boundary.
+// Workspace readers and durable read consent consume this source without taking over its authority checks.
 public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
     TenantRunConfigurationResolver configurations, ITenantResourceSourceContentStore content, IamAuthorizer iam, TimeProvider time)
 {
-    private sealed record Source(AgentRun Run, TenantSecurityState Security, TenantSession Session, TenantAgent Agent,
+    internal sealed record Source(AgentRun Run, TenantSecurityState Security, TenantSession Session, TenantAgent Agent,
         TenantResourceSourceObservation Observation);
-    public async ValueTask<TenantResourceSource> CaptureAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct = default)
+    public ValueTask<TenantResourceSource> CaptureAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct = default) =>
+        CaptureForInspectionAsync(frame, tool, path, false, true, ct);
+    internal async ValueTask<TenantResourceSource> CaptureForInspectionAsync(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, CancellationToken ct)
     {
         ValidatePath(path);
-        var before = await Require(frame, tool, path, ct).ConfigureAwait(false);
+        var before = await RequireMetadataAsync(frame, tool, path, ct, approved, live).ConfigureAwait(false);
         var resource = before.Observation.Resource;
         DefinitionResourcePolicies.ValidateContentSize(resource.ByteLength);
         byte[] bytes;
@@ -46,24 +48,27 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         { throw new AccessDeniedException("resource_content_unavailable"); }
         // Freeze before checking post-I/O authority; callers receive only a defensive copy of these verified bytes.
         var captured = new TenantResourceSource(before.Observation, bytes);
-        var after = await Require(frame, tool, path, ct).ConfigureAwait(false);
+        var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live).ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.Security.Tenant.Revision != after.Security.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
             || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Observation != after.Observation)
             throw new SecurityConflictException("resource_source_changed");
         var final = await operations.ResolveAsync(new(after.Observation.TenantId, frame.RunId), ct).ConfigureAwait(false);
-        TenantRuntimeRules.Require(frame, after.Session.Owner, final.Run, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, after.Session.Owner, final.Run, time.GetUtcNow());
         if (final.Run.Revision != after.Run.Revision || final.State.Tenant.Revision != after.Security.Tenant.Revision)
             throw new SecurityConflictException("resource_source_changed");
         ct.ThrowIfCancellationRequested();
         return captured;
     }
-    private async ValueTask<Source> Require(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct)
+    internal async ValueTask<Source> RequireMetadataAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct, bool approved = false, bool live = true, bool audit = false)
     {
+        ValidatePath(path);
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId)
+            throw new AccessDeniedException("resource_unavailable");
         if (run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
             || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
@@ -79,7 +84,9 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         {
             if (!(await iam.CheckOwnedTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("executor_read_required");
-            var decision = await operations.Evaluate(state, run.Admission.ExecutionContext!, permission, scope, ct).ConfigureAwait(false);
+            if (approved) continue;
+            var decision = audit ? await operations.Check(state, run, permission, scope, ct, purpose: ExecutionAuthorizationPurpose.ToolBoundary).ConfigureAwait(false)
+                : await operations.Evaluate(state, run.Admission.ExecutionContext!, permission, scope, ct).ConfigureAwait(false);
             if (decision.Decision == OperationDecisionKind.RequiresApproval) throw new AccessDeniedException("resource_read_review_required");
             if (decision.Decision != OperationDecisionKind.Allowed) throw new AccessDeniedException(decision.ReasonCode);
         }
@@ -96,10 +103,11 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         return new(run, state, session, current.Snapshot.Agent,
             new(tenant, run.AgentInstanceId, run.SessionId, resource, run.DefinitionId, run.DefinitionVersion, revision));
     }
-    private static void ValidatePath(string path)
+    internal static void ValidatePath(string path)
     {
+        // Virtual paths match manifest entries literally; only their verified digest reaches the filesystem.
         if (string.IsNullOrWhiteSpace(path) || Encoding.UTF8.GetByteCount(path) > 4095 || path.Contains('\\') || path.Any(char.IsControl)
-            || path.IndexOfAny(['*', '?', '[', ']']) >= 0 || path.Split('/').Skip(1).Any(p => p.Length == 0 || p is "." or ".." || Encoding.UTF8.GetByteCount(p) > 255)
+            || path.Split('/').Skip(1).Any(p => p.Length == 0 || p is "." or "..")
             || !path.StartsWith("/agent/resources/", StringComparison.Ordinal) && !path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal))
             throw new ArgumentException("Use an exact admitted resource file path.");
     }

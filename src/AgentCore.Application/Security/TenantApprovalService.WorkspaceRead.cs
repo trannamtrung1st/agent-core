@@ -11,7 +11,8 @@ public sealed partial class TenantApprovalService
     {
         try
         {
-            var (run, _) = await operations.ResolveForDecisionAsync(reference, "workspaces.read", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
+            var permission = AgentCore.Application.Tools.TenantWorkspaceReadContract.IsResourcePath(AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path) ? "resources.read" : "workspaces.read";
+            var (run, _) = await operations.ResolveForDecisionAsync(reference, permission, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
             if (run.Status != AgentRunStatus.Running || run.Claim?.Generation != generation || run.Revision != expectedRunRevision || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())
                 throw new AccessDeniedException("tenant_runtime_unavailable");
             var prepared = await (workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareInspectionAsync(new(run.Owner, run.SessionId, run.AgentRunId, generation), call, ct).ConfigureAwait(false);
@@ -31,7 +32,7 @@ public sealed partial class TenantApprovalService
         }
         catch (Exception e) when (e is AccessDeniedException or SecurityConflictException)
         {
-            await operations.RecordFailureAsync(reference, "workspaces.read", e is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)e).ReasonCode, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false); throw;
+            await operations.RecordFailureAsync(reference, AgentCore.Application.Tools.TenantWorkspaceReadContract.IsResourcePath(AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path) ? "resources.read" : "workspaces.read", e is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)e).ReasonCode, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false); throw;
         }
     }
 }

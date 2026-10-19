@@ -14,11 +14,16 @@ namespace AgentCore.Application.Security;
 
 public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer operations, ITenantRunStore runs,
     ITenantSessionStore sessions, ITenantWorkspaceReadStore files, TenantRunConfigurationResolver configurations,
-    IIamStore security, IamAuthorizer iam, TimeProvider time, ITenantApprovalStore approvals, IIdGenerator ids, ITenantApprovedOperationStore effects, IOfficeProcessor? office = null)
+    IIamStore security, IamAuthorizer iam, TimeProvider time, ITenantApprovalStore approvals, IIdGenerator ids, ITenantApprovedOperationStore effects, IOfficeProcessor? office = null, TenantResourceSourceTarget? resources = null)
 {
-    private sealed record Read(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent, TenantWorkspaceReference Workspace);
+    private sealed record Read(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent, TenantWorkspaceReference Workspace, TenantResourceSourceObservation? Resource = null);
     private async ValueTask<Read> Require(TenantRuntimeFrame frame, string tool, TenantWorkspaceReadArguments args, CancellationToken ct, bool audit = false, bool approved = false, bool live = true)
     {
+        if (TenantWorkspaceReadContract.IsResourcePath(args.Path))
+        {
+            var source = await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireMetadataAsync(frame, tool, args.Path, ct, approved, live, audit).ConfigureAwait(false);
+            return new(source.Run, source.Security, source.Session, source.Agent, new(source.Observation.TenantId, source.Observation.InstanceId), source.Observation);
+        }
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
@@ -58,7 +63,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         var after = await Require(frame, tool, args, ct, approved: approved, live: live).ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.State.Tenant.Revision != after.State.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
-            || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Workspace != after.Workspace)
+            || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Workspace != after.Workspace || before.Resource != after.Resource)
             throw new SecurityConflictException("workspace_source_changed");
         if ((await security.ReadTenantAsync(after.Workspace.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != after.State.Tenant.Revision)
             throw new SecurityConflictException("workspace_source_changed");
@@ -66,14 +71,21 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         if (live) TenantRuntimeRules.Require(frame, after.Session.Owner, final, time.GetUtcNow());
         if (final.Revision != after.Run.Revision) throw new SecurityConflictException("workspace_source_changed");
     }
+    private static AgentWorkspaceContent ResourceContent(TenantResourceSource source, bool body)
+    {
+        var resource = source.Observation.Resource;
+        return new(new(source.Observation.InstanceId, resource.VirtualPath, resource.MediaType, resource.ByteLength, DateTimeOffset.UnixEpoch), body ? source.CopyContent() : []);
+    }
     private static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     private async ValueTask<(Read Before, string Output, string Hash)> InspectCore(TenantRuntimeFrame frame, ModelToolCall call, int remainingBytes,
         CancellationToken ct, bool approved = false, bool live = true)
     {
         var args = TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson);
         var before = await Require(frame, call.Name, args, ct, !approved, approved, live).ConfigureAwait(false);
-        object Witness() => new { tool = call.Name, arguments = args };
-        string result; string fingerprint;
+        string fingerprint = "";
+        object Witness() => before.Resource is null ? (object)new { tool = call.Name, arguments = args }
+            : new { tool = call.Name, arguments = args, resource = before.Resource, observationHash = fingerprint };
+        string result;
         if (call.Name == ToolCatalog.WorkspaceSearch)
             (result, fingerprint) = await Search(frame, args, before, remainingBytes, ct, approved, live).ConfigureAwait(false);
         else if (call.Name == ToolCatalog.WorkspaceList)
@@ -95,15 +107,21 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         }
         else
         {
-            var metadata = await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false);
+            var resourceSource = before.Resource is null ? null : await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable"))
+                .CaptureForInspectionAsync(frame, call.Name, args.Path, approved, live, ct).ConfigureAwait(false);
+            if (resourceSource is not null && resourceSource.Observation != before.Resource) throw new SecurityConflictException("resource_source_changed");
+            var metadata = resourceSource is null ? await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false)
+                : ResourceContent(resourceSource, false);
             var officeRead = TenantWorkspaceReadContract.IsOffice(call.Name);
             if (officeRead && (office is null || metadata.Item.ByteSize > OfficeLimits.MaxPackageBytes))
                 throw new AccessDeniedException(office is null ? "office_processing_unavailable" : "office_processing_limit");
-            var content = await files.InspectTenantAsync(before.Workspace, args.Path, officeRead ? OfficeLimits.MaxPackageBytes : checked((int)AgentWorkspaceLimits.MaxFileBytes), ct).ConfigureAwait(false);
+            var content = resourceSource is null ? await files.InspectTenantAsync(before.Workspace, args.Path, officeRead ? OfficeLimits.MaxPackageBytes : checked((int)AgentWorkspaceLimits.MaxFileBytes), ct).ConfigureAwait(false) : ResourceContent(resourceSource, true);
             if (metadata.Item != content.Item || content.Bytes.LongLength != content.Item.ByteSize
-                || (await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false)).Item != content.Item)
+                || resourceSource is null && (await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false)).Item != content.Item)
                 throw new SecurityConflictException("workspace_source_changed");
-            fingerprint = Hash(JsonSerializer.Serialize(new { content.Item, hash = Convert.ToHexStringLower(SHA256.HashData(content.Bytes)) }));
+            var contentHash = Convert.ToHexStringLower(SHA256.HashData(content.Bytes));
+            fingerprint = before.Resource is null ? Hash(JsonSerializer.Serialize(new { content.Item, hash = contentHash }))
+                : Hash(JsonSerializer.Serialize(new { content.Item, source = before.Resource, hash = contentHash }));
             if (officeRead)
             {
                 string Envelope(object page) => JsonSerializer.Serialize(new { path = args.Path, untrusted = true, inspection = page, tenantWorkspaceRead = true,
@@ -136,7 +154,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         {
             var observed = await InspectCore(frame, call, remainingBytes, ct).ConfigureAwait(false);
             var exact = TenantApprovalRules.PrepareWorkspaceRead(ids.NewId(), frame.Owner.AgentInstanceId,
-                Witness(frame.SessionId, call, observed.Hash), observed.Before.Agent.Instance.Revision, observed.Before.Agent.Instance.PersonaRevision);
+                Witness(frame.SessionId, call, observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision), observed.Before.Agent.Instance.Revision, observed.Before.Agent.Instance.PersonaRevision);
             var prior = await approvals.FindRootApprovalAsync(observed.Before.Workspace.TenantId, observed.Before.Run.Admission.ExecutionContext!.RootActivationId,
                 observed.Before.Agent.PrincipalId, exact, ct).ConfigureAwait(false);
             if (prior is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));
@@ -145,7 +163,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         }
         catch (Exception e) when (e is AccessDeniedException or SecurityConflictException)
         {
-            if (frame.Owner.TenantId is { } tenant) await operations.RecordFailureAsync(new(tenant, frame.RunId), "workspaces.read",
+            if (frame.Owner.TenantId is { } tenant) await operations.RecordFailureAsync(new(tenant, frame.RunId), TenantWorkspaceReadContract.IsResourcePath(TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path) ? "resources.read" : "workspaces.read",
                 e is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)e).ReasonCode, ExecutionAuthorizationPurpose.ToolBoundary, ct, frame.SessionId).ConfigureAwait(false);
             throw;
         }
@@ -178,6 +196,14 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
             }
             catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException or KeyNotFoundException)
             { throw new AccessDeniedException("workspace_source_changed"); }
+            if (TenantWorkspaceReadContract.IsResourcePath(args.Path))
+            {
+                using var doc = JsonDocument.Parse(message.Text); var witness = doc.RootElement.GetProperty("workspaceRead");
+                var observed = await InspectCore(frame, new("resource-revalidate", message.Name!, TenantWorkspaceReadContract.Canonical(message.Name!, args)), ToolLimits.MaxOutputBytes, ct).ConfigureAwait(false);
+                if (witness.GetProperty("observationHash").GetString() != observed.Hash
+                    || witness.GetProperty("resource").Deserialize<TenantResourceSourceObservation>() != observed.Before.Resource) throw new AccessDeniedException("resource_source_changed");
+                continue;
+            }
             var before = await Require(frame, message.Name!, args, ct).ConfigureAwait(false);
             await Fence(frame, message.Name!, args, before, ct).ConfigureAwait(false);
         }

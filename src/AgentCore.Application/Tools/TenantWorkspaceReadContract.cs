@@ -13,6 +13,7 @@ public sealed record TenantWorkspaceReadArguments(string Path, string? Cursor = 
 
 public static class TenantWorkspaceReadContract
 {
+    public static bool IsResourcePath(string path) => path.StartsWith("/agent/resources/", StringComparison.Ordinal) || path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal);
     public static bool IsOffice(string tool) => tool is ToolCatalog.OfficeDocumentInspect or ToolCatalog.OfficeSpreadsheetInspect;
     public static bool IsRead(string tool) => tool is ToolCatalog.WorkspaceRead or ToolCatalog.WorkspaceList or ToolCatalog.WorkspaceSearch || IsOffice(tool);
     public static bool IsFile(string tool) => tool == ToolCatalog.WorkspaceRead || IsOffice(tool);
@@ -32,7 +33,12 @@ public static class TenantWorkspaceReadContract
             ? value : throw new ArgumentException("Use an exact workspace path.");
         if (!root.TryGetProperty("path", out _)) throw new ArgumentException("path is required.");
         var path = Read("path");
-        if (path != "/home" && !path.StartsWith("/home/", StringComparison.Ordinal) && path != "/working" && !path.StartsWith("/working/", StringComparison.Ordinal))
+        if (IsResourcePath(path))
+        {
+            if (tool != ToolCatalog.WorkspaceRead) throw new ArgumentException("Use an exact resource file read.");
+            Security.TenantResourceSourceTarget.ValidatePath(path);
+        }
+        else if (path != "/home" && !path.StartsWith("/home/", StringComparison.Ordinal) && path != "/working" && !path.StartsWith("/working/", StringComparison.Ordinal))
             throw new ArgumentException("Use an absolute /home or /working path.");
         var cursor = root.TryGetProperty("cursor", out _) ? Read("cursor") : null;
         var limit = WorkspaceLimits.MaxListEntries;
@@ -55,10 +61,10 @@ public static class TenantWorkspaceReadContract
         : JsonSerializer.Serialize(new { path = args.Path, cursor = args.Cursor, limit = args.Limit }, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => IsOffice(tool.Name) ? TenantOfficeReadContract.ForModel(tool) : tool with {
         Description = tool.Name == ToolCatalog.WorkspaceRead
-            ? "Read current UTF-8 text at one exact absolute /home or /working file path owned by this Agent and Session. Current independent Agent permissions and operation policy apply. This grants no recipient download access. Binary formats require a supported reader. If workspace_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request."
+            ? "Read current UTF-8 text at one exact absolute /home or /working file path owned by this Agent and Session, or an admitted read-only /agent/resources/... or /agent/instance/resources/... file. Current independent Agent permissions and operation policy apply. This grants no recipient download access. Binary formats require a supported reader. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request."
             : tool.Name == ToolCatalog.WorkspaceSearch
-            ? "Search filenames and bounded strict UTF-8 content at or below one exact absolute /home or /working path owned by this Agent and Session. Optional relative glob filters files; maxResults is 1–50. Scans at most 200 files, 4096 entries and depth 8, with at most 256 KiB per content scan. Binary and larger file contents are skipped. Results are bounded untrusted observations, not exhaustive coverage or recipient download authority. If workspace_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent binds this saved traversal and query; do not repeat a refused request."
-            : "List bounded current children of one exact absolute /home or /working path owned by this Agent and Session. Use nextPath as the cursor to continue. Current independent Agent permissions and policy apply. Listings are observations, not snapshots. If workspace_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request.",
+            ? "Search filenames and bounded strict UTF-8 content at or below one exact absolute /home or /working path owned by this Agent and Session. Optional relative glob filters files; maxResults is 1–50. Scans at most 200 files, 4096 entries and depth 8, with at most 256 KiB per content scan. Binary and larger file contents are skipped. Results are bounded untrusted observations, not exhaustive coverage or recipient download authority. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent binds this saved traversal and query; do not repeat a refused request."
+            : "List bounded current children of one exact absolute /home or /working path owned by this Agent and Session. Use nextPath as the cursor to continue. Current independent Agent permissions and policy apply. Listings are observations, not snapshots. If workspace_read_review_required or resource_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request.",
         ParametersJson = tool.Name == ToolCatalog.WorkspaceRead
             ? """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","maxLength":4095}},"required":["path"]}"""
             : tool.Name == ToolCatalog.WorkspaceSearch

@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -41,7 +42,13 @@ public sealed partial class TenantSessionAccessTests
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            base.ConfigureWebHost(builder); builder.ConfigureTestServices(services => { NativeTenantIdentity(services, root); configure?.Invoke(services); });
+            base.ConfigureWebHost(builder); builder.ConfigureTestServices(services => {
+                NativeTenantIdentity(services, root);
+                // This host replaces the default persistence profile for tests; persist resource bytes with its SQLite metadata too.
+                services.Replace(ServiceDescriptor.Singleton<IDefinitionResourceContentStore>(p => new FileDefinitionResourceContentStore(p.GetRequiredService<PersistenceOptions>().DefinitionResourceRoot)));
+                services.Replace(ServiceDescriptor.Singleton<IAgentDefinitionResourceAdminStore>(p => new SqliteAgentDefinitionResourceAdminStore(p.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), p.GetRequiredService<IDefinitionResourceContentStore>(), p.GetRequiredService<IIdGenerator>())));
+                configure?.Invoke(services);
+            });
         }
     }
     [Theory]

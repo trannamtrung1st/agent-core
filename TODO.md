@@ -1,5 +1,8 @@
 # TODO
 
+Exact tenant resource file reads now use the current scoped source, resource-child Review and incumbent successor/checkpoint machinery. [Current qualification](docs/reports/tenant-resource-read-consent-verification-2026-10-19.md) supersedes exact file-read/Office-consent pending notes below. Resource namespace browsing/search, other resource/publication adapters, autonomous/transport families and final legacy authority/schema cutover remain pending. The full proposal stays active.
+
+
 Pinned resource reads now have an internal current tenant/Instance source boundary and verified immutable byte facet. [Focused verification](docs/reports/tenant-resource-source-verification-2026-10-19.md) covers independent source IAM/policy, same-Account isolation, late revocation/expiry and native blob safety. Model `/agent` projection, namespace browsing and durable resource-read consent remain pending; this prerequisite does not grant read authority. The full proposal remains active.
 
 Workspace-to-Artifact conversion now has verified source capture, current-Allowed transactions, exact source consent, model schema/direct export offering and the shared source inspector through the incumbent Artifact/Run/grant/receipt owners. [Current model/HTTP/browser evidence](docs/reports/tenant-workspace-artifact-model-verification-2026-10-19.md) records actual owned DOCX publication, exact download/preview, stale-source cancellation and SQLite pending-consent host recreation. Independent source/recipient reads and current source/access fences remain mandatory. Other publication adapters, virtual resources, autonomous/resource/transport families and final legacy authority/schema cutover remain open. The full proposal remains active.

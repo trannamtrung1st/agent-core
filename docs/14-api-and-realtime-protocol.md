@@ -1487,3 +1487,8 @@ The existing `mutate_workspace` intent also accepts the four admitted Office cre
 ```
 
 The existing `workspaceMutationTool`/`workspaceMutationArguments` review fields contain complete supplied semantic parameters, never current source bytes. Existing mutation result/receipt fields separate approval from completion and retain `replayAllowed:false`; Office processing publishes no Artifact. Create refuses occupied names; edit compares the original package before replacement. [Executed qualification](reports/tenant-office-mutation-verification-2026-10-19.md) records the bounded current implementation.
+
+
+## Exact resource file observations
+
+Tenant model `workspace.read` and the two read-only Office inspectors accept one exact admitted `/agent/resources/...` or `/agent/instance/resources/...` file. Caller-selected tenant, Instance, Session, resource key or digest fields are not accepted. Core derives the actual child and evaluates independent Session/Agent/resource reads. `resource_read_review_required` directs the model to the existing `inspect_workspace` intent with the same exact `read.tool` and `read.arguments`. The shared path/page/disclosure review fields remain body-free; `readAuthorized` and `workspaceObservation` retain the existing consent-result contract. Approval is for one saved source and page; no mutation, later discovery or recipient download is authorized. Resource list/search, unrelated `/agent` aliases and resource publication are not enabled by this file-read contract. [Qualification](reports/tenant-resource-read-consent-verification-2026-10-19.md).
