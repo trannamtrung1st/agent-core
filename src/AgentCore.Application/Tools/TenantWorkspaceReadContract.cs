@@ -8,11 +8,14 @@ using AgentCore.Application.Ports;
 namespace AgentCore.Application.Tools;
 
 public sealed record TenantWorkspaceReadArguments(string Path, string? Cursor = null, int Limit = WorkspaceLimits.MaxListEntries,
-    string? Query = null, string? Glob = null, int MaxResults = WorkspaceSearchLimits.DefaultMaxResults);
+    string? Query = null, string? Glob = null, int MaxResults = WorkspaceSearchLimits.DefaultMaxResults,
+    int Offset = 0, string? Sheet = null, string? Range = null);
 
 public static class TenantWorkspaceReadContract
 {
-    public static bool IsRead(string tool) => tool is ToolCatalog.WorkspaceRead or ToolCatalog.WorkspaceList or ToolCatalog.WorkspaceSearch;
+    public static bool IsOffice(string tool) => tool is ToolCatalog.OfficeDocumentInspect or ToolCatalog.OfficeSpreadsheetInspect;
+    public static bool IsRead(string tool) => tool is ToolCatalog.WorkspaceRead or ToolCatalog.WorkspaceList or ToolCatalog.WorkspaceSearch || IsOffice(tool);
+    public static bool IsFile(string tool) => tool == ToolCatalog.WorkspaceRead || IsOffice(tool);
     public static bool Allows(AgentDefinition definition, string tool) => IsRead(tool) && RolePermissions.AllowsTool(definition, tool);
     public static TenantWorkspaceReadArguments Parse(string tool, string json)
     {
@@ -20,6 +23,7 @@ public static class TenantWorkspaceReadContract
         using var doc = JsonDocument.Parse(json); var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object) throw new ArgumentException("Use workspace arguments.");
         var fields = root.EnumerateObject().ToArray();
+        if (IsOffice(tool)) return TenantOfficeReadContract.Parse(tool, root);
         var allowed = tool == ToolCatalog.WorkspaceSearch ? new[] { "path", "query", "glob", "maxResults" }
             : tool == ToolCatalog.WorkspaceList ? ["path", "cursor", "limit"] : ["path"];
         if (fields.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() != fields.Length
@@ -46,10 +50,10 @@ public static class TenantWorkspaceReadContract
             || maxResults is < 1 or > WorkspaceSearchLimits.MaxResultsCap)) throw new ArgumentException("Use maxResults between 1 and 50.");
         return new(path, Query: query, Glob: glob, MaxResults: maxResults);
     }
-    public static string Canonical(string tool, TenantWorkspaceReadArguments args) => tool == ToolCatalog.WorkspaceRead ? JsonSerializer.Serialize(new { path = args.Path })
+    public static string Canonical(string tool, TenantWorkspaceReadArguments args) => IsOffice(tool) ? TenantOfficeReadContract.Canonical(tool, args) : tool == ToolCatalog.WorkspaceRead ? JsonSerializer.Serialize(new { path = args.Path })
         : tool == ToolCatalog.WorkspaceSearch ? JsonSerializer.Serialize(new { path = args.Path, query = args.Query, glob = args.Glob, maxResults = args.MaxResults }, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull })
         : JsonSerializer.Serialize(new { path = args.Path, cursor = args.Cursor, limit = args.Limit }, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
-    public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with {
+    public static ModelToolDefinition ForModel(ModelToolDefinition tool) => IsOffice(tool.Name) ? TenantOfficeReadContract.ForModel(tool) : tool with {
         Description = tool.Name == ToolCatalog.WorkspaceRead
             ? "Read current UTF-8 text at one exact absolute /home or /working file path owned by this Agent and Session. Current independent Agent permissions and operation policy apply. This grants no recipient download access. Binary formats require a supported reader. If workspace_read_review_required is returned, request inspect_workspace through approvals.request_authorization with read.tool and these exact read.arguments. Consent applies only to this saved observation; do not repeat a refused request."
             : tool.Name == ToolCatalog.WorkspaceSearch

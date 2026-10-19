@@ -1,5 +1,11 @@
 # Frontend Implementation Specification
 
+## Exact Office read review
+
+An XLSX explicit range without `sheet` selects the first worksheet; sparse mode without `sheet` traverses workbook order. The saved read scope distinguishes those meanings.
+
+The shared workspace-read inspector shows the exact DOCX/XLSX path and supplied read scope. DOCX states offset and maximum element count. XLSX states the exact selected sheet (or workbook-order traversal) and explicit range or complete opaque continuation cursor. All supplied values are inert wrapping text. The preview exposes no document/cell contents or source hash. Confirmation approves one saved observation only; file mutation, publication, recipient download and later discovery remain separate. Source changes retain cancellation and require a fresh exact request.
+
 ## Exact workspace mutation review
 
 Organization and original Chat reuse `TenantApprovalDetail` for `mutate_workspace`. Its existing responsive Drawer, section gaps, confirmation, revision recovery and footer own layout and decisions. A focused saved-mutation preview shows the native action, complete exact path/source/destination, explicit recursive intent and ordered batch steps. Write replacement text and patch find/replacement literals use labeled read-only native text areas, retaining complete content with bounded scrolling. These are supplied proposals, not current private file contents. Render escaped text only, with no Markdown, HTML execution or implicit file reads. Malformed/unavailable saved parameters disable approval and retain cancellation/refresh recovery.

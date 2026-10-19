@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant Office inspection checkpoint — 2026-10-19
+
+Conversational DOCX/XLSX inspection now uses the canonical tenant workspace-read, exact consent and incumbent guarded Office processor. [Focused evidence](tenant-office-inspection-verification-2026-10-19.md) records current independent IAM/capability/source fences, bounded excerpts/ranges/sparse continuation, durable Review and shared inspector behavior. This supersedes Office-inspection-pending notes below only; Office writes/source publication, virtual resources, autonomous origins, other proposal families and final authority/schema cutover remain open. The full proposal stays active.
+
 ## Workspace exact mutation model and review successor — 2026-10-19
 
 The bounded human-attributed conversational mutation path now uses closed tool-specific authorization proposals, current compound consent/effect gates and the incumbent Run/grant/receipt/canonical filesystem owners. Organization and Chat share complete inert saved-parameter inspection and separate truthful outcomes. [Model/HTTP, SQLite recreation and browser evidence](tenant-workspace-mutation-review-verification-2026-10-19.md) supersedes mutation-Review/model/shared-inspector-pending notes below for that path only. Workspace virtual resources/Office/source publication, autonomous origins, other resource/transport families and final clean authority/schema cutover remain open. [Approved-effect host recovery](tenant-workspace-approved-recovery-verification-2026-10-19.md) also verifies controlled settlement loss and role revocation across full SQLite host recreation for Review and exceptional grants, with no native/model replay. The baseline route/tool tables below remain an inventory to reconcile, not proof of current conversion or full acceptance.

@@ -13,8 +13,8 @@ public static partial class TenantApprovalRules
     {
         var args = TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson);
         var owner = new TenantWorkspaceReference(Guid.Empty, instance, value.Working ? value.SessionId : null);
-        TenantWorkspaceRules.Path(owner, args.Path, value.ToolName == ToolCatalog.WorkspaceRead);
-        if (args.Cursor is not null) TenantWorkspaceRules.Path(owner, args.Cursor);
+        TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(value.ToolName));
+        if (args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
         if (id == Guid.Empty || instance == Guid.Empty || value.SessionId == Guid.Empty || revision < 1 || personaRevision < 1
             || TenantWorkspaceReadContract.Canonical(value.ToolName, args) != value.ArgumentsJson || value.ObservationHash is not { Length: 64 }
             || value.ObservationHash.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))) throw new ArgumentException("Invalid exact workspace observation.");

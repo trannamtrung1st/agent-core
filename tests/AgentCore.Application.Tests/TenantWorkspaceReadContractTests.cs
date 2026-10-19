@@ -19,7 +19,7 @@ public sealed class TenantWorkspaceReadContractTests
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_projection_keeps_immutable_capability_and_current_execution_boundaries(bool capabilities)
     {
-        var definition = await CapabilityProjectionTests.Definition(); var names = new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
+        var definition = await CapabilityProjectionTests.Definition(); var names = new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.OfficeDocumentInspect, ToolCatalog.OfficeSpreadsheetInspect };
         definition = definition with { Environment = definition.Environment! with { Capabilities = capabilities ? new("Selected", names) : null, ToolAllowlist = names } };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,

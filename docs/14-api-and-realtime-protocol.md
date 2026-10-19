@@ -1,5 +1,24 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Office inspection intent
+
+An XLSX explicit range without `sheet` selects the first worksheet; sparse mode without `sheet` traverses workbook order. The saved read scope distinguishes those meanings.
+
+Tenant model `office.document.inspect` and `office.spreadsheet.inspect` accept exact absolute owned `/home` or `/working` files through the workspace-read boundary. DOCX accepts `path`, optional integer `offset` (default 0) and `limit` (default 20, 1–100). XLSX accepts `path`, optional `sheet` (1–31 characters), and either `range` (1–32 characters) or opaque `cursor` (1–2048 characters). Unknown/duplicate fields and caller authority are refused. The existing Office tool schema keeps its 512-character path bound and matching extension. The cursor has no IAM authority.
+
+Policy-required reads use the existing authorization operation, for example:
+
+```json
+{"operation":"inspect_workspace","read":{"tool":"office.document.inspect","arguments":{"path":"/home/report.docx","offset":1,"limit":20}}}
+```
+
+```json
+{"operation":"inspect_workspace","read":{"tool":"office.spreadsheet.inspect","arguments":{"path":"/working/report.xlsx","sheet":"Results","range":"A1:C20"}}}
+```
+
+Successful direct results contain `untrusted:true`, `tenantWorkspaceRead:true`, exact tool/argument witness and bounded `inspection` using the incumbent Office read shapes. Approved results wrap the same observation in `workspaceObservation` with `readAuthorized:true` and `applied:false`; denial returns no observation. No write, publication or recipient download is implied. Existing safe package/cursor/revision/output-limit errors contain no source bytes.
+
+
 ## Exact tenant workspace mutation consent
 
 Human-attributed conversational execution offers only admitted mutation capabilities under `approvals.request_authorization`. `mutate_workspace` accepts one closed `{ mutation: { tool, arguments } }` proposal; supported tools are write, patch, mkdir, copy, move, delete and ordered batch, each using its incumbent closed argument schema. The bounded envelope is checked before the ordinary 16 KiB authorization bound so a complete 32 KiB UTF-8 literal write can be reviewed without truncation; mutation arguments remain at most 64 KiB and the envelope adds at most 256 bytes. Caller tenant/principal/permission/grant/witness fields are forbidden. Core derives actual ownership, compound permission targets and private source observations.

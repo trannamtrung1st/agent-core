@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Execution;
+using AgentCore.Application.Office;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -13,7 +14,7 @@ namespace AgentCore.Application.Security;
 
 public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAuthorizer operations, ITenantRunStore runs,
     ITenantSessionStore sessions, ITenantWorkspaceReadStore files, TenantRunConfigurationResolver configurations,
-    IIamStore security, IamAuthorizer iam, TimeProvider time, ITenantApprovalStore approvals, IIdGenerator ids, ITenantApprovedOperationStore effects)
+    IIamStore security, IamAuthorizer iam, TimeProvider time, ITenantApprovalStore approvals, IIdGenerator ids, ITenantApprovedOperationStore effects, IOfficeProcessor? office = null)
 {
     private sealed record Read(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent, TenantWorkspaceReference Workspace);
     private async ValueTask<Read> Require(TenantRuntimeFrame frame, string tool, TenantWorkspaceReadArguments args, CancellationToken ct, bool audit = false, bool approved = false, bool live = true)
@@ -32,8 +33,8 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool)
             || !TenantWorkspaceReadContract.Allows(current.Definition, tool)) throw new AccessDeniedException("capability_unavailable");
         var owner = new TenantWorkspaceReference(tenant, run.AgentInstanceId, args.Path.StartsWith("/working", StringComparison.Ordinal) ? run.SessionId : null);
-        TenantWorkspaceRules.Path(owner, args.Path, tool == ToolCatalog.WorkspaceRead);
-        if (args.Cursor is not null) TenantWorkspaceRules.Path(owner, args.Cursor);
+        TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(tool));
+        if (args.Cursor is not null && tool == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current.Definition).StateIsolationPolicy ?? StateIsolationPolicy.Default;
         if (owner.SessionId is null && isolation.HomeAccess == HomeAccess.Disabled) throw new AccessDeniedException("home_access_disabled");
         var targets = new List<(string Permission, AccessScope Scope)> { ("sessions.read", TenantSessionRules.Scope(tenant, run.SessionId)) };
@@ -95,20 +96,36 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         else
         {
             var metadata = await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false);
-            var content = await files.InspectTenantAsync(before.Workspace, args.Path, checked((int)AgentWorkspaceLimits.MaxFileBytes), ct).ConfigureAwait(false);
+            var officeRead = TenantWorkspaceReadContract.IsOffice(call.Name);
+            if (officeRead && (office is null || metadata.Item.ByteSize > OfficeLimits.MaxPackageBytes))
+                throw new AccessDeniedException(office is null ? "office_processing_unavailable" : "office_processing_limit");
+            var content = await files.InspectTenantAsync(before.Workspace, args.Path, officeRead ? OfficeLimits.MaxPackageBytes : checked((int)AgentWorkspaceLimits.MaxFileBytes), ct).ConfigureAwait(false);
             if (metadata.Item != content.Item || content.Bytes.LongLength != content.Item.ByteSize
                 || (await files.InspectTenantAsync(before.Workspace, args.Path, 0, ct).ConfigureAwait(false)).Item != content.Item)
                 throw new SecurityConflictException("workspace_source_changed");
             fingerprint = Hash(JsonSerializer.Serialize(new { content.Item, hash = Convert.ToHexStringLower(SHA256.HashData(content.Bytes)) }));
-            try
+            if (officeRead)
             {
-                var text = new UTF8Encoding(false, true).GetString(content.Bytes);
-                if (text.Any(c => char.IsControl(c) && c is not ('\t' or '\n' or '\r' or '\f'))) throw new DecoderFallbackException();
-                result = ToolJsonResults.FitJsonWithContentField(remainingBytes, ToolJsonResults.ClipUtf8Prefix(text, Math.Max(0, remainingBytes)),
-                    (body, clipped) => JsonSerializer.Serialize(new { path = args.Path, contentType = content.Item.ContentType, byteSize = content.Item.ByteSize,
-                        truncated = clipped || body.Length < text.Length, content = body, untrusted = true, tenantWorkspaceRead = true, workspaceRead = Witness() }));
+                string Envelope(object page) => JsonSerializer.Serialize(new { path = args.Path, untrusted = true, inspection = page, tenantWorkspaceRead = true,
+                    workspaceRead = JsonSerializer.SerializeToElement(Witness()) }, OfficeReadResults.Json);
+                var budget = Math.Min(remainingBytes, 128 * 1024);
+                result = call.Name == ToolCatalog.OfficeDocumentInspect
+                    ? OfficeReadResults.Document(office!.InspectDocument(content.Bytes, args.Offset, args.Limit, ct), args.Offset, budget, Envelope)
+                    : args.Range is null ? OfficeReadResults.SparseWorkbook(office!.ReadWorkbookContent(content.Bytes, args.Sheet, args.Cursor, ct), budget, Envelope)
+                    : OfficeReadResults.Workbook(office!.InspectWorkbook(content.Bytes, args.Sheet, args.Range, ct), budget, Envelope);
             }
-            catch (DecoderFallbackException) { result = ToolJsonResults.FitToBudget(remainingBytes, """{"error":"unsupported_reader","message":"This file is not UTF-8 text. Use a supported reader."}"""); }
+            else
+            {
+                try
+                {
+                    var text = new UTF8Encoding(false, true).GetString(content.Bytes);
+                    if (text.Any(c => char.IsControl(c) && c is not ('\t' or '\n' or '\r' or '\f'))) throw new DecoderFallbackException();
+                    result = ToolJsonResults.FitJsonWithContentField(remainingBytes, ToolJsonResults.ClipUtf8Prefix(text, Math.Max(0, remainingBytes)),
+                        (body, clipped) => JsonSerializer.Serialize(new { path = args.Path, contentType = content.Item.ContentType, byteSize = content.Item.ByteSize,
+                            truncated = clipped || body.Length < text.Length, content = body, untrusted = true, tenantWorkspaceRead = true, workspaceRead = Witness() }));
+                }
+                catch (DecoderFallbackException) { result = ToolJsonResults.FitToBudget(remainingBytes, """{"error":"unsupported_reader","message":"This file is not UTF-8 text. Use a supported reader."}"""); }
+            }
         }
         await Fence(frame, call.Name, args, before, ct, approved, live).ConfigureAwait(false);
         return (before, result, fingerprint);
@@ -131,6 +148,12 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
             if (frame.Owner.TenantId is { } tenant) await operations.RecordFailureAsync(new(tenant, frame.RunId), "workspaces.read",
                 e is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)e).ReasonCode, ExecutionAuthorizationPurpose.ToolBoundary, ct, frame.SessionId).ConfigureAwait(false);
             throw;
+        }
+        catch (Sessions.AgentCoreException e) when (TenantWorkspaceReadContract.IsOffice(call.Name))
+        {
+            var reason = new[] { "office_cursor_invalid", "office_revision_conflict", "office_processing_limit", "office_operation_unsupported", "invalid_office_package" }
+                .FirstOrDefault(code => e.Code == code || e.Message.StartsWith(code + ":", StringComparison.Ordinal)) ?? "workspace_read_unavailable";
+            return ToolJsonResults.FitToBudget(remainingBytes, JsonSerializer.Serialize(new { error = reason, message = "The exact Office observation is unavailable. Check its parameters and current source before requesting another read." }));
         }
         catch (Exception e) when (e is Sessions.AgentCoreException or IOException or UnauthorizedAccessException)
         {

@@ -13,19 +13,19 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantOperationAuthorizationTests
 {
-    private static TenantWorkspaceRuntimeReadService WorkspaceRuntimeReads(Fixture f, ITenantWorkspaceReadStore? store = null) => new(Operations(f),
-        (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, store ?? WorkspaceReader(f), f.RunConfiguration(), f.Iam, f.Authorizer, f.Clock, (ITenantApprovalStore)f.Iam, f.Ids, (ITenantApprovedOperationStore)f.Iam);
+    private static TenantWorkspaceRuntimeReadService WorkspaceRuntimeReads(Fixture f, ITenantWorkspaceReadStore? store = null, IOfficeProcessor? office = null) => new(Operations(f),
+        (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, store ?? WorkspaceReader(f), f.RunConfiguration(), f.Iam, f.Authorizer, f.Clock, (ITenantApprovalStore)f.Iam, f.Ids, (ITenantApprovedOperationStore)f.Iam, office);
     private static async Task<RoleAssignment> GrantWorkspaceRuntimeReads(Fixture f, Environment s, string[]? keys = null, AccessScope? scope = null)
     {
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Owned model workspace reads", keys ?? ["agents.read", "sessions.read", "workspaces.read"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         return await f.Access.AssignRoleAsync(s.Owner.PrincipalId, s.Tenant, s.Agent.PrincipalId, role.RoleId, scope ?? AccessScope.ForTenant(s.Tenant), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
     }
-    private static async Task SeedRuntimeWorkspace(Fixture f, Environment s, bool working, string name = "private.txt", byte[]? bytes = null)
+    private static async Task SeedRuntimeWorkspace(Fixture f, Environment s, bool working, string name = "private.txt", byte[]? bytes = null, long maxFileBytes = 4096)
     {
         var root = Path.Combine(f.Root, "workspaces"); _ = WorkspaceReader(f);
         var fs = new CanonicalWorkspaceFilesystem(working ? AgentWorkspacePhysicalPaths.WorkingDirectory(root, s.Agent.Instance.InstanceId, s.Run.SessionId)
             : AgentWorkspacePhysicalPaths.HomeDirectory(root, s.Agent.Instance.InstanceId), working ? "/working" : "/home");
-        fs.Ensure(); await fs.WriteAsync((working ? "/working/" : "/home/") + name, bytes ?? Encoding.UTF8.GetBytes("Private model bytes: thử nghiệm"), 4096, 100000);
+        fs.Ensure(); await fs.WriteAsync((working ? "/working/" : "/home/") + name, bytes ?? Encoding.UTF8.GetBytes("Private model bytes: thử nghiệm"), maxFileBytes, 100000);
     }
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     public async Task Tenant_workspace_model_reads_and_lists_use_actual_files_and_executor_authority(bool sqlite, bool working)

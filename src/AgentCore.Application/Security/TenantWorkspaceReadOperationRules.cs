@@ -21,8 +21,8 @@ public static class TenantWorkspaceReadOperationRules
     {
         var args = TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson);
         var owner = new TenantWorkspaceReference(agent.TenantId, agent.Instance.InstanceId, value.Working ? value.SessionId : null);
-        TenantWorkspaceRules.Path(owner, args.Path, value.ToolName == ToolCatalog.WorkspaceRead);
-        if (args.Cursor is not null) TenantWorkspaceRules.Path(owner, args.Cursor);
+        TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(value.ToolName));
+        if (args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
         if (value.SessionId != run.SessionId || session.Owner.SessionId != run.SessionId || session.Owner.TenantId != run.Owner.TenantId
             || agent.TenantId != run.Owner.TenantId || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != run.Owner.ExecutorPrincipalId
             || session.Owner.ExecutorPrincipalId != agent.PrincipalId || session.Owner.AgentInstanceId != agent.Instance.InstanceId

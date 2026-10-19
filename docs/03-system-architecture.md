@@ -1,5 +1,9 @@
 # System Architecture
 
+## Tenant Office observation ownership
+
+Conversational DOCX/XLSX inspection composes the existing canonical tenant workspace-read and exact saved-consent owner with the incumbent guarded Office processor. The same independent parent/workspace IAM, current capability/HomeAccess, claimed Run and source/checkpoint fences govern the bounded semantic observation. No legacy workspace path, Office write, publication, separate read grant or new execution engine is introduced. [Contract](04-backend-interfaces.md#tenant-model-office-inspection), [bounded evidence](reports/tenant-office-inspection-verification-2026-10-19.md).
+
 ## Approved workspace mutation Run ownership
 
 Approved mutation execution uses the same workspace effect service, canonical file adapter and existing approval/Run/grant/receipt owners. Approved start reserves the current exact operation and claims its grant atomically; native I/O remains outside storage transactions. Current authority/owner/claim callbacks and private source revalidation constrain dispatch. Settlement stores only factual outcome, exact receipt, terminal grant disposition and body-free continuation checkpoint. Recovery uses retained ownership without requiring current file access or replaying I/O. Structural operations retain their initial-footprint/ordered-prefix semantics. No scheduler, versioned filesystem, stored file snapshot or parallel effect engine is added. [Current port](04-backend-interfaces.md#approved-workspace-mutation-execution).

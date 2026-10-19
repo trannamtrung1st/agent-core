@@ -1,5 +1,11 @@
 # Accounts, organizations, access and approvals UX
 
+## Exact Office read review
+
+An XLSX explicit range without `sheet` selects the first worksheet; sparse mode without `sheet` traverses workbook order. The saved read scope distinguishes those meanings.
+
+The shared workspace-read inspector shows the exact DOCX/XLSX path and supplied read scope. DOCX states offset and maximum element count. XLSX states the exact selected sheet (or workbook-order traversal) and explicit range or complete opaque continuation cursor. All supplied values are inert wrapping text. The preview exposes no document/cell contents or source hash. Confirmation approves one saved observation only; file mutation, publication, recipient download and later discovery remain separate. Source changes retain cancellation and require a fresh exact request.
+
 ## Exact workspace mutation Review
 
 The existing Organization inbox and original-Chat approval link open the same exact saved workspace change. Show full paths, proposed literal replacement/edit text and every ordered operation before a decision. No current private file body, directory listing or observation hash is disclosed. Read-only literal controls preserve all content, keyboard access and narrow-screen wrapping. Current server qualification plus complete saved-parameter presentation governs the decision controls; cancellation remains available when current source changes.

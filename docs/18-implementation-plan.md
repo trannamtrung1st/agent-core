@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant Office inspection checkpoint — 2026-10-19
+
+Human-attributed conversational Runs now offer the existing DOCX/XLSX inspect tools through canonical owned workspace reads and exact saved-read consent. [Focused evidence](reports/tenant-office-inspection-verification-2026-10-19.md) separates actual model/HTTP, cursor/source/authority boundaries, disposable SQLite schema/host recovery and shared browser review. This supersedes Office-inspection-pending claims below for this read-only conversational path. Office create/edit, source publication, virtual resources, autonomous origins, other proposal families and the final authority/schema cutover remain open; no full proposal or milestone acceptance is claimed.
+
 ## Approved workspace abandoned-effect recovery checkpoint — 2026-10-19
 
 Actual model/HTTP-approved native writes now have [complete SQLite host-recreation evidence](reports/tenant-workspace-approved-recovery-verification-2026-10-19.md) when initial receipt settlement is unavailable. Both Review and exceptional-grant cases revoke Agent authority before stopping the first host; the fresh hosted pass retains factual uncertainty, seals one receipt/grant disposition and performs no further write or model call. This supersedes abandoned-approved-effect-host-qualification-pending notes below for this controlled outage only; no physical process kill is claimed. Other proposal families and final authority/schema cutover remain open.

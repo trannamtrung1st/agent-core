@@ -154,7 +154,9 @@ public sealed partial class TenantApprovalService
         if (op.WorkspaceRead is { } workspace)
         {
             var args = AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(workspace.ToolName, workspace.ArgumentsJson);
-            var page = workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceRead ? "One exact current UTF-8 file"
+            var page = workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.OfficeDocumentInspect ? $"Word document excerpt: offset {args.Offset}; up to {args.Limit} elements."
+                : workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.OfficeSpreadsheetInspect ? $"Excel content: sheet {args.Sheet ?? (args.Range is null ? "workbook order" : "first worksheet")}; " + (args.Range is not null ? $"exact range {args.Range}." : args.Cursor is not null ? $"sparse continuation cursor {args.Cursor}." : "first sparse page.")
+                : workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceRead ? "One exact current UTF-8 file"
                 : workspace.ToolName == AgentCore.Application.Tools.ToolCatalog.WorkspaceSearch ? $"Search for {args.Query}; glob: {args.Glob ?? "all files"}; up to {args.MaxResults} matches. Scan bounds: 200 files, 4096 entries, depth 8 and 256 KiB per file."
                 : $"Up to {args.Limit} directory entries" + (args.Cursor is null ? "." : $", after {args.Cursor}.");
             return [new("path", null, args.Path, false), new("readPage", null, page, false),
