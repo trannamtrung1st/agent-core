@@ -9,8 +9,9 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    TimeProvider? clock = null, SqliteArtifactStore? artifactBacking = null, SqliteAttachmentStore? attachmentBacking = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    TimeProvider? clock = null, SqliteArtifactStore? artifactBacking = null, SqliteAttachmentStore? attachmentBacking = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
+    private readonly BrowserPrivacyAuthority privacyAuthority = BrowserPrivacyRules.FreezeAuthority(browserPrivacyAuthority ?? new(true, false, [], []));
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }
     public async ValueTask<Account?> ReadAccountAsync(Guid accountId, CancellationToken ct = default)
@@ -68,6 +69,11 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     public async ValueTask<SystemSecurityState> ReadSystemAsync(CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var state = await ReadSystemAsync(db, ct); await tx.CommitAsync(ct); return state;
+    }
+    private static async ValueTask<SystemSecurityState> ReadSystemAsync(AgentCoreDbContext db, CancellationToken ct)
+    {
         var roles = await RolesAsync(db, null, ct).ConfigureAwait(false);
         return new(Array.AsReadOnly(await db.Set<Principal>().AsNoTracking().Where(p => p.TenantId == null).ToArrayAsync(ct).ConfigureAwait(false)), roles,
             Array.AsReadOnly((await db.Set<IamAssignmentRow>().AsNoTracking().Where(a => a.TenantId == null).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray()));

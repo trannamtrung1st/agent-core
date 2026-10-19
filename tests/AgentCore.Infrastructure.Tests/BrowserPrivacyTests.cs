@@ -25,10 +25,10 @@ public sealed class BrowserPrivacyTests
         await crossOriginFixture.StartAsync(default);
         var permittedFrameOrigin = crossOriginFixture.HostPolicy.NavigationOrigins.Single();
         var origin = fixture.HostPolicy.NavigationOrigins.Single();
-        var privacy = NewPrivacy(new(true, true, [exact ? origin : "http://127.0.0.1:1"], [origin]));
+        var privacy = await BrowserPrivacyTestHost.Create(new(true, true, [exact ? origin : "http://127.0.0.1:1"], [origin]));
         await privacy.SaveAsync(0, mode, mode == "Unmasked" ? [exact ? origin : "http://127.0.0.1:1"] : [], [origin], mode == "Unmasked");
         var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixtureEnabled = false,
-            NavigationOrigins = [origin, permittedFrameOrigin], InteractionOrigins = [origin, permittedFrameOrigin] }, null, privacy: privacy);
+            NavigationOrigins = [origin, permittedFrameOrigin], InteractionOrigins = [origin, permittedFrameOrigin] }, null, privacy: privacy.Runtime);
         await browser.StartAsync(default);
         var id = Guid.NewGuid();
         try
@@ -88,11 +88,11 @@ public sealed class BrowserPrivacyTests
         try
         {
             var origin = browser.HostPolicy.NavigationOrigins.Single();
-            var privacy = NewPrivacy(new(true, true, [origin], []));
+            var privacy = await BrowserPrivacyTestHost.Create(new(true, true, [origin], []));
             await privacy.SaveAsync(0, mode, mode == "Unmasked" ? [origin] : [], [], mode == "Unmasked");
             await privacy.ActivateAtStartupAsync();
             var guarded = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixtureEnabled = false,
-                NavigationOrigins = [origin], InteractionOrigins = [origin] }, null, privacy: privacy);
+                NavigationOrigins = [origin], InteractionOrigins = [origin] }, null, privacy: privacy.Runtime);
             await guarded.StartAsync(default);
             try
             {
@@ -122,8 +122,8 @@ public sealed class BrowserPrivacyTests
     [Fact]
     public async Task Saved_changes_do_not_split_inflight_capture_and_shutdown_revokes_unpublished_bytes()
     {
-        var privacy = NewPrivacy(new(true, false, [], []));
-        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null, privacy: privacy);
+        var privacy = await BrowserPrivacyTestHost.Create(new(true, false, [], []));
+        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null, privacy: privacy.Runtime);
         await browser.StartAsync(default); var id = Guid.NewGuid();
         try
         {
@@ -144,7 +144,7 @@ public sealed class BrowserPrivacyTests
             // Closing the host cannot publish the now-retired capture.
             try { var result = await capture; Assert.Null(result.Bytes); Assert.NotNull(result.ErrorCode); }
             catch (OperationCanceledException) { }
-            var restarted = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null, privacy: privacy);
+            var restarted = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null, privacy: privacy.Runtime);
             await restarted.StartAsync(default);
             try
             {
@@ -169,18 +169,19 @@ public sealed class BrowserPrivacyTests
             await new SqliteMemoryStore(contexts, TimeProvider.System).EnsureCreatedAsync();
             var ids = new SystemIdGenerator(TimeProvider.System);
             var authority = new BrowserPrivacyAuthority(true,true,["https://example.test"],[]);
-            var first = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts,ids), authority, TimeProvider.System, ids);
+            var first = await BrowserPrivacyTestHost.Create(authority, contexts);
             var saved = await first.SaveAsync(0,"Unmasked",["https://example.test"],[],true);
             Assert.True(saved.Durable);
             Assert.True(saved.RestartRequired);
-            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => first.SaveAsync(0,"Disabled",[],[],false).AsTask());
-            var second = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts,ids),authority,TimeProvider.System,ids);
+            await Assert.ThrowsAsync<AgentCore.Application.Security.SecurityConflictException>(() => first.SaveAsync(0,"Disabled",[],[],false).AsTask());
+            var second = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts),authority);
             await second.ActivateAtStartupAsync();
             Assert.Equal(BrowserScreenshotPrivacyMode.Unmasked, second.Effective.Mode); Assert.Equal(1,second.Effective.Revision);
-            var history = await new SqliteAdminEventStore(contexts,ids).ListAsync(new("browserPrivacy","host"));
-            Assert.Equal(AdminEventOperationKind.BrowserPrivacyChanged, Assert.Single(history).Operation);
-            Assert.DoesNotContain("example.test", history.Single().SummaryJson);
-            var restricted = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts,ids),new(false,false,[],[]),TimeProvider.System,ids);
+            await using var db = await contexts.CreateDbContextAsync();
+            var history = await db.Set<AgentCore.Domain.Security.AuthorizationAudit>().Where(a => a.Action == "system.browser.privacy.update").ToArrayAsync();
+            Assert.Equal(first.Human.PrincipalId, Assert.Single(history).ActorPrincipalId); Assert.Null(history.Single().TenantId);
+            Assert.DoesNotContain("example.test", System.Text.Json.JsonSerializer.Serialize(history));
+            var restricted = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts),new(false,false,[],[]));
             await restricted.ActivateAtStartupAsync();
             Assert.Equal(BrowserScreenshotPrivacyMode.Disabled,restricted.Effective.Mode); Assert.Empty(restricted.Effective.UnmaskedOrigins);
         }
@@ -202,13 +203,13 @@ public sealed class BrowserPrivacyTests
         try
         {
             await new SqliteMemoryStore(contexts, TimeProvider.System).EnsureCreatedAsync();
-            var initial = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts, ids), new(true, true, origins, origins), TimeProvider.System, ids);
+            var initial = await BrowserPrivacyTestHost.Create(new(true, true, origins, origins), contexts);
             var pending = await initial.SaveAsync(0, "Unmasked", origins, origins, true);
             Assert.True(pending.RestartRequired);
             Assert.False(pending.ConstrainedByDeployment);
             var authority = new BrowserPrivacyAuthority(restriction != "capture", restriction != "unmasked",
                 restriction == "origins" ? [origins[0]] : origins, restriction == "graphics" ? [origins[0]] : origins);
-            var reopened = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts, ids), authority, TimeProvider.System, ids);
+            var reopened = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts), authority);
             await reopened.ActivateAtStartupAsync();
             var view = await reopened.ReadAsync();
             Assert.Equal(expectedMode, view.Effective.Mode);
@@ -223,8 +224,6 @@ public sealed class BrowserPrivacyTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
 
-    private static BrowserPrivacyService NewPrivacy(BrowserPrivacyAuthority authority)
-    { var ids = new SystemIdGenerator(TimeProvider.System); return new(new InMemoryBrowserPrivacyStore(new InMemoryAdminEventStore(ids)), authority, TimeProvider.System, ids); }
     private sealed class Contexts(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken ct = default) => Task.FromResult(CreateDbContext()); }
 }

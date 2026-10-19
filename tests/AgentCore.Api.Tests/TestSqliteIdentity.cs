@@ -21,13 +21,15 @@ internal static class TestSqliteIdentity
         options.AttachmentRoot = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource + ".attachments";
         services.TryAddSingleton<SqliteAttachmentStore>(p => new(p.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), p.GetRequiredService<TimeProvider>(), p.GetRequiredService<PersistenceOptions>().AttachmentRoot));
         services.Replace(ServiceDescriptor.Singleton<IAttachmentStore>(p => p.GetRequiredService<SqliteAttachmentStore>()));
+        services.RemoveAll<IBrowserPrivacyStore>();
+        services.AddSingleton<IBrowserPrivacyStore, SqliteBrowserPrivacyStore>();
         services.RemoveAll<IIamStore>();
         services.AddSingleton<IIamStore>(provider =>
         {
             var contexts = provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
             using (var db = contexts.CreateDbContext()) db.Database.Migrate();
             var store = new SqliteIamStore(contexts, provider.GetService<IDefinitionResourceContentStore>(),
-                provider.GetService<IBuiltInAgentDefinitionStore>(), provider.GetService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<SqliteArtifactStore>(), provider.GetRequiredService<SqliteAttachmentStore>());
+                provider.GetService<IBuiltInAgentDefinitionStore>(), provider.GetService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<SqliteArtifactStore>(), provider.GetRequiredService<SqliteAttachmentStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>());
             if (!store.HasBootstrapAsync().AsTask().GetAwaiter().GetResult())
             {
                 var identity = new IdentityService(store, provider.GetRequiredService<IAccountPasswordHasher>(),

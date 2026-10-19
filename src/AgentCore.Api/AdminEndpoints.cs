@@ -101,7 +101,6 @@ internal static class AdminEndpoints
         RuntimeStateEndpoints.Map(group);
         StateIsolationConfigurationEndpoints.Map(group);
         group.MapCredentials();
-        group.MapBrowserPrivacy();
         group.MapSandboxes();
         HarnessManagementEndpoints.Map(group);
         AgentInstanceSkillEndpoints.Map(group);

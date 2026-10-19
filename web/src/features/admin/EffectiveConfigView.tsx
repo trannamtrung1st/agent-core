@@ -1,6 +1,6 @@
 import { Descriptions, Flex, Typography, theme } from "antd";
 import { followAppLink } from "../../app/appLink";
-import { adminHomePath } from "../../app/appRoute";
+import { systemBrowserPrivacyPath } from "../../services/systemBrowserPrivacy";
 import { type AdminEffectiveConfiguration } from "../../services/adminApi";
 import { InstanceIdentityTags } from './AdminRecordSummaries';
 import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
@@ -114,7 +114,7 @@ export function EffectiveConfigView({
               <Descriptions.Item label="Configuration source">Host Browser:Limits configuration · changes apply after host restart. Safety ceilings remain enforced.</Descriptions.Item>
             </> : null}
           </Descriptions>
-          <a href={adminHomePath("browser-privacy")} onClick={followAppLink}>Manage global Browser privacy · Host restart rules apply</a>
+          <a href={systemBrowserPrivacyPath} onClick={followAppLink}>Manage global Browser privacy · Host restart rules apply</a>
           </Flex>
         </section>
       ) : null}

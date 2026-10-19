@@ -582,7 +582,7 @@ describe("AdminApp", () => {
       expect(within(section as HTMLElement).queryByRole("combobox")).not.toBeInTheDocument();
       expect(within(section as HTMLElement).queryByRole("switch")).not.toBeInTheDocument();
     }
-    expect(within(browser).getByRole('link', { name: /Manage global Browser privacy/ })).toHaveAttribute('href', '/admin/platform/browser-privacy');
+    expect(within(browser).getByRole('link', { name: /Manage global Browser privacy/ })).toHaveAttribute('href', '/system/browser-privacy');
     expect(within(browser).queryByRole('region', { name: 'Screenshot privacy' })).not.toBeInTheDocument();
 
   });

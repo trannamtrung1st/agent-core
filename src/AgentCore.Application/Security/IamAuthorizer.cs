@@ -101,15 +101,15 @@ public sealed class IamAuthorizer(IIamStore store)
     }
 
     private async ValueTask<AccessDecision> EvaluateAsync(Guid principalId, PermissionDefinition permission, AccessScope target,
-        IReadOnlyList<Principal> principals, IReadOnlyList<AccessRole> roles, IReadOnlyList<RoleAssignment> assignments, CancellationToken ct)
+        IReadOnlyList<Principal> principals, IReadOnlyList<AccessRole> roles, IReadOnlyList<RoleAssignment> assignments, CancellationToken ct, Account? ownedAccount = null)
     {
         var principal = principals.SingleOrDefault(p => p.PrincipalId == principalId && p.TenantId == target.TenantId);
         if (principal is null || principal.Status != IdentityStatus.Active) return AccessDecision.Deny("principal_unavailable");
         if (principal.Kind == PrincipalKind.SystemIdentity && permission.HumanOnly) return AccessDecision.Deny("human_only");
         if (principal.Kind == PrincipalKind.User)
         {
-            var account = principal.AccountId is { } accountId ? await store.ReadAccountAsync(accountId, ct).ConfigureAwait(false) : null;
-            if (account?.Status != IdentityStatus.Active) return AccessDecision.Deny("account_unavailable");
+            var account = ownedAccount ?? (principal.AccountId is { } accountId ? await store.ReadAccountAsync(accountId, ct).ConfigureAwait(false) : null);
+            if (account?.Status != IdentityStatus.Active || account.AccountId != principal.AccountId) return AccessDecision.Deny("account_unavailable");
         }
         var roleIds = roles.Where(r => r.TenantId == target.TenantId && (!r.HumanOnly || principal.Kind == PrincipalKind.User)
             && r.Permissions.Contains(permission.Key, StringComparer.Ordinal)).Select(r => r.RoleId).ToHashSet();
@@ -117,6 +117,13 @@ public sealed class IamAuthorizer(IIamStore store)
             && roleIds.Contains(a.RoleId) && ValidScope(a.Scope) && a.Scope.TenantId == a.TenantId && a.Scope.Contains(target))
             .Select(a => a.AssignmentId).ToArray();
         return matches.Length > 0 ? new(true, "allowed", matches) : AccessDecision.Deny("permission_denied");
+    }
+
+    internal ValueTask<AccessDecision> CheckOwnedSystemAsync(SystemSecurityState state, Account account, Guid actor, string permission, CancellationToken ct)
+    {
+        var metadata = PermissionCatalog.Get(permission);
+        if (!metadata.SystemOnly) return ValueTask.FromResult(AccessDecision.Deny("scope_mismatch"));
+        return EvaluateAsync(actor, metadata, AccessScope.System, state.Principals, state.Roles, state.Assignments, ct, account);
     }
 
     public static bool ValidScope(AccessScope scope) => scope.Kind switch

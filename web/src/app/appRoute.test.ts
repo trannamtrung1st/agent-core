@@ -27,7 +27,7 @@ describe('Admin canonical routes', () => {
     for (const p of draftPages) expect(parseAppRoute(adminDraftPath('field guide', id, p.id))).toEqual({ area: 'admin', view: 'draft', definitionId: 'field guide', draftId: id, page: p.id });
     expect(adminDefinitionPath('examiner')).toBe('/admin/definitions/examiner/versions');
     expect(adminHomePath('credentials')).toBe('/admin/connections/credentials');
-    expect(adminHomePath('browser-privacy')).toBe('/admin/platform/browser-privacy');
+    expect(parseAppRoute('/system/browser-privacy')).toEqual({ area: 'access', view: 'system', page: 'browser-privacy' });
   });
   it('relocates legacy combined-page anchors to their focused owner', () => {
     expect(canonicalAppUrl(`${base}/behavior#voice`)).toBe(`${base}/voice#voice`);

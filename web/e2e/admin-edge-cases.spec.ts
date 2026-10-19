@@ -1,50 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
-import { navigateAdmin } from './support/admin-navigation';
-
-async function clickGlobalLink(page: Page, name: string) {
-  if (await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).isVisible()) {
-    await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
-  }
-  await page.getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name, exact: true }).click();
-}
-async function unloadBlocked(page: Page) {
-  return page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; });
-}
+import { expect, test } from '@playwright/test';
 
 for (const width of [1440, 390]) {
-  test(`retained Browser privacy discards only approved edits and clears unload protection at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/admin/platform/browser-privacy');
-    const mode = page.getByRole('combobox', { name: /Saved screenshot privacy mode/ });
-    const field = page.locator('.ant-select').filter({ has: mode });
-    await expect(field).toContainText('Protected — mask sensitive pixels');
-    let writes = 0;
-    page.on('request', request => { if (request.url().endsWith('/api/v2/admin/browser/privacy') && request.method() === 'PUT') writes++; });
-    await mode.click();
-    await page.locator('.ant-select-item-option:visible').filter({ hasText: 'Disabled — no screenshots' }).click();
-    await expect.poll(() => unloadBlocked(page)).toBe(true);
-    await clickGlobalLink(page, 'Credentials');
-    const confirmation = page.getByRole('dialog', { name: 'Discard unsaved changes?', exact: true });
-    await confirmation.getByRole('button', { name: 'Stay', exact: true }).click();
-    await expect(confirmation).toBeHidden();
-    await expect(field).toContainText('Disabled — no screenshots');
-    await expect.poll(() => unloadBlocked(page)).toBe(true);
-    await clickGlobalLink(page, 'Credentials');
-    await confirmation.getByRole('button', { name: 'Discard and leave', exact: true }).click();
-    await expect(page).toHaveURL(/\/admin\/connections\/credentials$/);
-    await expect.poll(() => unloadBlocked(page)).toBe(false);
-    await navigateAdmin(page, 'Browser privacy');
-    await expect(field).toContainText('Protected — mask sensitive pixels');
-    await expect.poll(() => unloadBlocked(page)).toBe(false);
-    await navigateAdmin(page, 'Definitions');
-    await expect(confirmation).toHaveCount(0);
-    expect(writes).toBe(0);
-    const dialogs: string[] = [];
-    page.on('dialog', async dialog => { dialogs.push(dialog.type()); await dialog.dismiss(); });
-    await page.reload();
-    expect(dialogs).toEqual([]);
-  });
-
   test(`archived Automation deep links preserve exact completed Run inspection at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/'); await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));

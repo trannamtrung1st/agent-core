@@ -8,12 +8,14 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null, InMemoryArtifactStore? artifacts = null, InMemoryAttachmentStore? attachments = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null, InMemoryArtifactStore? artifacts = null, InMemoryAttachmentStore? attachments = null, InMemoryBrowserPrivacyStore? browserPrivacy = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     private readonly InMemoryAttachmentStore? attachmentBacking = attachments?.BindTenantAuthority(definitionReferences);
     private readonly InMemoryArtifactStore? artifactBacking = artifacts?.BindTenantAuthority(definitionReferences);
     private readonly InMemoryMemoryStore sessionBacking = definitionReferences.BindTenantInstances(instances);
     private readonly InMemorySandboxStore sandboxBacking = (sandboxProfiles ?? new()).BindTenantAuthority(definitionReferences, instances);
+    private readonly InMemoryBrowserPrivacyStore browserPrivacyBacking = browserPrivacy ?? new();
+    private readonly BrowserPrivacyAuthority privacyAuthority = BrowserPrivacyRules.FreezeAuthority(browserPrivacyAuthority ?? new(true, false, [], []));
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
     private readonly Dictionary<Guid, TenantSecurityState> _tenants = [];

@@ -5,6 +5,7 @@ using AgentCore.Api.Security;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Security;
@@ -86,26 +87,24 @@ public sealed class IdentitySqliteRestartTests
     }
 
     // Uses the production identity registration, cookie/CSRF middleware and endpoint mappers. Other
-    // runtime/worker boundaries are intentionally excluded and are not claimed verified by this test.
+    // runtime endpoint/worker behavior is not exercised or claimed verified by this test.
     private static async Task<WebApplication> StartAsync(string root, IDbContextFactory<AgentCoreDbContext> contexts)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>());
-        builder.Services.AddSingleton(contexts);
-        builder.Services.AddSingleton(new PersistenceOptions { Provider = "Sqlite", CredentialProtectionKeyRoot = Path.Combine(root, "keys") });
-        builder.Services.AddSingleton(TimeProvider.System);
-        builder.Services.AddSingleton<IIdGenerator, SystemIdGenerator>();
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
-        var agentRoot = Path.Combine(directory!.FullName, "agents");
-        var builtIns = new FileAgentDefinitionStore(agentRoot, SyntheticProviderAliases.Default);
-        builder.Services.AddSingleton<IBuiltInAgentDefinitionStore>(builtIns);
-        var content = new FileDefinitionResourceContentStore(Path.Combine(root, "resources"));
-        builder.Services.AddSingleton<IDefinitionResourceContentStore>(content);
-        builder.Services.AddSingleton(new AgentCore.Application.Agents.InheritedDefinitionResourceCatalog(
-            new SqliteAgentDefinitionResourceAdminStore(contexts, content, new SystemIdGenerator(TimeProvider.System)),
-            builtIns, new FileApprovedKnowledgeCatalog(agentRoot), content));
+        // Endpoint mapping now includes resource/editor reads. Use the real Synthetic dependency
+        // composition, with every writable root isolated, rather than stubbing each new dependency.
+        builder.Services.AddAgentCoreInfrastructure(Path.Combine(directory!.FullName, "agents"), "Synthetic",
+            persistence: new PersistenceOptions {
+                Provider = "Sqlite", ConnectionString = $"Data Source={Path.Combine(root, "identity.db")};Foreign Keys=True",
+                CredentialProtectionKeyRoot = Path.Combine(root, "keys"), WorkspaceRoot = Path.Combine(root, "workspaces"),
+                ArtifactRoot = Path.Combine(root, "artifacts"), AttachmentRoot = Path.Combine(root, "attachments"),
+                DefinitionResourceRoot = Path.Combine(root, "resources")
+            }, browser: new AgentCore.Infrastructure.Browser.BrowserOptions { Enabled = false, ProfileRoot = Path.Combine(root, "browser") });
+        builder.Services.AddSingleton(new AgentCore.Api.FilePreviewOptions());
         builder.Services.AddAgentCoreIdentity();
         builder.Services.AddIdentityHttp(builder.Configuration);
         var app = builder.Build();

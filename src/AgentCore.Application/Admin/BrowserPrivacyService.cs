@@ -1,5 +1,5 @@
-using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Application.Sessions;
 
 namespace AgentCore.Application.Admin;
@@ -7,10 +7,11 @@ namespace AgentCore.Application.Admin;
 public sealed record BrowserPrivacyView(BrowserScreenshotPolicy Saved, BrowserScreenshotPolicy Effective,
     BrowserPrivacyAuthority Deployment, bool RestartRequired, string Activation, bool Durable, bool ConstrainedByDeployment);
 
-/// <summary>Owner-only host policy administration. Effective revision is pinned for the host lifetime.</summary>
-public sealed class BrowserPrivacyService(IBrowserPrivacyStore store, BrowserPrivacyAuthority authority, TimeProvider time, IIdGenerator ids)
+/// <summary>Host privacy projection and startup activation. Human writes belong to the system IAM transaction.</summary>
+public sealed class BrowserPrivacyService(IBrowserPrivacyStore store, BrowserPrivacyAuthority deployment)
 {
-    private BrowserScreenshotPolicy _effective = DefaultPolicy(authority);
+    private readonly BrowserPrivacyAuthority authority = BrowserPrivacyRules.FreezeAuthority(deployment);
+    private BrowserScreenshotPolicy _effective = DefaultPolicy(BrowserPrivacyRules.FreezeAuthority(deployment));
     public BrowserScreenshotPolicy Effective => Volatile.Read(ref _effective);
 
     private static BrowserScreenshotPolicy DefaultPolicy(BrowserPrivacyAuthority authority) => new(
@@ -52,32 +53,7 @@ public sealed class BrowserPrivacyService(IBrowserPrivacyStore store, BrowserPri
         return new(saved, effective, authority, saved.Revision != effective.Revision, activation, store.IsDurable, constrainedByDeployment);
     }
 
-    public async ValueTask<BrowserPrivacyView> SaveAsync(long expectedRevision, string mode,
-        IReadOnlyList<string>? unmaskedOrigins, IReadOnlyList<string>? graphicsOrigins, bool acknowledgeExposure, CancellationToken ct = default)
-    {
-        if (expectedRevision < 0 || expectedRevision == long.MaxValue || !Enum.GetNames<BrowserScreenshotPrivacyMode>().Contains(mode, StringComparer.Ordinal))
-            throw AgentCoreErrors.Validation("Use Protected, Unmasked or Disabled and a nonnegative expected revision.");
-        var selected = Enum.Parse<BrowserScreenshotPrivacyMode>(mode);
-        var unmasked = ExactOrigins(unmaskedOrigins ?? []);
-        var graphics = ExactOrigins(graphicsOrigins ?? []);
-        if (!authority.CaptureAllowed && selected != BrowserScreenshotPrivacyMode.Disabled)
-            throw AgentCoreErrors.Forbidden("Deployment policy prohibits screenshots.");
-        if (selected == BrowserScreenshotPrivacyMode.Unmasked && (!acknowledgeExposure || unmasked.Count == 0))
-            throw AgentCoreErrors.Validation("Unmasked capture requires exact origins and explicit acknowledgement of exposure to model providers and Session artifacts.");
-        if (selected != BrowserScreenshotPrivacyMode.Unmasked && unmasked.Count > 0)
-            throw AgentCoreErrors.Validation("Unmasked origins apply only to Unmasked mode.");
-        if (selected == BrowserScreenshotPrivacyMode.Unmasked && !authority.UnmaskedAllowed
-            || unmasked.Except(authority.UnmaskedOriginCeiling, StringComparer.OrdinalIgnoreCase).Any()
-            || graphics.Except(authority.GraphicsOriginCeiling, StringComparer.OrdinalIgnoreCase).Any())
-            throw AgentCoreErrors.Forbidden("The requested capture exception exceeds deployment authority.");
-        var policy = new BrowserScreenshotPolicy(selected, unmasked, graphics, checked(expectedRevision + 1));
-        var audit = new AdminEventAppend(ids.NewId(), time.GetUtcNow(), AdminEventActorKind.LocalOwner,
-            AdminEventOperationKind.BrowserPrivacyChanged, "browserPrivacy", "host", policy.Revision, null,
-            JsonSerializer.Serialize(new { mode, revision = policy.Revision, unmaskedOriginCount = unmasked.Count,
-                graphicsOriginCount = graphics.Count, exposureAcknowledged = selected == BrowserScreenshotPrivacyMode.Unmasked && acknowledgeExposure }));
-        await store.SaveAsync(policy, expectedRevision, audit, ct);
-        return await ReadAsync(ct);
-    }
+    public BrowserScreenshotPolicy Prepare(SystemBrowserPrivacyChange change) => BrowserPrivacyRules.Prepare(change, authority);
 
     public static IReadOnlyList<string> ExactOrigins(IReadOnlyList<string> input)
     {

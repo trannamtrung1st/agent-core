@@ -1,5 +1,13 @@
 # Accounts, organizations, access and approvals UX
 
+## Platform Browser privacy
+
+The canonical `/system/browser-privacy` page is a System area named Platform, outside every organization. Account navigation exposes it only with `system.governance.manage`; server reads/writes independently reauthorize. A tenant Owner is not a platform governor. Unknown System routes fail closed rather than entering Chat. The former `/admin/platform/browser-privacy` page has no alias. The same existing privacy editor, AdminShell, panel, responsive details/form and native confirmation remain the presentation owners.
+
+Lead with global scope, effective versus saved policy, deployment ceilings, persistence and activation. Mode and exact-origin choices cannot expand deployment limits. Every Unmasked save requires a native centered confirmation explicitly naming exposure across all organizations, exact origins and disclosure to model providers/immutable Session Artifacts. Save only the captured fields/revision; no automatic repeat or host restart. After a successful save, show saved revision separately from unchanged effective startup revision. Read-only deployment constraints and InMemory ephemerality remain explicit.
+
+Stale/uncertain save disables further saving until deliberate Reload. Reload retains the user's draft while refreshing saved revision and authority; it does not resubmit. If readback confirms the same draft, Save remains unnecessary/disabled. Original login or platform access loss removes policy/origin controls. The Reload action remains available for deliberate recovery. Existing unsaved-navigation/discard behavior and owner-unmount cancellation also apply in System routes. Other platform inventory/operator/guardrail/audit surfaces remain separate open work.
+
 ## Browser persistent-profile reset facts
 
 The shared **Browser state** section on an Agent's **Connections** page reads the canonical [preflight/reset contract](14-api-and-realtime-protocol.md#tenant-browser-profile-reset-http) independently of credential bindings. Binding-read denial does not suppress separately authorized Browser facts, and readable credentials grant no Browser reset authority. The section shows the coherent current Agent name/lifecycle, saved-profile presence, open persistent-view count and last reset outcome. Busy, archived and read-only states explain why reset is unavailable. The server's current raw `browser.manage`, parent read and Browser read remain decisive.

@@ -1,4 +1,4 @@
-using AgentCore.Application.Admin;
+using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
 
@@ -26,9 +26,15 @@ public interface IBrowserPrivacyStore
 {
     bool IsDurable { get; }
     ValueTask<BrowserScreenshotPolicy?> ReadAsync(CancellationToken ct = default);
-    /// <summary>CAS plus Admin history in one commit; initial expected revision is zero.</summary>
-    ValueTask SaveAsync(BrowserScreenshotPolicy policy, long expectedRevision, AdminEventAppend audit, CancellationToken ct = default);
+
 }
 
 /// <summary>Host retirement also cancels unpublished capture/artifact work.</summary>
 public interface IBrowserCaptureLifetime { CancellationToken CaptureLifetime { get; } }
+
+public sealed record SystemBrowserPrivacyChange(long ExpectedRevision, string Mode, IReadOnlyList<string>? UnmaskedOrigins, IReadOnlyList<string>? TrustedGraphicsOrigins, bool AcknowledgeExposure);
+public interface ISystemBrowserPrivacyStore
+{
+    // Actual live platform human, system permission and deployment limits repeat inside the existing policy/audit transaction.
+    ValueTask<bool> TrySaveSystemBrowserPrivacyAsync(HumanSessionReference human, SystemBrowserPrivacyChange change, AuthorizationAudit audit, CancellationToken ct = default);
+}

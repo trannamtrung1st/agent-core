@@ -1,5 +1,7 @@
 # Implementation Plan
 
+Canonical System Browser privacy now uses the original live platform human, raw `system.governance.manage`, immutable deployment ceilings and the existing global policy/canonical audit transaction. Its System editor preserves saved/effective startup facts and explicit stale/lost readback without replay. [Focused qualification](reports/system-browser-privacy-verification-2026-10-20.md) supersedes Browser-privacy-administration-pending notes below only. Profile decommission/autonomous Browser adapters, remaining proposal families, general System guardrails/audit and final obsolete-authority/schema consolidation remain open; the full original goal stays active.
+
 ## Tenant Browser human reset UI checkpoint — 2026-10-20
 
 The existing Agent Connections page now has independently authorized Browser profile facts, exact named reset confirmation and deliberate no-replay readback. [Focused frontend/runtime qualification](reports/tenant-browser-profile-reset-ui-verification-2026-10-20.md) supersedes reset-frontend-pending notes below. The backend reset owner remains separately qualified; decommission/privacy/autonomous Browser adapters, remaining proposal families and final obsolete-authority/schema consolidation stay open. The full goal remains active; no milestone acceptance is claimed.
@@ -863,7 +865,7 @@ The [review follow-up](reports/scoped-configuration-review-followup.md) reconcil
 
 ### Browser privacy administration and intelligent recovery follow-up
 
-This requested enhancement adds durable owner Admin privacy beneath deployment ceilings, startup-pinned effective revisions, conditional semantic-to-visual recovery and independent logout/context-close guidance to existing Browser v2. It does not start P10/P11 or reopen historical freezes. The [testing matrix](16-testing-strategy.md#browser-privacy-and-logout-recovery-regression-matrix) and [delivery report](reports/browser-privacy-intelligent-recovery-verification.md) distinguish deterministic native/API/UI execution from paid-model and authorized-enterprise acceptance. The user explicitly requested no CI wait; hosted outcomes are reported separately and are not inferred from local success.
+This requested enhancement originally added durable owner Admin privacy beneath deployment ceilings (the canonical System successor below replaces that authority), startup-pinned effective revisions, conditional semantic-to-visual recovery and independent logout/context-close guidance to existing Browser v2. It does not start P10/P11 or reopen historical freezes. The [testing matrix](16-testing-strategy.md#browser-privacy-and-logout-recovery-regression-matrix) and [delivery report](reports/browser-privacy-intelligent-recovery-verification.md) distinguish deterministic native/API/UI execution from paid-model and authorized-enterprise acceptance. The user explicitly requested no CI wait; hosted outcomes are reported separately and are not inferred from local success.
 
 ### Dynamic-page visual evidence follow-up (authorized 2026-10-10)
 

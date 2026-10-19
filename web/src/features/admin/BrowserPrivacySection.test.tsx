@@ -2,10 +2,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { App as AntApp, ConfigProvider } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserPrivacySection } from "./BrowserPrivacySection";
-import { getBrowserPrivacy, saveBrowserPrivacy, type BrowserPrivacy } from "../../services/adminApi";
+import { getBrowserPrivacy, saveBrowserPrivacy, type BrowserPrivacy } from "../../services/systemBrowserPrivacy";
+import { IdentityError, IdentityCompletionError } from "../../services/identity";
 import { approveAppNavigation } from "../../app/appRoute";
 
-vi.mock("../../services/adminApi", () => ({ getBrowserPrivacy: vi.fn(), saveBrowserPrivacy: vi.fn() }));
+vi.mock("../../services/systemBrowserPrivacy", () => ({ getBrowserPrivacy: vi.fn(), saveBrowserPrivacy: vi.fn() }));
 const policy: BrowserPrivacy = { saved: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
   effective: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
   deployment: { captureAllowed: true, unmaskedAllowed: true, unmaskedOriginCeiling: ["https://example.test"], graphicsOriginCeiling: ["https://example.test"] },
@@ -14,6 +15,7 @@ function mount() { return render(<ConfigProvider theme={{ token: { motion: false
 async function choose(label: string, option: string) {
   fireEvent.mouseDown(screen.getByRole("combobox", { name: label }));
   fireEvent.click(await screen.findByText(option, { selector: ".ant-select-item-option-content" }));
+  await waitFor(() => expect(screen.getByRole("button", {name:"Save screenshot privacy"})).toBeEnabled());
 }
 describe("BrowserPrivacySection", () => {
   beforeEach(() => { vi.mocked(getBrowserPrivacy).mockReset().mockResolvedValue(structuredClone(policy)); vi.mocked(saveBrowserPrivacy).mockReset(); });
@@ -42,13 +44,13 @@ describe("BrowserPrivacySection", () => {
     await choose('Trusted graphics origins in Protected mode', 'https://example.test');
     await choose('Saved screenshot privacy mode', 'Disabled — no screenshots');
     fireEvent.click(screen.getByRole('button', { name: 'Save screenshot privacy' }));
-    await screen.findByText('Temporary privacy write failure');
+    await screen.findByText('The service could not be reached. Check your connection and try again.');
     let leave!: Promise<boolean>; act(() => { leave = approveAppNavigation('/admin/instances'); });
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).getByRole('button', { name: 'Discard and leave' }));
     expect(await leave).toBe(true);
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Saved screenshot privacy mode' }).closest('.ant-select')).toHaveTextContent('Protected — mask sensitive pixels'));
     expect(screen.getByRole('combobox', { name: 'Trusted graphics origins in Protected mode' }).closest('.ant-select')).toHaveTextContent('https://example.test');
-    expect(screen.queryByText('Temporary privacy write failure')).not.toBeInTheDocument();
+    expect(screen.queryByText('The service could not be reached. Check your connection and try again.')).not.toBeInTheDocument();
     expect(saveBrowserPrivacy).toHaveBeenCalledTimes(1);
   });
   it("reports same-revision deployment constraints without calling the saved policy active or asking for restart", async () => {
@@ -86,8 +88,8 @@ describe("BrowserPrivacySection", () => {
     expect(saveBrowserPrivacy).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Save screenshot privacy" }));
     const confirmation = await screen.findByRole("dialog");
-    await waitFor(() => expect(within(confirmation).getByRole("button", { name: "Acknowledge exposure and save" })).toBeVisible());
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Acknowledge exposure and save" }));
+    await waitFor(() => expect(within(confirmation).getByRole("button", { name: "Acknowledge & save" })).toBeVisible());
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Acknowledge & save" }));
     await screen.findByText("Unmasked · revision 1 · restart required");
     expect(saveBrowserPrivacy).toHaveBeenCalledWith(expect.objectContaining({ mode: "Unmasked", acknowledgeExposure: true, unmaskedOrigins: ["https://example.test"] }), expect.any(AbortSignal));
   });
@@ -96,10 +98,10 @@ describe("BrowserPrivacySection", () => {
     mount(); await screen.findByText("Protected · revision 0 · active as saved");
     await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
     fireEvent.click(screen.getByRole("button", { name: "Save screenshot privacy" }));
-    await within(screen.getByRole("region", {name:"Screenshot privacy"})).findByText(/Browser privacy changed/);
+    await screen.findByText("Read current policy before saving again");
     expect(screen.getByRole("combobox", { name: "Saved screenshot privacy mode" }).closest(".ant-select")).toHaveTextContent("Disabled — no screenshots");
     vi.mocked(getBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, revision: 2 }, restartRequired: true });
-    fireEvent.click(screen.getByRole("button", { name: "Reload saved privacy policy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved policy" }));
     await screen.findByText("Protected · revision 2 · restart required");
     await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
     vi.mocked(saveBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, mode: "Disabled", revision: 3 }, restartRequired: true });
@@ -109,9 +111,26 @@ describe("BrowserPrivacySection", () => {
   });
   it("retries a failed read and prevents a late load after unmount", async () => {
     vi.mocked(getBrowserPrivacy).mockRejectedValueOnce(new Error("Temporary failure"));
-    const view = mount(); await screen.findByText("Temporary failure");
-    fireEvent.click(screen.getByRole("button", { name: "Reload saved privacy policy" }));
+    const view = mount(); await screen.findByText("The service could not be reached. Check your connection and try again.");
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved policy" }));
     await screen.findByText("Protected · revision 0 · active as saved");
     view.unmount(); expect(vi.mocked(getBrowserPrivacy).mock.calls.at(-1)?.[0]?.aborted).toBe(true);
   });
+  it("blocks a lost save reply until explicit readback without resubmitting the policy", async () => {
+    vi.mocked(saveBrowserPrivacy).mockRejectedValue(new IdentityCompletionError());
+    mount(); await screen.findByText("Protected · revision 0 · active as saved"); await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
+    fireEvent.click(screen.getByRole("button", {name:"Save screenshot privacy"})); await screen.findByText("Read current policy before saving again");
+    expect(screen.getByRole("button", {name:"Save screenshot privacy"})).toBeDisabled();
+    vi.mocked(getBrowserPrivacy).mockResolvedValue({...policy,saved:{...policy.saved,mode:"Disabled",revision:1},restartRequired:true});
+    fireEvent.click(screen.getByRole("button", {name:"Reload saved policy"})); await screen.findByText("Disabled · revision 1 · restart required");
+    expect(saveBrowserPrivacy).toHaveBeenCalledTimes(1); expect(screen.getByRole("button", {name:"Save screenshot privacy"})).toBeDisabled();
+  });
+  it("clears policy and origin controls after platform access is denied and retains a deliberate reload action", async () => {
+    vi.mocked(saveBrowserPrivacy).mockRejectedValue(new IdentityError(403,"permission_denied"));
+    mount(); await screen.findByText("Protected · revision 0 · active as saved"); await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
+    fireEvent.click(screen.getByRole("button", {name:"Save screenshot privacy"})); await screen.findByText("Read current policy before saving again");
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument(); expect(screen.queryByText("Effective privacy")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {name:"Reload saved policy"})).toBeEnabled(); expect(saveBrowserPrivacy).toHaveBeenCalledTimes(1);
+  });
+
 });

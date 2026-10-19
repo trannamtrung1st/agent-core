@@ -1,5 +1,13 @@
 # Persistence and Configuration
 
+## System Browser privacy state
+
+Browser privacy remains one genuinely global host resource in the existing BrowserPrivacy table. Canonical writes now commit its CAS revision and a body-free AuthorizationAudit with `TenantId=null`, the actual platform human Principal, action `system.browser.privacy.update`, target `host` and reason `policy_saved_restart_required`. The former LocalOwner/Admin-history save path is removed. There is no new policy table, dual write, data conversion or permission snapshot.
+
+The original Account/session/global human Principal, current raw system permission and deployment ceilings are checked again in the owning transaction. InMemory shares the configured privacy backing and its gate with IAM; SQLite reads current system roles and validated Account/session under its policy transaction and writes policy plus audit atomically. Runtime/store readers retain the same saved row and host-lifetime activation. Saved origin lists are immutable canonical projections; deployment authorization remains startup configuration and cannot be expanded by the API.
+
+Migration `20261020080000_SystemBrowserPrivacyAuthority` installs bounded closed-schema/revision/exact-origin guards on the existing row and retains saved policy against direct deletion. It adds no column/model owner. Downgrade refuses while policy data remains; empty downgrade/upgrade preserves model parity. Final clean-baseline schema consolidation remains open. [Ports](04-backend-interfaces.md#system-browser-privacy-administration), [wire behavior](14-api-and-realtime-protocol.md#system-browser-privacy-http).
+
 ## Tenant Browser profile reset state
 
 Migration `20261020060000_TenantBrowserProfileReset` adds nullable `AgentInstances.BrowserProfileResetJson` to the existing Instance owner. It stores exactly the operation ID, original human Principal, private native provider epoch/witness, closed status/reason and UTC request/result times. The internal Domain property is excluded from general serialization; explicit persistence maps the dedicated column, and the human facade returns only safe facts. No profile bytes, paths, tasks, native handles, second effect ledger or cleanup table are persisted.
@@ -949,7 +957,7 @@ Recovery scan cursors are ephemeral Application state, independent of durable re
 
 ### Browser screenshot privacy administration
 
-`BrowserScreenshotPolicy` is the canonical global capture policy. Owner-protected Admin GET/PUT `/api/v2/admin/browser/privacy` edits a saved revision independently of Definition/Instance policy. SQLite stores the singleton `BrowserPrivacy` row and `BrowserPrivacyChanged` audit event in one transaction; the explicitly selected InMemory provider remains ephemeral, and Admin reports `durable=false` plus a warning that those edits cannot survive full host restart. SQLite is required for durable activation. Saves require an expected revision; stale writers receive 409 and must reload. Audit summaries contain mode, revision, acknowledgement and origin counts, never captured content or origin values.
+`BrowserScreenshotPolicy` is the canonical global capture policy. Authenticated System GET/PUT `/api/v2/system/browser/privacy` requires the original live platform human and raw `system.governance.manage`, independently of organization ownership. SQLite commits the existing singleton `BrowserPrivacy` row and canonical nullable-tenant `AuthorizationAudit` in one transaction; InMemory remains ephemeral and the UI reports `durable=false`. SQLite is required for durable activation. Expected revision prevents stale overwrites; 409 requires deliberate readback. Audit stores the real global actor, safe action/reason and host target without origin values or policy bodies. [System transaction](#system-browser-privacy-state).
 
 | Mode | Main-document pixels | Semantics and frames |
 | --- | --- | --- |

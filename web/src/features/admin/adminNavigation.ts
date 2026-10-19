@@ -4,7 +4,6 @@ export const globalPages = [
   { id: 'definitions', path: 'definitions', label: 'Definitions', group: 'Agents', description: 'Inspect immutable versions and author revisioned drafts.', aliases: [] },
   { id: 'credentials', path: 'connections/credentials', label: 'Credentials', group: 'Integrations', description: 'Manage shared protected credentials and email accounts.', aliases: ['Gmail', 'OAuth', 'IMAP', 'SMTP', 'emailAccount'] },
   { id: 'events', path: 'connections/events', label: 'Events', group: 'Integrations', description: 'Inspect Built-in Events and manage shared Webhook Events.', aliases: ['Webhook', 'subscribers', 'deliveries'] },
-  { id: 'browser-privacy', path: 'platform/browser-privacy', label: 'Browser privacy', group: 'Platform', description: 'Global host screenshot privacy, constrained by deployment policy.', aliases: ['screenshots', 'protected', 'unmasked', 'restart'] },
   { id: 'sandboxes', path: 'platform/sandboxes', label: 'Sandboxes', group: 'Platform', description: 'Manage prebuilt Session environments and local execution readiness.', aliases: ['Python', 'Node', 'Workbench', 'Office', 'sandbox'] },
 ] as const;
 export const instancePages = [
