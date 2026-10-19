@@ -139,6 +139,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (!boundary.Tenant || !boundary.Allowed || call.Name != ToolCatalog.RequestAuthorization || boundary.Reference is null || approvals is null || configuration is null)
             throw new AccessDeniedException("tenant_context_required");
         var intent = TenantApprovalToolContract.Parse(call);
+        if (intent.WorkspaceMutation is not null) throw new AccessDeniedException("tenant_effect_unavailable"); // Saved continuation support precedes model offering.
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");

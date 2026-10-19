@@ -12,9 +12,10 @@ public sealed record TenantWorkspaceMutationResult(OperationDecisionKind Decisio
     public Guid? OperationId => Receipt?.OperationId ?? UnsettledOperationId;
 }
 
-public sealed class TenantWorkspaceMutationEffectService(TenantOperationAuthorizer operations, IIamStore security, ITenantRunStore runs,
+public sealed partial class TenantWorkspaceMutationEffectService(TenantOperationAuthorizer operations, IIamStore security, ITenantRunStore runs,
     ITenantSessionStore sessions, TenantRunConfigurationResolver configurations, IamAuthorizer iam, ITenantWorkspaceOperationStore effects,
-    ITenantWorkspaceMutationStore files, IIdGenerator ids, TimeProvider time, ITenantApprovalStore approvals)
+    ITenantWorkspaceMutationStore files, IIdGenerator ids, TimeProvider time, ITenantApprovalStore approvals,
+    ITenantApprovedOperationStore receipts, TenantWorkspaceMutationTarget targets)
 {
     public async ValueTask<TenantWorkspaceMutationResult> ExecuteAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct = default)
     {
@@ -110,6 +111,8 @@ public sealed class TenantWorkspaceMutationEffectService(TenantOperationAuthoriz
         var count = 0;
         foreach (var fence in await effects.RecoverableWorkspaceEffectsAsync(time.GetUtcNow(), 100, ct).ConfigureAwait(false))
             if (await Settle(fence, TenantOperationOutcome.Indeterminate, true, ct).ConfigureAwait(false) is not null) count++;
+        foreach (var fence in await effects.RecoverableApprovedWorkspaceEffectsAsync(time.GetUtcNow(), 100, ct).ConfigureAwait(false))
+            if (await SettleApproved(fence, TenantOperationOutcome.Indeterminate, TenantWorkspaceApprovedEffectRules.Uncertain, true, ct).ConfigureAwait(false) is not null) count++;
         return count;
     }
     private async ValueTask<TenantOperationReceipt?> Settle(TenantWorkspaceDispatch fence, TenantOperationOutcome outcome, bool recovery, CancellationToken ct)

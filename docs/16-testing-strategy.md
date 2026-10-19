@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Approved workspace mutation execution checks
+
+Run actual canonical file effects through both stores for Review and exceptional primary grants. Verify exact saved arguments, immutable body-free receipts, one grant consumption/dispatch, duplicate reuse and current source/authority/claim/independent-review gates. Include write/patch source change at commit, cross-root copy, delete/move/mixed ordered batch, retained partial-prefix uncertainty, unavailable settlement, concurrent callers, expiry, cancellation and retained-owner recovery after Session deletion. Exercise the same off-mailbox continuation service with a real saved authorization checkpoint: receipt plus result checkpoint/admission marker must commit together, and later delivery/retry/host recreation must never replay native work. A trusted internal intent parser is not evidence of model offering or UI availability.
+
 ## Exact workspace mutation consent checks
 
 Exercise both real stores and canonical owned files: blind literal-write Review and exceptional primary grant, safe exact supplied-content inspection, waiting Run/decision/grant/signal durability, unchanged filesystem after decision, full private source changes despite restored length/timestamp, compound cross-root source/destination/parent visibility before counts/paging, current independent reviewer policy and secondary-mutation authority. Refusal tests must relax current policy and change source bytes, then attempt both normal direct execution and the atomic start store. Keep known receipt reuse factual. Temporary SQLite checks cover upgrade/reopen, malformed/mixed payloads and rollback refusal. This consent-stage evidence must not be presented as approved mutation execution, model offering, shared inspector or full proposal acceptance; those require their own integrated execution/recovery/browser checks.

@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null)
 {
     // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
     public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
@@ -40,9 +40,9 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
         var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
         TenantRunContinuationRules.Require(run, request, source);
-        ValidateAuthorizationCheckpoint(run, request!, (request!.Operation.Kind is TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand)
+        ValidateAuthorizationCheckpoint(run, request!, (request!.Operation.Kind is TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand or TenantOperationKind.WorkspaceMutation)
             && run.Admission.ApprovalResume is not null && run.SideEffect.ToolCallId != "operation:" + request.Operation.OperationId.ToString("D"));
-        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind is not (TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand)) return;
+        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind is not (TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand or TenantOperationKind.WorkspaceMutation)) return;
         var remaining = run.Checkpoint?.PauseBudgetClock(time.GetUtcNow()).RemainingOverallBudgetMs
             ?? (run.Admission.ExecutionBudget?.Profile.DurationSeconds ?? 180) * 1000;
         if (remaining <= 0) throw new AccessDeniedException("execution_budget_exhausted");
@@ -50,7 +50,10 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, budget.Token);
         try
         {
-            if (request.Operation.Kind == TenantOperationKind.BrowserCommand)
+            if (request.Operation.Kind == TenantOperationKind.WorkspaceMutation)
+                await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteApprovedAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
+                    run.Claim!.Generation, request.Operation.ActionHash, linked.Token).ConfigureAwait(false);
+            else if (request.Operation.Kind == TenantOperationKind.BrowserCommand)
                 await (browserEffects ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
                     run.Claim!.Generation, request.Operation.ActionHash, linked.Token).ConfigureAwait(false);
             else if (request.Operation.Kind == TenantOperationKind.SandboxCommand)
@@ -143,7 +146,9 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                         applied = outcome.Outcome == TenantOperationOutcome.Completed, controlRequestAccepted = outcome.Outcome == TenantOperationOutcome.Completed,
                         terminationConfirmed = false, filesRetained = true });
                 var paused = checkpoint.PauseBudgetClock(time.GetUtcNow());
-                var resumed = request.Operation.BrowserCommand is not null
+                var resumed = request.Operation.WorkspaceMutation is not null
+                    ? TenantWorkspaceMutationContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason)
+                    : request.Operation.BrowserCommand is not null
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
                         request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched")
                     : request.Operation.WorkspaceRead is not null ? TenantWorkspaceReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)

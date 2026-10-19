@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Approved workspace mutation settlement
+
+Approved workspace effects reuse the existing `AgentRuns.sideEffect.externalEffect`, `TenantOperationGrants`, `TenantOperationReceipts` and authorization audit. They retain the exact approval request/operation/action hash and Core claim generation; `directOperation` stays absent. There is no additional migration/table for this execution boundary. Start atomically claims an Available exceptional grant, and settlement atomically consumes/revokes/marks it Indeterminate with factual Run/receipt/audit state. A live exact successor can seal its body-free tool outcome and pending-runtime-admission marker in that settlement transaction. Retained Run/Session ownership supports uncertain recovery after claim expiry, access loss or deletion; recovery must never require reopening files. Execution and restart qualification remain in progress.
+
 ## Exact workspace mutation consent storage
 
 `TenantWorkspaceMutationReview` extends the existing `TenantApprovalRequests` payload/check constraint with one exclusive `WorkspaceMutation` value. It retains canonical supplied tool arguments, the actual Session, primary workspace/permission, bounded derived target scopes and a private observation hash; no current file body is stored. Target scopes describe required permissions, not final authorization. Normal Review and exceptional primary-mutation grants share the incumbent decision/grant/signal owners. Current in-transaction executor/parent/secondary authority and compound deciding-human checks supplement typed rebuilding and SQL shape constraints. SQLite rebuilds only this approval table and preserves existing approval families; downgrade refuses while any mutation consent remains. This schema does not yet implement approved file dispatch or its recovery. No installed/user database migration was performed for this development checkpoint.

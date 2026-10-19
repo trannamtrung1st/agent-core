@@ -7,11 +7,11 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
-    private void RequireWorkspaceMutationOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent)
+    private void RequireWorkspaceMutationOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent, AgentRun? source = null)
     {
         var session = sessionBacking.ReadTenantSession(request.TenantId, request.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
         var current = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
-        TenantWorkspaceMutationOperationRules.Require(request, run, agent, current, session);
+        TenantWorkspaceMutationOperationRules.Require(request, run, agent, current, session, source);
         TenantWorkspaceMutationOperationRules.ExecutorAsync(_tenants[request.TenantId], request, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
     }
     private bool WorkspaceMutationApprovalVisible(TenantApprovalRequest request, TenantWorkspaceMutationApprovalVisibility? visible)
