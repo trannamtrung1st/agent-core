@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Approved workspace abandoned-effect recovery checkpoint — 2026-10-19
+
+Actual model/HTTP-approved native writes now have [complete SQLite host-recreation evidence](reports/tenant-workspace-approved-recovery-verification-2026-10-19.md) when initial receipt settlement is unavailable. Both Review and exceptional-grant cases revoke Agent authority before stopping the first host; the fresh hosted pass retains factual uncertainty, seals one receipt/grant disposition and performs no further write or model call. This supersedes abandoned-approved-effect-host-qualification-pending notes below for this controlled outage only; no physical process kill is claimed. Other proposal families and final authority/schema cutover remain open.
+
 ## Workspace mutation model and shared inspector checkpoint — 2026-10-19
 
 Human-attributed conversational Runs now offer the closed exact mutation authorization intent for admitted tools and route it through the existing consent/effect owners. Organization and original Chat share complete supplied-text/path/ordered-step review, deliberate confirmation and separate truthful outcomes. Both-store model/HTTP checks cover Review, exceptional primary grants, refusal, stale source and unknown no-replay; SQLite host recreation covers pending consent and retained completed/unknown effects. Actual Synthetic browser approval and stale cancellation are [recorded separately](reports/tenant-workspace-mutation-review-verification-2026-10-19.md). This supersedes model/shared-inspector/full-product-flow-pending statements in earlier checkpoints below for this bounded conversational path only. Abandoned approved-dispatch cold-host qualification, Workspace virtual resources/Office/source publication, autonomous origins, other proposal families and the final authority/schema cutover remain open. No full proposal or milestone acceptance is claimed.

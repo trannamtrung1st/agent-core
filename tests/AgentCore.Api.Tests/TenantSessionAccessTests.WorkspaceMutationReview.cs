@@ -25,12 +25,15 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "stale")] [InlineData(true, "stale")]
     [InlineData(false, "unknown")] [InlineData(true, "unknown")]
     [InlineData(true, "restart")]
+    [InlineData(true, "unsettled-review")] [InlineData(true, "unsettled-grant")]
     public async Task Tenant_workspace_mutation_Review_model_HTTP_prepares_inspects_approves_and_continues_exactly_once(bool sqlite, string mode)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-mutation-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         WebApplicationFactory<Program>? recreated = null; HttpClient? recreatedOwner = null;
         try
         {
+            var unsettled = mode.StartsWith("unsettled-", StringComparison.Ordinal);
+            var exceptional = mode is "grant" or "unsettled-grant";
             var proof = !sqlite && mode == "review" && System.Environment.GetEnvironmentVariable("AGENTCORE_WORKSPACE_MUTATION_UI_PROOF") == "1";
             const string proofPath = "/private/tmp/agent-core-workspace-mutation-ui";
             var path = proof ? "/working/reviewed-multilingual-workspace-change-with-a-complete-long-name-thử-nghiệm-試験-2026.txt" : "/working/reviewed.txt";
@@ -39,6 +42,7 @@ public sealed partial class TenantSessionAccessTests
             var writes = 0; var injectLoss = false;
             void Configure(IServiceCollection services)
             {
+                if (unsettled) services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceOperationStore>(p => new UnavailableHostedWorkspaceSettlement((ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>())));
                 if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5179"];
                 if (mode == "unknown") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p => new ReviewedWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<IAgentInstanceWorkspaceStore>(), () => injectLoss, () => Interlocked.Increment(ref writes))));
             }
@@ -55,7 +59,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Private existing source"u8.ToArray()))).StatusCode);
             injectLoss = mode == "unknown";
             var access = factory.Services.GetRequiredService<TenantAccessService>();
-            var role = await access.SaveRoleAsync(human, tenant, null, "Exact model write", mode == "grant" ? ["agents.read", "sessions.read"] : ["agents.read", "sessions.read", "workspaces.write"], await Revision(owner, tenant));
+            var role = await access.SaveRoleAsync(human, tenant, null, "Exact model write", exceptional ? ["agents.read", "sessions.read"] : ["agents.read", "sessions.read", "workspaces.write"], await Revision(owner, tenant));
             await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/workspaces.write", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Apply only the exact reviewed workspace change", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
@@ -69,7 +73,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(AgentRunStatus.WaitingForApproval, (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, source.AgentRunId))!.Status);
             }
             var request = (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, source.ApprovalRequestId!.Value))!;
-            Assert.Equal(TenantOperationKind.WorkspaceMutation, request.Operation.Kind); Assert.Equal(mode == "grant" ? ApprovalKind.ExceptionalGrant : ApprovalKind.Review, request.Kind);
+            Assert.Equal(TenantOperationKind.WorkspaceMutation, request.Operation.Kind); Assert.Equal(exceptional ? ApprovalKind.ExceptionalGrant : ApprovalKind.Review, request.Kind);
             var detail = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
             Assert.Equal("mutate_workspace", detail.GetProperty("preparedAction").GetProperty("operation").GetString()); Assert.True(detail.GetProperty("review").GetProperty("canDecide").GetBoolean());
             Assert.DoesNotContain("Private existing source", detail.GetRawText()); Assert.DoesNotContain(request.Operation.WorkspaceMutation!.ObservationHash, detail.GetRawText());
@@ -93,19 +97,53 @@ public sealed partial class TenantSessionAccessTests
             else Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = mode == "reject" ? "reject" : "approve", actionHash = request.Operation.ActionHash,
                 expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision })).StatusCode);
             var done = await AwaitBrowserRestartRun(factory.Services.GetRequiredService<ITenantRunStore>(), tenant, source.AgentRunId, false);
-            if (mode == "unknown") { Assert.Equal(AgentRunStatus.Failed, done.Status); Assert.Equal("side-effect-indeterminate", done.Failure!.Code); Assert.Contains("not replayed", done.Failure.Summary); }
+            if (mode == "unknown" || unsettled) { Assert.Equal(AgentRunStatus.Failed, done.Status); Assert.Equal("side-effect-indeterminate", done.Failure!.Code); Assert.Contains("not replayed", done.Failure.Summary); }
             else Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}");
             Assert.NotEqual(source.AgentRunId, done.AgentRunId);
-            var result = model.Requests.Last().Messages.Last(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization).Text;
-            using var resultJson = JsonDocument.Parse(result); var outcome = resultJson.RootElement;
-            if (mode == "unknown") { Assert.Equal("indeterminate", outcome.GetProperty("outcome").GetString()); Assert.Equal(JsonValueKind.Null, outcome.GetProperty("applied").ValueKind); Assert.Equal(1, writes); }
-            else Assert.Equal(mode is not ("reject" or "stale"), outcome.GetProperty("applied").GetBoolean());
-            Assert.Contains("\"replayAllowed\":false", result); Assert.DoesNotContain(content, result);
+            if (!unsettled)
+            {
+                var result = model.Requests.Last().Messages.Last(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization).Text;
+                using var resultJson = JsonDocument.Parse(result); var outcome = resultJson.RootElement;
+                if (mode == "unknown") { Assert.Equal("indeterminate", outcome.GetProperty("outcome").GetString()); Assert.Equal(JsonValueKind.Null, outcome.GetProperty("applied").ValueKind); Assert.Equal(1, writes); }
+                else Assert.Equal(mode is not ("reject" or "stale"), outcome.GetProperty("applied").GetBoolean());
+                Assert.Contains("\"replayAllowed\":false", result); Assert.DoesNotContain(content, result);
+            }
             Assert.Equal(mode == "reject" ? "Private existing source" : mode == "stale" ? "Concurrent source replacement" : content,
                 Encoding.UTF8.GetString(await owner.GetByteArrayAsync(workspace + "/content?path=" + Uri.EscapeDataString(path))));
             Assert.Equal(mode is "reject" or "stale" ? 0 : 1, (await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200)).Count(a => a.Action == TenantWorkspaceEffectRules.Dispatch));
             var grant = await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId);
-            Assert.Equal(mode == "grant", grant is not null); if (grant is not null) Assert.Equal(OperationGrantStatus.Consumed, grant.Status);
+            Assert.Equal(exceptional, grant is not null); if (grant is not null) Assert.Equal(unsettled ? OperationGrantStatus.Claimed : OperationGrantStatus.Consumed, grant.Status);
+            if (unsettled)
+            {
+                var receipts = factory.Services.GetRequiredService<ITenantApprovedOperationStore>();
+                Assert.Null(await receipts.FindOperationReceiptAsync(tenant, request.Operation.OperationId));
+                var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
+                var assignment = Assert.Single(state.Assignments, a => a.PrincipalId == executor);
+                await access.RevokeAssignmentAsync(human, tenant, assignment.AssignmentId, state.Tenant.Revision);
+                // Stop the complete host with the native effect retained but its receipt unavailable.
+                await factory.DisposeAsync();
+                var replayModel = new WorkspaceMutationReviewModel(path, content); var reopenedWrites = 0;
+                recreated = new NativeTenantSqliteFactory(root, replayModel, services => services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceMutationStore>(p =>
+                    new ReviewedWorkspaceAcknowledgement((ITenantWorkspaceMutationStore)p.GetRequiredService<IAgentInstanceWorkspaceStore>(), () => true, () => { }, () => Interlocked.Increment(ref reopenedWrites)))));
+                recreatedOwner = recreated.CreateClient(); factory = recreated; owner = recreatedOwner;
+                await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+                TenantOperationReceipt? recovered = null;
+                using var recoveryDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                while (recovered is null)
+                {
+                    recovered = await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId, recoveryDeadline.Token);
+                    if (recovered is null) await Task.Delay(50, recoveryDeadline.Token);
+                }
+                Assert.Equal(TenantOperationOutcome.Indeterminate, recovered.Outcome); Assert.Equal(request.RequestId, recovered.RequestId);
+                Assert.Equal(done.AgentRunId, recovered.RunId); Assert.Equal(request.Operation.ActionHash, recovered.ActionHash);
+                Assert.Equal(0, reopenedWrites); Assert.Empty(replayModel.Requests);
+                Assert.Equal(content, Encoding.UTF8.GetString(await owner.GetByteArrayAsync(workspace + "/content?path=" + Uri.EscapeDataString(path))));
+                if (exceptional) Assert.Equal(OperationGrantStatus.Indeterminate, (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId))!.Status);
+                var recoveredAudit = await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200);
+                Assert.Single(recoveredAudit, a => a.Action == TenantWorkspaceEffectRules.Dispatch); Assert.Single(recoveredAudit, a => a.Action == TenantWorkspaceEffectRules.Result);
+                Assert.Equal(0, await factory.Services.GetRequiredService<TenantWorkspaceMutationEffectService>().RecoverAsync());
+                Assert.Equal(recovered, await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId));
+            }
             if (proof)
             {
                 await File.WriteAllTextAsync(proofPath + "-completed.json", "{}");
@@ -143,10 +181,10 @@ public sealed partial class TenantSessionAccessTests
         }
         finally { recreatedOwner?.Dispose(); if (recreated is not null) await recreated.DisposeAsync(); SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
-    private sealed class ReviewedWorkspaceAcknowledgement(ITenantWorkspaceMutationStore inner, Func<bool> inject, Action wrote) : ITenantWorkspaceMutationStore
+    private sealed class ReviewedWorkspaceAcknowledgement(ITenantWorkspaceMutationStore inner, Func<bool> inject, Action wrote, Action? entered = null) : ITenantWorkspaceMutationStore
     {
         public async ValueTask WriteTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes, Func<CancellationToken, ValueTask> check, CancellationToken ct = default)
-        { await inner.WriteTenantAsync(owner, path, bytes, check, ct); if (inject()) { wrote(); throw new IOException("Private native acknowledgement lost"); } }
+        { entered?.Invoke(); await inner.WriteTenantAsync(owner, path, bytes, check, ct); if (inject()) { wrote(); throw new IOException("Private native acknowledgement lost"); } }
         public ValueTask DeleteTenantAsync(TenantWorkspaceReference owner, string path, Func<CancellationToken, ValueTask> check, CancellationToken ct = default) => inner.DeleteTenantAsync(owner, path, check, ct);
         public ValueTask<WorkspacePatchResult> PatchTenantAsync(TenantWorkspaceReference owner, string path, IReadOnlyList<WorkspaceTextEdit> edits, Func<CancellationToken, ValueTask> check, CancellationToken ct = default) => inner.PatchTenantAsync(owner, path, edits, check, ct);
         public ValueTask<WorkspaceStructureResult> StructureTenantAsync(TenantWorkspaceReference owner, IReadOnlyList<WorkspaceStructuralOperation> operations, Func<CancellationToken, ValueTask> check, CancellationToken ct = default) => inner.StructureTenantAsync(owner, operations, check, ct);
