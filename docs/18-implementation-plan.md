@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Exact mutation Review implementation in progress — 2026-10-19
+
+Private, bounded mutation source observations now use the existing canonical filesystem and current Application ownership/authority fences. They bind resolved write/patch routes, unlinked structural targets, actual source bytes/coverage and absent destinations without returning data or creating directories. [Focused evidence](reports/tenant-workspace-mutation-observations-verification-2026-10-19.md) records the executed component boundary. Exact prepared mutation payload/schema, scoped decision/reviewer checks, root refusal suppression, approved dispatch/receipt recovery and shared inspector/model integration remain required; the private observation component does not authorize an effect or accept the full proposal.
+
 ## Tenant workspace direct mutation checkpoint — 2026-10-19
 
 Tenant conversational Runs now offer guarded direct write, patch, mkdir, copy and non-destructive ordered batch under current Allowed policy. The existing Run side-effect and immutable receipt owners prevent duplicate dispatch, preserve body-free outcomes and recover abandoned/uncertain attempts without file replay. Both-store qualification covers commit-time revocation, exact call identity, concurrency, receipt-unavailable recovery and SQLite shape/rollback/reopen. [Focused evidence](reports/tenant-workspace-effects-verification-2026-10-19.md) records the executed local qualification and remaining proposal boundaries. This supersedes earlier direct-model-mutation/effect-recovery-pending notes only. Exact mutation Review/exceptional grants remain open; policy-required delete/move/destructive batch and other protected mutations return no dispatch. Virtual resources/Office/source publication, autonomous origins, other proposal families and the final authority/schema cutover remain open. The full proposal stays active.

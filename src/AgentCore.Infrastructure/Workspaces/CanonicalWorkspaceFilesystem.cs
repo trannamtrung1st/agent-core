@@ -452,7 +452,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         return relative;
     }
 
-    private string Resolve(SafeFileHandle root, string relative, bool allowMissing = false)
+    private string Resolve(SafeFileHandle root, string relative, bool allowMissing = false, Action<string, string>? observedLink = null)
     {
         var parts = Parts(relative).ToList(); var links = 0;
         for (var index = 0; index < parts.Count; index++)
@@ -467,6 +467,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
             if (node.Kind != LinkKind) continue;
             if (++links > 40) throw AgentCoreErrors.Validation("unsafe_link_target: symbolic-link cycle or excessive traversal.");
             var target = ReadLink(parent, parts[index]);
+            observedLink?.Invoke(_logicalRoot + "/" + string.Join('/', parts.Take(index + 1)), target);
             List<string> resolved;
             if (target.StartsWith('/'))
             {

@@ -26,13 +26,14 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, false, "unknown")] [InlineData(true, true, "unknown")]
     [InlineData(false, true, "unsettled")] [InlineData(true, false, "unsettled")]
     [InlineData(false, false, "invalid")] [InlineData(true, true, "invalid")]
+    [InlineData(false, false, "home-disabled")] [InlineData(true, false, "home-disabled")]
     public async Task Tenant_workspace_model_mutations_HTTP_dispatch_once_under_current_policy_and_keep_body_free_results(bool sqlite, bool working, string mode)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-workspace-model-effects-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
             var logical = working ? "/working" : "/home";
-            var model = new WorkspaceMutationRecordingModel(logical, mode == "allowed", mode == "invalid"); var writes = 0;
+            var model = new WorkspaceMutationRecordingModel(logical, mode == "allowed", mode == "invalid") { FirstRequestGate = mode == "home-disabled" ? new(TaskCreationOptions.RunContinuationsAsynchronously) : null }; var writes = 0;
             void Configure(IServiceCollection services)
             {
                 if (mode == "unsettled") services.Replace(ServiceDescriptor.Singleton<ITenantWorkspaceOperationStore>(p => new UnavailableHostedWorkspaceSettlement((ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>())));
@@ -54,6 +55,15 @@ public sealed partial class TenantSessionAccessTests
             if (mode == "review") Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/workspaces.write", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             var sent = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Perform the exact bounded workspace changes", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var runId = (await Json(sent)).GetProperty("runId").GetGuid();
+            if (mode == "home-disabled")
+            {
+                await model.FirstRequestEntered.Task.WaitAsync(TimeSpan.FromSeconds(15));
+                var admitted = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!;
+                Assert.Equal(AgentCore.Domain.Definitions.HomeAccess.ReadWrite, (admitted.Admission.Configuration!.Definition.StateIsolationPolicy ?? AgentCore.Domain.Definitions.StateIsolationPolicy.Default).HomeAccess);
+                try { Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(api + $"/agents/{instance}/settings/stateIsolationPolicy", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
+                    set = new { homeAccess = "Disabled" }, clear = Array.Empty<string>() })).StatusCode); }
+                finally { model.FirstRequestGate!.TrySetResult(); }
+            }
             var run = await AwaitBrowserRestartRun(factory.Services.GetRequiredService<ITenantRunStore>(), tenant, runId, false);
             if (mode is "unknown" or "unsettled")
             {
@@ -74,6 +84,7 @@ public sealed partial class TenantSessionAccessTests
                 foreach (var message in results)
                 {
                     using var doc = JsonDocument.Parse(message.Text); var data = doc.RootElement;
+                    if (mode == "home-disabled") { Assert.Equal("forbidden", data.GetProperty("error").GetString()); Assert.Equal("home_access_disabled", data.GetProperty("reasonCode").GetString()); continue; }
                     if (mode == "invalid") { Assert.Equal("invalid", data.GetProperty("error").GetString()); Assert.Equal("invalid_arguments", data.GetProperty("reasonCode").GetString()); continue; }
                     var completed = mode == "allowed" && message.Name != ToolCatalog.WorkspaceDelete;
                     Assert.Equal(completed, data.GetProperty("applied").GetBoolean()); Assert.False(data.GetProperty("replayAllowed").GetBoolean());
@@ -117,9 +128,12 @@ public sealed partial class TenantSessionAccessTests
         private readonly ScriptedLanguageModel inner = new();
         public ModelCapabilities Capabilities => inner.Capabilities;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
+        public TaskCompletionSource? FirstRequestGate { get; init; }
+        public TaskCompletionSource FirstRequestEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            if (Requests.Count == 1 && FirstRequestGate is { } gate) { FirstRequestEntered.TrySetResult(); await gate.Task.WaitAsync(cancellationToken); }
             var count = request.Messages.Count(m => m.Role == ModelRole.Tool && TenantWorkspaceMutationContract.IsMutation(m.Name ?? ""));
             (string Tool, object Args)[] changes = [
                 (ToolCatalog.WorkspaceWrite, new { path = invalid ? "/working" : root + "/source.txt", content = Original }),

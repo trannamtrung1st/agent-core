@@ -44,7 +44,7 @@ public static class TenantWorkspaceEffectRules
             throw new AccessDeniedException("capability_unavailable");
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy ?? StateIsolationPolicy.Default;
         foreach (var (path, permission) in args.Targets)
-            StateIsolationAccess.RequireHome(isolation, path, permission != "workspaces.read");
+            RequireHome(isolation, path, permission != "workspaces.read");
         if (!AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages)) throw new SecurityConflictException("workspace_checkpoint_required");
         var pending = AgentRunToolCallCheckpoint.PendingCalls(messages!).ToArray();
         if (pending.Length != 1 || pending[0].Id != operation.SourceCallId || pending[0].Name != operation.ToolName
@@ -54,6 +54,12 @@ public static class TenantWorkspaceEffectRules
             || run.SideEffect.ToolCallId != "operation:" + operation.OperationId.ToString("D") || run.SideEffect.ActionHash != TenantWorkspaceMutationContract.ActionHash(run.SessionId, operation.ParametersHash)))
             throw new SecurityConflictException("operation_mismatch");
         return args;
+    }
+    public static void RequireHome(StateIsolationPolicy policy, string path, bool write)
+    {
+        if (!path.StartsWith("/home/", StringComparison.Ordinal)) return;
+        if (policy.HomeAccess == HomeAccess.Disabled) throw new AccessDeniedException("home_access_disabled");
+        if (write && policy.HomeAccess != HomeAccess.ReadWrite) throw new AccessDeniedException("home_read_only");
     }
     public static async ValueTask RequireAuthority(TenantSecurityState state, AgentRun run, TenantWorkspaceMutationArguments args, IamAuthorizer iam, CancellationToken ct)
     {

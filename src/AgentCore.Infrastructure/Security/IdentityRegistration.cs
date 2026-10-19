@@ -110,6 +110,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantWorkspaceRuntimeReadService>();
         services.TryAddSingleton<ITenantWorkspaceOperationStore>(p => (ITenantWorkspaceOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantWorkspaceMutationEffectService>();
+        services.TryAddSingleton<TenantWorkspaceMutationTarget>();
         services.TryAddSingleton<TenantSessionService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();

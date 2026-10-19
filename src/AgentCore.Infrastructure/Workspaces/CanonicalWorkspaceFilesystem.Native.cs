@@ -80,7 +80,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         }
         catch { current.Dispose(); throw; }
     }
-    private static IReadOnlyList<string> Names(SafeFileHandle directory, bool partial = false)
+    private static IReadOnlyList<string> Names(SafeFileHandle directory, bool partial = false, int maximum = ScanBudget)
     {
         // fdopendir owns a separately opened description (dup would share the offset).
         using var copy = OpenChild(directory, ".", directory: true);
@@ -109,7 +109,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
                 catch (DecoderFallbackException) { throw AgentCoreErrors.Validation("Workspace filename is not valid UTF-8."); }
                 if (name is "." or "..") continue;
                 if (name.Contains('/') || name.Length == 0) throw AgentCoreErrors.Validation("Workspace directory entry is invalid.");
-                if (names.Count >= ScanBudget) { if (partial) return names; throw AgentCoreErrors.WorkspaceQuotaExceeded(); }
+                if (names.Count >= maximum) { if (partial) return names; throw AgentCoreErrors.WorkspaceQuotaExceeded(); }
                 names.Add(name);
             }
         }

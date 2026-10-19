@@ -1,5 +1,9 @@
 # System Architecture
 
+## Tenant workspace mutation preparation witnesses
+
+The canonical filesystem supplies bounded private source observations for exact mutation preparation through `ITenantWorkspaceMutationObservationStore`; it remains the only native file owner. Resolved write/patch routes and unlinked structural nodes/trees retain distinct semantics. Current Application Run/owner/configuration/IAM fences surround observation; only primary delegatable mutation authority may be absent during preparation, never prerequisite reads or secondary mutation authority. An observation is neither consent nor a dispatch fence. No content snapshot, file ledger, version table, effect engine or permission grant is introduced. [Port and privacy contract](04-backend-interfaces.md#tenant-workspace-mutation-source-observations).
+
 ## Tenant workspace direct effect ownership
 
 Direct Allowed-policy workspace mutations use the existing claimed Run side-effect origin and immutable operation receipts. Application owns typed argument/compound-current-authority validation; the incumbent canonical filesystem owns actual paths and repeats current callbacks at commit. The store atomically reserves Run/security/audit before I/O and settles factual Run/receipt/security/audit afterward. It claims no database/filesystem transaction. An abandoned or ambiguous dispatch is settled uncertain without replay, independently of whether a live executor can still access the files. No permission snapshot, scheduler or file-effect ledger is added. Exact mutation Review/exceptional grants remain open. [Contract](04-backend-interfaces.md#tenant-workspace-direct-mutation-effects), [qualification](reports/tenant-workspace-effects-verification-2026-10-19.md).
