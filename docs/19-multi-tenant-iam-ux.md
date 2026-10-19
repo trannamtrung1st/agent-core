@@ -1,5 +1,12 @@
 # Accounts, organizations, access and approvals UX
 
+## Browser capture and download facts
+
+The incumbent saved Browser parameter summary shows whether capture images or accepted downloads will be published, the independent creation/read distinction, effective byte/task limits and capture privacy mode. Download publication is explicit in model intent and defaults off; no replacement arguments or second approval editor is introduced. “Command completed” describes the native Browser result. File publication has separate `published`, `empty` or `unavailable` facts, safe reason and file IDs in the approval result; partial publication retains its qualifying reason. Published references confer no file access and never imply an application/business outcome was verified. Shared rich-file surfaces recheck each recipient independently.
+
+The backend/model/native contract and result DTO have [focused qualification](reports/tenant-browser-artifacts-verification-2026-10-20.md). Dedicated frontend presentation of the new publication result and its visual/browser qualification remain a successor task; this checkpoint does not claim that UI gate.
+
+
 ## Browser upload consent
 
 The incumbent shared Browser saved-action summary includes each exact Session Artifact's safe name, media type, byte size, ID and SHA-256 hash, plus the file-input origin and full existing target parameters. Keep these facts selectable and wrapped using the existing literal parameter presentation. State that setting the selected input does not confirm server submission. Source names require current independent source and parent reads; Browser approval does not grant them. No replacement arguments, new upload route, file picker or second consent surface is introduced. Existing stale/denied/cancel recovery applies, and repeated receipt inspection never repeats upload.

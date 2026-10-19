@@ -1,5 +1,12 @@
 # Backend Implementation Specification
 
+## Tenant Browser capture/download implementation
+
+`TenantBrowserArtifactRules` closes publication intent, privacy witnesses, byte/task limits and body-free publication results. `TenantBrowserEffectService` freezes accepted native bytes, then passes that batch to its incumbent settlement owner. Both stores repeat compound current authority and publish owned immutable metadata plus factual receipt/checkpoint atomically. Whole-batch capacity is checked before private blob writes. The receipt distinguishes successful native execution from unavailable or partial file publication; lookup/recovery cannot repeat SDK work. Publication staging is charged to the existing checkpoint clock, and expired claims cannot seal observation delivery.
+
+Native capture shares the interactive hold already owned by tenant execution, preventing nested gate acquisition. Privacy remains the startup-pinned host policy; exact capture consent binds its mode/hash, without creating a tenant privacy override. `TenantBrowserEffectService.Images` resolves actual receipt-proven capture bytes for each model generation under independent current file read/policy and verifies them again at the provider boundary, including provider image-role projections. The existing Attachment and execution-source checks share an unchanged security revision during that boundary check. The normal Artifact reference preflight and recipient readback still decide rich file visibility. [Contract](04-backend-interfaces.md#tenant-browser-capture-and-download-publication). Artifact-backed drops, lifecycle/privacy administration, autonomous origins and full cutover remain open.
+
+
 ## Tenant Browser Artifact upload implementation
 
 `TenantBrowserUploadTarget` reads metadata from `ITenantArtifactStore` only after independent raw source permission checks, and resolves hash-verified immutable bytes only for the native sink callback. Its closed ordered witnesses extend the incumbent Browser prepared command and canonical hash. Both IAM stores repeat actual same-Session source facts inside their existing Browser operation transactions; inbox queries apply all source visibility before counts and paging. The model authorization schema now includes the converted upload command.

@@ -3522,6 +3522,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("BrowserArtifactsJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("ExecutorPrincipalId")
                         .HasColumnType("TEXT");
 

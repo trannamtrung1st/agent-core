@@ -13,7 +13,7 @@ public static class TenantBrowserEffectRules
     private static readonly HashSet<string> Denials = new(StringComparer.Ordinal) { "approval_expired", "grantor_authority_lost", "permission_denied",
         "executor_unavailable", "requester_unavailable", "tenant_unavailable", "browser_policy_changed", "browser_target_changed", "browser_target_busy",
         "policy_transition_pending", "provider_unavailable", "root_operation_conflict", "operation_witness_changed", "resource_unavailable",
-        "browser_file_source_changed", "artifact_content_unavailable", "browser_command_not_dispatched", "independent_reviewer_required", "approver_unqualified", "browser_source_changed", "execution_claim_expired",
+        "capture_limit", "download_limit", "browser_file_source_changed", "artifact_content_unavailable", "browser_command_not_dispatched", "independent_reviewer_required", "approver_unqualified", "browser_source_changed", "execution_claim_expired",
         "credential_unavailable", "credential_binding_changed", "credential_origin_changed", "credential_origin_unavailable", "credential_direct_chat_required",
         "credential_target_invalid", "user_intervention_required", "forbidden", "target_denied", "target_missing", "ambiguous_target", "stale_frame",
         "grant_expired", "grant_unavailable", "operation_authority_changed" };
@@ -124,7 +124,8 @@ public static class TenantBrowserEffectRules
     }
     public static TenantOperationReceipt Receipt(TenantApprovalRequest request, AgentRun run, TenantOperationOutcome outcome, string reason, DateTimeOffset at) =>
         new(request.Operation.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId, request.RootActivationId, request.ExecutorPrincipalId,
-            request.Operation.InstanceId, request.Operation.ActionHash, outcome, reason, request.Operation.ExpectedInstanceRevision, request.Operation.ExpectedPersonaRevision, Milliseconds(at));
+            request.Operation.InstanceId, request.Operation.ActionHash, outcome, reason, request.Operation.ExpectedInstanceRevision, request.Operation.ExpectedPersonaRevision, Milliseconds(at), BrowserArtifactsJson: request.Operation.BrowserCommand?.Artifacts is null ? null
+                : TenantBrowserArtifactRules.Unavailable("browser_command_not_completed"));
     public static TenantOperationReceipt Matching(TenantOperationReceipt receipt, TenantBrowserEffectFence fence)
     {
         if (receipt.TenantId != fence.TenantId || receipt.RequestId != fence.RequestId || receipt.OperationId != fence.OperationId

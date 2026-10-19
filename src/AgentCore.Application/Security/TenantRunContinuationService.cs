@@ -31,6 +31,16 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
     TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? attachmentReads = null)
 {
+    public ValueTask<List<ModelMessage>> RehydrateBrowserImagesAsync(AgentRun run, List<ModelMessage> messages, bool vision, CancellationToken ct) =>
+        browserEffects is null ? ValueTask.FromResult(messages) : browserEffects.RehydrateCapturesAsync(run, messages, vision, ct);
+
+    public async ValueTask RequireBrowserImageSourcesAsync(AgentRun run, IReadOnlyList<ModelMessage> messages, CancellationToken ct,
+        Func<CancellationToken, ValueTask>? otherSources = null)
+    {
+        if (browserEffects is not null) await browserEffects.RequireProviderImageSourcesAsync(run, messages, otherSources, ct).ConfigureAwait(false);
+        else if (otherSources is not null) await otherSources(ct).ConfigureAwait(false);
+    }
+
     // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
     public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
     {
@@ -158,7 +168,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     ? TenantWorkspaceMutationContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason)
                     : request.Operation.BrowserCommand is not null
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
-                        request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched")
+                        request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched", receipt)
                     : request.Operation.WorkspaceRead is not null ? TenantWorkspaceReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.AttachmentRead is not null ? TenantAttachmentReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ArtifactVerification is not null ? TenantArtifactVerificationContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)

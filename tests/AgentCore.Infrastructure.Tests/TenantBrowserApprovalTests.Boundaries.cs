@@ -124,7 +124,8 @@ public sealed partial class TenantBrowserApprovalTests
         Assert.True(TenantApprovalRules.BrowserIntent(session, ToolCatalog.BrowserDialog, """{"operation":"inspect"}""").ReadOnly);
         foreach (var args in new[] { "{", "[]", """{"url":"http://127.0.0.1:5091","url":"http://other.test"}""", """{"url":"http://127.0.0.1:5091","tenantId":"forged"}""" })
             Assert.Throws<ArgumentException>(() => TenantApprovalRules.BrowserIntent(session, ToolCatalog.BrowserNavigate, args));
-        var denied = Assert.Throws<AccessDeniedException>(() => TenantApprovalRules.BrowserIntent(session, ToolCatalog.BrowserScreenshot, "{}"));
+        Assert.False(TenantApprovalRules.BrowserIntent(session, ToolCatalog.BrowserScreenshot, "{}").ReadOnly);
+        var denied = Assert.Throws<AccessDeniedException>(() => TenantApprovalRules.BrowserIntent(session, ToolCatalog.BrowserGeolocation, """{"operation":"clear","origin":"http://127.0.0.1:5091"}"""));
         Assert.Equal("browser_resource_adapter_unavailable", denied.ReasonCode);
         Assert.False(TenantApprovalRules.BrowserOrigin("http://user:secret@example.test")); Assert.False(TenantApprovalRules.BrowserOrigin("http://example.test/private?q=secret"));
         Assert.True(TenantApprovalRules.BrowserOrigin("https://example.test"));

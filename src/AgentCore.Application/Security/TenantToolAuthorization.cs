@@ -191,7 +191,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (intent.MetadataArguments is { } metadata)
             return await approvals.PrepareCredentialReadAsync(boundary.Reference, metadata, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.Browser is { } browser)
-            return await approvals.PrepareBrowserAsync(boundary.Reference, browser.Tool, browser.ArgumentsJson, run.Revision, run.Claim!.Generation, ct, registerCold: true).ConfigureAwait(false);
+            return await approvals.PrepareBrowserAsync(boundary.Reference, browser.Tool, browser.ArgumentsJson, run.Revision, run.Claim!.Generation, ct, registerCold: true, downloadArtifacts: browser.DownloadArtifacts).ConfigureAwait(false);
         if (intent.SandboxRead is { } read)
             return await approvals.PrepareSandboxReadAsync(boundary.Reference, read.Kind, read.ExecutionId, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.SandboxControl is { } control)

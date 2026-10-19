@@ -38,6 +38,7 @@ public sealed partial class InMemoryIamStore
                     if (agent is null) throw new AccessDeniedException("executor_unavailable");
                     TenantApprovalRules.Validate(request, run, agent, source: source);
                     RequireBrowserOperation(request, run, agent);
+                    RequireBrowserArtifactBudget(request);
                     TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct,
                         grant, OperationGrantStatus.Available, at).GetAwaiter().GetResult();
                     if (RootApproval(request.TenantId, request.RootActivationId, request.ExecutorPrincipalId, request.Fingerprint)?.RequestId != request.RequestId)
@@ -80,7 +81,7 @@ public sealed partial class InMemoryIamStore
         }
     }
     public ValueTask<TenantOperationReceipt?> TrySettleBrowserEffectAsync(TenantSecurityState next, long expectedSecurityRevision, TenantBrowserEffectFence fence,
-        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null)
+        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null, TenantBrowserArtifactBatch? artifacts = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next); TenantBrowserEffectRules.Outcome(outcome, reason, recovery);
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
@@ -108,10 +109,17 @@ public sealed partial class InMemoryIamStore
                 }
                 catch (Exception e) when (e is AccessDeniedException or SecurityConflictException) { observation = null; }
             }
-            saved = TenantBrowserContinuationProjection.Save(run, saved, request, outcome, reason, at, observation);
-            var receipt = TenantBrowserEffectRules.Receipt(request, run, outcome, reason, at);
-            audit = TenantOperationAuditRules.WithEffectResult(audit with { At = at, Decision = outcome switch { TenantOperationOutcome.Completed => "allowed", TenantOperationOutcome.Denied => "denied", _ => "indeterminate" }, ReasonCode = reason }, before, run, request, grant?.GrantId);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
+            var receipt = TenantBrowserEffectRules.Receipt(request, run, outcome, reason, at);
+            if (request.Operation.BrowserCommand!.Artifacts is not null && outcome == TenantOperationOutcome.Completed)
+                receipt = receipt with { BrowserArtifactsJson = observation is not null && artifacts is not null
+                    ? PublishBrowserArtifacts(request, run, artifacts, ct) : TenantBrowserArtifactRules.Unavailable() };
+            var publishedAt = ApprovalNow; if (publishedAt > at) at = publishedAt;
+            receipt = receipt with { RecordedAt = TenantBrowserEffectRules.Milliseconds(at) };
+            if (run.CancellationRequested || run.Claim?.LeaseExpiresAtUtc <= at) observation = null;
+            if (observation is not null) observation = TenantBrowserContinuationProjection.WithArtifacts(observation, receipt.BrowserArtifactsJson);
+            saved = TenantBrowserContinuationProjection.Save(run, saved, request, outcome, reason, at, observation, receipt);
+            audit = TenantOperationAuditRules.WithEffectResult(audit with { At = at, Decision = outcome switch { TenantOperationOutcome.Completed => "allowed", TenantOperationOutcome.Denied => "denied", _ => "indeterminate" }, ReasonCode = reason }, before, run, request, grant?.GrantId);
             if (saved.Revision != run.Revision) sessionBacking.SaveRetainedTenantOperationRun(saved, run.Revision);
             if (grant is not null) _operationGrants[request.RequestId] = grant with { Status = outcome switch {
                 TenantOperationOutcome.Completed => OperationGrantStatus.Consumed, TenantOperationOutcome.Denied => OperationGrantStatus.Revoked, _ => OperationGrantStatus.Indeterminate }, Revision = checked(grant.Revision + 1) };

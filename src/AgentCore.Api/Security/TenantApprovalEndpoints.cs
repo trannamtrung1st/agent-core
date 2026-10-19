@@ -71,7 +71,7 @@ public static class TenantApprovalEndpoints
                 op.SandboxCommand is { } sandbox ? new(sandbox.SessionId, sandbox.ProfileId, sandbox.ProfileRevision, sandbox.CommandJson,
                     sandbox.ExpectedLeaseRevision, sandbox.ExpectedGeneration, sandbox.HomeAccess.ToString()) : null),
             view.Decision is { } d ? new(d.HumanPrincipalId, Camel(d.Status), d.DecidedAt) : null,
-            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt) : null,
+            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson)) : null,
             review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,
                 review.Changes.Select(c => new TenantApprovalChangeDto(c.Field, c.Before, c.After, c.BeforeAvailable, c.AfterAvailable, c.RestoresDefault)).ToArray(),
                 review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState));
@@ -80,4 +80,10 @@ public static class TenantApprovalEndpoints
         : Enum.TryParse<T>(value, true, out var parsed) && Enum.IsDefined(parsed) && !int.TryParse(value, out _) ? parsed
         : throw new ArgumentException("Unknown approval filter.");
     private static string Camel<T>(T value) where T : Enum => JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
+    private static TenantBrowserArtifactPublicationDto? BrowserArtifactResult(string? json)
+    {
+        if (json is null) return null;
+        var result = TenantBrowserArtifactRules.Read(json);
+        return new(result.Status, result.ReasonCode, result.Files.Select(f => new TenantBrowserArtifactReferenceDto(f.Kind, f.ArtifactId)).ToArray());
+    }
 }

@@ -95,8 +95,8 @@ public sealed partial class TenantBrowserApprovalTests
                 f.RunConfiguration(), store, new(store), f.Clock, (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store));
     }
     private const string Navigate = """{"url":"http://127.0.0.1:5091/browser-native.html"}""";
-    private static ValueTask<TenantApprovalPreparationResult> Request(TenantApprovalService service, Setup s, string tool = ToolCatalog.BrowserNavigate, string args = Navigate) =>
-        service.PrepareBrowserAsync(new(s.Tenant, s.Run.AgentRunId), tool, args, s.Run.Revision, s.Run.Claim!.Generation);
+    private static ValueTask<TenantApprovalPreparationResult> Request(TenantApprovalService service, Setup s, string tool = ToolCatalog.BrowserNavigate, string args = Navigate, bool downloads = false) =>
+        service.PrepareBrowserAsync(new(s.Tenant, s.Run.AgentRunId), tool, args, s.Run.Revision, s.Run.Claim!.Generation, downloadArtifacts: downloads);
 
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_Browser_Review_retains_exact_consent_across_reopen_and_never_dispatches_or_grants(bool sqlite)

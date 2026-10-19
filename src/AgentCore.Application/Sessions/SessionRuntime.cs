@@ -14,6 +14,7 @@ using AgentCore.Application.Memory;
 using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Application.Speech;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
@@ -2712,7 +2713,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentRunToolCallCheckpoint.EnsureCurrentBrowserContract(checkpoint);
         var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
         var messages = restored ? restoredMessages!.ToList() : new List<ModelMessage>();
-        if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
+        if (restored && _runtimeOwner is null) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
         if (restored && _runtimeOwner is not null && _boundAgentRun is { } attachmentRun)
             messages = await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment binding is required."))
                 .RehydrateReadImagesAsync(attachmentRun, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
@@ -2958,6 +2959,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     working = working with { Context = working.Context!.Upsert(semanticRecovery) };
                 working = working with { Context = PromptContextBuilder.WithRequesterContext(working.Context!, _boundAgentRun?.Admission.ExecutionContext,
                     await RequesterContextAsync(_boundAgentRun, generateToken).ConfigureAwait(false)) };
+                if (!resumingBatch && _runtimeOwner is not null && _boundAgentRun is { } browserRun
+                    && TenantBrowserArtifactRules.HasCapture(messages))
+                    messages = await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
+                        .RehydrateBrowserImagesAsync(browserRun, messages, model.Capabilities.Vision, generateToken).ConfigureAwait(false);
                 working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
@@ -2977,8 +2982,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 if (!resumingBatch)
                 {
-                    await RequireProviderRunAuthorityAsync(cause, request.ResponseId, generateToken).ConfigureAwait(false);
-                    await RequireTenantAttachmentSourcesAsync(_boundAgentRun, attachmentSources, generateToken).ConfigureAwait(false);
+                    async ValueTask RequireOtherSources(CancellationToken token)
+                    {
+                        await RequireProviderRunAuthorityAsync(cause, request.ResponseId, token).ConfigureAwait(false);
+                        await RequireTenantAttachmentSourcesAsync(_boundAgentRun, attachmentSources, token).ConfigureAwait(false);
+                    }
+                    if (_runtimeOwner is not null && _boundAgentRun is { } imageRun && TenantBrowserArtifactRules.HasCapture(messages))
+                        await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
+                            .RequireBrowserImageSourcesAsync(imageRun, messages, generateToken, RequireOtherSources).ConfigureAwait(false);
+                    else await RequireOtherSources(generateToken).ConfigureAwait(false);
                 }
                 if (!resumingBatch)
                 await foreach (var evt in model.GenerateAsync(working, finalizationReason is null && workTimer is not null ? (cleanupPhase ? cleanupCts.Token : workCts.Token) : generateToken).ConfigureAwait(false))

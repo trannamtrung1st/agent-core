@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Tenant Browser captures and explicitly requested downloads now publish immutable Session Artifacts through the existing exact consent, native effect, receipt and checkpoint owners. [Focused backend/model/native qualification](docs/reports/tenant-browser-artifacts-verification-2026-10-20.md) covers independent file permissions, atomic publication facts, root budgets and current-access vision delivery. Dedicated publication-result UI, remaining Browser/resource/transport families and the full tenant IAM authority/schema cutover stay open.
+
 Tenant Chat now exposes original Attachment copying through the shared Session files inspector, with independent Working files and Artifacts views and deliberate partial/unknown recovery. [UI qualification](docs/reports/tenant-attachment-materialization-ui-verification-2026-10-19.md) supersedes frontend-materialization-pending notes below. The remaining full tenant IAM proposal stays active.
 
 Human tenant Attachment materialization now creates a guarded working copy plus an immutable Artifact with actual human/source provenance. [Backend qualification](docs/reports/tenant-attachment-materialization-verification-2026-10-19.md) covers compound permissions, partial/unknown outcomes and SQLite host recreation. This supersedes backend-materialization-pending notes below; the shared frontend action and remaining full tenant IAM proposal stay open.

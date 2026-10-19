@@ -1,5 +1,12 @@
 # Testing Strategy
 
+## Tenant Browser capture/download checks
+
+Exercise exact capture/download consent through both stores, actual native masked capture and native download bytes, and model/HTTP approval-to-response execution. Check explicit download opt-in, independent raw creation before target observation, scoped inbox totals, creation loss before and after native work, durable task budgets across approval hops, exact same-Run Artifact ownership and duplicate/reopen no-replay. Stage a failed second private blob and verify no member's metadata becomes visible, unrelated bytes survive and the native factual receipt remains completed. Reject a batch that exceeds aggregate quota before any blob write. Verify raw receipt forgery/mutation and guarded downgrade, then restore/read the current model.
+
+Model tests must prove actual image parts reach a vision model only under current independent read/Allowed policy, stay out of checkpoints and disappear after read revocation between generations. Fence loaded parts again immediately before provider invocation, across all other input-source checks and provider role projection. Original-human Artifact readback remains independent of Agent read. Native capture tests check masks/PNG bytes, not physical display fidelity or universal pixel-secret detection. [Executed matrix](reports/tenant-browser-artifacts-verification-2026-10-20.md).
+
+
 ## Tenant Browser upload checks
 
 Exercise exact same-Session Artifact metadata → saved Browser Review → qualified decision → at-most-once native file input with both memory and SQLite stores. Compare original non-ASCII bytes and file size in disposable Chromium; clearing the input before duplicate receipt lookup must not repopulate it. Cover missing independent source reads before target observation, another Session's actual file, source-scoped inbox totals/reviewer qualification, read loss before native dispatch and after effect completion, retained model result read loss, malformed witnesses and raw SQLite source mutation. Native source resolution races must recheck current authority, page generation/frame URL and exact destination before transmitting any bytes. Reuse existing recovery/claim/cancellation regressions; CI and external providers remain opt-in.

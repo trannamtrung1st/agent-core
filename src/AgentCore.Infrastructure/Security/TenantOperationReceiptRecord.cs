@@ -6,13 +6,17 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed record TenantOperationReceiptRecord(Guid OperationId, Guid? RequestId, Guid TenantId, string RunId, string SessionId,
     string RootActivationId, Guid ExecutorPrincipalId, string InstanceId, string ActionHash, int Outcome, string ReasonCode,
-    long InstanceRevision, long PersonaRevision, long RecordedAt, string? SourceCallId = null, string? ParametersHash = null)
+    long InstanceRevision, long PersonaRevision, long RecordedAt, string? SourceCallId = null, string? ParametersHash = null, string? BrowserArtifactsJson = null)
 {
-    internal TenantOperationReceipt Domain() => new(OperationId, RequestId, TenantId, Guid.Parse(RunId), Guid.Parse(SessionId), Guid.Parse(RootActivationId),
-        ExecutorPrincipalId, Guid.Parse(InstanceId), ActionHash, (TenantOperationOutcome)Outcome, ReasonCode, InstanceRevision, PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(RecordedAt), SourceCallId, ParametersHash);
+    internal TenantOperationReceipt Domain()
+    {
+        if (BrowserArtifactsJson is not null) _ = AgentCore.Application.Security.TenantBrowserArtifactRules.Read(BrowserArtifactsJson);
+        return new(OperationId, RequestId, TenantId, Guid.Parse(RunId), Guid.Parse(SessionId), Guid.Parse(RootActivationId),
+        ExecutorPrincipalId, Guid.Parse(InstanceId), ActionHash, (TenantOperationOutcome)Outcome, ReasonCode, InstanceRevision, PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(RecordedAt), SourceCallId, ParametersHash, BrowserArtifactsJson);
+    }
     internal static TenantOperationReceiptRecord From(TenantOperationReceipt r) => new(r.OperationId, r.RequestId, r.TenantId, r.RunId.ToString("D"),
         r.SessionId.ToString("D"), r.RootActivationId.ToString("D"), r.ExecutorPrincipalId, r.InstanceId.ToString("D"), r.ActionHash, (int)r.Outcome,
-        r.ReasonCode, r.InstanceRevision, r.PersonaRevision, r.RecordedAt.ToUnixTimeMilliseconds(), r.SourceCallId, r.ParametersHash);
+        r.ReasonCode, r.InstanceRevision, r.PersonaRevision, r.RecordedAt.ToUnixTimeMilliseconds(), r.SourceCallId, r.ParametersHash, r.BrowserArtifactsJson);
     internal static void Configure(ModelBuilder model)
     {
         var request = model.Entity<TenantApprovalRecord>();

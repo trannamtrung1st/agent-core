@@ -18,7 +18,8 @@ public static class TenantBrowserOperationRules
         Targets(tenant, instance, value.SessionId, value.ReadOnly).Concat(value.Credential is { } c
             ? new[] { ("credentials.read", TenantCredentialRules.Scope(tenant, c.CredentialId)), ("credentials.use", TenantCredentialRules.Scope(tenant, c.CredentialId)) } : [])
         .Concat(TenantApprovalRules.BrowserIntent(value.SessionId, value.ToolName, value.ArgumentsJson).Command is BrowserUploadCommand upload
-            ? TenantBrowserUploadRules.Ids(upload).Select(id => ("artifacts.read", TenantArtifactRules.Scope(tenant, id))) : []).ToArray();
+            ? TenantBrowserUploadRules.Ids(upload).Select(id => ("artifacts.read", TenantArtifactRules.Scope(tenant, id))) : [])
+        .Concat(value.Artifacts is null ? [] : new[] { ("artifacts.create", TenantSessionRules.Scope(tenant, value.SessionId)) }).ToArray();
     public static async ValueTask RequirePermissionsAsync(TenantSecurityState state, Guid instance, PreparedBrowserCommand value, Guid principal,
         IamAuthorizer authorizer, CancellationToken ct, bool allowCredentialUseException = false)
     {

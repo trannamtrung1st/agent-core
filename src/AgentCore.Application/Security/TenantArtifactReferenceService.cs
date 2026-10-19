@@ -29,7 +29,7 @@ public sealed class TenantArtifactReferenceService(ITenantArtifactStore artifact
             var session = await sessions.FindTenantSessionAsync(tenant, sessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             if (session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId) throw new AccessDeniedException("resource_unavailable");
             var current = await configurations.ResolveAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-            static bool Capability(AgentCore.Domain.Definitions.AgentDefinition definition) => TenantArtifactToolContract.Allows(definition) || TenantWorkspaceArtifactContract.Allows(definition) || RolePermissions.AllowsTool(definition, ToolCatalog.ArtifactsVerify);
+            static bool Capability(AgentCore.Domain.Definitions.AgentDefinition definition) => TenantArtifactToolContract.Allows(definition) || TenantWorkspaceArtifactContract.Allows(definition) || RolePermissions.AllowsTool(definition, ToolCatalog.ArtifactsVerify) || TenantBrowserAuthorizationContract.Allowed(definition).Count > 0;
             if (!Capability(run.Admission.Configuration!.Definition) || !Capability(current.Configuration.Configuration.Definition)) throw new AccessDeniedException("capability_unavailable");
             if (!(await iam.CheckOwnedTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get("sessions.read"), TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("executor_read_required");

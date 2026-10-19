@@ -19,11 +19,11 @@ public sealed partial class NativePlaywrightBrowser
 {
     private async ValueTask<BrowserScreenshotResult> CaptureViewportAsync(
         BrowserScreenshotRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool interactiveHeld = false)
     {
         var privacy = _capturePolicy;
         if (privacy.Mode == BrowserScreenshotPrivacyMode.Disabled) return new("forbidden", null, 0);
-        await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
+        await using var interactive = interactiveHeld ? NoInteractiveHold.Instance : await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable || !_sessions.TryGetValue(request.SessionId, out var session))
         {
             return new BrowserScreenshotResult("provider_unavailable", null, 0);

@@ -68,7 +68,7 @@ public sealed partial class NativePlaywrightBrowser
         if (command.Command is BrowserScreenshot captureArgs)
         {
             var capture = await CaptureViewportAsync(new BrowserScreenshotRequest(command.SessionId, captureArgs.Format,
-                captureArgs.FullPage, captureArgs.Target), cancellationToken);
+                captureArgs.FullPage, captureArgs.Target), cancellationToken, interactiveHeld);
             if (capture.ErrorCode is not null)
                 return new(capture.ErrorCode, RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height);
             var extension = capture.ContentType switch { "image/png" => "png", "image/jpeg" => "jpeg", "image/webp" => "webp", _ => null };

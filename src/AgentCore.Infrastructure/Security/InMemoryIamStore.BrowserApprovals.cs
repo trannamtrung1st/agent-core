@@ -22,6 +22,7 @@ public sealed partial class InMemoryIamStore
                 ?? throw new AccessDeniedException("credential_binding_changed");
             TenantBrowserCredentialRules.RequireBinding(run, agent, bound, TenantAgentDefinitionBaseline(agent)); TenantBrowserCredentialRules.RequireWitness(credential, bound);
         }
+        if (request.Status == TenantApprovalStatus.Pending && value.Artifacts is not null) RequireBrowserArtifactBudget(request);
         if (request.Snapshot != TenantBrowserOperationRules.Snapshot(agent, value)) throw new SecurityConflictException("browser_target_changed");
         TenantBrowserOperationRules.RequirePermissionsAsync(_tenants[request.TenantId], agent.Instance.InstanceId, value, request.ExecutorPrincipalId,
             new IamAuthorizer(this), CancellationToken.None, request.Kind == ApprovalKind.ExceptionalGrant).GetAwaiter().GetResult();

@@ -30,6 +30,8 @@ public sealed partial class SqliteIamStore
             var bound = await CredentialOperationTarget(db, request.TenantId, request.Operation.InstanceId, credential.BindingId, credential.CredentialId, ct).ConfigureAwait(false);
             TenantBrowserCredentialRules.RequireBinding(run, agent, bound, baseline); TenantBrowserCredentialRules.RequireWitness(credential, bound);
         }
+        if (request.Status == TenantApprovalStatus.Pending && value.Artifacts is not null)
+            await RequireBrowserArtifactBudget(db, request, ct).ConfigureAwait(false);
         if (request.Snapshot != TenantBrowserOperationRules.Snapshot(agent, value)) throw new SecurityConflictException("browser_target_changed");
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
         await TenantBrowserOperationRules.RequirePermissionsAsync(state, agent.Instance.InstanceId, value, request.ExecutorPrincipalId, new IamAuthorizer(this), ct,

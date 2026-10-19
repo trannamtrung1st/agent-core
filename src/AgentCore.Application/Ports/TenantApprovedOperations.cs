@@ -28,5 +28,5 @@ public interface ITenantApprovedOperationStore
     ValueTask<IReadOnlyList<TenantBrowserEffectFence>> RecoverableBrowserEffectsAsync(DateTimeOffset at, int limit, CancellationToken ct = default);
     ValueTask<TenantOperationReceipt?> TrySettleBrowserEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantBrowserEffectFence fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit,
-        bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null);
+        bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null, TenantBrowserArtifactBatch? artifacts = null);
 }

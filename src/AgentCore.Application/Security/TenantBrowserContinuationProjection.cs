@@ -12,6 +12,20 @@ namespace AgentCore.Application.Security;
 public static class TenantBrowserContinuationProjection
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    public static string? ArtifactData(string? data, string? receipt)
+    {
+        if (receipt is null) return data;
+        JsonNode? native = null;
+        try { if (data is not null) native = JsonNode.Parse(data); } catch (JsonException) { }
+        return JsonSerializer.Serialize(new { native, artifactPublication = TenantBrowserArtifactRules.Read(receipt) }, Json);
+    }
+    public static TenantBrowserEffectObservation WithArtifacts(TenantBrowserEffectObservation observation, string? receipt)
+    {
+        if (receipt is null) return observation;
+        var node = JsonNode.Parse(observation.Json)!.AsObject();
+        node["artifactPublication"] = JsonSerializer.SerializeToNode(TenantBrowserArtifactRules.Read(receipt), Json);
+        return observation with { Json = node.ToJsonString(Json) };
+    }
     public static string Observation(BrowserResult result)
     {
         // No binary/download delivery or raw provider object crosses into a checkpoint.
@@ -35,7 +49,7 @@ public static class TenantBrowserContinuationProjection
         }
     }
     public static AgentRunCheckpoint Complete(AgentRunCheckpoint checkpoint, ModelToolCall call, TenantApprovalRequest request,
-        TenantOperationOutcome outcome, string reason, string? observation, string? unavailable = null)
+        TenantOperationOutcome outcome, string reason, string? observation, string? unavailable = null, TenantOperationReceipt? receipt = null)
     {
         var node = observation is null ? null : JsonNode.Parse(observation);
         var result = Serialize(node, node is null ? unavailable ?? "browser_observation_not_retained" : null);
@@ -47,11 +61,12 @@ public static class TenantBrowserContinuationProjection
             outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()), reasonCode = reason, requestId = request.RequestId, operationId = request.Operation.OperationId,
             applied = (bool?)null, commandCompleted = outcome == TenantOperationOutcome.Completed, applicationOutcomeVerified = false,
             browser = value, observationUnavailable = value is null, observationUnavailableReason = missing,
+            artifactPublication = receipt?.BrowserArtifactsJson is { } files ? TenantBrowserArtifactRules.Read(files) : null,
             replayAllowed = false
         }, Json);
     }
     public static AgentRun Save(AgentRun before, AgentRun saved, TenantApprovalRequest request, TenantOperationOutcome outcome, string reason,
-        DateTimeOffset at, TenantBrowserEffectObservation? observation)
+        DateTimeOffset at, TenantBrowserEffectObservation? observation, TenantOperationReceipt? receipt = null)
     {
         if (saved.Status != AgentRunStatus.Running || saved.CancellationRequested || saved.Claim is null || saved.Claim.LeaseExpiresAtUtc <= at
             || before.Claim?.Generation != before.SideEffect.ExternalEffect?.Generation || saved.Checkpoint is not { } checkpoint
@@ -62,7 +77,7 @@ public static class TenantBrowserContinuationProjection
         try
         {
             var completed = Complete(checkpoint.PauseBudgetClock(at), calls[0], request, outcome, reason,
-                outcome == TenantOperationOutcome.Completed && observation?.RunRevision == before.Revision ? observation.Json : null);
+                outcome == TenantOperationOutcome.Completed && observation?.RunRevision == before.Revision ? observation.Json : null, receipt: receipt);
             var checkpointed = saved.SaveCheckpoint(saved.Revision, saved.Claim.Generation, completed, null, at);
             return checkpointed.AwaitApprovedExternalResultDelivery(checkpointed.Revision, saved.Claim.Generation, request.RequestId, request.Operation.OperationId, request.Operation.ActionHash, at);
         }

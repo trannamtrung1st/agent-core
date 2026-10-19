@@ -81,6 +81,7 @@ public sealed partial class SqliteArtifactStore : ITenantArtifactStore
     {
         if (await db.Artifacts.AnyAsync(a => a.ArtifactId == next.ArtifactId.ToString("D"), ct).ConfigureAwait(false)) throw new SecurityConflictException("artifact_publication_mismatch");
         var used = await db.Artifacts.Where(a => a.SessionId == next.SessionId.ToString("D")).SumAsync(a => a.ByteSize, ct).ConfigureAwait(false);
+        used += db.Artifacts.Local.Where(a => a.SessionId == next.SessionId.ToString("D") && db.Entry(a).State == EntityState.Added).Sum(a => a.ByteSize);
         if (frozen.Length > Math.Min(maxBytesEach, ArtifactLimits.MaxBytesEach) || used + frozen.Length > maxBytesSession) throw AgentCore.Application.Sessions.AgentCoreErrors.ArtifactQuotaExceeded();
         var path = TenantPath(next.TenantId!.Value, next.SessionId, next.ArtifactId); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".partial-" + Guid.NewGuid().ToString("N");

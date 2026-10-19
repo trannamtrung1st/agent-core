@@ -17,6 +17,7 @@ public sealed partial class TenantBrowserApprovalTests
         public Func<Task>? BeforeGate { get; set; }
         public Func<Task>? AfterEffect { get; set; }
         public bool Uncertain { get; set; }
+        public BrowserResult? Result { get; set; }
         public int Invocations;
         public int NativeEffects;
         public int PasswordResolutions;
@@ -43,8 +44,8 @@ public sealed partial class TenantBrowserApprovalTests
             }
             Interlocked.Increment(ref NativeEffects); target.CommandRevision++;
             if (AfterEffect is { } after) await after();
-            return Uncertain ? new("close_uncertain", EffectAttempted: true)
-                : new(null, DataJson: "{\"scope\":\"owned observation\"}", EffectAttempted: true, EffectConfirmedBySdk: true);
+            return Result ?? (Uncertain ? new("close_uncertain", EffectAttempted: true)
+                : new(null, DataJson: "{\"scope\":\"owned observation\"}", EffectAttempted: true, EffectConfirmedBySdk: true));
         }
     }
     private static TenantBrowserEffectService Effects(Fixture f, IBrowser browser, IIamStore? current = null, ITenantApprovedOperationStore? effects = null)
@@ -52,12 +53,12 @@ public sealed partial class TenantBrowserApprovalTests
         current ??= f.Iam;
         return new(current, (ITenantRunStore)current, (ITenantApprovalStore)current, effects ?? (ITenantApprovedOperationStore)current,
             new((ITenantSessionStore)current, f.RunConfiguration(), current, new(current), browser,
-                new((ITenantCredentialBindingStore)current, f.RunConfiguration(), f.Protector, (ITenantRunStore)current), f.Artifacts is ITenantArtifactStore files ? new(files) : null), new(current), browser, Operations(f, current), f.Ids, f.Clock);
+                new((ITenantCredentialBindingStore)current, f.RunConfiguration(), f.Protector, (ITenantRunStore)current), f.Artifacts is ITenantArtifactStore files ? new(files) : null), new(current), browser, Operations(f, current), f.Ids, f.Clock, f.Artifacts as ITenantArtifactStore);
     }
     private static async Task<(Setup Setup, TenantApprovalRequest Request)> ApprovedEffect(Fixture f, Setup s, IBrowser browser, Action? beforeDecision = null,
-        string tool = ToolCatalog.BrowserNavigate, string args = Navigate)
+        string tool = ToolCatalog.BrowserNavigate, string args = Navigate, bool downloads = false)
     {
-        var service = Service(f, browser); var request = (await Request(service, s, tool, args)).Request!;
+        var service = Service(f, browser); var request = (await Request(service, s, tool, args, downloads)).Request!;
         beforeDecision?.Invoke();
         var view = await service.ReadViewAsync(s.Tenant, request.RequestId, s.Human);
         request = await service.DecideAsync(s.Tenant, request.RequestId, s.Human, true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
@@ -219,7 +220,7 @@ public sealed partial class TenantBrowserApprovalTests
         public ValueTask<TenantOperationReceipt?> FindOperationReceiptAsync(Guid tenant, Guid operation, CancellationToken ct = default) => inner.FindOperationReceiptAsync(tenant, operation, ct);
         public ValueTask<TenantOperationReceipt?> TryCommitLocalEffectAsync(TenantSecurityState next, long revision, TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default) => inner.TryCommitLocalEffectAsync(next, revision, commit, audit, ct);
         public ValueTask<IReadOnlyList<TenantBrowserEffectFence>> RecoverableBrowserEffectsAsync(DateTimeOffset at, int limit, CancellationToken ct = default) => inner.RecoverableBrowserEffectsAsync(at, limit, ct);
-        public ValueTask<TenantOperationReceipt?> TrySettleBrowserEffectAsync(TenantSecurityState next, long revision, TenantBrowserEffectFence fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null) => inner.TrySettleBrowserEffectAsync(next, revision, fence, outcome, reason, audit, recovery, ct, observation);
+        public ValueTask<TenantOperationReceipt?> TrySettleBrowserEffectAsync(TenantSecurityState next, long revision, TenantBrowserEffectFence fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantBrowserEffectObservation? observation = null, TenantBrowserArtifactBatch? artifacts = null) => inner.TrySettleBrowserEffectAsync(next, revision, fence, outcome, reason, audit, recovery, ct, observation, artifacts);
         public async ValueTask<TenantBrowserEffectStart?> TryStartBrowserEffectAsync(TenantSecurityState next, long revision, TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
         {
             var start = await inner.TryStartBrowserEffectAsync(next, revision, commit, audit, ct);

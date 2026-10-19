@@ -6,7 +6,7 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantApprovalService
 {
     public async ValueTask<TenantApprovalPreparationResult> PrepareBrowserAsync(TenantRunReference reference, string tool, string argumentsJson,
-        long expectedRunRevision, Guid generation, CancellationToken ct = default, bool registerCold = false)
+        long expectedRunRevision, Guid generation, CancellationToken ct = default, bool registerCold = false, bool downloadArtifacts = false)
     {
         var permission = "browser.use";
         try
@@ -16,7 +16,7 @@ public sealed partial class TenantApprovalService
                 throw new AccessDeniedException("tenant_runtime_unavailable");
             var intent = TenantApprovalRules.BrowserIntent(run.SessionId, tool, argumentsJson);
             permission = intent.Command is AgentCore.Application.Ports.BrowserFillCredential ? "credentials.use" : intent.ReadOnly ? "browser.read" : "browser.use";
-            var prepared = await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(run, tool, argumentsJson, ct, registerCold).ConfigureAwait(false);
+            var prepared = await (browserTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(run, tool, argumentsJson, ct, registerCold, downloadArtifacts).ConfigureAwait(false);
             var value = prepared.Command;
             var operation = TenantApprovalRules.PrepareBrowser(ids.NewId(), run.AgentInstanceId, value, prepared.Agent.Instance.Revision, prepared.Agent.Instance.PersonaRevision);
             var review = await TenantBrowserOperationRules.NeedsReviewAsync(state, run.AgentInstanceId, value,

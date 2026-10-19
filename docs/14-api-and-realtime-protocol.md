@@ -1,5 +1,10 @@
 # HTTP API and Realtime Protocol
 
+## Browser Artifact publication results
+
+Canonical tenant Approval `operationResult` may include optional `browserArtifacts` with `status` (`published`, `empty`, `unavailable`), nullable safe `reasonCode` and bounded `files` of `{kind,artifactId}`. A completed Browser outcome does not imply file publication succeeded. These are factual references; no bytes, names, read capability or replay permission are returned in this field. Existing Session Artifact metadata/preview/content routes independently authorize each current recipient. No public Browser preparation/dispatch or image-body grant endpoint is added. Captures and explicitly requested downloads use the [existing effect contract](04-backend-interfaces.md#tenant-browser-capture-and-download-publication).
+
+
 ## Tenant Office inspection intent
 
 An XLSX explicit range without `sheet` selects the first worksheet; sparse mode without `sheet` traverses workbook order. The saved read scope distinguishes those meanings.

@@ -19,7 +19,10 @@ public sealed record TenantPreparedPreferencesDto(string? ResponseLength, string
     bool ClearResponseLength, bool ClearLanguage, bool ClearAskOneQuestionAtATime);
 public sealed record TenantApprovalDecisionDto(Guid PrincipalId, string Status, DateTimeOffset DecidedAt);
 public sealed record TenantApprovalOperationResultDto(Guid OperationId, string Outcome, string ReasonCode,
-    long InstanceRevision, long PersonaRevision, DateTimeOffset RecordedAt);
+    long InstanceRevision, long PersonaRevision, DateTimeOffset RecordedAt,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantBrowserArtifactPublicationDto? BrowserArtifacts = null);
+public sealed record TenantBrowserArtifactPublicationDto(string Status, string? ReasonCode, IReadOnlyList<TenantBrowserArtifactReferenceDto> Files);
+public sealed record TenantBrowserArtifactReferenceDto(string Kind, Guid ArtifactId);
 public sealed record TenantApprovalChangeDto(string Field, object? Before, object? After, bool BeforeAvailable, bool AfterAvailable, bool RestoresDefault);
 public sealed record TenantApprovalReviewDto(string AgentName, string? RequesterName, string? ReviewerName,
     IReadOnlyList<TenantApprovalChangeDto> Changes, bool CanDecide, bool CanCancel, string? DecisionUnavailableReason,

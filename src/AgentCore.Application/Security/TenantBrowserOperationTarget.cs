@@ -10,7 +10,7 @@ namespace AgentCore.Application.Security;
 public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, TenantRunConfigurationResolver configuration,
     IIamStore security, IamAuthorizer authorizer, IBrowser browser, TenantBrowserCredentialTarget? passwords = null, TenantBrowserUploadTarget? uploads = null)
 {
-    public async ValueTask<(TenantAgent Agent, PreparedBrowserCommand Command, TenantBrowserCommandWitness Witness)> PrepareAsync(AgentRun run, string tool, string json, CancellationToken ct, bool registerCold = false)
+    public async ValueTask<(TenantAgent Agent, PreparedBrowserCommand Command, TenantBrowserCommandWitness Witness)> PrepareAsync(AgentRun run, string tool, string json, CancellationToken ct, bool registerCold = false, bool downloadArtifacts = false)
     {
         var intent = TenantApprovalRules.BrowserIntent(run.SessionId, tool, json);
         var destinationUrl = intent.Command switch { BrowserNavigate { Operation: "goto" } navigation => navigation.Url,
@@ -26,7 +26,8 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         // Read/primary IAM and both capability ceilings precede the provider target observation.
         var command = new PreparedBrowserCommand(run.SessionId, tool, intent.Arguments, BrowserCommandIdentity.Hash(intent.Command),
-            "", intent.ReadOnly);
+            "", intent.ReadOnly, Artifacts: intent.Command is BrowserScreenshot || downloadArtifacts
+                ? TenantBrowserArtifactRules.Policy(intent.Command is BrowserScreenshot, downloadArtifacts, browser.HostPolicy) : null);
         TenantBrowserOperationRules.RequireSource(run.SessionId, tool, run, agent, baseline, session);
         var credential = intent.Command is BrowserFillCredential password
             ? await (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).ResolveAsync(run, password.CredentialRef, ct).ConfigureAwait(false) : null;
@@ -72,7 +73,7 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
     {
         var saved = request.Operation.BrowserCommand ?? throw new ArgumentException("Browser operation required.");
         // Restore trusted metadata after host loss, then compare the actual target. Never restore old native handles or transition an existing view.
-        var current = await PrepareAsync(run, saved.ToolName, saved.ArgumentsJson, ct, registerCold: browser is ITenantBrowserBinding).ConfigureAwait(false);
+        var current = await PrepareAsync(run, saved.ToolName, saved.ArgumentsJson, ct, registerCold: browser is ITenantBrowserBinding, downloadArtifacts: saved.Artifacts?.Downloads == true).ConfigureAwait(false);
         if (saved.Credential != current.Command.Credential)
             throw new SecurityConflictException(saved.Credential?.Origin != current.Command.Credential?.Origin ? "credential_origin_changed" : "credential_binding_changed");
         if (current.Command != saved || current.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
@@ -85,6 +86,8 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
     public async ValueTask<TenantAgent> RequireSourceAsync(TenantApprovalRequest request, AgentRun run, AgentRun? source, CancellationToken ct)
     {
         var value = request.Operation.BrowserCommand ?? throw new ArgumentException("Browser operation required.");
+        if (value.Artifacts is { } output && TenantBrowserArtifactRules.Policy(output.Capture, output.Downloads, browser.HostPolicy) != output)
+            throw new AccessDeniedException("browser_policy_changed");
         var (agent, baseline) = await configuration.BaselineAsync(request.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(request.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         TenantApprovalRules.Validate(request, run, agent, source: source);

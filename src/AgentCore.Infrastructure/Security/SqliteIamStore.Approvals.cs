@@ -215,6 +215,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 ({browserReadJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({browserReadJson})))
                 AND (json_extract(PayloadJson, '$.Operation.BrowserCommand.ReadOnly') = 1 OR {browserUseJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({browserUseJson})))
                 AND ({browserSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({browserSessionJson}))))
+                AND (json_type(PayloadJson, '$.Operation.BrowserCommand.Artifacts') IS NOT 'object' OR (
+                    ({artifactCreateJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactCreateJson})))
+                    AND EXISTS (SELECT 1 FROM TenantSessions root JOIN Sessions saved ON root.SessionId = saved.SessionId
+                        WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId
+                            AND saved.DurablyDeletedAtUtc IS NULL)))
                 AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.BrowserCommand.ArtifactSourcesJson')) member
                     WHERE ({artifactVerifyJson} <> 'null' AND json_extract(member.value, '$.ArtifactId') NOT IN (SELECT value FROM json_each({artifactVerifyJson})))
                         OR NOT EXISTS (SELECT 1 FROM Artifacts a WHERE a.TenantId = TenantApprovalRequests.TenantId

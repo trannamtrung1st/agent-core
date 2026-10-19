@@ -20,7 +20,7 @@ public static partial class TenantApprovalRules
             throw new ArgumentException("Use the exact supported Browser command schema.");
         var command = request.Command;
         // These require their own canonical resource/credential/attached-input adapters.
-        if (command is BrowserScreenshot or BrowserMouse or BrowserSetGeolocation
+        if (command is BrowserMouse or BrowserSetGeolocation
             || command is BrowserDrop { ArtifactId: not null }) throw new AccessDeniedException("browser_resource_adapter_unavailable");
         if (command is BrowserFillCredential password && password.CredentialRef != AgentCore.Domain.Credentials.CredentialRules.Reference(password.CredentialRef))
             throw new ArgumentException("Use the canonical bound Credential reference.");
@@ -90,6 +90,8 @@ public static partial class TenantApprovalRules
         foreach (var source in TenantBrowserUploadRules.Sources(value))
             lines.Add($"File: {source.DisplayName} ({source.ContentType}, {source.ByteSize} bytes)\nArtifact: {source.ArtifactId:D}\nSHA-256: {source.Sha256Hex}");
         if (command is BrowserUploadCommand) lines.Add("File input origin: " + value.FileInputOrigin + "\nSet the selected file input only; server submission is not confirmed.");
+        if (value.Artifacts is { } output)
+            lines.Add($"File publication: {(output.Capture ? "Capture image" : "")}{(output.Capture && output.Downloads ? " and " : "")}{(output.Downloads ? "accepted downloads" : "")}\nSession-owned immutable Artifacts; creation does not grant file read access.\nCapture privacy: {output.CapturePrivacyMode ?? "Not applicable"}\nCapture limit: {output.CaptureBytes} bytes, {output.CapturesPerScope} per task. Download limit: {output.DownloadBytes} bytes, {output.DownloadsPerScope} per task.");
         return lines.Count == 0 ? "No additional parameters" : string.Join("\n", lines);
         static string Label(string key) => key switch { "url" => "URL", "by" => "Match by", "frameRef" => "Frame", "tabRef" => "Tab",
             "within" => "Within", "cwd" => "Working directory", "mimeType" => "Media type", _ => string.Concat(key.Select((c, i) =>
@@ -102,6 +104,7 @@ public static partial class TenantApprovalRules
         if (parsed.Arguments != value.ArgumentsJson || parsed.ReadOnly != value.ReadOnly || BrowserCommandIdentity.Hash(parsed.Command) != value.CommandHash)
             throw new ArgumentException("Browser command parameters must be exact and canonical.");
         TenantBrowserCredentialRules.Shape(value, parsed.Command);
+        TenantBrowserArtifactRules.Shape(value, parsed.Command);
         _ = TenantBrowserUploadRules.Sources(value);
         if (parsed.Command is BrowserUploadCommand && (value.FileInputOrigin is null || value.FileInputOrigin == "about:blank" || !BrowserOrigin(value.FileInputOrigin)))
             throw new ArgumentException("Upload requires the exact file input origin.");

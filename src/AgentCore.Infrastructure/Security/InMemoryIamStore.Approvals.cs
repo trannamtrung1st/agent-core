@@ -35,6 +35,8 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && (r.Operation.BrowserCommand is null || (browserVisibility?.ReadInstances is null || browserVisibility.ReadInstances.Contains(r.Operation.InstanceId))
                     && (r.Operation.BrowserCommand.ReadOnly || browserVisibility?.UseInstances is null || browserVisibility.UseInstances.Contains(r.Operation.InstanceId))
                     && (browserVisibility?.Sessions is null || browserVisibility.Sessions.Contains(r.SessionId))
+                    && (r.Operation.BrowserCommand.Artifacts is null || (artifactCreateSessions is null || artifactCreateSessions.Contains(r.SessionId))
+                        && sessionBacking.ReadTenantSession(r.TenantId, r.SessionId) is { Snapshot.DurablyDeletedAt: null })
                     && TenantBrowserUploadRules.Sources(r.Operation.BrowserCommand).All(s =>
                         (artifactReadVisibility?.Artifacts is null || artifactReadVisibility.Artifacts.Contains(s.ArtifactId))
                         && artifactBacking?.FindTenantAsync(r.TenantId, r.SessionId, s.ArtifactId).Result is { } item

@@ -29,10 +29,12 @@ public sealed record PreparedSandboxRead(SandboxReadKind Kind, Guid SessionId, G
 
 public sealed record PreparedBrowserCredential(Guid CredentialId, Guid BindingId, string Reference, long BindingRevision,
     long CredentialRevision, long SecretRevision, string Origin, string DisplayName);
+public sealed record PreparedBrowserArtifacts(bool Capture, bool Downloads, int CaptureBytes, int DownloadBytes, int CapturesPerScope, int DownloadsPerScope, string? CapturePrivacyMode = null, string? CapturePrivacyHash = null);
 public sealed record PreparedBrowserCommand(Guid SessionId, string ToolName, string ArgumentsJson, string CommandHash, string TargetJson, bool ReadOnly,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBrowserCredential? Credential = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ArtifactSourcesJson = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FileInputOrigin = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FileInputOrigin = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBrowserArtifacts? Artifacts = null);
 
 public sealed record PreparedCredentialRead(Guid SessionId, Guid? CredentialId, string ArgumentsJson, string ReferencesJson);
 
