@@ -1,6 +1,6 @@
 # Agent Core MVP
 
-Exact admitted tenant resource files now use scoped UTF-8/Office reads and durable source-specific Review through the existing consent and Run owners. [Qualification](docs/reports/tenant-resource-read-consent-verification-2026-10-19.md) records the focused evidence and remaining limits. Resource browsing/search, other proposal families and final authority/schema cutover remain open; the full proposal stays active.
+Tenant resource namespaces now support scoped browsing/search and exact durable Review alongside admitted text/Office file reads. [Qualification](docs/reports/tenant-resource-namespace-verification-2026-10-19.md) records source, model/HTTP and SQLite recreation evidence. Other virtual resource/publication adapters, autonomous/transport families and final authority/schema cutover remain open; the full proposal stays active.
 
 
 Tenant workspace source publication now uses the existing atomic Artifact/Run/consent owners, with capability-specific model offering and a shared exact source inspector. [Focused verification](docs/reports/tenant-workspace-artifact-model-verification-2026-10-19.md) covers both stores, actual model/HTTP review and grants, stale source/access refusal, SQLite host recreation and live Synthetic download/preview. This is a bounded checkpoint; the full tenant IAM proposal remains active.

@@ -104,6 +104,15 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var mutationDeleteJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.Deletes);
         var mutationAgentsJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.HomeAgents?.Select(id => id.ToString("D")).ToArray());
         var mutationSessionsJson = System.Text.Json.JsonSerializer.Serialize(workspaceMutationVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
+        var resourceOwners = await db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE TenantId = {tenantId} AND
+            (Permission = 'resources.read' OR json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS 'text')
+            """).AsNoTracking().Select(r => r.InstanceId).Distinct().ToArrayAsync(ct).ConfigureAwait(false);
+        var ownedResources = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var owner in resourceOwners)
+            foreach (var scope in await ChildCatalogAsync(db, tenantId, Guid.Parse(owner), null, ct).ConfigureAwait(false))
+                if (scope.ResourceType == "resource") ownedResources.Add(scope.ResourceId!);
+        var ownedResourceJson = System.Text.Json.JsonSerializer.Serialize(ownedResources);
         var source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE
             (json_type(PayloadJson, '$.Operation.WorkspaceMutation') IS NOT 'object' OR (
@@ -123,7 +132,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                         AND root.AgentInstanceId = TenantApprovalRequests.InstanceId AND root.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL))) AND
             (json_type(PayloadJson, '$.Operation.WorkspaceRead') IS NOT 'object' OR (
                 ((Permission = 'workspaces.read' AND ({workspaceJson} = 'null' OR ResourceId IN (SELECT value FROM json_each({workspaceJson}))))
-                    OR (Permission = 'resources.read' AND ({resourceJson} = 'null' OR ResourceId IN (SELECT value FROM json_each({resourceJson})))) )
+                    OR (Permission = 'resources.read' AND ({resourceJson} = 'null' OR ResourceId IN (SELECT value FROM json_each({resourceJson})))
+                        AND ResourceId IN (SELECT value FROM json_each({ownedResourceJson})))
+                    OR (json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS 'text' AND NOT EXISTS (
+                        SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson')) member
+                        WHERE (InstanceId || ':' || json_extract(member.value, '$.Key')) NOT IN (SELECT value FROM json_each({ownedResourceJson}))
+                            OR ({resourceJson} <> 'null' AND (InstanceId || ':' || json_extract(member.value, '$.Key')) NOT IN (SELECT value FROM json_each({resourceJson}))))))
                 AND ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
                 AND (json_extract(PayloadJson, '$.Operation.WorkspaceRead.Working') = 1 OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))
                 AND EXISTS (SELECT 1 FROM TenantSessions AS root JOIN Sessions AS saved ON saved.SessionId = root.SessionId
@@ -167,14 +181,6 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var query = source.AsNoTracking().Where(r => r.TenantId == tenantId);
         if (page.SessionId is { } session) query = query.Where(r => r.SessionId == session.ToString("D"));
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
-        // Current child ownership is independent of a tenant-wide read role. Removed bindings must not affect counts.
-        var resourceOwners = await query.Where(r => r.Permission == "resources.read").Select(r => r.InstanceId).Distinct().ToArrayAsync(ct).ConfigureAwait(false);
-        var currentResources = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var owner in resourceOwners)
-            foreach (var scope in await ChildCatalogAsync(db, tenantId, Guid.Parse(owner), null, ct).ConfigureAwait(false))
-                if (scope.ResourceType == "resource") currentResources.Add(scope.ResourceId!);
-        var resourceIds = currentResources.ToArray();
-        query = query.Where(r => r.Permission != "resources.read" || resourceIds.Contains(r.ResourceId));
         if (allowedInstances is not null)
         { var ids = allowedInstances.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "agents.update" || ids.Contains(r.InstanceId)); }
         if (sandboxVisibility?.Instances is not null)

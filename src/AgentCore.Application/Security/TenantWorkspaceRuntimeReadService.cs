@@ -16,11 +16,12 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
     ITenantSessionStore sessions, ITenantWorkspaceReadStore files, TenantRunConfigurationResolver configurations,
     IIamStore security, IamAuthorizer iam, TimeProvider time, ITenantApprovalStore approvals, IIdGenerator ids, ITenantApprovedOperationStore effects, IOfficeProcessor? office = null, TenantResourceSourceTarget? resources = null)
 {
-    private sealed record Read(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent, TenantWorkspaceReference Workspace, TenantResourceSourceObservation? Resource = null);
+    private sealed record Read(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent, TenantWorkspaceReference Workspace, TenantResourceSourceObservation? Resource = null, ResourceCollection? Collection = null);
     private async ValueTask<Read> Require(TenantRuntimeFrame frame, string tool, TenantWorkspaceReadArguments args, CancellationToken ct, bool audit = false, bool approved = false, bool live = true)
     {
         if (TenantWorkspaceReadContract.IsResourcePath(args.Path))
         {
+            if (tool is ToolCatalog.WorkspaceList or ToolCatalog.WorkspaceSearch) return await RequireCollection(frame, tool, args, ct, audit, approved, live).ConfigureAwait(false);
             var source = await (resources ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireMetadataAsync(frame, tool, args.Path, ct, approved, live, audit).ConfigureAwait(false);
             return new(source.Run, source.Security, source.Session, source.Agent, new(source.Observation.TenantId, source.Observation.InstanceId), source.Observation);
         }
@@ -63,7 +64,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         var after = await Require(frame, tool, args, ct, approved: approved, live: live).ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.State.Tenant.Revision != after.State.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
-            || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Workspace != after.Workspace || before.Resource != after.Resource)
+            || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Workspace != after.Workspace || before.Resource != after.Resource || before.Collection?.Hash != after.Collection?.Hash)
             throw new SecurityConflictException("workspace_source_changed");
         if ((await security.ReadTenantAsync(after.Workspace.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != after.State.Tenant.Revision)
             throw new SecurityConflictException("workspace_source_changed");
@@ -83,10 +84,12 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         var args = TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson);
         var before = await Require(frame, call.Name, args, ct, !approved, approved, live).ConfigureAwait(false);
         string fingerprint = "";
-        object Witness() => before.Resource is null ? (object)new { tool = call.Name, arguments = args }
+        object Witness() => before.Collection is not null ? new { tool = call.Name, arguments = args, resourceCollection = true, observationHash = fingerprint } : before.Resource is null ? (object)new { tool = call.Name, arguments = args }
             : new { tool = call.Name, arguments = args, resource = before.Resource, observationHash = fingerprint };
         string result;
-        if (call.Name == ToolCatalog.WorkspaceSearch)
+        if (before.Collection is not null)
+            (result, fingerprint) = await InspectCollection(frame, call, args, before, remainingBytes, ct, approved, live).ConfigureAwait(false);
+        else if (call.Name == ToolCatalog.WorkspaceSearch)
             (result, fingerprint) = await Search(frame, args, before, remainingBytes, ct, approved, live).ConfigureAwait(false);
         else if (call.Name == ToolCatalog.WorkspaceList)
         {
@@ -154,7 +157,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         {
             var observed = await InspectCore(frame, call, remainingBytes, ct).ConfigureAwait(false);
             var exact = TenantApprovalRules.PrepareWorkspaceRead(ids.NewId(), frame.Owner.AgentInstanceId,
-                Witness(frame.SessionId, call, observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision), observed.Before.Agent.Instance.Revision, observed.Before.Agent.Instance.PersonaRevision);
+                Witness(frame.SessionId, call, observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson), observed.Before.Agent.Instance.Revision, observed.Before.Agent.Instance.PersonaRevision);
             var prior = await approvals.FindRootApprovalAsync(observed.Before.Workspace.TenantId, observed.Before.Run.Admission.ExecutionContext!.RootActivationId,
                 observed.Before.Agent.PrincipalId, exact, ct).ConfigureAwait(false);
             if (prior is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));
@@ -201,7 +204,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
                 using var doc = JsonDocument.Parse(message.Text); var witness = doc.RootElement.GetProperty("workspaceRead");
                 var observed = await InspectCore(frame, new("resource-revalidate", message.Name!, TenantWorkspaceReadContract.Canonical(message.Name!, args)), ToolLimits.MaxOutputBytes, ct).ConfigureAwait(false);
                 if (witness.GetProperty("observationHash").GetString() != observed.Hash
-                    || witness.GetProperty("resource").Deserialize<TenantResourceSourceObservation>() != observed.Before.Resource) throw new AccessDeniedException("resource_source_changed");
+                    || observed.Before.Collection is null && witness.GetProperty("resource").Deserialize<TenantResourceSourceObservation>() != observed.Before.Resource) throw new AccessDeniedException("resource_source_changed");
                 continue;
             }
             var before = await Require(frame, message.Name!, args, ct).ConfigureAwait(false);

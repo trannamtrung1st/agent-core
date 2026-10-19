@@ -1,6 +1,6 @@
 # TODO
 
-Exact tenant resource file reads now use the current scoped source, resource-child Review and incumbent successor/checkpoint machinery. [Current qualification](docs/reports/tenant-resource-read-consent-verification-2026-10-19.md) supersedes exact file-read/Office-consent pending notes below. Resource namespace browsing/search, other resource/publication adapters, autonomous/transport families and final legacy authority/schema cutover remain pending. The full proposal stays active.
+Tenant `/agent/resources` and `/agent/instance/resources` now support permission-filtered browsing/search and exact source-set Review through the incumbent reader, consent and checkpoint owners. [Current qualification](docs/reports/tenant-resource-namespace-verification-2026-10-19.md) supersedes resource namespace browsing/search pending notes below. Other virtual resource/publication adapters, autonomous/transport families and final legacy authority/schema cutover remain pending. The full proposal stays active.
 
 
 Pinned resource reads now have an internal current tenant/Instance source boundary and verified immutable byte facet. [Focused verification](docs/reports/tenant-resource-source-verification-2026-10-19.md) covers independent source IAM/policy, same-Account isolation, late revocation/expiry and native blob safety. Model `/agent` projection, namespace browsing and durable resource-read consent remain pending; this prerequisite does not grant read authority. The full proposal remains active.

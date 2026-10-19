@@ -29,10 +29,14 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         TenantResourceSourceObservation Observation);
     public ValueTask<TenantResourceSource> CaptureAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct = default) =>
         CaptureForInspectionAsync(frame, tool, path, false, true, ct);
-    internal async ValueTask<TenantResourceSource> CaptureForInspectionAsync(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, CancellationToken ct)
+    internal ValueTask<TenantResourceSource> CaptureForInspectionAsync(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, CancellationToken ct) =>
+        CaptureCore(frame, tool, path, approved, live, false, ct);
+    internal ValueTask<TenantResourceSource> CaptureForSearchAsync(TenantRuntimeFrame frame, string path, bool approved, bool live, CancellationToken ct) =>
+        CaptureCore(frame, ToolCatalog.WorkspaceSearch, path, approved, live, true, ct);
+    private async ValueTask<TenantResourceSource> CaptureCore(TenantRuntimeFrame frame, string tool, string path, bool approved, bool live, bool search, CancellationToken ct)
     {
         ValidatePath(path);
-        var before = await RequireMetadataAsync(frame, tool, path, ct, approved, live).ConfigureAwait(false);
+        var before = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search).ConfigureAwait(false);
         var resource = before.Observation.Resource;
         DefinitionResourcePolicies.ValidateContentSize(resource.ByteLength);
         byte[] bytes;
@@ -48,7 +52,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         { throw new AccessDeniedException("resource_content_unavailable"); }
         // Freeze before checking post-I/O authority; callers receive only a defensive copy of these verified bytes.
         var captured = new TenantResourceSource(before.Observation, bytes);
-        var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live).ConfigureAwait(false);
+        var after = await RequireMetadataAsync(frame, tool, path, ct, approved, live, search: search).ConfigureAwait(false);
         if (before.Run.Revision != after.Run.Revision || before.Security.Tenant.Revision != after.Security.Tenant.Revision
             || before.Agent.Instance.Revision != after.Agent.Instance.Revision || before.Session.Owner != after.Session.Owner
             || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Observation != after.Observation)
@@ -60,7 +64,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         ct.ThrowIfCancellationRequested();
         return captured;
     }
-    internal async ValueTask<Source> RequireMetadataAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct, bool approved = false, bool live = true, bool audit = false)
+    internal async ValueTask<Source> RequireMetadataAsync(TenantRuntimeFrame frame, string tool, string path, CancellationToken ct, bool approved = false, bool live = true, bool audit = false, bool search = false)
     {
         ValidatePath(path);
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
@@ -73,7 +77,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended) throw new AccessDeniedException("resource_unavailable");
-        if (!TenantWorkspaceReadContract.IsFile(tool) || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool))
+        if (!(TenantWorkspaceReadContract.IsFile(tool) || search && tool == ToolCatalog.WorkspaceSearch) || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool))
             throw new AccessDeniedException("capability_unavailable");
         var admitted = run.Admission.Configuration.Resources.Where(r => r.VirtualPath == path).Take(2).ToArray();
         var resource = admitted.Length == 1 ? admitted[0] : throw new AccessDeniedException("resource_unavailable");
@@ -103,12 +107,12 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         return new(run, state, session, current.Snapshot.Agent,
             new(tenant, run.AgentInstanceId, run.SessionId, resource, run.DefinitionId, run.DefinitionVersion, revision));
     }
-    internal static void ValidatePath(string path)
+    internal static void ValidatePath(string path, bool collection = false)
     {
         // Virtual paths match manifest entries literally; only their verified digest reaches the filesystem.
         if (string.IsNullOrWhiteSpace(path) || Encoding.UTF8.GetByteCount(path) > 4095 || path.Contains('\\') || path.Any(char.IsControl)
             || path.Split('/').Skip(1).Any(p => p.Length == 0 || p is "." or "..")
-            || !path.StartsWith("/agent/resources/", StringComparison.Ordinal) && !path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal))
+            || !(collection && path is "/agent/resources" or "/agent/instance/resources") && !path.StartsWith("/agent/resources/", StringComparison.Ordinal) && !path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal))
             throw new ArgumentException("Use an exact admitted resource file path.");
     }
 }

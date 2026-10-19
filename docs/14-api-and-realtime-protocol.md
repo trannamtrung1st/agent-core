@@ -1492,3 +1492,14 @@ The existing `workspaceMutationTool`/`workspaceMutationArguments` review fields 
 ## Exact resource file observations
 
 Tenant model `workspace.read` and the two read-only Office inspectors accept one exact admitted `/agent/resources/...` or `/agent/instance/resources/...` file. Caller-selected tenant, Instance, Session, resource key or digest fields are not accepted. Core derives the actual child and evaluates independent Session/Agent/resource reads. `resource_read_review_required` directs the model to the existing `inspect_workspace` intent with the same exact `read.tool` and `read.arguments`. The shared path/page/disclosure review fields remain body-free; `readAuthorized` and `workspaceObservation` retain the existing consent-result contract. Approval is for one saved source and page; no mutation, later discovery or recipient download is authorized. Resource list/search, unrelated `/agent` aliases and resource publication are not enabled by this file-read contract. [Qualification](reports/tenant-resource-read-consent-verification-2026-10-19.md).
+
+
+## Resource namespace list and search
+
+Tenant model `workspace.list` and `workspace.search` accept `/agent/resources`, `/agent/instance/resources` and exact descendants. Listing returns only readable current/admitted children; folders are derived from contributing readable leaves. `nextPath` is an exact immediate child cursor, and unauthorized files never affect page/truncation facts. Search retains the existing query/glob/result bounds: at most 200 files, depth eight and 256 KiB per strict UTF-8 content scan. Binary and larger content are skipped; matching filenames may still be returned. Results are bounded untrusted observations. No source key, tenant, owner or digest can be supplied by the model.
+
+`resource_read_review_required` uses the existing `inspect_workspace` intent. The primary address is the actual Session observation, with independent Agent/Session and exact contributing resource reads. Consent binds the saved source set, including scan non-matches and pagination lookahead; it grants no later discovery, mutation, publication or recipient download. Existing `workspaceObservation`, `readAuthorized` and observation-unavailable fields apply. Other `/agent` aliases and virtual resource families remain separate conversions. [Qualification](reports/tenant-resource-namespace-verification-2026-10-19.md).
+
+```json
+{"operation":"inspect_workspace","read":{"tool":"workspace.search","arguments":{"path":"/agent/instance/resources","query":"renewal","glob":"**/*.txt","maxResults":10}}}
+```

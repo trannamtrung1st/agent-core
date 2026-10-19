@@ -13,7 +13,7 @@ public sealed partial class InMemoryIamStore
         var session = sessionBacking.ReadTenantSession(request.TenantId, value.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
         var current = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
         TenantWorkspaceReadOperationRules.Require(value, run, agent, current, session);
-        if (value.ResourceKey is not null) TenantWorkspaceReadOperationRules.RequireResourceRevision(value, run, agent, instances.ReadTenantResourcesAsync(agent.Instance.InstanceId).Result);
+        if (value.ResourceKey is not null || value.ResourceMembersJson is not null) TenantWorkspaceReadOperationRules.RequireResourceRevision(value, run, agent, instances.ReadTenantResourcesAsync(agent.Instance.InstanceId).Result);
         TenantWorkspaceReadOperationRules.PermissionsAsync(_tenants[request.TenantId], agent.Instance.InstanceId, value, agent.PrincipalId, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
     }
     private bool WorkspaceApprovalVisible(TenantApprovalRequest request, TenantWorkspaceReadApprovalVisibility? visible)
@@ -23,12 +23,22 @@ public sealed partial class InMemoryIamStore
         var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId).Result;
         return session is not null && session.Snapshot.DurablyDeletedAt is null && agent is not null && agent.PrincipalId == request.ExecutorPrincipalId
             && session.Owner.AgentInstanceId == agent.Instance.InstanceId && session.Owner.ExecutorPrincipalId == agent.PrincipalId
+            && (value.ResourceMembersJson is null || CollectionVisible(request, visible))
             && (value.ResourceKey is null || ChildCatalog(request.TenantId, agent.Instance.InstanceId, null, CancellationToken.None)
                 .Contains(TenantAgentChildScopes.Scope(request.TenantId, agent.Instance.InstanceId, "resource", value.ResourceKey)))
-            && (value.ResourceKey is null ? visible?.Workspaces is null || visible.Workspaces.Contains(request.ResourceId)
-                : visible?.Resources is null || visible.Resources.Contains(request.ResourceId))
+            && (value.ResourceMembersJson is not null || (value.ResourceKey is null ? visible?.Workspaces is null || visible.Workspaces.Contains(request.ResourceId)
+                : visible?.Resources is null || visible.Resources.Contains(request.ResourceId)))
             && (value.Working || visible?.HomeAgents is null || visible.HomeAgents.Contains(agent.Instance.InstanceId))
             && (visible?.Sessions is null || visible.Sessions.Contains(value.SessionId));
+    }
+
+    private bool CollectionVisible(TenantApprovalRequest request, TenantWorkspaceReadApprovalVisibility? visible)
+    {
+        var owned = ChildCatalog(request.TenantId, request.Operation.InstanceId, null, CancellationToken.None);
+        return TenantApprovalRules.ResourceReadMembers(request.Operation.WorkspaceRead!).All(member => {
+            var scope = TenantAgentChildScopes.Scope(request.TenantId, request.Operation.InstanceId, "resource", member.Key);
+            return owned.Contains(scope) && (visible?.Resources is null || visible.Resources.Contains(scope.ResourceId!));
+        });
     }
 
 }

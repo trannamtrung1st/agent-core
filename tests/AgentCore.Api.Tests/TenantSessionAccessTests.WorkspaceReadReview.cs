@@ -37,6 +37,13 @@ public sealed partial class TenantSessionAccessTests
     [Fact]
     public Task Tenant_resource_read_pending_consent_survives_actual_SQLite_host_recreation() => WorkspaceReadReviewFlow(true, false, false, "approve", restart: true, resource: true);
 
+    [Theory] [InlineData(false, false, "approve")] [InlineData(true, false, "approve")]
+    [InlineData(false, true, "approve")] [InlineData(true, true, "approve")]
+    [InlineData(false, false, "reject")] [InlineData(true, false, "reject")]
+    public Task Tenant_resource_namespace_model_HTTP_returns_exact_collection(bool sqlite, bool search, string decision) => WorkspaceReadReviewFlow(sqlite, false, !search, decision, search: search, resource: true);
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public Task Tenant_resource_namespace_pending_consent_survives_actual_SQLite_host_recreation(bool search) => WorkspaceReadReviewFlow(true, false, !search, "approve", restart: true, search: search, resource: true);
+
     private async Task WorkspaceReadReviewFlow(bool sqlite, bool working, bool list, string decision, bool restart = false, bool search = false, bool resource = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-workspace-read-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
@@ -67,11 +74,18 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(path, saved.GetProperty("resource").GetProperty("virtualPath").GetString());
                 path = saved.GetProperty("resource").GetProperty("virtualPath").GetString()!;
                 instanceRevision = saved.GetProperty("instanceRevision").GetInt64();
+                if (search)
+                {
+                    var named = await owner.PostAsJsonAsync(api + $"/agents/{instance}/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision,
+                        input = new { logicalPath = "saved-name.txt", kind = AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, mediaType = "text/plain", content = "Unrelated literal body"u8.ToArray() } });
+                    Assert.True(named.IsSuccessStatusCode, await named.Content.ReadAsStringAsync());
+                    instanceRevision = (await Json(named)).GetProperty("instanceRevision").GetInt64();
+                }
             }
             var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision }))).GetProperty("sessionId").GetGuid();
             var workspace = api + (working ? $"/sessions/{session}/workspace" : $"/agents/{instance}/workspace");
             if (!resource) Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(path)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent(Encoding.UTF8.GetBytes(body)))).StatusCode);
-            if (search)
+            if (search && !resource)
             {
                 var named = path[..path.LastIndexOf('/')] + "/saved-name.txt";
                 Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsync(workspace + $"/content?path={Uri.EscapeDataString(named)}&expectedRevision={await Revision(owner, tenant)}", new ByteArrayContent("Unrelated literal body"u8.ToArray()))).StatusCode);
@@ -91,7 +105,7 @@ public sealed partial class TenantSessionAccessTests
             }
             if (restart)
             {
-                await factory.DisposeAsync(); model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = search ? ToolCatalog.WorkspaceSearch : ToolCatalog.WorkspaceRead };
+                await factory.DisposeAsync(); model = new WorkspaceRecordingModel(path) { Reviewed = true, ReviewTool = search ? ToolCatalog.WorkspaceSearch : list ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead };
                 recreated = new NativeTenantSqliteFactory(root, model); recreatedOwner = recreated.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
                 factory = recreated; owner = recreatedOwner; await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
                 runs = factory.Services.GetRequiredService<ITenantRunStore>();

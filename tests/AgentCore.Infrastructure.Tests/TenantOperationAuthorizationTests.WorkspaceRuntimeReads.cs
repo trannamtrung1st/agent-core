@@ -13,8 +13,8 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantOperationAuthorizationTests
 {
-    private static TenantWorkspaceRuntimeReadService WorkspaceRuntimeReads(Fixture f, ITenantWorkspaceReadStore? store = null, IOfficeProcessor? office = null) => new(Operations(f),
-        (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, store ?? WorkspaceReader(f), f.RunConfiguration(), f.Iam, f.Authorizer, f.Clock, (ITenantApprovalStore)f.Iam, f.Ids, (ITenantApprovedOperationStore)f.Iam, office, ResourceSources(f));
+    private static TenantWorkspaceRuntimeReadService WorkspaceRuntimeReads(Fixture f, ITenantWorkspaceReadStore? store = null, IOfficeProcessor? office = null, TenantResourceSourceTarget? resourceSources = null) => new(Operations(f),
+        (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, store ?? WorkspaceReader(f), f.RunConfiguration(), f.Iam, f.Authorizer, f.Clock, (ITenantApprovalStore)f.Iam, f.Ids, (ITenantApprovedOperationStore)f.Iam, office, resourceSources ?? ResourceSources(f));
     private static async Task<RoleAssignment> GrantWorkspaceRuntimeReads(Fixture f, Environment s, string[]? keys = null, AccessScope? scope = null)
     {
         var role = await f.Access.SaveRoleAsync(s.Owner.PrincipalId, s.Tenant, null, "Owned model workspace reads", keys ?? ["agents.read", "sessions.read", "workspaces.read"], (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);

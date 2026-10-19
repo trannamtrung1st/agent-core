@@ -789,3 +789,8 @@ Virtual resource reads resolve one exact admitted resource through the current t
 ## Tenant exact resource read and consent
 
 The workspace read owner consumes the pinned resource source for exact admitted resource files, with a typed source variant in its existing durable consent payload. Resource-child authority replaces workspace authority for this variant; Session/Agent reads remain independent. The same approval, Run continuation, receipt, root suppression and checkpoint owners apply. Native immutable bytes are never resolved through a writable workspace fallback. Current resource ownership also filters approval counts before paging, including removed bindings. [Qualification](reports/tenant-resource-read-consent-verification-2026-10-19.md) supersedes read-model/Office/consent-pending notes above only for exact resource leaves; namespace browsing/search and other families remain open.
+
+
+## Tenant resource namespace read and consent
+
+The incumbent workspace reader now derives bounded resource folders/pages and search results from the actual scoped admitted/current manifest. Current raw child reads filter the namespace before results or bounds. Collection consent is one Session-rooted observation with exact compound child witnesses, reusing the existing approval/Run/receipt/checkpoint owners. No directory IAM entity, file index or alternative effect engine is introduced. Other virtual resources, publication adapters and autonomous/transport families remain separate conversions. [Focused qualification](reports/tenant-resource-namespace-verification-2026-10-19.md).

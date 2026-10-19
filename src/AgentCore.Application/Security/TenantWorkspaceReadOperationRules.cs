@@ -15,6 +15,11 @@ public static class TenantWorkspaceReadOperationRules
     {
         yield return ("sessions.read", TenantSessionRules.Scope(tenant, value.SessionId));
         if (!value.Working) yield return ("agents.read", AccessScope.ForResource(tenant, "agent", instance.ToString("D")));
+        if (value.ResourceMembersJson is not null)
+        {
+            foreach (var member in TenantApprovalRules.ResourceReadMembers(value)) yield return ("resources.read", TenantAgentChildScopes.Scope(tenant, instance, "resource", member.Key));
+            yield break;
+        }
         yield return value.ResourceKey is { } key ? ("resources.read", TenantAgentChildScopes.Scope(tenant, instance, "resource", key))
             : ("workspaces.read", TenantWorkspaceRules.Scope(new(tenant, instance, value.Working ? value.SessionId : null)));
     }
@@ -22,14 +27,19 @@ public static class TenantWorkspaceReadOperationRules
     {
         var args = TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson);
         var owner = new TenantWorkspaceReference(agent.TenantId, agent.Instance.InstanceId, value.Working ? value.SessionId : null);
-        if (value.ResourceKey is null) TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(value.ToolName));
+        if (value.ResourceMembersJson is not null)
+        {
+            foreach (var member in TenantApprovalRules.ResourceReadMembers(value))
+                if (!run.Admission.Configuration!.Resources.Any(r => r.Key == member.Key && (r.VirtualPath == args.Path || r.VirtualPath.StartsWith(args.Path + "/", StringComparison.Ordinal)))) throw new SecurityConflictException("resource_source_changed");
+        }
+        else if (value.ResourceKey is null) TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(value.ToolName));
         else
         {
             TenantResourceSourceTarget.ValidatePath(args.Path);
             if (!TenantWorkspaceReadContract.IsFile(value.ToolName) || value.Working || value.ResourceRevision is null or < 0
                 || run.Admission.Configuration!.Resources.Count(r => r.Key == value.ResourceKey && r.VirtualPath == args.Path) != 1) throw new AccessDeniedException("resource_source_changed");
         }
-        if (args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
+        if (value.ResourceMembersJson is null && args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
         if (value.SessionId != run.SessionId || session.Owner.SessionId != run.SessionId || session.Owner.TenantId != run.Owner.TenantId
             || agent.TenantId != run.Owner.TenantId || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != run.Owner.ExecutorPrincipalId
             || session.Owner.ExecutorPrincipalId != agent.PrincipalId || session.Owner.AgentInstanceId != agent.Instance.InstanceId
@@ -39,11 +49,16 @@ public static class TenantWorkspaceReadOperationRules
             || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
             || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, value.ToolName) || !TenantWorkspaceReadContract.Allows(current, value.ToolName))
             throw new AccessDeniedException("workspace_source_changed");
-        if (value.ResourceKey is null && !value.Working && StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy!.HomeAccess == HomeAccess.Disabled)
+        if (value.ResourceMembersJson is null && value.ResourceKey is null && !value.Working && StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy!.HomeAccess == HomeAccess.Disabled)
             throw new AccessDeniedException("home_access_disabled");
     }
     public static void RequireResourceRevision(PreparedWorkspaceRead value, AgentRun run, TenantAgent agent, InstanceResourceSnapshot resources)
     {
+        if (value.ResourceMembersJson is not null)
+        {
+            foreach (var member in TenantApprovalRules.ResourceReadMembers(value)) RequireResourceRevision(value with { ResourceMembersJson = null, ResourceKey = member.Key, ResourceRevision = member.Revision }, run, agent, resources);
+            return;
+        }
         if (value.ResourceKey is not { } key) return;
         if (key.StartsWith("instance:", StringComparison.Ordinal))
         {

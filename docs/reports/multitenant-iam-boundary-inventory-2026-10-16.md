@@ -1,5 +1,8 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+Successor checkpoint: resource namespace browsing/search now filters current admitted children before results/bounds and uses exact all-member Review through existing consent/Run/receipt/checkpoint owners. [Qualification](tenant-resource-namespace-verification-2026-10-19.md) supersedes namespace-list/search pending notes only. Other virtual resources/publication adapters, autonomous/transport families and final authority/schema removal remain open.
+
+
 Successor checkpoint: exact admitted resource text/Office reads now use current resource-child plus Session/Agent IAM and the incumbent durable Review/Run/receipt/checkpoint owners. [Focused evidence](tenant-resource-read-consent-verification-2026-10-19.md) supersedes exact resource-file read/consent pending notes only. Broader resource namespace/adapters, autonomous/transport families and final legacy authority/schema removal remain open.
 
 

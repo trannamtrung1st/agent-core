@@ -975,3 +975,8 @@ The internal exact resource source now binds current tenant/Instance ownership, 
 ## Tenant exact resource read consent checkpoint — 2026-10-19
 
 Exact admitted resource text and Office files now flow through the incumbent read/consent/successor/checkpoint owners under current independent Session, Agent and resource-child authority. [Qualification](reports/tenant-resource-read-consent-verification-2026-10-19.md) supersedes exact resource-leaf model/Office/read-Review-pending notes only. Resource namespace listing/search, other resource/publication adapters, autonomous/transport families and final legacy authority/schema cutover remain open. The full proposal remains active; this does not claim milestone acceptance.
+
+
+## Tenant resource namespace checkpoint — 2026-10-19
+
+Resource namespace browsing/search now uses raw child filtering and exact collection Review through the incumbent read/consent/successor/checkpoint owners. This supersedes resource namespace browsing/search pending notes only. Other virtual resource and publication adapters, autonomous/transport families, final legacy authority/schema removal and full proposal acceptance remain open. This checkpoint does not start or claim milestone acceptance. [Focused qualification](reports/tenant-resource-namespace-verification-2026-10-19.md).
