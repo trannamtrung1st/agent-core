@@ -12,13 +12,14 @@ public sealed record TenantAttachmentReadObservation(TenantAttachmentContextSour
 
 public sealed partial class TenantAttachmentRuntimeContextService
 {
-    private async ValueTask<(View View, AttachmentRecord Source)> RequireRead(TenantRuntimeFrame frame, TenantAttachmentReadArguments args, CancellationToken ct, bool audit = false)
+    private async ValueTask<(View View, AttachmentRecord Source)> RequireRead(TenantRuntimeFrame frame, TenantAttachmentReadArguments args, CancellationToken ct, bool audit = false, bool approved = false, bool live = true)
     {
-        var view = await Load(frame, ct).ConfigureAwait(false);
+        var view = await Load(frame, ct, live).ConfigureAwait(false);
         var current = await configurations.CurrentPolicyAsync(frame.Owner.TenantId!.Value, frame.Owner.AgentInstanceId, ct).ConfigureAwait(false);
         if (current.Agent.Instance.Revision != view.Agent.Instance.Revision || !TenantAttachmentReadContract.Allows(view.Run.Admission.Configuration!.Definition)
             || !TenantAttachmentReadContract.Allows(current.Definition)) throw new AccessDeniedException("capability_unavailable");
         await TenantAttachmentRules.PermissionsAsync(view.State, view.Agent.PrincipalId, frame.SessionId, args.AttachmentId, "attachments.read", iam, ct).ConfigureAwait(false);
+        if (!approved)
         foreach (var (key, scope) in new[] { ("sessions.read", TenantSessionRules.Scope(frame.Owner.TenantId.Value, frame.SessionId)),
             ("attachments.read", TenantAttachmentRules.Scope(frame.Owner.TenantId.Value, args.AttachmentId)) })
         {
@@ -33,21 +34,36 @@ public sealed partial class TenantAttachmentRuntimeContextService
         TenantAttachmentReadContract.Window(args, source.ContentType);
         return (view, source);
     }
-    private async ValueTask ReadFence(TenantRuntimeFrame frame, View before, TenantAttachmentReadObservation observation, CancellationToken ct)
+    private async ValueTask ReadFence(TenantRuntimeFrame frame, View before, TenantAttachmentReadObservation observation, CancellationToken ct, bool approved = false)
     {
-        var after = await RequireRead(frame, TenantAttachmentReadContract.Parse(observation.ArgumentsJson), ct).ConfigureAwait(false);
+        var after = await RequireRead(frame, TenantAttachmentReadContract.Parse(observation.ArgumentsJson), ct, approved: approved).ConfigureAwait(false);
         if (TenantAttachmentContextRules.Witness(after.Source, observation.Source.ProcessorVersion) != observation.Source)
             throw new AccessDeniedException("attachment_source_changed");
-        await RequireSourcesAsync(after.View.Run, [observation.Source], ct).ConfigureAwait(false);
+        if (observation.Source.ProcessorVersion is not null)
+        {
+            if (observation.Source.ProcessorVersion != processor.Version) throw new AccessDeniedException("attachment_source_changed");
+            TenantAttachmentRules.Content(after.Source, await files.ReadTenantContentAsync(frame.Owner.TenantId!.Value, frame.SessionId, after.Source.AttachmentId, ct).ConfigureAwait(false));
+        }
         await Fence(frame, before, ct).ConfigureAwait(false);
     }
     public async ValueTask<ToolExecutionResult> InspectReadAsync(TenantRuntimeFrame frame, string arguments, bool vision, int remainingBytes,
-        IOfficeProcessor? office = null, CancellationToken ct = default)
+        IOfficeProcessor? office = null, CancellationToken ct = default) =>
+        await InspectReadCore(frame, arguments, vision, remainingBytes, office, ct, approved: false).ConfigureAwait(false);
+
+    private async ValueTask<ToolExecutionResult> InspectReadCore(TenantRuntimeFrame frame, string arguments, bool vision, int remainingBytes,
+        IOfficeProcessor? office, CancellationToken ct, bool approved)
     {
         var args = TenantAttachmentReadContract.Parse(arguments);
         try
         {
-            var (view, source) = await RequireRead(frame, args, ct, audit: true).ConfigureAwait(false);
+            var (view, source) = await RequireRead(frame, args, ct, audit: !approved, approved: approved).ConfigureAwait(false);
+            if (!approved)
+            {
+                var exact = TenantApprovalRules.PrepareAttachmentRead(ids.NewId(), view.Run.AgentInstanceId,
+                    WitnessRead(source, args, vision), view.Agent.Instance.Revision, view.Agent.Instance.PersonaRevision);
+                var prior = await approvals.FindRootApprovalAsync(frame.Owner.TenantId!.Value, view.Run.Admission.ExecutionContext!.RootActivationId, view.Agent.PrincipalId, exact, ct).ConfigureAwait(false);
+                if (prior is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));
+            }
             var type = AttachmentMedia.NormalizeContentType(source.ContentType);
             var processed = source.Readable && (!AttachmentMedia.IsImage(type) || vision);
             var observation = new TenantAttachmentReadObservation(TenantAttachmentContextRules.Witness(source, processed ? processor.Version : null), TenantAttachmentReadContract.Canonical(args));
@@ -87,7 +103,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
                         provenance = content.Provenance, failureCode = content.FailureCode, kind = content.Kind.ToString() })));
                 }
             }
-            await ReadFence(frame, view, observation, ct).ConfigureAwait(false);
+            await ReadFence(frame, view, observation, ct, approved).ConfigureAwait(false);
             return Encoding.UTF8.GetByteCount(result.Text) <= budget ? result : new(ToolJsonResults.FitToBudget(budget, """{"error":"output_limit"}"""));
         }
         catch (Exception e) when (e is AccessDeniedException or SecurityConflictException)
@@ -105,12 +121,24 @@ public sealed partial class TenantAttachmentRuntimeContextService
             return new(ToolJsonResults.FitToBudget(remainingBytes, JsonSerializer.Serialize(new { error = code, message = "The exact attachment observation is unavailable. Check current source and parameters." })));
         }
     }
+    public static bool HasReadObservation(ModelMessage message)
+    {
+        if (message.Role != ModelRole.Tool) return false;
+        if (message.Name == ToolCatalog.AttachmentsRead) return true;
+        if (message.Name != ToolCatalog.RequestAuthorization) return false;
+        try { using var doc = JsonDocument.Parse(message.Text); return doc.RootElement.TryGetProperty("attachmentObservation", out var data) && data.ValueKind != JsonValueKind.Null; }
+        catch (JsonException) { throw new AccessDeniedException("attachment_source_changed"); }
+    }
     private static TenantAttachmentReadObservation? Observation(ModelMessage message)
     {
         if (message.Role != ModelRole.Tool || message.Name != ToolCatalog.AttachmentsRead) return null;
+        return ObservationPayload(message.Text);
+    }
+    private static TenantAttachmentReadObservation? ObservationPayload(string json)
+    {
         try
         {
-            using var doc = JsonDocument.Parse(message.Text);
+            using var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.TryGetProperty("tenantAttachmentRead", out var marker)) return null;
             if (marker.ValueKind != JsonValueKind.True) throw new AccessDeniedException("attachment_source_changed");
             var value = doc.RootElement.GetProperty("attachmentRead").Deserialize<TenantAttachmentReadObservation>(OfficeReadResults.Json) ?? throw new AccessDeniedException("attachment_source_changed");
@@ -130,6 +158,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
                 var frame = Frame(run); var current = await RequireRead(frame, TenantAttachmentReadContract.Parse(observation.ArgumentsJson), ct).ConfigureAwait(false);
                 await ReadFence(frame, current.View, observation, ct).ConfigureAwait(false);
             }
+        await RequireStoredApprovedReadsAsync(run, messages, ct).ConfigureAwait(false);
     }
     public async ValueTask<List<ModelMessage>> RehydrateReadImagesAsync(AgentRun run, List<ModelMessage> messages, bool vision, CancellationToken ct = default)
     {
@@ -149,7 +178,9 @@ public sealed partial class TenantAttachmentRuntimeContextService
                     result.Add(message with { Parts = rebuilt.Parts }); continue;
                 }
             }
-            result.Add(message);
+            if (await RehydrateApprovedImageAsync(run, message, vision, ct).ConfigureAwait(false) is { } approvedImage)
+                result.Add(approvedImage);
+            else result.Add(message);
         }
         return result;
     }

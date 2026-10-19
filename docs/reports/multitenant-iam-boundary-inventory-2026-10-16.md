@@ -1,5 +1,10 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant Attachment exact read Review checkpoint — 2026-10-19
+
+Exact conversational Attachment read consent now binds actual sources and saved windows through the existing approval/receipt/successor/checkpoint owners. Independent Agent and reviewer reads remain required; no grant is created. [Focused qualification](tenant-attachment-read-review-verification-2026-10-19.md) supersedes explicit exact-read-Review-pending notes below. Public provided-file handoff/HTTP/Hub Attachment IDs, composer, publication, other proposal families and final obsolete-authority/schema cutover remain open. The full goal remains active.
+
+
 ## Tenant Attachment model read checkpoint — 2026-10-19
 
 Scoped conversational reads under Allowed policy now preserve incumbent media/Office behavior and current source/authority checks across the canonical tool loop and retained checkpoints. [Qualification](tenant-attachment-read-verification-2026-10-19.md) supersedes model reread-pending notes only for this bounded path. Public file messages, exact read Review, composer and Attachment publication remain unfinished; other proposal families and final obsolete-authority/schema cutover stay open. The full goal remains active.

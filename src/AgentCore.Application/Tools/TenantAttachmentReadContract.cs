@@ -42,6 +42,6 @@ public static class TenantAttachmentReadContract
             throw new ArgumentException("Use offset/limit only for DOCX and sheet/range/cursor only for XLSX.");
     }
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with {
-        Description = tool.Description + " Read one actual bound Attachment in this Session under independent current Agent Session/Attachment permissions, admitted/current tool capability and operation policy. No workspace copy or recipient download permission is granted. attachment_read_review_required means no content was read; exact read Review is not yet available on this tenant tool path. Do not repeat a refused read or switch identifiers to evade it."
+        Description = tool.Description + " Read one actual bound Attachment in this Session under independent current Agent Session/Attachment permissions, admitted/current tool capability and operation policy. No workspace copy or recipient download permission is granted. attachment_read_review_required means no content was read; request read_attachment through approvals.request_authorization with read containing these exact arguments. Consent applies only to the saved file and window. Do not repeat a refused read or switch identifiers to evade it."
     };
 }

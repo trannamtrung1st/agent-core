@@ -16,7 +16,7 @@ public sealed record TenantApprovalView(TenantApprovalRequest Request, long Secu
 public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null)
+    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -167,13 +167,14 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         var browserRead = await VisibleIds(before, human.PrincipalId, "browser.read", "agent", ct).ConfigureAwait(false);
         var browserUse = await VisibleIds(before, human.PrincipalId, "browser.use", "agent", ct).ConfigureAwait(false);
         var artifactCreate = await VisibleIds(before, human.PrincipalId, "artifacts.create", "session", ct).ConfigureAwait(false);
+        var attachmentReadIds = await VisibleIds(before, human.PrincipalId, "attachments.read", "attachment", ct).ConfigureAwait(false);
         var artifactReadIds = await VisibleIds(before, human.PrincipalId, "artifacts.read", "artifact", ct).ConfigureAwait(false);
         var workspaceScopes = await VisibleWorkspaceScopes(before, human.PrincipalId, ct).ConfigureAwait(false);
         var homeAgents = await VisibleIds(before, human.PrincipalId, "agents.read", "agent", ct).ConfigureAwait(false);
         var resourceScopes = await VisibleResourceReadScopes(before, human.PrincipalId, ct).ConfigureAwait(false);
         var workspaceWrites = await VisibleWorkspaceScopes(before, human.PrincipalId, ct, "workspaces.write").ConfigureAwait(false);
         var workspaceDeletes = await VisibleWorkspaceScopes(before, human.PrincipalId, ct, "workspaces.delete").ConfigureAwait(false);
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeAgents, sandboxSessions, resourceScopes), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeAgents, sandboxSessions)).ConfigureAwait(false);
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeAgents, sandboxSessions, resourceScopes), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeAgents, sandboxSessions), new(attachmentReadIds, sandboxSessions)).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -332,6 +333,12 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                 await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
                 await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
             }
+            if (request.Operation.AttachmentRead is not null)
+            {
+                var reads = attachmentReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                await reads.RequireInspectionAsync(request, run, ct).ConfigureAwait(false);
+                await reads.RequireInspectionReviewerAsync(request, state, human.PrincipalId, ct).ConfigureAwait(false);
+            }
             if (request.Operation.ArtifactVerification is not null)
             {
                 var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -394,6 +401,11 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         if (request.Operation.WorkspaceRead is not null)
         {
             try { await (workspaceReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }
+            catch (AccessDeniedException) { throw new AccessDeniedException("approval_unavailable"); }
+        }
+        if (request.Operation.AttachmentRead is not null)
+        {
+            try { await (attachmentReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }
             catch (AccessDeniedException) { throw new AccessDeniedException("approval_unavailable"); }
         }
         if (request.Operation.ArtifactVerification is not null)

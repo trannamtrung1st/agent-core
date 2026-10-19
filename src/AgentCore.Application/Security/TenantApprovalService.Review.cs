@@ -85,6 +85,13 @@ public sealed partial class TenantApprovalService
                     await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
                     await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
                 }
+                else if (op.AttachmentRead is not null)
+                {
+                    var reads = attachmentReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.ArtifactVerification is not null)
                 {
                     var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -166,6 +173,20 @@ public sealed partial class TenantApprovalService
                 : $"Up to {args.Limit} directory entries" + (args.Cursor is null ? "." : $", after {args.Cursor}.");
             return [new("path", null, args.Path, false), new("readPage", null, page, false),
                 new("readDisclosure", null, "Return only this saved file or directory observation to the Agent. Changed source requires fresh review. No file mutation, recipient download or later discovery is authorized.", false),
+                new("readLimit", null, "One bounded observation in this exact continuation. Later reads require current policy again.", false)];
+        }
+        if (op.AttachmentRead is { } attachment)
+        {
+            var args = AgentCore.Application.Tools.TenantAttachmentReadContract.Parse(attachment.ArgumentsJson);
+            var page = attachment.ContentType == AgentCore.Application.Ports.OfficeLimits.DocumentMime
+                ? $"Word document: offset {args.Offset ?? 0}; up to {args.Limit ?? 100} elements."
+                : attachment.ContentType == AgentCore.Application.Ports.OfficeLimits.SpreadsheetMime
+                    ? $"Excel: sheet {args.Sheet ?? (args.Range is null ? "workbook order" : "first worksheet")}; " + (args.Range is not null ? $"exact range {args.Range}." : args.Cursor is not null ? $"sparse continuation cursor {args.Cursor}." : "first sparse page.")
+                    : attachment.Vision && AgentCore.Domain.Conversation.AttachmentMedia.IsImage(attachment.ContentType) ? "One sanitized image for this vision-capable model."
+                    : "One bounded file observation; unsupported content remains inert.";
+            return [new("attachmentDisplayName", null, attachment.DisplayName, false), new("attachmentContentType", null, attachment.ContentType, false),
+                new("attachmentByteSize", null, attachment.ByteSize, false), new("attachmentChecksum", null, attachment.Sha256Hex, false), new("readPage", null, page, false),
+                new("readDisclosure", null, "Return only this saved file and read window to the Agent. Changed source or window requires fresh review. No file changes, publication or recipient download access.", false),
                 new("readLimit", null, "One bounded observation in this exact continuation. Later reads require current policy again.", false)];
         }
         if (op.ArtifactVerification is { } verification)

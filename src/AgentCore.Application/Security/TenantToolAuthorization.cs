@@ -173,6 +173,8 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
             return await approvals.PrepareWorkspaceMutationAsync(boundary.Reference, new(call.Id, mutation.Tool, mutation.ArgumentsJson), run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.WorkspaceRead is { } readWorkspace)
             return await approvals.PrepareWorkspaceReadAsync(boundary.Reference, new(call.Id, readWorkspace.Tool, readWorkspace.ArgumentsJson), run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+        if (intent.AttachmentArguments is { } attachment)
+            return await approvals.PrepareAttachmentReadAsync(boundary.Reference, attachment, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactId is { } artifactId)
             return await approvals.PrepareArtifactVerificationAsync(boundary.Reference, artifactId, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactArguments is { } artifact)

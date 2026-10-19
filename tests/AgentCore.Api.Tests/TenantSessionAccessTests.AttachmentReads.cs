@@ -21,6 +21,7 @@ public sealed partial class TenantSessionAccessTests
         private readonly ScriptedLanguageModel inner = new();
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public bool ReadEnabled { get; set; }
+        public bool ReviewRead { get; set; }
         public bool HoldAfterRead { get; init; }
         public string Arguments { get; set; } = "{}";
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -28,10 +29,12 @@ public sealed partial class TenantSessionAccessTests
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             Requests.Enqueue(request);
-            if (ReadEnabled && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AttachmentsRead))
+            var tool = ReviewRead ? ToolCatalog.RequestAuthorization : ToolCatalog.AttachmentsRead;
+            if (ReadEnabled && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == tool))
             {
-                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.AttachmentsRead);
-                yield return new ModelToolCallEvent(new("read-bound-source", ToolCatalog.AttachmentsRead, Arguments));
+                Assert.Contains(request.Tools!, t => t.Name == tool);
+                var args = ReviewRead ? JsonSerializer.Serialize(new { operation = "read_attachment", read = JsonSerializer.Deserialize<JsonElement>(Arguments) }) : Arguments;
+                yield return new ModelToolCallEvent(new("read-bound-source", tool, args));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             if (ReadEnabled) { Entered.TrySetResult(); if (HoldAfterRead) await Task.Delay(Timeout.InfiniteTimeSpan, ct); }
@@ -39,7 +42,7 @@ public sealed partial class TenantSessionAccessTests
         }
     }
     private sealed record AttachmentReadCase(AttachmentExecutionCase Execution, byte[] Bytes, Guid Instance);
-    private static async Task<AttachmentReadCase> PrepareAttachmentRead(IServiceProvider services, HttpClient owner, string format, bool recoveryBudget = false, bool explicitCapability = false)
+    private static async Task<AttachmentReadCase> PrepareAttachmentRead(IServiceProvider services, HttpClient owner, string format, bool recoveryBudget = false, bool explicitCapability = false, string? displayNameOverride = null)
     {
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
@@ -75,6 +78,7 @@ public sealed partial class TenantSessionAccessTests
         else if (format.StartsWith("png", StringComparison.Ordinal)) { using var bitmap = new SKBitmap(2, 2); bitmap.Erase(SKColors.Red); using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100); bytes = encoded.ToArray(); name = "read.png"; type = "image/png"; }
         else if (format == "binary") { bytes = [0, 1, 2, 255, 254]; name = "read.bin"; type = "application/octet-stream"; }
         else { bytes = "Private read body → thử nghiệm"u8.ToArray(); name = "read.txt"; type = "text/plain"; }
+        name = displayNameOverride ?? name;
         using var body = new MultipartFormDataContent(); var file = new ByteArrayContent(bytes); file.Headers.ContentType = new MediaTypeHeaderValue(type); body.Add(file, "file", name);
         var id = (await Json(await owner.PostAsync(api + $"/sessions/{session}/attachments?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision=1", body))).GetProperty("attachmentId").GetGuid();
         var login = (await services.GetRequiredService<IdentityService>().SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!;

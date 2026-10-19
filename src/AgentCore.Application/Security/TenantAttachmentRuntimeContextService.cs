@@ -6,15 +6,17 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed partial class TenantAttachmentRuntimeContextService(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
-    ITenantAttachmentStore files, TenantRunConfigurationResolver configurations, IamAuthorizer iam, IAttachmentProcessor processor, TimeProvider time)
+    ITenantAttachmentStore files, TenantRunConfigurationResolver configurations, IamAuthorizer iam, IAttachmentProcessor processor, TimeProvider time, ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, IIdGenerator ids, IModelCatalog models, IOfficeProcessor officeReader)
 {
     private sealed record View(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent);
-    private async ValueTask<View> Load(TenantRuntimeFrame frame, CancellationToken ct)
+    private async ValueTask<View> Load(TenantRuntimeFrame frame, CancellationToken ct, bool live = true)
     {
         var tenant = frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var (run, state) = await operations.ResolveAsync(new(tenant, frame.RunId), ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        if (run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId)
+            throw new AccessDeniedException("tenant_runtime_scope_mismatch");
         var current = await configurations.ResolveAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
         TenantAttachmentRules.Session(session.Owner, session, current.Agent, true);
         if (run.Owner != frame.Owner || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
@@ -33,9 +35,9 @@ public sealed partial class TenantAttachmentRuntimeContextService(TenantOperatio
         }
         return true;
     }
-    private async ValueTask Fence(TenantRuntimeFrame frame, View before, CancellationToken ct)
+    private async ValueTask Fence(TenantRuntimeFrame frame, View before, CancellationToken ct, bool live = true)
     {
-        var after = await Load(frame, ct).ConfigureAwait(false);
+        var after = await Load(frame, ct, live).ConfigureAwait(false);
         if (after.Run.Revision != before.Run.Revision || after.State.Tenant.Revision != before.State.Tenant.Revision || after.Session.Owner != before.Session.Owner
             || after.Session.Snapshot.Revision != before.Session.Snapshot.Revision || after.Agent.Instance.Revision != before.Agent.Instance.Revision)
             throw new SecurityConflictException("attachment_context_changed");

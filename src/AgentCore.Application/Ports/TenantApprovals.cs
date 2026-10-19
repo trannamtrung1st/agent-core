@@ -6,6 +6,7 @@ public sealed record TenantSandboxApprovalVisibility(IReadOnlyList<Guid>? Instan
 public sealed record TenantBrowserApprovalVisibility(IReadOnlyList<Guid>? ReadInstances, IReadOnlyList<Guid>? UseInstances, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantWorkspaceMutationApprovalVisibility(IReadOnlyList<string>? Reads, IReadOnlyList<string>? Writes, IReadOnlyList<string>? Deletes, IReadOnlyList<Guid>? HomeAgents, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantWorkspaceReadApprovalVisibility(IReadOnlyList<string>? Workspaces, IReadOnlyList<Guid>? HomeAgents, IReadOnlyList<Guid>? Sessions, IReadOnlyList<string>? Resources = null);
+public sealed record TenantAttachmentReadApprovalVisibility(IReadOnlyList<Guid>? Attachments, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantArtifactReadApprovalVisibility(IReadOnlyList<Guid>? Artifacts, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantCredentialReadApprovalVisibility(IReadOnlyList<Guid>? Credentials, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantApprovalContinuationIds(Guid ActivationId, Guid RunId);
@@ -24,7 +25,7 @@ public interface ITenantApprovalStore
     ValueTask<TenantApprovalRequest?> FindApprovalAsync(Guid tenantId, Guid requestId, CancellationToken ct = default);
     ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, PreparedTenantOperation operation, CancellationToken ct = default);
     ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests,
-        IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery query, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null);
+        IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery query, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null);
     ValueTask<TenantApprovalRequest?> TryCreateApprovalAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantApprovalRequest request, long expectedRunRevision, Guid? generation, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<bool> TryDecideApprovalAsync(TenantSecurityState next, long expectedSecurityRevision, TenantApprovalRequest request,

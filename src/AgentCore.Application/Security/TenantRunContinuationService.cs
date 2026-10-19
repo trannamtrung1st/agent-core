@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? attachmentReads = null)
 {
     // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
     public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
@@ -76,6 +76,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         ValidateAuthorizationCheckpoint(run, request!);
         if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(run, ct).ConfigureAwait(false);
         if (credentialReads is not null) await credentialReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
+        if (attachmentReads is not null) await attachmentReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
         if (artifactReads is not null) await artifactReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
         if (workspaceReads is not null) await workspaceReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
         TenantOperationReceipt? receipt = null;
@@ -109,6 +110,13 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                 if (request.Operation.WorkspaceRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
                 {
                     try { inspection = await (workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
+                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
+                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
+                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
+                }
+                if (request.Operation.AttachmentRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
+                {
+                    try { inspection = await (attachmentReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
                         new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
                     catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
                     catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
@@ -152,6 +160,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
                         request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched")
                     : request.Operation.WorkspaceRead is not null ? TenantWorkspaceReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
+                    : request.Operation.AttachmentRead is not null ? TenantAttachmentReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ArtifactVerification is not null ? TenantArtifactVerificationContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.CredentialRead is not null ? TenantCredentialReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.SandboxRead is not null ? TenantSandboxContinuationProjection.CompleteRead(paused, pending[0], request, outcome, inspection, readUnavailable)

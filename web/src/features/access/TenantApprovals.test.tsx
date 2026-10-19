@@ -434,3 +434,31 @@ it.each(['missing', 'duplicate', 'mixed', 'unknown', 'hidden', 'invalid-size'])(
   expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
 });
+
+
+it('shows exact Attachment source and page as escaped read consent with separate delivery authority', async () => {
+  view({ ...request, kind: 'review', status: 'approved', summary: 'Read attached file',
+    preparedAction: { ...request.preparedAction, operation: 'read_attachment' },
+    operationResult: { outcome: 'completed', reasonCode: 'attachment_read_authorized', recordedAt: '2026-10-19T04:00:00Z' },
+    review: { ...request.review, changes: [
+      { field: 'attachmentDisplayName', before: null, after: '<script>literal</script>.xlsx', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'attachmentContentType', before: null, after: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'attachmentByteSize', before: null, after: 0, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'attachmentChecksum', before: null, after: 'c'.repeat(64), beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readPage', before: null, after: 'Excel: sheet 試験; exact range A1:B2.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readDisclosure', before: null, after: 'Only this saved file and window. No file changes or recipient download access.', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'readLimit', before: null, after: 'One bounded observation in this continuation.', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } });
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved read' });
+  expect(within(saved).getByText('<script>literal</script>.xlsx', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('File name', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('Stored bytes', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('0', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('Excel: sheet 試験; exact range A1:B2.')).toBeVisible();
+  expect(within(saved).queryByText('Before', { exact: true })).not.toBeInTheDocument();
+  expect(within(saved).queryByText('Saved field', { exact: true })).not.toBeInTheDocument();
+  expect(within(saved).queryByText('c'.repeat(64))).not.toBeInTheDocument();
+  expect(within(dialog).getByText('Read authorized', { exact: true })).toBeVisible();
+  expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
+  expect(document.querySelector('script')).toBeNull();
+});

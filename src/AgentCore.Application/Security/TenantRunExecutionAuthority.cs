@@ -34,7 +34,7 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                     if (attachmentContext is not null) await attachmentContext.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(after.Run.Checkpoint).TenantAttachmentSources is { Count: > 0 }
                         || AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryRead(after.Run.Checkpoint, out var attachmentMessages)
-                            && attachmentMessages!.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.AttachmentsRead))
+                            && attachmentMessages!.Any(TenantAttachmentRuntimeContextService.HasReadObservation))
                         throw new AccessDeniedException("attachment_context_unavailable");
                     return current.Definition;
                 }

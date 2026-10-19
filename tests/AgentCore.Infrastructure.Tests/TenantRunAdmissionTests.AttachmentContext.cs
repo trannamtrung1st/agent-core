@@ -16,7 +16,7 @@ public sealed partial class TenantRunAdmissionTests
         new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock));
     private static TenantAttachmentRuntimeContextService ContextService(Fixture f, ITenantAttachmentStore? files = null, IAttachmentProcessor? processor = null) =>
         new(AttachmentOperations(f), (ITenantSessionStore)f.Iam, files ?? (ITenantAttachmentStore)f.Attachments, f.RunConfiguration(), f.Authorizer,
-            processor ?? new AttachmentProcessor(f.Attachments, new OfficeProcessor()), f.Clock);
+            processor ?? new AttachmentProcessor(f.Attachments, new OfficeProcessor()), f.Clock, (ITenantApprovalStore)f.Iam, (ITenantApprovedOperationStore)f.Iam, f.Ids, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), new OfficeProcessor());
     private static async Task<(Environment Setup, AgentRun Run, SessionSnapshot Snapshot, Guid Id, RoleAssignment Grant)> ContextCase(Fixture f, string[]? permissions = null, bool denyReadCapability = false)
     {
         var s = await Setup(f, denyReadCapability ? "general-assistant" : "examiner", denyReadCapability ? 32 : 1); var id = await Upload(f, s);

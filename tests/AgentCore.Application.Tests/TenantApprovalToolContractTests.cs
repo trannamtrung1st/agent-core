@@ -95,7 +95,7 @@ public sealed class TenantApprovalToolContractTests
     {
         var definition = await CapabilityProjectionTests.Definition();
         definition = definition with { SelfManagement = HarnessManagementPolicy.Disabled,
-            Environment = definition.Environment! with { Capabilities = null, ToolAllowlist = [ToolCatalog.DriveAccounts] } };
+            Environment = definition.Environment! with { Capabilities = new("Selected", [ToolCatalog.DriveAccounts]), ToolAllowlist = [ToolCatalog.DriveAccounts] } };
         var instance = Guid.NewGuid(); var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var at = DateTimeOffset.UtcNow;
         var context = CapabilityProjectionTests.Context(definition) with {
             AgentInstanceId = instance, OwnedSessionId = session,
@@ -105,11 +105,34 @@ public sealed class TenantApprovalToolContractTests
         Assert.Contains("check_credential_connection", offered.ParametersJson); Assert.DoesNotContain("update_persona", offered.ParametersJson); Assert.DoesNotContain("update_preferences", offered.ParametersJson);
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { Configuration = new(definition, 1, 1, []) }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
-        var unavailable = definition with { Environment = definition.Environment with { ToolAllowlist = [] } };
+        var unavailable = definition with { Environment = definition.Environment with { Capabilities = new("Selected", []), ToolAllowlist = [] } };
         Assert.DoesNotContain(ToolCatalog.For(unavailable, context with { Definition = unavailable }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         var uncertain = new TenantApprovalOutcome(context.ExecutionContext.TenantId, context.ExecutionContext.RunId, Guid.NewGuid(), Guid.NewGuid(), instance,
             activation, TenantApprovalStatus.Approved, TenantOperationOutcome.Indeterminate, "credential_check_uncertain", 1, 1);
         Assert.Empty(ToolCatalog.For(definition, context with { ApprovalOutcome = uncertain }, ToolConfigurationGates.AllowAll));
+    }
+
+    [Fact]
+    public void Attachment_read_consent_accepts_only_closed_window_arguments_and_binds_semantic_refusal_to_that_window()
+    {
+        var id = Guid.NewGuid(); var json = JsonSerializer.Serialize(new { operation = "read_attachment", read = new { attachmentId = id, offset = 1, limit = 2 } });
+        var intent = TenantApprovalToolContract.Parse(new("exact", ToolCatalog.RequestAuthorization, json));
+        var read = new PreparedAttachmentRead(Guid.NewGuid(), id, Guid.NewGuid(), "review.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 12, new string('a', 64), "attachment-processors/2", intent.AttachmentArguments!, false);
+        var saved = TenantApprovalRules.PrepareAttachmentRead(Guid.NewGuid(), Guid.NewGuid(), read, 1, 1);
+        Assert.True(intent.Matches(saved));
+        var changed = TenantApprovalRules.PrepareAttachmentRead(Guid.NewGuid(), saved.InstanceId, read with { DisplayName = "renamed.docx", Sha256Hex = new string('b', 64) }, 1, 1);
+        Assert.Equal(saved.SemanticActionJson, changed.SemanticActionJson); Assert.NotEqual(saved.ActionHash, changed.ActionHash);
+        Assert.False((intent with { AttachmentArguments = JsonSerializer.Serialize(new { attachmentId = id, offset = 2, limit = 2 }) }).Matches(saved));
+        foreach (var key in new[] { "tenantId", "sessionId", "principalId", "grantId", "resourceId", "expectedRevision" })
+        {
+            var forged = JsonNode.Parse(json)!; forged[key] = Guid.NewGuid().ToString();
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("forged", ToolCatalog.RequestAuthorization, forged.ToJsonString())));
+            forged = JsonNode.Parse(json)!; forged["read"]![key] = Guid.NewGuid().ToString();
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("forged", ToolCatalog.RequestAuthorization, forged.ToJsonString())));
+        }
+        Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("duplicate", ToolCatalog.RequestAuthorization, json[..^1] + ",\"operation\":\"read_attachment\"}")));
+        Assert.Contains("read_attachment", TenantApprovalToolContract.Descriptor(settings: false, credentials: false, attachmentRead: true).ModelDefinition.ParametersJson);
+        Assert.DoesNotContain("read_attachment", TenantApprovalToolContract.Descriptor(settings: false, credentials: false).ModelDefinition.ParametersJson);
     }
 
     private static readonly AgentIdentity Persona = new("Persona", "Assistant", "Description", "Clear");

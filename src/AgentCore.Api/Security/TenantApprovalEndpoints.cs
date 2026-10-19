@@ -48,6 +48,7 @@ public static class TenantApprovalEndpoints
         var (summary, operation) = op.Kind switch {
             TenantOperationKind.WorkspaceMutation => ("Change exact workspace paths", "mutate_workspace"),
             TenantOperationKind.WorkspaceRead => ("Read exact workspace observation", "inspect_workspace"),
+            TenantOperationKind.AttachmentRead => ("Read attached file", "read_attachment"),
             TenantOperationKind.ArtifactVerification => ("Verify file metadata", "verify_artifact"),
             TenantOperationKind.ArtifactPublication => ("Publish exact file", "publish_artifact"),
             TenantOperationKind.CredentialRead => ("Read bound Credential metadata", "inspect_credential_metadata"),
