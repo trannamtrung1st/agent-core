@@ -12,7 +12,7 @@ namespace AgentCore.Application.Tests;
 public sealed class CapabilityProjectionTests
 {
     [Fact]
-    public async Task Tenant_context_offers_only_implemented_inspection_and_typed_controls_even_with_loaded_legacy_capabilities()
+    public async Task Tenant_context_offers_only_implemented_inspection_guarded_mutations_and_typed_controls_even_with_loaded_legacy_capabilities()
     {
         var definition = await Definition(ToolRegistry.All.Select(t => t.Name).ToArray());
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
@@ -23,7 +23,8 @@ public sealed class CapabilityProjectionTests
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage)
         };
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order().ToArray();
-        Assert.Equal(new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch, ToolCatalog.ArtifactsVerify, ToolCatalog.ArtifactsCreate, ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions,
+        Assert.Equal(new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch,
+            ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch, ToolCatalog.ArtifactsVerify, ToolCatalog.ArtifactsCreate, ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions,
             ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus,
             ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserFind, ToolCatalog.BrowserWait, "browser.console_messages", "browser.network_requests",
             "browser.network_request", "browser.routes", "browser.verify", "browser.generate_locator", "browser.get_config", "browser.tabs", "browser.dialog" }.Order(), offered);

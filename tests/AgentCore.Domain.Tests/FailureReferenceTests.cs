@@ -134,6 +134,8 @@ public sealed class FailureReferenceTests
     [InlineData("setupTimeout")]
     [InlineData("streamIdle")]
     [InlineData("totalTimeout")]
+    [InlineData("workspaceOutcomeUnknown")]
+    [InlineData("sandboxOutcomeUnknown")]
     public void Allowlisted_provider_detail_round_trips_and_rejects_raw_text(string reason)
     {
         var reference = new FailureReference(

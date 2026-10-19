@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
     TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
     TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserReadService? browserReads = null,
-    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null)
+    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null)
 {
     // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
     public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
@@ -34,7 +34,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
-            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
+            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -67,6 +67,15 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                 var result = await artifactPublications.ExecuteAsync(boundary.Reference!, generation, call.Id, call.ArgumentsJson, ct).ConfigureAwait(false);
                 return JsonSerializer.Serialize(new { decision = JsonNamingPolicy.CamelCase.ConvertName(result.Decision.ToString()),
                     reasonCode = result.ReasonCode, applied = result.Receipt is not null, operationId = result.Receipt?.OperationId });
+            }
+            if (TenantWorkspaceMutationContract.IsMutation(call.Name))
+            {
+                if (workspaceMutations is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
+                var current = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+                var result = await workspaceMutations.ExecuteAsync(new(current.Owner, session, current.AgentRunId, generation), call, ct).ConfigureAwait(false);
+                return JsonSerializer.Serialize(new { decision = JsonNamingPolicy.CamelCase.ConvertName(result.Decision.ToString()), reasonCode = result.ReasonCode,
+                    outcome = result.IsUncertain ? "indeterminate" : result.Receipt is null ? "notDispatched" : JsonNamingPolicy.CamelCase.ConvertName(result.Receipt.Outcome.ToString()),
+                    applied = result.Receipt?.Outcome == AgentCore.Domain.Security.TenantOperationOutcome.Completed, operationId = result.OperationId, replayAllowed = false });
             }
             if (TenantWorkspaceReadContract.IsRead(call.Name))
             {

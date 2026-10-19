@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant direct workspace dispatch persistence
+
+`TenantWorkspaceDirectEffects` adds insert/update shape guards to the existing AgentRuns table. The optional `sideEffect.externalEffect.directOperation` binds operation ID, source call, supported tool, bounded canonical JSON arguments, lowercase parameter hash and Instance/persona revision witnesses. Null metadata is omitted from ordinary external effects. Native SQLite triggers preserve existing Artifact ownership references without rebuilding AgentRuns. Downgrade refuses while direct workspace origins or `workspace_mutation_*` receipts remain.
+
+The existing `TenantOperationReceipts` direct-source identity supplies immutable deduplication; no additional table is added. Recovery selects only supported abandoned workspace effects with no receipt and normalizes SQLite GUID columns when comparing JSON operation IDs. It settles uncertainty against retained actual owner Run records, without opening files or borrowing revoked authority. Start and result audit transactions retain safe qualified scopes rather than filenames/bodies. Disposable migration/reopen/rollback and model-host recreation evidence belongs in [the focused report](reports/tenant-workspace-effects-verification-2026-10-19.md); no installed-data cutover is claimed.
+
 ## Tenant workspace read consent persistence
 
 `TenantWorkspaceSearchReview` extends the same typed read check constraint to the existing search tool. Canonical query/glob/result bounds remain inside the closed saved arguments; only a private traversal digest is retained as source witness. No search index, saved result body, file ledger or read-session table is introduced. Rollback must refuse while search consent remains. Disposable SQLite qualification owns the upgrade/reopen/rollback evidence.

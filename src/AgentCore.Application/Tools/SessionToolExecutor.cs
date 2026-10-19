@@ -206,7 +206,17 @@ public sealed partial class SessionToolExecutor(
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (tenantAuthorization is not null && await tenantAuthorization.ExecuteAsync(sessionId, call, admission, cancellationToken, remainingOutputBytes).ConfigureAwait(false) is { } tenantResult)
-            return FitResult(remainingOutputBytes, tenantResult);
+        {
+            var result = FitResult(remainingOutputBytes, tenantResult);
+            if (TenantWorkspaceMutationContract.IsMutation(call.Name))
+            {
+                using var json = JsonDocument.Parse(tenantResult);
+                var unknown = json.RootElement.TryGetProperty("outcome", out var outcome) && outcome.GetString() == "indeterminate";
+                result = result with { OutcomeUnknown = unknown, SafeFailureSummary = unknown ? "Workspace outcome is uncertain. The change was not repeated. Inspect current files before deciding what to do next." : null,
+                    EffectObserved = json.RootElement.TryGetProperty("applied", out var applied) && applied.ValueKind == JsonValueKind.True };
+            }
+            return result;
+        }
         if (admission?.TenantId is not null || (IamToolContracts.IsInspection(call.Name) || call.Name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name)) return TextResult(Error("forbidden", "Trusted tenant execution is required."));
         if (admission?.AgentInstanceId is { } isolationOwner)
         {

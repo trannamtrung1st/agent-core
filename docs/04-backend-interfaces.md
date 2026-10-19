@@ -1,12 +1,18 @@
 # Backend Interfaces
 
+## Tenant workspace direct mutation effects
+
+`TenantWorkspaceMutationEffectService` binds exact closed mutation arguments to the actual claimed conversational Run/Session. `ITenantWorkspaceOperationStore` uses the existing Run external-effect origin and immutable operation receipt owner: atomic start/security/audit, guarded filesystem dispatch, then factual receipt/Run/security/audit settlement. `AgentRunDirectOperation` retains Core operation/call identity, canonical tool arguments/hash and current Instance/persona witnesses; it supplies no permission. A current read/write/delete and parent-scope decision, admitted/current capability/HomeAccess, requester, actual owner/lifecycle and live claim check repeats at the native commit gates.
+
+The direct tool returns a body-free receipt acknowledgement, never source bytes or recipient download authority. If factual receipt settlement is temporarily unavailable, the retained dispatch remains authoritative and the result is explicitly uncertain with the Core operation ID; no receipt is fabricated and no effect is replayed. Its exact Run/call/parameter identity prevents duplicate dispatch or changed-argument reuse. Abandoned dispatch recovery settles uncertainty without replaying I/O, including after the live executor/requester loses authority; factual settlement does not authorize an effect. Sensitive/requester-policy-required mutations return no dispatch. Exact mutation Review/exceptional grants remain required separately; current direct support does not supply that authority.
+
 ## Tenant canonical workspace mutation primitives
 
 `ITenantWorkspaceMutationStore` extends the incumbent canonical filesystem adapter with bounded UTF-8 patching, ordered mkdir/copy/move/delete batches and actual owned home/working tree copy. Paths and all batch syntax are validated before mutation. A repeatable trusted callback checks current source-read/destination-write/delete authority; actual tenant/Instance/Session ownership and destination lifecycle are independently rechecked by the adapter. Cross-copy never crosses Tenant, Instance or two distinct working Sessions. No read initializes a root.
 
 Patch freezes edits, requires unique current strict-UTF-8 matches (including overlapping ambiguity), checks byte growth before materializing replacement text and compares source bytes again before protected rename. This remains ordinary concurrent filesystem behavior, not a file version or CAS. Structural authorization repeats before each ordered operation; refusal stops before that operation and reports the known completed prefix. Copy is one coarse bounded tree effect, retains no-overwrite semantics and can leave partial effects on failure/cancellation. No automatic replay, rollback, file ledger, new provider or database/filesystem transaction is introduced.
 
-These are internal typed filesystem primitives, not model offering or durable mutation authorization. The model effect/review/grant/receipt integration remains a separate required boundary.
+These internal filesystem primitives supply no authorization on their own. The direct effect/receipt integration is specified above; exact mutation Review and exceptional grants remain a separate required boundary.
 
 ## Tenant workspace read Review
 

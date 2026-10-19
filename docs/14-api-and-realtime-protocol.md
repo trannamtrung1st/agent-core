@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant direct workspace mutation results
+
+In a claimed conversational tenant Run, admitted/current mutation capabilities accept closed exact absolute `/home` or `/working` child paths. Core derives source read, destination write, delete and parent scopes. Only an individual copy may cross those two owned roots. Each mutation must be the sole pending model call. Current policy requiring Review or missing authority produces no dispatch; these direct calls supply no approval authority.
+
+A dispatched result contains `decision`, safe `reasonCode`, `outcome` (`completed`, `denied`, or `indeterminate`), `applied`, Core `operationId`, and `replayAllowed:false`. A policy refusal has `outcome:"notDispatched"` and no operation ID. Unavailable receipt settlement after reserved dispatch still returns `indeterminate` with its Core operation ID; this is uncertainty, not a fabricated saved receipt. Malformed closed arguments return a bounded `invalid_arguments` tool result and cause no dispatch. `applied:true` acknowledges known completion only; it never supplies source bytes or recipient download authority. An indeterminate result terminates the response with `workspaceOutcomeUnknown`; inspect current files before an independent new decision. Exact Run/call/parameter receipt reuse never repeats I/O. A batch can retain earlier/partial effects and is not atomic. [Durable owner](04-backend-interfaces.md#tenant-workspace-direct-mutation-effects).
+
 ## Tenant workspace search protocol
 
 Converted `workspace.search` accepts one closed object with required `path` (exact absolute home/working path) and `query` (1–200 characters), optional relative `glob` (1–200 characters, no parent traversal) and `maxResults` (1–50, default 20). It returns `path`, `query`, `truncated`, complete `matches` records (`path`, `kind`, `snippet`), `untrusted` and the Core-owned workspace-read checkpoint witness. A small output budget returns `output_limit` rather than splitting a record. Search retains bounded content/name semantics; a result is not exhaustive coverage or recipient download authority.

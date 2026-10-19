@@ -17,6 +17,9 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && TenantWorkspaceMutationContract.IsMutation(toolName))
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && TenantWorkspaceMutationContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantWorkspaceReadContract.IsRead(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantWorkspaceReadContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -188,6 +191,10 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is { } mutation && TenantWorkspaceMutationContract.IsMutation(descriptor.Name))
+            return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
+                && mutation.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation
+                && mutation.SessionId == context.OwnedSessionId && TenantWorkspaceMutationContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } workspaceExecution && TenantWorkspaceReadContract.IsRead(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && workspaceExecution.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation

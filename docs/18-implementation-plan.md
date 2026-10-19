@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant workspace direct mutation checkpoint — 2026-10-19
+
+Tenant conversational Runs now offer guarded direct write, patch, mkdir, copy and non-destructive ordered batch under current Allowed policy. The existing Run side-effect and immutable receipt owners prevent duplicate dispatch, preserve body-free outcomes and recover abandoned/uncertain attempts without file replay. Both-store qualification covers commit-time revocation, exact call identity, concurrency, receipt-unavailable recovery and SQLite shape/rollback/reopen. [Focused evidence](reports/tenant-workspace-effects-verification-2026-10-19.md) records the executed local qualification and remaining proposal boundaries. This supersedes earlier direct-model-mutation/effect-recovery-pending notes only. Exact mutation Review/exceptional grants remain open; policy-required delete/move/destructive batch and other protected mutations return no dispatch. Virtual resources/Office/source publication, autonomous origins, other proposal families and the final authority/schema cutover remain open. The full proposal stays active.
+
 ## Tenant workspace mutation primitive checkpoint — 2026-10-19
 
 The canonical tenant filesystem now supplies guarded UTF-8 patch, ordered structure and owned home/working tree-copy primitives with current owner/lifecycle checks and repeatable authority callbacks. [Focused evidence](reports/tenant-workspace-primitives-verification-2026-10-19.md) distinguishes actual both-store filesystem workflows from the still-pending model offering, exact mutation Review/grants and durable effect/recovery integration. This is their adapter prerequisite, not model mutation or full-proposal acceptance. The full goal remains active.

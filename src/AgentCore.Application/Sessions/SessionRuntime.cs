@@ -3819,8 +3819,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     else
                                     {
                                     if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
-                                    // Tenant Artifact publication commits its own local Run/effect receipt atomically.
-                                    effectFenced = !(_runtimeOwner is not null && (TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name == ToolCatalog.ArtifactsCreate))
+                                    // Tenant Workspace mutations and Artifact publication own their durable Run/effect receipts.
+                                    effectFenced = !(_runtimeOwner is not null && (TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name == ToolCatalog.ArtifactsCreate))
                                         && (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
                                     effectHash = actionHash;
                                     var skipDispatch = false;
@@ -4028,7 +4028,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (sandboxUnknown)
                     {
                         await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest,
-                            executionResult.SafeFailureSummary ?? "Sandbox execution outcome is unknown. The command was not repeated. Inspect the Session sandbox and explicitly reset before another mutation.", FailureReason: "sandboxOutcomeUnknown")), CancellationToken.None).ConfigureAwait(false);
+                            executionResult.SafeFailureSummary ?? "Sandbox execution outcome is unknown. The command was not repeated. Inspect the Session sandbox and explicitly reset before another mutation.", FailureReason: TenantWorkspaceMutationContract.IsMutation(call.Name) ? "workspaceOutcomeUnknown" : "sandboxOutcomeUnknown")), CancellationToken.None).ConfigureAwait(false);
                         return;
                     }
                     if (effectFenced && !sandboxUnknown)

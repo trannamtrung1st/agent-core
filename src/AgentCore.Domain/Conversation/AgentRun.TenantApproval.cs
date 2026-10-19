@@ -2,6 +2,18 @@ namespace AgentCore.Domain.Conversation;
 
 public sealed partial class AgentRun
 {
+    public AgentRun BeginDirectExternalEffect(long revision, Guid generation, AgentRunDirectOperation operation, string actionHash, DateTimeOffset at)
+    {
+        RequireOperational(revision, generation);
+        if (Owner.TenantId is null || Claim!.LeaseExpiresAtUtc <= at
+            || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "A live unused direct operation is required.");
+        return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null,
+            SideEffect.Disposition == AgentRunSideEffectDisposition.Succeeded ? AgentRunKnownEffects.PreserveCompletedExternalEffect(KnownEffectSummary) : KnownEffectSummary,
+            Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.InFlight, "operation:" + operation.OperationId.ToString("D"), actionHash, at,
+                new(generation, checked(revision + 1), at, operation)), Approval, at);
+    }
+
     public AgentRun BeginApprovedExternalEffect(long revision, Guid generation, Guid requestId, Guid operationId, string actionHash, DateTimeOffset at)
     {
         RequireOperational(revision, generation);

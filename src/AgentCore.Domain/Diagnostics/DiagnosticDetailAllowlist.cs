@@ -48,6 +48,8 @@ public static class DiagnosticDetailAllowlist
         "providerTimeout",
         "providerCancelled",
         "toolTimeout",
+        "workspaceOutcomeUnknown",
+        "sandboxOutcomeUnknown",
         "finalizationToolCall",
         "streamLimit"
     };

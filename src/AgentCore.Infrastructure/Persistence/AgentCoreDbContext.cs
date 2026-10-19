@@ -246,6 +246,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         AgentCore.Infrastructure.Security.IamPersistenceModel.Configure(modelBuilder);
+        WorkspaceEffectPersistence.Configure(modelBuilder);
         modelBuilder.Entity<SandboxInstanceVerificationRow>(e => { e.ToTable("SandboxInstanceVerifications"); e.HasKey(r => new { r.InstanceId, r.InstanceRevision }); });
         AgentCore.Infrastructure.Security.TenantSandboxVerificationRecord.Configure(modelBuilder);
         modelBuilder.Entity<SandboxVerificationRow>(e => { e.ToTable("SandboxProfileVerifications", t => t.HasCheckConstraint("CK_SandboxVerification_TenantJson",

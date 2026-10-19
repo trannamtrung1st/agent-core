@@ -1,8 +1,12 @@
 # Testing Strategy
 
+## Tenant direct workspace effect checks
+
+Exercise real HTTP → admitted model Run → canonical write/patch/mkdir/copy/batch in both stores and roots, inspect actual bytes, and require body-free receipts plus exactly one dispatch/result audit pair per mutation. Mandatory delete Review, missing mutation IAM and configured Always policy must cause no file dispatch or implicit approval. Inject a lost acknowledgement after an actual write and verify truthful terminal uncertainty, retained bytes and no replay. Cover duplicate/concurrent calls, changed arguments, commit-time revocation, abandoned reservation recovery after authority loss, SQLite upgrade/forged shape/guarded rollback/reopen and actual completed-host recreation. Distinguish controlled staged abandoned dispatch from a real process crash. Exact mutation Review/grant qualification remains separate. [Executed evidence](reports/tenant-workspace-effects-verification-2026-10-19.md).
+
 ## Tenant workspace mutation primitive checks
 
-Exercise actual owned home/working files with both IAM stores: human upload, independently authorized Agent patch, ordered structure, cross-root copy, retained empty directories and stopping a failed batch. Add commit-time permission/lifecycle loss, changed source while patch staging, frozen edits/operations, byte-growth/overlap rejection, no-overwrite/partial failure and foreign Tenant/Instance/working-Session rejection. Distinguish trusted internal callback qualification from pending model offering, exact durable grants and effect recovery.
+Exercise actual owned home/working files with both IAM stores: human upload, independently authorized Agent patch, ordered structure, cross-root copy, retained empty directories and stopping a failed batch. Add commit-time permission/lifecycle loss, changed source while patch staging, frozen edits/operations, byte-growth/overlap rejection, no-overwrite/partial failure and foreign Tenant/Instance/working-Session rejection. Distinguish this trusted internal callback qualification from the direct effect checks above and pending exact durable Review/grants.
 
 ## Tenant workspace read consent
 

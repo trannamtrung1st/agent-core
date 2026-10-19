@@ -1,8 +1,12 @@
 # System Architecture
 
+## Tenant workspace direct effect ownership
+
+Direct Allowed-policy workspace mutations use the existing claimed Run side-effect origin and immutable operation receipts. Application owns typed argument/compound-current-authority validation; the incumbent canonical filesystem owns actual paths and repeats current callbacks at commit. The store atomically reserves Run/security/audit before I/O and settles factual Run/receipt/security/audit afterward. It claims no database/filesystem transaction. An abandoned or ambiguous dispatch is settled uncertain without replay, independently of whether a live executor can still access the files. No permission snapshot, scheduler or file-effect ledger is added. Exact mutation Review/exceptional grants remain open. [Contract](04-backend-interfaces.md#tenant-workspace-direct-mutation-effects), [qualification](reports/tenant-workspace-effects-verification-2026-10-19.md).
+
 ## Tenant workspace mutation adapter ownership
 
-The existing canonical filesystem supplies typed tenant patch, structure and home/working copy primitives. Actual owner/lifecycle validation remains in its incumbent adapter; repeatable caller-authority callbacks fence each operation and final patch replacement. Batches retain the factual completed prefix and possible preparation/partial effects; no rollback, file ledger, provider or second execution owner is added. Model offering and durable mutation Review/grant/effect recovery remain pending integration with the existing approval/Run/receipt owners. [Port contract](04-backend-interfaces.md#tenant-canonical-workspace-mutation-primitives), [bounded evidence](reports/tenant-workspace-primitives-verification-2026-10-19.md).
+The existing canonical filesystem supplies typed tenant patch, structure and home/working copy primitives. Actual owner/lifecycle validation remains in its incumbent adapter; repeatable caller-authority callbacks fence each operation and final patch replacement. Batches retain the factual completed prefix and possible preparation/partial effects; no rollback, file ledger, provider or second execution owner is added. The direct effect/receipt owner is described above; exact mutation Review and exceptional grants remain pending integration with the existing approval owner. [Port contract](04-backend-interfaces.md#tenant-canonical-workspace-mutation-primitives), [bounded evidence](reports/tenant-workspace-primitives-verification-2026-10-19.md).
 
 ## Tenant workspace saved-read consent
 

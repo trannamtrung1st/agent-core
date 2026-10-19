@@ -312,7 +312,10 @@ public sealed class AgentRunFailure
     public Guid? DiagnosticId { get; }
 }
 
-public sealed record AgentRunExternalEffect(Guid Generation, long StartedRunRevision, DateTimeOffset StartedAtUtc);
+public sealed record AgentRunDirectOperation(Guid OperationId, string SourceCallId, string ToolName, string ArgumentsJson,
+    string ParametersHash, long InstanceRevision, long PersonaRevision);
+public sealed record AgentRunExternalEffect(Guid Generation, long StartedRunRevision, DateTimeOffset StartedAtUtc,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AgentRunDirectOperation? DirectOperation = null);
 
 public sealed class AgentRunSideEffect
 {
@@ -365,6 +368,18 @@ public sealed class AgentRunSideEffect
             if (origin.Generation == Guid.Empty || origin.StartedRunRevision < 1 || disposition == AgentRunSideEffectDisposition.None
                 || toolCallId?.StartsWith("operation:", StringComparison.Ordinal) != true || updatedAtUtc < origin.StartedAtUtc)
                 throw new ArgumentException("An external effect requires its exact starting claim and operation.");
+            if (origin.DirectOperation is { } direct)
+            {
+                if (direct.OperationId == Guid.Empty || toolCallId != "operation:" + direct.OperationId.ToString("D")
+                    || string.IsNullOrWhiteSpace(direct.SourceCallId) || direct.SourceCallId.Length > 200
+                    || string.IsNullOrWhiteSpace(direct.ToolName) || direct.ToolName.Length > 128
+                    || string.IsNullOrWhiteSpace(direct.ArgumentsJson) || System.Text.Encoding.UTF8.GetByteCount(direct.ArgumentsJson) > 65536
+                    || direct.InstanceRevision < 1 || direct.PersonaRevision < 1)
+                    throw new ArgumentException("Invalid direct external operation.");
+                _ = AgentRunText.RequireActionHash(direct.ParametersHash);
+                using var json = System.Text.Json.JsonDocument.Parse(direct.ArgumentsJson);
+                if (json.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) throw new ArgumentException("Exact operation arguments are required.");
+            }
         }
         ExternalEffect = externalEffect;
         Disposition = disposition;

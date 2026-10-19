@@ -1197,6 +1197,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("AgentRuns", null, t =>
                         {
+                            t.HasTrigger("TR_AgentRuns_DirectWorkspace_Insert");
+
+                            t.HasTrigger("TR_AgentRuns_DirectWorkspace_Update");
+
                             t.HasCheckConstraint("CK_AgentRuns_ExecutionOwner", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND OriginalInitiatorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)");
                         });
                 });
