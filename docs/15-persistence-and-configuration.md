@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Tenant Browser Artifact drop persistence
+
+Migration `20261020040000_TenantBrowserArtifactDrops` replaces the incumbent Browser-file insert/update guards to admit ordinary Browser-use Review for an exact single-Artifact drop as well as ordered uploads. The existing `ArtifactSourcesJson` / `FileInputOrigin` remain the metadata/destination witnesses; no table, column, model snapshot or second byte/effect store is added. Guards require actual undeleted same-Session source facts, exact source/argument correspondence, exclusive file input and immutable saved tool/arguments/source/origin. Both stores continue to repeat source ownership and raw compound authority. Downgrade refuses while a retained Artifact-drop request exists; an empty downgrade restores the prior upload-only trigger contract verbatim. Final clean-baseline schema consolidation remains open. [Qualification](reports/tenant-browser-drop-verification-2026-10-20.md).
+
 ## Tenant Browser Artifact publication persistence
 
 Migration `20261020000100_TenantBrowserArtifactPublication` adds only nullable `TenantOperationReceipts.BrowserArtifactsJson` to the incumbent receipt owner. It retains a closed publication status/reason plus at most one capture and two download IDs; there are no payload bytes, filenames, paths or new effect ledgers. Null omission preserves prior receipt serialization. Existing same-Run Artifact rows, ownership FKs and immutable metadata remain the published resources. SQLite guards require bounded exact publication intent, immutable intent, actual same-tenant/Session/execution Artifact references, applicable capture/download byte caps and immutable publication receipts. Application validation also derives exact capture names/MIME and download identities.

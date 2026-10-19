@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant Browser Artifact drop checks
+
+Extend the shared upload source/consent tests across both sinks and both stores: exact source preview and source-filtered totals, missing independent read before provider observation, each source's reviewer policy/approval scope, cross-Session refusal, native pre-dispatch revocation, post-effect result withholding, historical source-read loss and receipt/reopen no replay. Native tests must validate actual file bytes, name/type/size and one drop event, plus cross-origin frame drift before resolution and navigation/authority drift during source I/O. Full worker/HTTP tests approve actual prepared model commands and compare binary bytes delivered to the native page. Reject noncanonical IDs, mixed literal/MIME input, raw source/argument mutation and lossy downgrade; test empty migration rollback/upgrade. A drop result never proves server/business acceptance. [Executed evidence](reports/tenant-browser-drop-verification-2026-10-20.md).
+
 ## Tenant Browser capture/download checks
 
 Exercise exact capture/download consent through both stores, actual native masked capture and native download bytes, and model/HTTP approval-to-response execution. Check explicit download opt-in, independent raw creation before target observation, scoped inbox totals, creation loss before and after native work, durable task budgets across approval hops, exact same-Run Artifact ownership and duplicate/reopen no-replay. Stage a failed second private blob and verify no member's metadata becomes visible, unrelated bytes survive and the native factual receipt remains completed. Reject a batch that exceeds aggregate quota before any blob write. Verify raw receipt forgery/mutation and guarded downgrade, then restore/read the current model.

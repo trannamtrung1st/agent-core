@@ -35,10 +35,10 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         // Preparation is not use authority. Only the primary typed Credential use may proceed to exact exceptional classification.
         await TenantBrowserOperationRules.RequirePermissionsAsync(state, run.AgentInstanceId, command, run.Owner.ExecutorPrincipalId!.Value, authorizer, ct,
             allowCredentialUseException: command.Credential is not null).ConfigureAwait(false);
-        if (intent.Command is BrowserUploadCommand upload)
+        if (TenantBrowserUploadRules.HasSources(intent.Command))
         {
             command = command with { ArtifactSourcesJson = await (uploads ?? throw new AccessDeniedException("tenant_effect_unavailable"))
-                .CaptureAsync(tenant, run.SessionId, upload, ct).ConfigureAwait(false) };
+                .CaptureAsync(tenant, run.SessionId, intent.Command, ct).ConfigureAwait(false) };
             _ = TenantBrowserUploadRules.Sources(command);
         }
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
@@ -59,7 +59,7 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
             throw new SecurityConflictException("browser_target_changed");
         if (witness.ProfileMode != mode) throw new AccessDeniedException("policy_transition_pending");
         command = command with { TargetJson = TenantApprovalRules.BrowserTarget(witness, prepared.Origin),
-            FileInputOrigin = intent.Command is BrowserUploadCommand ? witness.FileInputOrigin ?? throw new AccessDeniedException("browser_file_source_changed") : null };
+            FileInputOrigin = TenantBrowserUploadRules.HasSources(intent.Command) ? witness.FileInputOrigin ?? throw new AccessDeniedException("browser_file_source_changed") : null };
         if (credential is not null)
         {
             command = command with { Credential = TenantBrowserCredentialRules.Parameters(credential, witness.CredentialOrigin ?? throw new AccessDeniedException("credential_origin_changed")) };

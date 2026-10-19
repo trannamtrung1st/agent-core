@@ -1,5 +1,9 @@
 # HTTP API and Realtime Protocol
 
+## Exact Browser Artifact drop intent
+
+The existing model `approvals.request_authorization` schema supports `{"operation":"run_browser_command","command":{"tool":"browser.drop","arguments":{"target":{"by":"testId","value":"file-drop"},"artifactId":"<canonical-same-Session-UUID>"}}}`. This is an internal typed model intent, not a new public dispatch route. `artifactId` is exclusive with `text` and `mimeType`; Core supplies actual Session/tenant/agent identity, independent current source reads, immutable file facts and the exact target-frame origin. Existing decision/receipt DTOs and shared Browser parameter preview remain the wire owners. A completed command confirms the native drop event, not remote acceptance. [Contract](04-backend-interfaces.md#tenant-browser-artifact-drop-contract), [qualification](reports/tenant-browser-drop-verification-2026-10-20.md).
+
 ## Browser Artifact publication results
 
 Canonical tenant Approval `operationResult` may include optional `browserArtifacts` with `status` (`published`, `empty`, `unavailable`), nullable safe `reasonCode` and bounded `files` of `{kind,artifactId}`. A completed Browser outcome does not imply file publication succeeded. These are factual references; no bytes, names, read capability or replay permission are returned in this field. Existing Session Artifact metadata/preview/content routes independently authorize each current recipient. No public Browser preparation/dispatch or image-body grant endpoint is added. Captures and explicitly requested downloads use the [existing effect contract](04-backend-interfaces.md#tenant-browser-capture-and-download-publication).

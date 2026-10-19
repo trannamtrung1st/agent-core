@@ -1,5 +1,9 @@
 # Accounts, organizations, access and approvals UX
 
+## Browser Artifact drop consent
+
+Artifact-backed drops reuse the shared Browser saved-command parameter summary. Show the exact readable file name, MIME, size, ID/hash and file-drop frame origin as escaped wrapping text. State “Dispatch this exact file drop only; server acceptance is not confirmed.” Artifact read and Browser use remain independent; no file picker, inline bytes, MIME override, second approval editor or new layout is introduced. Current source/target drift keeps the existing fresh-request/cancel recovery; completed and uncertain results retain their existing limited native/no-replay meaning. Backend, store, native and model/HTTP behavior have [focused qualification](reports/tenant-browser-drop-verification-2026-10-20.md); this checkpoint does not claim a separate new rendered Drop UI gate.
+
 ## Browser capture and download facts
 
 The incumbent saved Browser parameter summary shows whether capture images or accepted downloads will be published, the independent creation/read distinction, effective byte/task limits and capture privacy mode. Download publication is explicit in model intent and defaults off; no replacement arguments or second approval editor is introduced. “Command completed” describes the native Browser result. File publication has separate `published`, `empty` or `unavailable` facts, safe reason and file IDs in the approval result; partial publication retains its qualifying reason. Published references confer no file access and never imply an application/business outcome was verified. Shared rich-file surfaces recheck each recipient independently.

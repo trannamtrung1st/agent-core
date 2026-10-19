@@ -10,24 +10,35 @@ public sealed record TenantBrowserUploadSource(Guid ArtifactId, string DisplayNa
 
 public static class TenantBrowserUploadRules
 {
-    public static IReadOnlyList<Guid> Ids(BrowserUploadCommand upload)
+    public static bool HasSources(BrowserCommand command) => command is BrowserUploadCommand or BrowserDrop { ArtifactId: not null };
+    public static IReadOnlyList<Guid> Ids(BrowserCommand command) => command switch
     {
-        if (upload.Uploads is not null || upload.ArtifactIds is not { Count: > 0 and <= 8 } ids)
-            throw new ArgumentException("Use one to eight canonical Session Artifact IDs.");
+        BrowserUploadCommand upload => Ids(upload),
+        BrowserDrop { ArtifactId: { } id, Text: null, MimeType: null } => CanonicalIds([id]),
+        _ => throw new ArgumentException("Use either exact file-drop Artifact authority or literal text, never both.")
+    };
+    private static IReadOnlyList<Guid> CanonicalIds(IReadOnlyList<string> ids)
+    {
         var parsed = ids.Select(id => Guid.TryParseExact(id, "D", out var value) && value != Guid.Empty && id == value.ToString("D")
             ? value : throw new ArgumentException("Use canonical Session Artifact IDs.")).ToArray();
         if (parsed.Distinct().Count() != parsed.Length) throw new ArgumentException("Use distinct Session Artifact IDs.");
         return parsed;
     }
+    public static IReadOnlyList<Guid> Ids(BrowserUploadCommand upload)
+    {
+        if (upload.Uploads is not null || upload.ArtifactIds is not { Count: > 0 and <= 8 } ids)
+            throw new ArgumentException("Use one to eight canonical Session Artifact IDs.");
+        return CanonicalIds(ids);
+    }
     public static IReadOnlyList<TenantBrowserUploadSource> Sources(PreparedBrowserCommand value)
     {
         var command = TenantApprovalRules.BrowserIntent(value.SessionId, value.ToolName, value.ArgumentsJson).Command;
-        if (command is not BrowserUploadCommand upload)
+        if (!HasSources(command))
         {
-            if (value.ArtifactSourcesJson is not null || value.FileInputOrigin is not null) throw new ArgumentException("File sources require Browser upload.");
+            if (value.ArtifactSourcesJson is not null || value.FileInputOrigin is not null) throw new ArgumentException("File sources require Browser upload or Artifact drop.");
             return [];
         }
-        var ids = Ids(upload);
+        var ids = Ids(command);
         if (value.ArtifactSourcesJson is not { Length: > 0 and <= 16384 } json) throw new ArgumentException("Upload requires exact file sources.");
         TenantBrowserUploadSource[] sources;
         try { sources = JsonSerializer.Deserialize<TenantBrowserUploadSource[]>(json) ?? throw new ArgumentException("Missing upload sources."); }
@@ -50,10 +61,10 @@ public static class TenantBrowserUploadRules
 
 public sealed class TenantBrowserUploadTarget(ITenantArtifactStore artifacts)
 {
-    public async ValueTask<string> CaptureAsync(Guid tenant, Guid session, BrowserUploadCommand upload, CancellationToken ct)
+    public async ValueTask<string> CaptureAsync(Guid tenant, Guid session, BrowserCommand command, CancellationToken ct)
     {
         var sources = new List<TenantBrowserUploadSource>();
-        foreach (var id in TenantBrowserUploadRules.Ids(upload))
+        foreach (var id in TenantBrowserUploadRules.Ids(command))
         {
             var item = await artifacts.FindTenantAsync(tenant, session, id, ct).ConfigureAwait(false)
                 ?? throw new AccessDeniedException("resource_unavailable");

@@ -35,7 +35,7 @@ public sealed partial class TenantBrowserApprovalTests
             return ValueTask.FromResult(Error is not null ? new TenantBrowserCommandPreparation(Error) : new(null,
                 new(actual, Guid.NewGuid(), 0, CommandRevision, Mode, Context, "pg_owned", 1, null, new string('a', 64), BrowserCommandIdentity.Hash(command),
                     command is BrowserFillCredential ? "http://127.0.0.1:5091" : null,
-                    command is BrowserUploadCommand ? "http://127.0.0.1:5091" : null), "http://127.0.0.1:5091"));
+                    TenantBrowserUploadRules.HasSources(command) ? "http://127.0.0.1:5091" : null), "http://127.0.0.1:5091"));
         }
     }
     private static async Task<Setup> Prepare(Fixture f, bool permissions = true, bool password = false, bool credentialUseAllowed = true, int passwordCount = 1)

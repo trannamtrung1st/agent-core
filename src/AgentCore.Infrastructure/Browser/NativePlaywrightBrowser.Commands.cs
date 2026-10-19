@@ -27,9 +27,9 @@ public sealed partial class NativePlaywrightBrowser
             || command.TenantWitness?.CredentialOrigin is null)) return new("forbidden");
         if (command.Command is not BrowserFillCredential && command.TenantPasswordResolver is not null) return new("forbidden");
         if (command.TenantUploadResolver is not null && command.TenantOwner is null) return new("forbidden");
-        if (command.TenantOwner is not null && command.Command is BrowserUploadCommand
+        if (command.TenantOwner is not null && command.Command is (BrowserUploadCommand or BrowserDrop { ArtifactId: not null })
             && (command.TenantUploadResolver is null || command.TenantDispatchCheck is null || command.TenantWitness?.FileInputOrigin is null)) return new("forbidden");
-        if (command.Command is not BrowserUploadCommand && command.TenantUploadResolver is not null) return new("forbidden");
+        if (command.Command is not (BrowserUploadCommand or BrowserDrop { ArtifactId: not null }) && command.TenantUploadResolver is not null) return new("forbidden");
         if (command.TenantReadOnly && (command.TenantOwner is null || !TenantBrowserInspectionContract.ReadOnly(command.Command))) return new("forbidden");
         if (!TenantRequestAllowed(command)) return new("forbidden");
         if (command.TenantOwner is not null)
@@ -402,6 +402,39 @@ public sealed partial class NativePlaywrightBrowser
                 case BrowserDrop args:
                     {
                         var target = await Target(args.Target); if (target is null) return new("target_missing"); if (!await Ordinary(target)) return new("forbidden");
+                        if (args.ArtifactId is not null)
+                        {
+                            if (command.TenantOwner is null || args.Text is not null || args.MimeType is not null) return new("forbidden");
+                            var pageUrl = session.Page.Url; var generation = session.Generation;
+                            var frameUrl = await target.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct);
+                            if (!Uri.TryCreate(frameUrl, UriKind.Absolute, out var uri)
+                                || uri.GetLeftPart(UriPartial.Authority) != command.TenantWitness!.FileInputOrigin) return new("browser_target_changed");
+                            var uploads = await command.TenantUploadResolver!(ct).ConfigureAwait(false);
+                            if (uploads.Count != 1) return new("invalid");
+                            var file = uploads[0];
+                            target = await Target(args.Target);
+                            if (target is null || session.Page.Url != pageUrl || generation != session.Generation
+                                || await target.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct) != frameUrl) return new("browser_target_changed");
+                            if (!await Ordinary(target)) return new("forbidden");
+                            if (command.TenantDispatchCheck is { } dispatch && await dispatch(ct).ConfigureAwait(false) is { } denied) return new(denied);
+                            if (session.Page.Url != pageUrl || generation != session.Generation
+                                || await target.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct) != frameUrl) return new("browser_target_changed");
+                            ct.ThrowIfCancellationRequested();
+                            // Pin the actual element/context: a locator must not resolve private bytes in a replacement document.
+                            await using var sink = await target.ElementHandleAsync().WaitAsync(ct);
+                            if (sink is null || await sink.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct) != frameUrl)
+                                return new("browser_target_changed");
+                            // Bytes exist only at this private native boundary; never in the saved command or result.
+                            await Action(sink.EvaluateAsync("""
+                                (el, data) => {
+                                    const bytes = Uint8Array.from(atob(data.base64), c => c.charCodeAt(0));
+                                    const transfer = new DataTransfer();
+                                    transfer.items.add(new File([bytes], data.name, {type:data.mime}));
+                                    el.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer:transfer}));
+                                }
+                                """, new { name = file.FileName, mime = file.MediaType, base64 = Convert.ToBase64String(file.Content.Span) }));
+                            break;
+                        }
                         var text = args.Text; if (string.IsNullOrWhiteSpace(text)) return new("invalid");
                         await Action(target.EvaluateAsync("(el, data) => { const transfer = new DataTransfer(); transfer.setData(data.mime, data.text); el.dispatchEvent(new DragEvent('drop', {bubbles:true,dataTransfer:transfer})); }", new { mime = args.MimeType ?? "text/plain", text })); break;
                     }

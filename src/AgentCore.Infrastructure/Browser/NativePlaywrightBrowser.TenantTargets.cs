@@ -73,7 +73,9 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserCommandTarge
             view?.Dialog is { } dialog ? _tenantDialogs.GetValue(dialog, static _ => new()).Id : null,
             location is null ? null : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(location))), BrowserCommandIdentity.Hash(command),
             command is BrowserFillCredential fill && view is not null ? CredentialTargetOrigin(view, fill.Target) : null,
-            command is BrowserUploadCommand upload && view is not null ? CredentialTargetOrigin(view, upload.Target) : null);
+            view is not null ? command switch {
+                BrowserUploadCommand upload => CredentialTargetOrigin(view, upload.Target),
+                BrowserDrop { ArtifactId: not null } drop => CredentialTargetOrigin(view, drop.Target), _ => null } : null);
     }
 
     // Cached frame handles only. The protected sink still validates the live field and exact frame before resolving a secret.

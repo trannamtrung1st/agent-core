@@ -41,12 +41,12 @@ public sealed partial class TenantBrowserApprovalTests
         Assert.Throws<ArgumentException>(() => TenantBrowserUploadRules.Ids(new(new("label", "File"), [artifact.ToString("D")], [new("raw.txt", "text/plain", new byte[] { 1 })])));
     }
 
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Browser_upload_model_continuation_retains_only_its_own_file_read_authority(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Browser_upload_model_continuation_retains_only_its_own_file_read_authority(bool sqlite, bool drop)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f); var (file, read) = await UploadSource(f, s); var probe = new EffectProbe(Probe(s));
-        (s, var request) = await BrowserModelApproval(f, s, probe, upload: file.ArtifactId);
+        (s, var request) = await BrowserModelApproval(f, s, probe, upload: file.ArtifactId, drop: drop);
         await BrowserContinuations(f, probe).PrepareExternalEffectAsync(s.Run);
         var saved = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!;
         Assert.Contains("owned observation", saved.Checkpoint!.PayloadJson); Assert.DoesNotContain("Private original", saved.Checkpoint.PayloadJson);
@@ -57,8 +57,8 @@ public sealed partial class TenantBrowserApprovalTests
         Assert.Equal(1, probe.NativeEffects);
     }
 
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Browser_upload_cannot_use_another_Sessions_actual_Artifact_even_with_tenant_read(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Browser_upload_cannot_use_another_Sessions_actual_Artifact_even_with_tenant_read(bool sqlite, bool drop)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f);
@@ -69,17 +69,17 @@ public sealed partial class TenantBrowserApprovalTests
             new AgentCore.Application.Execution.AgentRunCommand.Claim(other.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
         var (file, _) = await UploadSource(f, s with { Run = other });
         var probe = Probe(s);
-        Assert.Equal("resource_unavailable", (await Assert.ThrowsAsync<AccessDeniedException>(() => Request(Service(f, probe), s, ToolCatalog.BrowserUpload, UploadArguments(file.ArtifactId)).AsTask())).ReasonCode);
+        Assert.Equal("resource_unavailable", (await Assert.ThrowsAsync<AccessDeniedException>(() => Request(Service(f, probe), s, FileTransferTool(drop), FileTransferArguments(drop, file.ArtifactId)).AsTask())).ReasonCode);
         Assert.Equal(0, probe.Reads);
     }
 
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Browser_upload_review_requires_independent_raw_file_read_and_source_approval_scope(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Browser_upload_review_requires_independent_raw_file_read_and_source_approval_scope(bool sqlite, bool drop)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f); var (file, _) = await UploadSource(f, s); var service = Service(f, Probe(s));
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision;
-        var request = Assert.IsType<TenantApprovalRequest>((await Request(service, s, ToolCatalog.BrowserUpload, UploadArguments(file.ArtifactId))).Request);
+        var request = Assert.IsType<TenantApprovalRequest>((await Request(service, s, FileTransferTool(drop), FileTransferArguments(drop, file.ArtifactId))).Request);
         await new TenantOperationPolicyService(f.Iam, (ITenantOperationPolicyStore)f.Iam, f.Authorizer, f.Identity, f.Ids, f.Clock)
             .SaveAsync(s.Tenant, s.Human, "artifacts.read", new(OperationApprovalMode.Always, true), await Revision(), 0);
         var account = await f.Identity.RegisterAsync("upload-reviewer@example.test", "File reviewer", "strong-reviewer-password");
@@ -110,12 +110,12 @@ public sealed partial class TenantBrowserApprovalTests
         Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, request.RequestId));
     }
 
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Browser_upload_inbox_omits_deleted_Session_sources_before_totals(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Browser_upload_inbox_omits_deleted_Session_sources_before_totals(bool sqlite, bool drop)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f); var (file, _) = await UploadSource(f, s); var service = Service(f, Probe(s));
-        var request = (await Request(service, s, ToolCatalog.BrowserUpload, UploadArguments(file.ArtifactId))).Request!;
+        var request = (await Request(service, s, FileTransferTool(drop), FileTransferArguments(drop, file.ArtifactId))).Request!;
         Assert.Equal(1, (await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(s.Tenant, null, null, new())).Total);
         await service.CancelAsync(s.Tenant, request.RequestId, s.Human, request.Operation.ActionHash,
             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, request.Revision);
@@ -129,17 +129,17 @@ public sealed partial class TenantBrowserApprovalTests
         Assert.Equal(0, (await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(s.Tenant, null, null, new())).Total);
     }
 
-    [Fact]
-    public async Task Tenant_Browser_upload_SQLite_guards_reject_missing_and_mutated_sources_at_storage_boundary()
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_Browser_upload_SQLite_guards_reject_missing_and_mutated_sources_at_storage_boundary(bool drop)
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f); var (file, _) = await UploadSource(f, s);
-        var request = (await Request(Service(f, Probe(s)), s, ToolCatalog.BrowserUpload, UploadArguments(file.ArtifactId))).Request!;
+        var request = (await Request(Service(f, Probe(s)), s, FileTransferTool(drop), FileTransferArguments(drop, file.ArtifactId))).Request!;
         await using var db = await f.Contexts!.CreateDbContextAsync();
         var row = TenantApprovalRecord.From(request with { RequestId = f.Ids.NewId(), Operation = request.Operation with {
             BrowserCommand = request.Operation.BrowserCommand! with { ArtifactSourcesJson = "[]" } } });
         db.Add(row); var rejected = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
-        Assert.Contains("Browser upload requires exact owned Artifact sources", rejected.InnerException!.Message);
+        Assert.Contains("Browser file transfer requires exact owned Artifact sources", rejected.InnerException!.Message);
         db.ChangeTracker.Clear();
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson = json_set(PayloadJson, '$.Operation.BrowserCommand.ArtifactSourcesJson', '[]') WHERE RequestId = {request.RequestId}"));
         Assert.Equal(request, (await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(s.Tenant, request.RequestId))!);

@@ -6,8 +6,8 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantBrowserOwnershipTests
 {
-    [TenantChromiumFact]
-    public async Task Tenant_upload_file_input_origin_is_exact_for_cross_origin_frames_and_cannot_change_before_resolution()
+    [TenantChromiumTheory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_upload_file_input_origin_is_exact_for_cross_origin_frames_and_cannot_change_before_resolution(bool drop)
     {
         await using var first = new LoopbackBrowserFixtureHost(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
         await using var second = new LoopbackBrowserFixtureHost(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
@@ -25,7 +25,8 @@ public sealed partial class TenantBrowserOwnershipTests
             await page.SetContentAsync("<iframe title='File input' src='" + second.Origin + "/upload'></iframe>");
             await page.FrameLocator("iframe").GetByLabel("Product image").WaitForAsync();
             var snapshot = await Dispatch(browser, owner, new BrowserObserve()); var frameRef = Assert.Single(snapshot.Observation!.Frames!).Ref;
-            var command = new BrowserUploadCommand(new("label", "Product image", FrameRef: frameRef), [Guid.NewGuid().ToString("D")]);
+            BrowserCommand command = drop ? new BrowserDrop(new("label", "Product image", FrameRef: frameRef), ArtifactId: Guid.NewGuid().ToString("D"))
+                : new BrowserUploadCommand(new("label", "Product image", FrameRef: frameRef), [Guid.NewGuid().ToString("D")]);
             var prepared = await browser.PrepareTenantCommandAsync(owner, command); Assert.Null(prepared.ErrorCode);
             Assert.Equal(first.Origin, prepared.Origin); Assert.Equal(second.Origin, prepared.Witness!.FileInputOrigin);
             var frame = page.Frames.Single(f => f != page.MainFrame); await frame.GotoAsync(first.Origin + "/upload");
@@ -39,8 +40,8 @@ public sealed partial class TenantBrowserOwnershipTests
         finally { await browser.StopAsync(CancellationToken.None); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
-    [TenantChromiumTheory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_upload_sink_rechecks_authority_and_live_frame_after_resolving_files(bool navigate)
+    [TenantChromiumTheory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_upload_sink_rechecks_authority_and_live_frame_after_resolving_files(bool navigate, bool drop)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-upload-sink-" + Guid.NewGuid().ToString("N")); var browser = Native(root);
         await browser.StartAsync(CancellationToken.None);
@@ -48,7 +49,8 @@ public sealed partial class TenantBrowserOwnershipTests
         {
             var owner = Owner(); await Open(browser, owner); var page = Page(browser, owner);
             await page.GotoAsync(browser.Fixture.Origin + "/upload");
-            var command = new BrowserUploadCommand(new("label", "Product image"), [Guid.NewGuid().ToString("D")]);
+            BrowserCommand command = drop ? new BrowserDrop(new("label", "Product image"), ArtifactId: Guid.NewGuid().ToString("D"))
+                : new BrowserUploadCommand(new("label", "Product image"), [Guid.NewGuid().ToString("D")]);
             var prepared = await browser.PrepareTenantCommandAsync(owner, command); Assert.Null(prepared.ErrorCode);
             var resolutions = 0; var checks = 0;
             var request = new BrowserRequest(owner.SessionId, command) { TenantOwner = owner, TenantWitness = prepared.Witness,

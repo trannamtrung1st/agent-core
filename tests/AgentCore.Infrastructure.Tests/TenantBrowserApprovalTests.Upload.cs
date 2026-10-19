@@ -12,6 +12,10 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantBrowserApprovalTests
 {
     private static string UploadArguments(Guid artifact) => JsonSerializer.Serialize(new { target = new { by = "label", value = "Product image" }, artifactIds = new[] { artifact.ToString("D") } });
+    private static string FileTransferTool(bool drop) => drop ? ToolCatalog.BrowserDrop : ToolCatalog.BrowserUpload;
+    private static string FileTransferArguments(bool drop, Guid artifact) => drop
+        ? JsonSerializer.Serialize(new { target = new { by = "testId", value = "file-drop" }, artifactId = artifact.ToString("D") })
+        : UploadArguments(artifact);
     private static async Task<(ArtifactRecord File, RoleAssignment Read)> UploadSource(Fixture f, Setup s, bool permit = true)
     {
         var file = await ((ITenantArtifactStore)f.Artifacts).CreateTenantAsync(new(s.Run.Owner, s.Run.SessionId, s.Run.AgentRunId, s.Run.Claim!.Generation),
@@ -23,19 +27,19 @@ public sealed partial class TenantBrowserApprovalTests
         return (file, read);
     }
 
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Browser_upload_reviews_actual_file_facts_then_dispatches_once_and_reopens_without_bytes(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Browser_upload_reviews_actual_file_facts_then_dispatches_once_and_reopens_without_bytes(bool sqlite, bool drop)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f); var (file, _) = await UploadSource(f, s); var probe = new EffectProbe(Probe(s));
-        var service = Service(f, probe); var pending = await Request(service, s, ToolCatalog.BrowserUpload, UploadArguments(file.ArtifactId));
+        var service = Service(f, probe); var pending = await Request(service, s, FileTransferTool(drop), FileTransferArguments(drop, file.ArtifactId));
         var request = Assert.IsType<TenantApprovalRequest>(pending.Request); var value = request.Operation.BrowserCommand!;
         Assert.Equal(TenantBrowserUploadRules.Source(file), Assert.Single(TenantBrowserUploadRules.Sources(value)));
         Assert.Equal("http://127.0.0.1:5091", value.FileInputOrigin); Assert.Equal("browser.use", request.Permission);
         Assert.DoesNotContain("Private original", JsonSerializer.Serialize(request));
         var view = await service.ReadViewAsync(s.Tenant, request.RequestId, s.Human);
         Assert.Contains(view.Review!.Changes, c => c.Field == "browserArguments" && c.After!.ToString()!.Contains(file.DisplayName)
-            && c.After.ToString()!.Contains(file.Sha256Hex) && c.After.ToString()!.Contains("server submission is not confirmed"));
+            && c.After.ToString()!.Contains(file.Sha256Hex) && c.After.ToString()!.Contains(drop ? "server acceptance is not confirmed" : "server submission is not confirmed"));
         Assert.Equal(0, (await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(s.Tenant, null, null, new(), artifactReadVisibility: new([], null))).Total);
         Assert.Equal(1, (await ((ITenantApprovalStore)f.Iam).ListApprovalsAsync(s.Tenant, null, null, new(), artifactReadVisibility: new([file.ArtifactId], null))).Total);
         request = await service.DecideAsync(s.Tenant, request.RequestId, s.Human, true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
@@ -56,21 +60,22 @@ public sealed partial class TenantBrowserApprovalTests
             new AgentCore.Application.Execution.AgentRunCommand.Claim(run.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
     }
 
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_Browser_upload_requires_raw_file_read_before_target_preparation(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_Browser_upload_requires_raw_file_read_before_target_preparation(bool sqlite, bool drop)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f); var (file, _) = await UploadSource(f, s, false); var probe = Probe(s);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => Request(Service(f, probe), s, ToolCatalog.BrowserUpload, UploadArguments(file.ArtifactId)).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => Request(Service(f, probe), s, FileTransferTool(drop), FileTransferArguments(drop, file.ArtifactId)).AsTask());
         Assert.Equal(0, probe.Reads);
     }
 
-    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
-    public async Task Tenant_Browser_upload_rechecks_file_read_at_native_gate_and_withholds_results_after_read_loss(bool sqlite, bool after)
+    [Theory] [InlineData(false, false, false)] [InlineData(true, false, false)] [InlineData(false, true, false)] [InlineData(true, true, false)]
+    [InlineData(false, false, true)] [InlineData(true, false, true)] [InlineData(false, true, true)] [InlineData(true, true, true)]
+    public async Task Tenant_Browser_upload_rechecks_file_read_at_native_gate_and_withholds_results_after_read_loss(bool sqlite, bool after, bool drop)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true);
         var s = await Prepare(f); var (file, read) = await UploadSource(f, s); var probe = new EffectProbe(Probe(s));
-        (s, var request) = await ApprovedEffect(f, s, probe, tool: ToolCatalog.BrowserUpload, args: UploadArguments(file.ArtifactId));
+        (s, var request) = await ApprovedEffect(f, s, probe, tool: FileTransferTool(drop), args: FileTransferArguments(drop, file.ArtifactId));
         async Task Revoke() => await f.Access.RevokeAssignmentAsync(s.Human.PrincipalId, s.Tenant, read.AssignmentId, (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
         if (after) probe.AfterEffect = Revoke; else probe.BeforeGate = Revoke;
         var result = await ExecuteEffect(Effects(f, probe), s, request);

@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Tenant Browser Artifact-backed drops now reuse exact file-source consent, independent file reads and the native protected transfer sink. [Focused qualification](docs/reports/tenant-browser-drop-verification-2026-10-20.md) covers both stores, native file delivery/no replay and full model-worker/HTTP binary transfer. Browser lifecycle/privacy/autonomous families and the remaining full IAM proposal stay open.
+
 Tenant Browser captures and explicitly requested downloads now publish immutable Session Artifacts through the existing exact consent, native effect, receipt and checkpoint owners. [Focused backend/model/native qualification](docs/reports/tenant-browser-artifacts-verification-2026-10-20.md) covers independent file permissions, atomic publication facts, root budgets and current-access vision delivery. The [shared publication-result inspector](docs/reports/tenant-browser-files-ui-verification-2026-10-20.md) now separates command/publication facts and deliberately checks recipient file access. Remaining Browser/resource/transport families and the full tenant IAM authority/schema cutover stay open.
 
 Tenant Chat now exposes original Attachment copying through the shared Session files inspector, with independent Working files and Artifacts views and deliberate partial/unknown recovery. [UI qualification](docs/reports/tenant-attachment-materialization-ui-verification-2026-10-19.md) supersedes frontend-materialization-pending notes below. The remaining full tenant IAM proposal stays active.

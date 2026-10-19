@@ -37,7 +37,7 @@ public sealed partial class TenantBrowserApprovalTests
                 Assert.NotNull(request.TenantPasswordResolver); PasswordResolutions++;
                 Assert.Equal("tenant-bound-private-password", await request.TenantPasswordResolver(target.HostPolicy.NavigationOrigins.Single(), ct));
             }
-            if (request.Command is BrowserUploadCommand)
+            if (request.Command is BrowserUploadCommand or BrowserDrop { ArtifactId: not null })
             {
                 Assert.NotNull(request.TenantUploadResolver);
                 Uploads = await request.TenantUploadResolver(ct);

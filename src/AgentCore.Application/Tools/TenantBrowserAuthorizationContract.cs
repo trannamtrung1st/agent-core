@@ -32,7 +32,17 @@ public static class TenantBrowserAuthorizationContract
                 ids["items"]!["maxLength"] = 36;
                 ids["items"]!["pattern"] = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
             }
-            if (name == "browser.drop") arguments["properties"]!.AsObject().Remove("artifactId");
+            if (name == ToolCatalog.BrowserDrop)
+            {
+                var id = arguments["properties"]!["artifactId"]!;
+                id["maxLength"] = 36;
+                id["pattern"] = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+                id["description"] = "One exact same-Session Artifact; omit text and mimeType. Independent current file read is required.";
+                arguments["oneOf"] = new JsonArray(
+                    new JsonObject { ["required"] = new JsonArray("artifactId"), ["not"] = new JsonObject { ["anyOf"] = new JsonArray(
+                        new JsonObject { ["required"] = new JsonArray("text") }, new JsonObject { ["required"] = new JsonArray("mimeType") }) } },
+                    new JsonObject { ["required"] = new JsonArray("text"), ["not"] = new JsonObject { ["required"] = new JsonArray("artifactId") } });
+            }
             commands.Add(new JsonObject { ["type"] = "object", ["additionalProperties"] = false,
                 ["properties"] = new JsonObject { ["tool"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(name) },
                     ["arguments"] = arguments, ["downloadArtifacts"] = new JsonObject { ["type"] = "boolean", ["description"] = "Explicitly publish accepted downloads as Session Artifacts under independent creation authority; no file read is granted." } }, ["required"] = new JsonArray("tool", "arguments") });
