@@ -80,6 +80,13 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, claim.Generation);
         var snapshot = await storage.LoadTenantRuntimeAsync(frame, cancellationToken).ConfigureAwait(false);
         if (snapshot is null) return false;
+        if (snapshot.Entries.Any(entry => entry.Attachments is { Count: > 0 }))
+        {
+            // Internal binding precedes the independently authorized runtime adapter. Never pass saved file labels to an unconverted model context.
+            await storage.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Fail(run.Revision, time.GetUtcNow(), claim.Generation,
+                "attachment-runtime-unavailable", "Tenant attachment processing is unavailable for this Run.", false, null, ids.NewId()), ids.NewId(), cancellationToken).ConfigureAwait(false);
+            return true;
+        }
         Live? admitted = null; var refused = false;
         lock (_gate)
         {

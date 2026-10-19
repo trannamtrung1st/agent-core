@@ -3,7 +3,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantHumanRunAdmission(AgentRun Run, ConversationEntry Input, long ExpectedSessionRevision, long ExpectedInstanceRevision);
+public sealed record TenantHumanRunAdmission(AgentRun Run, ConversationEntry Input, long ExpectedSessionRevision, long ExpectedInstanceRevision, IReadOnlyList<AttachmentRecord>? Attachments = null);
 public sealed record TenantRunAdmissionResult(bool Created, AgentRun Run, Guid EntryId, long SessionRevision);
 
 // Existing entry/Activation/Run rows, owning Session, security revision and audit commit atomically.

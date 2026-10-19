@@ -993,3 +993,9 @@ Tenant knowledge retrieval now uses the actual pinned/current resource source, e
 ## Tenant resource publication checkpoint — 2026-10-19
 
 Exact resource publication now uses actual pinned/current sources and the incumbent atomic Artifact/Run/receipt and exact consent owners. This supersedes resource-file source publication pending notes only. Other virtual resource and Attachment/Browser adapters, autonomous/transport families, final legacy authority/schema removal and full proposal acceptance remain open. This bounded checkpoint does not start or claim milestone acceptance. [Focused qualification](reports/tenant-resource-artifact-verification-2026-10-19.md).
+
+## Tenant Attachment binding prerequisite — 2026-10-19
+
+Exact internal human message admission now binds pending uploads in the existing entry/Activation/Run/IAM transaction, with factual dedupe, current original-human child reads, immutable source checks and rollback. Human history resolves actual same-Session sources and removes untrusted labels. [Focused evidence](reports/tenant-attachment-binding-verification-2026-10-19.md) qualifies this prerequisite only. Public HTTP/Hub attachment admission, runtime processing/model reads and exact read Review, composer, Attachment publication, other proposal families and final obsolete-authority/schema cutover remain open. No full Attachment, milestone or proposal acceptance is claimed.
+
+The tenant dispatcher currently refuses loaded Attachment context before runtime allocation or model dispatch. Replace that guard only after current independent Agent IAM/policy, extraction/manifest projection and checkpoint source revalidation have actual hosted evidence.

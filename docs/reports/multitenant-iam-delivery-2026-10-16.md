@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant Attachment binding prerequisite — 2026-10-19
+
+Exact internal message binding now joins the incumbent entry/Activation/Run/IAM transaction, and human history resolves current actual same-Session sources with canonical labels. [Qualification](tenant-attachment-binding-verification-2026-10-19.md) supersedes the internal binding prerequisite only. Public attachment messages, runtime processing/model reads and exact Review, composer and Attachment publication remain unconverted. Other proposal families and final obsolete-authority/schema cutover stay open; the full goal remains active.
+
 ## Human tenant Attachment storage checkpoint — 2026-10-19
 
 Canonical human upload, permission-filtered metadata/download/Office preview, pending abort and retained-expiry/deleted-Session cleanup now use existing Attachment/IAM/filesystem/supervision owners. [Focused evidence](tenant-attachment-storage-verification-2026-10-19.md) supersedes human Attachment storage/cleanup pending notes only. Tenant message binding, processing/model tools, composer and Attachment publication remain unconverted. Other virtual resource/Browser adapters, autonomous/background/events/transport families and final obsolete-authority/schema cutover remain open. The full proposal stays active; no milestone or production acceptance is claimed.

@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant Attachment binding prerequisite — 2026-10-19
+
+Exact internal message binding now joins the incumbent entry/Activation/Run/IAM transaction, and human history resolves current actual same-Session sources with canonical labels. [Qualification](tenant-attachment-binding-verification-2026-10-19.md) supersedes the internal binding prerequisite only. Public attachment messages, runtime processing/model reads and exact Review, composer and Attachment publication remain unconverted. Other proposal families and final obsolete-authority/schema cutover stay open; the full goal remains active.
+
 Successor checkpoint: exact admitted resource files now support publication through independent source IAM and the existing atomic Artifact/Run/receipt and consent owners. [Qualification](tenant-resource-artifact-verification-2026-10-19.md) supersedes resource-file source publication pending notes only. Other virtual resource/adapters, autonomous/transport families and final authority/schema removal remain open.
 
 Successor checkpoint: tenant knowledge retrieval now uses actual admitted/current resource sources, independent child/Agent/Session reads and incumbent durable Review/successor/checkpoint owners. [Qualification](tenant-knowledge-read-verification-2026-10-19.md) supersedes `knowledge.retrieve` pending notes only. Other virtual resources/publication adapters, autonomous/transport families and final authority/schema removal remain open.

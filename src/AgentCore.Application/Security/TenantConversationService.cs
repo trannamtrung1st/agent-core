@@ -15,13 +15,19 @@ public sealed record TenantConversationView(TenantSessionRoot Owner, string Titl
     PublicAgentDescriptor Agent, SessionModelSelection? Model);
 
 public sealed class TenantConversationService(IIamStore security, ITenantSessionStore sessions, ITenantConversationStore content,
-    IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null)
+    IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null, TenantAttachmentService? attachmentAccess = null)
 {
     public async ValueTask<bool> CanReadArtifactReferenceAsync(Guid tenant, Guid session, TenantSessionInitiator human, string? reference, CancellationToken ct = default)
     {
         if (artifactAccess is null || !Guid.TryParse(reference, out var id) || id == Guid.Empty) return false;
         try { await artifactAccess.ReadAsync(tenant, session, id, human, ct).ConfigureAwait(false); return true; }
         catch (AccessDeniedException) { return false; }
+    }
+    private async ValueTask<AttachmentRecord?> ReadAttachmentReferenceAsync(Guid tenant, Guid session, TenantSessionInitiator human, string? reference, CancellationToken ct)
+    {
+        if (attachmentAccess is null || !Guid.TryParse(reference, out var id) || id == Guid.Empty) return null;
+        try { var source = await attachmentAccess.ReadAsync(tenant, session, id, human, ct).ConfigureAwait(false); return source.State == AttachmentState.Bound ? source : null; }
+        catch (AccessDeniedException) { return null; }
     }
     public async ValueTask<TenantConversationRecipient> AuthorizeRecipientAsync(Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct = default)
     {
@@ -53,6 +59,13 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
         if (page.Owner != saved.Owner || page.SessionRevision != saved.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
         var visible = new List<PublicHistoryEntry>(page.History.Items.Count);
         var cache = new Dictionary<(string Permission, string Type, string Id), bool>();
+        var sources = new Dictionary<string, AttachmentRecord?>(StringComparer.Ordinal);
+        async ValueTask<AttachmentRecord?> Attachment(string? id)
+        {
+            if (id is null) return null;
+            if (!sources.TryGetValue(id, out var source)) { source = await ReadAttachmentReferenceAsync(tenant, session, human, id, ct).ConfigureAwait(false); sources.Add(id, source); }
+            return source;
+        }
         async ValueTask<bool> CanRead(string permission, string type, string? id)
         {
             if (string.IsNullOrWhiteSpace(id)) return false;
@@ -60,6 +73,7 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
             if (!cache.TryGetValue(key, out var allowed))
             {
                 allowed = type == "artifact" ? await CanReadArtifactReferenceAsync(tenant, session, human, id, ct).ConfigureAwait(false)
+                    : type == "attachment" ? await Attachment(id).ConfigureAwait(false) is not null
                     : (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(permission),
                         AccessScope.ForResource(tenant, type, id), ct).ConfigureAwait(false)).Allowed;
                 cache.Add(key, allowed);
@@ -76,11 +90,13 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
                     || block.Kind == "markdown" && block.AttachmentId is null && block.ArtifactId is null
                     || block.Kind == "attachment" && block.ArtifactId is null && await CanRead("attachments.read", "attachment", block.AttachmentId).ConfigureAwait(false)
                     || block.Kind == "artifact" && block.AttachmentId is null && await CanRead("artifacts.read", "artifact", block.ArtifactId).ConfigureAwait(false))
-                    blocks.Add(block.Kind == "artifact" ? block with { ArtifactId = Guid.Parse(block.ArtifactId!).ToString("D"), Text = "", FallbackText = "File" } : block);
+                    blocks.Add(block.Kind == "artifact" ? block with { ArtifactId = Guid.Parse(block.ArtifactId!).ToString("D"), Text = "", FallbackText = "File" }
+                        : block.Kind == "attachment" ? block with { AttachmentId = Guid.Parse(block.AttachmentId!).ToString("D"), Text = "", FallbackText = "File" } : block);
             var attachments = new List<PublicHistoryAttachment>();
             foreach (var attachment in projected.Attachments ?? [])
-                if (await CanRead("attachments.read", "attachment", attachment.AttachmentId.ToString("D")).ConfigureAwait(false)) attachments.Add(attachment);
-            // Canonical tenant ingress currently admits text only. Do not expose legacy resource labels,
+                if (await Attachment(attachment.AttachmentId.ToString("D")).ConfigureAwait(false) is { } attachmentSource)
+                    attachments.Add(new(attachmentSource.AttachmentId, attachmentSource.DisplayName, attachmentSource.ContentType));
+            // Structured resource parts remain unconverted. Do not expose legacy resource labels,
             // locators or untyped effect receipts as implicit authority for their underlying resources.
             var parts = projected.Parts?.Select(p => p.Kind == "text" ? p : new UserMessagePart("text", "[Resource unavailable]")).ToArray();
             visible.Add(projected with {

@@ -12,25 +12,41 @@ public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Gu
 public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null, bool CanCancel = false);
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null)
 {
     public async ValueTask<TenantRunReceipt> SubmitTextAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
+        => await SubmitMessageAsync(tenant, sessionId, initiator, messageId, text, [], expectedSecurityRevision, expectedSessionRevision, ct).ConfigureAwait(false);
+
+    public async ValueTask<TenantRunReceipt> SubmitMessageAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
+        Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
     {
+        var requested = attachmentIds.ToArray();
+        if (requested.Length > AttachmentLimits.MaxPerMessage || requested.Any(id => id == Guid.Empty) || requested.Distinct().Count() != requested.Length)
+            throw AgentCoreErrors.Validation("Use at most ten distinct attachment IDs.");
         var session = await sessions.FindTenantSessionAsync(tenant, sessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", session.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
         if (state.Tenant.Revision != expectedSecurityRevision || session.Snapshot.Revision != expectedSessionRevision) throw new SecurityConflictException("stale_revision");
-        if (messageId == Guid.Empty || string.IsNullOrWhiteSpace(text) || text.Length > 8000) throw AgentCoreErrors.Validation("A message ID and 1–8000 characters of text are required.");
+        if (messageId == Guid.Empty || string.IsNullOrWhiteSpace(text) && requested.Length == 0 || text.Length > 8000) throw AgentCoreErrors.Validation("A message ID and text up to 8000 characters or an attachment are required.");
         var (agent, resolved) = await configurations.ResolveAsync(tenant, session.Owner.AgentInstanceId, ct).ConfigureAwait(false);
         if (agent.PrincipalId != session.Owner.ExecutorPrincipalId) throw new AccessDeniedException("executor_unavailable");
         if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
         TenantSessionRules.RequireExecutor(state, agent);
+        var sources = new List<AttachmentRecord>(requested.Length);
+        foreach (var id in requested)
+        {
+            if (attachments is null) throw new AccessDeniedException("attachment_unavailable");
+            var item = await attachments.FindTenantAsync(tenant, sessionId, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("attachment_unavailable");
+            await TenantAttachmentBindingRules.PermissionsAsync(state, initiator.PrincipalId, sessionId, [item], authorizer, ct).ConfigureAwait(false);
+            sources.Add(item);
+        }
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
         var activationId = ids.NewId(); var runId = ids.NewId(); var entryId = ids.NewId(); var responseId = ids.NewId();
         var input = new ConversationEntry(entryId, session.Snapshot.DurableLastEntrySequence + 1, messageId, ConversationRole.User,
-            text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, now);
+            text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, now,
+            Attachments: sources.Count == 0 ? null : sources.Select(a => new ConversationAttachmentRef(a.AttachmentId, a.DisplayName, a.ContentType)).ToArray());
         var activation = Activation.Start(activationId, sessionId, ActivationKind.UserTurn, [entryId], messageId, null, null, null,
             $"human:{initiator.PrincipalId:D}:{messageId:D}", now);
         var context = new TrustedExecutionContext(tenant, agent.PrincipalId, initiator.PrincipalId, sessionId, runId, activationId, activationId, null, null, ExecutionOrigin.UserMessage);
@@ -42,7 +58,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
                 ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, false), resolved.Configuration, executionContext: context),
             new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
-        var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision);
+        var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray());
         _ = TenantRunRules.Admit(session, admission, agent, initiator);
         var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
         var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, "agent-runs.admit", runId.ToString("D"), "allowed", "human_message_admitted", now);

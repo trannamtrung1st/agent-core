@@ -18,6 +18,7 @@ public static class TenantRunRules
     {
         var run = admission.Run; var a = run.Admission.Activation; var context = run.Admission.ExecutionContext;
         var current = session.Snapshot; var input = admission.Input;
+        TenantAttachmentBindingRules.Shape(admission);
         if (context is null || context.Origin != ExecutionOrigin.UserMessage || context.OriginalInitiatorPrincipalId != initiator.PrincipalId
             || context.TenantId != session.Owner.TenantId || context.AgentPrincipalId != session.Owner.ExecutorPrincipalId
             || run.Owner != AgentRunOwner.ForTenant(session.Owner.TenantId, session.Owner.AgentInstanceId, session.Owner.ExecutorPrincipalId)
@@ -27,8 +28,8 @@ public static class TenantRunRules
             || input.Role != ConversationRole.User || input.Status != EntryStatus.Completed || input.ResponseId is not null
             || input.Sequence != current.DurableLastEntrySequence + 1 || input.SourceEventId is null
             || a.SourceEventId != input.SourceEventId || a.DedupeKey != $"human:{initiator.PrincipalId:D}:{input.SourceEventId:D}"
-            || input.Text.Length is < 1 or > 8000 || string.IsNullOrWhiteSpace(input.Text)
-            || input.Parts is not null || input.Envelope is not null || input.Attachments is not null || input.Failure is not null
+            || input.Text.Length > 8000 || string.IsNullOrWhiteSpace(input.Text) && input.Attachments is not { Count: > 0 }
+            || input.Parts is not null || input.Envelope is not null || input.Failure is not null
             || run.Admission.Configuration?.InstanceRevision != agent.Instance.Revision || run.DefinitionId != agent.Instance.DefinitionId
             || run.DefinitionVersion != agent.Instance.ActiveVersion || run.PinnedPersona != agent.Instance.Persona
             || run.Admission.Configuration.PersonaRevision != agent.Instance.PersonaRevision)
@@ -47,5 +48,6 @@ public static class TenantRunRules
         saved.Owner == proposed.Run.Owner && saved.SessionId == proposed.Run.SessionId
         && saved.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage
         && saved.Admission.ExecutionContext?.OriginalInitiatorPrincipalId == proposed.Run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId
-        && savedInput.SourceEventId == proposed.Input.SourceEventId && savedInput.Text == proposed.Input.Text;
+        && savedInput.SourceEventId == proposed.Input.SourceEventId && savedInput.Text == proposed.Input.Text
+        && (savedInput.Attachments ?? []).SequenceEqual(proposed.Input.Attachments ?? []);
 }

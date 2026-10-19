@@ -49,11 +49,11 @@ public sealed partial class InMemoryIamStore
     public ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next); var run = admission.Run;
+        ct.ThrowIfCancellationRequested(); admission = TenantAttachmentBindingRules.Freeze(admission); next = IamStateRules.Freeze(next); var run = admission.Run;
         if (run.Owner.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expectedSecurityRevision + 1)
             || audit.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != initiator.PrincipalId
             || audit.Action != "agent-runs.admit" || audit.Target != run.AgentRunId.ToString("D")) throw new ArgumentException("Invalid Run admission transaction.");
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (attachmentBacking?.TenantGate ?? _gate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantRunAdmissionResult?>(null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
@@ -62,7 +62,15 @@ public sealed partial class InMemoryIamStore
             if (agent is null || agent.Instance.Revision != admission.ExpectedInstanceRevision) return ValueTask.FromResult<TenantRunAdmissionResult?>(null);
             if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
             TenantSessionRules.RequireExecutor(before, agent); ct.ThrowIfCancellationRequested();
-            var result = sessionBacking.AdmitTenantRun(admission, agent, initiator);
+            var sources = admission.Attachments ?? [];
+            if (sources.Count > 0 && attachmentBacking is null) throw new AccessDeniedException("attachment_unavailable");
+            TenantAttachmentBindingRules.PermissionsAsync(before, initiator.PrincipalId, run.SessionId, sources, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            var result = sessionBacking.AdmitTenantRun(admission, agent, initiator, () => {
+                var actual = sources.Select(source => attachmentBacking!.RetainedTenant(next.Tenant.TenantId, run.SessionId, source.AttachmentId)
+                    ?? throw new AccessDeniedException("attachment_unavailable")).ToArray();
+                TenantAttachmentBindingRules.Current(admission, actual, (clock ?? TimeProvider.System).GetUtcNow());
+            });
+            if (result?.Created == true) attachmentBacking?.BindTenantSources(admission);
             if (result?.Created == true) { _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); }
             return ValueTask.FromResult(result);
         }

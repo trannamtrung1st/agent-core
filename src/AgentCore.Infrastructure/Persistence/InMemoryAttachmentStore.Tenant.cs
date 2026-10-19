@@ -45,6 +45,10 @@ public sealed partial class InMemoryAttachmentStore : ITenantAttachmentStore
         }
     }
     internal AttachmentRecord? RetainedTenant(Guid tenant, Guid session, Guid id) => _items.TryGetValue(id, out var item) && item.TenantId == tenant && item.SessionId == session ? item : null;
+    internal void BindTenantSources(TenantHumanRunAdmission admission)
+    {
+        foreach (var source in admission.Attachments ?? []) _items[source.AttachmentId] = TenantAttachmentBindingRules.Bound(source, admission.Input);
+    }
     internal void AbortTenant(AttachmentRecord item, CancellationToken ct)
     {
         lock (TenantGate) { ct.ThrowIfCancellationRequested(); _items[item.AttachmentId] = item with { ExpiresAt = time.GetUtcNow(), StageForNextTurn = false }; }

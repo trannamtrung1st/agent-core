@@ -105,7 +105,7 @@ public sealed partial class TenantCredentialIntegrationTests
         public IDefinitionResourceContentStore RunContent { get; } = new InMemoryDefinitionResourceContentStore();
         public TenantRunService RunService(ITenantRunStore? runs = null) => new(Iam, (ITenantSessionStore)Iam, runs ?? (ITenantRunStore)Iam,
             RunConfiguration(),
-            Identity, Authorizer, ModelCatalogFactory.Synthetic(), Ids, Clock);
+            Identity, Authorizer, ModelCatalogFactory.Synthetic(), Ids, Clock, attachments: Attachments as ITenantAttachmentStore);
         public TenantRunConfigurationResolver RunConfiguration(IBuiltInAgentDefinitionStore? currentBuiltIns = null) =>
             new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, currentBuiltIns ?? BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam);
         public TenantAgentConfigurationService AgentConfiguration() => new(Iam, (ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam,

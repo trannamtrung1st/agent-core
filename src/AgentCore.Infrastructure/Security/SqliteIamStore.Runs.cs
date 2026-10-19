@@ -83,7 +83,7 @@ public sealed partial class SqliteIamStore
     public async ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default)
     {
-        var run = admission.Run;
+        admission = TenantAttachmentBindingRules.Freeze(admission); var run = admission.Run;
         if (run.Owner.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != initiator.PrincipalId
             || audit.Action != "agent-runs.admit" || audit.Target != run.AgentRunId.ToString("D")) throw new ArgumentException("Invalid Run admission transaction.");
         TenantRunAdmissionResult? result = null;
@@ -99,6 +99,9 @@ public sealed partial class SqliteIamStore
             var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
             var current = SqliteMemoryStore.ToSnapshot(row, []);
             var value = TenantRunRules.Admit(new(root.Domain(), current), admission, agent, initiator);
+            var sources = admission.Attachments ?? [];
+            var currentState = (await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!;
+            await TenantAttachmentBindingRules.PermissionsAsync(currentState, initiator.PrincipalId, run.SessionId, sources, new IamAuthorizer(this), ct).ConfigureAwait(false);
             var key = run.Admission.Activation.DedupeKey;
             var duplicate = await db.Activations.AsNoTracking().SingleOrDefaultAsync(a => a.SessionId == root.SessionId && a.DedupeKey == key, ct).ConfigureAwait(false);
             if (duplicate is not null)
@@ -106,16 +109,33 @@ public sealed partial class SqliteIamStore
                 var saved = AgentRunStoreMapping.ToDomain(await OwnedRuns(db, next.Tenant.TenantId).AsNoTracking().SingleAsync(r => r.ActivationId == duplicate.ActivationId, ct).ConfigureAwait(false));
                 var inputId = saved.Admission.Activation.SourceEntryIds.Single().ToString("D");
                 var savedInput = await db.Entries.AsNoTracking().SingleAsync(e => e.EntryId == inputId && e.SessionId == root.SessionId, ct).ConfigureAwait(false);
-                if (saved.Owner != run.Owner || saved.Admission.ExecutionContext?.OriginalInitiatorPrincipalId != initiator.PrincipalId || savedInput.Text != admission.Input.Text)
+                if (!TenantRunRules.SameMessage(saved, SqliteMemoryStore.ToEntry(savedInput), admission))
                     throw new SecurityConflictException("message_id_conflict");
                 result = new(false, saved, Guid.Parse(inputId), current.Revision); return false;
             }
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status == (int)AgentRunStatus.Running, ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
             if (await db.AgentRuns.CountAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false) >= 100)
                 throw new SecurityConflictException("session_queue_full");
+            var attachmentRows = new List<AttachmentRecordRow>(sources.Count);
+            foreach (var source in sources)
+                attachmentRows.Add(await SqliteAttachmentStore.Owned(db, next.Tenant.TenantId, run.SessionId)
+                    .SingleOrDefaultAsync(a => a.AttachmentId == source.AttachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false)
+                    ?? throw new AccessDeniedException("attachment_unavailable"));
+            TenantAttachmentBindingRules.Current(admission, attachmentRows.Select(SqliteAttachmentStore.Domain).ToArray(), (clock ?? TimeProvider.System).GetUtcNow());
             SqliteMemoryStore.ApplySession(row, value); db.Entries.Add(SqliteMemoryStore.ToRecord(root.SessionId, admission.Input));
             db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(value, run)); db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(run));
             db.ActivationSourceEntries.Add(new() { ActivationId = run.ActivationId.ToString("D"), SessionId = root.SessionId, EntryId = admission.Input.EntryId.ToString("D"), Ordinal = 0 });
+            if (attachmentRows.Count > 0)
+            {
+                // Entry must exist before the conditional same-Session bind trigger runs. Both saves share the outer IAM transaction.
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                foreach (var attachment in attachmentRows)
+                {
+                    attachment.State = nameof(AttachmentState.Bound); attachment.EntryId = admission.Input.EntryId.ToString("D");
+                    attachment.ExpiresAtUtc = null; attachment.BoundAtUtc = admission.Input.CreatedAt.ToUnixTimeMilliseconds(); attachment.StageForNextTurn = false;
+                    db.MessageAttachments.Add(new() { SessionId = root.SessionId, EntryId = attachment.EntryId, AttachmentId = attachment.AttachmentId, Ordinal = attachmentRows.IndexOf(attachment) });
+                }
+            }
             result = new(true, run, admission.Input.EntryId, value.Revision); return true;
         }, ct).ConfigureAwait(false);
         return written || result is { Created: false } ? result : null;

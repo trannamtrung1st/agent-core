@@ -1,0 +1,28 @@
+# Tenant Attachment binding prerequisite qualification — 2026-10-19
+
+This checkpoint extends the existing internal human message admission with atomic Attachment binding and actual-source human history projection. Public HTTP/Hub message routes remain text-only. Runtime processing/model attachment reads and exact read Review, composer and Attachment publication remain unconverted. This is a prerequisite for those paths, not complete tenant Attachment behavior, milestone or proposal acceptance. The full goal remains active.
+
+## Behavior exercised
+
+The representative both-store workflow uploads immutable bytes, submits an attachment-only internal message, observes one completed user entry and queued Activation/Run with the actual uploader and exact source, retries the same message without new effects, refuses changed text or a new message reusing the bound upload, and reopens SQLite metadata/bytes. Binding performs no byte I/O or processing, adds no authority to the Agent, and retains the original request/uploader/hash with no bound TTL.
+
+Current original-human child reads and exact pending source witnesses join the incumbent admission transaction/gates. Prepared admission gates test child-read revocation, logout, expiry and abort; every refused branch leaves no user entry, Run or admission audit. Duplicate/empty/over-limit IDs, missing child reads and foreign-Session sources refuse without binding. A controlled SQLite relation-publication failure occurs after the entry/Activation/Run first save but before transaction commit: all graph/source/revision/relation/audit facts roll back, and a clean same-request retry succeeds. The two saves share one transaction and preserve the existing same-Session bound-entry trigger.
+
+History qualification reads the actual bound child, checks canonical source names/types and generic file blocks, suppresses invented model labels, hides files from a Session/Chat-only reader, and removes access immediately after an exact child grant is revoked. A separately bound file in another actual Session is injected into the tested response block and metadata refs; both stay hidden even from an organization-wide reader. History/download authority remains independent of executor authority. Actual Synthetic HTTP hosts for both profiles additionally prove internal binding remains factual while dispatch seals `attachment-runtime-unavailable` with no model request, checkpoint or result and no filename/body in its failure. No new frontend, browser or design token was introduced.
+
+## Executed checks
+
+| Project / filter | Terminal result | Evidence |
+| --- | --- | --- |
+| Infrastructure: `Tenant_message_attachment_`, `Actual_message_admission_`, `Current_chat_and_session_read_`, `Prepared_admission_`, `Tenant_conversation_pages_`, `AttachmentStoreContractTests`, `Tenant_attachment_`, `TenantSessionLifecycleTests` | 80 passed, 0 failed, 0 skipped; 1 m 1 s | `/private/tmp/tenant-attachment-binding-final-infrastructure.log` |
+| Infrastructure: `Tenant_message_attachment_history_`, with injected actual foreign-Session source | 2 passed, 0 failed, 0 skipped; 8 s | `/private/tmp/tenant-attachment-binding-foreign-history.log` |
+| API: `Tenant_internal_attachment_binding_` | 2 passed, 0 failed, 0 skipped; 10 s | `/private/tmp/tenant-attachment-binding-dispatch-fence.log` |
+| API: `Tenant_internal_attachment_binding_`, `Canonical_tenant_worker_completes_actual_HTTP_text_`, `Canonical_dispatch_rechecks_`, `Tenant_conversation_HTTP_reads_`, `Tenant_attachment_`, `AttachmentApiTests.Upload_bind_and_content_` | 14 passed, 0 failed, 0 skipped; 38 s | `/private/tmp/tenant-attachment-binding-final-api-with-fence.log` |
+
+Earlier focused execution passed all 15 new binding/history cases (29 s) before the broad run. Later focused history strengthening is recorded separately; repeated cases are not additional distinct passes. The final selections cover 94 distinct passing cases (80 Infrastructure + 14 API); the focused repeat rows do not add distinct cases. Documentation checks passed for 9 changed/new Markdown files, 1,261 local links/fragments and 5 complete JSON examples; `git diff --check` passed.
+
+Commands use `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj` or `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj`, with the table substring filters combined as `FullyQualifiedName~...` using OR. All commands use `--nologo --no-restore -m:1 -nr:false -p:UseSharedCompilation=false`; fixtures use disposable stores and Synthetic services, with no hosted provider calls.
+
+## Boundaries
+
+No public attachment message API/Hub contract was opened. The incumbent dispatcher seals an internally bound Attachment Run as failed with `attachment-runtime-unavailable` before runtime allocation or model dispatch, preventing saved file labels from entering an unconverted model context. This fence must be replaced by qualified independent executor IAM/policy/source projection and processing before enabling attachment messages. `SubmitTextAsync` still supplies no Attachment IDs; unknown JSON fields do not become binding authority. Runtime context/extraction, model read/Review and checkpoint source revalidation must be completed before public message attachment intake is enabled. No browser UX or visual acceptance is claimed. No installed database migration/reset, CI, live provider or physical process-kill qualification was performed. The full proposal still requires those attachment integrations, other virtual resource/Browser adapters, autonomous/background/events/transport families and final obsolete-authority/schema cutover.
