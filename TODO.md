@@ -143,6 +143,7 @@ Other bounded successor verification limits remain in their linked reports under
 
 Always keep this section. These are personal product ideas to refine, not approved implementation scope.
 
+- [ ] Client app identity? can auth per client app account? [TBD]
 - [ ] Retention policy, temp chat [TBD]
 - [ ] AI auditor, reviewer. AI reduces cost of operation? [TBD]
 - [ ] End chat capability/tool.
