@@ -13,8 +13,8 @@ public static class TenantBackgroundToolContract
         && execution.SessionId == context.OwnedSessionId
         && (name == ToolCatalog.BackgroundStart
             ? execution.Origin == ExecutionOrigin.UserMessage && !context.DetachedExecution && context.Trigger.Kind == TriggerKind.UserTurn && RolePermissions.AllowsTool(definition, name)
-            : name == ToolCatalog.WorkComplete && execution.Origin == ExecutionOrigin.ImmediateBackground && context.OutputContract == AgentRunOutputContract.BackgroundOutcome);
+            : name == ToolCatalog.WorkComplete && execution.Origin is (ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation) && context.OutputContract == AgentRunOutputContract.BackgroundOutcome);
     public static bool Allows(AgentRun run, string name) => name == ToolCatalog.BackgroundStart
         ? run.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage && run.Admission.Activation.Kind == ActivationKind.UserTurn
-        : name == ToolCatalog.WorkComplete && run.Admission.ExecutionContext?.Origin == ExecutionOrigin.ImmediateBackground && run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;
+        : name == ToolCatalog.WorkComplete && run.Admission.ExecutionContext?.Origin is (ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation) && run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;
 }

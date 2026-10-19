@@ -50,8 +50,10 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                     && run.Claim?.Generation == admission.AgentRunGeneration;
                 return new(true, background, reference, background ? "allowed" : "tenant_effect_unavailable");
             }
-            if (run.Admission.ExecutionContext?.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.ImmediateBackground or AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
-                && !IamToolContracts.IsInspection(tool)) return new(true, false, reference, "tenant_effect_unavailable");
+            if (!IamToolContracts.IsInspection(tool)
+                && (run.Admission.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
+                    || TenantFileObservationContract.IsBackground(run) && !TenantFileObservationContract.IsTool(tool) && tool != ToolCatalog.RequestAuthorization))
+                return new(true, false, reference, "tenant_effect_unavailable");
             var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
@@ -194,6 +196,11 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
+        if (TenantFileObservationContract.IsBackground(run) && intent.WorkspaceRead is null && intent.AttachmentArguments is null && intent.ArtifactId is null)
+        {
+            await authorizer.RecordFailureAsync(boundary.Reference, "", "tenant_effect_unavailable", AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ApprovalPreparation, ct, session).ConfigureAwait(false);
+            throw new AccessDeniedException("tenant_effect_unavailable");
+        }
         if (intent.WorkspaceMutation is { } mutation)
             return await approvals.PrepareWorkspaceMutationAsync(boundary.Reference, new(call.Id, mutation.Tool, mutation.ArgumentsJson), run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.WorkspaceRead is { } readWorkspace)

@@ -1,5 +1,13 @@
 # Backend Implementation Specification
 
+## Tenant immediate-background file observation
+
+`TenantFileObservationContract` centralizes eligible execution shape and the closed background file/read-consent schema; it is not an authority token. `TenantToolAuthorization` repeats the family gate on actual saved Runs and rejects non-file authorization intents before their adapters. The existing Workspace, resource, Attachment and Artifact read owners still enforce current independent IAM, exact source/window, state isolation, claim and retained-checkpoint fences. Current background capability is checked on both initial Runs and approval successors.
+
+`TenantApprovalContinuationRules` preserves BackgroundOutcome and uses a background signal; `PromptContextBuilder` derives Core background/task semantics from the output contract as well as occurrence triggers. Successors therefore retain the original objective and finish through work.complete. No separate Runtime or file-effect executor is introduced.
+
+`TenantBackgroundLineage` validates persisted same-task handoffs. Both stores create the existing completion receipt only for the terminal non-Continued task Run; their report source carries the immutable initial child alongside that terminal Run. Report admission resolves current root authority and the original parent. Activity follows the same task chain only while every successor remains independently readable, withholding unknown completion facts. [Contract](04-backend-interfaces.md#tenant-immediate-background-file-observation) and [focused qualification](reports/tenant-background-file-observation-verification-2026-10-20.md). Positive bound-Attachment background acceptance still needs the owning live-input/source-admission conversion; current human binding during active execution refuses with session_in_use. Mutation/publication and native adapters remain pending.
+
 ## Tenant Background Activity and foreground implementation
 
 Canonical human Activity queries use the existing scoped Session/Run owners. Both stores filter exact Agent ownership, allowed read IDs and optional BackgroundWork before count/paging. Session rows include archived and zero-run contexts, ordered by updated time descending then ID; Runs order by creation time descending then ID. Exact reads independently validate tenant/Agent/Session. The service rechecks the original live human/current security revision after awaited reads. Initial task/result and completion accounting are independently gated by Run read; parent target references require their own current Session read.

@@ -44,7 +44,8 @@ public sealed partial class TenantSessionAccessTests
             if (origin == ExecutionOrigin.ImmediateBackground)
             {
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-                Assert.DoesNotContain(request.Tools!, t => t.Name == ToolCatalog.BackgroundStart || t.Name == ToolCatalog.RequestAuthorization);
+                Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.WorkspaceWrite or ToolCatalog.ArtifactsCreate);
+                Assert.DoesNotContain("mutate_workspace", Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
                 yield return new ModelToolCallEvent(new("tenant-background-finish", ToolCatalog.WorkComplete,
                     """{"outcome":"Response","summary":"Owned background result.","attentionRequired":false}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
@@ -85,6 +86,8 @@ public sealed partial class TenantSessionAccessTests
                 services.AddSingleton<ILoggerProvider>(new BackgroundFailureLogs(model));
                 var options=(PersistenceOptions)services.Last(d=>d.ServiceType==typeof(PersistenceOptions)).ImplementationInstance!;
                 options.WorkspaceRoot=Path.Combine(root,"workspaces");options.ArtifactRoot=Path.Combine(root,"artifacts");options.AttachmentRoot=Path.Combine(root,"attachments");options.DefinitionResourceRoot=Path.Combine(root,"resources");
+                services.Replace(ServiceDescriptor.Singleton<IDefinitionResourceContentStore>(p => new FileDefinitionResourceContentStore(p.GetRequiredService<PersistenceOptions>().DefinitionResourceRoot)));
+                services.Replace(ServiceDescriptor.Singleton<IAgentDefinitionResourceAdminStore>(p => new SqliteAgentDefinitionResourceAdminStore(p.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<AgentCoreDbContext>>(), p.GetRequiredService<IDefinitionResourceContentStore>(), p.GetRequiredService<IIdGenerator>())));
                 if(holdCompletion) services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p=>new TenantRunExecution(p.GetRequiredService<ITenantRuntimeStore>(),p.GetRequiredService<ITenantRunStore>(),p.GetRequiredService<ITenantRunDispatcher>(),p.GetRequiredService<IIdGenerator>(),p.GetRequiredService<TimeProvider>())));
             });
         }

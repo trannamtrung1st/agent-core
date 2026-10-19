@@ -24,8 +24,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
         TenantAttachmentRules.Session(session.Owner, session, current.Agent, true);
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId
             || session.Owner.AgentInstanceId != run.AgentInstanceId || current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
-            || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
-            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
+            || !TenantFileObservationContract.Allows(run, current.Definition)
             || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool) || !TenantWorkspaceReadContract.Allows(current.Definition, tool)
             || !TenantAttachmentReadContract.Allows(run.Admission.Configuration.Definition) || !TenantAttachmentReadContract.Allows(current.Definition)) throw new AccessDeniedException("capability_unavailable");
         async ValueTask Policy(string key, AccessScope scope)

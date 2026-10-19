@@ -133,7 +133,7 @@ public sealed class PromptContextBuilder(
             snapshot = snapshot.Upsert(ContextSection.Core(CoreProcedure.AutomationHistory));
             if (context.OutputContract == AgentRunOutputContract.ConversationResponse) snapshot = snapshot.Upsert(ContextSection.Core(CoreProcedure.Automation));
         }
-        if (ToolResources.IsOccurrence(context.Trigger.Kind))
+        if (context.OutputContract == AgentRunOutputContract.BackgroundOutcome || ToolResources.IsOccurrence(context.Trigger.Kind))
         {
             if (!context.AuthoredAutomation || context.OutputContract == AgentRunOutputContract.BackgroundOutcome)
                 snapshot = snapshot.Upsert(ContextSection.Core(CoreProcedure.Background));

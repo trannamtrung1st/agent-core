@@ -199,7 +199,8 @@ public static class ToolCatalog
         foreach (var authority in ToolRegistry.All)
             if (authority.OfferRule is ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority or ToolOfferRule.TenantExecutionAuthority
                 && ToolPolicy.IsOffered(authority, definition, context, configurationGate) && seen.Add(authority.Name))
-                offered.Add(authority.Name == RequestAuthorization ? TenantApprovalToolContract.Descriptor(
+                offered.Add(authority.Name == RequestAuthorization && TenantFileObservationContract.IsBackground(context) ? TenantFileObservationContract.Authorization(definition).ModelDefinition
+                    : authority.Name == RequestAuthorization ? TenantApprovalToolContract.Descriptor(
                     definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == true,
                     TenantApprovalToolContract.AllowsCredentialCheck(definition, context),
                     TenantSandboxAuthorizationContract.Allows(definition) ? definition.ExecutionSandboxProfiles!.Where(p => p.AdmittedForExecution == true

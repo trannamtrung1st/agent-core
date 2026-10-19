@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Background task approval-chain readback
+
+A tenant immediate-background file read may wait on the existing durable approval API and continue through an immutable successor Run with BackgroundOutcome. It retains the original Session/task/root and still finishes through work.complete. Only a terminal non-Continued task Run creates completion accounting and one factual parent report; the report's parent Run is that final task Run. No wire event or new schema is introduced.
+
+Activity `session.initialRunId` stays the immutable initial identity. The background detail's `initialRun` follows only validated same-task approval handoffs and requires independent current Run read at every step. It may therefore identify the terminal successor while retaining the original title/task. If a later Run cannot be read, its result and completion facts are withheld; the service does not invent Pending from a missing receipt on a Continued source. Independent parent read still controls the report target. Unrelated later Chat turns are excluded. [Focused qualification](reports/tenant-background-file-observation-verification-2026-10-20.md).
+
 ## Tenant Background Activity and Continue API
 
 All routes below require the original authenticated human tenant context. Readable ownership and permissions are checked again by the use case, including after awaited reads. None uses the legacy local owner capability/profile.

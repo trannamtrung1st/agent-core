@@ -8,7 +8,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Security;
 
-public sealed record TenantBackgroundCompletion(AgentRun Child, TenantSession ChildSession, TenantSession? Parent);
+public sealed record TenantBackgroundCompletion(AgentRun Child, TenantSession ChildSession, TenantSession? Parent, AgentRun? InitialChild = null);
 
 public static class TenantBackgroundCompletionFactory
 {
@@ -39,11 +39,12 @@ public static class TenantBackgroundCompletionFactory
     }
     public static void RequireParent(TenantBackgroundCompletion source)
     {
-        var child = source.Child; var parent = source.Parent; var snapshot = parent?.Snapshot;
-        if (!child.IsTerminal || source.ChildSession.Snapshot.DurablyDeletedAt is not null || !source.ChildSession.Snapshot.Origin.MayReportCompletion(child.AgentRunId)
+        var child = source.Child; var initial = source.InitialChild ?? child; var parent = source.Parent; var snapshot = parent?.Snapshot;
+        if (!child.IsTerminal || child.Result?.OutcomeKind == AgentRunOutcomeKind.Continued || source.ChildSession.Snapshot.DurablyDeletedAt is not null || !source.ChildSession.Snapshot.Origin.MayReportCompletion(initial.AgentRunId)
+            || initial.Owner != child.Owner || initial.SessionId != child.SessionId || initial.Admission.OutputContract != child.Admission.OutputContract
             || source.ChildSession.Owner.TenantId != child.Owner.TenantId || source.ChildSession.Owner.ExecutorPrincipalId != child.Owner.ExecutorPrincipalId
             || parent is null || parent.Owner.TenantId != child.Owner.TenantId || parent.Owner.ExecutorPrincipalId != child.Owner.ExecutorPrincipalId
-            || parent.Owner.AgentInstanceId != child.AgentInstanceId || child.Admission.Activation.SourceSessionId != parent.Owner.SessionId
+            || parent.Owner.AgentInstanceId != child.AgentInstanceId || initial.Admission.Activation.SourceSessionId != parent.Owner.SessionId
             || snapshot!.DurablyDeletedAt is not null || snapshot.ArchivedAt is not null || LifecycleTransition.IsTerminal(snapshot)
             || snapshot.Status is SessionStatus.Ended or SessionStatus.Ending || snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason))

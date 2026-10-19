@@ -38,10 +38,11 @@ public static class TenantExecutionLineage
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.CompletionReport
                 && (a.Kind != ActivationKind.BackgroundCompleted || !parent.IsTerminal || parent.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome
-                    || parent.Admission.Activation.SourceSessionId != run.SessionId || run.Admission.OutputContract != AgentRunOutputContract.CompletionReport))
+                    || (await TenantBackgroundLineage.InitialAsync(parent, (id, token) => runs.FindTenantRunAsync(initial.TenantId, id, token), ct).ConfigureAwait(false)).Admission.Activation.SourceSessionId != run.SessionId
+                    || run.Admission.OutputContract != AgentRunOutputContract.CompletionReport))
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.ApprovalContinuation
-                && (a.Kind != ActivationKind.ApprovalContinuation || parent.SessionId != run.SessionId
+                && (a.Kind != ActivationKind.ApprovalContinuation || parent.SessionId != run.SessionId || parent.Admission.OutputContract != run.Admission.OutputContract
                     || parent.Result?.ContinuationRunId != run.AgentRunId || parent.Result.OutcomeKind != AgentRunOutcomeKind.Continued))
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             run = parent;

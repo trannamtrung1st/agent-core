@@ -96,10 +96,19 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
             var run = await runs.FindTenantRunAsync(tenant, initialId, ct).ConfigureAwait(false);
             if (run is not null && run.SessionId == sessionId && run.AgentInstanceId == instance && run.Owner.ExecutorPrincipalId == session.Owner.ExecutorPrincipalId)
             {
+                var seen = new HashSet<Guid>();
+                while (run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome && run.Result is { OutcomeKind: AgentRunOutcomeKind.Continued, ContinuationRunId: { } successor }
+                    && seen.Add(run.AgentRunId) && seen.Count < 64
+                    && await Can(state, human.PrincipalId, "agent-runs.read", TenantRunRules.Scope(tenant, successor), ct).ConfigureAwait(false))
+                {
+                    var next = await runs.FindTenantRunAsync(tenant, successor, ct).ConfigureAwait(false);
+                    if (next is null) break;
+                    TenantBackgroundLineage.RequireHandoff(run, next); run = next;
+                }
                 initial = await Run(state, run, human, ct).ConfigureAwait(false);
-                var receipt = await runs.FindTenantCompletionAsync(run.Owner, initialId, ct).ConfigureAwait(false);
+                var receipt = run.Result?.OutcomeKind == AgentRunOutcomeKind.Continued ? null : await runs.FindTenantCompletionAsync(run.Owner, run.AgentRunId, ct).ConfigureAwait(false);
                 Guid? target = receipt?.ParentSessionId is { } parent && await Can(state, human.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, parent), ct).ConfigureAwait(false) ? parent : null;
-                delivery = new(receipt?.Status == CompletionInboxStatus.DeliveryQueued ? "admitted" : receipt?.Status.ToString() ?? (origin.ReportCompletionToOrigin ? "Pending" : "NotRequested"), target, receipt?.SkipReason);
+                delivery = run.Result?.OutcomeKind == AgentRunOutcomeKind.Continued ? null : new(receipt?.Status == CompletionInboxStatus.DeliveryQueued ? "admitted" : receipt?.Status.ToString() ?? (origin.ReportCompletionToOrigin ? "Pending" : "NotRequested"), target, receipt?.SkipReason);
             }
         }
         var result = new TenantBackgroundDetail(await Session(state, agent, session, human, ct).ConfigureAwait(false), initial, origin.InitialTitle, delivery);

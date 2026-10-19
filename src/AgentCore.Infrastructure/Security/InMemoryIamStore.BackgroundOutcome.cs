@@ -12,9 +12,9 @@ public sealed partial class InMemoryIamStore
     private void SettleTenantCompletion(AgentRun next, Guid? generation)
     {
         var state = sessionBacking.AgentRuns;
-        if (next.IsTerminal && next.Result?.OutcomeKind != AgentRunOutcomeKind.Continued && !state.CompletionReceipts.ContainsKey(next.AgentRunId)
+        if (next.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome && next.IsTerminal && next.Result?.OutcomeKind != AgentRunOutcomeKind.Continued && !state.CompletionReceipts.ContainsKey(next.AgentRunId)
             && sessionBacking.ReadTenantSession(next.Owner.TenantId!.Value, next.SessionId) is { } child
-            && child.Snapshot.Origin.MayReportCompletion(next.AgentRunId))
+            && child.Snapshot.Origin.MayReportCompletion(TenantBackgroundLineage.InitialAsync(next, (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(next.Owner.TenantId.Value, id)), CancellationToken.None).AsTask().GetAwaiter().GetResult().AgentRunId))
             state.CompletionReceipts.Add(next.AgentRunId, CompletionInboxMapping.Create(next, child.Snapshot));
         foreach (var row in state.CompletionReceipts.Values.Where(r => r.AgentInstanceId == next.AgentInstanceId.ToString("D") && r.ProfileId is null))
         {

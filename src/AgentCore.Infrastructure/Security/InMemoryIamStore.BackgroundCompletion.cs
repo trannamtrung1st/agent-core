@@ -15,7 +15,8 @@ public sealed partial class InMemoryIamStore
         var run = sessionBacking.ReadRetainedTenantOperationRun(owner.TenantId!.Value, childRunId);
         if (run?.Owner != owner || sessionBacking.ReadRetainedTenantBackgroundSession(owner.TenantId.Value, run.SessionId) is not { } child) return null;
         var parent = child.Snapshot.Origin.OriginatingSessionId is { } parentId ? sessionBacking.ReadTenantSession(owner.TenantId.Value, parentId) : null;
-        return new(run, child, parent);
+        var initial = TenantBackgroundLineage.InitialAsync(run, (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(owner.TenantId.Value, id)), CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        return new(run, child, parent, initial);
     }
     public ValueTask<IReadOnlyList<TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default)
     {

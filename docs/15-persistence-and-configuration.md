@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Background read-consent task successors
+
+Exact read consent reuses existing Approval, successor AgentRun, checkpoint and local receipt rows. Background successors retain the admitted task, BackgroundOutcome, owned Session, source inputs and inherited root; the initial Session origin/Run is never rewritten. Only the terminal non-Continued successor creates an existing BackgroundCompletionReceipt keyed to its actual Run. A bounded saved-handoff resolver relates it to the immutable initial task and original parent before report admission; current root/executor/creation authority still applies. Activity separately gates every successor read. No migration, synthetic User, copied permission snapshot or second task/result store is added. [Qualification and source-admission limits](reports/tenant-background-file-observation-verification-2026-10-20.md).
+
 ## Tenant Agent decommission persistence
 
 The existing SystemIdentity/Principal `Removed` statuses, archived backing Instance and canonical `agents.decommission` audit receipt jointly identify permanent retirement. The Instance revision and tenant security revision advance atomically with the receipt, executor/target/home/child assignment retirement, credential unbinding and local child configuration purge. The backing row remains an immutable identity-use tombstone, preserving existing foreign keys and preventing global ID adoption; live reads exclude it. Retained Session and execution history are not cascaded. Retired Instance markers cease to count as live Definition references, while genuine Instance/Session/execution references remain protected. Incumbent Session, learned-memory, Automation/occurrence, Run/Approval/Activation blockers stay decisive; a pending Browser profile reset also blocks.

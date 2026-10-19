@@ -24,7 +24,11 @@ public sealed partial class SqliteIamStore
         var parentRoot = child.Snapshot.Origin.OriginatingSessionId is { } id
             ? await OwnedSessions(db, owner.TenantId!.Value).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == id.ToString("D"), ct).ConfigureAwait(false) : null;
         var parent = parentRoot is null ? null : await SessionView(db, parentRoot, ct).ConfigureAwait(false);
-        return new(run, child, parent);
+        var initial = await TenantBackgroundLineage.InitialAsync(run, async (id, token) => {
+            var previous = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == owner.TenantId && r.AgentRunId == id.ToString("D"), token).ConfigureAwait(false);
+            return previous is null ? null : AgentRunStoreMapping.ToDomain(previous);
+        }, ct).ConfigureAwait(false);
+        return new(run, child, parent, initial);
     }
     public async ValueTask<IReadOnlyList<TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default)
     {
