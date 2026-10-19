@@ -1107,6 +1107,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
 
                     break;
+                case BrainEvaluationFinished brainFinished:
+                    if (ReferenceEquals(_brainEvaluationCts, brainFinished.Evaluation)) _brainEvaluationCts = null;
+                    brainFinished.Evaluation.Dispose();
+                    break;
                 case TimerElapsedReceived timer:
                     await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1435,6 +1439,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case BrainReturned brain:
                 brain.Processed.TrySetResult();
+                break;
+            case BrainFailed failed:
+                failed.Processed.TrySetResult();
+                break;
+            case BrainEvaluationFinished finished:
+                finished.Evaluation.Dispose();
                 break;
             case CompactionReturned compaction:
                 compaction.Processed.TrySetResult(false);
@@ -1827,13 +1837,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await StartSpeakPathAsync(input, speakable, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task HandleBrainFailedAsync(BrainFailed input, CancellationToken cancellationToken)
+    private async Task FinishBrainFailureAsync(BrainFailed input, CancellationToken cancellationToken)
     {
-        await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
-        if (input.TurnGeneration != _turnGeneration)
+        if (_deactivated || input.TurnGeneration != _turnGeneration || input.Context.Epoch != _epoch)
         {
             return;
         }
+        if (_boundAgentRun is { } bound)
+        {
+            if (bound.ResponseId != input.ResponseId || bound.Claim?.Generation != input.Context.AgentRunGeneration
+                || !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false)) return;
+            var current = _boundAgentRun!;
+            _boundAgentRun = await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,
+                new AgentRunCommand.Fail(current.Revision, _time.GetUtcNow(), current.Claim!.Generation,
+                    input.AuthorityUnavailable ? "authority-unavailable" : input.Recoverable ? "preparation-failed" : "preparation-cancelled",
+                    input.AuthorityUnavailable ? "Current execution authority is unavailable."
+                        : "The agent could not prepare a response. No model or tool work was repeated.",
+                    false, null, input.DiagnosticId ?? _diagnostics.NewId()), cancellationToken).ConfigureAwait(false);
+            ClearAgentRunTerminalPending();
+        }
+        await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
 
         if (input.Trigger.Kind == TriggerKind.UserTurn)
         {
@@ -2430,7 +2453,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         _brainEvaluationCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        var evaluationToken = _brainEvaluationCts.Token;
+        var evaluation = _brainEvaluationCts;
+        var evaluationToken = evaluation.Token;
         if (trigger.Kind is not (TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent))
         {
             PinModelSelectionIfMissing();
@@ -2530,96 +2554,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 };
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
-                AgentDecision? decision = null;
-                BrainFailed? failure = null;
+                AgentDecision decision;
                 try
                 {
                     decision = capturedRun?.Admission.ComposerInput?.Error is not null
                         ? new Speak(ContextAssembler.Create(responseId, new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)], purpose: ContextPurpose.Platform)))
-                        : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
+                        : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false)
+                            ?? throw AgentCoreErrors.Validation("The agent did not prepare a decision.");
                     if (tenantFiles is not null && decision is Speak prepared)
                         decision = prepared with { Request = prepared.Request with { TenantAttachmentSources = tenantFiles.Sources } };
                 }
-                catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
-                {
-                    if (trigger.Kind == TriggerKind.UserTurn)
-                    {
-                        failure = new BrainFailed(
-                            WorkerContext(cause),
-                            turn,
-                            responseId,
-                            trigger,
-                            Recoverable: false,
-                            Message: null,
-                            new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
-                    }
-                    else
-                    {
-                        decision = new StaySilent(
-                            "Initiative evaluation superseded.",
-                            CountsTowardSilentCap: false);
-                    }
-                }
-                catch (Exception ex) when (trigger.Kind != TriggerKind.UserTurn)
-                {
-                    LogHandledRuntimeFailure(ex, "initiative.evaluate", "initiative_evaluation_failed");
-                    decision = new StaySilent(
-                        "Initiative evaluation failed.",
-                        CountsTowardSilentCap: false);
-                }
-                catch (Exception ex)
-                {
-                    var diagnosticId = _diagnostics.NewId();
-                    LogConversationFailure(
-                        WorkerContext(cause),
-                        responseId,
-                        diagnosticId,
-                        "Session",
-                        "BrainFailed",
-                        "The agent could not prepare a response.",
-                        ex);
-                    failure = new BrainFailed(
-                        WorkerContext(cause),
-                        turn,
-                        responseId,
-                        trigger,
-                        Recoverable: true,
-                        Message: ex.Message,
-                        new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
-                        diagnosticId);
-                }
-
-                RuntimeTelemetry.Record("brain", RuntimeTelemetry.ElapsedMs(brainStarted));
+                finally { RuntimeTelemetry.Record("brain", RuntimeTelemetry.ElapsedMs(brainStarted)); }
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var inbound = WorkerContext(cause);
                 BeginWork();
-                if (failure is not null)
-                {
-                    var failed = new BrainFailed(
-                        failure.Context,
-                        failure.TurnGeneration,
-                        failure.ResponseId,
-                        failure.Trigger,
-                        failure.Recoverable,
-                        failure.Message,
-                        processed,
-                        failure.DiagnosticId);
-                    if (!TryMailbox(failed))
-                    {
-                        EndWork();
-                        return;
-                    }
-
-                    await processed.Task.ConfigureAwait(false);
-                    return;
-                }
-
-                if (decision is null)
-                {
-                    EndWork();
-                    return;
-                }
-
                 if (!TryMailbox(new BrainReturned(inbound, turn, responseId, trigger, decision, processed, skillCatalog, resolved, selection)))
                 {
                     EndWork();
@@ -2628,14 +2576,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 await processed.Task.ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
+            {
+                await QueueBrainFailureAsync(cause, trigger, responseId, turn, recoverable: false).ConfigureAwait(false);
+            }
+            catch (Exception error)
+            {
+                var diagnosticId = _diagnostics.NewId();
+                if (trigger.Kind != TriggerKind.UserTurn && capturedRun is null)
+                    LogHandledRuntimeFailure(error, "initiative.evaluate", "initiative_evaluation_failed");
+                else
+                    LogConversationFailure(WorkerContext(cause), responseId, diagnosticId, "Session", "BrainFailed",
+                        "The agent could not prepare a response.", error);
+                await QueueBrainFailureAsync(cause, trigger, responseId, turn, recoverable: true, diagnosticId,
+                    error is AgentCore.Application.Security.AccessDeniedException or AgentCore.Application.Security.SecurityConflictException
+                        or AgentCoreException { Code: "Forbidden" }).ConfigureAwait(false);
+            }
             finally
             {
-                if (_brainEvaluationCts?.Token == evaluationToken)
-                {
-                    _brainEvaluationCts.Dispose();
-                    _brainEvaluationCts = null;
-                }
-
+                BeginWork();
+                Enqueue(new BrainEvaluationFinished(WorkerContext(cause), evaluation), urgent: true);
                 EndWork();
             }
         }, CancellationToken.None);

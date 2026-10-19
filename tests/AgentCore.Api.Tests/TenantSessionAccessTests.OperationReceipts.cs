@@ -53,6 +53,7 @@ public sealed partial class TenantSessionAccessTests
         public bool EmitArtifactReference { get; set; }
         public bool VerifyPublishedArtifact { get; set; }
         public string? ProposedArtifactAuthorization { get; set; }
+        public string? AuthorizationPreamble { get; set; }
         public string? ProposedPreferenceAuthorization { get; set; }
         public TaskCompletionSource? ApprovalResponseGate { get; set; }
         public TaskCompletionSource ApprovalResponseEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -95,6 +96,7 @@ public sealed partial class TenantSessionAccessTests
             if (ProposedArtifactAuthorization is { } publication && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization)
                 && request.Tools?.Any(t => t.Name == AgentCore.Application.Tools.ToolCatalog.RequestAuthorization && (t.ParametersJson.Contains("publish_artifact") || t.ParametersJson.Contains("publish_workspace_artifact"))) == true)
             {
+                if (AuthorizationPreamble is { } preamble) yield return new ModelDisplayDelta(preamble);
                 yield return new ModelToolCallEvent(new("reviewed-artifact", AgentCore.Application.Tools.ToolCatalog.RequestAuthorization, publication));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }

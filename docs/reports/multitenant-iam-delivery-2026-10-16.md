@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant preparation failure lifecycle — 2026-10-19
+
+The existing Runtime now contains context/brain failures, settles the exact current claim without replay, closes existing saved progress through the incumbent writer and owns evaluation cleanup through its mailbox. [Deterministic lifecycle and recovery qualification](tenant-preparation-failure-verification-2026-10-19.md) covers both stores, late failure after cancellation and factual Artifact/receipt/grant preservation after actual SQLite host recreation. This closes the reproduced unsupervised-preparation stall mechanism; it does not prove the cause of every historical intermittent pre-model failure or accept other resource/autonomous/transport families, final authority/schema removal or the full proposal.
+
 ## Exact tenant Attachment virtual file reads — 2026-10-19
 
 Workspace UTF-8 and Office file inspection now use exact bound originals through canonical Attachment source/read/Review/successor/checkpoint owners. Normalized consent shares canonical Attachment source/window and refusal roots; direct retained observations revalidate the original reader too. [Focused qualification](tenant-attachment-virtual-read-verification-2026-10-19.md) records the measured boundaries. This supersedes virtual-file-read implementation pending notes only; intermittent pre-model/Run timeout findings remain an execution qualification gap. Namespace browsing/search and human materialization, other resource/Browser adapters, autonomous/background/event/transport families and final obsolete-authority/schema cutover remain open. The full proposal stays active; no milestone acceptance is claimed.

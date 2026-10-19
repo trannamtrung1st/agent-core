@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 
@@ -32,18 +33,32 @@ public sealed partial class TenantSessionAccessTests
     [Theory] [InlineData(false, true)] [InlineData(true, true)] [InlineData(false, false)] [InlineData(true, false)]
     public Task Reviewed_Artifact_successor_can_publish_a_rich_reference_only_with_independent_read_authority(bool sqlite, bool review) => ArtifactReviewFlow(sqlite, review, "approve", true);
 
-    private async Task ArtifactReviewFlow(bool sqlite, bool review, string choice, bool rich)
+    [Theory] [InlineData(false, true)] [InlineData(true, true)] [InlineData(false, false)] [InlineData(true, false)]
+    public Task Tenant_preparation_failure_after_saved_Artifact_consent_preserves_completed_receipt_and_consumed_grant_without_replay(bool sqlite, bool review) => ArtifactReviewFlow(sqlite, review, "approve", false, true);
+
+    private sealed class ConsentPreparationFailureBrain : IAgentBrain
+    {
+        private readonly AgentCore.Application.Agents.DefaultAgentBrain inner = new(new AgentCore.Application.Agents.PromptContextBuilder());
+        public ValueTask<AgentDecision> DecideAsync(AgentContext context, Guid response, CancellationToken ct = default) => context.ApprovalOutcome is not null
+            ? ValueTask.FromException<AgentDecision>(new IOException("Controlled failure after the approved publication completed.")) : inner.DecideAsync(context, response, ct);
+    }
+
+    private async Task ArtifactReviewFlow(bool sqlite, bool review, string choice, bool rich, bool failAfterConsent = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-artifact-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        var proof = !sqlite && choice == "approve" && Environment.GetEnvironmentVariable("AGENTCORE_ARTIFACT_UI_PROOF") == "1";
+        var proof = !failAfterConsent && !sqlite && choice == "approve" && Environment.GetEnvironmentVariable("AGENTCORE_ARTIFACT_UI_PROOF") == "1";
         var proofPath = "/private/tmp/agent-core-artifact-review-ui-" + (review ? "review" : "grant");
         try
         {
             var content = "# Exact proposed file\n<script>alert('literal')</script>\nUTF-8: thử nghiệm" + (proof ? "\n" + string.Join("\n", Enumerable.Range(1, 35).Select(i => $"{i}: Exact saved content for the operations team — literal UTF-8 thử nghiệm.")) + "\n" + new string('x', 600) : "");
-            var model = new ApprovalRecordingModel { ProposedArtifactAuthorization = JsonSerializer.Serialize(new { operation = "publish_artifact", artifact = new { displayName = "reviewed-report.md", contentType = "text/markdown", content } }), EmitArtifactReference = rich };
+            var model = new ApprovalRecordingModel { ProposedArtifactAuthorization = JsonSerializer.Serialize(new { operation = "publish_artifact", artifact = new { displayName = "reviewed-report.md", contentType = "text/markdown", content } }), EmitArtifactReference = rich,
+                AuthorizationPreamble = failAfterConsent ? "The exact file is ready for review." : null };
+            var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
             var enabled = true;
             void Configure(IServiceCollection services)
             {
+                services.AddLogging(logs => logs.AddProvider(diagnostics));
+                if (failAfterConsent) services.Replace(ServiceDescriptor.Singleton<IAgentBrain>(new ConsentPreparationFailureBrain()));
                 if (proof) services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new ArtifactProofClock()));
                 if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5216"];
                 services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new MetadataExecutionGate(() => Volatile.Read(ref enabled),
@@ -70,7 +85,7 @@ public sealed partial class TenantSessionAccessTests
             var accepted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Publish this exact file after review", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode); var source = (await Json(accepted)).GetProperty("runId").GetGuid();
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitBrowserRestartRun(runs, tenant, source, true);
-            Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}");
+            Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}; errors={string.Join("\n", diagnostics.Errors.Select(error => error.ToString()))}");
             Volatile.Write(ref enabled, false);
             var request = (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, waiting.ApprovalRequestId!.Value))!;
             Assert.Equal(review ? ApprovalKind.Review : ApprovalKind.ExceptionalGrant, request.Kind);
@@ -90,7 +105,7 @@ public sealed partial class TenantSessionAccessTests
             else
             Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + action, new { decision = choice, actionHash = request.Operation.ActionHash, expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision })).StatusCode);
             Volatile.Write(ref enabled, true); var done = await AwaitBrowserRestartRun(runs, tenant, source, false);
-            Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}"); Assert.NotEqual(source, done.AgentRunId);
+            Assert.True(done.Status == (failAfterConsent ? AgentRunStatus.Failed : AgentRunStatus.Completed), $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}"); Assert.NotEqual(source, done.AgentRunId);
             var terminalFeed = Assert.Single((await Json(await owner.GetAsync(api + $"/sessions/{session}/approvals?pageSize=1"))).GetProperty("items").EnumerateArray());
             Assert.Equal(choice == "approve" ? "approved" : choice == "reject" ? "rejected" : "cancelled", terminalFeed.GetProperty("status").GetString());
             Assert.Equal(choice == "approve" ? "completed" : null, terminalFeed.GetProperty("outcome").GetString());
@@ -107,6 +122,17 @@ public sealed partial class TenantSessionAccessTests
             if (choice == "approve" && !review) Assert.Equal(OperationGrantStatus.Consumed, grant!.Status); else Assert.Null(grant);
             Assert.Equal(review, (await factory.Services.GetRequiredService<IamAuthorizer>().CheckAsync(executor, "artifacts.create", TenantSessionRules.Scope(tenant, session))).Allowed);
             Assert.Equal(rich, (await factory.Services.GetRequiredService<IamAuthorizer>().CheckAsync(executor, "artifacts.read", AccessScope.ForTenant(tenant))).Allowed);
+            if (failAfterConsent)
+            {
+                Assert.Equal("preparation-failed", done.Failure!.Code); Assert.Equal(AgentRunSideEffectDisposition.Succeeded, done.SideEffect.Disposition);
+                Assert.Single(model.Requests); Assert.NotNull(receipt);
+                var saved = (await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(tenant, session, null, null, 100))!.History.Items;
+                Assert.Equal(EntryStatus.Failed, saved.Single(e => e.Role == ConversationRole.Assistant && e.ResponseId == done.ResponseId).Status);
+                await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
+                await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
+                Assert.Single((await Json(await owner.GetAsync(api + $"/sessions/{session}/artifacts"))).GetProperty("items").EnumerateArray());
+                Assert.Equal(receipt, await effects.FindOperationReceiptAsync(tenant, request.Operation.OperationId)); Assert.Single(model.Requests);
+            }
             if (rich)
             {
                 var saved = (await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(tenant, session, null, null, 50))!.History.Items.Single(e => e.ResponseId == done.ResponseId);
@@ -114,6 +140,25 @@ public sealed partial class TenantSessionAccessTests
                 Assert.False(Assert.Single(saved.Envelope.Blocks).DisplayDelivered);
             }
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
+            if (failAfterConsent && sqlite)
+            {
+                await factory.DisposeAsync(); var restartedModel = new ApprovalRecordingModel();
+                await using var restarted = new NativeTenantSqliteFactory(root, restartedModel);
+                using var fresh = restarted.CreateClient(); await Login(fresh, "owner@example.test", "explicit-synthetic-test-password");
+                await restarted.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
+                await restarted.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
+                var retained = (await restarted.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, done.AgentRunId))!;
+                Assert.Equal(AgentRunStatus.Failed, retained.Status); Assert.Equal("preparation-failed", retained.Failure!.Code);
+                Assert.Equal(AgentRunSideEffectDisposition.Succeeded, retained.SideEffect.Disposition);
+                Assert.Equal(EntryStatus.Failed, (await restarted.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(tenant, session, null, null, 100))!.History.Items.Single(e => e.ResponseId == done.ResponseId).Status);
+                Assert.Equal(receipt, await restarted.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId));
+                var retainedGrant = await restarted.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(tenant, request.RequestId);
+                if (review) Assert.Null(retainedGrant);
+                else { Assert.Equal(OperationGrantStatus.Consumed, retainedGrant!.Status); Assert.Equal(grant!.OperationId, retainedGrant.OperationId); }
+                var retainedFiles = (await Json(await fresh.GetAsync(api + $"/sessions/{session}/artifacts"))).GetProperty("items");
+                Assert.Equal(content, await fresh.GetStringAsync(api + $"/sessions/{session}/artifacts/{Assert.Single(retainedFiles.EnumerateArray()).GetProperty("artifactId").GetGuid()}/content"));
+                Assert.Empty(restartedModel.Requests);
+            }
             if (proof)
             {
                 await File.WriteAllTextAsync(proofPath + "-completed.json", JsonSerializer.Serialize(new { completed = true, requestId = request.RequestId }));
