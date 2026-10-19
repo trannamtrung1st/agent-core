@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant Office mutation checkpoint — 2026-10-19
+
+Conversational DOCX/XLSX create/edit now use the canonical tenant workspace mutation, exact Review/primary write grant and incumbent Office processor/file owners. [Focused evidence](reports/tenant-office-mutation-verification-2026-10-19.md) records both-store model/HTTP flows, actual pending-consent SQLite host recreation, guarded create-new/edit source checks, abandoned-dispatch no-replay and the shared Synthetic browser journey. This supersedes Office-create/edit-pending notes below for this conversational path only. Source publication, virtual resources, autonomous/resource/transport families and final clean authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant Office inspection checkpoint — 2026-10-19
 
 Human-attributed conversational Runs now offer the existing DOCX/XLSX inspect tools through canonical owned workspace reads and exact saved-read consent. [Focused evidence](reports/tenant-office-inspection-verification-2026-10-19.md) separates actual model/HTTP, cursor/source/authority boundaries, disposable SQLite schema/host recovery and shared browser review. This supersedes Office-inspection-pending claims below for this read-only conversational path. Office create/edit, source publication, virtual resources, autonomous origins, other proposal families and the final authority/schema cutover remain open; no full proposal or milestone acceptance is claimed.

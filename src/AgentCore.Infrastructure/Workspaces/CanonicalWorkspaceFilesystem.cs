@@ -187,7 +187,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
     }
 
     internal async ValueTask<bool> TryWriteNewAsync(string path, ReadOnlyMemory<byte> bytes, long maxFileBytes,
-        long maxRootBytes, CancellationToken ct = default)
+        long maxRootBytes, CancellationToken ct = default, Func<CancellationToken, ValueTask>? authorizeCommit = null)
     {
         if (bytes.Length > maxFileBytes) throw AgentCoreErrors.WorkspaceQuotaExceeded();
         using var root = OpenRoot(create: true);
@@ -209,6 +209,8 @@ internal sealed partial class CanonicalWorkspaceFilesystem
                 await stream.WriteAsync(bytes, ct);
                 await stream.FlushAsync(ct);
             }
+            ct.ThrowIfCancellationRequested();
+            if (authorizeCommit is not null) await authorizeCommit(ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             BeforeOpen?.Invoke(path); // Deterministic external-writer race coverage.
             if (RenameNoReplace(parent, temporary, parent, name) == 0) return true;

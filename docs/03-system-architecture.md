@@ -1,5 +1,9 @@
 # System Architecture
 
+## Tenant Office mutation ownership
+
+The four existing Office create/edit tools compose the existing tenant workspace mutation/approval/Run/grant/receipt owners with the guarded semantic processor. The canonical file adapter owns exclusive creation, bounded source reads, byte comparison and current-authority commit callbacks. Synchronous Office processing runs on the supervised tool worker outside the Session mailbox. No independent Office effect engine, role snapshot or publication path is introduced. [Contract](04-backend-interfaces.md#tenant-model-office-mutation-contract), [focused evidence](reports/tenant-office-mutation-verification-2026-10-19.md).
+
 ## Tenant Office observation ownership
 
 Conversational DOCX/XLSX inspection composes the existing canonical tenant workspace-read and exact saved-consent owner with the incumbent guarded Office processor. The same independent parent/workspace IAM, current capability/HomeAccess, claimed Run and source/checkpoint fences govern the bounded semantic observation. No legacy workspace path, Office write, publication, separate read grant or new execution engine is introduced. [Contract](04-backend-interfaces.md#tenant-model-office-inspection), [bounded evidence](reports/tenant-office-inspection-verification-2026-10-19.md).

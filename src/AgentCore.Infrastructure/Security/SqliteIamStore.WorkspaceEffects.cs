@@ -48,7 +48,7 @@ public sealed partial class SqliteIamStore : ITenantWorkspaceOperationStore
         var rows = await db.Set<AgentRunRecord>().FromSqlInterpolated($"""
             SELECT r.* FROM AgentRuns r WHERE r.TenantId IS NOT NULL
             AND json_type(r.PayloadJson, '$.sideEffect.externalEffect.directOperation') IS 'object'
-            AND json_extract(r.PayloadJson, '$.sideEffect.externalEffect.directOperation.toolName') IN ('workspace.write','workspace.patch','workspace.mkdir','workspace.copy','workspace.move','workspace.delete','workspace.batch')
+            AND json_extract(r.PayloadJson, '$.sideEffect.externalEffect.directOperation.toolName') IN ('workspace.write','workspace.patch','workspace.mkdir','workspace.copy','workspace.move','workspace.delete','workspace.batch','office.document.create','office.document.edit','office.spreadsheet.create','office.spreadsheet.edit')
             AND json_extract(r.PayloadJson, '$.sideEffect.disposition') IN (2,5)
             AND (r.Status <> {(int)AgentRunStatus.Running} OR r.LeaseExpiresAtUtc IS NULL OR r.LeaseExpiresAtUtc <= {at.ToUnixTimeMilliseconds()}
                 OR json_extract(r.PayloadJson, '$.sideEffect.disposition') = 5

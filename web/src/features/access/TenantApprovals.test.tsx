@@ -363,3 +363,45 @@ it('presents workspace consent as an exact saved read with a path and truthful r
   expect(within(saved).queryByText('Before', { exact: true })).not.toBeInTheDocument(); expect(saved.querySelector('script')).toBeNull();
   expect(within(dialog).getByText('Read authorized', { exact: true })).toBeVisible(); expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
 });
+
+it('reviews complete Word sections as inert literal fields and retains protected confirmation', async () => {
+  view({ ...mutationRequest('office.document.create', { path: '/home/exact.docx', title: '<script>literal title</script>', sections: [{ heading: 'Exact heading', paragraphs: ['', 'thử nghiệm'], table: [['zero', '']], pageBreakBefore: false }] }), kind: 'review' });
+  const saved = await screen.findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByText('Create Word document')).toBeVisible();
+  expect(within(saved).getByRole('textbox', { name: 'Document title' })).toHaveValue('<script>literal title</script>');
+  expect(within(saved).getByRole('textbox', { name: 'Section 1 · paragraphs in order' })).toHaveValue('Paragraph 1\n(empty text)\n\nParagraph 2\nthử nghiệm');
+  expect(within(saved).getByRole('textbox', { name: 'Section 1 · table cells in row order' })).toHaveValue('Row 1, column 1\nzero\n\nRow 1, column 2\n(empty text)');
+  expect(within(saved).getByRole('textbox', { name: 'Section 1 · page break before' })).toHaveValue('No'); expect(saved.querySelector('script')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+  const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it('preserves typed zero, false and stored formulas in full exact Excel review', async () => {
+  view(mutationRequest('office.spreadsheet.edit', { path: '/working/exact.xlsx', operations: [{ operation: 'set_cells', sheet: '試験', range: 'A1:C1', cells: [[{ type: 'number', number: 0 }, { type: 'boolean', boolean: false }, { type: 'text', text: '', formula: '1+1', format: 'general' }]] }] }));
+  const saved = await screen.findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByText('Edit Excel workbook')).toBeVisible();
+  expect(within(saved).getByRole('textbox', { name: 'Edit 1 · Sheet' })).toHaveValue('試験');
+  expect(within(saved).getByRole('textbox', { name: 'Edit 1 · Exact range' })).toHaveValue('A1:C1');
+  expect(within(saved).getByRole('textbox', { name: 'Edit 1 · Typed cells in range order' })).toHaveValue('Row 1, column 1\nType: number\nNumber: 0\n\nRow 1, column 2\nType: boolean\nBoolean: No\n\nRow 1, column 3\nType: text\nText: (empty text)\nStored formula: 1+1\nNumber format: general');
+  expect(within(saved).getByText(/Stored formulas are not calculated/)).toBeVisible();
+});
+it('blocks malformed or hidden Office fields while preserving cancellation', async () => {
+  view(mutationRequest('office.document.create', { path: '/home/a.docx', sections: [{ paragraphs: ['safe'], grantId: 'hidden' }] }));
+  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Saved workspace changes unavailable')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+it('shows Word edit order, selectors, styles and explicit empty replacement', async () => {
+  view(mutationRequest('office.document.edit', { path: '/home/exact.docx', operations: [{ operation: 'replace_paragraph', selector: 'p:exact', text: '' }, { operation: 'set_heading_style', selector: 'p:other', style: 'Heading2' }] }));
+  const saved = await screen.findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByRole('textbox', { name: 'Edit 1 · Exact selector' })).toHaveValue('p:exact');
+  expect(within(saved).getByRole('textbox', { name: 'Edit 1 · Replacement text' })).toHaveValue(''); expect(within(saved).getByText('Empty text')).toBeVisible();
+  expect(within(saved).getByRole('textbox', { name: 'Edit 2 · Paragraph style' })).toHaveValue('Heading2');
+});
+it('keeps every Excel create sheet and typed value separately reviewable', async () => {
+  view(mutationRequest('office.spreadsheet.create', { path: '/working/exact.xlsx', sheets: [{ name: 'First', rows: [[{ type: 'text', text: 'Exact value' }]] }, { name: 'Second', rows: [] }] }));
+  const saved = await screen.findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByRole('textbox', { name: 'Sheet 1 · name' })).toHaveValue('First'); expect(within(saved).getByRole('textbox', { name: 'Sheet 2 · name' })).toHaveValue('Second');
+  expect(within(saved).getByRole('textbox', { name: 'Sheet 1 · typed cells in row order' })).toHaveValue('Row 1, column 1\nType: text\nText: Exact value');
+  expect(within(saved).getByRole('textbox', { name: 'Sheet 2 · typed cells in row order' })).toHaveValue('No stored cells');
+});

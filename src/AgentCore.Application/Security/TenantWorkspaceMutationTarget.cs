@@ -25,7 +25,7 @@ public sealed partial class TenantWorkspaceMutationTarget(TenantOperationAuthori
 
     public static IReadOnlyList<WorkspaceMutationObservationProbe> Probes(TenantWorkspaceMutationArguments args)
     {
-        if (args.Tool is ToolCatalog.WorkspaceWrite or ToolCatalog.WorkspacePatch) return [new(args.Path!, true, false)];
+        if (TenantOfficeMutationContract.IsMutation(args.Tool) || args.Tool is ToolCatalog.WorkspaceWrite or ToolCatalog.WorkspacePatch) return [new(args.Path!, true, false)];
         return args.Operations.SelectMany(o => o.Op switch {
             "mkdir" => new[] { new WorkspaceMutationObservationProbe(o.Path!, false, false) },
             "delete" => [new(o.Path!, false, o.Recursive)],

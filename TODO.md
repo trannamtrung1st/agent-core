@@ -2,7 +2,7 @@
 
 Current conversational Workspace mutation Review/grants, guarded execution and retained factual recovery are implemented through the existing consent/Run/grant/receipt/canonical filesystem owners. [Model/shared review qualification](docs/reports/tenant-workspace-mutation-review-verification-2026-10-19.md) and [controlled abandoned-effect host recovery](docs/reports/tenant-workspace-approved-recovery-verification-2026-10-19.md) supersede mutation-pending notes in the historical checkpoints below.
 
-Tenant DOCX/XLSX inspection now uses canonical owned workspace reads and exact read consent; [inspection evidence](docs/reports/tenant-office-inspection-verification-2026-10-19.md) records its bounded current scope. Office create/edit and source publication, Workspace virtual resources, autonomous origins, other resource/transport families and final clean authority/schema cutover remain open. The full proposal remains active.
+Tenant DOCX/XLSX inspection now uses canonical owned workspace reads and exact read consent; [inspection evidence](docs/reports/tenant-office-inspection-verification-2026-10-19.md) records its bounded current scope. The four Office create/edit tools now use exact tenant mutation consent and guarded native processing; [mutation evidence](docs/reports/tenant-office-mutation-verification-2026-10-19.md) records the bounded qualification. Source publication, Workspace virtual resources, autonomous origins, other resource/transport families and final clean authority/schema cutover remain open. The full proposal remains active.
 
 ## Tenant workspace direct mutation checkpoint — 2026-10-19
 

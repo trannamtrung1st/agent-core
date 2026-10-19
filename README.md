@@ -1,5 +1,9 @@
 # Agent Core MVP
 
+## Tenant Office mutation checkpoint — 2026-10-19
+
+Conversational DOCX/XLSX create/edit now use the canonical tenant workspace mutation, exact Review/primary write grant and incumbent Office processor/file owners. [Focused evidence](docs/reports/tenant-office-mutation-verification-2026-10-19.md) records both-store model/HTTP flows, actual pending-consent SQLite host recreation, guarded create-new/edit source checks, abandoned-dispatch no-replay and the shared Synthetic browser journey. This supersedes Office-create/edit-pending notes below for this conversational path only. Source publication, virtual resources, autonomous/resource/transport families and final clean authority/schema cutover remain open; the full proposal stays active.
+
 ## Tenant Office inspection checkpoint — 2026-10-19
 
 Conversational DOCX/XLSX inspection now uses the canonical tenant workspace-read, exact consent and incumbent guarded Office processor. [Focused evidence](docs/reports/tenant-office-inspection-verification-2026-10-19.md) records current independent IAM/capability/source fences, bounded excerpts/ranges/sparse continuation, durable Review and shared inspector behavior. This supersedes Office-inspection-pending notes below only; Office writes/source publication, virtual resources, autonomous origins, other proposal families and final authority/schema cutover remain open. The full proposal stays active.

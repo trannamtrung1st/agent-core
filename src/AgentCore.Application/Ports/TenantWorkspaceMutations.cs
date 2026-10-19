@@ -12,6 +12,9 @@ public interface ITenantWorkspaceMutationStore
 {
     ValueTask WriteTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes,
         Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
+    // The byte processor is pure; ownership, quotas, source comparison and commit authority remain in this filesystem owner.
+    ValueTask TransformOfficeTenantAsync(TenantWorkspaceReference owner, string path, bool create,
+        Func<ReadOnlyMemory<byte>, CancellationToken, byte[]> process, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
     ValueTask DeleteTenantAsync(TenantWorkspaceReference owner, string path,
         Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default);
     // Callbacks are repeatable current-authority checks, never permission snapshots.

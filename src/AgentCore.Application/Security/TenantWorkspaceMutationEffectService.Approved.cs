@@ -84,7 +84,13 @@ public sealed partial class TenantWorkspaceMutationEffectService
     }
     private async ValueTask<TenantOperationOutcome> ApplyApproved(AgentRun run, TenantWorkspaceMutationArguments args, Func<CancellationToken, ValueTask> check, CancellationToken ct)
     {
-        if (args.Tool == ToolCatalog.WorkspaceWrite)
+        if (TenantOfficeMutationContract.IsMutation(args.Tool))
+        {
+            if (office is null) throw new AccessDeniedException("office_processing_unavailable");
+            await files.TransformOfficeTenantAsync(TenantWorkspaceEffectRules.Owner(run, args.Path!), args.Path!, !TenantOfficeMutationContract.IsEdit(args.Tool),
+                (source, token) => TenantOfficeMutationContract.Process(office, args, source, token).Bytes, check, ct).ConfigureAwait(false);
+        }
+        else if (args.Tool == ToolCatalog.WorkspaceWrite)
             await files.WriteTenantAsync(TenantWorkspaceEffectRules.Owner(run, args.Path!), args.Path!, Encoding.UTF8.GetBytes(args.Content!), check, ct).ConfigureAwait(false);
         else if (args.Tool == ToolCatalog.WorkspacePatch)
             await files.PatchTenantAsync(TenantWorkspaceEffectRules.Owner(run, args.Path!), args.Path!, args.Edits, check, ct).ConfigureAwait(false);

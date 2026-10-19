@@ -1471,3 +1471,13 @@ Tenant `artifacts.verify` accepts exactly `{ artifactId }` (one nonempty GUID; b
 Policy-required inspection uses `approvals.request_authorization` as the sole call with `{ operation: "verify_artifact", artifactId }`. Current independent raw Session/Artifact reads are required before preparation; caller-selected principals, Session IDs, permissions and arbitrary actions are rejected. The existing approval detail and Session status use `preparedAction.operation=verify_artifact` / `operation=verify_artifact`. Protected changes include filename, type, stored byte count, checksum and explicit disclosure/read bounds; no body is projected. Existing `/decision` and `/cancel` witnessed commands apply.
 
 The successor result has `applied: false`, `readAuthorized`, optional `artifactMetadata`, `metadataUnavailable`, `metadataUnavailableReason`, request/operation IDs and `replayAllowed: false`. Completed receipt reason `artifact_metadata_read_authorized` authorizes the exact inspection only. A delivery loss/budget failure can withhold metadata after consent; it does not grant a later read. `artifact_verification_review_required` requests exact Review, `artifact_source_changed` withholds changed source facts, and stale snapshot/claim conflicts fail closed. Rejected/expired/cancelled or already-approved same-root actions cannot bypass consent through direct calls or relaxed policy. A genuinely independent root still follows current policy.
+
+## Tenant Office mutation tool intent
+
+The existing `mutate_workspace` intent also accepts the four admitted Office create/edit tools. Identity, permission, source witness, Session and Run are derived by Core. The nested arguments use the existing closed Office schemas under the tenant mutation envelope's 64 KiB UTF-8 argument limit. A primary write grant never replaces independent source reads. For example:
+
+```json
+{"operation":"mutate_workspace","mutation":{"tool":"office.spreadsheet.edit","arguments":{"path":"/working/report.xlsx","operations":[{"operation":"set_cells","sheet":"Results","range":"A1:B1","cells":[[{"type":"text","text":"Approved total"},{"type":"number","number":0}]]}]}}}
+```
+
+The existing `workspaceMutationTool`/`workspaceMutationArguments` review fields contain complete supplied semantic parameters, never current source bytes. Existing mutation result/receipt fields separate approval from completion and retain `replayAllowed:false`; Office processing publishes no Artifact. Create refuses occupied names; edit compares the original package before replacement. [Executed qualification](reports/tenant-office-mutation-verification-2026-10-19.md) records the bounded current implementation.

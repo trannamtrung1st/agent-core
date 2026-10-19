@@ -1,9 +1,10 @@
 import { useId } from 'react';
 import { Alert, Descriptions, Flex, Input, Typography } from 'antd';
+import { savedOfficeMutation, type OfficeProposal } from './OfficeMutationProposal';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 
 type Operation = { op: string; path?: string; source?: string; destination?: string; recursive?: boolean };
-type Proposal = { tool: string; path?: string; content?: string; edits?: { oldText: string; newText: string }[]; operations?: Operation[] };
+type Proposal = { office?: OfficeProposal; tool: string; path?: string; content?: string; edits?: { oldText: string; newText: string }[]; operations?: Operation[] };
 const names: Record<string, string> = { write: 'Replace file text', patch: 'Apply exact text edits', mkdir: 'Create directory', copy: 'Copy file or directory', move: 'Move file or directory', delete: 'Delete file or directory', batch: 'Ordered workspace changes' };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const exactPath = (value: unknown): value is string => typeof value === 'string' && (value.startsWith('/home/') || value.startsWith('/working/')) && value.length > 6;
@@ -19,9 +20,11 @@ function structural(value: unknown, op?: string): Operation | null {
     ? { op: name, source: value.source, destination: value.destination } : null;
 }
 export function savedWorkspaceMutation(tool: unknown, json: unknown): Proposal | null {
-  if (typeof tool !== 'string' || !tool.startsWith('workspace.') || typeof json !== 'string') return null;
+  if (typeof tool !== 'string' || typeof json !== 'string') return null;
   try {
     const args: unknown = JSON.parse(json); if (!object(args)) return null;
+    if (tool.startsWith('office.')) { const office = savedOfficeMutation(tool, args); return office ? { tool, path: args.path as string, office } : null; }
+    if (!tool.startsWith('workspace.')) return null;
     if (tool === 'workspace.write') return keys(args, ['path', 'content']) && exactPath(args.path) && typeof args.content === 'string' ? { tool, path: args.path, content: args.content } : null;
     if (tool === 'workspace.patch') {
       if (!keys(args, ['path', 'edits']) || !exactPath(args.path) || !Array.isArray(args.edits) || args.edits.length < 1 || args.edits.length > 32
@@ -45,8 +48,9 @@ export function WorkspaceMutationPreview({ proposal }: { proposal: Proposal | nu
   const path = (text: string) => <Typography.Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</Typography.Text>;
   if (!proposal) return <Alert type="warning" showIcon title="Saved workspace changes unavailable" description="Refresh details before deciding. If the saved parameters remain unavailable, cancel this request and ask for a fresh exact action." />;
   return <Flex vertical gap="var(--ac-space-section)">
-    <Typography.Text strong>{names[proposal.tool.slice('workspace.'.length)]}</Typography.Text>
+    <Typography.Text strong>{proposal.office?.title ?? names[proposal.tool.slice('workspace.'.length)]}</Typography.Text>
     {proposal.path && <Descriptions {...layout} column={1} size="small" items={[{ key: 'path', label: 'Exact path', children: path(proposal.path) }]} />}
+    {proposal.office && <><Typography.Text>{proposal.office.disclosure}</Typography.Text>{proposal.office.fields.map((field, index) => <Literal key={index} label={field.label} text={field.text} />)}</>}
     {proposal.content !== undefined && <Literal label="Exact replacement text" text={proposal.content} />}
     {proposal.edits?.map((edit, index) => <Flex key={index} vertical gap="var(--ac-space-compact)"><Typography.Text strong>Edit {index + 1}</Typography.Text><Literal label={`Find exact text, edit ${index + 1}`} text={edit.oldText} /><Literal label={`Replacement text, edit ${index + 1}`} text={edit.newText} /></Flex>)}
     {proposal.operations && <ol style={{ margin: 0, paddingInlineStart: 'var(--ac-space-section)', display: 'flex', flexDirection: 'column', gap: 'var(--ac-space-section)' }}>{proposal.operations.map((operation, index) => <li key={index}><Flex vertical gap="var(--ac-space-compact)">

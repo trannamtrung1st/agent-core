@@ -15,7 +15,7 @@ public sealed record TenantWorkspaceMutationResult(OperationDecisionKind Decisio
 public sealed partial class TenantWorkspaceMutationEffectService(TenantOperationAuthorizer operations, IIamStore security, ITenantRunStore runs,
     ITenantSessionStore sessions, TenantRunConfigurationResolver configurations, IamAuthorizer iam, ITenantWorkspaceOperationStore effects,
     ITenantWorkspaceMutationStore files, IIdGenerator ids, TimeProvider time, ITenantApprovalStore approvals,
-    ITenantApprovedOperationStore receipts, TenantWorkspaceMutationTarget targets)
+    ITenantApprovedOperationStore receipts, TenantWorkspaceMutationTarget targets, IOfficeProcessor? office = null)
 {
     public async ValueTask<TenantWorkspaceMutationResult> ExecuteAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct = default)
     {
@@ -63,21 +63,7 @@ public sealed partial class TenantWorkspaceMutationEffectService(TenantOperation
             {
                 await Gate(fence, linked.Token).ConfigureAwait(false); linked.Token.ThrowIfCancellationRequested(); dispatched = true;
                 ValueTask Check(CancellationToken token) => Gate(fence, token);
-                if (call.Name == ToolCatalog.WorkspaceWrite)
-                    await files.WriteTenantAsync(TenantWorkspaceEffectRules.Owner(run, args.Path!), args.Path!, Encoding.UTF8.GetBytes(args.Content!), Check, linked.Token).ConfigureAwait(false);
-                else if (call.Name == ToolCatalog.WorkspacePatch)
-                    await files.PatchTenantAsync(TenantWorkspaceEffectRules.Owner(run, args.Path!), args.Path!, args.Edits, Check, linked.Token).ConfigureAwait(false);
-                else if (call.Name == ToolCatalog.WorkspaceCopy)
-                {
-                    var copy = args.Operations[0];
-                    await files.CopyTenantAsync(TenantWorkspaceEffectRules.Owner(run, copy.Source!), copy.Source!, TenantWorkspaceEffectRules.Owner(run, copy.Destination!), copy.Destination!, Check, linked.Token).ConfigureAwait(false);
-                }
-                else
-                {
-                    var result = await files.StructureTenantAsync(TenantWorkspaceEffectRules.Owner(run, args.Operations[0].Path ?? args.Operations[0].Source!), args.Operations, Check, linked.Token).ConfigureAwait(false);
-                    outcome = result.Completed ? TenantOperationOutcome.Completed : result.MutationsMayHaveOccurred ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Denied;
-                }
-                if (call.Name is ToolCatalog.WorkspaceWrite or ToolCatalog.WorkspacePatch or ToolCatalog.WorkspaceCopy) outcome = TenantOperationOutcome.Completed;
+                outcome = await ApplyApproved(run, args, Check, linked.Token).ConfigureAwait(false);
             }
             catch (Exception) { outcome = dispatched ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Denied; }
         }

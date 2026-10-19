@@ -117,6 +117,7 @@ public sealed partial class TenantOperationAuthorizationTests
 
     private sealed class DelayedApprovedWorkspaceWrite(ITenantWorkspaceMutationStore inner, Func<Task> wait) : ITenantWorkspaceMutationStore
     {
+        public ValueTask TransformOfficeTenantAsync(TenantWorkspaceReference owner, string path, bool create, Func<ReadOnlyMemory<byte>, CancellationToken, byte[]> process, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) => inner.TransformOfficeTenantAsync(owner, path, create, process, authorizeCommit, ct);
         public TaskCompletionSource Finished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async ValueTask WriteTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes, Func<CancellationToken, ValueTask> check, CancellationToken ct = default)
         { try { await wait(); await inner.WriteTenantAsync(owner, path, bytes, check, ct); } finally { Finished.TrySetResult(); } }

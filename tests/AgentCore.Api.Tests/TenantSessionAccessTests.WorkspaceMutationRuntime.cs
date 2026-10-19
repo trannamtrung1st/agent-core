@@ -165,6 +165,7 @@ public sealed partial class TenantSessionAccessTests
 
     private sealed class LostWorkspaceAcknowledgement(ITenantWorkspaceMutationStore inner, Action wrote) : ITenantWorkspaceMutationStore
     {
+        public ValueTask TransformOfficeTenantAsync(TenantWorkspaceReference owner, string path, bool create, Func<ReadOnlyMemory<byte>, CancellationToken, byte[]> process, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) => inner.TransformOfficeTenantAsync(owner, path, create, process, authorizeCommit, ct);
         public async ValueTask WriteTenantAsync(TenantWorkspaceReference owner, string path, ReadOnlyMemory<byte> bytes, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default)
         { await inner.WriteTenantAsync(owner, path, bytes, authorizeCommit, ct); wrote(); throw new IOException("private native acknowledgement lost"); }
         public ValueTask DeleteTenantAsync(TenantWorkspaceReference owner, string path, Func<CancellationToken, ValueTask> authorizeCommit, CancellationToken ct = default) => inner.DeleteTenantAsync(owner, path, authorizeCommit, ct);

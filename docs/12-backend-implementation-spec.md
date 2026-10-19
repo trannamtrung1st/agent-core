@@ -1,5 +1,9 @@
 # Backend Implementation Specification
 
+## Tenant conversational Office mutations
+
+Route the four existing Office create/edit names through the tenant mutation boundary before any legacy Office dispatcher. Close nested arguments against the incumbent schema and derive path ownership, ordinary source reads and primary write authority independently. Use the existing saved mutation consent and dispatch/settlement/recovery owners. Canonical byte transformation exclusively creates a new name or compares edit source bytes immediately before replacement, with current owner/claim/IAM/HomeAccess fences. Do not calculate formulas or publish an Artifact. [Port contract](04-backend-interfaces.md#tenant-model-office-mutation-contract), [evidence](reports/tenant-office-mutation-verification-2026-10-19.md).
+
 ## Tenant Office read processing
 
 Tenant `office.document.inspect` and `office.spreadsheet.inspect` dispatch through `TenantWorkspaceRuntimeReadService`, never the unscoped Session tool adapter. Core derives the actual home/working owner from the claimed Run, validates tool-specific closed arguments and checks current independent read authority before metadata/bytes. Metadata bounds allocation to the existing 10 MiB package ceiling. The incumbent `IOfficeProcessor` and `OfficeReadResults` retain package, relationship, sparse/range, formula-cache and whole-element/cell output safeguards. Current authority/owner/claim checks repeat after semantic projection. Exact Review, private full-source fingerprints and retained observation validation use the existing workspace read-consent/checkpoint owner. [Contract](04-backend-interfaces.md#tenant-model-office-inspection). No Office write or source publication is implied.
