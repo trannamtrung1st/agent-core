@@ -962,6 +962,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("ActiveVersion")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("BrowserProfileResetJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 

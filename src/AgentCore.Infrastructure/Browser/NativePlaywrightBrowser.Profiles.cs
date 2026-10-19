@@ -577,8 +577,8 @@ public sealed partial class NativePlaywrightBrowser
     private string ProfileDirectory(Guid agentInstanceId)
     {
         var root = string.IsNullOrWhiteSpace(_options.ProfileRoot) ? "data/browser-profiles" : _options.ProfileRoot;
-        var name = _tenantAgents.TryGetValue(agentInstanceId, out var owner)
-            ? Path.Combine("tenants", owner.TenantId.ToString("D"), "agents", agentInstanceId.ToString("D")) : agentInstanceId.ToString("D");
+        if (_tenantAgents.TryGetValue(agentInstanceId, out var scoped)) return TenantProfileDirectory(scoped);
+        var name = agentInstanceId.ToString("D");
         var rootFull = Path.GetFullPath(root);
         var full = Path.GetFullPath(Path.Combine(rootFull, name));
         if (!full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.Ordinal)
@@ -587,15 +587,6 @@ public sealed partial class NativePlaywrightBrowser
             throw new IOException();
         }
 
-        if (owner is not null)
-        {
-            var part = rootFull;
-            foreach (var segment in new[] { "", "tenants", owner.TenantId.ToString("D"), "agents", agentInstanceId.ToString("D") })
-            {
-                if (segment.Length > 0) part = Path.Combine(part, segment);
-                if ((Directory.Exists(part) || File.Exists(part)) && File.GetAttributes(part).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("Browser profile path is unavailable.");
-            }
-        }
         return full;
     }
 

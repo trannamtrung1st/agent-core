@@ -1,5 +1,13 @@
 # Backend Implementation Specification
 
+## Tenant Browser profile reset implementation
+
+The human `TenantBrowserProfileService` derives the actual Agent/executor and original Account/login/Principal through canonical IAM. It requires independent raw parent/Browser read and Browser manage; model permissions or approval grants cannot substitute. Exact security/Instance/native witnesses are compared before start. Both stores commit pending reset on the existing Instance with security/Instance revision increments and start audit before native close/deletion; stale prepared operations therefore lose their source witness.
+
+`NativePlaywrightBrowser` serializes reset with incumbent owner/profile gates, closes only the actual persistent context and requires its Close event. After closure it repeats safe path checks, takes the reusable `.lock` inode exclusively and invokes a current-human/revision check immediately before deletion. Linked profile components/lock paths are refused. Verified directory absence is the sole success fact; private I/O errors, uncertain native close, lost human authority or unproven deletion settle unknown. Ephemeral contexts and other Agents are untouched. No reset path launches a Browser. Profile data remains guarded by pending/unknown Instance state until a new deliberate confirmed reset.
+
+Factual settlement uses a separate bounded token so caller cancellation or logout does not erase an attempted operation. Native completion retains only the latest process-local normalized result. A later authorized GET can settle the exact pending operation from that result, or record unknown after process loss, without native replay. A busy read never declares abandonment. The start audit's unique operation ID prevents reuse of an older completed ID. Current-operation retries return facts only. [Ports](04-backend-interfaces.md#tenant-browser-persistent-profile-reset), [verification](reports/tenant-browser-profile-reset-verification-2026-10-20.md).
+
 ## Tenant Browser capture/download implementation
 
 `TenantBrowserArtifactRules` closes publication intent, privacy witnesses, byte/task limits and body-free publication results. `TenantBrowserEffectService` freezes accepted native bytes, then passes that batch to its incumbent settlement owner. Both stores repeat compound current authority and publish owned immutable metadata plus factual receipt/checkpoint atomically. Whole-batch capacity is checked before private blob writes. The receipt distinguishes successful native execution from unavailable or partial file publication; lookup/recovery cannot repeat SDK work. Publication staging is charged to the existing checkpoint clock, and expired claims cannot seal observation delivery.

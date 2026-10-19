@@ -1,5 +1,11 @@
 # Accounts, organizations, access and approvals UX
 
+## Browser persistent-profile reset facts
+
+Human persistent-profile reset now has a canonical backend [preflight/command contract](14-api-and-realtime-protocol.md#tenant-browser-profile-reset-http). A future shared Agent management control must load fresh profile facts, explain that reset closes all persistent Browser views for that Agent and removes its saved Browser state, then require an explicit human action using those exact witnesses. Ephemeral Sessions, Artifacts and working files are separate resources. Raw `browser.manage` and both parent/Browser reads remain independent; no model approval implies reset authority.
+
+Render pending, confirmed reset and unknown separately. Unknown may mean the Browser closed while bytes remain; never display success or silently retry destructive work. After a lost reply, deliberately refresh saved facts; a new deliberate reset needs a new operation ID and fresh witness. Busy state requires fresh observation. This backend checkpoint does not add or qualify the frontend control. [Verification](reports/tenant-browser-profile-reset-verification-2026-10-20.md).
+
 ## Browser lifecycle retirement facts
 
 Session lifecycle and Agent archive retain their existing confirmation/metadata flows. Native resources may still be retiring after the saved transition. The existing Browser resource observation owns partial cleanup counts/status; never translate a saved archive or delete acknowledgement into a “Browser closed” claim. Busy and unconfirmed closure require fresh observation and technical retry. Restore preserves saved profile state but cannot reuse an uncertain old context before its closure is confirmed. This backend checkpoint adds no screen or new human reset control. [Qualification](reports/tenant-browser-retirement-verification-2026-10-20.md).

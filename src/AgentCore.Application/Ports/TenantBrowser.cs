@@ -3,6 +3,8 @@ namespace AgentCore.Application.Ports;
 // Server-derived physical ownership, not permission or model-supplied arguments.
 public sealed record TenantBrowserOwner(Guid TenantId, Guid AgentInstanceId, Guid ExecutorPrincipalId, Guid SessionId)
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public TenantBrowserAgentOwner Agent => new(TenantId, AgentInstanceId, ExecutorPrincipalId);
     public void Validate()
     {
         if (TenantId == Guid.Empty || AgentInstanceId == Guid.Empty || ExecutorPrincipalId == Guid.Empty || SessionId == Guid.Empty)

@@ -9,7 +9,7 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserBinding, ITe
     private readonly object _bindingGate = new();
     // Retain immutable bindings after resource release; a Session cannot change owners.
     private readonly ConcurrentDictionary<Guid, TenantBrowserOwner> _tenantSessions = new();
-    private readonly ConcurrentDictionary<Guid, TenantBrowserOwner> _tenantAgents = new();
+    private readonly ConcurrentDictionary<Guid, TenantBrowserAgentOwner> _tenantAgents = new();
     private readonly HashSet<Guid> _legacySessions = [];
     private readonly HashSet<Guid> _legacyAgents = [];
 
@@ -26,7 +26,7 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserBinding, ITe
                 || !_tenantAgents.ContainsKey(owner.AgentInstanceId) && (_persistent.ContainsKey(owner.AgentInstanceId)
                     || _sessionOwners.Any(p => p.Value == owner.AgentInstanceId)))
                 throw new AccessDeniedException("browser_owner_mismatch");
-            _tenantAgents.TryAdd(owner.AgentInstanceId, owner);
+            _tenantAgents.TryAdd(owner.AgentInstanceId, owner.Agent);
             _tenantSessions.TryAdd(owner.SessionId, owner);
             _sessionOwners.TryAdd(owner.SessionId, owner.AgentInstanceId);
         }

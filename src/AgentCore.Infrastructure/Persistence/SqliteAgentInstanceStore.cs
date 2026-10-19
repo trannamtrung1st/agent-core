@@ -624,7 +624,8 @@ public sealed partial class SqliteAgentInstanceStore(
             row.UnattendedReasoningEffort,
             row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json),
             row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json),
-            row.SettingsOverridesJson is null ? null : JsonSerializer.Deserialize<InstanceSettingsOverrides>(row.SettingsOverridesJson, Json));
+            row.SettingsOverridesJson is null ? null : JsonSerializer.Deserialize<InstanceSettingsOverrides>(row.SettingsOverridesJson, Json),
+            row.BrowserProfileResetJson is null ? null : JsonSerializer.Deserialize<AgentBrowserProfileReset>(row.BrowserProfileResetJson, Json));
 
     internal static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
@@ -642,6 +643,7 @@ public sealed partial class SqliteAgentInstanceStore(
             UnattendedReasoningEffort = instance.UnattendedReasoningEffort,
             SettingsOverridesJson = instance.SettingsOverrides is null ? null : JsonSerializer.Serialize(instance.SettingsOverrides, Json),
             ExecutionBudgetsJson = instance.ExecutionBudgets is null ? null : JsonSerializer.Serialize(instance.ExecutionBudgets, Json),
+            BrowserProfileResetJson = instance.BrowserProfileReset is null ? null : JsonSerializer.Serialize(instance.BrowserProfileReset, Json),
             HarnessManagementJson = instance.HarnessManagement is null ? null : JsonSerializer.Serialize(instance.HarnessManagement, Json)
         };
 }

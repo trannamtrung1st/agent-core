@@ -1,5 +1,9 @@
 # System Architecture
 
+## Tenant Browser human profile reset ownership
+
+Human persistent-profile reset uses the existing Agent Instance as its durable owner and the incumbent IAM/Instance/audit transaction as its commit boundary. Actual server-derived tenant/Instance/executor ownership, original authenticated human and current raw compound rights remain authoritative. Native owner/profile gates and an opaque physical witness protect one exact close/deletion attempt outside the mailbox; they grant no permission. Pending/unknown facts advance Instance revision and block persistent reuse. Factual completion/recovery can record the exact attempted operation after authority loss but cannot repeat physical work. Ephemeral contexts and automatic lifecycle retirement remain separate. No Run, reset ledger, additional supervisor or parallel authority model is introduced. [Ports](04-backend-interfaces.md#tenant-browser-persistent-profile-reset), [retained state](15-persistence-and-configuration.md#tenant-browser-profile-reset-state), [qualification](reports/tenant-browser-profile-reset-verification-2026-10-20.md).
+
 ## Tenant Office mutation ownership
 
 The four existing Office create/edit tools compose the existing tenant workspace mutation/approval/Run/grant/receipt owners with the guarded semantic processor. The canonical file adapter owns exclusive creation, bounded source reads, byte comparison and current-authority commit callbacks. Synchronous Office processing runs on the supervised tool worker outside the Session mailbox. No independent Office effect engine, role snapshot or publication path is introduced. [Contract](04-backend-interfaces.md#tenant-model-office-mutation-contract), [focused evidence](reports/tenant-office-mutation-verification-2026-10-19.md).

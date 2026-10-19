@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser profile reset checks
+
+The reset matrix crosses authenticated HTTP, actual native Chromium, both canonical stores and disposable profile bytes. It verifies confirmed shared persistent-context closure/deletion, localStorage loss after reopen, preserved ephemeral/other-Agent contexts, cold reads without allocation, stale native witnesses, uncertain close/deletion, current-operation factual retry and new deliberate recovery. Original-login loss after closure must preserve bytes and record unknown. Never exercise destructive reset against user profiles.
+
+Store/Application cases independently omit each required human permission, reject foreign/Agent identities, lose login/security witnesses before deletion, retain and reopen pending facts, recover matching cached results versus unknown after host loss without native replay, and keep busy operations pending. Actual model target preparation must reject pending persistent state before provider access. Native filesystem cases exercise exclusive lock contention, linked roots/Agent/lock/child paths, refused delete authority, unproven directory deletion, epoch drift and concurrent reset. SQLite raw mutation guards, lossy downgrade refusal and empty rollback/upgrade/model parity complete the focused boundary. [Executed commands, observed outcomes and limitations](reports/tenant-browser-profile-reset-verification-2026-10-20.md) own qualification; frontend reset interaction and full proposal/milestone acceptance remain separate.
+
 ## Tenant Browser retirement checks
 
 Exercise canonical HTTP Session archive/pause/complete/cancel/delete and Agent archive under memory/SQLite and ephemeral/persistent Browser modes. Verify actual owned native page/context closure, sibling/other-Agent survival and cold authorized reopen after restore. Inject unconfirmed page/context close and prove current partial cleanup facts, retry through the existing sweep and exact-old-context completion after restore. Native tests also cover busy work without forced closure, lifecycle recheck inside the gates, stale command/foreign owner refusal, retained persistent profile bytes and sealed unscoped isolation. Metadata success is separate from cleanup confirmation. [Executed qualification](reports/tenant-browser-retirement-verification-2026-10-20.md).

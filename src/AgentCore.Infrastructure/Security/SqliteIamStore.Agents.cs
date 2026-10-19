@@ -36,7 +36,7 @@ public sealed partial class SqliteIamStore
         AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instance.InstanceId, instance.Lifecycle, audit);
-        if (instance.Revision != 1 || instance.Lifecycle != AgentInstanceLifecycle.Active) throw new ArgumentException("A new active Instance is required.");
+        if (instance.Revision != 1 || instance.Lifecycle != AgentInstanceLifecycle.Active || instance.BrowserProfileReset is not null) throw new ArgumentException("A new active Instance is required.");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var current = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == next.Tenant.TenantId, ct).ConfigureAwait(false);

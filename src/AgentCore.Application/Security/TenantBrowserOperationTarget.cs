@@ -45,6 +45,7 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         var mode = TenantBrowserOperationRules.Isolation(run.Admission.Configuration!.Definition, current) switch {
             BrowserIsolation.EphemeralSession => BrowserProfileMode.EphemeralSession,
             BrowserIsolation.PersistentAgent => BrowserProfileMode.PersistentAgent, _ => browser.HostPolicy.ProfileMode };
+        TenantBrowserOperationRules.RequireProfile(agent, mode);
         if (registerCold)
         {
             if (browser is not ITenantBrowserBinding binding) throw new AccessDeniedException("tenant_effect_unavailable");

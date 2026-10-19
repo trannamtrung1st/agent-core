@@ -74,6 +74,7 @@ public static class TenantBrowserOperationRules
         var admitted = run.Admission.Configuration!.Definition;
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
         var target = TenantApprovalRules.BrowserTarget(value);
+        RequireProfile(agent, target.ProfileMode);
         if (Isolation(admitted, current) == BrowserIsolation.EphemeralSession && target.ProfileMode != BrowserProfileMode.EphemeralSession)
             throw new AccessDeniedException("browser_policy_changed");
     }
@@ -89,6 +90,11 @@ public static class TenantBrowserOperationRules
             || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended)
             throw new AccessDeniedException("resource_unavailable");
 
+    }
+    public static void RequireProfile(TenantAgent agent, BrowserProfileMode mode)
+    {
+        if (mode == BrowserProfileMode.PersistentAgent && agent.Instance.BrowserProfileReset?.Status is "pending" or "unknown")
+            throw new AccessDeniedException("browser_profile_reset_unconfirmed");
     }
     public static BrowserIsolation Isolation(AgentDefinition admitted, AgentDefinition current) => StateIsolationPolicy.Restrict(
         admitted.StateIsolationPolicy ?? StateIsolationPolicy.Default, current.StateIsolationPolicy ?? StateIsolationPolicy.Default).BrowserIsolation;

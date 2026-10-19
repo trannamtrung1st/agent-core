@@ -120,6 +120,16 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
         lock (_gate) return ValueTask.FromResult(_instances.ContainsKey(instanceId));
     }
 
+    internal AgentInstance SetTenantProfileReset(Guid instance, AgentBrowserProfileReset reset, DateTimeOffset at)
+    {
+        lock (_gate)
+        {
+            var current = _instances[instance];
+            var updated = current with { BrowserProfileReset = reset, Revision = checked(current.Revision + 1), UpdatedAt = at };
+            _instances[instance] = updated; return CopyInstance(updated);
+        }
+    }
+
     internal ValueTask<AgentInstance?> FindTenantBackingAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -19,4 +19,5 @@ public sealed record AgentInstance(
     string? UnattendedModelCatalogKey = null,
     string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null,
-    ExecutionBudgetPolicy? ExecutionBudgets = null, InstanceSettingsOverrides? SettingsOverrides = null);
+    ExecutionBudgetPolicy? ExecutionBudgets = null, InstanceSettingsOverrides? SettingsOverrides = null,
+    [property: System.Text.Json.Serialization.JsonIgnore] AgentBrowserProfileReset? BrowserProfileReset = null);

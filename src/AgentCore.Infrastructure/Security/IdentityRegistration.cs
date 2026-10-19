@@ -54,6 +54,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantSandboxRuntimeStore>(p => (ITenantSandboxRuntimeStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantSandboxRuntimeReadService>();
         services.TryAddSingleton<TenantBrowserStateService>();
+        services.TryAddSingleton<ITenantBrowserProfileStore>(p => (ITenantBrowserProfileStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantBrowserProfileService>();
         services.TryAddSingleton<TenantBrowserRetirementService>();
         services.TryAddSingleton<TenantSandboxControlService>();
         services.TryAddSingleton<TenantSandboxOperationTarget>();

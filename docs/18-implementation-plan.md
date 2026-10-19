@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant Browser human profile reset checkpoint — 2026-10-20
+
+Canonical human preflight/reset now extends the existing native profile/Instance/IAM/audit owners, with current raw compound authority, exact native/revision witnesses, confirmed deletion and durable unknown/no-replay recovery. [Focused backend/native/HTTP evidence](reports/tenant-browser-profile-reset-verification-2026-10-20.md) supersedes backend-human-profile-reset-pending statements below only. The frontend reset control, profile decommission, Browser privacy/autonomous adapters, remaining proposal families and final obsolete-authority/schema consolidation remain open. This checkpoint does not claim milestone acceptance; the full original proposal stays active.
+
 ## Tenant human Attachment storage checkpoint — 2026-10-19
 
 Canonical human tenant Attachment intake, exact metadata/download/Office preview, pending abort and retained-expiry/deleted-Session cleanup now use existing Attachment/IAM/filesystem/supervision owners. [Focused qualification](reports/tenant-attachment-storage-verification-2026-10-19.md) separates both-store and authenticated HTTP/native recovery evidence from unconverted tenant message binding, processing/model tools, composer and Attachment publication. This supersedes human Attachment storage/cleanup pending notes only. Other virtual resources/Browser adapters, autonomous/transport families and final obsolete-authority/schema removal remain open; the full proposal stays active and no milestone acceptance is claimed.

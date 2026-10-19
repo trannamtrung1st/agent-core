@@ -1,5 +1,11 @@
 # Observability and Operations
 
+## Tenant Browser persistent-profile reset operations
+
+Use the canonical human [profile preflight/reset API](14-api-and-realtime-protocol.md#tenant-browser-profile-reset-http) only for the explicitly selected actual Agent. Preflight reads bounded existing metadata without launching a Browser or creating a directory. Reset may close all of that Agent's persistent views and remove its saved Browser state; it retains the reusable exclusive `.lock` inode and never deletes sibling Agent/tenant profiles or ephemeral Sessions. No operator should infer deletion from a request acknowledgement, closed page or audit start. Only stored `reset` confirms verified absence; unknown/pending need deliberate factual readback and, if desired, a newly authorized reset.
+
+Host loss cannot replay reset. The next independently authorized GET settles an abandoned pending operation from available same-operation native facts or records unknown; persistent use remains blocked until a new confirmed reset. Do not clear the Instance reset column, remove its audit IDs or bypass a live profile lock to recover. The existing automatic lifecycle sweep still retires native resources without deleting persistent bytes. Focused tests use disposable roots only; no development verification authorizes resetting a user's live profile. [Schema and rollback](15-persistence-and-configuration.md#tenant-browser-profile-reset-state), [evidence](reports/tenant-browser-profile-reset-verification-2026-10-20.md).
+
 The existing resource cleanup hosted service also reconciles already owned tenant Browser resources at startup and on its five-minute sweep, in bounded pages of 100 and five-second TimeProvider budgets. A timed-out Browser owner advances the retry cursor so later owners and file cleanup can proceed. Lifecycle mutations attempt reconciliation immediately after metadata commit. Busy/unconfirmed native closure remains pending and logs use normalized Browser cleanup reasons with resource identity, never URLs, page contents or profile paths. It does not launch a profile or delete its retained bytes. [Browser retirement evidence](reports/tenant-browser-retirement-verification-2026-10-20.md).
 
 ## Tenant Sandbox retirement adapter deployment

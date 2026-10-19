@@ -39,7 +39,7 @@ public sealed partial class InMemoryIamStore
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instance.InstanceId, instance.Lifecycle, audit);
-        if (instance.Revision != 1 || instance.Lifecycle != AgentInstanceLifecycle.Active) throw new ArgumentException("A new active Instance is required.");
+        if (instance.Revision != 1 || instance.Lifecycle != AgentInstanceLifecycle.Active || instance.BrowserProfileReset is not null) throw new ArgumentException("A new active Instance is required.");
         lock (_gate) lock (instances.CredentialGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult(false);

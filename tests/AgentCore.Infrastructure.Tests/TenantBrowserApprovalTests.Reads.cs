@@ -11,12 +11,12 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantBrowserApprovalTests
 {
-    private sealed class ReadProbe(TargetProbe target) : IBrowser, ITenantBrowserCommandTarget, ITenantBrowserBinding
+    private sealed class ReadProbe(TargetProbe target, BrowserProfileMode? profileMode = null) : IBrowser, ITenantBrowserCommandTarget, ITenantBrowserBinding
     {
         public int Bindings, Executions, Reads;
         public Func<Task>? BeforeGate, AfterRead;
         public BrowserProviderDescriptor Provider => target.Provider;
-        public BrowserHostPolicy HostPolicy => target.HostPolicy;
+        public BrowserHostPolicy HostPolicy => profileMode is { } mode ? target.HostPolicy with { ProfileMode = mode } : target.HostPolicy;
         public bool IsAvailable => true;
         public void BindTenantSession(TenantBrowserOwner owner) => Bindings++;
         public ValueTask<string?> EnsureTenantIsolationAsync(TenantBrowserOwner owner, BrowserProfileMode mode, CancellationToken ct = default) { Bindings++; return ValueTask.FromResult<string?>(null); }
