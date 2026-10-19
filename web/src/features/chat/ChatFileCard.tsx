@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Button, Tooltip, Typography } from 'antd';
 import { DownloadOutlined, FileOutlined } from '@ant-design/icons';
 import type { FileRef } from '../filePreview/fileSource';
@@ -14,7 +15,9 @@ export function ChatFileCard({
   onDownload,
   onRetryMetadata,
   onReadLost,
+  sourceAction,
 }: {
+  sourceAction?: ReactNode;
   displayName?: string;
   description?: string;
   fileRef?: FileRef;
@@ -61,6 +64,7 @@ export function ChatFileCard({
         )}
       </div>
       <div className="artifact-actions">
+        {sourceAction}
         {displayName && fileRef && (
           <FilePreviewButton
             file={fileRef}

@@ -1,5 +1,5 @@
 import { ownerFetch, type CursorPage } from './api';
-import { identityReadResponse, IdentityError, tenantApi } from './identity';
+import { identityReadResponse, identityRequest, IdentityError, tenantApi } from './identity';
 
 // Immutable metadata only. Pending requests share the same bound as completed reads.
 const metadata = new Map<string, Promise<ArtifactMetadata>>();
@@ -22,17 +22,21 @@ export async function listArtifactPage(
   sessionId: string,
   before?: string,
   agentRunId?: string,
+  tenantId?: string,
+  signal?: AbortSignal,
 ): Promise<CursorPage<ArtifactMetadata>> {
   const query = new URLSearchParams({
     limit: '20',
     ...(before ? { before } : {}),
     ...(agentRunId ? { agentRunId } : {}),
   });
-  const response = await ownerFetch(
-    `/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/page?${query}`,
-  );
-  if (!response.ok) throw new Error('Files could not be loaded. Try again.');
-  const page = (await response.json()) as CursorPage<ArtifactMetadata>;
+  let page: CursorPage<ArtifactMetadata>;
+  if (tenantId) page = await identityRequest(tenantApi(tenantId, `/sessions/${encodeURIComponent(sessionId)}/artifacts?${query}`), { signal });
+  else {
+    const response = await ownerFetch(`/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/page?${query}`, { signal });
+    if (!response.ok) throw new Error('Files could not be loaded. Try again.');
+    page = await response.json() as CursorPage<ArtifactMetadata>;
+  }
   if (
     !Array.isArray(page.items) ||
     page.items.length > 20 ||

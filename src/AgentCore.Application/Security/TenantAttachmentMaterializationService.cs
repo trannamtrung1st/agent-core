@@ -11,6 +11,28 @@ public sealed class TenantAttachmentMaterializationService(IIamStore security, I
     ITenantAttachmentStore attachments, ITenantAttachmentMutationStore mutations, ITenantWorkspaceMutationStore files,
     ITenantAuthorizationAuditStore audits, IdentityService identity, IamAuthorizer iam, IIdGenerator ids, TimeProvider time)
 {
+    public sealed record Access(string DisplayName, long SecurityRevision, bool CanMaterialize, bool ReadOnly);
+    public async ValueTask<Access> InspectAsync(Guid tenant, Guid session, Guid attachment, HumanSessionReference human, CancellationToken ct = default)
+    {
+        async ValueTask<(View View, Access Access)> Read()
+        {
+            var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+            var saved = await sessions.FindTenantSessionAsync(tenant, session, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+            var agent = await agents.FindTenantAgentAsync(tenant, saved.Owner.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+            var source = await attachments.FindTenantAsync(tenant, session, attachment, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+            TenantAttachmentRules.Session(saved.Owner, saved, agent, false);
+            await TenantAttachmentRules.PermissionsAsync(state, human.PrincipalId, session, attachment, "attachments.read", iam, ct).ConfigureAwait(false);
+            if (!TenantAttachmentRules.Available(source, time.GetUtcNow())) throw new AccessDeniedException("resource_unavailable");
+            var readOnly = !TenantWorkspaceMutationRules.Writable(agent, saved) || saved.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active;
+            var can = !readOnly && await TenantWorkspaceMutationRules.Allowed(state, new(tenant, agent.Instance.InstanceId, session), human.PrincipalId, "workspaces.write", iam, ct).ConfigureAwait(false)
+                && (await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("artifacts.create"), TenantSessionRules.Scope(tenant, session), ct).ConfigureAwait(false)).Allowed;
+            return (new(state, saved, agent, source), new(source.DisplayName, state.Tenant.Revision, can, readOnly));
+        }
+        var before = await Read().ConfigureAwait(false); var after = await Read().ConfigureAwait(false);
+        if (before.Access != after.Access || before.View.Session.Owner != after.View.Session.Owner || before.View.Source != after.View.Source
+            || before.View.Agent.Instance.Revision != after.View.Agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
+        return after.Access;
+    }
     private sealed record View(TenantSecurityState State, TenantSession Session, TenantAgent Agent, AttachmentRecord Source);
     private async ValueTask<View> Require(Guid tenant, Guid session, Guid attachment, HumanSessionReference human, long revision, CancellationToken ct)
     {

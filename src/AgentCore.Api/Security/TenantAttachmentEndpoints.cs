@@ -12,6 +12,10 @@ public static class TenantAttachmentEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments").RequireAuthorization();
+        group.MapGet("/{attachmentId:guid}/materialize", (Guid sessionId, Guid attachmentId, HttpContext http, TenantAttachmentMaterializationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http); return Results.Json(await service.InspectAsync(actor.TenantId, sessionId, attachmentId, Human(http, actor), ct).ConfigureAwait(false));
+        }));
         group.MapPost("/{attachmentId:guid}/materialize", (Guid sessionId, Guid attachmentId, MaterializeRequest body, HttpContext http, TenantAttachmentMaterializationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

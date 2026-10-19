@@ -8,6 +8,7 @@ import type { HistoryAttachment } from "../../state/sessionStore";
 import { downloadFile, readFile, resolveFile, type FileRef } from "../filePreview/fileSource";
 import { previewFormat, formatLimit, validateImageDimensions, validateSignature } from "../filePreview/previewPolicy";
 import { loadPreviewOptions } from "../filePreview/previewOptions";
+import { AttachmentMaterializeAction } from "./AttachmentMaterializeAction";
 import { ChatFileCard } from "./ChatFileCard";
 
 export function HistoryAttachmentView({ sessionId, tenantId, file }: { sessionId: string; tenantId?: string; file: HistoryAttachment }) {
@@ -39,7 +40,8 @@ function HistoryFile({ sessionId, tenantId, file }: { sessionId: string; tenantI
   return <div className="history-file-actions">
     {href && <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}><img className="entry-preview" loading="lazy" decoding="async" src={href} alt={file.displayName} /></a>}
     <ChatFileCard displayName={file.displayName} description={artifactKind(file.contentType)} fileRef={ref}
-      downloading={busy} downloadFailed={failed} onDownload={() => void save()} />
+      downloading={busy} downloadFailed={failed} onDownload={() => void save()}
+      sourceAction={tenantId && <AttachmentMaterializeAction key={`${tenantId}:${sessionId}:${file.attachmentId}`} tenantId={tenantId} sessionId={sessionId} attachmentId={file.attachmentId} displayName={file.displayName} />} />
   </div>;
 }
 

@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Tenant Chat now exposes original Attachment copying through the shared Session files inspector, with independent Working files and Artifacts views and deliberate partial/unknown recovery. [UI qualification](docs/reports/tenant-attachment-materialization-ui-verification-2026-10-19.md) supersedes frontend-materialization-pending notes below. The remaining full tenant IAM proposal stays active.
+
 Human tenant Attachment materialization now creates a guarded working copy plus an immutable Artifact with actual human/source provenance. [Backend qualification](docs/reports/tenant-attachment-materialization-verification-2026-10-19.md) covers compound permissions, partial/unknown outcomes and SQLite host recreation. This supersedes backend-materialization-pending notes below; the shared frontend action and remaining full tenant IAM proposal stay open.
 
 The Runtime’s own assistant-progress save no longer invalidates an unchanged Attachment context read, and the full model worker now reports prelude failures through the existing terminal/history owner. [Controlled race and lifecycle evidence](docs/reports/tenant-model-preparation-verification-2026-10-19.md) records both-store correction, cancellation and factual-effect recovery. Historical failure attribution outside this reproduced mechanism and the full tenant IAM proposal remain open.
