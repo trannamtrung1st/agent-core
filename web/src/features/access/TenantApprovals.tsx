@@ -8,6 +8,7 @@ import { adminCollectionPagination } from '../admin/AdminCollectionToolbar';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 import { ArtifactPublicationPreview, savedArtifactPublication } from './ArtifactPublicationPreview';
 import { WorkspaceMutationPreview, savedWorkspaceMutation } from './WorkspaceMutationPreview';
+import { BrowserArtifactPublication, type BrowserArtifactResult } from './BrowserArtifactPublication';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { tenantApprovalPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
@@ -20,7 +21,7 @@ export interface TenantApproval {
   summary: string; createdAt: string; expiresAt: string;
   preparedAction: { actionHash: string; operationId: string; operation?: string; expectedInstanceRevision: number; expectedPersonaRevision: number };
   decision: { principalId: string; status: Status; decidedAt: string } | null;
-  operationResult: { outcome: string; reasonCode: string; recordedAt: string } | null;
+  operationResult: { outcome: string; reasonCode: string; recordedAt: string; browserArtifacts?: BrowserArtifactResult } | null;
   review: { agentName: string; requesterName: string | null; reviewerName: string | null;
     changes: { field: string; before: string | number | boolean | null; after: string | number | boolean | null; beforeAvailable: boolean; afterAvailable: boolean; restoresDefault: boolean }[];
     canDecide: boolean; canCancel: boolean; decisionUnavailableReason: string | null; independentReview: boolean; serverNow: string; executionState: string };
@@ -234,8 +235,10 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           {!fresh && <Typography.Text role="status" type="secondary">Refresh details before deciding. A saved decision is never submitted again automatically.</Typography.Text>}
         </>}
         <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={resultLabel(data)} description={<>{artifactPublication && data.operationResult.outcome === 'completed' ? 'The exact saved file was published. Viewing or downloading it requires separate current access.' : reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {approvalDate(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
+        {browserCommand && data.operationResult?.browserArtifacts && <BrowserArtifactPublication key={`${tenant}:${id}:${version}`} result={data.operationResult.browserArtifacts} tenantId={tenant} sessionId={data.sessionId} />}
         <Collapse items={[{ key: 'technical', label: 'Technical references', children: <Descriptions {...layout} column={1} size="small" items={[
           { key: 'request', label: 'Request', children: data.requestId }, { key: 'run', label: 'Source Run', children: data.runId }, { key: 'session', label: 'Session', children: data.sessionId }, { key: 'root', label: 'Execution root', children: data.rootActivationId },
+          ...(browserCommand ? (data.operationResult?.browserArtifacts?.files ?? []).map((file, index) => ({ key: `browser-file-${index}`, label: file.kind === 'capture' ? 'Captured Artifact' : 'Downloaded Artifact', children: value(file.artifactId) })) : []),
           { key: 'hash', label: 'Exact action hash', children: data.preparedAction.actionHash },
           ...((attachmentRead || artifactVerification || publication?.source) && artifactChecksum?.afterAvailable ? [{ key: 'artifact-checksum', label: fields.artifactChecksum, children: value(artifactChecksum.after) }] : []), { key: 'revision', label: 'Request revision', children: data.requestRevision }, { key: 'access', label: 'Access revision', children: data.securityRevision }
         ]} /> }]} />

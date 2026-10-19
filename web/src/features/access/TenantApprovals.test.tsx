@@ -484,3 +484,57 @@ it('withholds a saved Attachment publication missing its canonical original file
   const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Saved file publication unavailable')).toBeVisible();
   expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
 });
+
+const browserFilesRequest = (browserArtifacts: NonNullable<TenantApproval['operationResult']>['browserArtifacts']): TenantApproval => ({
+  ...request, kind: 'review', status: 'approved', preparedAction: { ...request.preparedAction, operation: 'browser_command' },
+  operationResult: { outcome: 'completed', reasonCode: 'browser_command_completed', recordedAt: request.createdAt, ...(browserArtifacts ? { browserArtifacts } : {}) },
+  review: { ...request.review, canDecide: false, canCancel: false, executionState: 'recorded' },
+});
+const captureRef = { kind: 'capture' as const, artifactId: 'capture-file-reference' };
+it.each([
+  ['published', null, [captureRef], 'Files published', '1 captured image saved to this conversation.'],
+  ['published', 'download_limit', [captureRef, { kind: 'download', artifactId: 'download-file-reference' }], 'Some files published', 'The download size or task limit prevented publication of every download.'],
+  ['empty', null, [], 'No files published', 'The command produced no files for publication.'],
+  ['unavailable', 'permission_denied', [], 'File publication unavailable', 'Current permission no longer allowed file publication.'],
+  ['unavailable', 'artifact_quota_exceeded', [], 'File publication unavailable', 'The Session file storage limit prevented publication.'],
+  ['unavailable', 'future_reason', [], 'File publication unavailable', 'Some requested files could not be published.'],
+] as const)('keeps native completion separate from %s file publication (%s)', async (status, reasonCode, files, title, description) => {
+  view(browserFilesRequest({ status, reasonCode, files: [...files] }));
+  const publication = await screen.findByRole('region', { name: 'Browser files' });
+  expect(within(publication).getByText(title)).toBeVisible(); expect(within(publication).getByText(description)).toBeVisible();
+  const result = screen.getByRole('region', { name: 'Operation result' }); expect(within(result).getByText('Command completed')).toBeVisible();
+  expect(within(result).getByText(/has not been independently verified/)).toBeVisible();
+  expect(within(publication).queryByRole('button', { name: 'Inspect published files' }) !== null).toBe(status === 'published');
+  expect(within(publication).queryByText(captureRef.artifactId)).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/artifacts/'))).toBe(false);
+  expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+});
+it('leaves legacy Browser receipts without an invented publication outcome', async () => {
+  view(browserFilesRequest(undefined)); await screen.findByRole('region', { name: 'Operation result' });
+  expect(screen.queryByRole('region', { name: 'Browser files' })).not.toBeInTheDocument();
+});
+it('inspects published files deliberately with independent current access, recovery, and read-state retirement on refresh', async () => {
+  const item = browserFilesRequest({ status: 'published', reasonCode: null, files: [captureRef] }); view(item);
+  const dialog = await screen.findByRole('dialog'); const publication = await within(dialog).findByRole('region', { name: 'Browser files' });
+  let allowed = false;
+  fetchMock.mockImplementation(async path => {
+    if (String(path).includes('/artifacts/')) return allowed ? response({ artifactId: captureRef.artifactId, sessionId: item.sessionId, displayName: 'current-capture.png', contentType: 'image/png', byteSize: 40 }) : response({ reasonCode: 'resource_unavailable' }, 403);
+    return String(path).includes('/approvals?') ? response({ items: [item], total: 1, page: 0, pageSize: 20 }) : response(item);
+  });
+  fireEvent.click(within(publication).getByRole('button', { name: 'Inspect published files' }));
+  expect(await within(publication).findByText('File unavailable')).toBeVisible();
+  expect(within(publication).queryByRole('button', { name: /Download/ })).not.toBeInTheDocument();
+  allowed = true; fireEvent.click(within(publication).getByRole('button', { name: 'Retry file' }));
+  expect(await within(publication).findByText('current-capture.png')).toBeVisible();
+  expect(within(publication).getByRole('button', { name: 'Download current-capture.png' })).toBeEnabled();
+  expect(within(publication).getByRole('button', { name: 'Preview current-capture.png' })).toBeEnabled();
+  const fileCalls = fetchMock.mock.calls.filter(([path]) => String(path).includes('/artifacts/'));
+  expect(fileCalls).toHaveLength(2); expect(fileCalls.every(([path]) => String(path) === '/api/v2/tenants/tenant-a/sessions/session-reference/artifacts/capture-file-reference')).toBe(true);
+  allowed = false; fireEvent.click(within(dialog).getByRole('button', { name: 'Refresh details' }));
+  await waitFor(() => expect(within(dialog).queryByText('current-capture.png')).not.toBeInTheDocument());
+  const refreshed = within(dialog).getByRole('region', { name: 'Browser files' });
+  fireEvent.click(within(refreshed).getByRole('button', { name: 'Inspect published files' }));
+  expect(await within(refreshed).findByText('File unavailable')).toBeVisible();
+  expect(within(refreshed).queryByText('current-capture.png')).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
