@@ -62,10 +62,11 @@ public sealed partial class SqliteAttachmentStore : ITenantAttachmentStore
         var row = await Owned(db, tenant, session).AsNoTracking().SingleOrDefaultAsync(a => a.AttachmentId == attachment.ToString("D") && a.ContentDeletedAtUtc == null
             && (a.State == nameof(AttachmentState.Bound) || a.ExpiresAtUtc > now), ct).ConfigureAwait(false); return row is null ? null : FromRow(row);
     }
-    public async ValueTask<TenantAttachmentPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before, int limit, CancellationToken ct = default)
+    public async ValueTask<TenantAttachmentPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before, int limit, CancellationToken ct = default, bool boundOnly = false)
     {
         TenantAttachmentRules.Query(tenant, session, limit); await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var now = time.GetUtcNow().ToUnixTimeMilliseconds();
         var query = Owned(db, tenant, session).AsNoTracking().Where(a => a.ContentDeletedAtUtc == null && (a.State == nameof(AttachmentState.Bound) || a.ExpiresAtUtc > now));
+        if (boundOnly) query = query.Where(a => a.State == nameof(AttachmentState.Bound));
         if (allowed is not null) { var ids = allowed.Select(id => id.ToString("D")).ToArray(); query = query.Where(a => ids.Contains(a.AttachmentId)); }
         if (before is { } cursor)
         {

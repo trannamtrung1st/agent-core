@@ -39,7 +39,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                     && (sandboxVisibility?.Sessions is null || sandboxVisibility.Sessions.Contains(r.SessionId))
                     && (artifactCreateSessions is null || artifactCreateSessions.Contains(r.SessionId))
                     && (r.Operation.ArtifactPublication.Source is null || ArtifactSourceApprovalVisible(r, workspaceReadVisibility, attachmentReadVisibility)))
-                && (r.Operation.WorkspaceRead is null || WorkspaceApprovalVisible(r, workspaceReadVisibility))
+                && (r.Operation.WorkspaceRead is null || WorkspaceApprovalVisible(r, workspaceReadVisibility, attachmentReadVisibility))
                 && (r.Operation.WorkspaceMutation is null || WorkspaceMutationApprovalVisible(r, workspaceMutationVisibility))
                 && (r.Operation.AttachmentRead is null || attachmentBacking is not null
                     && attachmentBacking.FindTenantAsync(r.TenantId, r.SessionId, r.Operation.AttachmentRead.AttachmentId).Result is { State: AgentCore.Domain.Conversation.AttachmentState.Bound } item

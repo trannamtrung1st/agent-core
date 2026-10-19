@@ -105,7 +105,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
             if (TenantWorkspaceReadContract.IsRead(call.Name))
             {
                 var args = TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson);
-                if (TenantAttachmentVirtualReadContract.IsPath(args.Path))
+                if (TenantAttachmentVirtualReadContract.IsTool(call.Name) && TenantAttachmentVirtualReadContract.IsPath(args.Path))
                 {
                     if (tenantAttachments is null || admission?.AgentRunGeneration is not { } attachmentGeneration) return Error("forbidden", "tenant_effect_unavailable");
                     var attachmentRun = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");

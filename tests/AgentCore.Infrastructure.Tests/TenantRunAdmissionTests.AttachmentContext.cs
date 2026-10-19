@@ -35,7 +35,7 @@ public sealed partial class TenantRunAdmissionTests
         public ValueTask<TenantAttachmentUpload> PrepareUploadTenantAsync(TenantSessionRoot owner, Guid id, Guid request, Guid actor, string name, string type, Stream content, CancellationToken ct = default) => inner.PrepareUploadTenantAsync(owner, id, request, actor, name, type, content, ct);
         public ValueTask<bool> OwnsTenantAsync(Guid tenant, Guid session, Guid attachment, CancellationToken ct = default) => inner.OwnsTenantAsync(tenant, session, attachment, ct);
         public ValueTask<AttachmentRecord?> FindTenantAsync(Guid tenant, Guid session, Guid attachment, CancellationToken ct = default) => inner.FindTenantAsync(tenant, session, attachment, ct);
-        public ValueTask<TenantAttachmentPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before, int limit, CancellationToken ct = default) => inner.ListTenantAsync(tenant, session, allowed, before, limit, ct);
+        public ValueTask<TenantAttachmentPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before, int limit, CancellationToken ct = default, bool boundOnly = false) => inner.ListTenantAsync(tenant, session, allowed, before, limit, ct, boundOnly);
         public async ValueTask<byte[]> ReadTenantContentAsync(Guid tenant, Guid session, Guid attachment, CancellationToken ct = default)
         { Reads++; var bytes = await inner.ReadTenantContentAsync(tenant, session, attachment, ct); if (afterRead is not null) await afterRead(); return bytes; }
     }

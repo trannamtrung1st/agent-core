@@ -143,12 +143,19 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 ((Permission = 'workspaces.read' AND ({workspaceJson} = 'null' OR ResourceId IN (SELECT value FROM json_each({workspaceJson}))))
                     OR (Permission = 'resources.read' AND ({resourceJson} = 'null' OR ResourceId IN (SELECT value FROM json_each({resourceJson})))
                         AND ResourceId IN (SELECT value FROM json_each({ownedResourceJson})))
+                    OR (json_type(PayloadJson, '$.Operation.WorkspaceRead.AttachmentMembersJson') IS 'text'
+                        AND ({attachmentSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({attachmentSessionJson})))
+                        AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceRead.AttachmentMembersJson')) member
+                            WHERE ({attachmentJson} <> 'null' AND json_extract(member.value, '$.AttachmentId') NOT IN (SELECT value FROM json_each({attachmentJson})))
+                                OR NOT EXISTS (SELECT 1 FROM Attachments a WHERE a.TenantId = TenantApprovalRequests.TenantId AND a.SessionId = TenantApprovalRequests.SessionId
+                                    AND a.AttachmentId = json_extract(member.value, '$.AttachmentId') AND a.EntryId = json_extract(member.value, '$.EntryId')
+                                    AND a.Sha256Hex = json_extract(member.value, '$.Sha256Hex') AND a.State = 'Bound' AND a.ContentDeletedAtUtc IS NULL)))
                     OR (json_type(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson') IS 'text' AND NOT EXISTS (
                         SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceRead.ResourceMembersJson')) member
                         WHERE (InstanceId || ':' || json_extract(member.value, '$.Key')) NOT IN (SELECT value FROM json_each({ownedResourceJson}))
                             OR ({resourceJson} <> 'null' AND (InstanceId || ':' || json_extract(member.value, '$.Key')) NOT IN (SELECT value FROM json_each({resourceJson}))))))
                 AND ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
-                AND (json_extract(PayloadJson, '$.Operation.WorkspaceRead.Working') = 1 OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))
+                AND (json_type(PayloadJson, '$.Operation.WorkspaceRead.AttachmentMembersJson') IS 'text' OR json_extract(PayloadJson, '$.Operation.WorkspaceRead.Working') = 1 OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))
                 AND EXISTS (SELECT 1 FROM TenantSessions AS root JOIN Sessions AS saved ON saved.SessionId = root.SessionId
                     WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId
                     AND root.AgentInstanceId = TenantApprovalRequests.InstanceId AND root.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId

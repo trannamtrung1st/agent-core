@@ -1569,3 +1569,10 @@ A required `attachment_read_review_required` result discloses no content. `appro
 ## Preparation failure status
 
 A claimed conversational Run whose context/brain preparation fails reports a terminal `preparation-failed` failure, or `authority-unavailable` for a typed authority refusal. The existing safe `BrainFailed` error/status flow remains; exception bodies are not public error text. There is no new HTTP/Hub request or approval authority. No assistant entry is fabricated before output starts; retained streaming progress is marked Failed through the normal Session writer. An approval operation may truthfully remain completed with its immutable receipt and consumed grant while preparation of the later conversational answer fails. A new independent user message is the normal recovery path; terminal work is not automatically repeated.
+
+
+### Tenant model Attachment namespace discovery
+
+`workspace.list` and `workspace.search` accept the exact `/attachments` root. Other directory/filename/exact-file spellings refuse for collection operations. Existing closed list (`cursor`, `limit`) and search (`query`, `glob`, `maxResults`) bounds remain; list cursors must be exact canonical UUID child paths returned as `nextPath`. Only actual bound same-Session sources with independent current child reads contribute results. Name/glob matching uses inert display labels; content search scans supported UTF-8 originals within existing scan limits without Office/media extraction. Results are bounded untrusted observations with `tenantWorkspaceRead` and an `attachmentCollection` witness; they supply no download authority.
+
+Policy-required observations return `attachment_read_review_required` and use existing `approvals.request_authorization` operation `inspect_workspace` with the exact tool/arguments. The shared inspector retains exact arguments/fingerprint and read-only consent semantics. Current Session/member reads, capability, source and qualified reviewer checks remain independent; this Review cannot grant missing IAM. No new HTTP or Hub route is added.

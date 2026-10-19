@@ -56,20 +56,21 @@ public sealed partial class TenantSessionAccessTests
         }
     }
     private sealed record AttachmentReadCase(AttachmentExecutionCase Execution, byte[] Bytes, Guid Instance);
-    private static async Task<AttachmentReadCase> PrepareAttachmentRead(IServiceProvider services, HttpClient owner, string format, bool recoveryBudget = false, bool explicitCapability = false, string? displayNameOverride = null, string? virtualTool = null)
+    private static async Task<AttachmentReadCase> PrepareAttachmentRead(IServiceProvider services, HttpClient owner, string format, bool recoveryBudget = false, bool explicitCapability = false, string? displayNameOverride = null, string? virtualTool = null, IReadOnlyList<string>? virtualTools = null)
     {
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
+        var readers = virtualTools ?? (virtualTool is null ? Array.Empty<string>() : new[] { virtualTool });
         JsonElement agent;
-        if (explicitCapability || virtualTool is not null)
+        if (explicitCapability || readers.Count > 0)
         {
             var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Attachment reader", expectedRevision = await Revision(owner, tenant) }));
             var draftId = draft.GetProperty("draftId").GetGuid();
             var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
             candidate["environment"] = JsonSerializer.SerializeToNode(new {
                 harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
-                capabilities = new { mode = "Selected", resolvedCapabilities = virtualTool is null ? new[] { ToolCatalog.AttachmentsRead } : new[] { ToolCatalog.AttachmentsRead, virtualTool } },
-                projection = new { alwaysCapabilities = virtualTool is null ? Array.Empty<string>() : new[] { virtualTool } } });
+                capabilities = new { mode = "Selected", resolvedCapabilities = new[] { ToolCatalog.AttachmentsRead }.Concat(readers).Distinct().ToArray() },
+                projection = new { alwaysCapabilities = readers.ToArray() } });
             var saved = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));
             Assert.True(saved.TryGetProperty("revision", out _), saved.GetRawText());
             await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));

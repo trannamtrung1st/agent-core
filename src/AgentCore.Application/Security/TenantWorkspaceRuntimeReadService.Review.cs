@@ -11,16 +11,16 @@ public sealed record TenantWorkspacePreparedRead(AgentRun Run, TenantSecuritySta
 
 public sealed partial class TenantWorkspaceRuntimeReadService
 {
-    private static PreparedWorkspaceRead Witness(Guid session, ModelToolCall call, string hash, string? resourceKey = null, long? resourceRevision = null, string? resourceMembers = null, PreparedKnowledgeReadSource? knowledge = null)
+    private static PreparedWorkspaceRead Witness(Guid session, ModelToolCall call, string hash, string? resourceKey = null, long? resourceRevision = null, string? resourceMembers = null, PreparedKnowledgeReadSource? knowledge = null, string? attachmentMembers = null)
     {
         var args = TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson);
-        return new(session, args.Path.StartsWith("/working", StringComparison.Ordinal), call.Name, TenantWorkspaceReadContract.Canonical(call.Name, args), hash, resourceKey, resourceRevision, resourceMembers, knowledge);
+        return new(session, args.Path.StartsWith("/working", StringComparison.Ordinal), call.Name, TenantWorkspaceReadContract.Canonical(call.Name, args), hash, resourceKey, resourceRevision, resourceMembers, knowledge, attachmentMembers);
     }
     private static ModelToolCall Call(PreparedWorkspaceRead value) => new("workspace-inspection", value.ToolName, value.ArgumentsJson);
     public async ValueTask<TenantWorkspacePreparedRead> PrepareInspectionAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct = default)
     {
         var observed = await ObserveExact(frame, call, ct).ConfigureAwait(false); var before = observed.Before;
-        var value = Witness(frame.SessionId, call, observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge); var review = false;
+        var value = Witness(frame.SessionId, call, observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge, observed.Before.Attachments?.MembersJson); var review = false;
         foreach (var (key, scope) in TenantWorkspaceReadOperationRules.Targets(before.Workspace.TenantId, before.Agent.Instance.InstanceId, value))
             review |= await TenantSandboxReadOperationRules.NeedsReviewAsync(before.State, before.Run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false);
         await Fence(frame, call.Name, TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson), before, ct, approved: true).ConfigureAwait(false);
@@ -43,7 +43,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
         var value = request.Operation.WorkspaceRead ?? throw new AccessDeniedException("operation_mismatch");
         var observed = await ObserveExact(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation ?? Guid.Empty), Call(value), ct, live: false).ConfigureAwait(false);
         if (observed.Before.Run.Revision != run.Revision || observed.Before.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
-            || observed.Before.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision || Witness(run.SessionId, Call(value), observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge) != value)
+            || observed.Before.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision || Witness(run.SessionId, Call(value), observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge, observed.Before.Attachments?.MembersJson) != value)
             throw new SecurityConflictException("workspace_source_changed");
     }
     public async ValueTask RequireInspectionReadAsync(TenantApprovalRequest request, TenantSecurityState state, Guid human, CancellationToken ct)
@@ -78,7 +78,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
         var value = request.Operation.WorkspaceRead ?? throw new AccessDeniedException("operation_mismatch");
         var observed = await ObserveExact(frame, Call(value), ct, budget: remainingBytes).ConfigureAwait(false);
         await RequireApprovedData(observed.Before, request, receipt, ct).ConfigureAwait(false);
-        if (Witness(frame.SessionId, Call(value), observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge) != value || observed.Before.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
+        if (Witness(frame.SessionId, Call(value), observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge, observed.Before.Attachments?.MembersJson) != value || observed.Before.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
             || observed.Before.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision) throw new SecurityConflictException("workspace_source_changed");
         if (receipt.RunId != frame.RunId || observed.Before.Run.SideEffect.Disposition != AgentRunSideEffectDisposition.Succeeded
             || observed.Before.Run.SideEffect.ToolCallId != "operation:" + receipt.OperationId.ToString("D") || observed.Before.Run.SideEffect.ActionHash != receipt.ActionHash)
@@ -103,7 +103,7 @@ public sealed partial class TenantWorkspaceRuntimeReadService
             if (witness.GetProperty("tool").GetString() != value.ToolName || witness.GetProperty("arguments").Deserialize<TenantWorkspaceReadArguments>() != TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson))
                 throw new AccessDeniedException("workspace_source_changed");
             var observed = await ObserveExact(frame, Call(value), ct).ConfigureAwait(false);
-            if (Witness(run.SessionId, Call(value), observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge) != value) throw new AccessDeniedException("workspace_source_changed");
+            if (Witness(run.SessionId, Call(value), observed.Hash, observed.Before.Resource?.Resource.Key, observed.Before.Resource?.ResourceRevision, observed.Before.Collection?.MembersJson, observed.Before.Knowledge, observed.Before.Attachments?.MembersJson) != value) throw new AccessDeniedException("workspace_source_changed");
             await RequireApprovedData(observed.Before, request, receipt, ct).ConfigureAwait(false);
             await Fence(frame, value.ToolName, TenantWorkspaceReadContract.Parse(value.ToolName, value.ArgumentsJson), observed.Before, ct, approved: true).ConfigureAwait(false);
         }

@@ -65,11 +65,11 @@ public sealed partial class InMemoryAttachmentStore : ITenantAttachmentStore
         ct.ThrowIfCancellationRequested(); var item = RetainedTenant(tenant, session, attachment);
         return ValueTask.FromResult(item is not null && OwnsTenantAttachment(tenant, attachment) && TenantAttachmentRules.Available(item, time.GetUtcNow()) ? item : null);
     }
-    public ValueTask<TenantAttachmentPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before, int limit, CancellationToken ct = default)
+    public ValueTask<TenantAttachmentPage> ListTenantAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, Guid? before, int limit, CancellationToken ct = default, bool boundOnly = false)
     {
         ct.ThrowIfCancellationRequested(); TenantAttachmentRules.Query(tenant, session, limit); var scope = allowed?.ToHashSet();
         var rows = _items.Values.Where(a => a.TenantId == tenant && a.SessionId == session && (scope is null || scope.Contains(a.AttachmentId))
-            && OwnsTenantAttachment(tenant, a.AttachmentId) && TenantAttachmentRules.Available(a, time.GetUtcNow()))
+            && (!boundOnly || a.State == AttachmentState.Bound) && OwnsTenantAttachment(tenant, a.AttachmentId) && TenantAttachmentRules.Available(a, time.GetUtcNow()))
             .OrderBy(a => a.CreatedAt).ThenBy(a => a.AttachmentId.ToString("D"), StringComparer.Ordinal).ToArray();
         var offset = before is null ? 0 : Array.FindIndex(rows, a => a.AttachmentId == before) + 1;
         if (before is not null && offset == 0) throw new AccessDeniedException("resource_unavailable");

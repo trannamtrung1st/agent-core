@@ -8,6 +8,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Api.Tests;
@@ -21,19 +22,23 @@ public sealed partial class TenantSessionAccessTests
     [InlineData("text", "provided")] [InlineData("png", "provided")]
     [InlineData("virtual-text", "pending")] [InlineData("virtual-text", "allowed")]
     [InlineData("virtual-text", "revoke")] [InlineData("virtual-text", "source")]
+    [InlineData("namespace-list", "pending")] [InlineData("namespace-list", "allowed")] [InlineData("namespace-list", "revoke")]
+    [InlineData("namespace-search", "pending")] [InlineData("namespace-search", "allowed")] [InlineData("namespace-search", "source")]
     public async Task Tenant_attachment_Review_checkpoint_rechecks_consent_bytes_and_images_after_actual_SQLite_host_recreation(string format, string boundary)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-attachment-review-restart-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        var namespaceRead = format.StartsWith("namespace-", StringComparison.Ordinal);
         var virtualRead = format.StartsWith("virtual-", StringComparison.Ordinal);
-        var readTool = virtualRead ? ToolCatalog.WorkspaceRead : ToolCatalog.AttachmentsRead;
+        var readTool = namespaceRead ? format == "namespace-list" ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceSearch : virtualRead ? ToolCatalog.WorkspaceRead : ToolCatalog.AttachmentsRead;
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); AttachmentReadCase value; Guid runId, sourceId; TenantApprovalRequest consent;
         try
         {
             var provided = boundary == "provided";
             var initial = new AttachmentReadModel { ReadTool = readTool, ReviewRead = true, HoldAfterRead = true, ReadSubmittedSelector = provided };
-            await using (var first = new NativeTenantSqliteFactory(root, initial, s => s.Replace(ServiceDescriptor.Singleton<TimeProvider>(clock))))
+            var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Debug);
+            await using (var first = new NativeTenantSqliteFactory(root, initial, s => { s.Replace(ServiceDescriptor.Singleton<TimeProvider>(clock)); s.AddSingleton(diagnostics); s.AddLogging(logs => logs.AddProvider(diagnostics)); }))
             {
-                using var owner = first.CreateClient(); value = await PrepareAttachmentRead(first.Services, owner, virtualRead ? format[8..] : format, recoveryBudget: true, explicitCapability: boundary == "capability", virtualTool: virtualRead ? readTool : null); var v = value.Execution;
+                using var owner = first.CreateClient(); value = await PrepareAttachmentRead(first.Services, owner, namespaceRead ? "text" : virtualRead ? format[8..] : format, recoveryBudget: true, explicitCapability: boundary == "capability", virtualTool: namespaceRead || virtualRead ? readTool : null); var v = value.Execution;
                 if (!provided)
                 {
                 var bound = await first.Services.GetRequiredService<TenantRunService>().SubmitMessageAsync(v.Tenant, v.Session, v.Human, Guid.NewGuid(), "Keep this file available", [v.Id], await Revision(owner, v.Tenant), 1);
@@ -41,13 +46,18 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(AgentRunStatus.Completed, (await AttachmentTerminal(first.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, bound.RunId)).Status);
                 }
                 Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PutAsJsonAsync($"/api/v2/tenants/{v.Tenant}/operation-policies/attachments.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, v.Tenant), expectedPolicyRevision = 0 })).StatusCode);
-                initial.Requests.Clear(); initial.ReadEnabled = true; initial.Arguments = virtualRead ? System.Text.Json.JsonSerializer.Serialize(new { path = "/attachments/" + v.Id.ToString("D") }) : System.Text.Json.JsonSerializer.Serialize(new { attachmentId = v.Id });
+                initial.Requests.Clear(); initial.ReadEnabled = true; initial.Arguments = namespaceRead ? format == "namespace-list" ? """{"path":"/attachments","limit":1}""" : """{"path":"/attachments","query":"Private read body"}""" : virtualRead ? System.Text.Json.JsonSerializer.Serialize(new { path = "/attachments/" + v.Id.ToString("D") }) : System.Text.Json.JsonSerializer.Serialize(new { attachmentId = v.Id });
                 var session = (await first.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(v.Tenant, v.Session))!;
                 var sent = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{v.Tenant}/sessions/{v.Session}/messages", new {
                     messageId = Guid.NewGuid(), text = provided ? "" : "Read that earlier file", attachmentIds = provided ? new[] { v.Id } : Array.Empty<Guid>(), expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = session.Snapshot.Revision }));
                 sourceId = sent.GetProperty("runId").GetGuid();
                 await first.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
-                consent = await AwaitAttachmentReview(first.Services, v.Tenant, sourceId);
+                try { consent = await AwaitAttachmentReview(first.Services, v.Tenant, sourceId); }
+                catch (Exception error)
+                {
+                    var pending = await first.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(v.Tenant, sourceId);
+                    throw new Xunit.Sdk.XunitException($"{error}; status={pending?.Status}; revision={pending?.Revision}; checkpoint={pending?.Checkpoint is not null}; requests={initial.Requests.Count}; diagnostics={string.Join("\n", diagnostics.Lines)}; errors={string.Join("\n", diagnostics.Errors.Select(e => e.ToString()))}");
+                }
                 Assert.Single(initial.Requests); runId = sourceId;
                 if (boundary is not ("pending" or "provided"))
                 {
@@ -103,11 +113,11 @@ public sealed partial class TenantSessionAccessTests
                 Assert.True(completed.Status == AgentRunStatus.Completed, $"{completed.Status}: {completed.Failure?.Code}: {completed.Failure?.Summary}; requests={model.Requests.Count}");
                 var request = Assert.Single(model.Requests); var tool = request.Messages.Single(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization);
                 if (format == "png") { var image = Assert.Single(tool.Parts!.OfType<ModelImageContent>()); using var bitmap = SkiaSharp.SKBitmap.Decode(image.Bytes.ToArray()); Assert.Equal(2, bitmap.Width); Assert.Equal(2, bitmap.Height); }
-                else { Assert.Contains("Private read body", tool.Text); Assert.True(tool.Parts is null or { Count: 0 }); }
+                else { Assert.Contains(format == "namespace-list" ? "read.txt" : "Private read body", tool.Text); Assert.True(tool.Parts is null or { Count: 0 }); }
             }
             else { Assert.Equal(AgentRunStatus.Failed, completed.Status); Assert.Equal("authority-unavailable", completed.Failure!.Code); Assert.Empty(model.Requests); }
             Assert.Null(await second.Services.GetRequiredService<ITenantApprovalStore>().FindOperationGrantAsync(e.Tenant, consent.RequestId));
-            Assert.Single(await second.Services.GetRequiredService<IIamStore>().ReadAuditAsync(e.Tenant, 200), a => a.Action == TenantAttachmentReadRules.AuditAction);
+            Assert.Single(await second.Services.GetRequiredService<IIamStore>().ReadAuditAsync(e.Tenant, 200), a => a.Action == (namespaceRead ? TenantWorkspaceReadOperationRules.AuditAction : TenantAttachmentReadRules.AuditAction));
             Assert.Equal(0, second.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }

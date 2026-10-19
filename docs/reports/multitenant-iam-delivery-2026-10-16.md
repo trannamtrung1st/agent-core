@@ -1,5 +1,7 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+Tenant Attachment namespace list/search now extends the incumbent Workspace read/consent/checkpoint owners. [Focused evidence](tenant-attachment-namespace-verification-2026-10-19.md) records its bounded qualification. Human materialization, remaining lifecycle/autonomous/transport adapters and final authority/schema/proposal qualification remain open; the full goal stays active.
+
 ## Tenant preparation failure lifecycle — 2026-10-19
 
 The existing Runtime now contains context/brain failures, settles the exact current claim without replay, closes existing saved progress through the incumbent writer and owns evaluation cleanup through its mailbox. [Deterministic lifecycle and recovery qualification](tenant-preparation-failure-verification-2026-10-19.md) covers both stores, late failure after cancellation and factual Artifact/receipt/grant preservation after actual SQLite host recreation. This closes the reproduced unsupervised-preparation stall mechanism; it does not prove the cause of every historical intermittent pre-model failure or accept other resource/autonomous/transport families, final authority/schema removal or the full proposal.

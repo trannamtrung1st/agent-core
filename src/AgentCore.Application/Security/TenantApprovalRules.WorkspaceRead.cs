@@ -21,7 +21,8 @@ public static partial class TenantApprovalRules
         }
         else if (value.Knowledge is not null) throw new ArgumentException("Unexpected knowledge source.");
         var owner = new TenantWorkspaceReference(Guid.Empty, instance, value.Working ? value.SessionId : null);
-        if (value.ResourceMembersJson is not null) _ = ResourceReadMembers(value);
+        if (value.AttachmentMembersJson is not null) _ = AttachmentReadMembers(value);
+        else if (value.ResourceMembersJson is not null) _ = ResourceReadMembers(value);
         else if (value.ResourceKey is { } key)
         {
             if (!TenantAgentChildScopes.TryParse(AccessScope.ForResource(instance, "resource", instance.ToString("D") + ":" + key), out _, out _)) throw new ArgumentException("Invalid resource key.");
@@ -32,11 +33,11 @@ public static partial class TenantApprovalRules
             if (value.ResourceRevision is not null) throw new ArgumentException("Unexpected resource revision.");
             TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(value.ToolName));
         }
-        if (value.ResourceMembersJson is null && args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
+        if (value.AttachmentMembersJson is null && value.ResourceMembersJson is null && args.Cursor is not null && value.ToolName == ToolCatalog.WorkspaceList) TenantWorkspaceRules.Path(owner, args.Cursor);
         if (id == Guid.Empty || instance == Guid.Empty || value.SessionId == Guid.Empty || revision < 1 || personaRevision < 1
             || TenantWorkspaceReadContract.Canonical(value.ToolName, args) != value.ArgumentsJson || value.ObservationHash is not { Length: 64 }
             || value.ObservationHash.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))) throw new ArgumentException("Invalid exact workspace observation.");
-        var json = JsonSerializer.Serialize(new { operation = value.ToolName, permission = value.ResourceMembersJson is not null ? "sessions.read" : value.ResourceKey is null ? "workspaces.read" : "resources.read", read = value, expectedInstanceRevision = revision, expectedPersonaRevision = personaRevision });
+        var json = JsonSerializer.Serialize(new { operation = value.ToolName, permission = value.AttachmentMembersJson is not null || value.ResourceMembersJson is not null ? "sessions.read" : value.ResourceKey is null ? "workspaces.read" : "resources.read", read = value, expectedInstanceRevision = revision, expectedPersonaRevision = personaRevision });
         return new(id, instance, null, revision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), WorkspaceRead: value);
     }
 }

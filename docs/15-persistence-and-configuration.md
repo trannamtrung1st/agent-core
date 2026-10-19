@@ -1173,3 +1173,8 @@ Direct Workspace/Office reads of bound Attachment originals use the existing `te
 ## Preparation failures and retained progress
 
 Preparation failures use the current Run Fail command and existing failure-reference fields; no schema/migration or exception payload is added. If an assistant entry already exists in Streaming state, close only that entry with Failed status, completion time and safe diagnostic reference through the existing noncoalesced Session writer, then settle the matching current Run in its mailbox callback. Preserve the saved text/envelope, received/heard projections and factual effect/receipt/grant records. With no existing answer, do not create a synthetic assistant row. Actual SQLite host recreation after failure retains completed Artifact bytes/receipt, consumed grant and failed response without provider/effect replay; this is controlled host recreation, not a physical crash claim.
+
+
+### Attachment namespace consent persistence
+
+`PreparedWorkspaceRead.AttachmentMembersJson` uses the incumbent approval payload and immutable local receipt/checkpoint storage, with nullable omission on other read variants. `TenantAttachmentNamespaceReview` extends the SQLite approval shape for a Review-only Session-scoped collection; resource/knowledge/exact-file payloads cannot carry this variant. Both SQLite and InMemory validate canonical bounded unique member identity, bound same-Session source currency and current independent reads at the protected consent transaction. Approval inventory filters current member visibility before totals/pages. No file body or parser cache is stored in consent. Existing saved-result reentry resolves current collection/source authority, and application-host recreation never replays a model or file effect.

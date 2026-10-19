@@ -1027,3 +1027,8 @@ Workspace UTF-8 and Office file inspection now select exact bound Attachment ori
 ## Tenant preparation failure lifecycle — 2026-10-19
 
 The shared Runtime now contains context and brain failures, settles the matching current Run without replay, closes retained streaming progress through the existing writer, and owns evaluation cleanup in its mailbox. [Focused evidence](reports/tenant-preparation-failure-verification-2026-10-19.md) records deterministic before/after stall reproduction, both-store cancellation/late-failure checks and completed Artifact receipt/grant preservation with SQLite host recreation. This closes that reproduced mechanism only; attribution of the historical intermittent pre-model failures, remaining resource/autonomous/transport families and final obsolete-authority/schema cutover remain open. No milestone or full proposal acceptance is claimed.
+
+
+### Tenant Attachment namespace checkpoint — 2026-10-19
+
+Exact `/attachments` model list/search now extends the canonical Workspace observation/Review/checkpoint owners with bound and current-child filtering before bounds, original-source fingerprints and retained-result revalidation. [Focused qualification](reports/tenant-attachment-namespace-verification-2026-10-19.md) records the executed evidence. This supersedes Attachment-namespace-pending notes only for these conversational observations. Human materialization, remaining resource/Browser lifecycle/autonomous/transport families, obsolete-authority/schema removal and final proposal-wide qualification remain open; the full goal remains active.

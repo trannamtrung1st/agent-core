@@ -12,7 +12,7 @@ public sealed partial class TenantApprovalService
     {
         try
         {
-            if (TenantAttachmentVirtualReadContract.IsPath(TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path))
+            if (TenantAttachmentVirtualReadContract.IsTool(call.Name) && TenantAttachmentVirtualReadContract.IsPath(TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path))
             {
                 var (sourceRun, _) = await operations.ResolveForDecisionAsync(reference, "attachments.read", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
                 if (sourceRun.Status != AgentRunStatus.Running || sourceRun.Claim?.Generation != generation || sourceRun.Revision != expectedRunRevision || sourceRun.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())
@@ -20,7 +20,7 @@ public sealed partial class TenantApprovalService
                 var arguments = await (attachmentReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).VirtualArgumentsAsync(new(sourceRun.Owner, sourceRun.SessionId, sourceRun.AgentRunId, generation), call, ct).ConfigureAwait(false);
                 return await PrepareAttachmentReadAsync(reference, arguments, expectedRunRevision, generation, ct).ConfigureAwait(false);
             }
-            var permission = call.Name == AgentCore.Application.Tools.ToolCatalog.KnowledgeRetrieve || AgentCore.Application.Tools.TenantWorkspaceReadContract.IsResourcePath(AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path) ? "resources.read" : "workspaces.read";
+            var permission = TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path == "/attachments" ? "sessions.read" : call.Name == AgentCore.Application.Tools.ToolCatalog.KnowledgeRetrieve || AgentCore.Application.Tools.TenantWorkspaceReadContract.IsResourcePath(AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(call.Name, call.ArgumentsJson).Path) ? "resources.read" : "workspaces.read";
             var (run, _) = await operations.ResolveForDecisionAsync(reference, permission, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
             if (run.Status != AgentRunStatus.Running || run.Claim?.Generation != generation || run.Revision != expectedRunRevision || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())
                 throw new AccessDeniedException("tenant_runtime_unavailable");
