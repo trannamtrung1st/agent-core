@@ -30,6 +30,8 @@ public sealed partial class TenantApprovedOperationService
                 catch (AccessDeniedException) { throw new AccessDeniedException("grantor_authority_lost"); }
                 if (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision)
                     reason = "operation_witness_changed";
+                if (reason is null && request.Operation.ArtifactPublication?.Source is not null)
+                    commit = commit with { ArtifactSourceContent = await (artifactSources ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(request, run, ct).ConfigureAwait(false) };
             }
             catch (AccessDeniedException e) { reason = e.ReasonCode; }
             catch (SecurityConflictException e) { reason = e.ReasonCode; }

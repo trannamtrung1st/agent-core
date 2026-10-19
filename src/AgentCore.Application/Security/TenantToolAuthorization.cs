@@ -149,7 +149,9 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (intent.ArtifactId is { } artifactId)
             return await approvals.PrepareArtifactVerificationAsync(boundary.Reference, artifactId, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactArguments is { } artifact)
-            return await approvals.PrepareArtifactAsync(boundary.Reference, artifact, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+            return intent.ArtifactFromWorkspace
+                ? await approvals.PrepareWorkspaceArtifactAsync(boundary.Reference, artifact, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false)
+                : await approvals.PrepareArtifactAsync(boundary.Reference, artifact, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.MetadataArguments is { } metadata)
             return await approvals.PrepareCredentialReadAsync(boundary.Reference, metadata, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.Browser is { } browser)

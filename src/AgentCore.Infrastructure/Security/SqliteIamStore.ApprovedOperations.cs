@@ -106,12 +106,14 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         {
             try
             {
-                var artifact = await RequireArtifactOperation(db, request, run, target, ct, source).ConfigureAwait(false);
+                _ = await RequireArtifactOperation(db, request, run, target, ct, source).ConfigureAwait(false);
                 try { await TenantArtifactReviewRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false); }
                 catch (AccessDeniedException) { throw new AccessDeniedException("grantor_authority_lost"); }
-                var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = System.Text.Encoding.UTF8.GetBytes(artifact.Content);
+                var artifact = await TenantArtifactSourceRules.MaterializeAsync(run, request.Operation.ArtifactPublication, commit.ArtifactSourceContent, ct).ConfigureAwait(false);
+                var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = artifact.Bytes;
                 artifactRow = await (artifactBacking ?? throw new AccessDeniedException("tenant_effect_unavailable")).StageTenantLocalAsync(db, frame,
                     TenantArtifactRules.Record(frame, commit.OperationId, artifact.DisplayName, artifact.ContentType, bytes, at), bytes, ct).ConfigureAwait(false);
+                if (commit.ArtifactSourceContent is { } currentSource) await currentSource.RequireCurrentAsync(ct).ConfigureAwait(false);
             }
             catch (AccessDeniedException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }
             catch (SecurityConflictException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }

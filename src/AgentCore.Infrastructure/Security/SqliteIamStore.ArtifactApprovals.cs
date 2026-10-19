@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    private async ValueTask<TenantArtifactArguments> RequireArtifactOperation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run,
+    private async ValueTask<TenantArtifactPublicationArguments> RequireArtifactOperation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run,
         TenantAgent agent, CancellationToken ct, AgentRun? source = null)
     {
         var session = await ReadSandboxSession(db, request.TenantId, request.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");

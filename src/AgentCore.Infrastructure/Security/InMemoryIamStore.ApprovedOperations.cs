@@ -86,18 +86,20 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 TenantCredentialReadOperationRules.ReviewerAsync(before, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
-            AgentCore.Application.Tools.TenantArtifactArguments? artifact = null;
+            TenantArtifactMaterialization? artifact = null;
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactPublication is not null)
             {
                 try
                 {
-                    artifact = RequireArtifactOperation(request, run, target, source);
+                    _ = RequireArtifactOperation(request, run, target, source);
                     try { TenantArtifactReviewRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult(); }
                     catch (AccessDeniedException) { throw new AccessDeniedException("grantor_authority_lost"); }
+                    artifact = TenantArtifactSourceRules.MaterializeAsync(run, request.Operation.ArtifactPublication, commit.ArtifactSourceContent, ct).GetAwaiter().GetResult();
                 }
                 catch (AccessDeniedException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }
                 catch (SecurityConflictException e) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = e.ReasonCode }; }
-                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+                at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
             }
             audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
@@ -122,7 +124,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             }
             if (complete && artifact is not null)
             {
-                var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = System.Text.Encoding.UTF8.GetBytes(artifact.Content);
+                var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = artifact.Bytes;
                 (artifactBacking ?? throw new AccessDeniedException("tenant_effect_unavailable")).PublishTenantLocal(frame,
                     TenantArtifactRules.Record(frame, commit.OperationId, artifact.DisplayName, artifact.ContentType, bytes, at), bytes, false, ct);
             }

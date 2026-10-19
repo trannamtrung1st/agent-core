@@ -28,9 +28,11 @@ public static class TenantArtifactSourceRules
     public static TenantWorkspaceReference Owner(AgentRun run, string path) => new(run.Owner.TenantId!.Value, run.AgentInstanceId,
         path.StartsWith("/working/", StringComparison.Ordinal) ? run.SessionId : null);
     public static IEnumerable<(string Permission, AccessScope Scope)> Targets(AgentRun run, string path)
+        => Targets(run.Owner.TenantId!.Value, run.AgentInstanceId, run.SessionId, path.StartsWith("/working/", StringComparison.Ordinal));
+    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, Guid session, bool working)
     {
-        yield return ("sessions.read", TenantSessionRules.Scope(run.Owner.TenantId!.Value, run.SessionId));
-        var owner = Owner(run, path);
+        yield return ("sessions.read", TenantSessionRules.Scope(tenant, session));
+        var owner = new TenantWorkspaceReference(tenant, instance, working ? session : null);
         if (owner.SessionId is null) yield return ("agents.read", AccessScope.ForResource(owner.TenantId, "agent", owner.InstanceId.ToString("D")));
         yield return ("workspaces.read", TenantWorkspaceRules.Scope(owner));
     }

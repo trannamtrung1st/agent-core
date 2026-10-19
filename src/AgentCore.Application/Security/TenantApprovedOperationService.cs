@@ -9,7 +9,7 @@ namespace AgentCore.Application.Security;
 
 public sealed partial class TenantApprovedOperationService(IIamStore security, ITenantRunStore runs, ITenantAgentStore agents,
     ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantOperationAuthorizer operations,
-    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null)
+    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantArtifactSourceTarget? artifactSources = null)
 {
     // Trusted server frame only. The saved request supplies every action parameter and target.
     public async ValueTask<TenantOperationReceipt> ExecuteAsync(TenantRunReference reference, Guid requestId, Guid operationId,

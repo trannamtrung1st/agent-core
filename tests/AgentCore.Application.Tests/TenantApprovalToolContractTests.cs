@@ -12,6 +12,24 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantApprovalToolContractTests
 {
     [Fact]
+    public void Workspace_publication_consent_binds_only_closed_source_intent_and_cannot_match_inline_publication()
+    {
+        const string input = """{"operation":"publish_workspace_artifact","artifact":{"path":"/home/source.bin","displayName":"published.bin"}}""";
+        var intent = TenantApprovalToolContract.Parse(new("source", ToolCatalog.RequestAuthorization, input)); Assert.True(intent.ArtifactFromWorkspace);
+        var args = TenantWorkspaceArtifactContract.Parse(intent.ArtifactArguments!);
+        var source = new PreparedArtifactSource(false, args.Path, "application/octet-stream", 4, new('a', 64), new('b', 64));
+        var saved = TenantApprovalRules.PrepareArtifact(Guid.NewGuid(), Guid.NewGuid(), new(Guid.NewGuid(), args.CanonicalArguments, source), 1, 1);
+        Assert.True(intent.Matches(saved)); Assert.False((intent with { ArtifactFromWorkspace = false }).Matches(saved));
+        Assert.False((intent with { ArtifactArguments = args.CanonicalArguments.Replace("source.bin", "other.bin") }).Matches(saved));
+        foreach (var key in new[] { "tenantId", "sessionId", "principalId", "permission", "grantId", "source", "sha256Hex", "observationHash" })
+        {
+            var root = JsonNode.Parse(input)!; root[key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("bad", ToolCatalog.RequestAuthorization, root.ToJsonString())));
+            root = JsonNode.Parse(input)!; root["artifact"]![key] = "untrusted";
+            Assert.Throws<ArgumentException>(() => TenantApprovalToolContract.Parse(new("bad", ToolCatalog.RequestAuthorization, root.ToJsonString())));
+        }
+    }
+    [Fact]
     public void Artifact_consent_binds_exact_normalized_bytes_and_rejects_model_selected_authority()
     {
         const string input = """{"operation":"publish_artifact","artifact":{"displayName":"../review.md","content":"<script>literal</script>\r\nUTF-8: thử nghiệm"}}""";

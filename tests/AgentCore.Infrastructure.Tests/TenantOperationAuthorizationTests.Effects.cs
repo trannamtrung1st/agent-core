@@ -82,11 +82,11 @@ public sealed partial class TenantOperationAuthorizationTests
         }
         else { var memory = Assert.IsType<InMemoryMemoryStore>(f.Memory); lock (memory.AdmissionGate) memory.AgentRuns.Runs[run.AgentRunId] = run; }
     }
-    private static TenantApprovedOperationService Effects(Fixture f, IIamStore? store = null, ITenantApprovedOperationStore? effects = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null)
+    private static TenantApprovedOperationService Effects(Fixture f, IIamStore? store = null, ITenantApprovedOperationStore? effects = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantArtifactSourceTarget? artifactSources = null)
     {
         var current = store ?? f.Iam; var authorizer = new IamAuthorizer(current);
         return new(current, (ITenantRunStore)current, (ITenantAgentStore)current, (ITenantApprovalStore)current,
             effects ?? (ITenantApprovedOperationStore)current, new(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)),
-            f.RunConfiguration(), f.Ids, f.Clock, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), AgentCore.Application.Ports.SyntheticProviderAliases.Default, artifactReads: artifactReads, workspaceReads: workspaceReads);
+            f.RunConfiguration(), f.Ids, f.Clock, AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), AgentCore.Application.Ports.SyntheticProviderAliases.Default, artifactReads: artifactReads, workspaceReads: workspaceReads, artifactSources: artifactSources);
     }
 }

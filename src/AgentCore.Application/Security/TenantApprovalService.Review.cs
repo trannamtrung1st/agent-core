@@ -59,6 +59,7 @@ public sealed partial class TenantApprovalService
                 TenantApprovalRules.Validate(r, run, target!);
                 if (op.ArtifactPublication is not null)
                 {
+                    independent = await TenantArtifactReviewRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
                     await RequireArtifactAsync(r, run, state, ct).ConfigureAwait(false);
                     await TenantArtifactReviewRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
@@ -170,9 +171,13 @@ public sealed partial class TenantApprovalService
                 new("readLimit", null, "One exact metadata inspection in this continuation. Later reads require current policy again; this approval grants no file creation or body read.", false)];
         if (op.ArtifactPublication is { } publication)
         {
-            var args = AgentCore.Application.Tools.TenantArtifactToolContract.Parse(publication.ArgumentsJson);
+            var args = AgentCore.Application.Tools.TenantArtifactToolContract.ParsePublication(publication);
+            if (publication.Source is { } source)
+                return [new("artifactDisplayName", null, args.DisplayName, false), new("artifactContentType", null, args.ContentType ?? source.ContentType, false),
+                    new("artifactSourcePath", null, source.Path, false), new("artifactByteSize", null, source.ByteSize, false), new("artifactChecksum", null, source.Sha256Hex, false),
+                    new("publicationDisclosure", null, "Copy only the exact saved workspace bytes into one immutable file in this conversation. Publication grants no file-read or download access.", false)];
             return [new("artifactDisplayName", null, args.DisplayName, false), new("artifactContentType", null, args.ContentType, false),
-                new("artifactByteSize", null, System.Text.Encoding.UTF8.GetByteCount(args.Content), false), new("artifactContent", null, args.Content, false)];
+                new("artifactByteSize", null, System.Text.Encoding.UTF8.GetByteCount(args.Content!), false), new("artifactContent", null, args.Content, false)];
         }
         if (op.CredentialRead is { } metadata)
         {

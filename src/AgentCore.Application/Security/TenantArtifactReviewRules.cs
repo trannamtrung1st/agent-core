@@ -14,7 +14,7 @@ public static class TenantArtifactReviewRules
             || run.Admission.Activation.Kind != ActivationKind.UserTurn || run.ActivationId != run.Admission.Activation.RootActivationId)
             throw new AccessDeniedException("artifact_direct_chat_required");
     }
-    public static TenantArtifactArguments Require(TenantApprovalRequest request, AgentRun run, TenantAgent agent,
+    public static TenantArtifactPublicationArguments Require(TenantApprovalRequest request, AgentRun run, TenantAgent agent,
         AgentDefinition current, TenantSession session, AgentRun? source = null)
     {
         TenantApprovalContinuationRules.Require(request, run, source);
@@ -24,8 +24,10 @@ public static class TenantArtifactReviewRules
             || session.Owner.SessionId != value.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != request.ExecutorPrincipalId
             || agent.TenantId != request.TenantId || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != request.ExecutorPrincipalId)
             throw new SecurityConflictException("operation_mismatch");
-        if (!TenantArtifactToolContract.Allows(run.Admission.Configuration!.Definition) || !TenantArtifactToolContract.Allows(current)) throw new AccessDeniedException("capability_unavailable");
-        return TenantArtifactToolContract.Parse(value.ArgumentsJson);
+        if (!TenantArtifactToolContract.AllowsPublication(run.Admission.Configuration!.Definition, value) || !TenantArtifactToolContract.AllowsPublication(current, value)) throw new AccessDeniedException("capability_unavailable");
+        var args = TenantArtifactToolContract.ParsePublication(value);
+        if (args.SourcePath is { } path) TenantArtifactSourceRules.Require(run, agent, current, session, path);
+        return args;
     }
     public static async ValueTask ExecutorAsync(TenantSecurityState state, TenantApprovalRequest request, IamAuthorizer iam, CancellationToken ct)
     {
@@ -34,6 +36,9 @@ public static class TenantArtifactReviewRules
         var scope = TenantSessionRules.Scope(request.TenantId, request.SessionId);
         if (!(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, PermissionCatalog.Get("sessions.read"), scope, ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("executor_read_required");
+        foreach (var (key, target) in SourceTargets(request))
+            if (!(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, PermissionCatalog.Get(key), target, ct).ConfigureAwait(false)).Allowed)
+                throw new AccessDeniedException("executor_read_required");
         if (request.Kind == ApprovalKind.Review && !(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, PermissionCatalog.Get("artifacts.create"), scope, ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("operation_authority_changed");
         if (request.OriginalInitiatorPrincipalId is { } requester)
@@ -44,6 +49,8 @@ public static class TenantArtifactReviewRules
     {
         if (!(await iam.CheckTenantAsync(state, human, PermissionCatalog.Get("sessions.read"), TenantSessionRules.Scope(request.TenantId, request.SessionId), ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("approval_unavailable");
+        foreach (var (key, scope) in SourceTargets(request))
+            if (!(await iam.CheckTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("approval_unavailable");
     }
     public static async ValueTask ReviewerAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
@@ -54,16 +61,37 @@ public static class TenantArtifactReviewRules
         var target = TenantSessionRules.Scope(request.TenantId, request.SessionId);
         foreach (var key in request.Kind == ApprovalKind.ExceptionalGrant ? new[] { "artifacts.create", "approvals.approve", "approvals.grant_exception" } : ["artifacts.create", "approvals.approve"])
             if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), target, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("approver_unqualified");
+        foreach (var (key, scope) in SourceTargets(request))
+        {
+            if (!await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false)) continue;
+            if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview && human == request.OriginalInitiatorPrincipalId)
+                throw new AccessDeniedException("independent_reviewer_required");
+            if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("approvals.approve"), scope, ct).ConfigureAwait(false)).Allowed)
+                throw new AccessDeniedException("approver_unqualified");
+        }
+    }
+    public static IEnumerable<(string Permission, AccessScope Scope)> SourceTargets(TenantApprovalRequest request) => request.Operation.ArtifactPublication?.Source is { } source
+        ? TenantArtifactSourceRules.Targets(request.TenantId, request.Operation.InstanceId, request.SessionId, source.Working) : [];
+    public static async ValueTask<bool> IndependentAsync(TenantSecurityState state, TenantApprovalRequest request, IamAuthorizer iam, CancellationToken ct)
+    {
+        if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get("artifacts.create")).IndependentReview) return true;
+        foreach (var (key, scope) in SourceTargets(request))
+            if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview
+                && await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false)) return true;
+        return false;
     }
     public static void ValidateEffect(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
         AgentRun run, TenantOperationCommit commit, AgentRun? source)
     {
         TenantLocalEffectRules.ValidateApproval(request, decision, grant, run, commit, source);
+        if (commit.ArtifactSourceContent is not null && request.Operation.ArtifactPublication?.Source is null)
+            throw new SecurityConflictException("operation_mismatch");
         if (request.Operation.ArtifactPublication is null || commit.Outcome is not (TenantOperationOutcome.Completed or TenantOperationOutcome.Denied)
             || commit.Outcome == TenantOperationOutcome.Completed && commit.ReasonCode != "operation_completed"
             || commit.Outcome == TenantOperationOutcome.Denied && !Denials.Contains(commit.ReasonCode)) throw new SecurityConflictException("operation_mismatch");
     }
     private static readonly HashSet<string> Denials = new(StringComparer.Ordinal) { "approval_expired", "grant_expired", "grantor_authority_lost",
         "operation_authority_changed", "operation_witness_changed", "requester_unavailable", "root_operation_conflict", "executor_read_required",
-        "capability_unavailable", "resource_unavailable", "artifact_direct_chat_required", "approver_unqualified", "approval_unavailable", "tenant_effect_unavailable", "artifact_publication_mismatch", "artifact_content_unavailable" };
+        "capability_unavailable", "resource_unavailable", "artifact_direct_chat_required", "approver_unqualified", "approval_unavailable", "tenant_effect_unavailable", "artifact_publication_mismatch", "artifact_content_unavailable",
+        "workspace_source_changed", "home_access_disabled", "independent_reviewer_required" };
 }

@@ -7,7 +7,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Tools;
 
-public sealed record TenantAuthorizationIntent(AgentIdentity? Persona, PreparedConversationPreferences? Preferences, string? CredentialReference = null, TenantSandboxAuthorizationIntent? Sandbox = null, TenantSandboxControlIntent? SandboxControl = null, TenantSandboxReadIntent? SandboxRead = null, TenantBrowserAuthorizationIntent? Browser = null, string? MetadataArguments = null, string? ArtifactArguments = null, Guid? ArtifactId = null, TenantWorkspaceReadIntent? WorkspaceRead = null, TenantWorkspaceMutationIntent? WorkspaceMutation = null)
+public sealed record TenantAuthorizationIntent(AgentIdentity? Persona, PreparedConversationPreferences? Preferences, string? CredentialReference = null, TenantSandboxAuthorizationIntent? Sandbox = null, TenantSandboxControlIntent? SandboxControl = null, TenantSandboxReadIntent? SandboxRead = null, TenantBrowserAuthorizationIntent? Browser = null, string? MetadataArguments = null, string? ArtifactArguments = null, Guid? ArtifactId = null, TenantWorkspaceReadIntent? WorkspaceRead = null, TenantWorkspaceMutationIntent? WorkspaceMutation = null, bool ArtifactFromWorkspace = false)
 {
     public bool Matches(PreparedTenantOperation operation) => (Persona, Preferences, CredentialReference, Sandbox, SandboxControl, SandboxRead, Browser, MetadataArguments, ArtifactArguments, ArtifactId, WorkspaceRead, WorkspaceMutation) switch {
         (not null, null, null, null, null, null, null, null, null, null, null, null) => operation.Kind == TenantOperationKind.Persona && Persona == operation.Persona,
@@ -18,7 +18,8 @@ public sealed record TenantAuthorizationIntent(AgentIdentity? Persona, PreparedC
         (null, null, null, null, null, not null, null, null, null, null, null, null) => SandboxRead.Matches(operation),
         (null, null, null, null, null, null, not null, null, null, null, null, null) => Browser.Matches(operation),
         (null, null, null, null, null, null, null, not null, null, null, null, null) => operation.CredentialRead?.ArgumentsJson == MetadataArguments,
-        (null, null, null, null, null, null, null, null, not null, null, null, null) => operation.ArtifactPublication?.ArgumentsJson == ArtifactArguments,
+        (null, null, null, null, null, null, null, null, not null, null, null, null) => operation.ArtifactPublication is { } artifact
+            && artifact.ArgumentsJson == ArtifactArguments && (artifact.Source is not null) == ArtifactFromWorkspace,
         (null, null, null, null, null, null, null, null, null, not null, null, null) => operation.ArtifactVerification?.ArtifactId == ArtifactId,
         (null, null, null, null, null, null, null, null, null, null, not null, null) => WorkspaceRead.Matches(operation),
         (null, null, null, null, null, null, null, null, null, null, null, not null) => WorkspaceMutation.Matches(operation),
@@ -70,6 +71,11 @@ public static class TenantApprovalToolContract
         if (call.Name != ToolCatalog.RequestAuthorization || Encoding.UTF8.GetByteCount(call.ArgumentsJson) > TenantArtifactToolContract.MaxArgumentBytes + 256)
             throw new ArgumentException("Invalid authorization request.");
         using var document = JsonDocument.Parse(call.ArgumentsJson); var root = document.RootElement;
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("operation", out var source) && source.ValueKind == JsonValueKind.String && source.GetString() == "publish_workspace_artifact")
+        {
+            Require(root, ["operation", "artifact"]);
+            return new(null, null, ArtifactArguments: TenantWorkspaceArtifactContract.Parse(root.GetProperty("artifact").GetRawText()).CanonicalArguments, ArtifactFromWorkspace: true);
+        }
         if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("operation", out var publication) && publication.ValueKind == JsonValueKind.String && publication.GetString() == "publish_artifact")
         {
             Require(root, ["operation", "artifact"]);

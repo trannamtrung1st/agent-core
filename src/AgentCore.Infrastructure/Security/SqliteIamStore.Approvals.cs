@@ -140,8 +140,15 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             (Permission <> 'artifacts.create' OR (
                 ({artifactReadJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactReadJson})))
                 AND ({artifactCreateJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactCreateJson})))
+                AND (json_type(PayloadJson, '$.Operation.ArtifactPublication.Source') IS NOT 'object' OR (
+                    ({workspaceSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({workspaceSessionsJson})))
+                    AND ({workspaceJson} = 'null' OR CASE WHEN json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
+                        THEN 'working:' || SessionId ELSE 'home:' || InstanceId END IN (SELECT value FROM json_each({workspaceJson})))
+                    AND (json_extract(PayloadJson, '$.Operation.ArtifactPublication.Source.Working') = 1
+                        OR {homeAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({homeAgentsJson})))))
                 AND EXISTS (SELECT 1 FROM TenantSessions AS root JOIN Sessions AS saved ON saved.SessionId = root.SessionId
-                    WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId AND saved.DurablyDeletedAtUtc IS NULL))) AND
+                    WHERE root.TenantId = TenantApprovalRequests.TenantId AND root.SessionId = TenantApprovalRequests.SessionId
+                    AND root.AgentInstanceId = TenantApprovalRequests.InstanceId AND root.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL))) AND
             (json_type(PayloadJson, '$.Operation.CredentialRead') IS NOT 'object' OR (
                 ({metadataSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({metadataSessionJson})))
                 AND ({metadataReadJson} = 'null' OR NOT EXISTS (
