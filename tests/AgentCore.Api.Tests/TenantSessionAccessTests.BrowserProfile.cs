@@ -39,6 +39,7 @@ public sealed partial class TenantSessionAccessTests
             var instance = await Agent(); var unrelated = await Agent(); var url = api + $"/agents/{instance}/browser/profile";
             var native = Assert.IsType<NativePlaywrightBrowser>(factory.Services.GetRequiredService<IBrowser>());
             var beforeRead = await Json(await owner.GetAsync(url)); Assert.False(beforeRead.GetProperty("profilePresent").GetBoolean());
+            Assert.False(string.IsNullOrWhiteSpace(beforeRead.GetProperty("agentName").GetString())); Assert.Equal("Active", beforeRead.GetProperty("lifecycle").GetString());
             Assert.False(Directory.Exists(Path.Combine(root, "browser", "tenants"))); // Read never binds, creates or launches a profile.
             if (scenario == "cold")
             {

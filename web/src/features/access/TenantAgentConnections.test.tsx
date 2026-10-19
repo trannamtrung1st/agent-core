@@ -16,6 +16,7 @@ beforeEach(() => {
     const url = String(path);
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
     if (options?.method && options.method !== 'GET') return stale ? response({ reasonCode: 'stale_revision' }, 409) : response({});
+    if (url.endsWith('/browser/profile')) return response({ instanceId: 'agent', agentName: 'Browser agent', lifecycle: 'Active', canReset: false, busy: false, profilePresent: false, liveViews: 0, lastReset: null, instanceRevision: 4, securityRevision: 7, witness: 'a'.repeat(64) });
     if (url.includes('/credential-bindings')) return denied ? response({ reasonCode: 'permission_denied' }, 403) : response(current);
     if (url.includes('/credentials?')) return response({ items: [{ tenantId: 'tenant', credential }], total: 1, page: 0, pageSize: 10 });
     if (url.endsWith('/access')) return response({ permissions: bind ? ['credentials.read', 'credentials.bind'] : ['credentials.read'], revision: 7 });

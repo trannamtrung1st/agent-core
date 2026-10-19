@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Browser profile reset UI checks
+
+`TenantBrowserProfilePanel.test.tsx` exercises captured named confirmation and witnesses, one POST, deliberate GET readback, pending/unknown/confirmed facts, network/malformed/mismatched replies, stale/revoked authority, read-only/archived/busy state, independent binding denial, focus/cancellation and unmount/late-owner retirement. Incumbent Connections component cases remain affected consumers.
+
+`playwright.tenant-browser-profile.config.ts` selects the two reset journeys plus the incumbent Connections journeys against the disposable Synthetic fixture. Use the existing tenant Chat fixture ports/root controls; `TENANT_UI_EXTERNAL=1` reuses only an independently verified disposable Synthetic host, with `TENANT_CHAT_API_PORT`, `TENANT_CHAT_WEB_PORT` and `TENANT_CHAT_TEST_RUN_ROOT` matching that host. Native profile paths must remain under that disposable root. The reset journey confirms actual backend completion, then deliberately makes its successful reply unreadable and observes recovery by GET with no repeated POST. Another journey changes security after confirmation opens, observes actual 409/no saved reset, refreshes and deliberately retries, then archives the Instance and inspects disabled reset at 320px. Parent Connections pagination/drafts/revocation remain qualified separately in the same focused run. [Executed counts, MCP captures and exact limits](reports/tenant-browser-profile-reset-ui-verification-2026-10-20.md).
+
 ## Tenant Browser profile reset checks
 
 The reset matrix crosses authenticated HTTP, actual native Chromium, both canonical stores and disposable profile bytes. It verifies confirmed shared persistent-context closure/deletion, localStorage loss after reopen, preserved ephemeral/other-Agent contexts, cold reads without allocation, stale native witnesses, uncertain close/deletion, current-operation factual retry and new deliberate recovery. Original-login loss after closure must preserve bytes and record unknown. Never exercise destructive reset against user profiles.

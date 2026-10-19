@@ -6,7 +6,7 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantBrowserProfileResetView(Guid OperationId, string Status, string ReasonCode, DateTimeOffset RequestedAt, DateTimeOffset? RecordedAt);
 public sealed record TenantBrowserProfileView(Guid InstanceId, long InstanceRevision, long SecurityRevision, string Witness,
-    bool ProfilePresent, int LiveViews, bool CanReset, bool Busy, TenantBrowserProfileResetView? LastReset);
+    bool ProfilePresent, int LiveViews, bool CanReset, bool Busy, TenantBrowserProfileResetView? LastReset, string AgentName, string Lifecycle);
 
 public sealed class TenantBrowserProfileService(IIamStore security, ITenantAgentStore agents, ITenantBrowserProfileStore store,
     IdentityService identity, IamAuthorizer authorizer, IBrowser browser, TimeProvider time, IIdGenerator ids)
@@ -54,7 +54,7 @@ public sealed class TenantBrowserProfileService(IIamStore security, ITenantAgent
         var saved = agent.Instance.BrowserProfileReset;
         return new(agent.Instance.InstanceId, agent.Instance.Revision, revision, observed.Witness, observed.ProfilePresent, observed.LiveViews,
             manage && !observed.Busy && observed.InFlightOperation is null && saved?.Status != "pending", observed.Busy || observed.InFlightOperation is not null,
-            saved is null ? null : new(saved.OperationId, saved.Status, saved.ReasonCode, saved.RequestedAt, saved.RecordedAt));
+            saved is null ? null : new(saved.OperationId, saved.Status, saved.ReasonCode, saved.RequestedAt, saved.RecordedAt), agent.Instance.Persona.Name, agent.Instance.Lifecycle.ToString());
     }
     public async ValueTask<TenantBrowserProfileResetView> ResetAsync(Guid tenant, Guid instance, HumanSessionReference human, Guid operation,
         long expectedSecurityRevision, long expectedInstanceRevision, string witness, CancellationToken ct = default)

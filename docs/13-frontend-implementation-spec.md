@@ -1,5 +1,13 @@
 # Frontend Implementation Specification
 
+## Tenant Browser profile management
+
+Agent Connections reuses `TenantBrowserProfilePanel` as an independent **Browser state** section, composed with the existing `AgentConfigurationPanel`, Ant Design Alert/Flex/Button and shared centered `confirmAction`. It observes current server-projected Agent name/lifecycle and persistent-profile facts without a Credential-binding prerequisite. The inherited bounded column, section gap, wrapping panel heading/actions and native confirmation own layout; no new CSS/token/theme or generic wrapper is added.
+
+Reset confirms the exact Agent/organization and destructive persistent-state scope, sends one new operation UUID with the captured security/Instance/native witnesses and invalidates the captured observation on every returned outcome. Confirmed, pending, unknown, refused and unreadable/lost replies have distinct safe messages. No automatic retry or result polling occurs. Explicit **Reload Browser state** retires the old query key immediately, then reads canonical facts; a fresh deliberate reset needs a new confirmation and operation ID. Read-only, archived and busy responses disable reset with an explanation. General binding updates remain independent.
+
+The mutation adapter validates operation/status/reason/time correspondence before claiming completion. Failed or malformed replies cannot become a confirmed reset. Component/query/command ownership prevents late responses after navigation; owner unmount destroys its confirmation. Cancel returns focus to Reset; completion/refusal returns focus to Reload. Last-reset facts describe a historical operation separately from current profile presence. [UX](19-multi-tenant-iam-ux.md#browser-persistent-profile-reset-facts), [wire contract](14-api-and-realtime-protocol.md#tenant-browser-profile-reset-http), [executed evidence](reports/tenant-browser-profile-reset-ui-verification-2026-10-20.md).
+
 ## Exact Office read review
 
 An XLSX explicit range without `sheet` selects the first worksheet; sparse mode without `sheet` traverses workbook order. The saved read scope distinguishes those meanings.

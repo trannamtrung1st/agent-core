@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Tenant Browser human reset UI checkpoint — 2026-10-20
+
+The existing Agent Connections page now has independently authorized Browser profile facts, exact named reset confirmation and deliberate no-replay readback. [Focused frontend/runtime qualification](reports/tenant-browser-profile-reset-ui-verification-2026-10-20.md) supersedes reset-frontend-pending notes below. The backend reset owner remains separately qualified; decommission/privacy/autonomous Browser adapters, remaining proposal families and final obsolete-authority/schema consolidation stay open. The full goal remains active; no milestone acceptance is claimed.
+
 ## Tenant Browser human profile reset checkpoint — 2026-10-20
 
 Canonical human preflight/reset now extends the existing native profile/Instance/IAM/audit owners, with current raw compound authority, exact native/revision witnesses, confirmed deletion and durable unknown/no-replay recovery. [Focused backend/native/HTTP evidence](reports/tenant-browser-profile-reset-verification-2026-10-20.md) supersedes backend-human-profile-reset-pending statements below only. The frontend reset control, profile decommission, Browser privacy/autonomous adapters, remaining proposal families and final obsolete-authority/schema consolidation remain open. This checkpoint does not claim milestone acceptance; the full original proposal stays active.

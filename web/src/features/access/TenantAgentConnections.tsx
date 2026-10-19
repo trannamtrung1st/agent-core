@@ -12,6 +12,7 @@ import { tenantAccessPath, tenantCredentialPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
+import { TenantBrowserProfilePanel } from './TenantBrowserProfilePanel';
 
 export type TenantBindingPage = Page<CredentialBinding> & { allRead: boolean; instanceRevision: number; securityRevision: number; agentName: string; lifecycle: string; canUpdate: boolean; removableBindingIds: string[] };
 export const tenantBindingApi = (tenant: string, id: string) => tenantApi(tenant, `/agents/${encodeURIComponent(id)}/credential-bindings`);
@@ -40,6 +41,7 @@ export function TenantAgentConnections({ context, id }: { context: TenantContext
         {view.total > 10 && <Pagination size="small" current={page + 1} total={view.total} pageSize={10} showSizeChanger={false} onChange={value => setPage(value - 1)} />}
       </Flex></section>
     </>}
+    <TenantBrowserProfilePanel key={`${tenant}:${id}`} tenant={tenant} id={id} organization={context.tenant.name} onReset={state.reload} />
     {editing && <BindingEditor tenant={tenant} organization={context.tenant.name} id={id} onClose={close} onSaved={() => { close(); state.reload(); }} />}
   </Flex>;
 }

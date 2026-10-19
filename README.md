@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+The shared Agent Connections page now exposes independently authorized Browser state and exact human profile reset with deliberate saved-fact recovery after every outcome. [Frontend/runtime qualification](docs/reports/tenant-browser-profile-reset-ui-verification-2026-10-20.md) supersedes reset-UI-pending notes below. Decommission/privacy/autonomous Browser adapters and the full remaining IAM proposal stay open.
+
 Canonical human Browser profile preflight/reset now checks current raw authority and exact native/revision witnesses, records durable pending/unknown facts and confirms actual profile deletion without replay. [Focused backend/native/HTTP evidence](docs/reports/tenant-browser-profile-reset-verification-2026-10-20.md) supersedes backend-human-reset-pending notes below. The frontend reset control, decommission/privacy/autonomous adapters and the remaining full IAM proposal remain open.
 
 Tenant Session lifecycle and Agent archive now retire their owned native Browser resources, with confirmed closure, partial cleanup facts and retry through the existing resource sweep. [Focused qualification](docs/reports/tenant-browser-retirement-verification-2026-10-20.md) preserves sibling isolation and retained profile state. Destructive Browser reset/profile deletion, privacy/autonomous adapters and the remaining full IAM proposal stay open.
