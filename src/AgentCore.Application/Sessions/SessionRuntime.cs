@@ -217,7 +217,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
         ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
-        AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null)
+        AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
+        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -246,6 +247,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _audioOutput = audioOutput ?? output as ISessionAudioOutput;
         _attachments = attachments;
         _processor = processor;
+        _tenantAttachments = tenantAttachments;
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
         _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
@@ -2457,20 +2459,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 else if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host)) selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, executionDefinition, selection);
                 var model = selection is null ? ResolveTurnModel(trigger.Kind) : _models.Resolve(selection, capturedRun is not null || occurrencePin is not null && ToolResources.IsOccurrence(trigger.Kind) || trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
                 model = TestDecorateLanguageModel?.Invoke(model) ?? model;
-                var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
+                var tenantFiles = capturedRun?.Owner.TenantId is not null
+                    ? await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."))
+                        .PrepareAsync(capturedRun, capturedSnapshot, model.Capabilities.Vision, evaluationToken).ConfigureAwait(false) : null;
+                var promptHistory = tenantFiles?.History ?? capturedSnapshot.Entries;
+                var sessionAttachments = tenantFiles?.Manifest ?? await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
                 var learned = await SessionMemoryPrompt.LoadAsync(
                     _structuredMemory,
                     capturedSnapshot.SessionId,
                     executionDefinition,
                     _profile,
-                    capturedSnapshot.Entries,
+                    promptHistory,
                     evaluationToken,
                     capturedSnapshot.AgentInstanceId).ConfigureAwait(false);
                 var skillCatalog = capturedRun is { } execution && execution.ResponseId == responseId
                     ? execution.PinnedSkillCatalog : resolved!.Skills;
                 var context = new AgentContext(
                     executionDefinition,
-                    capturedSnapshot.Entries,
+                    promptHistory,
                     capturedSnapshot.Summary,
                     Profile: _profile,
                     capturedSnapshot.Mode,
@@ -2478,7 +2484,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     HelpOfferedDuringSilence: _helpOfferedDuringSilence,
                     InterruptedHeardText: LastInterruptedHeardText(),
                     trigger,
-                    attachments,
+                    tenantFiles?.Contents ?? attachments,
                     sessionAttachments,
                     ConsecutiveProactiveSpeaks: _consecutiveProactiveSpeaks,
                     SilentEvaluations: _silentEvaluations,
@@ -2531,6 +2537,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     decision = capturedRun?.Admission.ComposerInput?.Error is not null
                         ? new Speak(ContextAssembler.Create(responseId, new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)], purpose: ContextPurpose.Platform)))
                         : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
+                    if (tenantFiles is not null && decision is Speak prepared)
+                        decision = prepared with { Request = prepared.Request with { TenantAttachmentSources = tenantFiles.Sources } };
                 }
                 catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
                 {
@@ -2738,6 +2746,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var messages = restored ? restoredMessages!.ToList() : new List<ModelMessage>();
         if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
         var executionState = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint);
+        var attachmentSources = AgentCore.Application.Security.TenantAttachmentContextRules.Merge(executionState.TenantAttachmentSources, request.TenantAttachmentSources);
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
         var failedAttempts = (executionState.FailedAttempts ?? []).ToList();
@@ -2798,7 +2807,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var cleanupPhase = executionState.Phase == RunPhase.Cleanup || executionState.CleanupStartedAtMessage is not null;
         var cleanupStartedAtMessage = executionState.CleanupStartedAtMessage;
         ToolLoopExecutionState State() => new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
-            finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery);
+            finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
+            attachmentSources.Count == 0 ? null : attachmentSources);
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
         var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;
@@ -2995,7 +3005,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                 }
                 if (!resumingBatch)
+                {
                     await RequireProviderRunAuthorityAsync(cause, request.ResponseId, generateToken).ConfigureAwait(false);
+                    await RequireTenantAttachmentSourcesAsync(_boundAgentRun, attachmentSources, generateToken).ConfigureAwait(false);
+                }
                 if (!resumingBatch)
                 await foreach (var evt in model.GenerateAsync(working, finalizationReason is null && workTimer is not null ? (cleanupPhase ? cleanupCts.Token : workCts.Token) : generateToken).ConfigureAwait(false))
                 {

@@ -87,7 +87,10 @@ public sealed record ModelRequest(
     string? ToolChoiceName = null,
     AgentCore.Application.Context.EffectiveContextSnapshot? Context = null,
     IReadOnlyList<ModelMessage>? Interaction = null,
-    AgentCore.Application.Context.ContextManifest? ContextManifest = null);
+    AgentCore.Application.Context.ContextManifest? ContextManifest = null)
+{
+    internal IReadOnlyList<TenantAttachmentContextSource>? TenantAttachmentSources { get; init; }
+}
 
 public abstract record ModelGenerationEvent;
 

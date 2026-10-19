@@ -16,7 +16,10 @@ public sealed class AgentRunCheckpointFormatTests
         var state = AgentRunToolCallCheckpoint.ReadCapabilityState(new(payload, 1, 0, 1000));
         Assert.Equal([ToolCatalog.EmailSearch], state.Ids);
         Assert.Equal(3, state.Calls);
-        var legacy = AgentRunToolCallCheckpoint.ReadCapabilityState(new(AgentRunToolCallCheckpoint.Write([]), 0, 0, 1000));
+        var sourceFree = AgentRunToolCallCheckpoint.Write([]);
+        Assert.DoesNotContain("TenantAttachmentSources", sourceFree, StringComparison.Ordinal);
+        Assert.Null(AgentRunToolCallCheckpoint.ReadExecutionState(new(sourceFree, 0, 0, 1000)).TenantAttachmentSources);
+        var legacy = AgentRunToolCallCheckpoint.ReadCapabilityState(new(sourceFree, 0, 0, 1000));
         Assert.Empty(legacy.Ids);
         Assert.Equal(0, legacy.Calls);
         Assert.False(AgentRunToolCallCheckpoint.TryWrite([new(ModelRole.User, new string('x', AgentRunLimits.MaxCheckpointBytes))], false, null, out _, state.Ids, state.Calls));

@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant Attachment runtime input context — 2026-10-19
+
+Canonical internal conversational file input now uses current independent executor IAM/policy, actual owned sources, incumbent guarded processing and existing Runtime/checkpoint source fences. [Qualification](tenant-attachment-context-verification-2026-10-19.md) supersedes the initial input-processing and blanket dispatch-refusal notes only. Public Attachment messages, model reread/Review, composer and Attachment publication remain unfinished; other proposal families and final obsolete-authority/schema cutover stay open. The full goal remains active.
+
 ## Tenant Attachment binding prerequisite — 2026-10-19
 
 Exact internal message binding now joins the incumbent entry/Activation/Run/IAM transaction, and human history resolves current actual same-Session sources with canonical labels. [Qualification](tenant-attachment-binding-verification-2026-10-19.md) supersedes the internal binding prerequisite only. Public attachment messages, runtime processing/model reads and exact Review, composer and Attachment publication remain unconverted. Other proposal families and final obsolete-authority/schema cutover stay open; the full goal remains active.

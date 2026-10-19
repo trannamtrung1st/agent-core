@@ -15,7 +15,8 @@ namespace AgentCore.Application.Execution;
 public enum RunPhase { Work, Cleanup, Finalization }
 public sealed record ToolLoopExecutionState(RunPhase Phase = RunPhase.Work, string? FinalizationReason = null,
     int? CleanupStartedAtMessage = null, IReadOnlyList<RunAttemptDiagnostic>? FailedAttempts = null,
-    ContextManifest? ContextManifest = null, Guid? TranscriptId = null, bool CompletionCorrectionAttempted = false, RunProtocolRecovery? ProtocolRecovery = null);
+    ContextManifest? ContextManifest = null, Guid? TranscriptId = null, bool CompletionCorrectionAttempted = false, RunProtocolRecovery? ProtocolRecovery = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantAttachmentContextSource>? TenantAttachmentSources = null);
 
 public static class AgentRunToolCallCheckpoint
 {

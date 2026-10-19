@@ -98,6 +98,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantApprovedOperationStore>(p => (ITenantApprovedOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantApprovedOperationService>();
         services.TryAddSingleton<ITenantRuntimeStore>(p => (ITenantRuntimeStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantAttachmentRuntimeContextService>();
         services.TryAddSingleton<TenantRunExecutionAuthority>();
         services.TryAddSingleton<TenantRunContinuationService>();
         services.TryAddSingleton<ITenantPreferenceOperationStore>(p => (ITenantPreferenceOperationStore)p.GetRequiredService<IIamStore>());

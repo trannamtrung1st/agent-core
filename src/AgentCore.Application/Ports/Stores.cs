@@ -204,6 +204,9 @@ public interface IAttachmentProcessor
 {
     string Version { get; }
 
+    ValueTask<AttachmentProcessResult> ProcessSourceAsync(AttachmentRecord source, byte[] bytes, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Frozen attachment processing is unavailable.");
+
     ValueTask<IReadOnlyList<AttachmentProcessResult>> ProcessTurnAsync(
         Guid sessionId,
         IReadOnlyList<Guid> attachmentIds,

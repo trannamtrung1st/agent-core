@@ -530,7 +530,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetService<IBrowserLease>(), provider.GetRequiredService<IAgentRunAuthority>(),
                 composer: provider.GetRequiredService<AgentCore.Application.Composer.ComposerReferenceService>(),
                 tenantContinuations: provider.GetRequiredService<AgentCore.Application.Security.TenantRunContinuationService>(),
-                tenantArtifacts: provider.GetRequiredService<AgentCore.Application.Security.TenantArtifactReferenceService>());
+                tenantArtifacts: provider.GetRequiredService<AgentCore.Application.Security.TenantArtifactReferenceService>(),
+                tenantAttachments: provider.GetRequiredService<AgentCore.Application.Security.TenantAttachmentRuntimeContextService>());
         });
         services.TryAddSingleton<AgentCore.Application.Composer.ComposerReferenceService>();
         services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();

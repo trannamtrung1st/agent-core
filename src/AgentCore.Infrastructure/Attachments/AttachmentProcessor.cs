@@ -37,6 +37,13 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
 
     public string Version { get; }
 
+    public async ValueTask<AttachmentProcessResult> ProcessSourceAsync(AttachmentRecord source, byte[] bytes, CancellationToken cancellationToken = default)
+    {
+        var frozen = bytes.ToArray(); AgentCore.Application.Security.TenantAttachmentRules.Content(source, frozen);
+        await using var content = new MemoryStream(frozen, writable: false);
+        return (await ProcessOneAsync(source, content, cancellationToken).ConfigureAwait(false)) with { ProcessorVersion = Version };
+    }
+
     public ValueTask<IReadOnlyList<AttachmentProcessResult>> ProcessTurnAsync(
         Guid sessionId,
         IReadOnlyList<Guid> attachmentIds,

@@ -30,3 +30,10 @@ public interface ITenantAttachmentCleanupStore
     ValueTask<TenantAttachmentCleanupPage> ListAttachmentCleanupAsync(string? after, int limit, CancellationToken ct = default);
     ValueTask<bool> CleanupAttachmentContentAsync(TenantAttachmentCleanupTarget target, CancellationToken ct = default);
 }
+
+// Source provenance only. Every use resolves current ownership, permissions and policy again.
+public sealed record TenantAttachmentContextSource(Guid AttachmentId, Guid EntryId, string DisplayName, string ContentType,
+    long ByteSize, string Sha256Hex, string? ProcessorVersion = null);
+public sealed record TenantAttachmentContext(IReadOnlyList<AgentCore.Domain.Conversation.ConversationEntry> History,
+    IReadOnlyList<SessionAttachmentManifestItem> Manifest, IReadOnlyList<AttachmentProcessResult> Contents,
+    IReadOnlyList<TenantAttachmentContextSource> Sources);

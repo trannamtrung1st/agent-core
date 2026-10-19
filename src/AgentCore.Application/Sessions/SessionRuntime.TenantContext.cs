@@ -6,6 +6,14 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
+    private readonly TenantAttachmentRuntimeContextService? _tenantAttachments;
+    private async ValueTask RequireTenantAttachmentSourcesAsync(AgentRun? run, IReadOnlyList<TenantAttachmentContextSource>? sources, CancellationToken ct)
+    {
+        if (_runtimeOwner is null || sources is not { Count: > 0 }) return;
+        if (run is null || run.Owner != _runtimeOwner || _tenantAttachments is null) throw AgentCoreErrors.Forbidden("Tenant attachment context is unavailable.");
+        await _tenantAttachments.RequireSourcesAsync(run, sources, ct).ConfigureAwait(false);
+    }
+
     private async ValueTask<TenantRequesterContext?> RequesterContextAsync(AgentRun? run, CancellationToken ct)
     {
         if (_runtimeOwner is null) return null;

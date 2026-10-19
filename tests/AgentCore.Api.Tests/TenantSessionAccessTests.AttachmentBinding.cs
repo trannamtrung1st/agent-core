@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,9 +11,11 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantSessionAccessTests
 {
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_internal_attachment_binding_cannot_reach_unconverted_model_context_or_legacy_processing(bool sqlite)
+    [Theory] [InlineData(false, "missing")] [InlineData(true, "missing")] [InlineData(false, "allowed")] [InlineData(true, "allowed")]
+    [InlineData(false, "parent")] [InlineData(true, "parent")] [InlineData(false, "review")] [InlineData(true, "review")]
+    public async Task Tenant_attachment_context_uses_only_independent_current_executor_reads_and_preserves_original_binding(bool sqlite, string mode)
     {
+        var allowed = mode == "allowed";
         var root = Path.Combine(Path.GetTempPath(), "tenant-attachment-binding-http-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
@@ -26,6 +29,15 @@ public sealed partial class TenantSessionAccessTests
             var id = (await Json(await owner.PostAsync(path + $"?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision=1", body))).GetProperty("attachmentId").GetGuid();
             var identity = factory.Services.GetRequiredService<IdentityService>(); var login = (await identity.SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!;
             var state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!; var human = state.Users.Single();
+            if (mode != "missing")
+            {
+                var access = factory.Services.GetRequiredService<TenantAccessService>();
+                var role = await access.SaveRoleAsync(human.PrincipalId, tenant, null, "Agent attachment reads", mode == "parent" ? ["attachments.read"] : ["sessions.read", "attachments.read"], await Revision(owner, tenant));
+                await access.AssignRoleAsync(human.PrincipalId, tenant, agent.GetProperty("principalId").GetGuid(), role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
+                if (mode == "review") await factory.Services.GetRequiredService<TenantOperationPolicyService>().SaveAsync(tenant,
+                    new(human.AccountId, login.Session.SessionId, human.PrincipalId), "attachments.read", new(OperationApprovalMode.Always, false), await Revision(owner, tenant), 0);
+                state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
+            }
             var receipt = await factory.Services.GetRequiredService<TenantRunService>().SubmitMessageAsync(tenant, session,
                 new(human.AccountId, login.Session.SessionId, human.PrincipalId), Guid.NewGuid(), "Read this", [id], state.Tenant.Revision, 1);
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); AgentRun? run = null;
@@ -35,10 +47,27 @@ public sealed partial class TenantSessionAccessTests
                 run = await runs.FindTenantRunAsync(tenant, receipt.RunId, timeout.Token); if (run?.IsTerminal == true) break;
                 await Task.Delay(50, timeout.Token);
             }
-            Assert.NotNull(run); Assert.Equal(AgentRunStatus.Failed, run.Status); Assert.Equal("attachment-runtime-unavailable", run.Failure!.Code);
-            Assert.Empty(model.Requests); Assert.Null(run.Checkpoint); Assert.Null(run.Result);
+            Assert.NotNull(run); Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}: {run.Failure?.Summary}");
+            Assert.NotEmpty(model.Requests);
+            var prompt = string.Join("\n", model.Requests.SelectMany(r => r.Messages).Select(m => m.Text + "\n" + string.Join("\n", (m.Parts ?? []).OfType<ModelTextContent>().Select(p => p.Text))));
+            if (allowed) { Assert.Contains("Private attachment body", prompt); Assert.Contains("Private file label.txt", prompt); }
+            else { Assert.DoesNotContain("Private attachment body", prompt); Assert.DoesNotContain("Private file label.txt", prompt); Assert.DoesNotContain(id.ToString("D"), prompt); Assert.Contains("unavailable under current access", prompt); }
+            Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
             Assert.Equal(AttachmentState.Bound, (await factory.Services.GetRequiredService<ITenantAttachmentStore>().FindTenantAsync(tenant, session, id))!.State);
-            Assert.DoesNotContain("Private file", run.Failure.Summary);
+            if (allowed)
+            {
+                var priorRequests = model.Requests.Count;
+                var currentSession = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!;
+                var followup = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new {
+                    messageId = Guid.NewGuid(), text = "Which files are available?", expectedRevision = await Revision(owner, tenant),
+                    expectedSessionRevision = currentSession.Snapshot.Revision }));
+                var later = await AttachmentTerminal(runs, tenant, followup.GetProperty("runId").GetGuid());
+                Assert.Equal(AgentRunStatus.Completed, later.Status);
+                var laterPrompt = string.Join("\n", model.Requests.Skip(priorRequests).SelectMany(r => r.Messages).Select(m => m.Text));
+                Assert.Contains("Private file label.txt", laterPrompt); Assert.Contains(id.ToString("D"), laterPrompt);
+                Assert.DoesNotContain("Private attachment body", laterPrompt); // Historical input is metadata; rereading is a separate operation.
+                Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
+            }
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
