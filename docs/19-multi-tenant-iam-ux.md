@@ -1,5 +1,10 @@
 # Accounts, organizations, access and approvals UX
 
+## Browser upload consent
+
+The incumbent shared Browser saved-action summary includes each exact Session Artifact's safe name, media type, byte size, ID and SHA-256 hash, plus the file-input origin and full existing target parameters. Keep these facts selectable and wrapped using the existing literal parameter presentation. State that setting the selected input does not confirm server submission. Source names require current independent source and parent reads; Browser approval does not grant them. No replacement arguments, new upload route, file picker or second consent surface is introduced. Existing stale/denied/cancel recovery applies, and repeated receipt inspection never repeats upload.
+
+
 ## Exact Office read review
 
 An XLSX explicit range without `sheet` selects the first worksheet; sparse mode without `sheet` traverses workbook order. The saved read scope distinguishes those meanings.

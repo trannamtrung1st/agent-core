@@ -214,7 +214,20 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             AND (json_type(PayloadJson, '$.Operation.BrowserCommand') IS NOT 'object' OR (
                 ({browserReadJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({browserReadJson})))
                 AND (json_extract(PayloadJson, '$.Operation.BrowserCommand.ReadOnly') = 1 OR {browserUseJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({browserUseJson})))
-                AND ({browserSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({browserSessionJson})))))
+                AND ({browserSessionJson} = 'null' OR SessionId IN (SELECT value FROM json_each({browserSessionJson}))))
+                AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.BrowserCommand.ArtifactSourcesJson')) member
+                    WHERE ({artifactVerifyJson} <> 'null' AND json_extract(member.value, '$.ArtifactId') NOT IN (SELECT value FROM json_each({artifactVerifyJson})))
+                        OR NOT EXISTS (SELECT 1 FROM Artifacts a WHERE a.TenantId = TenantApprovalRequests.TenantId
+                            AND a.SessionId = TenantApprovalRequests.SessionId AND a.ArtifactId = json_extract(member.value, '$.ArtifactId')
+                            AND a.DisplayName = json_extract(member.value, '$.DisplayName') AND a.ContentType = json_extract(member.value, '$.ContentType')
+                            AND a.ByteSize = json_extract(member.value, '$.ByteSize') AND a.Sha256Hex = json_extract(member.value, '$.Sha256Hex')
+                            AND EXISTS (SELECT 1 FROM TenantSessions root JOIN Sessions saved ON saved.SessionId = root.SessionId
+                                WHERE root.TenantId = a.TenantId AND root.SessionId = a.SessionId AND saved.DurablyDeletedAtUtc IS NULL)
+                            AND ((a.AgentRunId IS NOT NULL AND EXISTS (SELECT 1 FROM AgentRuns r WHERE r.TenantId = a.TenantId
+                                AND r.SessionId = a.SessionId AND r.AgentRunId = a.AgentRunId)) OR (a.AgentRunId IS NULL
+                                AND a.CreatedByPrincipalId IS NOT NULL AND a.SourceAttachmentId IS NOT NULL AND a.WorkspaceLogicalPath IS NOT NULL
+                                AND EXISTS (SELECT 1 FROM Attachments source WHERE source.TenantId = a.TenantId
+                                    AND source.SessionId = a.SessionId AND source.AttachmentId = a.SourceAttachmentId))))))
             """);
         var query = source.AsNoTracking().Where(r => r.TenantId == tenantId);
         if (page.SessionId is { } session) query = query.Where(r => r.SessionId == session.ToString("D"));

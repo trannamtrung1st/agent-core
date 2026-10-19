@@ -20,12 +20,13 @@ public static partial class TenantApprovalRules
             throw new ArgumentException("Use the exact supported Browser command schema.");
         var command = request.Command;
         // These require their own canonical resource/credential/attached-input adapters.
-        if (command is BrowserUploadCommand or BrowserScreenshot or BrowserMouse or BrowserSetGeolocation
+        if (command is BrowserScreenshot or BrowserMouse or BrowserSetGeolocation
             || command is BrowserDrop { ArtifactId: not null }) throw new AccessDeniedException("browser_resource_adapter_unavailable");
         if (command is BrowserFillCredential password && password.CredentialRef != AgentCore.Domain.Credentials.CredentialRules.Reference(password.CredentialRef))
             throw new ArgumentException("Use the canonical bound Credential reference.");
         // The legacy tool effect classification treats navigation as ReadOnly. Tenant IAM must
         // reserve navigation, closure, storage and context changes for sensitive browser.use.
+        if (command is BrowserUploadCommand upload) _ = TenantBrowserUploadRules.Ids(upload);
         var read = TenantBrowserInspectionContract.ReadOnly(command);
         return (command, ToolActionHash.Normalize(doc.RootElement), read);
         static bool Unique(JsonElement value) => value.ValueKind switch {
@@ -86,6 +87,9 @@ public static partial class TenantApprovalRules
             lines.Add("Credential origin: " + credential.Origin);
             lines.Add("Protected field fill only; sign-in is not confirmed.");
         }
+        foreach (var source in TenantBrowserUploadRules.Sources(value))
+            lines.Add($"File: {source.DisplayName} ({source.ContentType}, {source.ByteSize} bytes)\nArtifact: {source.ArtifactId:D}\nSHA-256: {source.Sha256Hex}");
+        if (command is BrowserUploadCommand) lines.Add("File input origin: " + value.FileInputOrigin + "\nSet the selected file input only; server submission is not confirmed.");
         return lines.Count == 0 ? "No additional parameters" : string.Join("\n", lines);
         static string Label(string key) => key switch { "url" => "URL", "by" => "Match by", "frameRef" => "Frame", "tabRef" => "Tab",
             "within" => "Within", "cwd" => "Working directory", "mimeType" => "Media type", _ => string.Concat(key.Select((c, i) =>
@@ -98,6 +102,9 @@ public static partial class TenantApprovalRules
         if (parsed.Arguments != value.ArgumentsJson || parsed.ReadOnly != value.ReadOnly || BrowserCommandIdentity.Hash(parsed.Command) != value.CommandHash)
             throw new ArgumentException("Browser command parameters must be exact and canonical.");
         TenantBrowserCredentialRules.Shape(value, parsed.Command);
+        _ = TenantBrowserUploadRules.Sources(value);
+        if (parsed.Command is BrowserUploadCommand && (value.FileInputOrigin is null || value.FileInputOrigin == "about:blank" || !BrowserOrigin(value.FileInputOrigin)))
+            throw new ArgumentException("Upload requires the exact file input origin.");
         var json = JsonSerializer.Serialize(new { operation = "browser.command", permission = value.Credential is not null ? "credentials.use" : value.ReadOnly ? "browser.read" : "browser.use",
             resourceType = value.Credential is not null ? "credential" : "agent", resourceId = (value.Credential?.CredentialId ?? instance).ToString("D"),
             expectedInstanceRevision = instanceRevision, expectedPersonaRevision = personaRevision, browserCommand = value });

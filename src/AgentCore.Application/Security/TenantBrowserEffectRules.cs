@@ -13,7 +13,7 @@ public static class TenantBrowserEffectRules
     private static readonly HashSet<string> Denials = new(StringComparer.Ordinal) { "approval_expired", "grantor_authority_lost", "permission_denied",
         "executor_unavailable", "requester_unavailable", "tenant_unavailable", "browser_policy_changed", "browser_target_changed", "browser_target_busy",
         "policy_transition_pending", "provider_unavailable", "root_operation_conflict", "operation_witness_changed", "resource_unavailable",
-        "browser_command_not_dispatched", "independent_reviewer_required", "approver_unqualified", "browser_source_changed", "execution_claim_expired",
+        "browser_file_source_changed", "artifact_content_unavailable", "browser_command_not_dispatched", "independent_reviewer_required", "approver_unqualified", "browser_source_changed", "execution_claim_expired",
         "credential_unavailable", "credential_binding_changed", "credential_origin_changed", "credential_origin_unavailable", "credential_direct_chat_required",
         "credential_target_invalid", "user_intervention_required", "forbidden", "target_denied", "target_missing", "ambiguous_target", "stale_frame",
         "grant_expired", "grant_unavailable", "operation_authority_changed" };

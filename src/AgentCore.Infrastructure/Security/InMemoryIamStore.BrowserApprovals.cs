@@ -12,6 +12,9 @@ public sealed partial class InMemoryIamStore
         var value = request.Operation.BrowserCommand!;
         var session = sessionBacking.ReadTenantSession(request.TenantId, value.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
         TenantBrowserOperationRules.Require(value, run, agent, TenantAgentDefinitionBaseline(agent), session);
+        foreach (var source in TenantBrowserUploadRules.Sources(value))
+            TenantBrowserUploadRules.Require(request.TenantId, value.SessionId, source,
+                artifactBacking?.FindTenantAsync(request.TenantId, value.SessionId, source.ArtifactId).Result);
         if (value.Credential is { } credential)
         {
             TenantBrowserCredentialRules.RequireChatLineageAsync(run, (id, _) => ValueTask.FromResult(sessionBacking.ReadTenantRun(request.TenantId, id)), CancellationToken.None).GetAwaiter().GetResult();

@@ -1,5 +1,10 @@
 # Persistence and Configuration
 
+## Tenant Browser upload source persistence
+
+Optional `PreparedBrowserCommand.ArtifactSourcesJson` and `FileInputOrigin` bind ordered immutable same-Session Artifact facts and the exact destination origin into existing canonical approval JSON/hash; null omission preserves previous Browser actions. There are no new tables, columns, effect ledgers or blob stores. Migration `20261019200000_TenantBrowserUploadSources` adds insert/update guards to the existing approval table: uploads require ordinary Browser-use Review, exact actual owned source metadata and ordering, distinct bounded files and immutable saved source/origin facts. Downgrade refuses to discard this boundary while upload consent rows remain. Current source ownership and every independent raw permission also repeat inside both stores' existing preparation/decision/start/eligible-result transactions. Byte acquisition is ephemeral at native dispatch, outside the database transaction. Final clean-baseline schema consolidation remains open.
+
+
 ## Workspace source publication transaction boundary
 
 The incumbent direct Artifact transaction can materialize an exact owned workspace source under current Allowed authority. The source capsule on `TenantArtifactCommit` is Application-only ephemeral evidence, never a serialized byte payload, callback checkpoint, provider DTO or second ledger. Native source validation must not call IAM/database owners while they hold their existing transaction/locks. The owning stores repeat current raw parent/workspace reads, operation policy, admitted/current capability and HomeAccess; SQLite also repeats native source validation after private byte staging and claim validation before metadata commit. Failed staging/transactions may leave unreachable private bytes under existing cleanup semantics; they grant no visibility.

@@ -15,6 +15,12 @@ public sealed partial class SqliteIamStore
         var session = await ReadSandboxSession(db, request.TenantId, value.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var baseline = await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false);
         TenantBrowserOperationRules.Require(value, run, agent, baseline, session);
+        foreach (var source in TenantBrowserUploadRules.Sources(value))
+        {
+            var row = await SqliteArtifactStore.Owned(db, request.TenantId, value.SessionId)
+                .SingleOrDefaultAsync(a => a.ArtifactId == source.ArtifactId.ToString("D"), ct).ConfigureAwait(false);
+            TenantBrowserUploadRules.Require(request.TenantId, value.SessionId, source, row is null ? null : SqliteArtifactStore.FromRow(row));
+        }
         if (value.Credential is { } credential)
         {
             await TenantBrowserCredentialRules.RequireChatLineageAsync(run, async (id, token) => {

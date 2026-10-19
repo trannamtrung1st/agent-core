@@ -26,6 +26,10 @@ public sealed partial class NativePlaywrightBrowser
         if (command.Command is BrowserFillCredential && (command.TenantOwner is null || command.TenantPasswordResolver is null || command.TenantDispatchCheck is null
             || command.TenantWitness?.CredentialOrigin is null)) return new("forbidden");
         if (command.Command is not BrowserFillCredential && command.TenantPasswordResolver is not null) return new("forbidden");
+        if (command.TenantUploadResolver is not null && command.TenantOwner is null) return new("forbidden");
+        if (command.TenantOwner is not null && command.Command is BrowserUploadCommand
+            && (command.TenantUploadResolver is null || command.TenantDispatchCheck is null || command.TenantWitness?.FileInputOrigin is null)) return new("forbidden");
+        if (command.Command is not BrowserUploadCommand && command.TenantUploadResolver is not null) return new("forbidden");
         if (command.TenantReadOnly && (command.TenantOwner is null || !TenantBrowserInspectionContract.ReadOnly(command.Command))) return new("forbidden");
         if (!TenantRequestAllowed(command)) return new("forbidden");
         if (command.TenantOwner is not null)
@@ -97,6 +101,8 @@ public sealed partial class NativePlaywrightBrowser
             return result with { EffectAttempted = result.EffectAttempted || effectAttempted,
                 EffectConfirmedBySdk = result.EffectConfirmedBySdk || effectConfirmed };
         }
+        catch (AgentCore.Application.Security.AccessDeniedException ex) when (command.TenantOwner is not null) { return new(ex.ReasonCode, EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (AgentCore.Application.Security.SecurityConflictException ex) when (command.TenantOwner is not null) { return new(ex.ReasonCode, EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
         catch (BrowserDialogPendingException) { return new("dialog_pending", EffectAttempted: effectAttempted); }
         catch (BrowserTargetException ex) { return new(ex.Code, EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
         catch (BrowserTargetDeniedException) { return new("target_denied", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
@@ -153,7 +159,22 @@ public sealed partial class NativePlaywrightBrowser
                         var target = await Target(args.Target);
                         if (target is null) return new("target_missing");
                         if (!await Ordinary(target)) return new("forbidden");
-                        if (args.Uploads is not { Count: > 0 and <= 8 } uploads) return new("invalid");
+                        var pageUrl = session.Page.Url; var generation = session.Generation;
+                        var frameUrl = await target.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct);
+                        if (command.TenantOwner is not null && (!Uri.TryCreate(frameUrl, UriKind.Absolute, out var uri)
+                            || uri.GetLeftPart(UriPartial.Authority) != command.TenantWitness!.FileInputOrigin)) return new("browser_target_changed");
+                        if (!await target.EvaluateAsync<bool>("el => el.matches('input[type=file]')").WaitAsync(ct)) return new("target_missing");
+                        var uploads = command.TenantOwner is null ? args.Uploads : await command.TenantUploadResolver!(ct).ConfigureAwait(false);
+                        if (uploads is not { Count: > 0 and <= 8 }) return new("invalid");
+                        target = await Target(args.Target);
+                        if (target is null || session.Page.Url != pageUrl || generation != session.Generation
+                            || await target.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct) != frameUrl) return new("browser_target_changed");
+                        if (!await Ordinary(target) || !await target.EvaluateAsync<bool>("el => el.matches('input[type=file]')").WaitAsync(ct)) return new("target_missing");
+                        // Source I/O can yield. Repeat current authority immediately before native transmission.
+                        if (command.TenantDispatchCheck is { } dispatch && await dispatch(ct).ConfigureAwait(false) is { } denied) return new(denied);
+                        if (session.Page.Url != pageUrl || generation != session.Generation
+                            || await target.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct) != frameUrl) return new("browser_target_changed");
+                        ct.ThrowIfCancellationRequested();
                         await Action(target.SetInputFilesAsync(uploads.Select(u => new FilePayload
                         { Name = u.FileName, MimeType = u.MediaType, Buffer = u.Content.ToArray() }), new() { Timeout = TimeoutMs() }));
                         break;

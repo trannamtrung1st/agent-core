@@ -88,6 +88,12 @@ public sealed class TenantBrowserEffectService(IIamStore security, ITenantRunSto
                 var parsed = TenantApprovalRules.BrowserIntent(run.SessionId, command.ToolName, command.ArgumentsJson).Command;
                 pending = browser.ExecuteAsync(new(run.SessionId, parsed) { TenantOwner = witness!.Owner, TenantWitness = witness,
                     TenantDispatchCheck = token => GateAsync(request, decision, fence, token),
+                    TenantUploadResolver = command.ArtifactSourcesJson is null ? null : async token => {
+                        if (await GateAsync(request, decision, fence, token).ConfigureAwait(false) is { } denied) throw new AccessDeniedException(denied);
+                        var files = await targets.UploadsAsync(request, token).ConfigureAwait(false);
+                        if (await GateAsync(request, decision, fence, token).ConfigureAwait(false) is { } changed) throw new AccessDeniedException(changed);
+                        return files;
+                    },
                     TenantPasswordResolver = command.Credential is null ? null : async (origin, token) => {
                         if (await GateAsync(request, decision, fence, token).ConfigureAwait(false) is { } denied) throw new AccessDeniedException(denied);
                         var live = await runs.FindTenantRunAsync(reference.TenantId, run.AgentRunId, token).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");

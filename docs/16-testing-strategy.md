@@ -1,5 +1,10 @@
 # Testing Strategy
 
+## Tenant Browser upload checks
+
+Exercise exact same-Session Artifact metadata → saved Browser Review → qualified decision → at-most-once native file input with both memory and SQLite stores. Compare original non-ASCII bytes and file size in disposable Chromium; clearing the input before duplicate receipt lookup must not repopulate it. Cover missing independent source reads before target observation, another Session's actual file, source-scoped inbox totals/reviewer qualification, read loss before native dispatch and after effect completion, retained model result read loss, malformed witnesses and raw SQLite source mutation. Native source resolution races must recheck current authority, page generation/frame URL and exact destination before transmitting any bytes. Reuse existing recovery/claim/cancellation regressions; CI and external providers remain opt-in.
+
+
 ## Tenant workspace Artifact source capture checks
 
 The source-storage prerequisite is qualified separately from publication. Execute actual owned home/working files under both in-memory and SQLite tenant authorities; verify frozen binary/DOCX/XLSX bytes, source checksum, unchanged Run and no Artifact creation. Native cases cover empty/missing files, the configured and 50 MiB ceilings, source/link/parent/root substitution, external hard-link refusal, unrelated sibling stability and cancellation. Captured source evidence supplies no IAM, consent or recipient read authority. [Executed source-capture evidence](reports/tenant-workspace-artifact-source-verification-2026-10-19.md) does not establish model export, Artifact transaction/Review integration or milestone acceptance.

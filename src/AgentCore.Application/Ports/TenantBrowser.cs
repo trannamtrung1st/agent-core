@@ -30,7 +30,7 @@ public interface ITenantBrowserStateReader
 // Physical target CAS only. This is neither human consent nor an operation grant.
 public sealed record TenantBrowserCommandWitness(TenantBrowserOwner Owner, Guid ProviderEpoch, long SelectionRevision,
     long CommandRevision, BrowserProfileMode ProfileMode, Guid? ContextId, string? TabRef, int? PageGeneration,
-    Guid? DialogId, string? LocationHash, string CommandHash, string? CredentialOrigin = null);
+    Guid? DialogId, string? LocationHash, string CommandHash, string? CredentialOrigin = null, string? FileInputOrigin = null);
 public sealed record TenantBrowserCommandPreparation(string? ErrorCode, TenantBrowserCommandWitness? Witness = null, string? Origin = null);
 public interface ITenantBrowserCommandTarget
 {

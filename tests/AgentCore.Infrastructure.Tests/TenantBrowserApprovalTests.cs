@@ -34,7 +34,8 @@ public sealed partial class TenantBrowserApprovalTests
             ct.ThrowIfCancellationRequested(); Assert.Equal(owner, actual); Reads++;
             return ValueTask.FromResult(Error is not null ? new TenantBrowserCommandPreparation(Error) : new(null,
                 new(actual, Guid.NewGuid(), 0, CommandRevision, Mode, Context, "pg_owned", 1, null, new string('a', 64), BrowserCommandIdentity.Hash(command),
-                    command is BrowserFillCredential ? "http://127.0.0.1:5091" : null), "http://127.0.0.1:5091"));
+                    command is BrowserFillCredential ? "http://127.0.0.1:5091" : null,
+                    command is BrowserUploadCommand ? "http://127.0.0.1:5091" : null), "http://127.0.0.1:5091"));
         }
     }
     private static async Task<Setup> Prepare(Fixture f, bool permissions = true, bool password = false, bool credentialUseAllowed = true, int passwordCount = 1)
@@ -89,7 +90,7 @@ public sealed partial class TenantBrowserApprovalTests
         return new(store, (ITenantApprovalStore)store, (ITenantAgentStore)store, Operations(f, store), new(store), f.Identity, f.Ids, f.Clock,
             f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store,
             browserTargets: new((ITenantSessionStore)store, f.RunConfiguration(), store, new(store), browser,
-                new((ITenantCredentialBindingStore)store, f.RunConfiguration(), f.Protector, (ITenantRunStore)store)),
+                new((ITenantCredentialBindingStore)store, f.RunConfiguration(), f.Protector, (ITenantRunStore)store), f.Artifacts is ITenantArtifactStore files ? new(files) : null),
             credentialReads: new(Operations(f, store), (ITenantRunStore)store, (ITenantSessionStore)store, (ITenantCredentialBindingStore)store,
                 f.RunConfiguration(), store, new(store), f.Clock, (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store));
     }

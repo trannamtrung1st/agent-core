@@ -34,7 +34,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                     && (sandboxVisibility?.Profiles is null || TenantApprovalRules.ReadProfiles(r.Operation.SandboxRead!).All(p => sandboxVisibility.Profiles.Contains(p.Id))))
                 && (r.Operation.BrowserCommand is null || (browserVisibility?.ReadInstances is null || browserVisibility.ReadInstances.Contains(r.Operation.InstanceId))
                     && (r.Operation.BrowserCommand.ReadOnly || browserVisibility?.UseInstances is null || browserVisibility.UseInstances.Contains(r.Operation.InstanceId))
-                    && (browserVisibility?.Sessions is null || browserVisibility.Sessions.Contains(r.SessionId)))
+                    && (browserVisibility?.Sessions is null || browserVisibility.Sessions.Contains(r.SessionId))
+                    && TenantBrowserUploadRules.Sources(r.Operation.BrowserCommand).All(s =>
+                        (artifactReadVisibility?.Artifacts is null || artifactReadVisibility.Artifacts.Contains(s.ArtifactId))
+                        && artifactBacking?.FindTenantAsync(r.TenantId, r.SessionId, s.ArtifactId).Result is { } item
+                        && TenantBrowserUploadRules.Source(item) == s))
                 && (r.Operation.ArtifactPublication is null || sessionBacking.OwnsTenantSession(r.TenantId, r.SessionId)
                     && (sandboxVisibility?.Sessions is null || sandboxVisibility.Sessions.Contains(r.SessionId))
                     && (artifactCreateSessions is null || artifactCreateSessions.Contains(r.SessionId))

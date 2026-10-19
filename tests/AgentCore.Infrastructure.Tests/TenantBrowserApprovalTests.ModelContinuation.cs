@@ -24,16 +24,18 @@ public sealed partial class TenantBrowserApprovalTests
         return new((ITenantRunStore)store, (ITenantApprovalStore)store, local, f.Clock, (ITenantRuntimeStore)store, f.Ids,
             browserEffects: Effects(f, browser, store));
     }
-    private static async Task<(Setup Setup, TenantApprovalRequest Request)> BrowserModelApproval(Fixture f, Setup s, IBrowser browser, bool password = false)
+    private static async Task<(Setup Setup, TenantApprovalRequest Request)> BrowserModelApproval(Fixture f, Setup s, IBrowser browser, bool password = false, Guid? upload = null)
     {
-        var runtime = (ITenantRuntimeStore)f.Iam; var call = password
+        var runtime = (ITenantRuntimeStore)f.Iam; var call = upload is { } file
+            ? new ModelToolCall("exact-upload", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "run_browser_command", command = new { tool = ToolCatalog.BrowserUpload, arguments = JsonSerializer.Deserialize<JsonElement>(UploadArguments(file)) } }))
+            : password
             ? new ModelToolCall("exact-password", ToolCatalog.RequestAuthorization, """{"operation":"run_browser_command","command":{"tool":"browser.fill_credential","arguments":{"credentialRef":"account","target":{"by":"label","value":"Password"}}}}""")
             : BrowserModelCall();
         var run = await runtime.ApplyTenantRuntimeCommandAsync(s.Run.Owner, s.Run.AgentRunId,
             new AgentRunCommand.Checkpoint(s.Run.Revision, f.Clock.GetUtcNow(), s.Run.Claim!.Generation,
                 new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 10000, 100), null), f.Ids.NewId());
         s = s with { Run = run }; var approvals = Service(f, browser);
-        var request = (await Request(approvals, s, password ? ToolCatalog.BrowserFillCredential : ToolCatalog.BrowserNavigate, password ? PasswordArguments : Navigate)).Request!;
+        var request = (await Request(approvals, s, upload is not null ? ToolCatalog.BrowserUpload : password ? ToolCatalog.BrowserFillCredential : ToolCatalog.BrowserNavigate, upload is { } id ? UploadArguments(id) : password ? PasswordArguments : Navigate)).Request!;
         var view = await approvals.ReadViewAsync(s.Tenant, request.RequestId, s.Human);
         request = await approvals.DecideAsync(s.Tenant, request.RequestId, s.Human, true, request.Operation.ActionHash, view.SecurityRevision, request.Revision);
         await approvals.DispatchPendingAsync(); var source = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Tenant, run.AgentRunId))!;

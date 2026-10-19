@@ -1,5 +1,12 @@
 # Backend Implementation Specification
 
+## Tenant Browser Artifact upload implementation
+
+`TenantBrowserUploadTarget` reads metadata from `ITenantArtifactStore` only after independent raw source permission checks, and resolves hash-verified immutable bytes only for the native sink callback. Its closed ordered witnesses extend the incumbent Browser prepared command and canonical hash. Both IAM stores repeat actual same-Session source facts inside their existing Browser operation transactions; inbox queries apply all source visibility before counts and paging. The model authorization schema now includes the converted upload command.
+
+Native upload requires the actual tenant owner, exact physical witness, current-authority callback and private file resolver. A cached target-frame origin joins the physical witness and saved consent. Source resolution yields no authority: current claim/IAM checks repeat after it, and native page generation, frame URL and file-input semantics repeat before transmission. Known pre-dispatch refusals remain denied without an attempted effect. Existing Browser receipts, uncertain recovery, checkpoint projection and historical source revalidation remain the only dispatch/result owners. [Contract](04-backend-interfaces.md#tenant-browser-artifact-upload-contract).
+
+
 ## Tenant conversational Office mutations
 
 Route the four existing Office create/edit names through the tenant mutation boundary before any legacy Office dispatcher. Close nested arguments against the incumbent schema and derive path ownership, ordinary source reads and primary write authority independently. Use the existing saved mutation consent and dispatch/settlement/recovery owners. Canonical byte transformation exclusively creates a new name or compares edit source bytes immediately before replacement, with current owner/claim/IAM/HomeAccess fences. Do not calculate formulas or publish an Artifact. [Port contract](04-backend-interfaces.md#tenant-model-office-mutation-contract), [evidence](reports/tenant-office-mutation-verification-2026-10-19.md).

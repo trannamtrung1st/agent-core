@@ -20,6 +20,7 @@ public sealed partial class TenantBrowserApprovalTests
         public int Invocations;
         public int NativeEffects;
         public int PasswordResolutions;
+        public IReadOnlyList<BrowserUpload>? Uploads;
         public BrowserProviderDescriptor Provider => target.Provider;
         public BrowserHostPolicy HostPolicy => target.HostPolicy;
         public bool IsAvailable => true;
@@ -35,6 +36,11 @@ public sealed partial class TenantBrowserApprovalTests
                 Assert.NotNull(request.TenantPasswordResolver); PasswordResolutions++;
                 Assert.Equal("tenant-bound-private-password", await request.TenantPasswordResolver(target.HostPolicy.NavigationOrigins.Single(), ct));
             }
+            if (request.Command is BrowserUploadCommand)
+            {
+                Assert.NotNull(request.TenantUploadResolver);
+                Uploads = await request.TenantUploadResolver(ct);
+            }
             Interlocked.Increment(ref NativeEffects); target.CommandRevision++;
             if (AfterEffect is { } after) await after();
             return Uncertain ? new("close_uncertain", EffectAttempted: true)
@@ -46,7 +52,7 @@ public sealed partial class TenantBrowserApprovalTests
         current ??= f.Iam;
         return new(current, (ITenantRunStore)current, (ITenantApprovalStore)current, effects ?? (ITenantApprovedOperationStore)current,
             new((ITenantSessionStore)current, f.RunConfiguration(), current, new(current), browser,
-                new((ITenantCredentialBindingStore)current, f.RunConfiguration(), f.Protector, (ITenantRunStore)current)), new(current), browser, Operations(f, current), f.Ids, f.Clock);
+                new((ITenantCredentialBindingStore)current, f.RunConfiguration(), f.Protector, (ITenantRunStore)current), f.Artifacts is ITenantArtifactStore files ? new(files) : null), new(current), browser, Operations(f, current), f.Ids, f.Clock);
     }
     private static async Task<(Setup Setup, TenantApprovalRequest Request)> ApprovedEffect(Fixture f, Setup s, IBrowser browser, Action? beforeDecision = null,
         string tool = ToolCatalog.BrowserNavigate, string args = Navigate)

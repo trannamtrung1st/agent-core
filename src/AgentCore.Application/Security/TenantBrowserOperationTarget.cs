@@ -8,7 +8,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, TenantRunConfigurationResolver configuration,
-    IIamStore security, IamAuthorizer authorizer, IBrowser browser, TenantBrowserCredentialTarget? passwords = null)
+    IIamStore security, IamAuthorizer authorizer, IBrowser browser, TenantBrowserCredentialTarget? passwords = null, TenantBrowserUploadTarget? uploads = null)
 {
     public async ValueTask<(TenantAgent Agent, PreparedBrowserCommand Command, TenantBrowserCommandWitness Witness)> PrepareAsync(AgentRun run, string tool, string json, CancellationToken ct, bool registerCold = false)
     {
@@ -34,6 +34,12 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         // Preparation is not use authority. Only the primary typed Credential use may proceed to exact exceptional classification.
         await TenantBrowserOperationRules.RequirePermissionsAsync(state, run.AgentInstanceId, command, run.Owner.ExecutorPrincipalId!.Value, authorizer, ct,
             allowCredentialUseException: command.Credential is not null).ConfigureAwait(false);
+        if (intent.Command is BrowserUploadCommand upload)
+        {
+            command = command with { ArtifactSourcesJson = await (uploads ?? throw new AccessDeniedException("tenant_effect_unavailable"))
+                .CaptureAsync(tenant, run.SessionId, upload, ct).ConfigureAwait(false) };
+            _ = TenantBrowserUploadRules.Sources(command);
+        }
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
         var mode = TenantBrowserOperationRules.Isolation(run.Admission.Configuration!.Definition, current) switch {
             BrowserIsolation.EphemeralSession => BrowserProfileMode.EphemeralSession,
@@ -51,7 +57,8 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         if (witness.Owner != TenantBrowserOperationRules.Owner(session.Owner) || witness.CommandHash != command.CommandHash)
             throw new SecurityConflictException("browser_target_changed");
         if (witness.ProfileMode != mode) throw new AccessDeniedException("policy_transition_pending");
-        command = command with { TargetJson = TenantApprovalRules.BrowserTarget(witness, prepared.Origin) };
+        command = command with { TargetJson = TenantApprovalRules.BrowserTarget(witness, prepared.Origin),
+            FileInputOrigin = intent.Command is BrowserUploadCommand ? witness.FileInputOrigin ?? throw new AccessDeniedException("browser_file_source_changed") : null };
         if (credential is not null)
         {
             command = command with { Credential = TenantBrowserCredentialRules.Parameters(credential, witness.CredentialOrigin ?? throw new AccessDeniedException("credential_origin_changed")) };
@@ -84,6 +91,8 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         TenantBrowserOperationRules.Require(value, run, agent, baseline, session);
         if (value.Credential is { } credential)
             await (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(run, credential, ct).ConfigureAwait(false);
+        if (value.ArtifactSourcesJson is not null)
+            await (uploads ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request.TenantId, value, ct).ConfigureAwait(false);
         return agent;
     }
     // Historical output can outlive one approval hop; it never supplies dispatch authority.
@@ -100,8 +109,14 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
         TenantBrowserOperationRules.Require(value, run, agent, baseline, session);
         if (value.Credential is { } credential)
             await (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(run, credential, ct).ConfigureAwait(false);
+        if (value.ArtifactSourcesJson is not null)
+            await (uploads ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request.TenantId, value, ct).ConfigureAwait(false);
         return agent;
     }
+
+    public ValueTask<IReadOnlyList<BrowserUpload>> UploadsAsync(TenantApprovalRequest request, CancellationToken ct) =>
+        (uploads ?? throw new AccessDeniedException("tenant_effect_unavailable")).ReadAsync(request.TenantId,
+            request.Operation.BrowserCommand ?? throw new AccessDeniedException("browser_file_source_changed"), ct);
 
     public ValueTask<string> PasswordAsync(TenantApprovalRequest request, AgentRun run, string origin, CancellationToken ct) =>
         (passwords ?? throw new AccessDeniedException("tenant_effect_unavailable")).PasswordAsync(run,

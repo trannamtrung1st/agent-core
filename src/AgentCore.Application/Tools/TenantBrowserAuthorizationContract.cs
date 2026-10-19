@@ -17,7 +17,7 @@ public static class TenantBrowserAuthorizationContract
 {
     public static IReadOnlyList<string> Allowed(AgentDefinition definition) => BrowserToolCatalog.Tools.Values
         .Where(t => Supported(t.Name) && RolePermissions.AllowsTool(definition, t.Name)).Select(t => t.Name).ToArray();
-    private static bool Supported(string name) => name is not (ToolCatalog.BrowserUpload or ToolCatalog.BrowserScreenshot
+    private static bool Supported(string name) => name is not (ToolCatalog.BrowserScreenshot
         or ToolCatalog.BrowserVisionMouse or ToolCatalog.BrowserGeolocation) && BrowserToolCatalog.TryGet(name, out _);
     public static JsonNode Schema(IReadOnlyList<string> tools)
     {
@@ -26,6 +26,13 @@ public static class TenantBrowserAuthorizationContract
         {
             if (!Supported(name) || !BrowserToolCatalog.TryGet(name, out var tool)) continue;
             var arguments = JsonNode.Parse(tool.ParametersJson)!;
+            if (name == ToolCatalog.BrowserUpload)
+            {
+                var ids = arguments["properties"]!["artifactIds"]!;
+                ids["uniqueItems"] = true;
+                ids["items"]!["maxLength"] = 36;
+                ids["items"]!["pattern"] = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+            }
             if (name == "browser.drop") arguments["properties"]!.AsObject().Remove("artifactId");
             commands.Add(new JsonObject { ["type"] = "object", ["additionalProperties"] = false,
                 ["properties"] = new JsonObject { ["tool"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(name) },

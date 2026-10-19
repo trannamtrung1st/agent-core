@@ -16,7 +16,9 @@ public static class TenantBrowserOperationRules
         .Concat(readOnly ? [] : new[] { ("browser.use", AccessScope.ForResource(tenant, "agent", instance.ToString("D"))) }).ToArray();
     public static IReadOnlyList<(string Permission, AccessScope Scope)> Targets(Guid tenant, Guid instance, PreparedBrowserCommand value) =>
         Targets(tenant, instance, value.SessionId, value.ReadOnly).Concat(value.Credential is { } c
-            ? new[] { ("credentials.read", TenantCredentialRules.Scope(tenant, c.CredentialId)), ("credentials.use", TenantCredentialRules.Scope(tenant, c.CredentialId)) } : []).ToArray();
+            ? new[] { ("credentials.read", TenantCredentialRules.Scope(tenant, c.CredentialId)), ("credentials.use", TenantCredentialRules.Scope(tenant, c.CredentialId)) } : [])
+        .Concat(TenantApprovalRules.BrowserIntent(value.SessionId, value.ToolName, value.ArgumentsJson).Command is BrowserUploadCommand upload
+            ? TenantBrowserUploadRules.Ids(upload).Select(id => ("artifacts.read", TenantArtifactRules.Scope(tenant, id))) : []).ToArray();
     public static async ValueTask RequirePermissionsAsync(TenantSecurityState state, Guid instance, PreparedBrowserCommand value, Guid principal,
         IamAuthorizer authorizer, CancellationToken ct, bool allowCredentialUseException = false)
     {

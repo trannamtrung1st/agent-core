@@ -337,6 +337,7 @@ public sealed record BrowserRequest(Guid SessionId, BrowserCommand Command)
     [JsonIgnore] public Func<CancellationToken, ValueTask<string?>>? TenantDispatchCheck { get; init; }
     // Core-only protected sink callback. Never serialized, model-provided or retained in a receipt.
     [JsonIgnore] public Func<string, CancellationToken, ValueTask<string>>? TenantPasswordResolver { get; init; }
+    [JsonIgnore] public Func<CancellationToken, ValueTask<IReadOnlyList<BrowserUpload>>>? TenantUploadResolver { get; init; }
     public BrowserOperation Operation => Command.Kind;
 }
 
