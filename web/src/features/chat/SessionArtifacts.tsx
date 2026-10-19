@@ -12,7 +12,7 @@ export function SessionArtifacts({ sessionId, open, agentRunId, tenantId }: { se
   return <Flex vertical gap={token.padding}>
     <Typography.Text strong>{agentRunId ? "Original task files" : "Files"}</Typography.Text>
     {agentRunId ? <Typography.Text type="secondary">Only files attributed to this run are shown. Older files without run ownership remain available in chat.</Typography.Text> : null}
-    {page.loading ? <Spin aria-label="Loading files" /> : !page.items.length && !page.error ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No files yet" /> : null}
+    {page.loading ? <Spin aria-label="Loading files" /> : !page.items.length && !page.error ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={tenantId ? "No files are available with your current access." : "No files yet"} /> : null}
     {!page.error && page.items.map(file => <ArtifactView key={file.artifactId} sessionId={sessionId} tenantId={tenantId} artifactId={file.artifactId} />)}
     {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
     <DrawerListFooter loadingMore={page.loadingMore} hasMore={page.hasMore} error={page.error} count={page.items.length}

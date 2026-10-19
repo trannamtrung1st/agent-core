@@ -1,6 +1,6 @@
 import { draftPages, type DraftPage } from '../admin/adminNavigation';
 export type AccessPage = 'governance' | 'access' | 'members' | 'roles' | 'audit' | 'definitions' | 'credentials' | 'sandboxes' | 'approvals' | 'agents';
-export type TenantInstancePage = 'profile' | 'version' | 'skills' | 'resources' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'sandbox' | 'workspace' | 'access' | 'connections' | 'lifecycle';
+export type TenantInstancePage = 'profile' | 'version' | 'skills' | 'resources' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'sandbox' | 'workspace' | 'access' | 'connections' | 'lifecycle' | 'activity-sessions' | 'activity-runs';
 export type AccessRoute = { area: 'access' } & (
   | { view: 'sign-in' }
   | { view: 'system'; page: 'browser-privacy' }
@@ -18,6 +18,8 @@ export function parseAccessRoute(path: string): AccessRoute | null {
   if (credentials) return { area: 'access', view: 'tenant', tenantId: credentials[1].toLowerCase(), page: 'credentials' };
   const sandboxes = new RegExp(`^/t/(${uuid})/integrations/sandboxes/?$`, 'i').exec(path);
   if (sandboxes) return { area: 'access', view: 'tenant', tenantId: sandboxes[1].toLowerCase(), page: 'sandboxes' };
+  const activity = new RegExp(`^/t/(${uuid})/admin/agents/(${uuid})/activity(?:/(sessions|runs))?/?$`, 'i').exec(path);
+  if (activity) return { area: 'access', view: 'tenant', tenantId: activity[1].toLowerCase(), page: 'agents', instanceId: activity[2].toLowerCase(), instancePage: activity[3]?.toLowerCase() === 'runs' ? 'activity-runs' : 'activity-sessions' };
   const agent = new RegExp(`^/t/(${uuid})/admin/agents(?:/(${uuid})/(profile|version|skills|resources|settings|sandbox|workspace|execution-budgets|self-management|unattended-model|access|connections|lifecycle))?/?$`, 'i').exec(path);
   if (agent) return { area: 'access', view: 'tenant', tenantId: agent[1].toLowerCase(), page: 'agents', instanceId: agent[2]?.toLowerCase(), instancePage: agent[3]?.toLowerCase() as TenantInstancePage | undefined };
   const approval = new RegExp(`^/t/(${uuid})/admin/approvals(?:/(${uuid}))?/?$`, 'i').exec(path);
@@ -37,7 +39,7 @@ export function parseAccessRoute(path: string): AccessRoute | null {
 export const tenantAccessPath = (tenantId: string, page: AccessPage = 'access') => `/t/${encodeURIComponent(tenantId)}/${page === 'credentials' || page === 'sandboxes' ? `integrations/${page}` : `admin/${page}`}`;
 export const tenantCredentialPath = (tenant: string, id?: string) => tenantAccessPath(tenant, 'credentials') + (id ? `?credentialId=${encodeURIComponent(id)}` : '');
 export const tenantApprovalPath = (tenant: string, id?: string) => tenantAccessPath(tenant, 'approvals') + (id ? `/${encodeURIComponent(id)}` : '');
-export const tenantAgentPath = (tenant: string, id: string, page: TenantInstancePage = 'access') => `${tenantAccessPath(tenant, 'agents')}/${encodeURIComponent(id)}/${page}`;
+export const tenantAgentPath = (tenant: string, id: string, page: TenantInstancePage = 'access') => `${tenantAccessPath(tenant, 'agents')}/${encodeURIComponent(id)}/${page.startsWith('activity-') ? `activity/${page.slice(9)}` : page}`;
 export const tenantDefinitionPath = (tenant: string, id: string) => `${tenantAccessPath(tenant, 'definitions')}/${encodeURIComponent(id)}`;
 export const tenantDraftPath = (tenant: string, id: string, draft: string, page: DraftPage = 'overview') => `${tenantDefinitionPath(tenant, id)}/drafts/${encodeURIComponent(draft)}/${draftPages.find(p => p.id === page)!.path}`;
 

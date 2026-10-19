@@ -12,7 +12,7 @@ public sealed record TenantRunPage(IReadOnlyList<AgentRun> Items, int Total, int
 
 public interface ITenantRunStore
 {
-    ValueTask<TenantRunPage> ListTenantSessionRunsAsync(Guid tenant, Guid session, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default) => throw new NotSupportedException();
+    ValueTask<TenantRunPage> ListTenantSessionRunsAsync(Guid tenant, Guid? session, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default, Guid? instanceId = null, IReadOnlyList<Guid>? allowedSessions = null) => throw new NotSupportedException();
     ValueTask<CompletionInboxItem?> FindTenantCompletionAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantSessionRoot?> ResolveTenantSessionOwnerAsync(Guid sessionId, CancellationToken ct = default);
     ValueTask<AgentRun?> TryCancelTenantRunAsync(TenantSecurityState next, long expectedSecurityRevision, Guid runId, long expectedRunRevision,

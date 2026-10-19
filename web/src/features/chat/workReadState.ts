@@ -8,8 +8,8 @@ function subscribe(listener: () => void) {
   window.addEventListener("storage", listener);
   return () => { listeners.delete(listener); window.removeEventListener("storage", listener); };
 }
-function snapshot() {
-  try { return window.localStorage.getItem(WORK_READ_STORAGE_KEY) ?? "{}"; }
+function snapshot(scope?: string) {
+  try { return window.localStorage.getItem(scope ? `${WORK_READ_STORAGE_KEY}:${scope}` : WORK_READ_STORAGE_KEY) ?? "{}"; }
   catch { return "{}"; }
 }
 function parse(value: string): Record<string, string> {
@@ -24,18 +24,18 @@ function acknowledgedRevision(value: unknown): number {
   const revision = Number(value.split(":", 1)[0]);
   return Number.isSafeInteger(revision) && revision > 0 ? revision : -1;
 }
-export function useWorkReadState() {
-  const read = parse(useSyncExternalStore(subscribe, snapshot));
+export function useWorkReadState(scope?: string) {
+  const read = parse(useSyncExternalStore(subscribe, () => snapshot(scope)));
   return {
     isUnread: (item: AgentRun) => item.status === "completed" && !!item.outcome?.attentionRequired && acknowledgedRevision(read[item.agentRunId]) <= item.revision && read[item.agentRunId] !== version(item),
     markRead: (items: AgentRun[]) => {
-      const next = parse(snapshot());
+      const next = parse(snapshot(scope));
       for (const item of items) {
         if (item.status === "completed" && item.outcome?.attentionRequired && acknowledgedRevision(next[item.agentRunId]) <= item.revision) {
           next[item.agentRunId] = version(item);
         }
       }
-      try { window.localStorage.setItem(WORK_READ_STORAGE_KEY, JSON.stringify(next)); }
+      try { window.localStorage.setItem(scope ? `${WORK_READ_STORAGE_KEY}:${scope}` : WORK_READ_STORAGE_KEY, JSON.stringify(next)); }
       catch { throw new Error("Unable to save read status in this browser. Try again."); }
       listeners.forEach(listener => listener());
     }

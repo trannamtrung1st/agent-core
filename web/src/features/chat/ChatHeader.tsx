@@ -13,7 +13,7 @@ export function ChatHeader({
   sessionsToggle,
   speechLocale,
   onSchedules,
-  onBackgroundWork,
+  onBackgroundWork, backgroundButtonRef,
   onSandbox, onFiles, filesButtonRef,
   sandboxButtonRef,
   attentionCount = 0,
@@ -28,7 +28,7 @@ export function ChatHeader({
   sessionsToggle?: ReactNode;
   speechLocale?: ReactNode;
   onSchedules?: () => void;
-  onBackgroundWork?: () => void;
+  onBackgroundWork?: () => void; backgroundButtonRef?: Ref<HTMLButtonElement>;
   onSandbox?: () => void;
   sandboxButtonRef?: Ref<HTMLButtonElement>;
   onFiles?: () => void; filesButtonRef?: Ref<HTMLButtonElement>;
@@ -79,7 +79,7 @@ export function ChatHeader({
                   <Button
                     type="text"
                     size="small"
-                    className="chat-header-icon-action chat-header-background-work"
+                    ref={backgroundButtonRef} className="chat-header-icon-action chat-header-background-work"
                     aria-label={attentionCount > 0 ? `Background work, ${attentionCount} need attention` : "Background work"}
                     icon={<InboxOutlined />}
                     onClick={onBackgroundWork}

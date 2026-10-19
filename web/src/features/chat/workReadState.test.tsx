@@ -26,6 +26,16 @@ describe("background work read state", () => {
     expect(remounted.result.current.isUnread({ ...attention, revision: 4 })).toBe(true);
     expect(remounted.result.current.isUnread({ ...attention, agentRunId: "another-work" })).toBe(true);
   });
+  it("keeps identical Run IDs separate across tenant and actual-person read scopes", () => {
+    const first = renderHook(() => useWorkReadState("tenant-a:person-a"));
+    const otherTenant = renderHook(() => useWorkReadState("tenant-b:person-a"));
+    const otherPerson = renderHook(() => useWorkReadState("tenant-a:person-b"));
+    act(() => first.result.current.markRead([attention]));
+    expect(first.result.current.isUnread(attention)).toBe(false);
+    expect(otherTenant.result.current.isUnread(attention)).toBe(true);
+    expect(otherPerson.result.current.isUnread(attention)).toBe(true);
+    expect(window.localStorage.getItem(WORK_READ_STORAGE_KEY)).toBeNull();
+  });
   it("does not let an older view overwrite a newer acknowledgement", () => {
     const view = renderHook(useWorkReadState);
     const newer = { ...attention, revision: 4 };

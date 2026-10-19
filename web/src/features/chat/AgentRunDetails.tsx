@@ -1,8 +1,11 @@
+import { IdentityError } from "../../services/identity";
+import type { ActivitySource, RunActions } from "../../services/activitySource";
+import { legacyActivitySource } from "../../services/activitySource";
 import { ConversationDestination } from "./AutomationDestination";
 import { useEffect, useRef, useState } from "react";
 import { App, Alert, Button, Collapse, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, LoadingOutlined, RedoOutlined, StopOutlined } from "@ant-design/icons";
-import { cancelAgentRun, decideAgentRunApproval, listAgentRuns, type AgentRun } from "../../services/api";
+import { cancelAgentRun, decideAgentRunApproval, type AgentRun } from "../../services/api";
 import { useCursorPages } from "./useCursorPages";
 import { DrawerListFooter } from "./DrawerListFooter";
 import { DiagnosticDetails } from "./DiagnosticDetails";
@@ -25,13 +28,15 @@ function ReadingRegion({ label, text }: { label: string; text: string }) {
     </div>
   </section>;
 }
-export function AgentRunDetails({ run, onChange, showContextProvenance = false }: { run: AgentRun; onChange: (run: AgentRun) => void; showContextProvenance?: boolean }) {
+export function AgentRunDetails({ run, onChange, showContextProvenance = false, actions }: { run: AgentRun; onChange: (run: AgentRun) => void; showContextProvenance?: boolean; actions?: RunActions }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const [recoveryRequired, setRecoveryRequired] = useState(false);
+  const [restricted, setRestricted] = useState(false);
   const [confirming, setConfirming] = useState(false); const [now, setNow] = useState(Date.now);
   const action = useRef(false); const confirmation = useRef(false); const epoch = useRef(0);
   const latest = useRef(run); latest.current = run;
-  useEffect(() => { epoch.current++; setError(null); setBusy(false); setConfirming(false); action.current = false; confirmation.current = false; return () => { epoch.current++; }; }, [run.agentRunId]);
+  useEffect(() => { epoch.current++; setError(null); setRecoveryRequired(false); setRestricted(false); setBusy(false); setConfirming(false); action.current = false; confirmation.current = false; return () => { epoch.current++; }; }, [run.agentRunId]);
   useEffect(() => {
     if (!run.approval) return;
     setNow(Date.now());
@@ -40,7 +45,7 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false }
   }, [run.approval?.expiresAt]);
   const approvalExpired = !!run.approval && new Date(run.approval.expiresAt).getTime() <= now;
   async function perform(decision: "cancel" | "approve" | "reject") {
-    if (action.current || confirmation.current || (decision !== "cancel" && approvalExpired)) return;
+    if (recoveryRequired || action.current || confirmation.current || (decision !== "cancel" && approvalExpired)) return;
     const generation = epoch.current;
     confirmation.current = true; setConfirming(true);
     confirmAction(modal, {
@@ -63,18 +68,27 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false }
     if (action.current) return;
     const generation = epoch.current; action.current = true; setBusy(true); setError(null);
     try {
-      const updated = await (decision === "cancel" ? cancelAgentRun(run) : decideAgentRunApproval(run, decision));
+      const updated = await (decision === "cancel" ? (actions?.cancel ?? cancelAgentRun)(run) : decideAgentRunApproval(run, decision));
       if (generation === epoch.current) onChange(updated);
     } catch (reason) {
-      if (generation === epoch.current) setError(reason instanceof Error ? reason.message : "The run changed. Refresh and try again.");
+      if (generation === epoch.current) { setError(reason instanceof Error ? reason.message : "The run changed. Refresh and try again."); if (actions) { setRecoveryRequired(true); if (reason instanceof IdentityError && [401,403,404].includes(reason.status)) setRestricted(true); } }
     } finally { if (generation === epoch.current) { action.current = false; setBusy(false); } }
   }
+  async function recover() {
+    if (!actions || action.current) return;
+    const generation = epoch.current; action.current = true; setBusy(true);
+    try { const saved = await actions.read(run); if (generation === epoch.current) { onChange(saved); setRecoveryRequired(false); setRestricted(false); setError(null); } }
+    catch (reason) { if (generation === epoch.current) setError(reason instanceof Error ? reason.message : "Run access could not be read."); }
+    finally { if (generation === epoch.current) { action.current = false; setBusy(false); } }
+  }
+  if (restricted) return <Alert type="error" showIcon title={error ?? "This Run is unavailable."} action={<Button disabled={busy} onClick={() => void recover()}>Reload run</Button>} />;
   return <Flex vertical gap={token.padding} className="agent-run-details" data-agent-run-id={run.agentRunId}>
     <Flex align="center" wrap gap={token.paddingXS}><AgentRunStatus run={run} />
       <Typography.Text type="secondary">{runActivationLabel(run.activationKind)}</Typography.Text>
       {run.outcome?.attentionRequired ? <Typography.Text><ExclamationCircleOutlined /> Needs attention</Typography.Text> : null}
     </Flex>
     {run.sourceBackgroundSessionId ? <Typography.Text type="secondary">Background result from <ConversationDestination sessionId={run.sourceBackgroundSessionId} /></Typography.Text> : null}
+    {run.taskIntent ? <ReadingRegion label="Original task" text={run.taskIntent} /> : null}
     {run.progress ? <Typography.Paragraph className="background-work-progress" style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}
     {run.executionDiagnostic?.protocolRecovery ? <section aria-label="Response recovery" className="background-work-detail-section">
       <Flex vertical gap={token.paddingXS}>
@@ -115,7 +129,7 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false }
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
     ]} />
-    {showContextProvenance ? <section aria-label="Context provenance" className="background-work-detail-section"><Flex vertical gap={token.paddingXS}>
+    {showContextProvenance && run.contextProvenanceAvailable !== false ? <section aria-label="Context provenance" className="background-work-detail-section"><Flex vertical gap={token.paddingXS}>
       <Typography.Text strong>Context provenance</Typography.Text>
       <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Read-only section metadata from the last model request. Contents and credentials are excluded.</Typography.Paragraph>
       {run.contextManifest ? <Collapse size="small" items={(["Core", "Runtime", "Evidence"] as const).map(layer => ({
@@ -155,19 +169,19 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false }
       <Flex wrap gap={token.paddingXS}><Button type="primary" disabled={busy || confirming || approvalExpired} loading={busy} onClick={() => void perform("approve")}>Approve action</Button>
         <Button disabled={busy || confirming || approvalExpired} onClick={() => void perform("reject")}>Reject action</Button></Flex>
     </Flex> : null}
-    {run.cancellationAvailable ? <Button danger style={{ alignSelf: "flex-start" }} disabled={busy || confirming} onClick={() => void perform("cancel")}>Cancel run</Button> : null}
+    {run.cancellationAvailable ? <Button danger style={{ alignSelf: "flex-start" }} disabled={busy || confirming || recoveryRequired} onClick={() => void perform("cancel")}>Cancel run</Button> : null}
     {run.cancellationRequested && run.status !== "cancelled" ? <Typography.Text type="secondary" role="status">Cancellation requested</Typography.Text> : null}
-    {error ? <Alert type="error" showIcon title={error} /> : null}
+    {error ? <Alert type="error" showIcon title={error} description={recoveryRequired ? "Read saved Run facts before another action. Reload does not repeat cancellation." : undefined} action={recoveryRequired ? <Button disabled={busy} onClick={() => void recover()}>Reload run</Button> : undefined} /> : null}
   </Flex>;
 }
-export function SessionRunHistory({ sessionId, open }: { sessionId: string; open: boolean }) {
-  const page = useCursorPages(sessionId, open, listAgentRuns);
+export function SessionRunHistory({ sessionId, open, source = legacyActivitySource }: { sessionId: string; open: boolean; source?: ActivitySource }) {
+  const page = useCursorPages(`${source.scope}:${sessionId}`, open, (_scope, cursor) => source.listRuns(sessionId, cursor));
   const { token } = theme.useToken();
   return <Flex vertical gap={token.padding}>
     <Typography.Text strong>Run history</Typography.Text>
     {page.loading ? <Spin aria-label="Loading run history" /> : page.items.length === 0 && !page.error ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet" /> : null}
-    {page.items.map(run => <section key={run.agentRunId} className="agent-run-history-item" aria-label={`${runActivationLabel(run.activationKind)} run`}>
-      <AgentRunDetails run={run} onChange={updated => page.replace(rows => rows.map(row => row.agentRunId === updated.agentRunId ? updated : row))} />
+    {(source.tenantId && page.error ? [] : page.items).map(run => <section key={run.agentRunId} className="agent-run-history-item" aria-label={`${runActivationLabel(run.activationKind)} run`}>
+      <AgentRunDetails run={run} actions={source.actions} onChange={updated => page.replace(rows => rows.map(row => row.agentRunId === updated.agentRunId ? updated : row))} />
     </section>)}
     {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
     <DrawerListFooter loadingMore={page.loadingMore} hasMore={page.hasMore} error={page.error} count={page.items.length} onLoadMore={() => void page.loadMore()} onRetry={() => void page.retry()} />

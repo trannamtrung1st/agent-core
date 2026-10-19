@@ -661,6 +661,38 @@ body,
 
 .background-work-drawer .ant-drawer-body {
   padding: var(--ac-space-section);
+  container: activity-inspector / inline-size;
+}
+
+/* Inspection labels and filtered empty states remain readable on elevated surfaces. */
+.background-work-drawer :is(.ant-typography-secondary, .ant-empty-description, .ant-descriptions-item-label),
+.activity-collection :is(.ant-typography-secondary, .ant-empty-description) {
+  color: var(--ac-color-text-secondary);
+}
+
+@container activity-inspector (max-width: 480px) {
+  .background-work-drawer .ant-alert {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    row-gap: var(--ac-space-default);
+  }
+
+  .background-work-drawer .ant-alert-section {
+    grid-column: 2;
+  }
+
+  .background-work-drawer .ant-alert-actions {
+    grid-column: 2;
+    margin-inline-start: 0;
+  }
+
+  .background-work-drawer .ant-alert-actions .ant-btn {
+    max-width: 100%;
+    height: auto;
+    min-height: 40px;
+    white-space: normal;
+  }
 }
 
 .background-work-timestamps,

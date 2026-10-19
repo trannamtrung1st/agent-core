@@ -68,6 +68,8 @@ export type SessionResponse = {
 };
 
 export type AgentRun = {
+  taskIntent?: string | null;
+  contextProvenanceAvailable?: boolean;
   contextManifest?: { contextFormatVersion: number; coreContractVersion: number; fingerprint: string; fieldSources?: Record<string, { kind: string; revision: string }> | null; sections: { id: string; layer: "Core" | "Runtime" | "Evidence"; source: string; semantics: string; sourceRevision: string | null; characters: number; utf8Bytes: number; estimatedTokens: number; omitted?: boolean; originalCharacters?: number | null }[] } | null;
   executionDiagnostic?: { remainingBudgetMs: number; lastTool: string | null; recordedToolResults: number; failedAttempts: { attempt: number; code: string; reason: string | null; channel: string | null; maxOutputTokens?: number | null; transport?: string | null }[];
     protocolRecovery?: { reason: string; channel: string | null; eligibility: string; strategy: string | null; outcome: string | null } | null } | null;
@@ -89,10 +91,10 @@ export type AgentRun = {
 export type CursorPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
 export type BackgroundSession = {
   session: CatalogItem;
-  origin: { kind: string; initialAgentRunId: string; parentSessionId: string | null; parentAgentRunId: string | null;
+  origin: { kind: string; initialAgentRunId: string | null; parentSessionId: string | null; parentAgentRunId: string | null;
     automationId: string | null; occurrenceId: string | null; reportCompletion: boolean };
   completionDelivery?: { status: string; targetSessionId: string | null; parentAgentRunId: string | null; reason: string | null };
-  originalTitle?: string | null; surfaces: string[]; initialRun: AgentRun | null; canContinueInChat: boolean; artifactCount: number; artifactCountHasMore: boolean;
+  originalTitle?: string | null; surfaces: string[]; initialRun: AgentRun | null; canContinueInChat: boolean; securityRevision?: number; artifactCount: number | null; artifactCountHasMore: boolean;
 };
 
 export type SessionAutomation = {

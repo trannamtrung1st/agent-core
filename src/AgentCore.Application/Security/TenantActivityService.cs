@@ -11,8 +11,8 @@ public sealed record TenantActivitySession(TenantSessionMetadata Session, Sessio
 public sealed record TenantActivityPage<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize, long SecurityRevision);
 public sealed record TenantActivityRun(Guid RunId, Guid SessionId, Guid AgentInstanceId, TrustedExecutionContext Context,
     AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, ActivationKind ActivationKind,
-    AgentRunOutputContract OutputContract, int AttemptCount, int MaxAttempts, string? ProgressSummary, string? Objective, string? OutcomeText, AgentRunOutcomeKind? OutcomeKind,
-    string? FailureCode, string? FailureSummary, bool CanCancel);
+    AgentRunOutputContract OutputContract, string ModelCatalogKey, int AttemptCount, int MaxAttempts, string? ProgressSummary, string? Objective, string? OutcomeText, AgentRunOutcomeKind? OutcomeKind,
+    string? FailureCode, string? FailureSummary, Guid? DiagnosticId, bool CancellationRequested, bool CanCancel);
 public sealed record TenantActivityDelivery(string Status, Guid? TargetSessionId, string? Reason);
 public sealed record TenantBackgroundDetail(TenantActivitySession Session, TenantActivityRun? InitialRun,
     string? InitialTitle, TenantActivityDelivery? CompletionDelivery);
@@ -33,6 +33,26 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
         await Current(state, human, ct).ConfigureAwait(false);
         return new(items, saved.Total, saved.Page, saved.PageSize, state.Tenant.Revision);
     }
+    public async ValueTask<TenantActivityPage<TenantBackgroundDetail>> ListBackgroundAsync(Guid tenant, Guid instance, TenantSessionInitiator human,
+        int page = 0, int pageSize = 20, CancellationToken ct = default)
+    {
+        var saved = await ListSessionsAsync(tenant, instance, human, page, pageSize, backgroundOnly: true, ct).ConfigureAwait(false);
+        var items = new List<TenantBackgroundDetail>();
+        foreach (var row in saved.Items) items.Add(await ReadBackgroundAsync(tenant, instance, row.Session.Owner.SessionId, human, ct).ConfigureAwait(false));
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (state.Tenant.Revision != saved.SecurityRevision) throw new SecurityConflictException("stale_revision");
+        return new(items, saved.Total, saved.Page, saved.PageSize, saved.SecurityRevision);
+    }
+    public async ValueTask<TenantActivityPage<TenantActivityRun>> ListAgentRunsAsync(Guid tenant, Guid instance, TenantSessionInitiator human,
+        int page = 0, int pageSize = 20, CancellationToken ct = default)
+    {
+        var (state, _) = await Agent(tenant, instance, human, ct).ConfigureAwait(false);
+        var allowedSessions = await Readable(state, human.PrincipalId, "sessions.read", TenantSessionRules.TryId, ct).ConfigureAwait(false);
+        var allowedRuns = await Readable(state, human.PrincipalId, "agent-runs.read", TenantRunRules.TryId, ct).ConfigureAwait(false);
+        var saved = await runs.ListTenantSessionRunsAsync(tenant, null, allowedRuns, Math.Clamp(page, 0, 100_000), Math.Clamp(pageSize, 1, 100), ct, instance, allowedSessions).ConfigureAwait(false);
+        var items = new List<TenantActivityRun>(); foreach (var run in saved.Items) items.Add(await Run(state, run, human, ct).ConfigureAwait(false));
+        await Current(state, human, ct).ConfigureAwait(false); return new(items, saved.Total, saved.Page, saved.PageSize, state.Tenant.Revision);
+    }
     public async ValueTask<TenantActivitySession> ReadSessionAsync(Guid tenant, Guid instance, Guid sessionId, TenantSessionInitiator human, CancellationToken ct = default)
     {
         var (state, agent, session) = await OwnedSession(tenant, instance, sessionId, human, ct).ConfigureAwait(false);
@@ -47,6 +67,13 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
         var saved = await runs.ListTenantSessionRunsAsync(tenant, sessionId, allowed, Math.Clamp(page, 0, 100_000), Math.Clamp(pageSize, 1, 100), ct).ConfigureAwait(false);
         var items = new List<TenantActivityRun>(); foreach (var run in saved.Items) items.Add(await Run(state, run, human, ct).ConfigureAwait(false));
         await Current(state, human, ct).ConfigureAwait(false); return new(items, saved.Total, saved.Page, saved.PageSize, state.Tenant.Revision);
+    }
+    public async ValueTask<TenantActivityRun> ReadAgentRunAsync(Guid tenant, Guid instance, Guid runId, TenantSessionInitiator human, CancellationToken ct = default)
+    {
+        _ = await Agent(tenant, instance, human, ct).ConfigureAwait(false);
+        var run = await runs.FindTenantRunAsync(tenant, runId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        if (run.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable");
+        return await ReadRunAsync(tenant, instance, run.SessionId, runId, human, ct).ConfigureAwait(false);
     }
     public async ValueTask<TenantActivityRun> ReadRunAsync(Guid tenant, Guid instance, Guid sessionId, Guid runId, TenantSessionInitiator human, CancellationToken ct = default)
     {
@@ -97,7 +124,7 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
     {
         var s = saved.Snapshot; var tenant = saved.Owner.TenantId;
         var manage = await Can(state, human.PrincipalId, "sessions.manage", TenantSessionRules.Scope(tenant, saved.Owner.SessionId), ct).ConfigureAwait(false);
-        var canContinue = manage && agent.Instance.Lifecycle == AgentInstanceLifecycle.Active && s.ArchivedAt is null
+        var canContinue = (manage || s.Surfaces.HasFlag(SessionSurface.ChatList)) && agent.Instance.Lifecycle == AgentInstanceLifecycle.Active && s.ArchivedAt is null
             && s.Surfaces.HasFlag(SessionSurface.BackgroundWork) && !SessionLifecycle.IsTerminal(s.LifecycleStatus) && s.Status is not (SessionStatus.Ended or SessionStatus.Ending)
             && state.SystemIdentities.Any(i => i.PrincipalId == agent.PrincipalId && i.Status == IdentityStatus.Active)
             && state.Principals.Any(p => p.PrincipalId == agent.PrincipalId && p.Status == IdentityStatus.Active)
@@ -110,8 +137,8 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
     }
     private async ValueTask<TenantActivityRun> Run(TenantSecurityState state, AgentRun run, TenantSessionInitiator human, CancellationToken ct) =>
         new(run.AgentRunId, run.SessionId, run.AgentInstanceId, run.Admission.ExecutionContext!, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc,
-            run.Admission.Activation.Kind, run.Admission.OutputContract, run.AttemptCount, run.MaxAttempts, run.Progress?.Summary, run.Admission.TaskIntent?.Text, run.Result?.Text, run.Result?.OutcomeKind,
-            run.Failure?.Code, run.Failure?.Summary, !run.IsTerminal && await Can(state, human.PrincipalId, "agent-runs.cancel", TenantRunRules.Scope(state.Tenant.TenantId, run.AgentRunId), ct).ConfigureAwait(false)
+            run.Admission.Activation.Kind, run.Admission.OutputContract, run.PinnedModel.CatalogKey, run.AttemptCount, run.MaxAttempts, run.Progress?.Summary, run.Admission.TaskIntent?.Text, run.Result?.Text, run.Result?.OutcomeKind,
+            run.Failure?.Code, run.Failure?.Summary, run.Failure?.DiagnosticId, run.CancellationRequested, !run.IsTerminal && !run.CancellationRequested && await Can(state, human.PrincipalId, "agent-runs.cancel", TenantRunRules.Scope(state.Tenant.TenantId, run.AgentRunId), ct).ConfigureAwait(false)
                 && await Can(state, human.PrincipalId, "agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false));
     private delegate bool ResourceId(AccessScope scope, out Guid id);
     private async ValueTask<IReadOnlyList<Guid>?> Readable(TenantSecurityState state, Guid actor, string permission, ResourceId parse, CancellationToken ct)

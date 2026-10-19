@@ -1,3 +1,5 @@
+import { tenantActivitySource } from "../../services/tenantActivity";
+import { legacyActivitySource } from "../../services/activitySource";
 import { TenantSessionFilesDrawer } from './TenantSessionFilesDrawer';
 import { tenantMayManageSession, tenantCanCreateChat, tenantRunControl } from '../../services/tenantChat';
 import { TenantConversationApprovals } from './TenantConversationApprovals';
@@ -7,7 +9,7 @@ import { newChatPath } from '../../app/sessionRoute';
 import { followAppLink } from "../../app/appLink";
 import { appMessageConfig } from "../../app/appFeedback";
 import { adminHomePath } from "../../app/appRoute";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useWorkReadState } from "./workReadState";
 import { messageTimestamp } from "./chatTime";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
@@ -57,7 +59,7 @@ import { imageModelCompatibility } from "./imageModelCompatibility";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
-import { getSession, listBackgroundSessions, listSessionAutomations, cancelSessionAutomation, type AgentRun } from "../../services/api";
+import { getSession, listSessionAutomations, cancelSessionAutomation, type AgentRun } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { SessionSandboxDrawer } from './SessionSandboxDrawer';
 import { TenantSessionSandboxDrawer } from './TenantSessionSandboxDrawer';
@@ -122,11 +124,12 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
   const sandboxButtonRef = useRef<HTMLButtonElement>(null);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
-  const { isUnread } = useWorkReadState();
+  const activitySource = useMemo(() => tenantContext && backgroundInstanceId ? tenantActivitySource(tenantContext.tenant.tenantId, backgroundInstanceId, tenantContext.principalId) : legacyActivitySource, [tenantContext?.tenant.tenantId, tenantContext?.principalId, backgroundInstanceId]);
+  const workButtonRef = useRef<HTMLButtonElement>(null);
+  const { isUnread } = useWorkReadState(tenantContext ? `${tenantContext.tenant.tenantId}:${tenantContext.principalId}` : undefined);
   const attentionCount = attentionItems.filter(item => item.delivery === "pending" || item.delivery !== "handled" && isUnread(item.run)).length;
 
   useEffect(() => {
-    if (organization) { setAttentionItems([]); setBackgroundInstanceId(null); return; }
     if (!state.sessionId) {
       setAttentionItems([]);
       setBackgroundInstanceId(null);
@@ -148,17 +151,18 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
         setBackgroundInstanceId(owner);
         const items: { run: AgentRun; delivery?: string }[] = []; let cursor: string | undefined;
         do {
-          const page = await listBackgroundSessions(owner, cursor, 100);
+          const source = tenantContext ? tenantActivitySource(tenantContext.tenant.tenantId, owner, tenantContext.principalId) : legacyActivitySource;
+          const page = await source.listBackground(owner, cursor, 100);
           for (const item of page.items) if (item.initialRun && (item.completionDelivery?.status === "pending" || item.initialRun.outcome?.attentionRequired)) items.push({ run: item.initialRun, delivery: item.completionDelivery?.status });
           cursor = page.hasMore ? page.nextCursor ?? undefined : undefined;
         } while (current && cursor);
         if (current && request === generation) setAttentionItems(items);
-      } catch { /* Preserve the last known attention count during a transient failure. */ }
+      } catch { if (tenantContext && current && request === generation) setAttentionItems([]); }
     }
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5_000);
     return () => { current = false; window.clearInterval(timer); };
-  }, [state.sessionId, organization]);
+  }, [state.sessionId, tenantContext?.tenant.tenantId, tenantContext?.principalId]);
   const [scheduleEpoch, setScheduleEpoch] = useState(0);
   const outputStateRef = useRef(state.outputState);
   const { isNarrow, siderWidth } = useViewport();
@@ -406,7 +410,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
               inSession={inSession && !readonly && (!organization || tenantMayManageSession(state.sessionId))}
               endDisabled={organization && state.liveResponseId != null}
               onSchedules={!organization && inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
-              onBackgroundWork={!organization && state.sessionId ? () => setWorkOpen(true) : undefined}
+              backgroundButtonRef={workButtonRef} onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
               filesButtonRef={filesButtonRef}
               onFiles={tenantContext && state.sessionId ? () => setFilesOpen(true) : undefined}
               sandboxButtonRef={sandboxButtonRef}
@@ -582,8 +586,8 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
             </div>
           </Content>
         </Layout>
-        {backgroundInstanceId ? <BackgroundWorkDrawer instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
-          onClose={() => setWorkOpen(false)} onAddReference={(sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label)} /> : null}
+        {backgroundInstanceId ? <BackgroundWorkDrawer source={activitySource} instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
+          onClose={() => setWorkOpen(false)} afterClose={() => workButtonRef.current?.focus()} onAddReference={!organization ? (sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label) : undefined} /> : null}
         {tenantContext && state.sessionId && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
         {tenantContext && state.sessionId && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
         {!organization && state.sessionId && <SessionSandboxDrawer key={state.sessionId} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} readOnly={readonly} onClose={() => setSandboxOpen(false)} />}

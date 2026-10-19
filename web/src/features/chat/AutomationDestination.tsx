@@ -1,9 +1,10 @@
+import { sessionPath } from "../../app/sessionRoute";
 import { followAppLink } from "../../app/appLink";
 import { Button, Flex, Typography } from "antd";
 import type { AutomationTarget, AutomationDelivery } from "../../services/api";
 
 export function ConversationDestination({ sessionId, currentSessionId }: { sessionId: string; currentSessionId?: string }) {
-  const path = `/c/${encodeURIComponent(sessionId)}`;
+  const path = sessionPath(sessionId);
   return <Typography.Link href={path} onClick={followAppLink}>
     {sessionId === currentSessionId ? "This conversation" : `Conversation ${sessionId.slice(0, 8)}`}
   </Typography.Link>;
