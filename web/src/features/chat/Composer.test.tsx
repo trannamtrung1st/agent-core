@@ -434,3 +434,14 @@ describe("Composer voice toolbar", () => {
     expect(onMute).not.toHaveBeenCalled();
   });
 });
+
+ it('offers only file attachment content in the plain tenant composer and accepts pasted files', async () => {
+    vi.clearAllMocks();
+    render(<Composer {...emptyComposerProps()} plainTextOnly fileAttachmentsEnabled />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add content' }));
+    expect(await screen.findByText('Attach file')).toBeInTheDocument();
+    expect(screen.queryByText('Use Skill')).not.toBeInTheDocument(); expect(screen.queryByText('Reference resource')).not.toBeInTheDocument();
+    const file = new File(['plain'], 'notes.txt', { type: 'text/plain' });
+    fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), { clipboardData: { files: [file] } });
+    expect(queueComposerFiles).toHaveBeenCalledWith([file]); expect(queueComposerFiles).toHaveBeenCalledTimes(1);
+ });

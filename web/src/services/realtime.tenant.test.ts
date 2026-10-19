@@ -39,3 +39,20 @@ it('acknowledges only the bounded rendered block list with the current tenant at
     attachmentId: 'attachment-one', responseId: 'response-one', payload: { textEndExclusive: 10, blockIds: ['b1'] }
   })));
 });
+
+it('sends file-only tenant input with exact selected IDs and fresh witnesses while omitting legacy behavior and rich parts', async () => {
+  tenant.witness.mockResolvedValue({ expectedRevision: 5, expectedSessionRevision: 8 });
+  const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke } as never);
+  useSessionStore.setState({ draft: '', pendingAttachments: [{ localId: 'local', attachmentId: 'file-one', displayName: 'notes.txt', contentType: 'text/plain', byteSize: 4, status: 'ready', progress: 100, error: null }] });
+  await sendDraft();
+  expect(invoke).toHaveBeenCalledWith('SendText', expect.objectContaining({ payload: { text: '', attachmentIds: ['file-one'], expectedRevision: 5, expectedSessionRevision: 8 } }));
+  expect(useSessionStore.getState().pendingAttachments).toEqual([]);
+});
+
+ it('keeps the conversation, draft and selected files after child file access is refused', async () => {
+   tenant.witness.mockResolvedValue({ expectedRevision: 5, expectedSessionRevision: 8 });
+   const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { category: 'Authorization', code: 'attachment_unavailable', message: 'Remove the unavailable file.' } }); hooks.setConnection({ invoke } as never);
+   const file = { localId: 'local', attachmentId: 'file-one', displayName: 'notes.txt', contentType: 'text/plain', byteSize: 4, status: 'ready' as const, progress: 100, error: null };
+   useSessionStore.setState({ draft: 'Keep this draft', pendingAttachments: [file] }); await sendDraft();
+   expect(useSessionStore.getState()).toMatchObject({ sessionId: 'session-one', connection: 'ready', draft: 'Keep this draft', pendingAttachments: [file] });
+ });

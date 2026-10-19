@@ -30,7 +30,10 @@ public static class TenantAttachmentBindingRules
         IReadOnlyList<AttachmentRecord> sources, IamAuthorizer iam, CancellationToken ct)
     {
         foreach (var source in sources)
-            await TenantAttachmentRules.PermissionsAsync(state, human, session, source.AttachmentId, "attachments.read", iam, ct).ConfigureAwait(false);
+        {
+            try { await TenantAttachmentRules.PermissionsAsync(state, human, session, source.AttachmentId, "attachments.read", iam, ct).ConfigureAwait(false); }
+            catch (AccessDeniedException) { throw new AccessDeniedException("attachment_unavailable"); }
+        }
     }
     public static AttachmentRecord Bound(AttachmentRecord source, ConversationEntry input) => source with {
         State = AttachmentState.Bound, EntryId = input.EntryId, ExpiresAt = null, BoundAt = input.CreatedAt, StageForNextTurn = false };

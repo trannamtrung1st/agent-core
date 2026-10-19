@@ -535,6 +535,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
                   ) : (
                     <Composer
                       plainTextOnly={organization}
+                      fileAttachmentsEnabled={organization}
                       draft={state.draft}
                       parts={state.draftParts}
                       instanceId={inSession ? backgroundInstanceId : state.newChatIdentityKey.startsWith("managed:") ? state.newChatIdentityKey.slice(8) : null}

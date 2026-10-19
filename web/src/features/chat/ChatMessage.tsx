@@ -50,7 +50,7 @@ export function ChatMessage({
   const files = hasFiles && entry.attachments && sessionId ? (
     <div className="entry-files">
       {entry.attachments.map((file) => (
-        <HistoryAttachmentView key={file.attachmentId} sessionId={sessionId} file={file} />
+        <HistoryAttachmentView key={file.attachmentId} sessionId={sessionId} tenantId={tenantId} file={file} />
       ))}
     </div>
   ) : null;
@@ -190,6 +190,7 @@ function RichBlock({ sessionId, tenantId, block }: { sessionId: string | null; t
       <div className="entry-block" data-kind="attachment">
         <HistoryAttachmentView
           sessionId={sessionId}
+          tenantId={tenantId}
           file={{
             attachmentId: block.attachmentId,
             displayName: block.text || block.fallbackText || "Attachment",

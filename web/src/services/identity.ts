@@ -99,5 +99,27 @@ export async function identityReadResponse(path: string, signal: AbortSignal): P
   if (response.status === 401) window.dispatchEvent(new Event('agentcore:authentication-expired'));
   return response;
 }
+/** Multipart upload with cookie/CSRF authority and native progress. Never retries a mutation. */
+export async function identityUpload<T>(path: string, body: FormData, signal: AbortSignal, onProgress: (percent: number) => void): Promise<T> {
+  const token = await csrfToken(); signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const cleanup = () => signal.removeEventListener('abort', abort);
+    xhr.open('POST', path); xhr.withCredentials = true;
+    xhr.setRequestHeader('Accept', 'application/json'); xhr.setRequestHeader('X-AgentCore-CSRF', token);
+    xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); };
+    xhr.onload = () => { void (async () => {
+      try {
+        await requireIdentityResponse(new Response(xhr.responseText, { status: xhr.status }), path);
+        signal.throwIfAborted();
+        try { resolve(JSON.parse(xhr.responseText) as T); } catch { reject(new IdentityCompletionError()); }
+      } catch (error) { reject(error); } finally { cleanup(); }
+    })(); };
+    xhr.onerror = () => { cleanup(); reject(new Error('Upload could not be confirmed. Retry the same file to check its saved upload.')); };
+    xhr.onabort = () => { cleanup(); reject(new DOMException('Aborted', 'AbortError')); };
+    signal.addEventListener('abort', abort, { once: true }); xhr.send(body);
+  });
+}
 export const tenantApi = (tenantId: string, suffix: string) => `/api/v2/tenants/${encodeURIComponent(tenantId)}${suffix}`;
 export const membershipsApi = (page: number, q = '') => `/api/v2/account/tenants?page=${page}&pageSize=10&q=${encodeURIComponent(q)}`;

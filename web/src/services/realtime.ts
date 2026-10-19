@@ -276,6 +276,7 @@ async function invoke(
     // Authorization. Reattach without replaying this command; actual access is checked again.
     void recoverFromSequenceGap('explicit');
   } else if (chatTenantId && result.error?.category === 'Authorization'
+    && !(method === 'SendText' && result.error.code === 'attachment_unavailable')
     && !['receipt_unavailable', 'receipt_out_of_bounds', 'UnknownResponse', 'tenant_runtime_unavailable'].includes(result.error.code ?? '')) {
     // A queued receipt can lose to Stop's interrupted-row commit. That refusal (and an
     // unknown response target) says nothing about this human's access to the conversation.
@@ -2909,7 +2910,6 @@ export function composerStopEnabled(): boolean {
 }
 
 export async function queueComposerFiles(fileList: File[]): Promise<void> {
-  if (chatTenantId) { useSessionStore.setState({ error: 'Files are not available in this conversation.', errorFatal: false }); return; }
   let snapshot = useSessionStore.getState();
   if (isReadonlySession(snapshot)) {
     return;
@@ -3303,7 +3303,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     try {
       const ack = await dispatchHubCommand((sequence) =>
         invoke("SendText", "user.text", payload, sequence, null, eventId)
-      , chatTenantId ? async () => { payload = { text, ...await tenantTextWitness(snapshot.sessionId!) }; } : undefined);
+      , chatTenantId ? async () => { payload = { text, ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...await tenantTextWitness(snapshot.sessionId!) }; } : undefined);
       if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
       if (!ack?.accepted) {
         clearAwaitingAgentResponseStart();

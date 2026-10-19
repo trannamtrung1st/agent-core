@@ -36,6 +36,12 @@ describe("AttachmentPreview", () => {
     expect(screen.getByText("PDF")).toBeInTheDocument();
   });
 
+  it("carries tenant ownership into Attachment preview/download references", async () => {
+    render(<HistoryAttachmentView sessionId="s1" tenantId="tenant-one" file={{ attachmentId: "a1", displayName: "provided.txt", contentType: "text/plain" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Download provided.txt" }));
+    await waitFor(() => expect(downloadFile).toHaveBeenCalledWith({ kind: "attachment", tenantId: "tenant-one", sessionId: "s1", attachmentId: "a1" }, expect.any(AbortSignal)));
+  });
+
   it("groups long filenames with preview/download and retries a failed download without duplication", async () => {
     const name = "Tổng hợp các đơn vị cung cấp dịch vụ cưới.xlsx";
     let reject!: (error: Error) => void;

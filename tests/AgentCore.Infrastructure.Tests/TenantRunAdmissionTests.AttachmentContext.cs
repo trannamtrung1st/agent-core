@@ -41,12 +41,12 @@ public sealed partial class TenantRunAdmissionTests
     }
     [Theory] [InlineData(false, "sessions.read")] [InlineData(true, "sessions.read")]
     [InlineData(false, "attachments.read")] [InlineData(true, "attachments.read")]
-    public async Task Tenant_attachment_context_missing_independent_executor_read_hides_names_ids_and_bytes_before_processing(bool sqlite, string missing)
+    public async Task Tenant_attachment_context_missing_independent_executor_read_hides_source_facts_but_preserves_submitted_selectors(bool sqlite, string missing)
     {
         await using var f = await Fixture.Create(sqlite, attachmentAuthority: true); var v = await ContextCase(f, new[] { "sessions.read", "attachments.read" }.Where(p => p != missing).ToArray());
         var probe = new ContextFileProbe((ITenantAttachmentStore)f.Attachments); var result = await ContextService(f, probe).PrepareAsync(v.Run, v.Snapshot, true);
         Assert.Equal(0, probe.Reads); Assert.Empty(result.Manifest); Assert.Empty(result.Contents); Assert.Empty(result.Sources);
-        var json = JsonSerializer.Serialize(result.History); Assert.DoesNotContain("Private source.txt", json); Assert.DoesNotContain(v.Id.ToString("D"), json);
+        var json = JsonSerializer.Serialize(result.History); Assert.DoesNotContain("Private source.txt", json); Assert.Contains(v.Id.ToString("D"), json); Assert.Contains("User-provided attachment references", json);
         Assert.Contains("unavailable under current access", json);
         Assert.NotNull(Assert.Single(v.Snapshot.Entries).Attachments); // Prompt projection must never rewrite durable bindings.
     }

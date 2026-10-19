@@ -204,7 +204,7 @@ function ComposerActionTooltip({ suppressed, title, children }: { suppressed: bo
 }
 
 export function Composer({
-  draft, parts, instanceId, onPartsChange, plainTextOnly = false,
+  draft, parts, instanceId, onPartsChange, plainTextOnly = false, fileAttachmentsEnabled = false,
   canSend,
   canStop,
   approvalPending = false,
@@ -237,6 +237,7 @@ export function Composer({
 }: {
   draft: string;
   plainTextOnly?: boolean;
+  fileAttachmentsEnabled?: boolean;
   parts?: MessagePart[] | null;
   instanceId?: string | null;
   onPartsChange?: (parts: MessagePart[]) => void;
@@ -300,7 +301,7 @@ export function Composer({
   }
 
   function takeFiles(list: FileList | File[] | null) {
-    if (!list || !ready) {
+    if (!list || !ready || plainTextOnly && !fileAttachmentsEnabled) {
       return;
     }
 
@@ -430,7 +431,7 @@ export function Composer({
             ))}
           </ul>
         ) : null}
-        {plainTextOnly ? <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (canSend) onSend(); } }} /> : <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>}
+        {plainTextOnly ? <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} onPaste={event => { if (fileAttachmentsEnabled && event.clipboardData.files.length) { event.preventDefault(); takeFiles(event.clipboardData.files); } }} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (canSend) onSend(); } }} /> : <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>}
         <input
           ref={fileInput}
           className="attach-input"
@@ -446,7 +447,7 @@ export function Composer({
         <Flex justify="space-between" align="center" gap={token.paddingXS} wrap="wrap" className="composer-toolbar">
           <Flex gap={token.paddingXS} align="center" wrap="wrap" className="composer-toolbar-start">
             {modelControls}
-            {!plainTextOnly && <Dropdown
+            {(!plainTextOnly || fileAttachmentsEnabled) && <Dropdown
               open={addOpen}
               onOpenChange={setAddOpen}
               classNames={{ root: "composer-add-menu" }}
@@ -454,8 +455,10 @@ export function Composer({
               menu={{
                 items: [
                   { key: "attach", label: "Attach file", icon: <PaperClipOutlined /> },
-                  { key: "invocation", label: "Use Skill", icon: <CodeOutlined /> },
-                  { key: "homeFile", label: "Reference resource", icon: <FolderOpenOutlined /> }
+                  ...(!plainTextOnly ? [
+                    { key: "invocation", label: "Use Skill", icon: <CodeOutlined /> },
+                    { key: "homeFile", label: "Reference resource", icon: <FolderOpenOutlined /> }
+                  ] : [])
                 ],
                 onClick: ({ key }) => {
                   setAddOpen(false);

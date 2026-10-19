@@ -29,7 +29,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", session.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
         if (state.Tenant.Revision != expectedSecurityRevision || session.Snapshot.Revision != expectedSessionRevision) throw new SecurityConflictException("stale_revision");
-        if (messageId == Guid.Empty || string.IsNullOrWhiteSpace(text) && requested.Length == 0 || text.Length > 8000) throw AgentCoreErrors.Validation("A message ID and text up to 8000 characters or an attachment are required.");
+        if (text is null || messageId == Guid.Empty || string.IsNullOrWhiteSpace(text) && requested.Length == 0 || text.Length > 8000) throw AgentCoreErrors.Validation("A message ID and text up to 8000 characters or an attachment are required.");
         var (agent, resolved) = await configurations.ResolveAsync(tenant, session.Owner.AgentInstanceId, ct).ConfigureAwait(false);
         if (agent.PrincipalId != session.Owner.ExecutorPrincipalId) throw new AccessDeniedException("executor_unavailable");
         if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
@@ -67,6 +67,23 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var saved = result.Run;
         return new(result.Created, saved.AgentRunId, result.EntryId, saved.ResponseId!.Value, saved.ActivationId, saved.Admission.Activation.RootActivationId,
             result.SessionRevision, result.Created ? next.Tenant.Revision : state.Tenant.Revision);
+    }
+    // A cached transport acknowledgement is a fact about earlier admission, never a file-read token.
+    public async ValueTask RequireMessageAttachmentsAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
+        IReadOnlyList<Guid> attachmentIds, CancellationToken ct = default)
+    {
+        if (attachmentIds.Count > AttachmentLimits.MaxPerMessage || attachmentIds.Any(id => id == Guid.Empty) || attachmentIds.Distinct().Count() != attachmentIds.Count)
+            throw new AccessDeniedException("attachment_unavailable");
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
+        await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false);
+        foreach (var id in attachmentIds)
+        {
+            var source = attachments is null ? null : await attachments.FindTenantAsync(tenant, sessionId, id, ct).ConfigureAwait(false);
+            if (source is null) throw new AccessDeniedException("attachment_unavailable");
+            await TenantAttachmentBindingRules.PermissionsAsync(state, initiator.PrincipalId, sessionId, [source], authorizer, ct).ConfigureAwait(false);
+        }
+        var after = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
+        if (after.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
     }
     public async ValueTask<TenantRunMetadata> ReadAsync(Guid tenant, Guid runId, TenantSessionInitiator initiator, CancellationToken ct = default)
     {

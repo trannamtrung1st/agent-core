@@ -15,7 +15,7 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "parent")] [InlineData(true, "parent")] [InlineData(false, "review")] [InlineData(true, "review")]
     public async Task Tenant_attachment_context_uses_only_independent_current_executor_reads_and_preserves_original_binding(bool sqlite, string mode)
     {
-        var allowed = mode == "allowed";
+        var allowed = mode == "allowed"; Guid? agentAssignment = null;
         var root = Path.Combine(Path.GetTempPath(), "tenant-attachment-binding-http-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
@@ -33,7 +33,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 var access = factory.Services.GetRequiredService<TenantAccessService>();
                 var role = await access.SaveRoleAsync(human.PrincipalId, tenant, null, "Agent attachment reads", mode == "parent" ? ["attachments.read"] : ["sessions.read", "attachments.read"], await Revision(owner, tenant));
-                await access.AssignRoleAsync(human.PrincipalId, tenant, agent.GetProperty("principalId").GetGuid(), role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
+                agentAssignment = (await access.AssignRoleAsync(human.PrincipalId, tenant, agent.GetProperty("principalId").GetGuid(), role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant))).AssignmentId;
                 if (mode == "review") await factory.Services.GetRequiredService<TenantOperationPolicyService>().SaveAsync(tenant,
                     new(human.AccountId, login.Session.SessionId, human.PrincipalId), "attachments.read", new(OperationApprovalMode.Always, false), await Revision(owner, tenant), 0);
                 state = (await factory.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
@@ -51,7 +51,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.NotEmpty(model.Requests);
             var prompt = string.Join("\n", model.Requests.SelectMany(r => r.Messages).Select(m => m.Text + "\n" + string.Join("\n", (m.Parts ?? []).OfType<ModelTextContent>().Select(p => p.Text))));
             if (allowed) { Assert.Contains("Private attachment body", prompt); Assert.Contains("Private file label.txt", prompt); }
-            else { Assert.DoesNotContain("Private attachment body", prompt); Assert.DoesNotContain("Private file label.txt", prompt); Assert.DoesNotContain(id.ToString("D"), prompt); Assert.Contains("unavailable under current access", prompt); }
+            else { Assert.DoesNotContain("Private attachment body", prompt); Assert.DoesNotContain("Private file label.txt", prompt); Assert.Contains(id.ToString("D"), prompt); Assert.Contains("User-provided attachment references", prompt); Assert.Contains("unavailable under current access", prompt); }
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
             Assert.Equal(AttachmentState.Bound, (await factory.Services.GetRequiredService<ITenantAttachmentStore>().FindTenantAsync(tenant, session, id))!.State);
             if (allowed)
@@ -66,6 +66,13 @@ public sealed partial class TenantSessionAccessTests
                 var laterPrompt = string.Join("\n", model.Requests.Skip(priorRequests).SelectMany(r => r.Messages).Select(m => m.Text));
                 Assert.Contains("Private file label.txt", laterPrompt); Assert.Contains(id.ToString("D"), laterPrompt);
                 Assert.DoesNotContain("Private attachment body", laterPrompt); // Historical input is metadata; rereading is a separate operation.
+                await factory.Services.GetRequiredService<TenantAccessService>().RevokeAssignmentAsync(human.PrincipalId, tenant, agentAssignment!.Value, await Revision(owner, tenant));
+                var afterReads = model.Requests.Count; currentSession = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!;
+                var hidden = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new {
+                    messageId = Guid.NewGuid(), text = "Continue without new files", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = currentSession.Snapshot.Revision }));
+                Assert.Equal(AgentRunStatus.Completed, (await AttachmentTerminal(runs, tenant, hidden.GetProperty("runId").GetGuid())).Status);
+                var hiddenPrompt = string.Join("\n", model.Requests.Skip(afterReads).SelectMany(r => r.Messages).Select(m => m.Text));
+                Assert.DoesNotContain(id.ToString("D"), hiddenPrompt); Assert.DoesNotContain("Private file label.txt", hiddenPrompt); Assert.DoesNotContain("Private attachment body", hiddenPrompt);
                 Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
             }
         }

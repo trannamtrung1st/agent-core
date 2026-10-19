@@ -10,25 +10,25 @@ import { previewFormat, formatLimit, validateImageDimensions, validateSignature 
 import { loadPreviewOptions } from "../filePreview/previewOptions";
 import { ChatFileCard } from "./ChatFileCard";
 
-export function HistoryAttachmentView({ sessionId, file }: { sessionId: string; file: HistoryAttachment }) {
-  return <HistoryFile key={`${sessionId}:${file.attachmentId}`} sessionId={sessionId} file={file} />;
+export function HistoryAttachmentView({ sessionId, tenantId, file }: { sessionId: string; tenantId?: string; file: HistoryAttachment }) {
+  return <HistoryFile key={`${tenantId ?? ""}:${sessionId}:${file.attachmentId}`} sessionId={sessionId} tenantId={tenantId} file={file} />;
 }
-function HistoryFile({ sessionId, file }: { sessionId: string; file: HistoryAttachment }) {
+function HistoryFile({ sessionId, tenantId, file }: { sessionId: string; tenantId?: string; file: HistoryAttachment }) {
   const [href, setHref] = useState<string | null>(null); const [failed, setFailed] = useState(false); const [busy, setBusy] = useState(false);
   const downloads = useRef<AbortController | null>(null);
-  const ref: FileRef = { kind: 'attachment', sessionId, attachmentId: file.attachmentId };
+  const ref: FileRef = { kind: 'attachment', sessionId, attachmentId: file.attachmentId, ...(tenantId !== undefined ? { tenantId } : {}) };
   useEffect(() => {
     const controller = new AbortController(); let url: string | null = null;
     if (file.contentType.startsWith('image/')) void (async () => {
       const metadata = await resolveFile(ref, controller.signal);
       if (previewFormat(metadata) !== 'image') return;
-      const policy = await loadPreviewOptions();
+      const policy = await loadPreviewOptions(tenantId, controller.signal);
       const blob = await readFile(ref, metadata, formatLimit('image', policy), controller.signal);
       await validateSignature(blob, metadata.contentType); await validateImageDimensions(blob, metadata.contentType, policy); controller.signal.throwIfAborted();
       url = URL.createObjectURL(blob); setHref(url);
     })().catch(() => undefined);
     return () => { controller.abort(); downloads.current?.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [sessionId, file.attachmentId, file.contentType]);
+  }, [tenantId, sessionId, file.attachmentId, file.contentType]);
   async function save() {
     if (downloads.current) return;
     const controller = new AbortController(); downloads.current = controller; setBusy(true); setFailed(false);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { identityRequest, IdentityError, IdentityCompletionError, resetIdentityCsrf } from './identity';
+import { identityRequest, identityUpload, IdentityError, IdentityCompletionError, resetIdentityCsrf } from './identity';
 const response = (status: number, body?: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 describe('canonical identity requests', () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -38,3 +38,16 @@ describe('canonical identity requests', () => {
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
   });
 });
+
+ it('uploads multipart bytes with cookie/CSRF authority, native progress and no owner header', async () => {
+   resetIdentityCsrf(); const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ token: 'upload-csrf' }), { status: 200 })); vi.stubGlobal('fetch', fetchMock);
+   const xhr = { open: vi.fn(), setRequestHeader: vi.fn(), send: vi.fn(), abort: vi.fn(), upload: {} as { onprogress?: (event: unknown) => void }, withCredentials: false, status: 201, responseText: '{"attachmentId":"saved"}', onload: null as null | (() => void) };
+   vi.stubGlobal('XMLHttpRequest', vi.fn(() => xhr)); const progress = vi.fn(); const body = new FormData(); body.append('file', new File(['data'], 'source.txt'));
+   const pending = identityUpload('/api/v2/tenants/t/sessions/s/attachments?uploadId=one', body, new AbortController().signal, progress);
+   await vi.waitFor(() => expect(xhr.send).toHaveBeenCalledWith(body));
+   xhr.upload.onprogress!({ lengthComputable: true, loaded: 2, total: 4 }); expect(progress).toHaveBeenCalledWith(50);
+   expect(xhr.withCredentials).toBe(true); expect(xhr.setRequestHeader).toHaveBeenCalledWith('X-AgentCore-CSRF', 'upload-csrf');
+   expect(xhr.setRequestHeader).not.toHaveBeenCalledWith('X-AgentCore-Owner-Capability', expect.anything());
+   expect(xhr.setRequestHeader).not.toHaveBeenCalledWith('Content-Type', expect.anything()); xhr.onload!();
+   await expect(pending).resolves.toEqual({ attachmentId: 'saved' }); expect(xhr.send).toHaveBeenCalledTimes(1); vi.unstubAllGlobals();
+ });

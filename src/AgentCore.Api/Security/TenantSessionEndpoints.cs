@@ -10,7 +10,7 @@ public static class TenantSessionEndpoints
     public sealed record CreateRequest(Guid AgentInstanceId, long ExpectedRevision, long ExpectedInstanceRevision, string Mode = "text", string? ModelKey = null, string? ReasoningEffort = null);
     public sealed record Witness(long ExpectedRevision, long ExpectedSessionRevision);
     public sealed record RenameRequest(string Title, long ExpectedRevision, long ExpectedSessionRevision);
-    public sealed record MessageRequest(Guid MessageId, string Text, long ExpectedRevision, long ExpectedSessionRevision);
+    public sealed record MessageRequest(Guid MessageId, string Text, long ExpectedRevision, long ExpectedSessionRevision, IReadOnlyList<Guid>? AttachmentIds = null);
     public sealed record RunWitness(long ExpectedRevision, long ExpectedRunRevision);
     public static void Map(WebApplication app)
     {
@@ -58,7 +58,7 @@ public static class TenantSessionEndpoints
         group.MapPost("/{sessionId:guid}/messages", (Guid sessionId, MessageRequest body, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            var receipt = await service.SubmitTextAsync(actor.TenantId, sessionId, Initiator(http, actor), body.MessageId, body.Text,
+            var receipt = await service.SubmitMessageAsync(actor.TenantId, sessionId, Initiator(http, actor), body.MessageId, body.Text, body.AttachmentIds ?? [],
                 body.ExpectedRevision, body.ExpectedSessionRevision, ct).ConfigureAwait(false);
             return Results.Json(receipt, statusCode: receipt.Created ? StatusCodes.Status202Accepted : StatusCodes.Status200OK);
         }));

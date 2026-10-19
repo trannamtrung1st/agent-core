@@ -1,5 +1,9 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+## Tenant public file-message and composer checkpoint — 2026-10-19
+
+Public file-only/text-file HTTP and native MessagePack messages now use canonical binding, current original-human file reads and the existing Runtime. Only exact selectors submitted in the current input remain untrusted user text before Agent read consent; protected source facts and historical IDs retain independent Agent IAM/policy. The existing composer and shared file viewer support scoped upload/remove/retry, exact approval, preview and download. This supersedes public-file-message/composer-pending notes below for this conversational path. Attachment publication/virtual overlays, other resource/Browser adapters, autonomous/background/events/transports and final obsolete-authority/schema removal remain open. No full Attachment, milestone or proposal acceptance is claimed. [Focused qualification](tenant-attachment-message-verification-2026-10-19.md).
+
 ## Tenant Attachment exact read Review checkpoint — 2026-10-19
 
 Exact conversational Attachment read consent now binds actual sources and saved windows through the existing approval/receipt/successor/checkpoint owners. Independent Agent and reviewer reads remain required; no grant is created. [Focused qualification](tenant-attachment-read-review-verification-2026-10-19.md) supersedes explicit exact-read-Review-pending notes below. Public provided-file handoff/HTTP/Hub Attachment IDs, composer, publication, other proposal families and final obsolete-authority/schema cutover remain open. The full goal remains active.

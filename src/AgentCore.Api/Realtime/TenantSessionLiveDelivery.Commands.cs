@@ -6,6 +6,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Realtime;
 
@@ -42,15 +43,30 @@ public sealed partial class TenantSessionLiveDelivery
         {
             var body = command.Payload;
             if (body is null || body.ExpectedRevision is not >= 1 || body.ExpectedSessionRevision is not >= 1
-                || body.Parts is { Length: > 0 } || body.AttachmentIds is { Length: > 0 } || body.Behavior is not null)
-                return Reject(command.EventId, "ValidationError", "Tenant text requires revision witnesses and plain text.", "Validation");
-            var result = await service.SubmitTextAsync(subscription.Tenant, subscription.Session, subscription.Human, Guid.Parse(command.EventId),
-                body.Text, body.ExpectedRevision.Value, body.ExpectedSessionRevision.Value, token).ConfigureAwait(false);
+                || body.Parts is { Length: > 0 } || body.Behavior is not null || MessageAttachmentIds(body) is not { } attachmentIds)
+                return Reject(command.EventId, "ValidationError", "Tenant messages require revision witnesses, plain text and at most ten Attachment IDs.", "Validation");
+            var result = await service.SubmitMessageAsync(subscription.Tenant, subscription.Session, subscription.Human, Guid.Parse(command.EventId),
+                body.Text, attachmentIds, body.ExpectedRevision.Value, body.ExpectedSessionRevision.Value, token).ConfigureAwait(false);
             return new() { EventId = command.EventId, Accepted = true, Result = new() {
                 ["created"] = result.Created, ["runId"] = result.RunId.ToString("D"), ["entryId"] = result.EntryId.ToString("D"),
                 ["responseId"] = result.ResponseId.ToString("D"), ["activationId"] = result.ActivationId.ToString("D"),
                 ["rootActivationId"] = result.RootActivationId.ToString("D"), ["sessionRevision"] = result.SessionRevision, ["securityRevision"] = result.SecurityRevision } };
-        }, ct);
+        }, ct, async (subscription, token) => {
+            if (MessageAttachmentIds(command.Payload) is { Length: > 0 } ids)
+                await service.RequireMessageAttachmentsAsync(subscription.Tenant, subscription.Session, subscription.Human, ids, token).ConfigureAwait(false);
+        });
+
+    private static Guid[]? MessageAttachmentIds(UserTextPayload? body)
+    {
+        if (body is null || body.AttachmentIds is { Length: > AttachmentLimits.MaxPerMessage }) return null;
+        var values = new List<Guid>();
+        foreach (var value in body.AttachmentIds ?? [])
+        {
+            if (!Guid.TryParse(value, out var id) || id == Guid.Empty || values.Contains(id)) return null;
+            values.Add(id);
+        }
+        return values.ToArray();
+    }
 
     public Task<CommandAck> CancelResponseAsync(string connection, ClientCommand<CancelResponsePayload> command, TenantRunService service,
         IamAuthorizer authorizer, CancellationToken ct)
@@ -75,7 +91,8 @@ public sealed partial class TenantSessionLiveDelivery
         }, ct);
 
     private async Task<CommandAck> ExecuteAsync(string connectionId, IRealtimeCommand command, string type, Func<Subscription, Guid?> resolve,
-        Func<Subscription, Guid?, CancellationToken, Task> authorize, Func<Subscription, Guid?, CancellationToken, Task<CommandAck>> action, CancellationToken ct)
+        Func<Subscription, Guid?, CancellationToken, Task> authorize, Func<Subscription, Guid?, CancellationToken, Task<CommandAck>> action, CancellationToken ct,
+        Func<Subscription, CancellationToken, Task>? reauthorizeCached = null)
     {
         var envelope = SessionHost.Validate(command, attach: false, expectedType: type);
         if (!envelope.Accepted) return envelope;
@@ -102,6 +119,7 @@ public sealed partial class TenantSessionLiveDelivery
             {
                 if (prior.Sequence != command.Sequence || prior.Fingerprint != fingerprint) return Reject(command.EventId, "ProtocolError", "The event ID was already used for a different command.", "Protocol");
                 await authorize(subscription, prior.Run, ct).ConfigureAwait(false);
+                if (reauthorizeCached is not null) await reauthorizeCached(subscription, ct).ConfigureAwait(false);
                 return prior.Ack;
             }
             if (command.Sequence != subscription.LastCommand + 1)
@@ -111,7 +129,7 @@ public sealed partial class TenantSessionLiveDelivery
             // Never hold the publication gate while a command waits on the Runtime mailbox: cancellation
             // itself publishes its interruption through that gate before acknowledging its durable commit.
             try { ack = await action(subscription, target, ct).ConfigureAwait(false); }
-            catch (AccessDeniedException ex) { ack = Reject(command.EventId, ex.ReasonCode, "This command is not authorized.", "Authorization"); }
+            catch (AccessDeniedException ex) { ack = Reject(command.EventId, ex.ReasonCode, ex.ReasonCode == "attachment_unavailable" ? "The selected files are unavailable. Remove them or check current file access before trying again." : "This command is not authorized.", "Authorization"); }
             catch (SecurityConflictException ex) { ack = Reject(command.EventId, ex.ReasonCode, "State changed. Reload before trying again."); }
             catch (AgentCoreException ex) when (ex.Code is "ValidationError" or "Conflict" or "NotFound")
             { ack = Reject(command.EventId, ex.ValidationCode ?? ex.Code, "The command could not be admitted.", ex.Code == "ValidationError" ? "Validation" : "Session"); }
@@ -120,7 +138,7 @@ public sealed partial class TenantSessionLiveDelivery
             while (subscription.DedupeOrder.Count > 128) subscription.Dedupe.Remove(subscription.DedupeOrder.Dequeue());
             return ack;
         }
-        catch (AccessDeniedException ex) { return Reject(command.EventId, ex.ReasonCode, "This command is not authorized.", "Authorization"); }
+        catch (AccessDeniedException ex) { return Reject(command.EventId, ex.ReasonCode, ex.ReasonCode == "attachment_unavailable" ? "The selected files are unavailable. Remove them or check current file access before trying again." : "This command is not authorized.", "Authorization"); }
         catch (SecurityConflictException ex) { return Reject(command.EventId, ex.ReasonCode, "State changed. Reload before trying again."); }
         finally { connection.Commands.Release(); }
     }

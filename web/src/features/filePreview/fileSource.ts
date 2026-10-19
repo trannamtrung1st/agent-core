@@ -12,7 +12,7 @@ export type FileMetadata = {
 export type FileRef =
   | { kind: 'tenantWorkspace'; owner: TenantWorkspaceOwner; instanceId: string; path: string; metadata: FileMetadata }
   | { kind: 'tenantResource'; tenantId: string; instanceId: string; resourceKey: string; metadata: FileMetadata }
-  | { kind: 'attachment'; sessionId: string; attachmentId: string }
+  | { kind: 'attachment'; sessionId: string; attachmentId: string; tenantId?: string }
   | { kind: 'artifact'; sessionId: string; artifactId: string; tenantId?: string }
   | { kind: 'home'; instanceId: string; path: string; metadata: FileMetadata }
   | {
@@ -56,9 +56,10 @@ export function sourcePath(ref: FileRef): string {
     case 'tenantResource':
       return tenantAgentApi(ref.tenantId, ref.instanceId, `/resources/${enc(ref.resourceKey)}`);
     case 'attachment':
-      return `/api/v2/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`;
+      return ref.tenantId !== undefined ? tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`)
+        : `/api/v2/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`;
     case 'artifact':
-      return ref.tenantId ? tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`)
+      return ref.tenantId !== undefined ? tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`)
         : `/api/v2/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`;
     case 'home':
       return `/api/v2/agent-instances/${enc(ref.instanceId)}/workspace`;
@@ -212,7 +213,7 @@ export async function readFile(
   return blob;
 }
 export function fileReadResponse(ref: FileRef, path: string, signal: AbortSignal): Promise<Response> {
-  return ref.kind === 'tenantWorkspace' || ref.kind === 'tenantResource' || ref.kind === 'artifact' && ref.tenantId ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
+  return ref.kind === 'tenantWorkspace' || ref.kind === 'tenantResource' || (ref.kind === 'artifact' || ref.kind === 'attachment') && ref.tenantId !== undefined ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
 }
 export const fileReadLost = (error: unknown) => error instanceof PreviewError && ['preview_forbidden', 'preview_unavailable'].includes(error.code);
 export async function downloadFile(

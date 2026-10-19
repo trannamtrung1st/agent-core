@@ -18,29 +18,34 @@ public sealed partial class TenantSessionAccessTests
     [InlineData("png", "allowed")] [InlineData("png", "revoke")] [InlineData("png", "source")]
     [InlineData("text", "capability")] [InlineData("png", "capability")]
     [InlineData("text", "pending")] [InlineData("png", "pending")]
+    [InlineData("text", "provided")] [InlineData("png", "provided")]
     public async Task Tenant_attachment_Review_checkpoint_rechecks_consent_bytes_and_images_after_actual_SQLite_host_recreation(string format, string boundary)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-attachment-review-restart-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); AttachmentReadCase value; Guid runId, sourceId; TenantApprovalRequest consent;
         try
         {
-            var initial = new AttachmentReadModel { ReviewRead = true, HoldAfterRead = true };
+            var provided = boundary == "provided";
+            var initial = new AttachmentReadModel { ReviewRead = true, HoldAfterRead = true, ReadSubmittedSelector = provided };
             await using (var first = new NativeTenantSqliteFactory(root, initial, s => s.Replace(ServiceDescriptor.Singleton<TimeProvider>(clock))))
             {
                 using var owner = first.CreateClient(); value = await PrepareAttachmentRead(first.Services, owner, format, recoveryBudget: true, explicitCapability: boundary == "capability"); var v = value.Execution;
+                if (!provided)
+                {
                 var bound = await first.Services.GetRequiredService<TenantRunService>().SubmitMessageAsync(v.Tenant, v.Session, v.Human, Guid.NewGuid(), "Keep this file available", [v.Id], await Revision(owner, v.Tenant), 1);
                 await first.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
                 Assert.Equal(AgentRunStatus.Completed, (await AttachmentTerminal(first.Services.GetRequiredService<ITenantRunStore>(), v.Tenant, bound.RunId)).Status);
+                }
                 Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PutAsJsonAsync($"/api/v2/tenants/{v.Tenant}/operation-policies/attachments.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, v.Tenant), expectedPolicyRevision = 0 })).StatusCode);
                 initial.Requests.Clear(); initial.ReadEnabled = true; initial.Arguments = System.Text.Json.JsonSerializer.Serialize(new { attachmentId = v.Id });
                 var session = (await first.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(v.Tenant, v.Session))!;
                 var sent = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{v.Tenant}/sessions/{v.Session}/messages", new {
-                    messageId = Guid.NewGuid(), text = "Read that earlier file", expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = session.Snapshot.Revision }));
+                    messageId = Guid.NewGuid(), text = provided ? "" : "Read that earlier file", attachmentIds = provided ? new[] { v.Id } : Array.Empty<Guid>(), expectedRevision = await Revision(owner, v.Tenant), expectedSessionRevision = session.Snapshot.Revision }));
                 sourceId = sent.GetProperty("runId").GetGuid();
                 await first.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
                 consent = await AwaitAttachmentReview(first.Services, v.Tenant, sourceId);
                 Assert.Single(initial.Requests); runId = sourceId;
-                if (boundary != "pending")
+                if (boundary is not ("pending" or "provided"))
                 {
                     var detail = await Json(await owner.GetAsync($"/api/v2/tenants/{v.Tenant}/approvals/{consent.RequestId}"));
                     Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PostAsJsonAsync($"/api/v2/tenants/{v.Tenant}/approvals/{consent.RequestId}/decision", new {
@@ -58,7 +63,7 @@ public sealed partial class TenantSessionAccessTests
                 }
             }
             clock.Advance(AgentRunCoordinator.ClaimDuration + TimeSpan.FromSeconds(2));
-            var model = new AttachmentReadModel { ReviewRead = true, ReadEnabled = true }; var enabled = false; var e = value.Execution;
+            var model = new AttachmentReadModel { ReviewRead = true, ReadEnabled = true, ReadSubmittedSelector = provided }; var enabled = false; var e = value.Execution;
             await using var second = new NativeTenantSqliteFactory(root, model, s => {
                 s.Replace(ServiceDescriptor.Singleton<TimeProvider>(clock));
                 s.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new AttachmentExecutionGate(() => Volatile.Read(ref enabled), new TenantRunExecution(
@@ -66,7 +71,7 @@ public sealed partial class TenantSessionAccessTests
             });
             using var fresh = second.CreateClient(); var runs = second.Services.GetRequiredService<ITenantRunStore>();
             Assert.False((await runs.FindTenantRunAsync(e.Tenant, runId))!.IsTerminal); Assert.Empty(model.Requests);
-            if (boundary == "pending")
+            if (boundary is "pending" or "provided")
             {
                 await Login(fresh, "owner@example.test", "explicit-synthetic-test-password");
                 var detail = await Json(await fresh.GetAsync($"/api/v2/tenants/{e.Tenant}/approvals/{consent.RequestId}"));
@@ -89,7 +94,7 @@ public sealed partial class TenantSessionAccessTests
             await second.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
             Volatile.Write(ref enabled, true); await second.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
             var completed = await AwaitBrowserRestartRun(runs, e.Tenant, sourceId, false);
-            if (boundary is "allowed" or "pending")
+            if (boundary is "allowed" or "pending" or "provided")
             {
                 Assert.True(completed.Status == AgentRunStatus.Completed, $"{completed.Status}: {completed.Failure?.Code}: {completed.Failure?.Summary}; requests={model.Requests.Count}");
                 var request = Assert.Single(model.Requests); var tool = request.Messages.Single(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization);

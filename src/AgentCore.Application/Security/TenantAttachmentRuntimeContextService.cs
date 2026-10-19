@@ -87,10 +87,20 @@ public sealed partial class TenantAttachmentRuntimeContextService(TenantOperatio
         }
         await Fence(frame, view, ct).ConfigureAwait(false);
         await RequireSourcesAsync(view.Run, sources, ct).ConfigureAwait(false);
-        var history = snapshot.Entries.Select(entry => entry.Attachments is not { Count: > 0 } ? entry : entry with {
-            Attachments = entry.Role == ConversationRole.User ? entry.Attachments.Where(a => visible.ContainsKey(a.AttachmentId)).Select(a => visible[a.AttachmentId]).ToArray() : null,
-            Text = entry.Role == ConversationRole.User && entry.Attachments.All(a => !visible.ContainsKey(a.AttachmentId))
-                ? entry.Text + "\n[Attached files are unavailable under current access or read policy.]" : entry.Text }).ToArray();
+        // These IDs came from this human's admitted input, not an Agent metadata read. Preserve only
+        // current submitted selectors as untrusted user text; historical discovery stays permission-gated.
+        var history = snapshot.Entries.Select(entry => {
+            if (entry.Attachments is not { Count: > 0 }) return entry;
+            var hidden = entry.Role == ConversationRole.User ? entry.Attachments.Where(a => !visible.ContainsKey(a.AttachmentId)).ToArray() : [];
+            var text = entry.Text;
+            if (entry.Role == ConversationRole.User && hidden.Length == entry.Attachments.Count)
+                text += "\n[Attached files are unavailable under current access or read policy.]";
+            if (current.Contains(entry.EntryId) && hidden.Length > 0)
+                text += "\n[User-provided attachment references (identifiers only; access has not been established): "
+                    + string.Join(", ", hidden.Select(a => a.AttachmentId.ToString("D"))) + "]";
+            return entry with { Attachments = entry.Role == ConversationRole.User
+                ? entry.Attachments.Where(a => visible.ContainsKey(a.AttachmentId)).Select(a => visible[a.AttachmentId]).ToArray() : null, Text = text };
+        }).ToArray();
         return new(history, manifest.ToArray(), contents.ToArray(), TenantAttachmentContextRules.Merge(null, sources));
     }
     public async ValueTask RequireSourcesAsync(AgentRun run, IReadOnlyList<TenantAttachmentContextSource>? sources, CancellationToken ct = default)

@@ -22,6 +22,7 @@ public sealed partial class TenantSessionAccessTests
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public bool ReadEnabled { get; set; }
         public bool ReviewRead { get; set; }
+        public bool ReadSubmittedSelector { get; init; }
         public bool HoldAfterRead { get; init; }
         public string Arguments { get; set; } = "{}";
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -33,7 +34,16 @@ public sealed partial class TenantSessionAccessTests
             if (ReadEnabled && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == tool))
             {
                 Assert.Contains(request.Tools!, t => t.Name == tool);
-                var args = ReviewRead ? JsonSerializer.Serialize(new { operation = "read_attachment", read = JsonSerializer.Deserialize<JsonElement>(Arguments) }) : Arguments;
+                var arguments = Arguments;
+                if (ReadSubmittedSelector)
+                {
+                    const string marker = "[User-provided attachment references (identifiers only; access has not been established): ";
+                    var submitted = request.Messages.Where(m => m.Role == ModelRole.User).Select(m => m.Text).Last(t => t.Contains(marker, StringComparison.Ordinal));
+                    var references = submitted[(submitted.IndexOf(marker, StringComparison.Ordinal) + marker.Length)..].Split(']')[0];
+                    var id = Guid.Parse(Assert.Single(references.Split(", ")));
+                    var input = System.Text.Json.Nodes.JsonNode.Parse(arguments)!.AsObject(); input["attachmentId"] = id.ToString("D"); arguments = input.ToJsonString();
+                }
+                var args = ReviewRead ? JsonSerializer.Serialize(new { operation = "read_attachment", read = JsonSerializer.Deserialize<JsonElement>(arguments) }) : arguments;
                 yield return new ModelToolCallEvent(new("read-bound-source", tool, args));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
