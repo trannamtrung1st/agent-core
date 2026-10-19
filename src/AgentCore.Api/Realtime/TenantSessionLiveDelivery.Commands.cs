@@ -43,8 +43,8 @@ public sealed partial class TenantSessionLiveDelivery
         {
             var body = command.Payload;
             if (body is null || body.ExpectedRevision is not >= 1 || body.ExpectedSessionRevision is not >= 1
-                || body.Parts is { Length: > 0 } || body.Behavior is not null || MessageAttachmentIds(body) is not { } attachmentIds)
-                return Reject(command.EventId, "ValidationError", "Tenant messages require revision witnesses, plain text and at most ten Attachment IDs.", "Validation");
+                || body.Parts is { Length: > 0 } || body.Behavior is not (null or "queue") || MessageAttachmentIds(body) is not { } attachmentIds)
+                return Reject(command.EventId, "ValidationError", "Tenant messages require revision witnesses, queue behavior, plain text and at most ten Attachment IDs.", "Validation");
             var result = await service.SubmitMessageAsync(subscription.Tenant, subscription.Session, subscription.Human, Guid.Parse(command.EventId),
                 body.Text, attachmentIds, body.ExpectedRevision.Value, body.ExpectedSessionRevision.Value, token).ConfigureAwait(false);
             return new() { EventId = command.EventId, Accepted = true, Result = new() {

@@ -48,7 +48,11 @@ public sealed partial class InMemoryIamStore
     public ValueTask<IReadOnlyList<Guid>> ListTenantRunIdsAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(sessionBacking.TenantRunIds(tenantId, sessionId)); }
     public ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default)
+        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default) =>
+        CommitTenantHumanRun(next, expectedSecurityRevision, admission, initiator, audit, ct);
+    private ValueTask<TenantRunAdmissionResult?> CommitTenantHumanRun(TenantSecurityState next, long expectedSecurityRevision,
+        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct,
+        TenantRuntimeFrame? frame = null, SessionSnapshot? liveSnapshot = null, long runtimeExpectedRevision = 0)
     {
         ct.ThrowIfCancellationRequested(); admission = TenantAttachmentBindingRules.Freeze(admission); next = IamStateRules.Freeze(next); var run = admission.Run;
         if (run.Owner.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expectedSecurityRevision + 1)
@@ -70,7 +74,7 @@ public sealed partial class InMemoryIamStore
                 var actual = sources.Select(source => attachmentBacking!.RetainedTenant(next.Tenant.TenantId, run.SessionId, source.AttachmentId)
                     ?? throw new AccessDeniedException("attachment_unavailable")).ToArray();
                 TenantAttachmentBindingRules.Current(admission, actual, (clock ?? TimeProvider.System).GetUtcNow());
-            });
+            }, frame, liveSnapshot, runtimeExpectedRevision, clock ?? TimeProvider.System);
             if (result?.Created == true) attachmentBacking?.BindTenantSources(admission);
             if (result?.Created == true) { _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); }
             return ValueTask.FromResult(result);

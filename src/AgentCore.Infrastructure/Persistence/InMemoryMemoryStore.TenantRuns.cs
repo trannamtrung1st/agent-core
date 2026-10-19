@@ -85,13 +85,21 @@ public sealed partial class InMemoryMemoryStore
     {
         lock (_gate) return AgentRuns.Runs.Values.Where(r => r.Owner.TenantId == tenant && r.SessionId == session).Select(r => r.AgentRunId).ToArray();
     }
-    internal TenantRunAdmissionResult? AdmitTenantRun(TenantHumanRunAdmission admission, TenantAgent agent, TenantSessionInitiator initiator, Action? validateCreate = null)
+    internal TenantRunAdmissionResult? AdmitTenantRun(TenantHumanRunAdmission admission, TenantAgent agent, TenantSessionInitiator initiator, Action? validateCreate = null,
+        TenantRuntimeFrame? frame = null, SessionSnapshot? liveSnapshot = null, long runtimeExpectedRevision = 0, TimeProvider? clock = null)
     {
         lock (_gate)
         {
             var run = admission.Run; var tenant = run.Owner.TenantId ?? throw new ArgumentException("Tenant execution is required.");
             var session = ReadTenantSession(tenant, run.SessionId); if (session is null) return null;
-            var next = TenantRunRules.Admit(session, admission, agent, initiator);
+            if (frame is not null)
+            {
+                _ = LoadTenantRuntime(frame, (clock ?? TimeProvider.System).GetUtcNow()) ?? throw new AccessDeniedException("tenant_runtime_unavailable");
+                if (liveSnapshot is null || session.Snapshot.Revision != runtimeExpectedRevision || liveSnapshot.Revision != runtimeExpectedRevision + 1)
+                    throw new SecurityConflictException("stale_revision");
+                TenantRuntimeRules.ValidateSnapshot(frame, session.Snapshot, liveSnapshot);
+            }
+            var next = TenantRunRules.Admit(frame is null ? session : new(session.Owner, liveSnapshot!), admission, agent, initiator, live: frame is not null);
             var key = (run.SessionId, run.Admission.Activation.DedupeKey);
             if (AgentRuns.ByAdmission.TryGetValue(key, out var existingId))
             {
@@ -99,11 +107,12 @@ public sealed partial class InMemoryMemoryStore
                 if (!TenantRunRules.SameMessage(saved, input, admission)) throw new SecurityConflictException("message_id_conflict");
                 return new(false, saved, input.EntryId, session.Snapshot.Revision);
             }
-            if (AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Status == AgentRunStatus.Running)) throw new SecurityConflictException("session_in_use");
+            if (AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Status == AgentRunStatus.Running && (frame is null || r.AgentRunId != frame.RunId))) throw new SecurityConflictException("session_in_use");
             if (AgentRuns.Runs.Values.Count(r => r.SessionId == run.SessionId && !r.IsTerminal) >= 100) throw new SecurityConflictException("session_queue_full");
             if (AgentRuns.Runs.ContainsKey(run.AgentRunId) || AgentRuns.Activations.ContainsKey(run.ActivationId)
                 || _entries.Values.Any(entries => entries.Any(e => e.EntryId == admission.Input.EntryId))) throw new SecurityConflictException("identity_conflict");
             validateCreate?.Invoke();
+            if (frame is not null) _ = LoadTenantRuntime(frame, (clock ?? TimeProvider.System).GetUtcNow()) ?? throw new AccessDeniedException("tenant_runtime_unavailable");
             var activation = AgentRunStoreMapping.ToActivationRecord(next, run);
             Store(next); AgentRuns.Runs.Add(run.AgentRunId, run); AgentRuns.Activations.Add(run.ActivationId, activation);
             AgentRuns.ByAdmission.Add(key, run.AgentRunId); AgentRuns.BySourceEntry.Add((run.SessionId, admission.Input.EntryId), run.ActivationId);

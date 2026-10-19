@@ -113,6 +113,7 @@ builder.Services.AddSingleton<IAgentRunDispatcher, AgentRunDispatcher>();
 builder.Services.AddSingleton<ITenantRunDispatcher, TenantSessionRuntimeHost>();
 builder.Services.AddSingleton<TenantSessionLiveDelivery>();
 builder.Services.AddSingleton<ITenantRunControl>(p => (ITenantRunControl)p.GetRequiredService<ITenantRunDispatcher>());
+builder.Services.AddSingleton<ITenantSessionInputControl>(p => (ITenantSessionInputControl)p.GetRequiredService<ITenantRunDispatcher>());
 builder.Services.AddSingleton<ITenantSessionForegroundControl>(p => (ITenantSessionForegroundControl)p.GetRequiredService<ITenantRunDispatcher>());
 builder.Services.AddSingleton<ITenantDeliveryReceiptControl>(p => (ITenantDeliveryReceiptControl)p.GetRequiredService<ITenantRunDispatcher>());
 builder.Services.AddSingleton<TenantBackgroundCompletionService>();

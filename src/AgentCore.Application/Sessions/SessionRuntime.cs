@@ -930,6 +930,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             if (!_pendingPersist.TryRemove(pair.Key, out var job)) continue;
             job.Then = null;
             job.Ended?.TrySetResult(false);
+            job.HumanInputCompleted?.TrySetResult(job.InputCommit);
             job.Applied.TrySetResult();
         }
 
@@ -1237,6 +1238,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case AgentRunControlReceived control:
                     await HandleAgentRunControlAsync(control, cancellationToken).ConfigureAwait(false);
                     break;
+                case TenantInputReceived tenantInput:
+                    HandleTenantInput(tenantInput);
+                    break;
                 case TenantForegroundReceived tenantForeground:
                     HandleTenantForeground(tenantForeground);
                     break;
@@ -1386,6 +1390,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case AgentRunControlReceived control:
                 control.Completed.TrySetException(AgentCoreErrors.Conflict("Session mailbox is unavailable."));
+                break;
+            case TenantInputReceived tenantInput:
+                tenantInput.Completed.TrySetResult(null);
                 break;
             case TenantForegroundReceived tenantForeground:
                 tenantForeground.Completed.TrySetResult(false);
@@ -6214,7 +6221,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private sealed record AttachmentTitleHints(IReadOnlyList<string> Names, bool ImageOnly);
 
-    private long NextSequence() => _snapshot.DurableLastEntrySequence + 1;
+    private long NextSequence() => checked(Math.Max(_snapshot.DurableLastEntrySequence, _tenantInputSequenceFloor) + 1);
 
     private static readonly TimeSpan[] PersistRetryDelays =
         [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
@@ -6254,6 +6261,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public Action<AgentRun>? OnAdmitted { get; set; }
         public TenantDeliveryReceipt? Receipt { get; init; }
         public TenantSessionForeground? Foreground { get; init; }
+        public TenantHumanInput? HumanInput { get; init; }
+        public TaskCompletionSource<TenantHumanInputCommit?>? HumanInputCompleted { get; init; }
+        public TenantHumanInputCommit? InputCommit { get; set; }
         public AgentRunOutcomeCommit? RunOutcome { get; } = runOutcome;
         public IReadOnlyList<Guid>? CompletionSourceRunIds { get; } = completionSourceRunIds ?? (completionSourceRunId is { } id ? [id] : null);
         public TaskCompletionSource Applied { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -6346,13 +6356,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         TaskCompletionSource<bool>? ended = null,
         bool userConversationTerminal = false,
         AgentRun? admittedRun = null,
-        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null)
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null, TenantHumanInput? tenantInput = null, TaskCompletionSource<TenantHumanInputCommit?>? tenantInputCompleted = null)
     {
         if (_tenantCancellationCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
-        { ended?.TrySetResult(false); return; }
+        { ended?.TrySetResult(false); tenantInputCompleted?.TrySetResult(null); return; }
         if (snapshot.Entries.Count > 1000)
         {
-            ended?.TrySetResult(false);
+            ended?.TrySetResult(false); tenantInputCompleted?.TrySetResult(null);
             throw AgentCoreErrors.Validation("Session entry limit of 1000 was reached.");
         }
 
@@ -6364,7 +6374,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, Receipt = tenantReceipt, Foreground = tenantForeground };
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, Receipt = tenantReceipt, Foreground = tenantForeground, HumanInput = tenantInput, HumanInputCompleted = tenantInputCompleted };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -6401,11 +6411,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (input.Error is not null)
             {
-                if (job.Receipt is not null || job.Foreground is not null)
+                if (job.Receipt is not null || job.Foreground is not null || job.HumanInput is not null)
                 {
                     // A refused human receipt/surface change must not fail the independently
                     // authorized Run or leak uncommitted state into an ordinary snapshot.
-                    job.Ended?.TrySetException(input.Error); return;
+                    job.Ended?.TrySetException(input.Error); job.HumanInputCompleted?.TrySetException(input.Error); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
                 if (job.AdmittedRun?.Admission.Activation.Kind == ActivationKind.UserTurn
@@ -6468,8 +6478,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 _durableSnapshot = saved;
                 if (job.Receipt is { } receipt && saved.Entries.SingleOrDefault(e => e.EntryId == receipt.EntryId) is { } received)
                     _tenantReceiptEvidence[received.EntryId] = received;
-                AdoptPersisted(job.Proposed, saved, job.Kind);
-                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { Surfaces = _snapshot.Surfaces | saved.Surfaces };
+                if (job.InputCommit?.Admission.Created != false) AdoptPersisted(job.Proposed, saved, job.Kind);
+                if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { Surfaces = _snapshot.Surfaces | saved.Surfaces,
+                    LastEntrySequence = Math.Max(_snapshot.DurableLastEntrySequence, saved.DurableLastEntrySequence),
+                    LastUserActivityAt = (_snapshot.LastUserActivityAt ?? DateTimeOffset.MinValue) > (saved.LastUserActivityAt ?? DateTimeOffset.MinValue) ? _snapshot.LastUserActivityAt : saved.LastUserActivityAt };
                 foreach (var entry in saved.Entries)
                 {
                     if (entry.Role == ConversationRole.User)
@@ -6511,6 +6523,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 EndUserConversationTerminalPersist();
             }
 
+            job.HumanInputCompleted?.TrySetResult(job.InputCommit);
             job.Applied.TrySetResult();
         }
     }
@@ -6618,7 +6631,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     private static bool IsCoalescableCheckpoint(PersistJob job) =>
-        job.Kind == PersistKind.Checkpoint && job.Then is null && job.Ended is null;
+        job.Kind == PersistKind.Checkpoint && job.Then is null && job.Ended is null && job.HumanInput is null;
 
     private async Task<PersistJob> CoalesceQueuedCheckpointsAsync(PersistJob job, CancellationToken cancellationToken)
     {
@@ -6656,6 +6669,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         job.Ended?.TrySetResult(false);
+        if (error is not null) job.HumanInputCompleted?.TrySetException(error);
+        else job.HumanInputCompleted?.TrySetResult(job.InputCommit);
         job.Applied.TrySetResult();
     }
 
@@ -6740,8 +6755,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
             .Where(id => !_admittedAgentInputs.ContainsKey(id)).ToArray() };
-        if (_runtimeOwner?.TenantId is not null) toSave = CarryTenantReceipts(toSave, _durableSnapshot) with { Surfaces = toSave.Surfaces | _durableSnapshot.Surfaces };
-        if (job.Foreground is { } foreground)
+        if (_runtimeOwner?.TenantId is not null) toSave = CarryTenantReceipts(toSave, _durableSnapshot) with { Surfaces = toSave.Surfaces | _durableSnapshot.Surfaces,
+            LastEntrySequence = Math.Max(toSave.DurableLastEntrySequence, _durableSnapshot.DurableLastEntrySequence),
+            LastUserActivityAt = (toSave.LastUserActivityAt ?? DateTimeOffset.MinValue) > (_durableSnapshot.LastUserActivityAt ?? DateTimeOffset.MinValue) ? toSave.LastUserActivityAt : _durableSnapshot.LastUserActivityAt };
+        if (job.HumanInput is { } humanInput)
+        {
+            job.InputCommit = await ((ITenantRuntimeInputWriter)_store).SaveInputAsync(toSave, _durableRevision, humanInput, cancellationToken).ConfigureAwait(false);
+            toSave = job.InputCommit.Snapshot;
+        }
+        else if (job.Foreground is { } foreground)
         {
             toSave = toSave with { Surfaces = SessionOrigin.ContinueInChat(toSave.Surfaces) };
             await ((ITenantRuntimeForegroundWriter)_store).SaveForegroundAsync(toSave, _durableRevision, foreground, cancellationToken).ConfigureAwait(false);

@@ -14,7 +14,7 @@ public static class TenantRunRules
         return scope.Kind == AccessScopeKind.Resource && scope.TenantId is { } tenant && tenant != Guid.Empty && scope.ResourceType == "agent-run"
             && Guid.TryParseExact(scope.ResourceId, "D", out id) && id != Guid.Empty && scope.ResourceId == id.ToString("D");
     }
-    public static SessionSnapshot Admit(TenantSession session, TenantHumanRunAdmission admission, TenantAgent agent, TenantSessionInitiator initiator)
+    public static SessionSnapshot Admit(TenantSession session, TenantHumanRunAdmission admission, TenantAgent agent, TenantSessionInitiator initiator, bool live = false)
     {
         var run = admission.Run; var a = run.Admission.Activation; var context = run.Admission.ExecutionContext;
         var current = session.Snapshot; var input = admission.Input;
@@ -26,7 +26,7 @@ public static class TenantRunRules
             || current.ProfileId is not null || current.SessionId != run.SessionId || !run.IsInitialQueued
             || a.Kind != ActivationKind.UserTurn || a.SourceEntryIds.Count != 1 || a.SourceEntryIds[0] != input.EntryId
             || input.Role != ConversationRole.User || input.Status != EntryStatus.Completed || input.ResponseId is not null
-            || input.Sequence != current.DurableLastEntrySequence + 1 || input.SourceEventId is null
+            || (live ? input.Sequence <= current.DurableLastEntrySequence : input.Sequence != current.DurableLastEntrySequence + 1) || input.SourceEventId is null
             || a.SourceEventId != input.SourceEventId || a.DedupeKey != $"human:{initiator.PrincipalId:D}:{input.SourceEventId:D}"
             || input.Text.Length > 8000 || string.IsNullOrWhiteSpace(input.Text) && input.Attachments is not { Count: > 0 }
             || input.Parts is not null || input.Envelope is not null || input.Failure is not null
@@ -38,11 +38,12 @@ public static class TenantRunRules
             throw new SecurityConflictException("stale_revision");
         if (!current.Surfaces.HasFlag(SessionSurface.ChatList) || current.DurablyDeletedAt is not null || current.ArchivedAt is not null || LifecycleTransition.IsTerminal(current))
             throw AgentCoreErrors.Validation("Session is unavailable for new input.");
-        if (current.Status is SessionStatus.Attached or SessionStatus.Ending || current.PendingAgentInputIds.Count != 0)
+        if (!live && (current.Status is SessionStatus.Attached or SessionStatus.Ending || current.PendingAgentInputIds.Count != 0))
             throw new SecurityConflictException("session_in_use");
         if (current.LifecycleStatus != SessionLifecycleStatus.Active) throw AgentCoreErrors.Validation("Resume the Session before sending input.");
-        return current with { Revision = checked(current.Revision + 1), Entries = [input], LastEntrySequence = input.Sequence,
-            LastUserActivityAt = input.CreatedAt, UpdatedAt = input.CreatedAt };
+        return current with { Revision = checked(current.Revision + 1), Entries = live ? [..current.Entries, input] : [input], LastEntrySequence = input.Sequence,
+            LastUserActivityAt = live && current.LastUserActivityAt > input.CreatedAt ? current.LastUserActivityAt : input.CreatedAt,
+            UpdatedAt = live && current.UpdatedAt > input.CreatedAt ? current.UpdatedAt : input.CreatedAt };
     }
     public static bool SameMessage(AgentRun saved, ConversationEntry savedInput, TenantHumanRunAdmission proposed) =>
         saved.Owner == proposed.Run.Owner && saved.SessionId == proposed.Run.SessionId

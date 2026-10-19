@@ -29,11 +29,11 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate)
         {
-            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => (r.ApprovalRequestId is null || _approvals.GetValueOrDefault(r.ApprovalRequestId.Value) is { Status: not TenantApprovalStatus.Pending }) && (r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted)
+            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => !TenantInputBlocked(r) && (r.ApprovalRequestId is null || _approvals.GetValueOrDefault(r.ApprovalRequestId.Value) is { Status: not TenantApprovalStatus.Pending }) && (r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted)
                 && r.Owner.TenantId is { } tenant && _tenants.GetValueOrDefault(tenant)?.Tenant.Status == IdentityStatus.Active
                 && sessionBacking.OwnsTenantSession(tenant, r.SessionId) && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.WaitingToRetry && r.NextRetryAtUtc <= at
                     || r.Status == AgentRunStatus.Running && r.Claim!.LeaseExpiresAtUtc <= at))
-                .OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.Admission.Activation.SourceEntryIds.Select(id => sessionBacking.FindEntry(r.SessionId, id)?.Sequence ?? long.MaxValue).DefaultIfEmpty(long.MaxValue).Min())
+                .OrderBy(r => r.CreatedAtUtc.ToUnixTimeMilliseconds()).ThenBy(InputOrdinal)
                 .ThenBy(r => r.AgentRunId).Take(Math.Clamp(limit, 1, 100)).ToArray();
             return ValueTask.FromResult<IReadOnlyList<AgentRun>>(result);
         }
@@ -54,7 +54,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 try { RequireRuntimeOwner(owner); } catch (AccessDeniedException) { throw AgentCoreErrors.Conflict("Executor is unavailable."); }
                 if (run.Admission.OutputContract == AgentRunOutputContract.CompletionReport && sessionBacking.AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.AgentRunId != runId && !r.IsTerminal))
                     throw AgentCoreErrors.Conflict("Completion waits for pending user work.");
-                if (sessionBacking.AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.AgentRunId != runId && r.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForSignal))
+                if (TenantInputBlocked(run))
                     throw AgentCoreErrors.Conflict("Session already owns an active execution.");
             }
             if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })

@@ -12,7 +12,8 @@ public static class TenantFileObservationContract
     public static bool IsTool(string name) => TenantWorkspaceReadContract.IsRead(name)
         || name is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsVerify;
     public static bool IsBackground(AgentRun run) => run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;
-    public static bool IsBackground(AgentContext? context) => context?.OutputContract == AgentRunOutputContract.BackgroundOutcome;
+    public static bool IsBackground(AgentContext? context) => context?.ExecutionContext is not null
+        && context.OutputContract == AgentRunOutputContract.BackgroundOutcome;
     private static bool Shape(TrustedExecutionContext? execution, AgentRunOutputContract output) => execution?.OriginalInitiatorPrincipalId is not null
         && (output == AgentRunOutputContract.ConversationResponse && execution.Origin is ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation
             || output == AgentRunOutputContract.BackgroundOutcome && execution.Origin is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation);

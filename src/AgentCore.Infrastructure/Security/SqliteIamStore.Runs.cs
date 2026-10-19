@@ -80,8 +80,12 @@ public sealed partial class SqliteIamStore
         var ids = await OwnedRuns(db, tenantId).Where(r => r.SessionId == sessionId.ToString("D")).Select(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
         return ids.Select(Guid.Parse).ToArray();
     }
-    public async ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default)
+    public ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default) =>
+        CommitTenantHumanRunAsync(next, expectedSecurityRevision, admission, initiator, audit, ct);
+    private async ValueTask<TenantRunAdmissionResult?> CommitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct,
+        TenantHumanInput? liveInput = null, TenantRuntimeFrame? frame = null, SessionSnapshot? liveSnapshot = null, long runtimeExpectedRevision = 0)
     {
         admission = TenantAttachmentBindingRules.Freeze(admission); var run = admission.Run;
         if (run.Owner.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != initiator.PrincipalId
@@ -98,7 +102,16 @@ public sealed partial class SqliteIamStore
             TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!, agent);
             var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
             var current = SqliteMemoryStore.ToSnapshot(row, []);
-            var value = TenantRunRules.Admit(new(root.Domain(), current), admission, agent, initiator);
+            if (frame is not null)
+            {
+                var (actualRoot, _) = await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
+                if (actualRoot.Domain() != root.Domain() || liveInput is null || liveSnapshot is null || current.Revision != runtimeExpectedRevision || liveSnapshot.Revision != runtimeExpectedRevision + 1)
+                    throw new SecurityConflictException("stale_revision");
+                var state = (await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!;
+                await TenantHumanInputRules.RequireAsync(liveInput, new(root.Domain(), current), agent, state, new IamAuthorizer(this), live: true, ct).ConfigureAwait(false);
+                TenantRuntimeRules.ValidateSnapshot(frame, current, liveSnapshot);
+            }
+            var value = TenantRunRules.Admit(new(root.Domain(), frame is null ? current : liveSnapshot!), admission, agent, initiator, live: frame is not null);
             var sources = admission.Attachments ?? [];
             var currentState = (await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!;
             await TenantAttachmentBindingRules.PermissionsAsync(currentState, initiator.PrincipalId, run.SessionId, sources, new IamAuthorizer(this), ct).ConfigureAwait(false);
@@ -113,7 +126,7 @@ public sealed partial class SqliteIamStore
                     throw new SecurityConflictException("message_id_conflict");
                 result = new(false, saved, Guid.Parse(inputId), current.Revision); return false;
             }
-            if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status == (int)AgentRunStatus.Running, ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
+            if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status == (int)AgentRunStatus.Running && (frame == null || r.AgentRunId != frame.RunId.ToString("D")), ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
             if (await db.AgentRuns.CountAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false) >= 100)
                 throw new SecurityConflictException("session_queue_full");
             var attachmentRows = new List<AttachmentRecordRow>(sources.Count);
@@ -122,6 +135,7 @@ public sealed partial class SqliteIamStore
                     .SingleOrDefaultAsync(a => a.AttachmentId == source.AttachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false)
                     ?? throw new AccessDeniedException("attachment_unavailable"));
             TenantAttachmentBindingRules.Current(admission, attachmentRows.Select(SqliteAttachmentStore.Domain).ToArray(), (clock ?? TimeProvider.System).GetUtcNow());
+            if (frame is not null) await new SqliteMemoryStore(contexts, clock ?? TimeProvider.System).StageTenantRuntimeSaveAsync(db, frame, liveSnapshot!, runtimeExpectedRevision, ct).ConfigureAwait(false);
             SqliteMemoryStore.ApplySession(row, value); db.Entries.Add(SqliteMemoryStore.ToRecord(root.SessionId, admission.Input));
             db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(value, run)); db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(run));
             db.ActivationSourceEntries.Add(new() { ActivationId = run.ActivationId.ToString("D"), SessionId = root.SessionId, EntryId = admission.Input.EntryId.ToString("D"), Ordinal = 0 });
@@ -136,6 +150,7 @@ public sealed partial class SqliteIamStore
                     db.MessageAttachments.Add(new() { SessionId = root.SessionId, EntryId = attachment.EntryId, AttachmentId = attachment.AttachmentId, Ordinal = attachmentRows.IndexOf(attachment) });
                 }
             }
+            if (frame is not null) _ = await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
             result = new(true, run, admission.Input.EntryId, value.Revision); return true;
         }, ct).ConfigureAwait(false);
         return written || result is { Created: false } ? result : null;

@@ -6,6 +6,12 @@ The Interaction Controller asks “What is happening in the conversation?” It 
 
 Client-transcript evidence uses the same mailbox rows as backend STT after Session Runtime admits `client.speech.evidence`. Admission requires matching attachment, epoch, voice mode, and monotonically increasing per-utterance revision; mute, stale identity, and PCM frames on this transport are rejected. Input transport `clientTranscript` does not open `ISpeechRecognizer`. The controller does not branch on adapter names.
 
+## Canonical tenant queued human input
+
+An authenticated tenant message with omitted/null or `queue` behavior may be accepted while its ChatList Session is executing. It creates a fresh original-human UserTurn root and queued Run; the active task retains its response, input boundary and in-flight work. After the owner releases its slot, queued Runs dispatch in saved order. An approval wait releases that slot, while cancelling one Run preserves independently accepted inputs. Queued factual reports yield to human work. An already-running report or terminal/suspended generation finishes before the host admits the next input against current saved Session state.
+
+Queueing does not steer, supersede or cancel the current response. A refused queue command does not fail independent work. Interrupt/Steer, voice arbitration and frontend live-send interaction remain separate tenant conversion work; legacy controller behavior is preserved. The [input port contract](04-backend-interfaces.md#canonical-tenant-queued-human-input) owns authority and admission, and the [backend implementation](12-backend-implementation-spec.md#canonical-tenant-queued-human-input) owns mailbox sequence reservation and atomic persistence. Raw audio stays outside the domain mailbox. [Focused qualification](reports/tenant-live-input-queue-verification-2026-10-20.md).
+
 ## State representation
 
 Avoid a single enum that incorrectly forbids simultaneous user input and agent output. Store these orthogonal fields:

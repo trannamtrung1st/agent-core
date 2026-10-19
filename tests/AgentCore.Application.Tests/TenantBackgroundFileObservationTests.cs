@@ -7,6 +7,15 @@ namespace AgentCore.Application.Tests;
 
 public sealed class TenantBackgroundFileObservationTests
 {
+    [Fact]
+    public async Task Legacy_background_output_does_not_activate_the_tenant_file_gate()
+    {
+        var definition = await CapabilityProjectionTests.Definition([ToolCatalog.WorkspaceWrite]);
+        var context = CapabilityProjectionTests.Context(definition) with { ExecutionContext = null,
+            OutputContract = AgentRunOutputContract.BackgroundOutcome, LoadedCapabilityIds = [ToolCatalog.WorkspaceWrite] };
+        Assert.False(TenantFileObservationContract.IsBackground(context));
+        Assert.Contains(ToolProjectionService.Project(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.WorkspaceWrite);
+    }
     [Theory] [InlineData(ExecutionOrigin.ImmediateBackground)] [InlineData(ExecutionOrigin.ApprovalContinuation)]
     public async Task Background_projection_preserves_completion_and_exposes_only_converted_observations_and_read_consent(ExecutionOrigin origin)
     {

@@ -92,12 +92,26 @@ public sealed partial class TenantSessionAccessTests
             });
         }
     }
-    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true)
+    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false)
     {
         await Login(owner,"owner@example.test","explicit-synthetic-test-password");
         var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();var api=$"/api/v2/tenants/{tenant}";
         var human=(await Json(await owner.GetAsync(api+"/access/me"))).GetProperty("principalId").GetGuid();
-        var agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=32,expectedRevision=await Revision(owner,tenant)}));
+        JsonElement agent;
+        if (attachmentCapability)
+        {
+            var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Background exact file reader", expectedRevision = await Revision(owner, tenant) }));
+            var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
+            var capabilities = new[] { ToolCatalog.BackgroundStart, ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
+            candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
+                capabilities = new { mode = "Selected", resolvedCapabilities = capabilities }, projection = new { alwaysCapabilities = capabilities.Where(c => c != ToolCatalog.AttachmentsRead).ToArray() } });
+            var draftId = draft.GetProperty("draftId").GetGuid();
+            var saved = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));
+            Assert.True(saved.TryGetProperty("revision", out _), saved.GetRawText());
+            await Json(await owner.PostAsJsonAsync(api + $"/definition-drafts/{draftId}/publish", new { expectedRevision = await Revision(owner, tenant), expectedDraftRevision = saved.GetProperty("revision").GetInt64() }));
+            agent = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }));
+        }
+        else agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=32,expectedRevision=await Revision(owner,tenant)}));
         var instance=agent.GetProperty("instance").GetProperty("instanceId").GetGuid();var executor=agent.GetProperty("principalId").GetGuid();
         if(createAuthority){var access=factory.Services.GetRequiredService<TenantAccessService>();var role=await access.SaveRoleAsync(human,tenant,null,"Background executor",["sessions.create","agent-runs.create"],await Revision(owner,tenant));
         await access.AssignRoleAsync(human,tenant,executor,role.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant));}

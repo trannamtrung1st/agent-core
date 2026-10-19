@@ -12,7 +12,7 @@ public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Gu
 public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null, bool CanCancel = false);
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null)
 {
     public async ValueTask<TenantRunReceipt> SubmitTextAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
@@ -59,14 +59,11 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
             new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
         var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray());
-        _ = TenantRunRules.Admit(session, admission, agent, initiator);
-        var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
-        var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, "agent-runs.admit", runId.ToString("D"), "allowed", "human_message_admitted", now);
-        var result = await runs.TryAdmitTenantHumanRunAsync(next, state.Tenant.Revision, admission, initiator, audit, ct).ConfigureAwait(false)
-            ?? throw new SecurityConflictException("stale_revision");
-        var saved = result.Run;
-        return new(result.Created, saved.AgentRunId, result.EntryId, saved.ResponseId!.Value, saved.ActivationId, saved.Admission.Activation.RootActivationId,
-            result.SessionRevision, result.Created ? next.Tenant.Revision : state.Tenant.Revision);
+        var prepared = new TenantHumanInput(session.Owner, initiator, state.Tenant.Revision, TenantAttachmentBindingRules.Freeze(admission));
+        await TenantHumanInputRules.RequireAsync(prepared, session, agent, state, authorizer, live: inputs is not null, ct).ConfigureAwait(false);
+        var committed = inputs is not null ? await inputs.SubmitAsync(prepared, ct).ConfigureAwait(false)
+            : await TenantHumanInputRules.CommitQuiescentAsync(prepared, security, runs, sessions, ids, time, ct).ConfigureAwait(false);
+        return TenantHumanInputRules.Receipt(committed);
     }
     // A cached transport acknowledgement is a fact about earlier admission, never a file-read token.
     public async ValueTask RequireMessageAttachmentsAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,

@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Canonical tenant live-input transaction
+
+Live human text/file intake uses the existing Session, Entry, MessageAttachment, Activation/Run, tenant security and authorization-audit records. The owning Runtime writer stages its captured output snapshot at expected Session revision N and human admission advances the same transaction to N+2. The returned Runtime snapshot contains only its own input window and committed sequence/activity metadata; later saves retain the high-water sequence and last-user-activity timestamp. Same-message replay performs no write and returns the original graph/current durable revision. The mailbox reserves opaque sequence slots before I/O, so refused commands may leave gaps without creating an entry or binding.
+
+Both InMemory gates and the SQLite transaction enforce the original live human, current independent Session read/Agent chat/file reads, current executor/configuration/lifecycle/source state and exact active Run generation. Refusal rolls back checkpoint, bindings, admission, security revision and audit together. Queued Runs keep immutable independent human roots across current-task cancellation and store/host recreation. Runnable filtering and claims use the same ordering fence before batch limits; queued completion reports yield to human work. No extra queue table or migration is introduced. [Qualification](reports/tenant-live-input-queue-verification-2026-10-20.md).
+
 ## Background read-consent task successors
 
 Exact read consent reuses existing Approval, successor AgentRun, checkpoint and local receipt rows. Background successors retain the admitted task, BackgroundOutcome, owned Session, source inputs and inherited root; the initial Session origin/Run is never rewritten. Only the terminal non-Continued successor creates an existing BackgroundCompletionReceipt keyed to its actual Run. A bounded saved-handoff resolver relates it to the immutable initial task and original parent before report admission; current root/executor/creation authority still applies. Activity separately gates every successor read. No migration, synthetic User, copied permission snapshot or second task/result store is added. [Qualification and source-admission limits](reports/tenant-background-file-observation-verification-2026-10-20.md).

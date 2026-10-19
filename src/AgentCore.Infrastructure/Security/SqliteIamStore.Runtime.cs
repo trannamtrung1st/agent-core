@@ -69,7 +69,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
     public async ValueTask<IReadOnlyList<AgentRun>> ListRunnableTenantRunsAsync(DateTimeOffset at, int limit, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var millis = at.ToUnixTimeMilliseconds();
-        var rows = await db.AgentRuns.AsNoTracking().Where(r => r.TenantId != null && !db.Set<TenantApprovalRecord>().Any(a => a.TenantId == r.TenantId && a.RunId == r.AgentRunId && a.Status == (int)TenantApprovalStatus.Pending)
+        var rows = await UnblockedTenantInput(db).AsNoTracking().Where(r => r.TenantId != null && !db.Set<TenantApprovalRecord>().Any(a => a.TenantId == r.TenantId && a.RunId == r.AgentRunId && a.Status == (int)TenantApprovalStatus.Pending)
             && db.Set<Tenant>().Any(t => t.TenantId == r.TenantId && t.Status == IdentityStatus.Active)
             && db.Set<TenantSessionRecord>().Any(s => s.SessionId == r.SessionId && s.TenantId == r.TenantId)
             && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null)
@@ -101,7 +101,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             if (run.Admission.OutputContract == AgentRunOutputContract.CompletionReport && await db.AgentRuns.AnyAsync(r => r.SessionId == row.SessionId && r.AgentRunId != row.AgentRunId
                 && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Failed && r.Status != (int)AgentRunStatus.Cancelled, ct).ConfigureAwait(false))
                 throw AgentCoreErrors.Conflict("Completion waits for pending user work.");
-            if (await db.AgentRuns.AnyAsync(r => r.SessionId == row.SessionId && r.AgentRunId != row.AgentRunId && (r.Status == (int)AgentRunStatus.Running || r.Status == (int)AgentRunStatus.WaitingForSignal), ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Session owns an active execution.");
+            if (!await UnblockedTenantInput(db).AnyAsync(r => r.AgentRunId == row.AgentRunId, ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Session owns an active execution.");
         }
         if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId }
             && !await db.Entries.AnyAsync(e => e.SessionId == row.SessionId && e.EntryId == entryId.ToString("D") && e.Role == nameof(ConversationRole.Assistant)

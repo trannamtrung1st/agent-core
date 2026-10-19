@@ -49,6 +49,10 @@ public sealed partial class TenantSessionAccessTests
                     : JsonSerializer.Serialize(new { operation = "inspect_workspace", read = new { tool = Tool, arguments = JsonSerializer.Deserialize<JsonElement>(Arguments) } });
                 yield return new ModelToolCallEvent(new(replies.Length == 0 ? "background-file-observation" : "repeat-background-file-observation", callName, arguments));
             }
+            else if (Review && replies.Last().Text.Contains("\"decision\":\"allowed\"", StringComparison.Ordinal)
+                && replies.Last().Text.Contains("\"applied\":false", StringComparison.Ordinal)
+                && !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == Tool))
+                yield return new ModelToolCallEvent(new("background-file-after-policy", Tool, Arguments));
             else yield return new ModelToolCallEvent(new("background-file-complete", ToolCatalog.WorkComplete,
                 """{"outcome":"Response","summary":"File observation finished.","attentionRequired":false}"""));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
@@ -72,11 +76,14 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "artifact", "allowed")] [InlineData(true, "artifact", "approve")]
     public Task Tenant_background_file_families_keep_actual_sources_and_independent_read_consent(bool sqlite, string kind, string decision) => BackgroundFileFlow(sqlite, kind, decision);
     [Theory(Timeout = 90000)] [InlineData(false, "attachment-virtual")] [InlineData(true, "attachment-virtual")] [InlineData(false, "attachment")] [InlineData(true, "attachment-list")]
-    public Task Tenant_background_pending_Attachments_cannot_bind_during_execution_or_supply_read_evidence(bool sqlite, string kind) => BackgroundFileFlow(sqlite, kind, "pending");
+    public Task Tenant_background_pending_Attachments_do_not_supply_read_evidence(bool sqlite, string kind) => BackgroundFileFlow(sqlite, kind, "pending");
     [Theory(Timeout = 90000)] [InlineData(false, "reject")] [InlineData(true, "reject")] [InlineData(false, "changed")] [InlineData(true, "changed")] [InlineData(false, "revoked")] [InlineData(true, "revoked")]
     public Task Tenant_background_file_refusal_never_substitutes_or_returns_source_bytes(bool sqlite, string decision) => BackgroundFileFlow(sqlite, "home", decision);
     [Theory(Timeout = 120000)] [InlineData("home")] [InlineData("resource")] [InlineData("artifact")]
     public Task Tenant_background_file_consent_survives_actual_SQLite_host_recreation(string kind) => BackgroundFileFlow(true, kind, "approve", restart: true);
+
+    [Theory(Timeout = 90000)] [InlineData(false, "bound")] [InlineData(true, "bound")] [InlineData(false, "bound-review")] [InlineData(true, "bound-review")]
+    public Task Tenant_background_capable_definition_reads_actual_live_bound_Attachment_with_current_consent(bool sqlite, string decision) => BackgroundFileFlow(sqlite, decision == "bound" ? "attachment-virtual" : "attachment", decision);
 
     private async Task BackgroundFileFlow(bool sqlite, string kind, string decision, bool restart = false)
     {
@@ -88,7 +95,7 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> initial = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
             var factory = initial;
             using var initialOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var owner = initialOwner;
-            var setup = await StartTenantBackground(factory, owner, submit: false); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
+            var setup = await StartTenantBackground(factory, owner, submit: false, attachmentCapability: decision.StartsWith("bound", StringComparison.Ordinal)); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
             var session = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, setup.Session))!;
             var instance = session.Owner.AgentInstanceId; var executor = session.Owner.ExecutorPrincipalId;
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
@@ -105,7 +112,7 @@ public sealed partial class TenantSessionAccessTests
             var role = await access.SaveRoleAsync(human, tenant, null, "Background file observations", ["agents.read", "sessions.read", "workspaces.read", "resources.read", "artifacts.read", "attachments.read"], await Revision(owner, tenant));
             var assignment = await access.AssignRoleAsync(human, tenant, executor, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             var permission = kind.StartsWith("resource", StringComparison.Ordinal) || kind == "knowledge" ? "resources.read" : kind == "artifact" ? "artifacts.read" : kind.StartsWith("attachment", StringComparison.Ordinal) ? "attachments.read" : "workspaces.read";
-            var expectedConsent = model.Review && !kind.StartsWith("attachment", StringComparison.Ordinal);
+            var expectedConsent = model.Review && (!kind.StartsWith("attachment", StringComparison.Ordinal) || decision == "bound-review");
             if (expectedConsent) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/" + permission, new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
             var sent = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{setup.Session}/messages", new { messageId = Guid.NewGuid(), text = "Observe the exact owned file in background", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
             var parentRunId = sent.GetProperty("runId").GetGuid();
@@ -131,9 +138,12 @@ public sealed partial class TenantSessionAccessTests
                 using var upload = new MultipartFormDataContent(); var content = new ByteArrayContent(bytes); content.Headers.ContentType = new("text/plain"); upload.Add(content, "file", "observation.txt");
                 var attachment = (await Json(await owner.PostAsync(api + $"/sessions/{child.Owner.SessionId}/attachments?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision={currentChild.Snapshot.Revision}", upload))).GetProperty("attachmentId").GetGuid();
                 currentChild = (await sessions.FindTenantSessionAsync(tenant, child.Owner.SessionId))!;
-                var queued = await owner.PostAsJsonAsync(api + $"/sessions/{child.Owner.SessionId}/messages", new { messageId = Guid.NewGuid(), text = "Keep the queued file available", attachmentIds = new[] { attachment }, expectedRevision = await Revision(owner, tenant), expectedSessionRevision = currentChild.Snapshot.Revision });
-                Assert.Equal(HttpStatusCode.Conflict, queued.StatusCode); Assert.Contains("session_in_use", await queued.Content.ReadAsStringAsync());
-                Assert.Equal(AttachmentState.Pending, (await factory.Services.GetRequiredService<ITenantAttachmentStore>().FindTenantAsync(tenant, child.Owner.SessionId, attachment))!.State);
+                if (decision.StartsWith("bound", StringComparison.Ordinal))
+                {
+                    var queued = await owner.PostAsJsonAsync(api + $"/sessions/{child.Owner.SessionId}/messages", new { messageId = Guid.NewGuid(), text = "Keep the queued file available", attachmentIds = new[] { attachment }, expectedRevision = await Revision(owner, tenant), expectedSessionRevision = currentChild.Snapshot.Revision });
+                    Assert.True(queued.StatusCode == HttpStatusCode.Accepted, await queued.Content.ReadAsStringAsync());
+                }
+                Assert.Equal(decision.StartsWith("bound", StringComparison.Ordinal) ? AttachmentState.Bound : AttachmentState.Pending, (await factory.Services.GetRequiredService<ITenantAttachmentStore>().FindTenantAsync(tenant, child.Owner.SessionId, attachment))!.State);
                 model.Tool = kind == "attachment" ? ToolCatalog.AttachmentsRead : kind == "attachment-list" ? ToolCatalog.WorkspaceList : ToolCatalog.WorkspaceRead;
                 model.Arguments = kind == "attachment" ? JsonSerializer.Serialize(new { attachmentId = attachment }) : JsonSerializer.Serialize(new { path = kind == "attachment-list" ? "/attachments" : "/attachments/" + attachment.ToString("D") });
             }

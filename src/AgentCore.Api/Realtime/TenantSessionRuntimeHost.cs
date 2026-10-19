@@ -12,7 +12,7 @@ namespace AgentCore.Api.Realtime;
 public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITenantRuntimeStore storage, ITenantRunStore runs,
     TenantRunExecutionAuthority authority, TenantToolAuthorization tools, SessionHost capacity, IIdGenerator ids, TimeProvider time,
     ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations, TenantRunCancellationService cancellations,
-    TenantSessionLiveDelivery delivery) : ITenantRunDispatcher, IAsyncDisposable
+    TenantSessionLiveDelivery delivery, IIamStore inputSecurity, ITenantSessionStore inputSessions) : ITenantRunDispatcher, IAsyncDisposable
 {
     private sealed class Live(AgentRun run, SessionRuntime runtime, TenantSessionLiveDelivery.Source output)
     {
