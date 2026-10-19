@@ -188,3 +188,8 @@ The source commit selects current active bound Instances with enabled subscripti
 ## Preparation worker completion
 
 `BrainFailed` is an internal normalized failure notification with current worker context and an authority-unavailable discriminator; it carries no raw exception message into persisted/public state. Failure delivery uses the existing urgent mailbox. The private evaluation-finished notification transfers cleanup of its exact live evaluation handle back to that mailbox. It is transient control state, never a serialized checkpoint, wire event or second execution owner. Shutdown acknowledges abandoned failure waiters and releases retired handles without mutating a newer evaluation.
+
+
+### Model preparation failure outcomes
+
+The existing normalized preparation failure input also carries an internal active-response requirement for generation workers. Its mailbox handler rejects stale/terminal response identities before altering history or Run state. No worker mutates the active response to settle an exception. Safe diagnostic IDs cross this boundary; exception messages, tasks, tokens and provider bodies do not enter durable state or public payloads. The ordinary failed response completion is emitted only after the existing history/Run owners have settled.

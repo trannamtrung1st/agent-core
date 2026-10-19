@@ -43,8 +43,9 @@ public sealed partial class TenantSessionAccessTests
             ? ValueTask.FromException<AgentDecision>(new IOException("Controlled failure after the approved publication completed.")) : inner.DecideAsync(context, response, ct);
     }
 
-    private async Task ArtifactReviewFlow(bool sqlite, bool review, string choice, bool rich, bool failAfterConsent = false)
+    private async Task ArtifactReviewFlow(bool sqlite, bool review, string choice, bool rich, bool failAfterConsent = false, bool failDuringModelPreparation = false)
     {
+        failAfterConsent |= failDuringModelPreparation;
         var root = Path.Combine(Path.GetTempPath(), "tenant-artifact-review-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var proof = !failAfterConsent && !sqlite && choice == "approve" && Environment.GetEnvironmentVariable("AGENTCORE_ARTIFACT_UI_PROOF") == "1";
         var proofPath = "/private/tmp/agent-core-artifact-review-ui-" + (review ? "review" : "grant");
@@ -54,11 +55,16 @@ public sealed partial class TenantSessionAccessTests
             var model = new ApprovalRecordingModel { ProposedArtifactAuthorization = JsonSerializer.Serialize(new { operation = "publish_artifact", artifact = new { displayName = "reviewed-report.md", contentType = "text/markdown", content } }), EmitArtifactReference = rich,
                 AuthorizationPreamble = failAfterConsent ? "The exact file is ready for review." : null };
             var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
-            var enabled = true;
+            var enabled = true; var modelPreparation = new ModelPreparationGate("consent-io");
             void Configure(IServiceCollection services)
             {
                 services.AddLogging(logs => logs.AddProvider(diagnostics));
-                if (failAfterConsent) services.Replace(ServiceDescriptor.Singleton<IAgentBrain>(new ConsentPreparationFailureBrain()));
+                if (failAfterConsent && !failDuringModelPreparation) services.Replace(ServiceDescriptor.Singleton<IAgentBrain>(new ConsentPreparationFailureBrain()));
+                if (failDuringModelPreparation)
+                {
+                    services.Replace(ServiceDescriptor.Singleton<IAgentBrain>(new ModelPreparationBrain(modelPreparation)));
+                    services.Replace(ServiceDescriptor.Singleton<ITenantRunStore>(p => new ModelPreparationRuns((ITenantRunStore)p.GetRequiredService<IIamStore>(), modelPreparation)));
+                }
                 if (proof) services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new ArtifactProofClock()));
                 if (proof) ((IdentityHttpOptions)services.Single(d => d.ServiceType == typeof(IdentityHttpOptions)).ImplementationInstance!).AllowedOrigins = ["http://127.0.0.1:5216"];
                 services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new MetadataExecutionGate(() => Volatile.Read(ref enabled),

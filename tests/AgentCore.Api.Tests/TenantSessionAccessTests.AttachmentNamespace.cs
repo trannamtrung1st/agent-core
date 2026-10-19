@@ -17,7 +17,12 @@ public sealed partial class TenantSessionAccessTests
 {
     private static async Task<AgentRun> NamespaceTerminal(IServiceProvider services, Guid tenant, Guid run)
     {
-        try { return await AttachmentTerminal(services.GetRequiredService<ITenantRunStore>(), tenant, run); }
+        try
+        {
+            var completed = await AttachmentTerminal(services.GetRequiredService<ITenantRunStore>(), tenant, run);
+            if (completed.Status == AgentRunStatus.Failed) throw new Xunit.Sdk.XunitException($"Run failed: code={completed.Failure?.Code}; summary={completed.Failure?.Summary}; revision={completed.Revision}; checkpoint={completed.Checkpoint is not null}");
+            return completed;
+        }
         catch (Xunit.Sdk.XunitException error)
         {
             var diagnostic = services.GetService<DiagnosticLineLoggerProvider>();

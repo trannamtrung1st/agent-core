@@ -101,7 +101,7 @@ public sealed record BrainFailed(
     bool Recoverable,
     string? Message,
     TaskCompletionSource Processed,
-    Guid? DiagnosticId = null, bool AuthorityUnavailable = false) : SessionInput(Context);
+    Guid? DiagnosticId = null, bool AuthorityUnavailable = false, bool RequireActiveResponse = false) : SessionInput(Context);
 
 public sealed record TimerElapsedReceived(
     EventContext Context,

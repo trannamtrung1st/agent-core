@@ -38,8 +38,15 @@ public sealed partial class TenantAttachmentRuntimeContextService(TenantOperatio
     private async ValueTask Fence(TenantRuntimeFrame frame, View before, CancellationToken ct, bool live = true)
     {
         var after = await Load(frame, ct, live).ConfigureAwait(false);
+        // The owning Runtime saves assistant progress concurrently with read-only prompt assembly.
+        // Conversation revision is not source authority: current ownership, lifecycle, IAM/policy,
+        // claim and immutable bound source checks remain mandatory on both sides of that save.
         if (after.Run.Revision != before.Run.Revision || after.State.Tenant.Revision != before.State.Tenant.Revision || after.Session.Owner != before.Session.Owner
-            || after.Session.Snapshot.Revision != before.Session.Snapshot.Revision || after.Agent.Instance.Revision != before.Agent.Instance.Revision)
+            || after.Session.Snapshot.Mode != before.Session.Snapshot.Mode
+            || after.Session.Snapshot.LifecycleStatus != before.Session.Snapshot.LifecycleStatus
+            || after.Session.Snapshot.ArchivedAt != before.Session.Snapshot.ArchivedAt
+            || after.Session.Snapshot.DurablyDeletedAt != before.Session.Snapshot.DurablyDeletedAt
+            || after.Agent.Instance.Revision != before.Agent.Instance.Revision)
             throw new SecurityConflictException("attachment_context_changed");
     }
     private static TenantRuntimeFrame Frame(AgentRun run) => new(run.Owner, run.SessionId, run.AgentRunId,

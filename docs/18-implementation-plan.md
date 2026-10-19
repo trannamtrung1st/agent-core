@@ -1032,3 +1032,8 @@ The shared Runtime now contains context and brain failures, settles the matching
 ### Tenant Attachment namespace checkpoint — 2026-10-19
 
 Exact `/attachments` model list/search now extends the canonical Workspace observation/Review/checkpoint owners with bound and current-child filtering before bounds, original-source fingerprints and retained-result revalidation. [Focused qualification](reports/tenant-attachment-namespace-verification-2026-10-19.md) records the executed evidence. This supersedes Attachment-namespace-pending notes only for these conversational observations. Human materialization, remaining resource/Browser lifecycle/autonomous/transport families, obsolete-authority/schema removal and final proposal-wide qualification remain open; the full goal remains active.
+
+
+### Tenant model preparation checkpoint — 2026-10-19
+
+The observed owned-progress Attachment fence race and unobserved model-prelude fault now have deterministic both-store before/after evidence. Full model worker supervision uses the existing mailbox/history/Run owners and preserves cancellation and factual completed effects. [Focused qualification](reports/tenant-model-preparation-verification-2026-10-19.md) separates this reproduced mechanism from unproven attribution of every historical sporadic failure. Human materialization, remaining lifecycle/autonomous/transport families, final authority/schema removal and proposal-wide qualification remain open; the original full goal stays active.

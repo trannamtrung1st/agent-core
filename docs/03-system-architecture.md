@@ -859,3 +859,10 @@ Workspace reads accept actual readable text; each Office reader requires its cor
 ## Preparation failure ownership
 
 Session Runtime supervises context preparation and the brain decision as one worker lifecycle. A normalized failure reaches the existing urgent mailbox; only the current epoch, turn, response and Run generation may settle the claim. Terminal failure uses the incumbent Run command and preserves factual receipts/side-effect disposition without retrying model or tool work. A failure before an answer exists creates no artificial assistant entry. Existing streaming progress is closed through the noncoalesced Session writer before the Run is settled. Evaluation-handle cleanup also returns to the mailbox and clears only the exact finished handle. [Focused qualification](reports/tenant-preparation-failure-verification-2026-10-19.md) does not accept autonomous origins or the full IAM proposal.
+
+
+### Model preparation and owned conversation progress
+
+The Session Runtime supervises the full model worker lifetime, including checkpoint restoration, current-directory/context preparation and final disposal outside the provider loop's own handler. Unexpected preparation failures return normalized outcomes through the existing mailbox and noncoalesced persistence owner. Only the current epoch/turn/response/claim can close its streaming row and Run; terminal or superseded responses stay terminal. Completed consent effects and immutable receipts remain factual and are never repeated.
+
+A protected Attachment context read rechecks current Run/security/configuration, Session ownership/lifecycle/mode and exact bound source integrity. The owning Runtime's assistant-save revision is conversation progress, not new read authority or changed Attachment provenance. A revision-only assistant commit therefore does not invalidate an otherwise unchanged authorized read.

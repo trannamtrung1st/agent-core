@@ -1280,3 +1280,8 @@ Exercise exact Artifact Review and exceptional grants through real model/HTTP co
 ### Attachment namespace qualification
 
 Exercise the actual both-store model/HTTP loop for `/attachments` list/search under direct Allowed policy and exact Review. Include pending/hidden children before bounds, independent parent and child IAM, current capability/policy denial, same-Agent different-Session isolation, canonical paging, byte-budget fitting, name versus UTF-8 content/glob search, binary skipping and retained-result revocation. Use disposable SQLite application-host recreation for pending consent and saved observations, including revoked authority and changed search-source bytes; distinguish this from physical process-kill recovery. Keep exact virtual file-reader, resource namespace and existing Workspace consent regressions focused on their shared owners.
+
+
+### Owned progress race and model-prelude qualification
+
+Use deterministic store barriers to capture an Attachment context read before the Runtime's streaming placeholder commits, then return that old metadata view only after the real save completes. The same authorized original must reach one model request and terminal history; no relaxed source/IAM guard or generation retry may hide the race. Inject an unrelated pre-provider setup error separately: it must produce a terminal Failed Run/history, no provider/effect call, released capacity and a working new independent message. Hold a noncooperative old setup callback across actual HTTP cancellation/new Run admission and verify that its late failure cannot revise the new or cancelled outcome. Reuse actual exact Review/grant publication and SQLite host recreation to preserve completed effects/consumed grants when later model preparation fails.

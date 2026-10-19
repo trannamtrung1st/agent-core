@@ -1178,3 +1178,8 @@ Preparation failures use the current Run Fail command and existing failure-refer
 ### Attachment namespace consent persistence
 
 `PreparedWorkspaceRead.AttachmentMembersJson` uses the incumbent approval payload and immutable local receipt/checkpoint storage, with nullable omission on other read variants. `TenantAttachmentNamespaceReview` extends the SQLite approval shape for a Review-only Session-scoped collection; resource/knowledge/exact-file payloads cannot carry this variant. Both SQLite and InMemory validate canonical bounded unique member identity, bound same-Session source currency and current independent reads at the protected consent transaction. Approval inventory filters current member visibility before totals/pages. No file body or parser cache is stored in consent. Existing saved-result reentry resolves current collection/source authority, and application-host recreation never replays a model or file effect.
+
+
+### Preparation settlement across owned progress saves
+
+The model worker's prelude/cleanup is supervised through the existing preparation outcome and normal noncoalesced writer. A current streaming entry saves Failed before its exact Run settles; no fresh assistant entry or receipt is invented, and completed effect/grant facts remain unchanged. Terminal guards prevent a delayed worker error from revising a cancelled or completed response. This adds no schema, ledger, migration or recovery replay. Attachment prompt/context reads retain semantic ownership/lifecycle/mode/source authority across the owning Runtime's unrelated assistant-save revision; current IAM, policy, Instance, Run/claim and exact source integrity still fence every protected use.

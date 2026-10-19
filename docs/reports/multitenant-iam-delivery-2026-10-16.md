@@ -1,5 +1,7 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
+The Runtime now supervises model prelude failures and distinguishes owned assistant-save revisions from Attachment read authority. [Controlled qualification](tenant-model-preparation-verification-2026-10-19.md) records the reproduced before/after mechanism and preserved cancellation/effect facts. Other historical failure attribution and the remaining full proposal stay open.
+
 Tenant Attachment namespace list/search now extends the incumbent Workspace read/consent/checkpoint owners. [Focused evidence](tenant-attachment-namespace-verification-2026-10-19.md) records its bounded qualification. Human materialization, remaining lifecycle/autonomous/transport adapters and final authority/schema/proposal qualification remain open; the full goal stays active.
 
 ## Tenant preparation failure lifecycle — 2026-10-19

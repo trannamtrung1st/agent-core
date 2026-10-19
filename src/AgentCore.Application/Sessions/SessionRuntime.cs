@@ -1857,6 +1857,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ClearAgentRunTerminalPending();
         }
         await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
+        if (input.RequireActiveResponse && _activeResponseId == input.ResponseId)
+        {
+            var entry = _snapshot.Entries.LastOrDefault(e => e.ResponseId == input.ResponseId && e.Role == ConversationRole.Assistant);
+            await PublishAsync(new SessionOutput(input.Context, input.ResponseId, new ResponseCompletedOutput(true,
+                HeardTextEndExclusive: entry?.HeardTextEndExclusive ?? 0, CompletedAt: entry?.CompletedAt)), cancellationToken).ConfigureAwait(false);
+            ClearActive();
+            await AfterResponseTerminalizedAsync(input.Context, cancellationToken).ConfigureAwait(false);
+        }
 
         if (input.Trigger.Kind == TriggerKind.UserTurn)
         {
@@ -2056,7 +2064,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             try
             {
-                await PumpModelAsync(model, request, workerContext, input.Trigger, pinnedCatalog, activeSkillKeys, responseToken)
+                await PumpModelAsync(model, request, workerContext, input.Trigger, pinnedCatalog, activeSkillKeys, input.TurnGeneration, responseToken)
                     .ConfigureAwait(false);
             }
             finally
@@ -2669,7 +2677,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         };
     }
 
-    private async Task PumpModelAsync(
+    private async Task PumpModelCoreAsync(
         ILanguageModel model,
         ModelRequest request,
         EventContext cause,
@@ -2719,7 +2727,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var pinnedSkills = (_boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.ActiveSkillKeys : activeSkillKeys).ToArray();
         var loadedCapabilities = LoadedCapabilitiesFor(request.ResponseId);
         var workspaceCwd = await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false);
-        if (workspaceCwd is null) return;
+        if (workspaceCwd is null) throw AgentCoreErrors.Conflict("Model preparation no longer owns workspace context.");
         var steps = checkpoint is null ? 0 : AgentRunToolCallCheckpoint.NormalizeResumedStepCount(checkpoint.StepCount, messages);
         var harnessSources = new List<HarnessSourceReceipt>();
         var outputBytes = checked((int)(checkpoint?.OutputBytes ?? 0));

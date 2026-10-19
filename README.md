@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+The Runtime’s own assistant-progress save no longer invalidates an unchanged Attachment context read, and the full model worker now reports prelude failures through the existing terminal/history owner. [Controlled race and lifecycle evidence](docs/reports/tenant-model-preparation-verification-2026-10-19.md) records both-store correction, cancellation and factual-effect recovery. Historical failure attribution outside this reproduced mechanism and the full tenant IAM proposal remain open.
+
 Tenant model Attachment namespace list/search now uses the existing Workspace observation, exact Review and retained-checkpoint owners. [Focused qualification](docs/reports/tenant-attachment-namespace-verification-2026-10-19.md) records current scoped filtering, original-source fences and actual SQLite host recreation. Human materialization and the other proposal families remain open; the full goal stays active.
 
 Context and brain preparation failures now settle their exact Run through the mailbox, preserve completed consent effects and cannot overwrite newer work after cancellation. [Lifecycle qualification](docs/reports/tenant-preparation-failure-verification-2026-10-19.md) records the reproduced stall correction and both-store/SQLite recovery evidence. Historical intermittent pre-model failure attribution and the remaining tenant IAM proposal stay open.

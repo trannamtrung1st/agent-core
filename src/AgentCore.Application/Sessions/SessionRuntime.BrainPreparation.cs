@@ -11,12 +11,19 @@ public sealed partial class SessionRuntime
 
     private async Task HandleBrainFailedAsync(BrainFailed input, CancellationToken ct)
     {
-        if (_deactivated || input.TurnGeneration != _turnGeneration || input.Context.Epoch != _epoch) return;
+        if (_deactivated || input.TurnGeneration != _turnGeneration || input.Context.Epoch != _epoch
+            || input.RequireActiveResponse && (_activeResponseId != input.ResponseId || _responseTerminal)) return;
         if (_boundAgentRun is { } bound && _snapshot.Entries.Any(e => e.Role == ConversationRole.Assistant
             && e.ResponseId == input.ResponseId && e.Status == EntryStatus.Streaming))
         {
             if (bound.ResponseId != input.ResponseId || bound.Claim?.Generation != input.Context.AgentRunGeneration
                 || !await OwnsWorkerAsync(input.Context, input.ResponseId, ct).ConfigureAwait(false)) return;
+            if (input.RequireActiveResponse)
+            {
+                _responseTerminal = true;
+                _responseLifecycle = ResponseLifecycle.Failed;
+                _responseCts?.Cancel();
+            }
             var diagnostic = input.DiagnosticId ?? _diagnostics.NewId();
             var failed = input with { DiagnosticId = diagnostic };
             var at = _time.GetUtcNow();
@@ -33,13 +40,13 @@ public sealed partial class SessionRuntime
     }
 
     private async Task QueueBrainFailureAsync(EventContext cause, AgentTrigger trigger, Guid responseId, int turn,
-        bool recoverable, Guid? diagnosticId = null, bool authorityUnavailable = false)
+        bool recoverable, Guid? diagnosticId = null, bool authorityUnavailable = false, bool requireActiveResponse = false)
     {
         if (_lifetime.IsCancellationRequested) return;
         var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
         if (!Enqueue(new BrainFailed(WorkerContext(cause), turn, responseId, trigger, recoverable, null, processed,
-            diagnosticId, authorityUnavailable), urgent: true)) return;
+            diagnosticId, authorityUnavailable, requireActiveResponse), urgent: true)) return;
         try { await processed.Task.WaitAsync(_lifetime.Token).ConfigureAwait(false); }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
     }
