@@ -93,6 +93,7 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserBinding, ITe
         if (!_tenantSessions.ContainsKey(owner.SessionId))
             return ValueTask.FromResult(new ResourceStateObservation("browser", IsAvailable ? "available" : "unavailable", "unknown", _time.GetUtcNow(),
                 LiveContexts: IsAvailable ? 0 : null, OpenPages: IsAvailable ? 0 : null, Code: IsAvailable ? null : "provider_unavailable"));
+        if (TenantRetirementBlocked(owner.SessionId)) return ValueTask.FromResult(new ResourceStateObservation("browser", "partial", SessionMode(owner.SessionId) == BrowserProfileMode.PersistentAgent ? "sharedCoordinated" : "isolated", _time.GetUtcNow(), CleanupPending: 1, Code: "cleanup_pending"));
         return ObserveCoreAsync(owner.AgentInstanceId, owner.SessionId, ct);
     }
 }

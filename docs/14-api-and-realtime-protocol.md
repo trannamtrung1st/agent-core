@@ -1,5 +1,9 @@
 # HTTP API and Realtime Protocol
 
+## Browser lifecycle cleanup facts
+
+Existing canonical Session lifecycle and Agent lifecycle HTTP commands retain their current witnesses, authorization, status codes and metadata DTOs. After their metadata commit, technical reconciliation attempts native retirement; its failure does not roll back the saved transition or imply success of resource cleanup. Current tenant Session Browser observation may report `availability=partial`, `cleanupPending=1` and `code=cleanup_pending`, with its known sharing mode and withheld unknown live counts. A qualified read still has its independent current human/parent/Browser checks. No new public release/reset/cleanup command or technical-actor endpoint is added. [Contract](04-backend-interfaces.md#tenant-browser-technical-retirement).
+
 ## Exact Browser Artifact drop intent
 
 The existing model `approvals.request_authorization` schema supports `{"operation":"run_browser_command","command":{"tool":"browser.drop","arguments":{"target":{"by":"testId","value":"file-drop"},"artifactId":"<canonical-same-Session-UUID>"}}}`. This is an internal typed model intent, not a new public dispatch route. `artifactId` is exclusive with `text` and `mimeType`; Core supplies actual Session/tenant/agent identity, independent current source reads, immutable file facts and the exact target-frame origin. Existing decision/receipt DTOs and shared Browser parameter preview remain the wire owners. A completed command confirms the native drop event, not remote acceptance. [Contract](04-backend-interfaces.md#tenant-browser-artifact-drop-contract), [qualification](reports/tenant-browser-drop-verification-2026-10-20.md).

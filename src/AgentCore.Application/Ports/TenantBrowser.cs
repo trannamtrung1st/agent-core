@@ -37,3 +37,12 @@ public interface ITenantBrowserCommandTarget
     // Inspect existing handles only; never create a context, navigate or read page content.
     ValueTask<TenantBrowserCommandPreparation> PrepareTenantCommandAsync(TenantBrowserOwner owner, BrowserCommand command, CancellationToken ct = default);
 }
+
+// Technical retirement of already owned native resources. No binding, launch, reset, deletion or user-command authority.
+public sealed record TenantBrowserRetirementPage(IReadOnlyList<TenantBrowserOwner> Items, Guid? NextCursor);
+public interface ITenantBrowserRetirement
+{
+    ValueTask<TenantBrowserRetirementPage> ListTenantRetirementCandidatesAsync(Guid? afterSession, int limit, CancellationToken ct = default);
+    // Recheck canonical lifecycle under native gates. An already started close can finish only its original context.
+    ValueTask<string> RetireTenantAsync(TenantBrowserOwner owner, Func<CancellationToken, ValueTask<bool>> stillRetired, CancellationToken ct = default);
+}

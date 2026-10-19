@@ -133,6 +133,7 @@ public sealed partial class NativePlaywrightBrowser
 
     private void ForgetClosed(SessionBrowser session)
     {
+        ClearTenantRetirements(session.Context);
         if (Interlocked.Exchange(ref session.RuntimeClosed, 1) == 1)
         {
             return;
@@ -164,6 +165,7 @@ public sealed partial class NativePlaywrightBrowser
 
     private void DropClosed(SessionBrowser session)
     {
+        ClearTenantRetirements(session.Context);
         if (session.Persistent && session.AgentInstanceId is Guid agentInstanceId)
         {
             _persistent.TryRemove(agentInstanceId, out _);

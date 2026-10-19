@@ -4,7 +4,7 @@ namespace AgentCore.Infrastructure.Browser;
 
 public sealed partial class NativePlaywrightBrowser : IBrowserIsolationBinding
 {
-    private bool ContextTransitionBlocked(Guid sessionId) => _sessionOwners.TryGetValue(sessionId, out var owner)
+    private bool ContextTransitionBlocked(Guid sessionId) => TenantRetirementBlocked(sessionId) || _sessionOwners.TryGetValue(sessionId, out var owner)
         && owner is { } id && _persistent.TryGetValue(id, out var root)
         && root.PendingContextMutation is { Completion.IsCompletedSuccessfully: false } pending
         && (pending.SessionId == sessionId || pending.SessionId == Guid.Empty

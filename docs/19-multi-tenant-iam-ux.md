@@ -1,5 +1,9 @@
 # Accounts, organizations, access and approvals UX
 
+## Browser lifecycle retirement facts
+
+Session lifecycle and Agent archive retain their existing confirmation/metadata flows. Native resources may still be retiring after the saved transition. The existing Browser resource observation owns partial cleanup counts/status; never translate a saved archive or delete acknowledgement into a “Browser closed” claim. Busy and unconfirmed closure require fresh observation and technical retry. Restore preserves saved profile state but cannot reuse an uncertain old context before its closure is confirmed. This backend checkpoint adds no screen or new human reset control. [Qualification](reports/tenant-browser-retirement-verification-2026-10-20.md).
+
 ## Browser Artifact drop consent
 
 Artifact-backed drops reuse the shared Browser saved-command parameter summary. Show the exact readable file name, MIME, size, ID/hash and file-drop frame origin as escaped wrapping text. State “Dispatch this exact file drop only; server acceptance is not confirmed.” Artifact read and Browser use remain independent; no file picker, inline bytes, MIME override, second approval editor or new layout is introduced. Current source/target drift keeps the existing fresh-request/cancel recovery; completed and uncertain results retain their existing limited native/no-replay meaning. Backend, store, native and model/HTTP behavior have [focused qualification](reports/tenant-browser-drop-verification-2026-10-20.md); this checkpoint does not claim a separate new rendered Drop UI gate.

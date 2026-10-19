@@ -1,5 +1,7 @@
 # Observability and Operations
 
+The existing resource cleanup hosted service also reconciles already owned tenant Browser resources at startup and on its five-minute sweep, in bounded pages of 100 and five-second TimeProvider budgets. A timed-out Browser owner advances the retry cursor so later owners and file cleanup can proceed. Lifecycle mutations attempt reconciliation immediately after metadata commit. Busy/unconfirmed native closure remains pending and logs use normalized Browser cleanup reasons with resource identity, never URLs, page contents or profile paths. It does not launch a profile or delete its retained bytes. [Browser retirement evidence](reports/tenant-browser-retirement-verification-2026-10-20.md).
+
 ## Tenant Sandbox retirement adapter deployment
 
 The trusted server bootstrap also installs `retirement.py` from its read-only source mount. Both local runner and Compose keep its negative fence SQLite file in the existing private `/var/lib/opensandbox` metadata volume. Preserve that volume when explicitly recreating an owned server. New tenant provisioning and disposable verification check the authenticated capability endpoint first; unsupported servers fail before filesystem/SDK effects. Never clear Core operation or provider retirement fences to retry an uncertain create. Disposable verification additionally requires `verificationFencing`; its tenant/attempt fence shares the existing provider metadata file and volume. Pending cleanup retains disposable files until the exact original host confirms retirement.

@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant Browser retirement checks
+
+Exercise canonical HTTP Session archive/pause/complete/cancel/delete and Agent archive under memory/SQLite and ephemeral/persistent Browser modes. Verify actual owned native page/context closure, sibling/other-Agent survival and cold authorized reopen after restore. Inject unconfirmed page/context close and prove current partial cleanup facts, retry through the existing sweep and exact-old-context completion after restore. Native tests also cover busy work without forced closure, lifecycle recheck inside the gates, stale command/foreign owner refusal, retained persistent profile bytes and sealed unscoped isolation. Metadata success is separate from cleanup confirmation. [Executed qualification](reports/tenant-browser-retirement-verification-2026-10-20.md).
+
 ## Tenant Browser Artifact drop checks
 
 Extend the shared upload source/consent tests across both sinks and both stores: exact source preview and source-filtered totals, missing independent read before provider observation, each source's reviewer policy/approval scope, cross-Session refusal, native pre-dispatch revocation, post-effect result withholding, historical source-read loss and receipt/reopen no replay. Native tests must validate actual file bytes, name/type/size and one drop event, plus cross-origin frame drift before resolution and navigation/authority drift during source I/O. Full worker/HTTP tests approve actual prepared model commands and compare binary bytes delivered to the native page. Reject noncanonical IDs, mixed literal/MIME input, raw source/argument mutation and lossy downgrade; test empty migration rollback/upgrade. A drop result never proves server/business acceptance. [Executed evidence](reports/tenant-browser-drop-verification-2026-10-20.md).

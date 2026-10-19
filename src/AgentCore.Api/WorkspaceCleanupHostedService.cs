@@ -14,6 +14,12 @@ public sealed class WorkspaceCleanupHostedService(
         {
             try
             {
+                await services.GetRequiredService<AgentCore.Application.Security.TenantBrowserRetirementService>().RecoverAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex) { HandledFailureLog.Warning(logger, ex, "browser.cleanup", "browser_retirement_scan_failed", diagnostics: diagnosticIds); }
+            try
+            {
                 await services.GetRequiredService<AgentCore.Application.Workspaces.TenantArtifactCleanupService>().RecoverAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
