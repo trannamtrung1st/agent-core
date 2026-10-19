@@ -8,6 +8,10 @@ public sealed record TenantRuntimeFrame(AgentRunOwner Owner, Guid SessionId, Gui
 
 public interface ITenantRuntimeStore
 {
+    // Internal child admission. The owning transaction rechecks the exact parent claim,
+    // current executor permissions/configuration and immutable causal identity.
+    ValueTask<AgentRunAdmissionResult> AdmitTenantImmediateAsync(TenantRuntimeFrame parent, SessionSnapshot snapshot,
+        AgentRun child, Guid auditId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<SessionSnapshot?> LoadTenantRuntimeAsync(TenantRuntimeFrame frame, CancellationToken ct = default);
     ValueTask SaveTenantRuntimeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, CancellationToken ct = default);
     ValueTask<ConversationHistoryPage?> ReadTenantRuntimeHistoryAsync(TenantRuntimeFrame frame, long? after, long? before, int limit, CancellationToken ct = default);

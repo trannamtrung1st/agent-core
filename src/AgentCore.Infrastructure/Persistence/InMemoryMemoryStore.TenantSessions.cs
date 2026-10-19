@@ -58,6 +58,11 @@ public sealed partial class InMemoryMemoryStore
             return new(roots.Skip(page * size).Take(size).Select(s => ReadTenantSession(tenant, s.SessionId)!).ToArray(), roots.Length, page, size);
         }
     }
+    internal bool HasTenantBackgroundIdentityConflict(SessionSnapshot snapshot)
+    {
+        lock (_gate) return _sessions.ContainsKey(snapshot.SessionId) || tenantSessions.ContainsKey(snapshot.SessionId)
+            || _entries.Values.Any(entries => entries.Any(entry => snapshot.Entries.Any(candidate => candidate.EntryId == entry.EntryId)));
+    }
     internal bool CreateTenantSession(TenantSessionRoot owner, AgentCore.Domain.Conversation.SessionSnapshot snapshot)
     {
         lock (_gate)

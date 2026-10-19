@@ -1,5 +1,15 @@
 # Backend Implementation Specification
 
+## Tenant immediate-background admission storage
+
+The incumbent `ITenantRuntimeStore` owns atomic trusted child admission in InMemory and SQLite. `TenantBackgroundAdmissionRules` validates the factory-built child against its exact active UserTurn parent frame, current Instance/persona identity, admitted/current capability, independent executor creation scope and current creation-review policy. It derives tenant/executor/original human/parent/root identity from stored ownership; no local profile or caller-selected causal identity is accepted.
+
+InMemory takes the existing IAM, Session, Instance and Definition gates; SQLite uses one database transaction. Both preserve same-parent/tool-call dedupe, refuse changed task/title/report intent, enforce per-parent/active-owner limits and commit the existing Session root, input, Activation/Run, security revision and canonical body-free executor audit together. A repeated exact admission checks current authority and returns the saved identity without another write, including after SQLite store recreation. Failure/cancellation before commit leaves no child owner, Run or success audit. No new table, migration or competing background owner is introduced.
+
+The root retains the original human provenance required by the incumbent TenantSessions User foreign key; immutable Run context separately records the actual Agent executor and original human, and the canonical admission audit attributes the operation to that executor. Provenance grants no future human access. Autonomous origins without a human parent need their converted ownership contract; no fabricated User is allowed.
+
+This storage checkpoint does not enable tenant model offering, child dispatch, outcome settlement, completion delivery or scheduled/event admission. Those adapters remain closed until converted. [Port contract](04-backend-interfaces.md#tenant-immediate-background-admission), [focused evidence](reports/tenant-background-admission-verification-2026-10-20.md).
+
 ## Tenant Agent decommission implementation
 
 `TenantAgentDecommissionService` supplies original-human preflight and an exact revision/operation command under the incumbent Instance lifecycle gate. The coherent lifecycle projection includes independent current raw update and deletion hints; a final original-human/security revision fence follows both hint reads. The existing IAM store transaction repeats authority and reference checks, marks the SystemIdentity/Principal Removed, advances Instance/security revisions, removes executor/target/home/child assignments and local child configuration/bindings, and commits one canonical audit receipt. The archived backing Instance remains as the identity-use tombstone; ordinary read/configuration/Chat/role resource discovery excludes it. Both central continuity checks and SQLite triggers prevent revival. A retired Instance marker no longer acts as a live Definition reference; genuine Instance, Session and execution references still block Definition retirement.

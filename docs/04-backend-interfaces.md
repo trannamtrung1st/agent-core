@@ -1,5 +1,15 @@
 # Backend Interfaces
 
+## Tenant immediate-background admission
+
+`ITenantRuntimeStore.AdmitTenantImmediateAsync` is an internal atomic admission boundary. It receives a server-held parent Runtime frame and a factory-built child, never public caller-selected tenant/executor/requester/root/parent identity. `BackgroundSessionAdmissionFactory.ForImmediate` derives the child's immutable trusted context from its tenant parent, preserves original initiator and approval root, names the exact parent Run/Activation and uses no local profile. The one existing Session/entry/Activation/Run schema and immutable tenant Session root remain the owners.
+
+The owning transaction requires an active owned UserTurn source with the exact live generation and unexpired claim, current active tenant/executor/Instance, current and admitted background capability, current Instance/persona revision and exact canonical child shape. Independent executor `sessions.create` and `agent-runs.create` apply to future roots. Original requester communication authority remains checked on the parent. Creation policy requiring Review refuses with `background_review_required`; this primitive cannot authorize or invent consent. Current capabilities and policy are checked again even for exact retries.
+
+Same owner/parent/tool-call key and unchanged task/title/report preference returns the original admission without a second write. Conflicting payloads refuse, including after ownership tombstones. Per-parent and active-owner background limits apply. Owned Session, original input, Activation/Run lineage, security revision and body-free executor-attributed audit commit together; refused, cancelled, stale or conflicting preparation leaves no child or audit. SQLite recreation retains the same trusted identity and dedupe; InMemory provides equivalent atomicity.
+
+This is the admission storage contract. Model offering, child dispatch/outcome settlement, completion delivery and autonomous occurrence integration require their own converted adapters before the path is enabled; the full proposal remains active.
+
 ## Tenant Agent decommission
 
 Original live humans can inspect exact Agent decommission preflight and retire an archived, unreferenced Agent under independent raw `agents.read` and `agents.delete`. The owning IAM transaction repeats human/session/status, current permission, security/Instance revisions and incumbent live Session, learned-memory, Automation/occurrence, Run/Approval/Activation blockers. Pending Browser reset also blocks retirement. No grant or model identity substitutes for the human.

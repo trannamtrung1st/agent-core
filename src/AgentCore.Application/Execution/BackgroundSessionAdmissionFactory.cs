@@ -19,14 +19,18 @@ public static class BackgroundSessionAdmissionFactory
         var persona = resolved?.Persona ?? source.PinnedPersona;
         var model = currentModel ?? source.PinnedModel;
         var skills = resolved?.Skills ?? source.PinnedSkillCatalog;
+        var execution = source.Admission.ExecutionContext is { } trusted
+            ? new TrustedExecutionContext(trusted.TenantId, trusted.AgentPrincipalId, trusted.OriginalInitiatorPrincipalId,
+                sessionId, runId, activationId, trusted.RootActivationId, source.AgentRunId, source.ActivationId, ExecutionOrigin.ImmediateBackground)
+            : null;
         var run = AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
-            persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration, taskIntent: new(objective, AgentRunTaskSource.AgentRun, source.AgentRunId.ToString("D"))), model, AgentRunLimits.DefaultMaxAttempts, now,
+            persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration, taskIntent: new(objective, AgentRunTaskSource.AgentRun, source.AgentRunId.ToString("D")), executionContext: execution), model, AgentRunLimits.DefaultMaxAttempts, now,
             skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground, parent.SessionId, source.AgentRunId,
             runId, reportCompletionToOrigin: reportCompletion,
             initialTitle: string.IsNullOrWhiteSpace(title) ? objective[..Math.Min(objective.Length, 80)] : title.Trim());
         var session = new SessionSnapshot(1, sessionId, 1, configuration.Definition, SessionMode.Text, null, SessionStatus.Created,
-            [entry], "", 0, null, source.ProfileId, now, now, source.AgentInstanceId,
+            [entry], "", 0, null, source.Owner.ProfileIdOrNull, now, now, source.AgentInstanceId,
             Title: string.IsNullOrWhiteSpace(title) ? objective[..Math.Min(objective.Length, 80)] : title.Trim(),
             LastEntrySequence: 1, Purpose: SessionPurpose.OngoingDefault, CompletionPolicy: SessionCompletionPolicy.Default,
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
