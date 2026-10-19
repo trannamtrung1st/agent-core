@@ -14,7 +14,7 @@ public sealed record TenantWorkspaceMutationResult(OperationDecisionKind Decisio
 
 public sealed class TenantWorkspaceMutationEffectService(TenantOperationAuthorizer operations, IIamStore security, ITenantRunStore runs,
     ITenantSessionStore sessions, TenantRunConfigurationResolver configurations, IamAuthorizer iam, ITenantWorkspaceOperationStore effects,
-    ITenantWorkspaceMutationStore files, IIdGenerator ids, TimeProvider time)
+    ITenantWorkspaceMutationStore files, IIdGenerator ids, TimeProvider time, ITenantApprovalStore approvals)
 {
     public async ValueTask<TenantWorkspaceMutationResult> ExecuteAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct = default)
     {
@@ -26,6 +26,9 @@ public sealed class TenantWorkspaceMutationEffectService(TenantOperationAuthoriz
         TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         var old = await effects.FindDirectOperationReceiptAsync(reference.TenantId, frame.RunId, call.Id, ct).ConfigureAwait(false);
         if (old is not null) return Result(TenantWorkspaceEffectRules.Match(old, run, call.Id, args.ParametersHash));
+        var prior = await RootApproval(run, args, ct).ConfigureAwait(false);
+        if (prior is not null) return new(prior.Status == TenantApprovalStatus.Pending ? OperationDecisionKind.RequiresApproval : OperationDecisionKind.Denied,
+            TenantApprovalRules.DuplicateReason(prior));
         if (run.SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             throw new SecurityConflictException("workspace_effect_in_progress");
         var current = await configurations.CurrentPolicyAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
@@ -92,12 +95,16 @@ public sealed class TenantWorkspaceMutationEffectService(TenantOperationAuthoriz
         var current = await configurations.CurrentPolicyAsync(fence.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
         var args = TenantWorkspaceEffectRules.Validate(run, current.Agent, current.Definition, fence.Origin.DirectOperation!, fence.Origin.Generation, time.GetUtcNow(), true);
         TenantWorkspaceEffectRules.Session(run, current.Agent, await sessions.FindTenantSessionAsync(fence.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable"));
+        if (await RootApproval(run, args, ct).ConfigureAwait(false) is { } prior) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(prior));
         await TenantWorkspaceEffectRules.RequireAuthority(state, run, args, iam, ct).ConfigureAwait(false);
         var final = await runs.FindTenantRunAsync(fence.TenantId, fence.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
         TenantWorkspaceEffectRules.RequireFence(final, fence);
         if (final.Claim?.Generation != fence.Origin.Generation || final.CancellationRequested || final.Status != AgentRunStatus.Running || final.Claim.LeaseExpiresAtUtc <= time.GetUtcNow()
             || (await security.ReadTenantAsync(fence.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("workspace_source_changed");
     }
+    private ValueTask<TenantApprovalRequest?> RootApproval(AgentRun run, TenantWorkspaceMutationArguments args, CancellationToken ct) =>
+        approvals.FindRootApprovalAsync(run.Owner.TenantId!.Value, run.Admission.Activation.RootActivationId, run.Owner.ExecutorPrincipalId!.Value,
+            TenantWorkspaceMutationOperationRules.Correlation(run, args), ct);
     public async ValueTask<int> RecoverAsync(CancellationToken ct = default)
     {
         var count = 0;

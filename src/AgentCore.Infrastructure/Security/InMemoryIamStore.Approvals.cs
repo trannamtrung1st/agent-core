@@ -18,7 +18,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash)
         .OrderBy(r => r.Status is TenantApprovalStatus.Rejected or TenantApprovalStatus.Expired or TenantApprovalStatus.Cancelled ? 0 : r.Status == TenantApprovalStatus.Pending ? 1 : 2)
         .ThenBy(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId).FirstOrDefault();
-    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null)
+    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null)
     {
         ct.ThrowIfCancellationRequested(); page.Validate();
         lock (_gate)
@@ -39,6 +39,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                     && (sandboxVisibility?.Sessions is null || sandboxVisibility.Sessions.Contains(r.SessionId))
                     && (artifactCreateSessions is null || artifactCreateSessions.Contains(r.SessionId)))
                 && (r.Operation.WorkspaceRead is null || WorkspaceApprovalVisible(r, workspaceReadVisibility))
+                && (r.Operation.WorkspaceMutation is null || WorkspaceMutationApprovalVisible(r, workspaceMutationVisibility))
                 && (r.Operation.ArtifactVerification is null || artifactBacking is not null
                     && artifactBacking.FindTenantAsync(r.TenantId, r.SessionId, r.Operation.ArtifactVerification.ArtifactId).Result is not null
                     && (artifactReadVisibility?.Sessions is null || artifactReadVisibility.Sessions.Contains(r.SessionId))
@@ -75,6 +76,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (request.Operation.BrowserCommand is not null) RequireBrowserOperation(request, run, agent);
             if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
             if (request.Operation.WorkspaceRead is not null) RequireWorkspaceReadOperation(request, run, agent);
+            if (request.Operation.WorkspaceMutation is not null) RequireWorkspaceMutationOperation(request, run, agent);
             if (request.Operation.ArtifactVerification is not null) RequireArtifactVerificationOperation(request, run, agent);
             if (request.Operation.CredentialRead is not null) RequireCredentialReadOperation(request, run, agent);
             if (request.Operation.SandboxCommand is not null) RequireSandboxOperation(request, run, agent);
@@ -137,6 +139,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 var owner = RequireSandboxReadOperation(request, run, agent);
                 TenantSandboxReadOperationRules.RequireReviewerAsync(before, owner, request.Operation.SandboxRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            if (request.Operation.WorkspaceMutation is not null && request.Status != TenantApprovalStatus.Cancelled)
+            {
+                RequireWorkspaceMutationOperation(request, run, agent);
+                TenantWorkspaceMutationOperationRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
             if (request.Operation.WorkspaceRead is not null && request.Status != TenantApprovalStatus.Cancelled)
             {

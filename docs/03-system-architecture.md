@@ -1,5 +1,9 @@
 # System Architecture
 
+## Exact workspace mutation consent ownership
+
+The existing typed approval owner now represents exact workspace mutation consent with derived compound scopes and private source witnesses. Current raw parent/source reads and secondary mutations remain independent; an exceptional grant can cover only the primary mutation permission. Scoped inbox filtering occurs before counts/paging, and current source/owner/compound-human qualification gates decisions. Semantic root correlation excludes mutable source/configuration witnesses, so the direct Allowed path cannot bypass an earlier refusal after policy or files change. Fixed correlation witnesses are never source or effect authority. Approved dispatch, continuation and model/inspector integration remain in progress; a decision alone applies no filesystem effect. [Contract](04-backend-interfaces.md#exact-workspace-mutation-consent-contract-implementation-in-progress).
+
 ## Tenant workspace mutation preparation witnesses
 
 The canonical filesystem supplies bounded private source observations for exact mutation preparation through `ITenantWorkspaceMutationObservationStore`; it remains the only native file owner. Resolved write/patch routes and unlinked structural nodes/trees retain distinct semantics. Current Application Run/owner/configuration/IAM fences surround observation; only primary delegatable mutation authority may be absent during preparation, never prerequisite reads or secondary mutation authority. An observation is neither consent nor a dispatch fence. No content snapshot, file ledger, version table, effect engine or permission grant is introduced. [Port and privacy contract](04-backend-interfaces.md#tenant-workspace-mutation-source-observations).

@@ -13,7 +13,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantOperationAuthorizationTests
 {
     private static TenantWorkspaceMutationEffectService WorkspaceEffects(Fixture f, ITenantWorkspaceMutationStore? store = null, ITenantWorkspaceOperationStore? effects = null) => new(Operations(f), f.Iam,
-        (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, f.RunConfiguration(), f.Authorizer, effects ?? (ITenantWorkspaceOperationStore)f.Iam, store ?? WorkspaceReader(f), f.Ids, f.Clock);
+        (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, f.RunConfiguration(), f.Authorizer, effects ?? (ITenantWorkspaceOperationStore)f.Iam, store ?? WorkspaceReader(f), f.Ids, f.Clock, (ITenantApprovalStore)f.Iam);
     private static async Task<AgentRun> WorkspaceEffectCheckpoint(Fixture f, TenantRuntimeFrame frame, ModelToolCall call)
     {
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(frame.Owner.TenantId!.Value, frame.RunId))!;

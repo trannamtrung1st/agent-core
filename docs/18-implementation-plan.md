@@ -2,7 +2,7 @@
 
 ## Exact mutation Review implementation in progress — 2026-10-19
 
-Private, bounded mutation source observations now use the existing canonical filesystem and current Application ownership/authority fences. They bind resolved write/patch routes, unlinked structural targets, actual source bytes/coverage and absent destinations without returning data or creating directories. [Focused evidence](reports/tenant-workspace-mutation-observations-verification-2026-10-19.md) records the executed component boundary. Exact prepared mutation payload/schema, scoped decision/reviewer checks, root refusal suppression, approved dispatch/receipt recovery and shared inspector/model integration remain required; the private observation component does not authorize an effect or accept the full proposal.
+Private, bounded mutation source observations use the existing canonical filesystem and current Application ownership/authority fences. They bind resolved write/patch routes, unlinked structural targets, actual source bytes/coverage and absent destinations without returning data or creating directories. [Source evidence](reports/tenant-workspace-mutation-observations-verification-2026-10-19.md) records that component boundary. Typed mutation consent/schema, current compound decision/reviewer checks and direct-path semantic root refusal suppression now have [focused local evidence](reports/tenant-workspace-mutation-consent-verification-2026-10-19.md). Approved dispatch/receipt recovery and shared inspector/model integration remain required; neither a private observation nor a consent decision authorizes file execution by itself. No full proposal acceptance is claimed.
 
 ## Tenant workspace direct mutation checkpoint — 2026-10-19
 

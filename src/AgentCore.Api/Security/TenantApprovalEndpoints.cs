@@ -46,6 +46,7 @@ public static class TenantApprovalEndpoints
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
+            TenantOperationKind.WorkspaceMutation => ("Change exact workspace paths", "mutate_workspace"),
             TenantOperationKind.WorkspaceRead => ("Read exact workspace observation", "inspect_workspace"),
             TenantOperationKind.ArtifactVerification => ("Verify file metadata", "verify_artifact"),
             TenantOperationKind.ArtifactPublication => ("Publish exact file", "publish_artifact"),

@@ -29,6 +29,9 @@ public sealed partial class SqliteIamStore : ITenantWorkspaceOperationStore
         var definition = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         var at = ApprovalNow; var args = TenantWorkspaceEffectRules.Validate(run, agent, definition, commit.Operation, commit.Generation, at);
         if (commit.ActionHash != TenantWorkspaceMutationContract.ActionHash(run.SessionId, args.ParametersHash)) throw new SecurityConflictException("operation_mismatch");
+        var correlated = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), agent.PrincipalId,
+            TenantWorkspaceMutationOperationRules.Correlation(run, args)).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated.Domain()));
         await TenantWorkspaceEffectRules.RequireAuthority(before, run, args, new IamAuthorizer(this), ct).ConfigureAwait(false);
         TenantWorkspaceEffectRules.Transaction(next, expectedSecurityRevision, run, audit, args, true);
         var saved = run.BeginDirectExternalEffect(run.Revision, commit.Generation, commit.Operation, commit.ActionHash, at);

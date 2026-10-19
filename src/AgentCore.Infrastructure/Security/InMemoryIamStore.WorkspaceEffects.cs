@@ -26,6 +26,9 @@ public sealed partial class InMemoryIamStore : ITenantWorkspaceOperationStore
             var definition = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
             var at = ApprovalNow; var args = TenantWorkspaceEffectRules.Validate(run, agent, definition, commit.Operation, commit.Generation, at);
             if (commit.ActionHash != TenantWorkspaceMutationContract.ActionHash(run.SessionId, args.ParametersHash)) throw new SecurityConflictException("operation_mismatch");
+            var correlated = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, agent.PrincipalId,
+                TenantWorkspaceMutationOperationRules.Correlation(run, args).OperationFingerprint);
+            if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated));
             TenantWorkspaceEffectRules.RequireAuthority(before, run, args, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             TenantWorkspaceEffectRules.Transaction(next, expectedSecurityRevision, run, audit, args, true);
             var saved = run.BeginDirectExternalEffect(run.Revision, commit.Generation, commit.Operation, commit.ActionHash, at);

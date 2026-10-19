@@ -71,6 +71,12 @@ public sealed partial class TenantApprovalService
                         PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
                     if (!read.Allowed) unavailable = "executor_read_required";
                 }
+                else if (op.WorkspaceMutation is not null)
+                {
+                    independent = await TenantWorkspaceMutationOperationRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
+                    await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(r, run, ct).ConfigureAwait(false);
+                    await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
                 else if (op.WorkspaceRead is not null)
                 {
                     var reads = workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -141,6 +147,10 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.WorkspaceMutation is { } mutation)
+            return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
+                new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),
+                new("workspaceMutationPartialEffects", null, "Copies and ordered batches are coarse filesystem operations. Earlier or partial effects can remain on failure; there is no atomic rollback and uncertain work must not be repeated.", false)];
         if (op.WorkspaceRead is { } workspace)
         {
             var args = AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(workspace.ToolName, workspace.ArgumentsJson);

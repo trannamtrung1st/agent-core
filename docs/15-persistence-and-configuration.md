@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Exact workspace mutation consent storage
+
+`TenantWorkspaceMutationReview` extends the existing `TenantApprovalRequests` payload/check constraint with one exclusive `WorkspaceMutation` value. It retains canonical supplied tool arguments, the actual Session, primary workspace/permission, bounded derived target scopes and a private observation hash; no current file body is stored. Target scopes describe required permissions, not final authorization. Normal Review and exceptional primary-mutation grants share the incumbent decision/grant/signal owners. Current in-transaction executor/parent/secondary authority and compound deciding-human checks supplement typed rebuilding and SQL shape constraints. SQLite rebuilds only this approval table and preserves existing approval families; downgrade refuses while any mutation consent remains. This schema does not yet implement approved file dispatch or its recovery. No installed/user database migration was performed for this development checkpoint.
+
 ## Tenant direct workspace dispatch persistence
 
 `TenantWorkspaceDirectEffects` adds insert/update shape guards to the existing AgentRuns table. The optional `sideEffect.externalEffect.directOperation` binds operation ID, source call, supported tool, bounded canonical JSON arguments, lowercase parameter hash and Instance/persona revision witnesses. Null metadata is omitted from ordinary external effects. Native SQLite triggers preserve existing Artifact ownership references without rebuilding AgentRuns. Downgrade refuses while direct workspace origins or `workspace_mutation_*` receipts remain.

@@ -13,7 +13,7 @@ public sealed record TenantWorkspaceMutationObservationTarget(AgentRun Run, Tena
     TenantWorkspaceMutationArguments Arguments, string Permission, AccessScope Scope, string ObservationHash);
 
 // Preparation supplies private source evidence only. Primary mutation authority is decided by the approval owner.
-public sealed class TenantWorkspaceMutationTarget(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
+public sealed partial class TenantWorkspaceMutationTarget(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
     TenantRunConfigurationResolver configuration, IamAuthorizer iam, ITenantWorkspaceMutationObservationStore files, TimeProvider time)
 {
     public static (string Permission, AccessScope Scope) Primary(AgentRun run, TenantWorkspaceMutationArguments args)
@@ -33,10 +33,11 @@ public sealed class TenantWorkspaceMutationTarget(TenantOperationAuthorizer oper
         }).Distinct().ToArray();
     }
 
-    public async ValueTask<TenantWorkspaceMutationObservationTarget> PrepareAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct = default)
+    public ValueTask<TenantWorkspaceMutationObservationTarget> PrepareAsync(TenantRuntimeFrame frame, ModelToolCall call, CancellationToken ct = default) => ObserveAsync(frame, call, true, ct);
+    private async ValueTask<TenantWorkspaceMutationObservationTarget> ObserveAsync(TenantRuntimeFrame frame, ModelToolCall call, bool live, CancellationToken ct)
     {
         var args = TenantWorkspaceMutationContract.Parse(frame.SessionId, call.Name, call.ArgumentsJson);
-        var before = await Require(frame, args, ct).ConfigureAwait(false);
+        var before = await Require(frame, args, live, ct).ConfigureAwait(false);
         var probes = Probes(args); long bytes = 0; var nodes = 0; var hashes = new List<object>();
         foreach (var group in probes.GroupBy(p => TenantWorkspaceEffectRules.Owner(before.Run, p.Path)))
         {
@@ -50,7 +51,7 @@ public sealed class TenantWorkspaceMutationTarget(TenantOperationAuthorizer oper
             nodes += observed.Nodes; bytes += observed.Bytes;
             hashes.Add(new { owner = group.Key, probes = group.ToArray(), observed.Hash });
         }
-        ct.ThrowIfCancellationRequested(); var after = await Require(frame, args, ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested(); var after = await Require(frame, args, live, ct).ConfigureAwait(false);
         if (after.State.Tenant.Revision != before.State.Tenant.Revision || after.Run.Revision != before.Run.Revision
             || after.Agent.Instance.Revision != before.Agent.Instance.Revision || after.Agent.Instance.PersonaRevision != before.Agent.Instance.PersonaRevision)
             throw new SecurityConflictException("workspace_source_changed");
@@ -58,13 +59,16 @@ public sealed class TenantWorkspaceMutationTarget(TenantOperationAuthorizer oper
         return before with { ObservationHash = hash };
     }
 
-    private async ValueTask<TenantWorkspaceMutationObservationTarget> Require(TenantRuntimeFrame frame, TenantWorkspaceMutationArguments args, CancellationToken ct)
+    private async ValueTask<TenantWorkspaceMutationObservationTarget> Require(TenantRuntimeFrame frame, TenantWorkspaceMutationArguments args, bool live, CancellationToken ct)
     {
         var reference = new TenantRunReference(frame.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required"), frame.RunId);
         var (run, state) = await operations.ResolveAsync(reference, ct).ConfigureAwait(false);
         var current = await configuration.CurrentPolicyAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
         var session = await sessions.FindTenantSessionAsync(reference.TenantId, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow()); TenantWorkspaceEffectRules.Session(run, current.Agent, session);
+        if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
+        else if (frame.Owner != run.Owner || frame.RunId != run.AgentRunId || frame.SessionId != run.SessionId || session.Owner.SessionId != run.SessionId
+            || run.CancellationRequested || run.Status is not (AgentRunStatus.Running or AgentRunStatus.WaitingForApproval)) throw new AccessDeniedException("tenant_runtime_unavailable");
+        TenantWorkspaceEffectRules.Session(run, current.Agent, session);
         if (run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
             || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
             || !TenantWorkspaceMutationContract.Allows(run.Admission.Configuration!.Definition, args.Tool)

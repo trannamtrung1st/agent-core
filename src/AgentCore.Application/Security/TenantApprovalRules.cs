@@ -46,6 +46,7 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.WorkspaceMutation => PrepareWorkspaceMutation(op.OperationId, op.InstanceId, op.WorkspaceMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.WorkspaceRead => PrepareWorkspaceRead(op.OperationId, op.InstanceId, op.WorkspaceRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ArtifactVerification => PrepareArtifactVerification(op.OperationId, op.InstanceId, op.ArtifactVerification!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ArtifactPublication => PrepareArtifact(op.OperationId, op.InstanceId, op.ArtifactPublication!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -65,7 +66,8 @@ public static partial class TenantApprovalRules
         var context = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var op = request.Operation;
         TenantApprovalContinuationRules.Require(request, run, source);
-        if (op.WorkspaceRead is { } workspace && workspace.SessionId != request.SessionId
+        if (op.WorkspaceMutation is { } mutation && mutation.SessionId != request.SessionId
+            || op.WorkspaceRead is { } workspace && workspace.SessionId != request.SessionId
             || op.ArtifactVerification is { } verification && verification.SessionId != request.SessionId
             || request.RequestId == Guid.Empty || request.TenantId != context.TenantId || request.SessionId != run.SessionId
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
