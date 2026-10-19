@@ -57,7 +57,7 @@ public sealed class BackgroundCompletionReceiptRecord
     public long Revision { get; set; } = 1;
     public string ChildAgentRunId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
-    public string ProfileId { get; set; } = "";
+    public string? ProfileId { get; set; }
     public string? ParentActivationId { get; set; }
     public string? SkipReason { get; set; }
     public long CreatedAtUtc { get; set; }

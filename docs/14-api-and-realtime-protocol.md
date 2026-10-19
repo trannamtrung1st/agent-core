@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Tenant immediate-background runtime core
+
+Canonical tenant UserTurn models may use `background.start`; an admitted immediate child uses `work.complete` and cannot fan out. Arguments contain task/title/report intent only; Core supplies actual tenant/executor/original-human/root/parent references. Current independent creation permissions and policy apply. Creation Review and other protected/native background effect adapters remain closed.
+
+A requested meaningful terminal child result can produce one factual Core-formatted report in the original parent conversation through the existing tenant text subscription/history DTOs. No new wire event or model generation is introduced. Report readiness waits for other parent work, and its pinned input boundary does not consume later human messages. The saved completion receipt means durable conversation output; actual client received-prefix acknowledgement remains its separate existing receipt. Child events do not become parent events.
+
+Canonical `GET /api/v2/tenants/{tenantId}/sessions` is the Chat collection: `ChatList` filtering happens before total/paging. Background-only Sessions remain independently readable through authorized metadata and `/messages` history, but cannot be attached as chat or accept human input implicitly. Explicit tenant Continue in chat and Activity are still pending. [Runtime, real MessagePack and browser evidence](reports/tenant-background-runtime-verification-2026-10-20.md) does not accept the full autonomous/voice/rich-input protocol or whole proposal.
+
 ## Tenant Agent decommission HTTP
 
 Authenticated `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/decommission` requires the current original human and raw `agents.read` on that exact owned Agent. It returns coherent Agent name/lifecycle and `organizationName`, Instance/security revisions, decommissioned flag, independent raw `canUpdate`/`canDecommission` hints, deletion blocker and recorded operation ID. `canUpdate` is false for retired owners and otherwise requires current exact `agents.update`; it grants no deletion authority. The original-human/security revision fence repeats after the final hint read. An exact retired owner is available only through this deliberate retained-fact projection; ordinary inventory/configuration routes exclude it.

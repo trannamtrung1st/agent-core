@@ -39,7 +39,7 @@ public sealed class AgentRunAdmission
             || approvalResume is not null && (new[] { approvalResume.SourceRunId, approvalResume.RequestId, approvalResume.OperationId }.Any(id => id == Guid.Empty)
                 || approvalResume.SourceRunId != activation.SourceAgentRunId || executionContext?.Origin != ExecutionOrigin.ApprovalContinuation
                 || approvalResume.ActionHash.Length != AgentRunLimits.ActionHashCharacters || responseId is null
-                || approvalResume.SourceInputEntryIds.Count is < 1 or > Activation.MaxSourceEntries
+                || (approvalResume.SourceInputEntryIds.Count == 0 && outputContract != AgentRunOutputContract.CompletionReport || approvalResume.SourceInputEntryIds.Count > Activation.MaxSourceEntries)
                 || approvalResume.SourceInputEntryIds.Any(id => id == Guid.Empty) || approvalResume.SourceInputEntryIds.Distinct().Count() != approvalResume.SourceInputEntryIds.Count))
             throw new ArgumentException("Approval continuation requires its exact trusted operation and original input references.");
         ApprovalResume = approvalResume is null ? null : approvalResume with { SourceInputEntryIds = Array.AsReadOnly(approvalResume.SourceInputEntryIds.ToArray()) };

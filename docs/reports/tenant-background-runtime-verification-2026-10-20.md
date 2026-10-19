@@ -1,0 +1,54 @@
+# Tenant immediate-background runtime and factual report verification — 2026-10-20
+
+This checkpoint extends [atomic immediate admission](tenant-background-admission-verification-2026-10-20.md) through model offering, detached child execution, atomic outcome settlement and one factual parent report. It also closes the Chat catalog/implicit attachment boundary found during the real browser journey. It does not accept the whole background module, a milestone or the complete [IAM proposal](../../local/proposals/agent-core-multitenant-iam-approval-final-proposal.md). The original goal remains active.
+
+## Converted behavior
+
+- Eligible tenant UserTurn models receive `background.start`; their immediate child receives `work.complete`, with no child fanout. Other protected/native background tools remain closed. Actual current tenant configuration supplies Instance revision; no legacy/local-profile fallback supplies tenant execution configuration.
+- Stored Run lineage proves same tenant, executor, original human, root and actual parent Run/Activation. Original requester communication authority applies on the original conversation, including when the requester has only that exact Session scope. Logout does not erase admitted attribution; current Account/membership/chat/read loss still blocks execution.
+- Both stores atomically save the owned Session/history and canonical Run outcome under the live claim generation. Quiet work remains quiet. Meaningful completed, failed or cancelled initial work with report intent creates an existing completion receipt once. A Continued source cannot emit a premature completion.
+- A bounded technical pass derives the actual child/parent, current creation permissions/policy and current configuration, then atomically admits one report Activation/Run and executor-attributed body-free audit. Busy parents yield before the batch limit. Report claim also yields to later queued human work. Its admitted input boundary excludes newer human messages from report input while preserving them during saves.
+- Core formats the saved terminal evidence without another model/provider generation. A successful report settles durable conversation output; actual client received-prefix evidence remains a separate receipt. Failed/unavailable report work settles a factual skip and is not replayed. Legacy delivery scans/inbox access cannot consume tenant receipts.
+- Canonical Chat listing filters `ChatList` before count/paging. Internal technical queries may retain all Sessions. Independently authorized background metadata/history remain readable, while live chat attachment and human input require `ChatList`. There is no implicit foregrounding or idle-only Continue shim.
+
+## Schema and recovery
+
+`20261020100000_TenantBackgroundRuntime` makes ProfileId nullable on the existing completion receipt. ChildRun ownership supplies the tenant reference; no second inbox/table or fabricated profile is added. SQLite insert/update triggers bind the profile/Instance to the child and any report Activation to the same tenant/executor/Instance/profile/root, and prevent owner/parent substitution. The explicit rebuild retains incumbent columns, keys and indexes. Empty downgrade/upgrade has model and foreign-key parity. Populated tenant receipts refuse downgrade rather than losing evidence.
+
+Actual SQLite application-host recreation preserves the terminal child and pending receipt. The next real host admits and saves one parent report without re-executing the child or making any new model request. Store recreation also preserves receipt/dedupe identity. Recovery fences the old claim writer.
+
+## Focused local results
+
+The initial green module batches comprised 13 new store cases, 11 API/wire/regression cases and 50 affected infrastructure regression cases: 74 passing cases. The final surface follow-up adds two store cases and two existing catalog/management cases, with affected background batches rerun below. Overlapping reruns are not added to the case total: **78 selected cases passed across this checkpoint**. All commands use Synthetic/disposable data and no hosted provider keys.
+
+| Evidence | Selection / observed result |
+| --- | --- |
+| `/private/tmp/tenant-background-runtime-store3.log` | 13 passed: atomic outcomes/report/dedupe; quiet output; expired/replaced claims; original resource-scoped requester/logout/revocation; queued human priority and pinned history boundary; human cancellation and failed report no replay; legacy isolation; SQLite owner trigger/downgrade/reopen |
+| `/private/tmp/tenant-background-runtime-api-final.log` | 11 passed: seven new model/background/host-recovery/real-wire cases plus existing two-store live JavaScript authentication/reconnect/switch/logout and two SQLite model-approval host-recreation cases |
+| `/private/tmp/tenant-background-runtime-regression.log` | 50 passed: affected immediate admission, canonical runtime, legacy immediate/quiet foreground behavior, requester/current policy and approved continuation/recovery/refusal families |
+| `/private/tmp/tenant-background-runtime-store4.log` | Final `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore --filter 'FullyQualifiedName~Tenant_background_' --nologo`: 35 passed, including 15 runtime/surface cases and 20 existing admission cases |
+| `/private/tmp/tenant-background-runtime-api-surface.log` | Final `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-restore --filter 'FullyQualifiedName~Tenant_background_' --nologo`: seven passed; actual public Chat total is one while technical Session total is two |
+| `/private/tmp/tenant-background-runtime-catalog-regression.log` | `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-build --no-restore --filter 'FullyQualifiedName~Public_conversation_view_and_management_hints_keep_chat_read_and_scoped_management_separate' --nologo`: two passed |
+| `/private/tmp/tenant-background-runtime-legacy-final.log` | Final narrow legacy scan/explicit foreground regression: `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore --filter 'FullyQualifiedName~Tenant_background_runtime_commits_outcome_and_one_root_bound_report_with_no_legacy_delivery\|FullyQualifiedName~Quiet_background_completion_and_foregrounding_preserve_same_session_for_a_new_turn' --nologo`; four passing overlapping cases |
+
+The production API cases exercise actual model tool requests, detached child Runtime, `work.complete`, canonical history and exact audit, across InMemory and SQLite. The Owner requester cannot substitute for missing executor creation permissions: no child/audit appears and the source truthfully reports unavailability. The loopback Kestrel cases run `tests/realtime-js/tenant-background.mjs` with the real JavaScript SignalR/MessagePack client: source and report share the parent attachment/Session and trusted causal root, child events do not leak into the parent, report appears once and only the actual delivered prefix is credited durably.
+
+Surface cases verify count/paging at storage, both typed surface selections, public Chat listing, independent background read access, refused direct attachment/human input and unchanged BackgroundWork surface/Run count after refusal. Metadata/history reads do not imply live conversation authority.
+
+## Production Synthetic browser journey
+
+Playwright MCP used the module-owned Synthetic API at `127.0.0.1:6998` and Vite at `127.0.0.1:6999`, with disabled native Browser/OpenSandbox, Synthetic speech and all mutable roots under `/private/tmp/agent-core-bg-ui-4lm7t713`. Setup used the original ephemeral owner and canonical public APIs to create General Assistant v32 plus an explicit tenant-wide executor role for `sessions.create` and `agent-runs.create`. No user host/catalog was reset.
+
+Through visible controls: sign in, open the parent Chat, send `[test:background-start] Check progress in the background and report the outcome here.`, then wait for completed output. Expected: start acknowledgement, detached child, one factual report, Ready with enabled composer. Observed: “Started the background check. You can keep chatting while it runs.” followed by “Background work: An unresolved checkpoint needs the owner's attention.” exactly once, Ready and enabled input.
+
+Reload the exact parent route. Expected: both saved outputs once, parent remains usable and background-only child stays out of Chats. Observed: report count one, input enabled, Chat API total one containing only the parent, no background child sidebar row. Final console inspection: zero errors/warnings. Only development StrictMode aborted reads were observed, followed by successful current reads. Functional screenshot: `.playwright-mcp/tenant-background-runtime-final.png` from MCP; no frontend source or visual-acceptance claim is made.
+
+The first browser run found the child incorrectly included in Chats after refresh. The server surface filter and implicit attach/input gates above corrected it, with repeatable two-store/API coverage and the successful rerun. During the final disposable host restart, a missing `Security:Http:AllowedOrigins` entry caused AttachTenant refusal despite successful HTTP reads; correcting this test-host configuration restored the journey. This was setup evidence, not a product fix.
+
+## Corrections and limits
+
+Batched verification exposed and corrected: tenant tool configuration losing Instance revision; report signal double-wrapping; nullable receipt migration triggers being dropped by an EF rebuild; predecessor SQL-only downgrade model limitations; and missing Chat surface filtering. Fixture corrections used the actual `/messages` history route and normalized model context sections. Earlier failed/compile/setup logs are superseded by the terminal green logs above; no failed job was relabeled as passing.
+
+No frontend build was required because frontend source did not change. No CI, full local CI suite, live provider/native-background effect qualification, real microphone/speaker or milestone acceptance was requested/run. Documentation relative links and whitespace checks run before commit. Only owned disposable API/Vite processes were stopped after verification; both ports were confirmed free.
+
+Remaining scope includes creation Review/exact grants; protected/native background resource/Browser effects; inbox/wait tools; explicit tenant Continue in chat and Activity; autonomous scheduled/event/initiative origins and ownership without a human parent; other transport/voice/rich-input arbitration; general System guardrails/audit/reconciliation; final isolation qualification and obsolete-authority/schema consolidation. These remain required by the full active proposal.

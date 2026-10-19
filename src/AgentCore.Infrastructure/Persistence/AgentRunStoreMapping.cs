@@ -226,7 +226,7 @@ internal static class AgentRunStoreMapping
 
     public static void ValidateOutcome(SessionSnapshot snapshot, AgentRun run, AgentRunCommand.Complete completion, ConversationEntry? draft)
     {
-        if (snapshot.SessionId != run.SessionId || snapshot.AgentInstanceId != run.AgentInstanceId || snapshot.ProfileId != run.ProfileId)
+        if (snapshot.SessionId != run.SessionId || snapshot.AgentInstanceId != run.AgentInstanceId || snapshot.ProfileId != run.Owner.ProfileIdOrNull)
             throw AgentCoreErrors.Conflict("AgentRun outcome belongs to another Session owner.");
         if (completion.OutcomeEntryId is { } entryId && snapshot.Entries.SingleOrDefault(entry => entry.EntryId == entryId) is not
             { Role: ConversationRole.Assistant, Status: EntryStatus.Completed } completed)

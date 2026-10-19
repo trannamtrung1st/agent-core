@@ -10,6 +10,16 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
     TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? tenantAttachments = null, IOfficeProcessor? office = null)
 {
+    internal async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration?> ResolveConfigurationAsync(AgentCore.Domain.Conversation.SessionSnapshot snapshot, CancellationToken ct)
+    {
+        var owner = await runs.ResolveTenantSessionOwnerAsync(snapshot.SessionId, ct).ConfigureAwait(false);
+        if (owner is null) return null;
+        if (configuration is null || owner.AgentInstanceId != snapshot.AgentInstanceId || snapshot.ProfileId is not null)
+            throw new AccessDeniedException("tenant_configuration_unavailable");
+        var resolved = await configuration.ResolveAsync(owner.TenantId, owner.AgentInstanceId, ct).ConfigureAwait(false);
+        if (resolved.Agent.PrincipalId != owner.ExecutorPrincipalId) throw new AccessDeniedException("tenant_configuration_unavailable");
+        return resolved.Configuration;
+    }
     // Legacy previews may read provider data before ExecuteAsync. They cannot prepare tenant authority.
     public async ValueTask<string?> PreparationErrorAsync(Guid session, ToolExecutionAdmission? admission, CancellationToken ct)
     {
@@ -34,6 +44,14 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
+            if (TenantBackgroundToolContract.IsTool(tool))
+            {
+                var background = TenantBackgroundToolContract.Allows(run, tool) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
+                    && run.Claim?.Generation == admission.AgentRunGeneration;
+                return new(true, background, reference, background ? "allowed" : "tenant_effect_unavailable");
+            }
+            if (run.Admission.ExecutionContext?.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.ImmediateBackground or AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
+                && !IamToolContracts.IsInspection(tool)) return new(true, false, reference, "tenant_effect_unavailable");
             var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");

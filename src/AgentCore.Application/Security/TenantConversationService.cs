@@ -33,6 +33,7 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
     {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var saved = await RequireAsync(state, session, human, ct).ConfigureAwait(false);
+        if (!saved.Snapshot.Surfaces.HasFlag(SessionSurface.ChatList)) throw new AccessDeniedException("resource_unavailable");
         var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         return new(saved.Owner, saved.Snapshot.Revision, state.Tenant.Revision, saved.Snapshot.Mode, saved.Snapshot.Status,

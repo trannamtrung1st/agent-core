@@ -47,7 +47,7 @@ public static class BackgroundCompletionProjection
         }
     }
 
-    public static string Build(AgentRun child, string objective, IReadOnlyList<ArtifactRecord> artifacts)
+    public static string Build(AgentRun child, string objective, IReadOnlyList<ArtifactRecord> artifacts, long? inputBoundarySequence = null)
     {
         static string Clip(string value, int bytes) => ToolJsonResults.ClipUtf8Prefix(
             new string(value.Select(character => char.IsControl(character) ? ' ' : character).ToArray()), bytes);
@@ -64,7 +64,7 @@ public static class BackgroundCompletionProjection
                 attentionRequired = child.Result?.AttentionRequired == true || child.Status == AgentRunStatus.Failed,
                 artifacts = files
             }, Json);
-            var evidence = JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.BackgroundCompleted, text, null), Json);
+            var evidence = JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.BackgroundCompleted, text, null, inputBoundarySequence), Json);
             if (Encoding.UTF8.GetByteCount(evidence) <= AgentRunLimits.MaxEvidenceBytes) return evidence;
             // Account for both JSON layers, including quote/backslash expansion, before admission.
             task = Clip(task, Encoding.UTF8.GetByteCount(task) / 2);

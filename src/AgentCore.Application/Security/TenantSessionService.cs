@@ -66,7 +66,7 @@ public sealed partial class TenantSessionService(IIamStore security, ITenantAgen
                 if ((await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("sessions.read"), assignment.Scope, ct).ConfigureAwait(false)).Allowed && TenantSessionRules.TryId(assignment.Scope, out var id)) ids.Add(id);
             allowed = ids.Distinct().ToArray();
         }
-        var result = await sessions.ListTenantSessionsAsync(tenant, allowed, Math.Clamp(page, 0, 100_000), Math.Clamp(pageSize, 1, 100), ct, includeArchived).ConfigureAwait(false);
+        var result = await sessions.ListTenantSessionsAsync(tenant, allowed, Math.Clamp(page, 0, 100_000), Math.Clamp(pageSize, 1, 100), ct, includeArchived, SessionSurface.ChatList).ConfigureAwait(false);
         var items = new List<TenantSessionMetadata>(result.Items.Count);
         foreach (var item in result.Items) items.Add(await MetadataAsync(state, actor, item, ct).ConfigureAwait(false));
         return new(items, result.Total, result.Page, result.PageSize);

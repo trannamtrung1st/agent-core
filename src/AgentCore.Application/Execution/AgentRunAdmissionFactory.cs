@@ -22,7 +22,7 @@ public static class AgentRunAdmissionFactory
         return budget with { RequestedCleanup = intent.Any, CleanupIntent = intent };
     }
 
-    public sealed record SignalInput(TriggerKind TriggerKind, string? Text, string? EnvironmentKind);
+    public sealed record SignalInput(TriggerKind TriggerKind, string? Text, string? EnvironmentKind, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? InputBoundarySequence = null);
 
     public static AgentRun ForConfigurationContinuation(Guid activationId, Guid runId, Guid responseId,
         SessionSnapshot snapshot, AgentRun source, ConfigurationPendingTask task, DateTimeOffset now,

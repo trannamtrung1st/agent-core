@@ -17,6 +17,10 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && TenantBackgroundToolContract.IsTool(toolName))
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && (toolName == ToolCatalog.WorkComplete || !admission.Detached && admission.TriggerKind == TriggerKind.UserTurn && RolePermissions.AllowsTool(definition, toolName))
+                ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantWorkspaceMutationContract.IsMutation(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantWorkspaceMutationContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -197,6 +201,12 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is not null && TenantBackgroundToolContract.IsTool(descriptor.Name))
+            return TenantBackgroundToolContract.IsOffered(definition, context, descriptor.Name);
+        // Native/effect families keep their explicit origin gates until converted. A background
+        // core Run can inspect its IAM and finish; it cannot borrow a foreground consent adapter.
+        if (context?.ExecutionContext?.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.ImmediateBackground or AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
+            && !IamToolContracts.IsInspection(descriptor.Name)) return false;
         if (context?.ExecutionContext is { } mutation && TenantWorkspaceMutationContract.IsMutation(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && mutation.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation

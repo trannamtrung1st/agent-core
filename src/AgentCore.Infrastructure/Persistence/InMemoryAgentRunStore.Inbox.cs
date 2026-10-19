@@ -7,6 +7,7 @@ public sealed partial class InMemoryAgentRunStore
 {
     public ValueTask<CompletionInboxItem?> GetCompletionInboxAsync(AgentRunOwner owner, Guid parentSessionId, Guid childRunId, DateTimeOffset now, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         ct.ThrowIfCancellationRequested();
         lock (sessions.AdmissionGate)
         {
@@ -17,13 +18,15 @@ public sealed partial class InMemoryAgentRunStore
 
     public ValueTask<bool> HasCompletionClaimAsync(AgentRunOwner owner, Guid parentRunId, Guid generation, DateTimeOffset now, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         ct.ThrowIfCancellationRequested();
-        lock (sessions.AdmissionGate) return ValueTask.FromResult(State.CompletionReceipts.Values.Select(CompletionInboxMapping.Read)
+        lock (sessions.AdmissionGate) return ValueTask.FromResult(State.CompletionReceipts.Values.Where(acLegacyReceipt => acLegacyReceipt.ProfileId is not null).Select(CompletionInboxMapping.Read)
             .Any(i => i.Owner == owner && i.Status == CompletionInboxStatus.Claimed && i.ClaimRunId == parentRunId && i.ClaimGeneration == generation && i.ClaimExpiresAtUtc > now));
     }
 
     public ValueTask<IReadOnlyList<AgentCore.Application.Ports.BackgroundCompletionCandidate>> ListBackgroundPageAsync(AgentRunOwner owner, Guid parentSessionId, Guid? cursor, bool pendingOnly, int limit, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         ct.ThrowIfCancellationRequested();
         if (limit is < 1 or > AgentRunLimits.MaxListLimit) throw AgentCoreErrors.Validation("Background limit must be 1–100.");
         lock (sessions.AdmissionGate)
@@ -40,13 +43,15 @@ public sealed partial class InMemoryAgentRunStore
 
     public ValueTask<bool> HasCompletionAcknowledgmentAsync(AgentRunOwner owner, Guid parentRunId, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         ct.ThrowIfCancellationRequested();
-        lock (sessions.AdmissionGate) return ValueTask.FromResult(State.CompletionReceipts.Values.Select(CompletionInboxMapping.Read)
+        lock (sessions.AdmissionGate) return ValueTask.FromResult(State.CompletionReceipts.Values.Where(acLegacyReceipt => acLegacyReceipt.ProfileId is not null).Select(CompletionInboxMapping.Read)
             .Any(i => i.Owner == owner && i.Status == CompletionInboxStatus.Claimed && i.ClaimRunId == parentRunId && i.Acknowledgment is not null));
     }
 
     public ValueTask<IReadOnlyList<AgentCore.Application.Ports.BackgroundCompletionCandidate>> ListBackgroundChildrenAsync(AgentRunOwner owner, Guid parentSessionId, int limit, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         ct.ThrowIfCancellationRequested();
         if (limit is < 1 or > AgentRunLimits.MaxListLimit) throw AgentCoreErrors.Validation("Background limit must be 1–100.");
         lock (sessions.AdmissionGate)
@@ -67,26 +72,27 @@ public sealed partial class InMemoryAgentRunStore
             if (child is not null && child.Origin.MayReportCompletion(run.AgentRunId))
                 State.CompletionReceipts.Add(run.AgentRunId, CompletionInboxMapping.Create(run, child));
         }
-        foreach (var row in State.CompletionReceipts.Values)
+        foreach (var row in State.CompletionReceipts.Values.Where(acLegacyReceipt => acLegacyReceipt.ProfileId is not null))
             CompletionInboxMapping.Write(row, CompletionInboxMapping.Refresh(CompletionInboxMapping.Read(row), State.Runs.Values.Where(r => r.Owner.TenantId is null).ToArray(), now));
     }
 
     private void SettleInbox(AgentRun updated, Guid? generation)
     {
-        foreach (var row in State.CompletionReceipts.Values)
+        foreach (var row in State.CompletionReceipts.Values.Where(acLegacyReceipt => acLegacyReceipt.ProfileId is not null))
             CompletionInboxMapping.Write(row, CompletionInboxMapping.Read(row).Settle(updated, generation));
         RepairInbox(updated.UpdatedAtUtc);
     }
 
     public ValueTask<IReadOnlyList<CompletionInboxItem>> ListCompletionInboxAsync(AgentRunOwner owner, Guid parentSessionId, int limit, DateTimeOffset now, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         ct.ThrowIfCancellationRequested();
         if (limit is < 1 or > AgentRunLimits.MaxListLimit) throw AgentCoreErrors.Validation("Inbox limit must be 1–100.");
         lock (sessions.AdmissionGate)
         {
             var parent = sessions.LoadMetadataAsync(parentSessionId, ct).GetAwaiter().GetResult();
             if (parent?.AgentInstanceId != owner.AgentInstanceId || parent.ProfileId != owner.ProfileId) throw AgentCoreErrors.NotFound("Parent Session was not found.");
-            return ValueTask.FromResult<IReadOnlyList<CompletionInboxItem>>(State.CompletionReceipts.Values.Select(CompletionInboxMapping.Read)
+            return ValueTask.FromResult<IReadOnlyList<CompletionInboxItem>>(State.CompletionReceipts.Values.Where(acLegacyReceipt => acLegacyReceipt.ProfileId is not null).Select(CompletionInboxMapping.Read)
                 .Where(i => i.Owner == owner && i.ParentSessionId == parentSessionId).OrderBy(i => i.SourceFinishedAtUtc).ThenBy(i => i.ChildAgentRunId).Take(limit).ToArray());
         }
     }

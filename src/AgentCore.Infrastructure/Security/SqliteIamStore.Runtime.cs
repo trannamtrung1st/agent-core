@@ -58,6 +58,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
     }
     private static async Task<long> TenantInputBoundaryAsync(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
     {
+        if (TenantBackgroundCompletionFactory.InputBoundary(run) is { } reportBoundary) return reportBoundary;
         var sources = TenantApprovalContinuationRules.Inputs(run).Select(id => id.ToString("D")).ToArray();
         var inputs = await db.Entries.Where(e => e.SessionId == run.SessionId.ToString("D") && sources.Contains(e.EntryId))
             .Select(e => new { e.EntrySequence, e.Role, e.Status }).ToArrayAsync(ct).ConfigureAwait(false);
@@ -76,7 +77,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
                 || r.Status == (int)AgentRunStatus.Running && r.LeaseExpiresAtUtc <= millis))
             .OrderBy(r => r.CreatedAtUtc).ThenBy(r => db.ActivationSourceEntries.Where(e => e.ActivationId == r.ActivationId).Join(db.Entries, source => source.EntryId, entry => entry.EntryId, (source, entry) => (long?)entry.EntrySequence).Min() ?? long.MaxValue)
             .ThenBy(r => r.AgentRunId).Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(ct).ConfigureAwait(false);
-        return rows.Select(AgentRunStoreMapping.ToDomain).Where(r => r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation).ToArray();
+        return rows.Select(AgentRunStoreMapping.ToDomain).Where(r => r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted).ToArray();
     }
     public async ValueTask<AgentRun> ApplyTenantRuntimeCommandAsync(AgentRunOwner owner, Guid runId, AgentRunCommand command, Guid diagnosticId, CancellationToken ct = default, Guid? runtimeGeneration = null)
     {
@@ -87,7 +88,8 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (command is AgentRunCommand.Claim)
         {
-            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            _ = await TenantExecutionLineage.RootAsync(run, this, ct).ConfigureAwait(false);
             if (run.ApprovalRequestId is { } approvalId)
             {
                 var request = await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(a => a.RequestId == approvalId && a.TenantId == owner.TenantId, ct).ConfigureAwait(false);
@@ -96,6 +98,9 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             }
             if (!await db.Set<Tenant>().AnyAsync(t => t.TenantId == owner.TenantId && t.Status == IdentityStatus.Active, ct).ConfigureAwait(false)
                 || !await db.Set<Principal>().AnyAsync(p => p.PrincipalId == owner.ExecutorPrincipalId && p.TenantId == owner.TenantId && p.Status == IdentityStatus.Active, ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Executor unavailable.");
+            if (run.Admission.OutputContract == AgentRunOutputContract.CompletionReport && await db.AgentRuns.AnyAsync(r => r.SessionId == row.SessionId && r.AgentRunId != row.AgentRunId
+                && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Failed && r.Status != (int)AgentRunStatus.Cancelled, ct).ConfigureAwait(false))
+                throw AgentCoreErrors.Conflict("Completion waits for pending user work.");
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == row.SessionId && r.AgentRunId != row.AgentRunId && (r.Status == (int)AgentRunStatus.Running || r.Status == (int)AgentRunStatus.WaitingForSignal), ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Session owns an active execution.");
         }
         if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId }
@@ -106,6 +111,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             && command is not (AgentRunCommand.Recover or AgentRunCommand.RequestCancellation or AgentRunCommand.DeadlineExceeded)) throw AgentCoreErrors.Conflict("Execution claim expired.");
         AgentRun next; try { next = command.Apply(run, () => diagnosticId); } catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
         AgentRunStoreMapping.Apply(row, next);
+        await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }
         catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Stale Run revision."); }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { throw AgentCoreErrors.Conflict("Execution ownership changed."); }

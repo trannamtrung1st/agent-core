@@ -27,7 +27,7 @@ public sealed partial class InMemoryAgentRunStore
         lock (sessions.AdmissionGate)
         {
             RepairInbox(now);
-            var candidates = State.CompletionReceipts.Values.Select(CompletionInboxMapping.Read).Where(i => i.Status == CompletionInboxStatus.Pending)
+            var candidates = State.CompletionReceipts.Values.Where(acLegacyReceipt => acLegacyReceipt.ProfileId is not null).Select(CompletionInboxMapping.Read).Where(i => i.Status == CompletionInboxStatus.Pending)
                 .OrderBy(i => i.SourceFinishedAtUtc).ThenBy(i => i.ChildAgentRunId)
                 .Select(i => new BackgroundCompletionCandidate(State.Runs[i.ChildAgentRunId], sessions.LoadMetadataAsync(i.ChildSessionId, ct).GetAwaiter().GetResult()!))
                 .Where(c => c.Run.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction ||

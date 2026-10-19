@@ -36,7 +36,7 @@ public static class TenantRunRules
             throw new ArgumentException("Invalid tenant human Run admission.");
         if (current.Revision != admission.ExpectedSessionRevision || agent.Instance.Revision != admission.ExpectedInstanceRevision)
             throw new SecurityConflictException("stale_revision");
-        if (current.DurablyDeletedAt is not null || current.ArchivedAt is not null || LifecycleTransition.IsTerminal(current))
+        if (!current.Surfaces.HasFlag(SessionSurface.ChatList) || current.DurablyDeletedAt is not null || current.ArchivedAt is not null || LifecycleTransition.IsTerminal(current))
             throw AgentCoreErrors.Validation("Session is unavailable for new input.");
         if (current.Status is SessionStatus.Attached or SessionStatus.Ending || current.PendingAgentInputIds.Count != 0)
             throw new SecurityConflictException("session_in_use");

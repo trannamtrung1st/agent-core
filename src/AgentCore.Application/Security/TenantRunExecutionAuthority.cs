@@ -24,6 +24,8 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                 if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
                     || current.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || current.Agent.Instance.DefinitionId != run.DefinitionId)
                     return null;
+                if (run.Admission.ExecutionContext?.Origin is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport
+                    && !AgentCore.Application.Agents.RolePermissions.AllowsTool(current.Definition, AgentCore.Application.Tools.ToolCatalog.BackgroundStart)) return null;
                 if (before.State.Tenant.Revision == after.State.Tenant.Revision)
                 {
                     if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(after.Run, cancellationToken).ConfigureAwait(false);
@@ -69,7 +71,8 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
             account = await store.ReadAccountAsync(user.AccountId, ct).ConfigureAwait(false);
             if (account?.Status != IdentityStatus.Active) throw new AccessDeniedException("requester_unavailable");
             var agent = AccessScope.ForResource(execution.TenantId, "agent", current.AgentInstanceId.ToString("D"));
-            var session = TenantSessionRules.Scope(execution.TenantId, current.SessionId);
+            var root = await operations.RootAsync(current, ct).ConfigureAwait(false);
+            var session = TenantSessionRules.Scope(execution.TenantId, root.SessionId);
             foreach (var assignment in state.Assignments.Where(a => a.PrincipalId == requester && a.TenantId == execution.TenantId
                 && IamAuthorizer.ValidScope(a.Scope) && (a.Scope.Contains(agent) || a.Scope.Contains(session))))
             {

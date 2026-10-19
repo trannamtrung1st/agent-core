@@ -30,7 +30,7 @@ internal static class CompletionInboxMapping
     internal static BackgroundCompletionReceiptRecord Create(AgentRun run, SessionSnapshot child)
     {
         var row = new BackgroundCompletionReceiptRecord { ChildAgentRunId = run.AgentRunId.ToString("D"),
-            AgentInstanceId = run.AgentInstanceId.ToString("D"), ProfileId = run.ProfileId.ToString("D"), CreatedAtUtc = run.UpdatedAtUtc.ToUnixTimeMilliseconds() };
+            AgentInstanceId = run.AgentInstanceId.ToString("D"), ProfileId = run.Owner.ProfileIdOrNull?.ToString("D"), CreatedAtUtc = run.UpdatedAtUtc.ToUnixTimeMilliseconds() };
         Write(row, new(run.AgentRunId, run.Owner, child.Origin.OriginatingSessionId!.Value, run.SessionId, run.UpdatedAtUtc,
             Status: run.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction ? CompletionInboxStatus.Skipped : CompletionInboxStatus.Pending,
             SkipReason: run.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction ? "quiet-outcome" : null));

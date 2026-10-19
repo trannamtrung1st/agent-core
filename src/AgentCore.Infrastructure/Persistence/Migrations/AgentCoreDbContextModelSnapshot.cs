@@ -1571,7 +1571,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProfileId")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<long>("Revision")

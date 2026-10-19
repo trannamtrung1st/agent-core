@@ -97,6 +97,8 @@ public sealed partial class SessionToolExecutor(
 
     public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
     {
+        if (tenantAuthorization is not null && await tenantAuthorization.ResolveConfigurationAsync(session, ct).ConfigureAwait(false) is { } tenantConfiguration)
+            return tenantConfiguration;
         if (_agentInstances is not null && _agentDefinitions is not null && definitionResources is not null)
             return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings, sandboxStore, sandboxAuthority, sandboxReadiness, browser).ResolveAsync(session.AgentInstanceId, ct);
         // Isolated fixtures can supply their immutable Definition directly. Production wires all stores.

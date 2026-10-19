@@ -25,8 +25,7 @@ public static class TenantApprovalContinuationRules
         var previous = source.Admission.ExecutionContext!;
         var activation = new Activation(ids.ActivationId, source.SessionId, ActivationKind.ApprovalContinuation, [], signal.SignalId, null,
             source.SessionId, source.AgentRunId, "approval-continuation:" + request.RequestId.ToString("D"), at,
-            previous.RootActivationId, source.ActivationId, JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.UserTurn,
-                "Continue the exact saved authorization operation. Use its recorded outcome; do not repeat prior effects.", "approval")));
+            previous.RootActivationId, source.ActivationId, CompletionEvidence(source));
         var context = new TrustedExecutionContext(previous.TenantId, previous.AgentPrincipalId, previous.OriginalInitiatorPrincipalId, source.SessionId,
             ids.RunId, ids.ActivationId, previous.RootActivationId, source.AgentRunId, source.ActivationId, ExecutionOrigin.ApprovalContinuation);
         var old = source.Admission;
@@ -35,6 +34,11 @@ public static class TenantApprovalContinuationRules
             new(source.AgentRunId, request.RequestId, request.Operation.OperationId, request.Operation.ActionHash, Inputs(source)));
         return source.ForkApprovalContinuation(ids.RunId, admission, request.RequestId, at);
     }
+
+    private static string CompletionEvidence(AgentRun source) => source.Admission.OutputContract == AgentRunOutputContract.CompletionReport
+        ? source.Admission.Activation.EvidenceJson ?? throw new AccessDeniedException("completion_input_unavailable")
+        : JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.UserTurn,
+            "Continue the exact saved authorization operation. Use its recorded outcome; do not repeat prior effects.", "approval"));
 
     public static void Require(TenantApprovalRequest request, AgentRun run, AgentRun? source)
     {

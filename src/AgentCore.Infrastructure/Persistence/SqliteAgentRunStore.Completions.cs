@@ -28,7 +28,7 @@ public sealed partial class SqliteAgentRunStore
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         await RepairInboxAsync(db, now, ct).ConfigureAwait(false);
         await SaveAsync(db, ct).ConfigureAwait(false);
-        var items = await db.BackgroundCompletionReceipts.AsNoTracking().Where(i => i.Status == (int)CompletionInboxStatus.Pending
+        var items = await db.BackgroundCompletionReceipts.AsNoTracking().Where(i => i.ProfileId != null && i.Status == (int)CompletionInboxStatus.Pending
             && (LegacyRuns(db).Any(c => c.AgentRunId == i.ChildAgentRunId && c.PayloadJson.Contains("\"outcomeKind\":1"))
                 || !LegacyRuns(db).Any(p => p.SessionId == i.ParentSessionId && p.Status != (int)AgentRunStatus.Completed && p.Status != (int)AgentRunStatus.Failed && p.Status != (int)AgentRunStatus.Cancelled)
                     && !db.Sessions.Any(p => p.SessionId == i.ParentSessionId && p.PendingAgentInputIdsJson != "[]")))
@@ -53,7 +53,7 @@ public sealed partial class SqliteAgentRunStore
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         await RepairInboxAsync(db, DateTimeOffset.MinValue, ct).ConfigureAwait(false);
         await SaveAsync(db, ct).ConfigureAwait(false);
-        var pending = (await db.BackgroundCompletionReceipts.AsNoTracking().Where(r => r.Status == (int)CompletionInboxStatus.Pending).OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.ChildAgentRunId).Take(limit).ToArrayAsync(ct).ConfigureAwait(false))
+        var pending = (await db.BackgroundCompletionReceipts.AsNoTracking().Where(r => r.ProfileId != null && r.Status == (int)CompletionInboxStatus.Pending).OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.ChildAgentRunId).Take(limit).ToArrayAsync(ct).ConfigureAwait(false))
             .Where(r => CompletionInboxMapping.Read(r).Status == CompletionInboxStatus.Pending).Take(limit).Select(r => r.ChildAgentRunId).ToArray();
         var rows = await LegacyRuns(db).AsNoTracking().Where(r => pending.Contains(r.AgentRunId)).OrderBy(r => r.UpdatedAtUtc).ThenBy(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);

@@ -8,7 +8,15 @@ The owning transaction requires an active owned UserTurn source with the exact l
 
 Same owner/parent/tool-call key and unchanged task/title/report preference returns the original admission without a second write. Conflicting payloads refuse, including after ownership tombstones. Per-parent and active-owner background limits apply. Owned Session, original input, Activation/Run lineage, security revision and body-free executor-attributed audit commit together; refused, cancelled, stale or conflicting preparation leaves no child or audit. SQLite recreation retains the same trusted identity and dedupe; InMemory provides equivalent atomicity.
 
-This is the admission storage contract. Model offering, child dispatch/outcome settlement, completion delivery and autonomous occurrence integration require their own converted adapters before the path is enabled; the full proposal remains active.
+`TenantBackgroundToolContract` offers `background.start` only to an eligible actual UserTurn and `work.complete` only to its immediate child. The scoped Runtime port binds admission and `CommitTenantOutcomeAsync` to its captured Run/generation. Outcome, Session revision/history and canonical Run completion commit atomically. Child fanout and other protected/native background adapters remain closed.
+
+`TenantExecutionLineage.RootAsync` resolves actual saved parents, same owner/executor/requester/root and recorded continuation handoffs. Current communication authority is checked on the original human conversation, never borrowed from a new child Session or copied web session. Every child/report also requires current background capability.
+
+The bounded technical completion service lists pending owned receipts, admits one factory-built report under current creation/communication authority and settles factual report results through existing owners. Busy parents yield before paging; an admitted report yields again to any newer queued human input. The pinned original input boundary hides newer entries from report input while preserving those durable entries. Core formats admitted terminal evidence without another model generation. Quiet outcomes remain quiet; failed/cancelled child facts may report once; unavailable or failed report work is skipped without replay.
+
+`ITenantSessionStore.ListTenantSessionsAsync` accepts an optional typed surface filter before count/paging. Canonical public Chat listing selects `ChatList`; internal technical queries may include all Sessions. Authorized background metadata/history reads remain independent, while live chat attachment and human-message admission require `ChatList`. A tenant explicit Continue in chat owner is still pending; direct attachment cannot implicitly foreground work.
+
+[Runtime qualification](reports/tenant-background-runtime-verification-2026-10-20.md) supersedes the admission-only checkpoint for these core paths. Creation Review, protected/native background effects, human Activity/Continue, inbox/wait tools and autonomous occurrence integration remain open; the full proposal stays active.
 
 ## Tenant Agent decommission
 

@@ -39,11 +39,12 @@ public sealed partial class InMemoryIamStore
     }
     public ValueTask<TenantSession?> FindTenantSessionAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(sessionBacking.ReadTenantSession(tenantId, sessionId)); }
-    public ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true)
+    public ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true, SessionSurface? surface = null)
     {
         ct.ThrowIfCancellationRequested();
         if (tenantId == Guid.Empty || page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
-        lock (_gate) return ValueTask.FromResult(sessionBacking.ListTenantSessions(tenantId, allowedIds, page, pageSize, includeArchived));
+        if (surface is not null and not SessionSurface.ChatList and not SessionSurface.BackgroundWork) throw new ArgumentOutOfRangeException(nameof(surface));
+        lock (_gate) return ValueTask.FromResult(sessionBacking.ListTenantSessions(tenantId, allowedIds, page, pageSize, includeArchived, surface));
     }
     public ValueTask<bool> TryCreateTenantSessionAsync(TenantSecurityState next, long expectedSecurityRevision, TenantSessionRoot owner,
         SessionSnapshot snapshot, TenantSessionInitiator initiator, long expectedInstanceRevision, AuthorizationAudit audit, CancellationToken ct = default)

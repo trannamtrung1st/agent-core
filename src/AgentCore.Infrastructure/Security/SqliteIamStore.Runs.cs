@@ -61,7 +61,7 @@ public sealed partial class SqliteIamStore
                 SqliteMemoryStore.ApplySession(session, snapshot with { Revision = checked(snapshot.Revision + 1), UpdatedAt = at,
                     LastEntrySequence = Math.Max(snapshot.DurableLastEntrySequence, values.Max(e => e.Sequence)) });
             }
-            AgentRunStoreMapping.Apply(row, saved); return true;
+            AgentRunStoreMapping.Apply(row, saved); await SettleTenantCompletion(db, saved, run.Claim?.Generation, ct).ConfigureAwait(false); return true;
         }, ct).ConfigureAwait(false);
         return written ? saved : null;
     }

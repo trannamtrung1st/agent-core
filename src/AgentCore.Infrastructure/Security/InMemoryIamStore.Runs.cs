@@ -28,6 +28,7 @@ public sealed partial class InMemoryIamStore
             var saved = sessionBacking.CancelTenantRun(next.Tenant.TenantId, runId, expectedRunRevision, at, response);
             if (saved is not null)
             {
+                SettleTenantCompletion(saved, run.Claim?.Generation);
                 if (closed is not null && closed != request)
                 {
                     _approvals[closed.RequestId] = closed;

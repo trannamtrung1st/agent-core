@@ -48,8 +48,18 @@ public sealed class TenantAgentRunStore(ITenantRuntimeStore storage, ITenantRunS
     public ValueTask<bool> HasCompletionReceiptAsync(AgentRunOwner owner, Guid childRunId, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
     public ValueTask SkipCompletionReportAsync(AgentRunOwner owner, Guid childRunId, string reason, DateTimeOffset now, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_continuation_unavailable");
     public ValueTask<AgentRunAdmissionResult> AdmitAsync(SessionSnapshot snapshot, long expectedSessionRevision, AgentRun run, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_admission_requires_authenticated_ingress");
-    public ValueTask<AgentRunAdmissionResult> AdmitImmediateAsync(SessionSnapshot snapshot, AgentRun run, Guid expectedParentGeneration, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_continuation_unavailable");
+    public ValueTask<AgentRunAdmissionResult> AdmitImmediateAsync(SessionSnapshot snapshot, AgentRun run, Guid expectedParentGeneration, CancellationToken cancellationToken = default)
+    {
+        if (frame is null || frame.Generation != expectedParentGeneration || run.Owner != frame.Owner
+            || run.Admission.ExecutionContext?.ParentRunId != frame.RunId) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
+        return storage.AdmitTenantImmediateAsync(frame, snapshot, run, ids.NewId(), cancellationToken);
+    }
     public ValueTask<AgentRunAdmissionResult> AdmitCompletionReportAsync(SessionSnapshot parent, long expectedRevision, AgentRun report, Guid childRunId, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_continuation_unavailable");
     public ValueTask<AgentRunAdmissionResult> AdmitOccurrenceAsync(SessionSnapshot snapshot, AgentRun run, long expectedRoutingRevision, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_trigger_unavailable");
-    public ValueTask<AgentRun> CommitOutcomeAsync(SessionSnapshot snapshot, long expectedSessionRevision, AgentRunOwner owner, Guid agentRunId, AgentRunCommand.Complete completion, Guid? draftEntryId, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_background_outcome_unavailable");
+    public ValueTask<AgentRun> CommitOutcomeAsync(SessionSnapshot snapshot, long expectedSessionRevision, AgentRunOwner owner, Guid agentRunId, AgentRunCommand.Complete completion, Guid? draftEntryId, CancellationToken cancellationToken = default)
+    {
+        Scope(owner, snapshot.SessionId, agentRunId);
+        if (frame is null) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
+        return storage.CommitTenantOutcomeAsync(frame, snapshot, expectedSessionRevision, completion, draftEntryId, ids.NewId(), cancellationToken);
+    }
 }

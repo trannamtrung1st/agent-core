@@ -9,6 +9,8 @@ public sealed partial class InMemoryMemoryStore
 {
     private HashSet<Guid> FutureTenantEntries(AgentRun run)
     {
+        if (TenantBackgroundCompletionFactory.InputBoundary(run) is { } reportBoundary)
+            return _entries.GetValueOrDefault(run.SessionId, []).Where(e => e.Sequence > reportBoundary && e.ResponseId != run.ResponseId).Select(e => e.EntryId).ToHashSet();
         var inputs = TenantApprovalContinuationRules.Inputs(run).Select(id => FindEntry(run.SessionId, id)).ToArray();
         if (inputs.Length == 0 || inputs.Any(e => e is not { Role: ConversationRole.User, Status: EntryStatus.Completed })) throw new AccessDeniedException("tenant_runtime_inputs_unavailable");
         var boundary = inputs.Max(e => e!.Sequence);

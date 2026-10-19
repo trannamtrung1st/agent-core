@@ -68,6 +68,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
         if (state is not null) await audit.RecordAsync(state, run,
             new(OperationDecisionKind.Denied, reason, permission, AccessScope.ForTenant(reference.TenantId)), purpose, ct).ConfigureAwait(false);
     }
+    internal ValueTask<AgentRun> RootAsync(AgentRun run, CancellationToken ct) => TenantExecutionLineage.RootAsync(run, runs, ct);
     internal async ValueTask<(AgentRun Run, TenantSecurityState State)> ResolveAsync(TenantRunReference reference, CancellationToken ct)
     {
         var run = await runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct).ConfigureAwait(false)
@@ -80,8 +81,9 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             ?? throw new AccessDeniedException("executor_unavailable");
         if (agent.PrincipalId != context.AgentPrincipalId || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("executor_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
+        var root = await TenantExecutionLineage.RootAsync(run, runs, ct).ConfigureAwait(false);
         if (context.OriginalInitiatorPrincipalId is { } requester)
-            foreach (var pair in new[] { ("sessions.read", TenantSessionRules.Scope(reference.TenantId, run.SessionId)),
+            foreach (var pair in new[] { ("sessions.read", TenantSessionRules.Scope(reference.TenantId, root.SessionId)),
                 ("agents.chat", AccessScope.ForResource(reference.TenantId, "agent", run.AgentInstanceId.ToString("D"))) })
             {
                 var current = await authorizer.CheckTenantAsync(state, requester, PermissionCatalog.Get(pair.Item1), pair.Item2, ct).ConfigureAwait(false);

@@ -66,13 +66,15 @@ public sealed partial class SqliteIamStore
         var root = await OwnedSessions(db, tenantId).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == sessionId.ToString("D"), ct).ConfigureAwait(false);
         return root is null ? null : await SessionView(db, root, ct).ConfigureAwait(false);
     }
-    public async ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true)
+    public async ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true, SessionSurface? surface = null)
     {
         if (tenantId == Guid.Empty || page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
+        if (surface is not null and not SessionSurface.ChatList and not SessionSurface.BackgroundWork) throw new ArgumentOutOfRangeException(nameof(surface));
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var query = OwnedSessions(db, tenantId).AsNoTracking();
         if (allowedIds is not null) { var ids = allowedIds.Select(id => id.ToString("D")).ToArray(); query = query.Where(s => ids.Contains(s.SessionId)); }
         if (!includeArchived) query = query.Where(s => db.Sessions.Any(row => row.SessionId == s.SessionId && row.ArchivedAtUtc == null));
+        if (surface is { } selected) query = query.Where(s => db.Sessions.Any(row => row.SessionId == s.SessionId && (row.Surfaces & (int)selected) != 0));
         var total = await query.CountAsync(ct).ConfigureAwait(false);
         var roots = await query.OrderBy(s => s.SessionId).Skip(page * pageSize).Take(pageSize).ToArrayAsync(ct).ConfigureAwait(false);
         var items = new List<TenantSession>(); foreach (var root in roots) items.Add(await SessionView(db, root, ct).ConfigureAwait(false));

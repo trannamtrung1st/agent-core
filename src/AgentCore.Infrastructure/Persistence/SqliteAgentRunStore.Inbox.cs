@@ -8,6 +8,7 @@ public sealed partial class SqliteAgentRunStore
 {
     public async ValueTask<CompletionInboxItem?> GetCompletionInboxAsync(AgentRunOwner owner, Guid parentSessionId, Guid childRunId, DateTimeOffset now, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var row = await db.BackgroundCompletionReceipts.SingleOrDefaultAsync(i => i.ChildAgentRunId == childRunId.ToString("D")
             && i.AgentInstanceId == owner.AgentInstanceId.ToString("D") && i.ProfileId == AgentRunStoreMapping.ProfileKey(owner) && i.ParentSessionId == parentSessionId.ToString("D"), ct).ConfigureAwait(false);
@@ -18,6 +19,7 @@ public sealed partial class SqliteAgentRunStore
 
     public async ValueTask<bool> HasCompletionClaimAsync(AgentRunOwner owner, Guid parentRunId, Guid generation, DateTimeOffset now, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var rows = await db.BackgroundCompletionReceipts.AsNoTracking().Where(i => i.AgentInstanceId == owner.AgentInstanceId.ToString("D") && i.ProfileId == AgentRunStoreMapping.ProfileKey(owner)
             && i.ClaimRunId == parentRunId.ToString("D") && i.Status == (int)CompletionInboxStatus.Claimed && i.ClaimExpiresAtUtc > now.ToUnixTimeMilliseconds()).ToArrayAsync(ct).ConfigureAwait(false);
@@ -26,6 +28,7 @@ public sealed partial class SqliteAgentRunStore
 
     public async ValueTask<IReadOnlyList<AgentCore.Application.Ports.BackgroundCompletionCandidate>> ListBackgroundPageAsync(AgentRunOwner owner, Guid parentSessionId, Guid? cursor, bool pendingOnly, int limit, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         if (limit is < 1 or > AgentRunLimits.MaxListLimit) throw AgentCoreErrors.Validation("Background limit must be 1–100.");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var parentKey = "\"originatingSessionId\":\"" + parentSessionId.ToString("D") + "\"";
@@ -51,6 +54,7 @@ public sealed partial class SqliteAgentRunStore
 
     public async ValueTask<bool> HasCompletionAcknowledgmentAsync(AgentRunOwner owner, Guid parentRunId, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var rows = await db.BackgroundCompletionReceipts.AsNoTracking().Where(i => i.AgentInstanceId == owner.AgentInstanceId.ToString("D") && i.ProfileId == AgentRunStoreMapping.ProfileKey(owner)
             && i.ClaimRunId == parentRunId.ToString("D")).ToArrayAsync(ct).ConfigureAwait(false);
@@ -59,6 +63,7 @@ public sealed partial class SqliteAgentRunStore
 
     public async ValueTask<IReadOnlyList<AgentCore.Application.Ports.BackgroundCompletionCandidate>> ListBackgroundChildrenAsync(AgentRunOwner owner, Guid parentSessionId, int limit, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         if (limit is < 1 or > AgentRunLimits.MaxListLimit) throw AgentCoreErrors.Validation("Background limit must be 1–100.");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var parentKey = "\"originatingSessionId\":\"" + parentSessionId.ToString("D") + "\"";
@@ -102,7 +107,7 @@ public sealed partial class SqliteAgentRunStore
             var child = await sessions.LoadMetadataAsync(run.SessionId, ct).ConfigureAwait(false);
             if (child is not null && child.Origin.MayReportCompletion(run.AgentRunId)) db.BackgroundCompletionReceipts.Add(CompletionInboxMapping.Create(run, child));
         }
-        var claimed = await db.BackgroundCompletionReceipts.Where(i => i.Status == (int)CompletionInboxStatus.Claimed).OrderBy(i => i.ClaimExpiresAtUtc).ThenBy(i => i.ChildAgentRunId).Take(AgentRunLimits.MaxListLimit).ToArrayAsync(ct).ConfigureAwait(false);
+        var claimed = await db.BackgroundCompletionReceipts.Where(i => i.ProfileId != null && i.Status == (int)CompletionInboxStatus.Claimed).OrderBy(i => i.ClaimExpiresAtUtc).ThenBy(i => i.ChildAgentRunId).Take(AgentRunLimits.MaxListLimit).ToArrayAsync(ct).ConfigureAwait(false);
         var parentIds = claimed.Select(i => i.ClaimRunId).Distinct().ToArray();
         var parents = (await LegacyRuns(db).AsNoTracking().Where(r => parentIds.Contains(r.AgentRunId)).ToArrayAsync(ct).ConfigureAwait(false)).Select(AgentRunStoreMapping.ToDomain).ToArray();
         foreach (var row in claimed) CompletionInboxMapping.Write(row, CompletionInboxMapping.Refresh(CompletionInboxMapping.Read(row), parents, now));
@@ -123,6 +128,7 @@ public sealed partial class SqliteAgentRunStore
 
     public async ValueTask<IReadOnlyList<CompletionInboxItem>> ListCompletionInboxAsync(AgentRunOwner owner, Guid parentSessionId, int limit, DateTimeOffset now, CancellationToken ct = default)
     {
+        if (owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         if (limit is < 1 or > AgentRunLimits.MaxListLimit) throw AgentCoreErrors.Validation("Inbox limit must be 1–100.");
         var parent = await sessions.LoadMetadataAsync(parentSessionId, ct).ConfigureAwait(false);
         if (parent?.AgentInstanceId != owner.AgentInstanceId || parent.ProfileId != owner.ProfileId) throw AgentCoreErrors.NotFound("Parent Session was not found.");
