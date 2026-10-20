@@ -168,6 +168,9 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     }
     private async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
+        foreach (var assignment in state.Assignments.Where(a => TenantWebhookRules.TryId(a.Scope, out _)))
+            if (!await db.WebhookEvents.IgnoreQueryFilters().AnyAsync(s => s.TenantId == state.Tenant.TenantId && s.ResourceId == assignment.Scope.ResourceId, ct))
+                throw new ArgumentException("A webhook assignment requires its actual tenant source.");
         foreach (var assignment in state.Assignments.Where(a => TenantWorkspaceRules.TryParse(a.Scope, out _, out _)))
             if (!await OwnsWorkspace(db, assignment.Scope, ct).ConfigureAwait(false))
                 throw new ArgumentException("A workspace assignment requires its actual current tenant owner.");

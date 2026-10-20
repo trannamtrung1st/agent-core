@@ -1768,3 +1768,28 @@ Canonical Schedule and explicit manual Automations targeting one new Background 
 The existing tenant approval collection/detail/decision/cancel routes own consent. `preparedAction.operation` is `admit_automation_occurrence`; source `runId` and `sessionId` are null, including after settlement. The private future identities are not source links. The safe review shows the saved Automation, actual scheduled or manual source, exact occurrence time and saved registration revision, objective, schedule, destination, selected model, primary consent permission, compound permission set and one-occurrence boundary. Current independent Agent/Automation reads, Automation run and both creation permissions gate list filtering/counts/pagination and detail. Decisions additionally require current approve authority on every compound target needing review and primary grant-exception authority when applicable. A decision grants no role or later tool authority.
 
 `review.executionState` is `waitingDecision`, `awaitingAdmission`, `admitted` or `notAdmitted`; approval, admission, execution and completion remain separate facts. A processed signal atomically admits the exact reserved graph once or rejects that occurrence without creating work. Changed registration/configuration/requester/executor/reviewer authority, rejection, cancellation or expiry cannot retarget or revive it. The original advancement is retained; a later deliberate manual invocation has a fresh root and requires its own current authority. Other ingress/destinations remain separate pending conversions.
+
+## Canonical tenant webhook connections and bearer ingress
+
+Authenticated human routes use the existing cookie/CSRF and original-session authority:
+
+| Method | Route under `/api/v2/tenants/{tenantId}` | Contract |
+| --- | --- | --- |
+| GET | `/webhooks?page=0&pageSize=20` | Current raw-read-filtered items/count/page, security revision and create hint; page size 1–100. |
+| GET | `/webhooks/{sourceId}` | Safe exact source metadata/current management hint; no token or hash. |
+| GET | `/webhooks/{sourceId}/receipts?page=0&pageSize=20` | Exact readable source plus immutable accepted receipt facts; no execution claim. |
+| POST | `/webhooks` | `displayName`, immutable `eventKey`, `expectedRevision`; 201 `{source,token}` once. |
+| PUT | `/webhooks/{sourceId}` | `displayName`, `expectedRevision`, `expectedSourceRevision`; exact rename. |
+| POST | `/webhooks/{sourceId}/rotate` | Both revision witnesses; `{source,token}` once, previous token invalidated. A revoked source becomes active. |
+| POST | `/webhooks/{sourceId}/revoke` | Both witnesses; revoked source, hash removed; receipts retained. |
+| GET | `/events/builtin` | Separate current tenant `core-events.read`; shared key/description metadata only. |
+
+Create requires tenant `webhooks.manage`; existing-source changes additionally require independent exact raw `webhooks.read`. An event key is unique within its tenant; caller-supplied ownership/actor fields do not set provenance. Stale source/security witnesses return 409. Safe source fields include resourceId, displayName, eventKey, status, revision, timestamps, canManage, securityRevision and ingressPath.
+
+External senders use **POST `/api/v2/hooks/{tenantId}/{sourceId}`**, a separate anonymous-capable route with **Authorization: Bearer** source token. Human cookies and CSRF never replace this credential. HTTPS is required, with only the explicit trusted-loopback development exception. Validate active tenant/source and token before reading a bounded body and repeat them in the receipt transaction. This is bearer authentication, not a cryptographic payload signature or IAM delegation. Responses are no-store.
+
+```json
+{"eventId":"sender-stable-id","data":{"orderReference":"order-123"},"occurredAt":"2026-10-21T00:00:00Z"}
+```
+
+`occurredAt` is optional UTC. Stable eventId is 1–64 printable non-space ASCII characters; data is an object, raw body at most 8 KiB, normalized evidence at most 4 KiB, nesting at most eight. Reject duplicate JSON properties and top-level identity/target/causal injection. Nested data remains untrusted literal input. Exact normalized source-event replay returns 200 with the original eventId, new receipt 202, changed evidence 409, invalid envelope 400 and bad/foreign/rotated/revoked credentials 401 before parsing. Credential rotation does not change prior receipt identity; a current new token can replay the exact old receipt. Receipt projection records sourceEventId, authenticated sourceRevision, occurredAtUtc, actual server admittedAtUtc and literal data. Acceptance creates no Session, Activation, Run, delivery queue or authority. [Qualification](reports/tenant-webhook-verification-2026-10-21.md).

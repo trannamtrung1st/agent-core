@@ -23,6 +23,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (source.TenantId is not null) throw AgentCoreErrors.Forbidden("Tenant webhook requires its canonical transaction.");
         db.WebhookEvents.Add(ToRecord(source));
         try
         {
@@ -72,6 +73,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (source.TenantId is not null) throw AgentCoreErrors.Forbidden("Tenant webhook requires its canonical transaction.");
         var id = source.ResourceId.ToString("D");
         var row = await db.WebhookEvents
             .FirstOrDefaultAsync(item => item.ResourceId == id, cancellationToken)
@@ -96,6 +98,9 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var resourceId = candidate.ResourceId.ToString("D");
+        if (candidate.TenantId is not null || targets.Any(t => t.Snapshot?.Owner.TenantId is not null)
+            || await db.WebhookEvents.IgnoreQueryFilters().AnyAsync(source => source.ResourceId == resourceId && source.TenantId != null, cancellationToken))
+            throw AgentCoreErrors.Forbidden("Tenant webhook requires its canonical source transaction.");
         var existing = await db.ExternalEvents.AsNoTracking()
             .FirstOrDefaultAsync(
                 item => item.ResourceId == resourceId && item.SourceEventId == candidate.SourceEventId,
@@ -221,8 +226,9 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         return row is null ? null : ToEvent(row);
     }
 
-    private static WebhookEventRecord ToRecord(WebhookEvent source) => new()
+    internal static WebhookEventRecord ToRecord(WebhookEvent source) => new()
     {
+        TenantId = source.TenantId, CreatedByPrincipalId = source.CreatedByPrincipalId,
         ResourceId = source.ResourceId.ToString("D"),
         DisplayName = source.DisplayName,
         Kind = (int)source.Kind,
@@ -234,7 +240,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         UpdatedAtUtc = source.UpdatedAtUtc.ToUnixTimeMilliseconds()
     };
 
-    private static void Copy(WebhookEventRecord row, WebhookEvent source)
+    internal static void Copy(WebhookEventRecord row, WebhookEvent source)
     {
         row.DisplayName = source.DisplayName;
         row.CredentialHash = source.CredentialHash;
@@ -243,7 +249,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         row.UpdatedAtUtc = source.UpdatedAtUtc.ToUnixTimeMilliseconds();
     }
 
-    private static WebhookEvent ToSource(WebhookEventRecord row) => new(
+    internal static WebhookEvent ToSource(WebhookEventRecord row) => new(
         Guid.Parse(row.ResourceId),
         row.DisplayName,
         (WebhookEventKind)row.Kind,
@@ -252,10 +258,11 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         (WebhookEventStatus)row.Status,
         row.Revision,
         DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
-        DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc));
+        DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc), row.TenantId, row.CreatedByPrincipalId);
 
-    private static ExternalEventRecord ToRecord(ExternalEvent item) => new()
+    internal static ExternalEventRecord ToRecord(ExternalEvent item) => new()
     {
+        TenantId = item.TenantId, SourceRevision = item.SourceRevision,
         EventId = item.EventId.ToString("D"),
         ResourceId = item.ResourceId.ToString("D"),
         SourceEventId = item.SourceEventId,
@@ -284,11 +291,11 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         row.SnapshotJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<EventSubscriptionSnapshot>(row.SnapshotJson, CoreEventPersistence.Json),
         row.DecisionJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json)) { TriggerId = Guid.Parse(row.TriggerId) };
 
-    private static ExternalEvent ToEvent(ExternalEventRecord row) => new(
+    internal static ExternalEvent ToEvent(ExternalEventRecord row) => new(
         Guid.Parse(row.EventId),
         Guid.Parse(row.ResourceId),
         row.SourceEventId,
         DateTimeOffset.FromUnixTimeMilliseconds(row.OccurredAtUtc),
         DateTimeOffset.FromUnixTimeMilliseconds(row.AdmittedAtUtc),
-        row.EvidenceJson);
+        row.EvidenceJson, row.TenantId, row.SourceRevision);
 }

@@ -172,6 +172,8 @@ TenantWorkspaceEndpoints.Map(app);
 TenantCredentialOAuthEndpoints.Map(app);
 TenantCredentialBindingEndpoints.Map(app);
 TenantAutomationEndpoints.Map(app);
+TenantWebhookEndpoints.Map(app);
+TenantWebhookIngressEndpoints.Map(app);
 TenantSessionEndpoints.Map(app);
 TenantActivityEndpoints.Map(app);
 TenantOperationPolicyEndpoints.Map(app);

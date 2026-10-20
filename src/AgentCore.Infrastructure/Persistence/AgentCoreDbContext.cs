@@ -561,18 +561,29 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<WebhookEventRecord>(entity =>
         {
-            entity.ToTable("WebhookEvents");
+            entity.ToTable("WebhookEvents", table => table.HasCheckConstraint("CK_WebhookEvents_TenantOwner",
+                "(TenantId IS NULL AND CreatedByPrincipalId IS NULL) OR COALESCE((TenantId IS NOT NULL AND CreatedByPrincipalId IS NOT NULL AND Kind = 0 AND Revision >= 1 AND UpdatedAtUtc >= CreatedAtUtc AND length(DisplayName) BETWEEN 1 AND 80 AND length(EventKey) BETWEEN 1 AND 64 AND substr(EventKey,1,1) GLOB '[a-z]' AND EventKey NOT GLOB '*[^a-z0-9._-]*' AND substr(EventKey,-1) GLOB '[a-z0-9]' AND DisplayName = trim(DisplayName) AND ((Status = 0 AND length(CredentialHash) = 64 AND CredentialHash NOT GLOB '*[^0-9a-f]*') OR (Status = 1 AND CredentialHash IS NULL))),0)"));
+            entity.HasQueryFilter(row => row.TenantId == null);
+            entity.HasOne<AgentCore.Domain.Security.Tenant>().WithMany().HasForeignKey(row => row.TenantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AgentCore.Domain.Security.TenantUser>().WithMany().HasForeignKey(row => new { row.TenantId, row.CreatedByPrincipalId })
+                .HasPrincipalKey(user => new { user.TenantId, user.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasKey(row => row.ResourceId);
             entity.Property(row => row.ResourceId).HasMaxLength(36);
             entity.Property(row => row.DisplayName).HasMaxLength(80).IsRequired();
             entity.Property(row => row.EventKey).HasMaxLength(64).IsRequired();
             entity.Property(row => row.CredentialHash).HasMaxLength(64);
             entity.Property(row => row.Revision).IsConcurrencyToken();
-            entity.HasIndex(row => row.EventKey).IsUnique();
+            entity.HasIndex(row => row.EventKey).IsUnique().HasFilter("TenantId IS NULL");
+            entity.HasIndex(row => new { row.TenantId, row.EventKey }).IsUnique().HasFilter("TenantId IS NOT NULL");
+            entity.HasIndex(row => new { row.TenantId, row.ResourceId });
         });
         modelBuilder.Entity<ExternalEventRecord>(entity =>
         {
-            entity.ToTable("ExternalEvents");
+            entity.ToTable("ExternalEvents", table => table.HasCheckConstraint("CK_ExternalEvents_TenantReceipt",
+                "(TenantId IS NULL AND SourceRevision IS NULL) OR COALESCE((TenantId IS NOT NULL AND SourceRevision >= 1 AND length(SourceEventId) BETWEEN 1 AND 64 AND length(CAST(EvidenceJson AS BLOB)) <= 4096 AND json_valid(EvidenceJson) AND json_type(EvidenceJson) IS 'object' AND json_extract(EvidenceJson, '$.sourceEventId') IS SourceEventId AND json_type(EvidenceJson, '$.data') IS 'object' AND json_extract(EvidenceJson, '$.rootAgentRunId') IS NULL AND json_extract(EvidenceJson, '$.triggerDepth') = 0),0)"));
+            entity.HasQueryFilter(row => row.TenantId == null);
+            entity.HasOne<AgentCore.Domain.Security.Tenant>().WithMany().HasForeignKey(row => row.TenantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.TenantId, row.ResourceId, row.AdmittedAtUtc, row.EventId });
             entity.HasKey(row => row.EventId);
             entity.Property(row => row.EventId).HasMaxLength(36);
             entity.Property(row => row.ResourceId).HasMaxLength(36).IsRequired();

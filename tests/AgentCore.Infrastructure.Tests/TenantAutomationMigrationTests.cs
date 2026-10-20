@@ -23,15 +23,17 @@ public sealed class TenantAutomationMigrationTests
             var legacy = new Automation(Guid.NewGuid(), new(Guid.NewGuid(), Guid.NewGuid()), AutomationStatus.Active, "Retain legacy source bytes", new ScheduleTrigger(schedule), schedule.AtUtc,
                 null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null);
             await new SqliteTriggerStore(factory).CreateAsync(legacy);
+            var latestGuards = await Guards(db);
+            await db.GetService<IMigrator>().MigrateAsync("20261021010000_TenantAutomationAdmissionApproval");
             var guards = await Guards(db); Assert.Contains("TR_TenantOccurrences_Source_Insert", guards); Assert.Contains("TR_TenantSessions_Creator_Insert", guards);
             Assert.Contains("TR_TenantApprovals_IndependentTask_Insert", guards); Assert.Contains("TR_TenantApprovals_IndependentTask_Update", guards);
             Assert.Contains("TR_TenantApprovals_AutomationAdmission_INSERT", guards); Assert.Contains("TR_TenantReceipts_BrowserArtifacts_Insert", guards); Assert.Equal(46, guards.Length);
             await db.GetService<IMigrator>().MigrateAsync("20261020200000_TenantIndependentChildControls");
             Assert.Equal(guards.Length - 3, (await Guards(db)).Length);
-            await db.Database.MigrateAsync(); Assert.Equal(guards, await Guards(db));
+            await db.Database.MigrateAsync(); Assert.Equal(latestGuards, await Guards(db));
             await db.GetService<IMigrator>().MigrateAsync("20261020170000_TenantAccountOperationRead");
             var previousGuards = await Guards(db); Assert.Equal(guards.Length - 10, previousGuards.Length);
-            await db.Database.MigrateAsync(); Assert.Equal(guards, await Guards(db));
+            await db.Database.MigrateAsync(); Assert.Equal(latestGuards, await Guards(db));
             var read = (await new SqliteTriggerStore(factory).GetAsync(legacy.Owner, legacy.AutomationId))!;
             Assert.Equal(legacy.Owner, read.Owner); Assert.Null(read.Owner.TenantId); Assert.Equal(legacy.Instructions, read.Instructions);
             Assert.Equal(legacy.NextOccurrenceAtUtc, read.NextOccurrenceAtUtc); Assert.Equal(legacy.Triggers.Single().TriggerId, read.Triggers.Single().TriggerId);

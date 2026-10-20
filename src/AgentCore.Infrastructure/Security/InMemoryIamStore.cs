@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null, InMemoryArtifactStore? artifacts = null, InMemoryAttachmentStore? attachments = null, InMemoryBrowserPrivacyStore? browserPrivacy = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null, InMemoryStructuredMemoryStore? structuredMemories = null, InMemoryEmailStore? emailDrafts = null, InMemoryTriggerStore? tenantTriggers = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null, InMemorySandboxStore? sandboxProfiles = null, InMemoryArtifactStore? artifacts = null, InMemoryAttachmentStore? attachments = null, InMemoryBrowserPrivacyStore? browserPrivacy = null, BrowserPrivacyAuthority? browserPrivacyAuthority = null, InMemoryStructuredMemoryStore? structuredMemories = null, InMemoryEmailStore? emailDrafts = null, InMemoryTriggerStore? tenantTriggers = null, InMemoryExternalEventStore? tenantWebhooks = null) : IIamStore, ITenantSandboxRuntimeStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     private readonly InMemoryAttachmentStore? attachmentBacking = attachments?.BindTenantAuthority(definitionReferences);
     private readonly InMemoryArtifactStore? artifactBacking = artifacts?.BindTenantAuthority(definitionReferences);
@@ -17,6 +17,7 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     private readonly InMemoryBrowserPrivacyStore browserPrivacyBacking = browserPrivacy ?? new();
     private readonly BrowserPrivacyAuthority privacyAuthority = BrowserPrivacyRules.FreezeAuthority(browserPrivacyAuthority ?? new(true, false, [], []));
     private readonly InMemoryTriggerStore automationBacking = (tenantTriggers ?? instances.TriggerStore ?? new InMemoryTriggerStore()).BindTenantSessions(definitionReferences);
+    private readonly InMemoryExternalEventStore webhookBacking = tenantWebhooks ?? new();
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
     private readonly Dictionary<Guid, TenantSecurityState> _tenants = [];
@@ -126,6 +127,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantWebhookRules.TryId(a.Scope, out var webhook) && !webhookBacking.OwnsTenantSource(state.Tenant.TenantId, webhook)))
+            throw new ArgumentException("A webhook assignment requires its actual tenant source.");
         if (state.Assignments.Any(a => TenantWorkspaceRules.TryParse(a.Scope, out _, out _) && !OwnsWorkspace(a.Scope, ct)))
             throw new ArgumentException("A workspace assignment requires its actual current tenant owner.");
         if (state.Assignments.Any(a => TenantSandboxProfileRules.TryId(a.Scope, out var profile) && FindTenantSandboxProfileAsync(state.Tenant.TenantId, profile, ct: ct).Result is null))

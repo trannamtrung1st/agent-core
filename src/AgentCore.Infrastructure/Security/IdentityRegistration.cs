@@ -141,6 +141,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAttachmentMaterializationService>();
         services.TryAddSingleton<ITenantAutomationStore>(p => (ITenantAutomationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAutomationService>();
+        services.TryAddSingleton<ITenantWebhookStore>(p => (ITenantWebhookStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantWebhookService>();
         services.TryAddSingleton<TenantAutomationAdmissionTarget>();
         services.TryAddSingleton<TenantSessionService>();
         services.TryAddSingleton<TenantSessionForegroundService>();
@@ -156,6 +158,6 @@ public static class IdentityRegistration
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
             provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>(),
-            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(), provider.GetService<IEmailStore>() as InMemoryEmailStore, provider.GetRequiredService<InMemoryTriggerStore>());
+            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(), provider.GetService<IEmailStore>() as InMemoryEmailStore, provider.GetRequiredService<InMemoryTriggerStore>(), provider.GetRequiredService<IExternalEventStore>() as InMemoryExternalEventStore);
     }
 }

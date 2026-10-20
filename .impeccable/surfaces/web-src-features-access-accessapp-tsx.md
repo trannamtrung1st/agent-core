@@ -45,3 +45,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 ## Organization Sandbox catalog successor
 
 The scoped Integrations Sandbox catalog is now represented by [its focused surface brief](web-src-features-access-tenantsandboxes-tsx.md). It reuses this shell and the existing native access Drawer/collection owners, with shared platform profile fields/details. [Focused evidence](../../docs/reports/tenant-sandbox-catalog-ui-verification-2026-10-18.md) supersedes catalog-UI-pending notes above only; Instance Sandbox configuration/verification, Session controls UI and the wider tenant cutover remain open. Preserve the incumbent system and historical sidecar fingerprints.
+
+## Tenant webhook connections successor
+
+Organization Integrations → Events now uses [the focused webhook surface brief](web-src-features-access-tenantevents-tsx.md) for scoped source management, transient tokens and bounded literal receipts beside independently read built-in metadata. It reuses this shell, collection/configuration sections, native access Drawer, confirmations and draft guard. [Focused qualification](../../docs/reports/tenant-webhook-verification-2026-10-21.md) covers this source/receipt module only; event subscriptions/fanout, the wider tenant cutover and full design/security acceptance remain open. Preserve the incumbent tokens and historical sidecar fingerprints.

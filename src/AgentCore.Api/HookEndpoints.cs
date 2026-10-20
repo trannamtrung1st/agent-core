@@ -48,7 +48,7 @@ public static class HookEndpoints
     private static IResult Error(int statusCode, string error) =>
         Results.Json(new ExternalEventErrorResponse(error), statusCode: statusCode);
 
-    private static bool TryBearer(HttpRequest request, out string token)
+    internal static bool TryBearer(HttpRequest request, out string token)
     {
         token = "";
         var header = request.Headers.Authorization.ToString();
@@ -62,7 +62,7 @@ public static class HookEndpoints
         return token.Length > 0 && !token.Contains(' ', StringComparison.Ordinal);
     }
 
-    private static async Task<byte[]?> ReadBoundedAsync(Stream body, CancellationToken cancellationToken)
+    internal static async Task<byte[]?> ReadBoundedAsync(Stream body, CancellationToken cancellationToken)
     {
         var buffer = new byte[ExternalEventEnvelope.MaxRawBytes + 1];
         var read = 0;

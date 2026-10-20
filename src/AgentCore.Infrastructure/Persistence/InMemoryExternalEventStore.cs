@@ -4,7 +4,7 @@ using AgentCore.Domain.Events;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryExternalEventStore : IExternalEventStore
+public sealed partial class InMemoryExternalEventStore : IExternalEventStore
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<Guid, WebhookEvent> _sources = [];
@@ -15,7 +15,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            var receipts = _events.Values.Where(e => e.ResourceId == resourceId).OrderByDescending(e => e.AdmittedAtUtc).Take(20).ToArray();
+            var receipts = _events.Values.Where(e => e.TenantId is null && e.ResourceId == resourceId).OrderByDescending(e => e.AdmittedAtUtc).Take(20).ToArray();
             var ids = receipts.Select(e => e.EventId).ToHashSet();
             return ValueTask.FromResult(new ExternalEventActivity(receipts, _deliveries.Values.Where(d => ids.Contains(d.EventId)).ToArray()));
         }
@@ -27,7 +27,8 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            if (_sources.ContainsKey(source.ResourceId) || _sources.Values.Any(item => item.EventKey == source.EventKey))
+            if (source.TenantId is not null) throw AgentCoreErrors.Forbidden("Tenant webhook requires its canonical transaction.");
+            if (_sources.ContainsKey(source.ResourceId) || _sources.Values.Any(item => item.TenantId is null && item.EventKey == source.EventKey))
             {
                 throw AgentCoreErrors.Conflict("Event key is already in use.");
             }
@@ -41,7 +42,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            return ValueTask.FromResult(_sources.GetValueOrDefault(resourceId));
+            return ValueTask.FromResult(_sources.GetValueOrDefault(resourceId) is { TenantId: null } source ? source : null);
         }
     }
 
@@ -49,7 +50,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            return ValueTask.FromResult(_sources.Values.FirstOrDefault(item => item.EventKey == eventKey));
+            return ValueTask.FromResult(_sources.Values.FirstOrDefault(item => item.TenantId is null && item.EventKey == eventKey));
         }
     }
 
@@ -58,7 +59,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
         lock (_gate)
         {
             return ValueTask.FromResult<IReadOnlyList<WebhookEvent>>(
-                _sources.Values.OrderBy(item => item.DisplayName).ThenBy(item => item.ResourceId).ToArray());
+                _sources.Values.Where(s => s.TenantId is null).OrderBy(item => item.DisplayName).ThenBy(item => item.ResourceId).ToArray());
         }
     }
 
@@ -69,7 +70,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            if (!_sources.TryGetValue(source.ResourceId, out var current) || current.Revision != expectedRevision)
+            if (source.TenantId is not null || !_sources.TryGetValue(source.ResourceId, out var current) || current.TenantId is not null || current.Revision != expectedRevision)
             {
                 throw AgentCoreErrors.Conflict("Event revision is stale.");
             }
@@ -88,6 +89,8 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
+            if (candidate.TenantId is not null || _sources.GetValueOrDefault(candidate.ResourceId)?.TenantId is not null
+                || targets.Any(t => t.Snapshot?.Owner.TenantId is not null)) throw AgentCoreErrors.Forbidden("Tenant ingress requires its canonical source transaction.");
             var key = (candidate.ResourceId, candidate.SourceEventId);
             if (_events.TryGetValue(key, out var existing))
             {
@@ -163,7 +166,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            return ValueTask.FromResult(_events.Values.FirstOrDefault(item => item.EventId == eventId));
+            return ValueTask.FromResult(_events.Values.FirstOrDefault(item => item.TenantId is null && item.EventId == eventId));
         }
     }
 
@@ -174,7 +177,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            return ValueTask.FromResult(_events.GetValueOrDefault((resourceId, sourceEventId)));
+            return ValueTask.FromResult(_events.GetValueOrDefault((resourceId, sourceEventId)) is { TenantId: null } receipt ? receipt : null);
         }
     }
 }

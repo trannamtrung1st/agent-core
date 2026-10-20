@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalAppUrl, parseAppRoute } from '../../app/appRoute';
-import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantSandboxPath, tenantApprovalPath, tenantAgentPath } from './accessRoute';
+import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath, tenantSandboxPath, tenantApprovalPath, tenantAgentPath, tenantAccessPath } from './accessRoute';
 const tenant = '11111111-1111-4111-8111-111111111111';
 describe('canonical access navigation', () => {
+  it('pins webhook connections and the built-in catalog to the canonical organization Events route', () => {
+    const path = tenantAccessPath(tenant, 'events'); expect(path).toBe(`/t/${tenant}/integrations/events`);
+    expect(parseAppRoute(path)).toMatchObject({ area: 'access', view: 'tenant', page: 'events', tenantId: tenant }); expect(canonicalAppUrl(path)).toBe(path);
+    expect(parseAccessRoute(path + '/foreign')?.view).toBe('not-found');
+  });
   it('pins agent Access to the exact organization and rejects incomplete or extra subroutes', () => {
     expect(parseAppRoute(`/t/${tenant}/admin/agents`)).toMatchObject({ area: 'access', view: 'tenant', page: 'agents', tenantId: tenant });
     expect(parseAccessRoute(tenantAgentPath(tenant, tenant))).toMatchObject({ page: 'agents', tenantId: tenant, instanceId: tenant });

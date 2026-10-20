@@ -11,6 +11,11 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (TenantWebhookRules.TryId(scope, out var webhook))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct);
+            return await db.WebhookEvents.IgnoreQueryFilters().AnyAsync(s => s.TenantId == scope.TenantId && s.ResourceId == webhook.ToString("D"), ct);
+        }
         if (TenantAutomationRules.TryId(scope, out var automation))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

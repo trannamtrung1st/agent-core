@@ -32,7 +32,8 @@ public sealed class WebhookEvent
         WebhookEventStatus status,
         long revision,
         DateTimeOffset createdAtUtc,
-        DateTimeOffset updatedAtUtc)
+        DateTimeOffset updatedAtUtc,
+        Guid? tenantId = null, Guid? createdByPrincipalId = null)
     {
         if (resourceId == Guid.Empty)
         {
@@ -54,6 +55,12 @@ public sealed class WebhookEvent
             throw new ArgumentException("Event revision starts at 1.");
         }
 
+        if (tenantId == Guid.Empty || createdByPrincipalId == Guid.Empty || (tenantId is null) != (createdByPrincipalId is null))
+            throw new ArgumentException("A tenant webhook requires its actual creator principal.");
+        if (tenantId is not null && (updatedAtUtc < createdAtUtc || (status == WebhookEventStatus.Active
+            ? credentialHash is not { Length: 64 } || credentialHash.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))
+            : credentialHash is not null))) throw new ArgumentException("Invalid tenant webhook state.");
+        TenantId = tenantId; CreatedByPrincipalId = createdByPrincipalId;
         DisplayName = RequireName(displayName);
         if (createdAtUtc.Offset != TimeSpan.Zero || updatedAtUtc.Offset != TimeSpan.Zero)
         {
@@ -75,6 +82,10 @@ public sealed class WebhookEvent
         UpdatedAtUtc = updatedAtUtc;
     }
 
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? TenantId { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? CreatedByPrincipalId { get; }
     public Guid ResourceId { get; }
 
     public string DisplayName { get; }
@@ -141,7 +152,7 @@ public sealed class ExternalEvent
         string sourceEventId,
                 DateTimeOffset occurredAtUtc,
         DateTimeOffset admittedAtUtc,
-        string evidenceJson)
+        string evidenceJson, Guid? tenantId = null, long? sourceRevision = null)
     {
         if (eventId == Guid.Empty || resourceId == Guid.Empty)
         {
@@ -158,6 +169,9 @@ public sealed class ExternalEvent
             throw new ArgumentException("External event evidence is not valid.");
         }
 
+        if (tenantId == Guid.Empty || (tenantId is null) != (sourceRevision is null) || sourceRevision < 1) throw new ArgumentException("Tenant receipt requires its authenticated source revision.");
+        SourceRevision = sourceRevision;
+        TenantId = tenantId;
         EventId = eventId;
         ResourceId = resourceId;
         SourceEventId = sourceEventId.Trim();
@@ -165,6 +179,12 @@ public sealed class ExternalEvent
         AdmittedAtUtc = admittedAtUtc;
         EvidenceJson = evidenceJson;
     }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? TenantId { get; }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public long? SourceRevision { get; }
 
     public Guid EventId { get; }
 

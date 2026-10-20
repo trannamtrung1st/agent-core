@@ -2,6 +2,8 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class WebhookEventRecord
 {
+    public Guid? TenantId { get; set; }
+    public Guid? CreatedByPrincipalId { get; set; }
     public string ResourceId { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public int Kind { get; set; }
@@ -15,6 +17,8 @@ public sealed class WebhookEventRecord
 
 public sealed class ExternalEventRecord
 {
+    public Guid? TenantId { get; set; }
+    public long? SourceRevision { get; set; }
     public string EventId { get; set; } = "";
     public string ResourceId { get; set; } = "";
     public string SourceEventId { get; set; } = "";
