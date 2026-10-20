@@ -1,0 +1,22 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { App } from 'antd';
+import { TenantAutomationEventActivity } from './TenantAutomationEventActivity';
+const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const page = { total: 1, page: 0, pageSize: 10, securityRevision: 4, items: [{ eventId: 'fact', triggerId: 'child', triggerRevision: 1, sourceKind: 'webhook', sourceKey: 'orders', receivedAtUtc: '2026-10-21T00:00:00Z', occurredAtUtc: '2026-10-21T00:00:00Z', status: 'admitted', runStatus: 'completed', batchReadable: true, runId: 'run', approvalRequestId: 'approval', data: { note: '<script>literal</script>' } }] };
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it('retains safe factual status on transient refresh failure, removes raw content and links, then recovers or clears on read loss', async () => {
+  let status = 200; const fetch = vi.fn(async () => response(status === 200 ? page : { reasonCode: 'permission_denied' }, status)); vi.stubGlobal('fetch', fetch);
+  const { rerender } = render(<App><TenantAutomationEventActivity tenant="t" instance="i" automation="a" /></App>);
+  expect(await screen.findByText('Run: completed')).toBeVisible(); fireEvent.click(screen.getByRole('button', { name: 'Inspect received data' }));
+  expect(await screen.findByLabelText('Received data')).toHaveValue(JSON.stringify(page.items[0].data, null, 2));
+  status = 503; fireEvent.click(screen.getByRole('button', { name: 'Reload event Activity' }));
+  expect(await screen.findByText('Showing the last successful Activity read')).toBeVisible(); expect(screen.getByText('Run: completed')).toBeVisible();
+  expect(screen.queryByLabelText('Received data')).not.toBeInTheDocument(); expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  status = 200; fireEvent.click(screen.getByRole('button', { name: 'Reload event Activity' }));
+  expect(await screen.findByRole('link', { name: 'Open Run in Activity' })).toBeVisible(); await waitFor(() => expect(screen.queryByText('Showing the last successful Activity read')).not.toBeInTheDocument());
+  status = 403; fireEvent.click(screen.getByRole('button', { name: 'Reload event Activity' })); await waitFor(() => expect(screen.queryByText('Run: completed')).not.toBeInTheDocument());
+  expect(screen.queryByRole('link')).not.toBeInTheDocument(); expect(screen.queryByLabelText('Received data')).not.toBeInTheDocument();
+  status = 503; rerender(<App><TenantAutomationEventActivity tenant="other" instance="i" automation="a" /></App>);
+  await waitFor(() => expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(5)); expect(screen.queryByText('Run: completed')).not.toBeInTheDocument();
+});

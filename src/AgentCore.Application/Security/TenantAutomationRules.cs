@@ -29,6 +29,18 @@ public static class TenantAutomationRules
             (permission, create ? AccessScope.ForTenant(state.Tenant.TenantId) : Scope(state.Tenant.TenantId, id)) })
             if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct)).Allowed) throw new AccessDeniedException("permission_denied");
     }
+    public static async ValueTask HumanSourcesAsync(TenantSecurityState state, Guid human, Automation value, IamAuthorizer iam, CancellationToken ct)
+    {
+        foreach (var child in value.Triggers)
+        {
+            var target = child.Configuration switch {
+                EventTrigger webhook => ("webhooks.read", TenantWebhookRules.Scope(state.Tenant.TenantId, webhook.EventId)),
+                CoreEventTrigger => ("core-events.read", AccessScope.ForTenant(state.Tenant.TenantId)),
+                _ => ((string, AccessScope)?)null };
+            if (target is { } source && !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(source.Item1), source.Item2, ct)).Allowed)
+                throw new AccessDeniedException("event_source_read_required");
+        }
+    }
     public static bool Same(Automation a, Automation b) => a.AutomationId == b.AutomationId && a.Owner == b.Owner && a.Status == b.Status
         && a.Revision == b.Revision && a.TriggerRevision == b.TriggerRevision && a.Name == b.Name && a.Instructions == b.Instructions
         && a.NextOccurrenceAtUtc == b.NextOccurrenceAtUtc && a.ExpiresAtUtc == b.ExpiresAtUtc && a.OccurrenceCount == b.OccurrenceCount
@@ -37,6 +49,18 @@ public static class TenantAutomationRules
         && a.SuspensionReason == b.SuspensionReason && JsonSerializer.Serialize(a.Provenance) == JsonSerializer.Serialize(b.Provenance)
         && a.Triggers.Count == b.Triggers.Count && a.Triggers.Zip(b.Triggers).All(pair => pair.First.TriggerId == pair.Second.TriggerId
             && pair.First.Revision == pair.Second.Revision && pair.First.Enabled == pair.Second.Enabled && pair.First.Configuration.SemanticEquals(pair.Second.Configuration));
+    public static TenantAutomationAdmissionResult Existing(TriggerOccurrence occurrence)
+    {
+        Guid? request = null;
+        if (occurrence.Disposition == OccurrenceRoutingDisposition.AwaitingDurableWork && occurrence.DispositionReason == TenantAutomationAdmissionApprovalRules.PendingReason)
+        {
+            using var json = JsonDocument.Parse(occurrence.EvidenceJson);
+            if (!json.RootElement.TryGetProperty("admissionApproval", out var consent) || !consent.TryGetProperty("requestId", out var id) || !id.TryGetGuid(out var parsed))
+                throw new SecurityConflictException("operation_witness_changed");
+            request = parsed;
+        }
+        return new(false, occurrence, occurrence.ExecutionSessionId, occurrence.AcceptedAgentRunId, request);
+    }
     public static Guid SourceAutomation(AgentRun run)
     {
         var source = run.Admission.TaskIntent;
@@ -50,13 +74,19 @@ public static class TenantAutomationRules
     {
         if (value.Owner != TriggerOwner.ForTenant(agent.TenantId, agent.Instance.InstanceId, agent.PrincipalId)) throw new AccessDeniedException("automation_unavailable");
     }
-    public static void Configuration(Automation value, AgentDefinition definition, DateTimeOffset at, bool validateSchedulePolicy = true)
+    public static void Configuration(Automation value, AgentDefinition definition, DateTimeOffset at, bool validateSchedulePolicy = true, TriggerSourceKind? sourceKind = null)
     {
-        // Schedule and explicit manual admission are the first converted ingress.
-        // Event/source conversions must bind their actual canonical owner first.
-        if (!value.IsSchedule || value.Triggers.Count != 1 || value.ExecutionTarget != AutomationExecutionTarget.Background
+        if (value.ExecutionTarget != AutomationExecutionTarget.Background
             || value.CompletionDelivery != AutomationCompletionDelivery.None || value.Provenance.SourceSessionId is not null || value.Provenance.SourceEventId is not null)
-            throw new ArgumentException("Use one exact schedule and its owned background destination.");
+            throw new ArgumentException("Use the exact owned background destination.");
+        if (!value.IsSchedule)
+        {
+            if (value.Triggers.Any(t => t.Configuration is not FilteredEventTrigger)) throw new ArgumentException("Use distinct typed event subscriptions.");
+            if (value.Status == AutomationStatus.Active && validateSchedulePolicy && value.Triggers.Where(t => t.Enabled)
+                .Any(t => (sourceKind is null || AutomationRules.Source(t.Configuration) == sourceKind) && !OccurrenceCompatibility.Allows(definition, AutomationRules.Source(t.Configuration))))
+                throw new AccessDeniedException("event_policy_unavailable");
+            return;
+        }
         if (value.Status == AutomationStatus.Active && validateSchedulePolicy)
         {
             var policy = definition.TriggerPolicy ?? throw new AccessDeniedException("scheduling_unavailable");
@@ -66,11 +96,10 @@ public static class TenantAutomationRules
         }
     }
     public static async ValueTask AdmissionAuthority(TenantSecurityState state, Automation automation, TenantAgent agent, AgentDefinition definition,
-        IamAuthorizer iam, CancellationToken ct, Guid? requester = null)
+        IamAuthorizer iam, CancellationToken ct, Guid? requester = null, TriggerSourceKind? sourceKind = null, PreparedEventAdmissionSource? eventSource = null)
     {
-        AdmissionSource(state, automation, agent, definition, requester);
-        foreach (var (key, scope) in new[] { ("automations.run", Scope(state.Tenant.TenantId, automation.AutomationId)),
-            ("sessions.create", AccessScope.ForTenant(state.Tenant.TenantId)), ("agent-runs.create", AccessScope.ForTenant(state.Tenant.TenantId)) })
+        AdmissionSource(state, automation, agent, definition, requester, sourceKind);
+        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(state.Tenant.TenantId, automation.AutomationId).Concat(TenantAutomationAdmissionApprovalRules.SourceTargets(eventSource)))
         {
             if (!(await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), scope, ct)).Allowed)
                 throw new AccessDeniedException("automation_executor_required");
@@ -79,11 +108,11 @@ public static class TenantAutomationRules
                 throw new AccessDeniedException("automation_admission_review_required");
         }
     }
-    public static void AdmissionSource(TenantSecurityState state, Automation automation, TenantAgent agent, AgentDefinition definition, Guid? requester)
+    public static void AdmissionSource(TenantSecurityState state, Automation automation, TenantAgent agent, AgentDefinition definition, Guid? requester, TriggerSourceKind? sourceKind = null)
     {
         Owner(automation, agent); TenantSessionRules.RequireExecutor(state, agent);
         if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || automation.Status != AutomationStatus.Active) throw new AccessDeniedException("automation_unavailable");
-        Configuration(automation, definition, automation.Provenance.CreatedAt, requester is null);
+        Configuration(automation, definition, automation.Provenance.CreatedAt, requester is null, sourceKind);
     }
     public static void TechnicalAdvance(Automation current, Automation advanced, DateTimeOffset at)
     {
@@ -107,8 +136,17 @@ public static class TenantAutomationRules
             expectedNext = current.WithScheduleAdvance(current.Status, current.NextOccurrenceAtUtc, current.OccurrenceCount, current.Revision + 1, sourceAt, null);
             expectedOccurrence = AutomationRules.ManualOccurrence(current, pin, sourceAt);
         }
+        else if (occurrence.SourceKind is TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent)
+        {
+            var source = value.EventSource ?? throw new ArgumentException("Event admission requires its owned source witness.");
+            if (consent is not null && JsonSerializer.Serialize(source) != JsonSerializer.Serialize(consent.EventSource)) throw new ArgumentException("Event consent source differs.");
+            expectedNext = TenantEventAdmissionRules.Next(current, sourceAt);
+            expectedOccurrence = consent?.Occurrence ?? TenantEventAdmissionRules.Initial(occurrence);
+            TenantEventAdmissionRules.Shape(current, expectedOccurrence, source);
+        }
         else
         {
+            if (value.EventSource is not null) throw new ArgumentException("A schedule cannot claim an event source.");
             var decision = TriggerScheduleAdmission.Decide(current, sourceAt);
             if (decision.Kind != ScheduleAdmissionKind.Admit) throw new ArgumentException("The exact schedule is not due.");
             expectedNext = TriggerScheduleAdmission.Advance(current, decision, sourceAt);
@@ -124,13 +162,14 @@ public static class TenantAutomationRules
         if (!Same(expectedNext, next) || JsonSerializer.Serialize(expectedOccurrence) != JsonSerializer.Serialize(occurrence))
             throw new ArgumentException("Occurrence intent differs from its current owned registration.");
         if (current.AutomationId != next.AutomationId || next.Revision != current.Revision + 1 || current.Owner != occurrence.Owner
-            || occurrence.AutomationId != current.AutomationId || occurrence.SourceKind is not (TriggerSourceKind.Schedule or TriggerSourceKind.ManualInvocation)
+            || occurrence.AutomationId != current.AutomationId || occurrence.SourceKind is not (TriggerSourceKind.Schedule or TriggerSourceKind.ManualInvocation or TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent)
             || occurrence.Disposition != OccurrenceRoutingDisposition.AcceptedDurable || occurrence.ExecutionSessionId != root.SessionId || occurrence.AcceptedAgentRunId != run.AgentRunId
             || root.TenantId != agent.TenantId || root.AgentInstanceId != agent.Instance.InstanceId || root.ExecutorPrincipalId != agent.PrincipalId
             || root.CreatedByPrincipalId != agent.PrincipalId || root.SessionId != value.Session.SessionId || root.CreatedAt != run.CreatedAtUtc
             || run.Owner != AgentRunOwner.ForTenant(agent.TenantId, agent.Instance.InstanceId, agent.PrincipalId) || run.SessionId != root.SessionId
             || !run.IsInitialQueued || context?.OriginalInitiatorPrincipalId != (occurrence.SourceKind == TriggerSourceKind.ManualInvocation ? manualInitiator : null) || context is null || context.ParentRunId is not null || context.ParentActivationId is not null
-            || context.RootActivationId != run.ActivationId || context.Origin != (occurrence.SourceKind == TriggerSourceKind.Schedule ? ExecutionOrigin.ScheduledOccurrence : ExecutionOrigin.ManualInvocation)
+            || context.RootActivationId != run.ActivationId || context.Origin != (occurrence.SourceKind switch { TriggerSourceKind.Schedule => ExecutionOrigin.ScheduledOccurrence,
+                TriggerSourceKind.ManualInvocation => ExecutionOrigin.ManualInvocation, TriggerSourceKind.CoreEvent => ExecutionOrigin.CoreEvent, _ => ExecutionOrigin.ApplicationEvent })
             || run.Admission.Activation.TriggerOccurrenceId != occurrence.OccurrenceId || run.Admission.Activation.DedupeKey != occurrence.DedupeKey
             || run.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome || value.Session.ProfileId is not null
             || value.Session.Origin.AutomationId != current.AutomationId || value.Session.Origin.TriggerOccurrenceId != occurrence.OccurrenceId

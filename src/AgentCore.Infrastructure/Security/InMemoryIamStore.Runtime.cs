@@ -22,14 +22,14 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
     public ValueTask<SessionSnapshot?> LoadTenantRuntimeAsync(TenantRuntimeFrame frame, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) { RequireRuntimeOwner(frame.Owner); return ValueTask.FromResult(sessionBacking.LoadTenantRuntime(frame, (clock ?? TimeProvider.System).GetUtcNow())); } }
     public ValueTask SaveTenantRuntimeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) { RequireRuntimeOwner(frame.Owner); sessionBacking.SaveTenantRuntime(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow()); return ValueTask.CompletedTask; } }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) { RequireRuntimeOwner(frame.Owner); SaveTenantRuntimeState(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow()); return ValueTask.CompletedTask; } }
     public ValueTask<ConversationHistoryPage?> ReadTenantRuntimeHistoryAsync(TenantRuntimeFrame frame, long? after, long? before, int limit, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) { RequireRuntimeOwner(frame.Owner); return ValueTask.FromResult(sessionBacking.ReadTenantRuntimeHistory(frame, after, before, Math.Clamp(limit, 1, 1000), (clock ?? TimeProvider.System).GetUtcNow())); } }
     public ValueTask<IReadOnlyList<AgentRun>> ListRunnableTenantRunsAsync(DateTimeOffset at, int limit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate)
         {
-            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => !TenantInputBlocked(r) && (r.ApprovalRequestId is null || _approvals.GetValueOrDefault(r.ApprovalRequestId.Value) is { Status: not TenantApprovalStatus.Pending }) && (r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground)
+            var result = sessionBacking.AgentRuns.Runs.Values.Where(r => !TenantInputBlocked(r) && (r.ApprovalRequestId is null || _approvals.GetValueOrDefault(r.ApprovalRequestId.Value) is { Status: not TenantApprovalStatus.Pending }) && (r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)
                 && r.Owner.TenantId is { } tenant && _tenants.GetValueOrDefault(tenant)?.Tenant.Status == IdentityStatus.Active
                 && sessionBacking.OwnsTenantSession(tenant, r.SessionId) && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.WaitingToRetry && r.NextRetryAtUtc <= at
                     || r.Status == AgentRunStatus.Running && r.Claim!.LeaseExpiresAtUtc <= at
@@ -49,7 +49,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
             if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
             if (command is AgentRunCommand.Claim)
             {
-                if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+                if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground or ActivationKind.CoreEvent or ActivationKind.ApplicationEvent)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
                 _ = TenantExecutionLineage.RootAsync(run, this, ct).AsTask().GetAwaiter().GetResult();
                 if (run.ApprovalRequestId is { } approvalId) TenantRunContinuationRules.Require(run, _approvals.GetValueOrDefault(approvalId), run.Admission.ApprovalResume is { } resume ? sessionBacking.ReadTenantRun(owner.TenantId!.Value, resume.SourceRunId) : null);
                 try { RequireRuntimeOwner(owner); } catch (AccessDeniedException) { throw AgentCoreErrors.Conflict("Executor is unavailable."); }
@@ -58,6 +58,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 if (TenantInputBlocked(run))
                     throw AgentCoreErrors.Conflict("Session already owns an active execution.");
             }
+            if (command is AgentRunCommand.Complete) RequireTenantEventRead(run, ct);
             if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })
             {
                 RequireTenantOutputSources(run, ct);
@@ -82,7 +83,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 else if (command is AgentRunCommand.ResumeWait)
                     next = AgentRunWaitExecution.Apply(run, command, TenantWaitChildren(run, run.Wait ?? throw AgentCoreErrors.Conflict("Run is not waiting.")));
                 else next = command.Apply(run, () => diagnosticId);
-                sessionBacking.SaveTenantOperationRun(next, run.Revision); SettleTenantCompletion(next, run.Claim?.Generation); return ValueTask.FromResult(next);
+                sessionBacking.SaveTenantOperationRun(next, run.Revision); AppendTenantCoreRun(run, next); SettleTenantCompletion(next, run.Claim?.Generation); return ValueTask.FromResult(next);
             }
             catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentCore.Infrastructure.Persistence.AgentRunStoreMapping.Map(ex); }
         }

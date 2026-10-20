@@ -7,6 +7,8 @@ public static class TriggerLimits
     public const int MaxInstructionsCharacters = 2000;
     // Bound fan-out and total serialized configuration independently of expression character counts.
     public const int MaxEventSubscriptions = 32;
+    public const int MaxEventBucketSources = 24;
+    public const int MaxWebhookFanoutTargets = 1024;
     public const int MaxAutomationConfigurationBytes = 64 * 1024;
     public const int MaxTimeZoneCharacters = 64;
     public const int MaxSuspensionReasonCharacters = 200;

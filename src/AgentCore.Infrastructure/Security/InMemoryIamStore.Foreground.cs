@@ -33,7 +33,7 @@ public sealed partial class InMemoryIamStore : ITenantSessionForegroundStore
             if (auditId == Guid.Empty || _audit.Any(a => a.AuditId == auditId)) throw new ArgumentException("Unique audit identity is required.");
             _ = checked(_tenants[request.Owner.TenantId].Tenant.Revision + 1);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
-            sessionBacking.SaveTenantRuntime(frame, snapshot, expectedRevision, at, foreground: true);
+            SaveTenantRuntimeState(frame, snapshot, expectedRevision, at, foreground: true);
             if (!saved.Snapshot.Surfaces.HasFlag(SessionSurface.ChatList)) AuditForeground(request, auditId, at);
             return ValueTask.CompletedTask;
         }

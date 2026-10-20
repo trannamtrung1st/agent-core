@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
-    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null) : IAgentRunAuthority, ITenantRunContext
+    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null) : IAgentRunAuthority, ITenantRunContext
 {
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, reason == "account_metadata_unavailable" ? "credentials.read" : "credentials.use", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
@@ -53,6 +53,9 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                         if (reportReads is null) throw new AccessDeniedException("completion_source_read_required");
                         await reportReads.RequireAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     }
+                    if (eventReads is not null) await eventReads.RequireAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    else if (TenantEventReadRules.IsEventRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false)))
+                        throw new AccessDeniedException("event_source_unavailable");
                     if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     if (browserReads is not null) await browserReads.RequireStoredObservationsAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     if (accountReads is not null) await accountReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);

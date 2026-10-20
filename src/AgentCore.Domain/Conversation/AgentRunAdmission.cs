@@ -6,7 +6,8 @@ namespace AgentCore.Domain.Conversation;
 public enum AgentRunOutputContract { ConversationResponse, BackgroundOutcome, CompletionReport }
 
 public enum AgentRunTaskSource { Automation, AgentRun }
-public sealed record AgentRunTaskIntent(string Text, AgentRunTaskSource Source, string? SourceRevision = null);
+public sealed record AgentRunTaskIntent(string Text, AgentRunTaskSource Source, string? SourceRevision = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AgentCore.Domain.Triggers.TriggerSourceKind? EventSourceKind = null);
 public sealed record TenantApprovalResume(Guid SourceRunId, Guid RequestId, Guid OperationId, string ActionHash, IReadOnlyList<Guid> SourceInputEntryIds);
 
 public sealed class AgentRunAdmission
@@ -31,7 +32,9 @@ public sealed class AgentRunAdmission
             ExplicitSkillKeys = Array.AsReadOnly(composerInput.ExplicitSkillKeys.ToArray()),
             References = Array.AsReadOnly(composerInput.References.ToArray()) };
         if (taskIntent is not null && (!Enum.IsDefined(taskIntent.Source) || string.IsNullOrWhiteSpace(taskIntent.Text)
-            || taskIntent.Text.Length > AgentRunLimits.MaxBackgroundObjectiveCharacters || taskIntent.SourceRevision?.Length > 128))
+            || taskIntent.Text.Length > AgentRunLimits.MaxBackgroundObjectiveCharacters || taskIntent.SourceRevision?.Length > 128
+            || taskIntent.EventSourceKind is not null && (taskIntent.Source != AgentRunTaskSource.Automation
+                || taskIntent.EventSourceKind is not (AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent or AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent))))
             throw new ArgumentException("Run task intent is invalid.");
         TaskIntent = taskIntent;
         ExecutionContext = executionContext;

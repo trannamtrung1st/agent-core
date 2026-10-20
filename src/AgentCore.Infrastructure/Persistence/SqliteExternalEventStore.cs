@@ -277,7 +277,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         AutomationId = target.AutomationId.ToString("D"),
         TriggerId = (target.Snapshot?.TriggerId ?? target.AutomationId).ToString("D"),
         AgentInstanceId = target.AgentInstanceId.ToString("D"),
-        ProfileId = target.ProfileId.ToString("D"),
+        ProfileId = target.ProfileId?.ToString("D"),
         Status = (int)ExternalEventDeliveryStatus.Pending,
         SnapshotJson = target.Snapshot is null ? null : System.Text.Json.JsonSerializer.Serialize(target.Snapshot, CoreEventPersistence.Json)
     };
@@ -286,7 +286,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         Guid.Parse(row.EventId),
         Guid.Parse(row.AutomationId),
         Guid.Parse(row.AgentInstanceId),
-        Guid.Parse(row.ProfileId),
+        row.ProfileId is { } profile ? Guid.Parse(profile) : null,
         (ExternalEventDeliveryStatus)row.Status,
         row.SnapshotJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<EventSubscriptionSnapshot>(row.SnapshotJson, CoreEventPersistence.Json),
         row.DecisionJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json)) { TriggerId = Guid.Parse(row.TriggerId) };

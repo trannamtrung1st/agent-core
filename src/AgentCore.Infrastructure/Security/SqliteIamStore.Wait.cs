@@ -41,6 +41,6 @@ public sealed partial class SqliteIamStore
             : builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         TenantWaitRules.Require(run, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), suspend);
-        await TenantExecutionLineage.RequireRequesterAsync(run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+        await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
     }
 }

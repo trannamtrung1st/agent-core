@@ -15,7 +15,7 @@ public sealed partial class InMemoryIamStore
                 var tenant = run.Owner.TenantId!.Value; var state = _tenants[tenant]; var iam = new IamAuthorizer(this);
                 var agent = FindTenantAgentAsync(tenant, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
                 TenantSessionRules.RequireExecutor(state, agent);
-                TenantExecutionLineage.RequireRequesterAsync(run, state, iam, this, ct).GetAwaiter().GetResult();
+                RequireTenantExecutionSourcesAsync(run, state, iam, this, ct).GetAwaiter().GetResult();
                 if (source.RequestId is { } requestId)
                 {
                     var request = _approvals.GetValueOrDefault(requestId); var receipt = _operationReceipts.GetValueOrDefault(source.OperationId!.Value);

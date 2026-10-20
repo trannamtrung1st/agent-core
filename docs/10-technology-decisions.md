@@ -569,3 +569,9 @@ Descriptor-relative canonical access/purge uses platform-specific no-follow prim
 ## Generic Linux retirement (owner-authorized 2026-10-15)
 
 Use bounded generic process-identity inspection and exact whole-container retirement for residual writers. The pinned process-group API does not prove escaped-descendant cleanup, so Core never guesses reused numeric IDs. Authoritative absence settles process evidence only: canonical writes already occurred. Reuse safe containers and preserve files/selection across recycle. Setup remains once-per-generation and never automatically replays an uncertain script. No alternative supervisor or synchronization service is introduced.
+
+### Tenant webhook fanout bound
+
+The tenant event conversion preserves an atomic receipt/subscription snapshot. A single Webhook receipt may capture at most 1,024 matching active Automation registrations across its tenant. Exceeding that ceiling refuses the whole receipt with `409 webhook_fanout_limit`; it never truncates the target set or admits partial work. A source/Automation owner must reduce active subscriptions before a deliberate new sender attempt. Core events remain scoped to the actual Instance owner, bounded by its active registrations. Existing source-body, filter, bucket packing, recovery-page and approval limits remain independent. This bound is independent of the authored child-count limit.
+
+Tenant event admission retains bounded consent serialization separately from authored configuration: canonical event admission intent is capped at 256 KiB and its stored approval payload at 1 MiB, to carry both current/next copies of the existing bounded multi-subscription owner. Schedule/manual intent retains its prior 64 KiB canonical/256 KiB stored limits. These bounds do not enlarge event evidence or predicate limits. Maximum-shape consent verification remains required before module qualification.

@@ -75,7 +75,7 @@ public sealed partial class TenantApprovalService
             catch (AgentCoreException) { unavailable = "operation_configuration_changed"; }
         }
         var independent = false;
-        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(r.TenantId, p.Current.AutomationId))
+        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(r))
             independent |= TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview
                 && (key == r.Permission || await TenantSandboxReadOperationRules.NeedsReviewAsync(state, r.OriginalInitiatorPrincipalId, key, scope, authorizer, ct).ConfigureAwait(false));
         async ValueTask<string?> Name(Guid? principal)
@@ -85,13 +85,37 @@ public sealed partial class TenantApprovalService
         }
         var execution = occurrence?.Disposition == OccurrenceRoutingDisposition.AcceptedDurable ? "admitted"
             : occurrence?.Disposition == OccurrenceRoutingDisposition.Rejected ? "notAdmitted" : r.Status == TenantApprovalStatus.Pending ? "waitingDecision" : "awaitingAdmission";
+        var changes = new List<TenantApprovalFieldChange>
+        {
+            new("admissionAutomation", null, p.Current.Name, false), new("admissionSource", null,
+                p.Occurrence.SourceKind switch { TriggerSourceKind.Schedule => "Scheduled occurrence · no human requester", TriggerSourceKind.CoreEvent => "Built-in event · no human requester", TriggerSourceKind.ApplicationEvent => "Webhook event · no human requester", _ => "Explicit manual invocation" }, false),
+            new("admissionOccurrence", null, $"{(p.EventSource is { IsBucket: true } ? "Batch window ended" : p.EventSource is not null ? p.Occurrence.SourceKind == TriggerSourceKind.ApplicationEvent ? "Producer occurrence time (untrusted)" : "Source occurrence time" : p.Occurrence.ScheduledAtUtc is null ? "Invoked" : "Scheduled")} at {(p.Occurrence.ScheduledAtUtc ?? p.Occurrence.ObservedAtUtc).ToUniversalTime():yyyy-MM-dd HH:mm:ss.fff} UTC · prepared {r.CreatedAt.ToUniversalTime():yyyy-MM-dd HH:mm:ss.fff} UTC · saved registration revision {p.Current.Revision}", false),
+            new("admissionPrimaryPermission", null, r.Permission, false), new("admissionObjective", null, p.Current.Instructions, false), new("admissionSchedule", null, AutomationRules.Describe(p.Current), false),
+            new("admissionDestination", null, "New separate Background Session · no completion report", false), new("admissionModel", null, p.Model.CatalogKey, false),
+            new("admissionScope", null, string.Join("; ", TenantAutomationAdmissionApprovalRules.Targets(r).Select(t => t.Permission).Distinct()), false),
+            new("admissionLimit", null, "One exact reserved occurrence. No work is created before settlement. An exceptional grant covers only its named primary permission; all raw reads, other permissions and later tools remain independent.", false)
+        };
+        if (p.EventSource is { } source)
+        {
+            AgentCore.Domain.Events.EventSubscriptionSnapshot? snapshot = null;
+            if (security is ITenantEventStore events)
+                snapshot = source.IsBucket
+                    ? (await events.FindTenantEventBucketAsync(r.TenantId, source.SourceId, ct).ConfigureAwait(false))?.Bucket.Subscription
+                    : (await events.FindTenantEventDeliveryAsync(r.TenantId, source.SourceKind, source.SourceId, source.TriggerId, ct).ConfigureAwait(false))?.Subscription;
+            if (snapshot is null) unavailable ??= "event_source_unavailable";
+            using var evidence = System.Text.Json.JsonDocument.Parse(p.Occurrence.EvidenceJson);
+            var context = evidence.RootElement.GetProperty("triggerContext");
+            var data = context.GetProperty(source.IsBucket ? "sources" : "source");
+            var identity = $"{(source.IsBucket ? "Coalesced batch" : "Receipt")} {source.SourceId:D} · child {source.TriggerId:D} · {source.EventIds.Count} source(s): {string.Join(", ", source.EventIds.Select(id => id.ToString("D")))}";
+            if (source.ResourceId is { } resource) identity += $" · webhook {resource:D} at source revision {source.ResourceRevision}";
+            changes.Add(new("admissionEventSource", null, identity, false));
+            changes.Add(new("admissionEventFilter", null, snapshot?.FilterExpression ?? "No saved predicate · every eligible receipt", false, snapshot is not null));
+            changes.Add(new("admissionEventDispatch", null, snapshot is null ? null : snapshot.Dispatch.Mode == EventDispatchMode.EveryMatch
+                ? "Every matched receipt" : $"Coalesce latest · {snapshot.Dispatch.WindowSeconds} second window", false, snapshot is not null));
+            changes.Add(new("admissionEventData", null, System.Text.Json.JsonSerializer.Serialize(data), false));
+        }
         return new(r.Snapshot?.AgentName ?? target?.Instance.Persona.Name ?? "Unavailable agent", await Name(r.OriginalInitiatorPrincipalId), await Name(view.Decision?.HumanPrincipalId),
-            [new("admissionAutomation", null, p.Current.Name, false), new("admissionSource", null, p.Occurrence.SourceKind == TriggerSourceKind.Schedule ? "Scheduled occurrence · no human requester" : "Explicit manual invocation", false),
-                new("admissionOccurrence", null, $"{(p.Occurrence.ScheduledAtUtc is null ? "Invoked" : "Scheduled")} at {(p.Occurrence.ScheduledAtUtc ?? p.Occurrence.ObservedAtUtc).ToUniversalTime():yyyy-MM-dd HH:mm:ss.fff} UTC · saved registration revision {p.Current.Revision}", false),
-                new("admissionPrimaryPermission", null, r.Permission, false), new("admissionObjective", null, p.Current.Instructions, false), new("admissionSchedule", null, AutomationRules.Describe(p.Current), false),
-                new("admissionDestination", null, "New separate Background Session · no completion report", false), new("admissionModel", null, p.Model.CatalogKey, false),
-                new("admissionScope", null, string.Join("; ", TenantAutomationAdmissionApprovalRules.Permissions), false),
-                new("admissionLimit", null, "One exact reserved occurrence. No work is created before settlement. An exceptional grant covers only its named primary permission; other permissions and all later tools remain independent.", false)],
+            changes,
             unavailable is null, cancel, unavailable, independent, at, execution);
     }
 }

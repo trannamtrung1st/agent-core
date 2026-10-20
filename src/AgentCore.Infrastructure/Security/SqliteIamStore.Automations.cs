@@ -61,6 +61,7 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
         if (current?.Status is AutomationStatus.Completed or AutomationStatus.Expired && proposed.Status != AutomationStatus.Cancelled) throw new AccessDeniedException("automation_terminal");
             AutomationRules.ValidateSave(current, proposed, expectedAutomationRevision); TenantAutomationRules.Configuration(proposed, policy, audit.At);
         await RequireAutomationHuman(before, human.PrincipalId, agent, proposed.AutomationId, permission, current is null, ct);
+        if (permission is "automations.create" or "automations.update") await TenantAutomationRules.HumanSourcesAsync(before, human.PrincipalId, proposed, new IamAuthorizer(this), ct);
         ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
         if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
             && await OwnedAutomations(db, next.Tenant.TenantId).CountAsync(a => a.AgentInstanceId == agent.Instance.InstanceId.ToString("D") && a.Status == (int)AutomationStatus.Active, ct) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))
@@ -106,19 +107,21 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
         if (tenant?.Revision != expectedSecurityRevision) return null;
         if (human is not null) await RequireHumanSessionAsync(db, tenant.TenantId, human, ct);
         var prior = await db.TriggerOccurrences.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(o => o.TenantId == tenant.TenantId && o.OccurrenceId == admission.Occurrence.OccurrenceId.ToString("D"), ct);
-        if (prior is not null) return new(false, TriggerStoreMapping.ToOccurrence(prior), Guid.Parse(prior.ExecutionSessionId!), Guid.Parse(prior.AcceptedAgentRunId!));
+        if (prior is not null) return TenantAutomationRules.Existing(TriggerStoreMapping.ToOccurrence(prior));
         var row = await OwnedAutomations(db, tenant.TenantId).SingleOrDefaultAsync(a => a.AutomationId == admission.Current.AutomationId.ToString("D"), ct);
         var current = row is null ? null : TriggerStoreMapping.ToRegistration(row);
         if (current is null || !TenantAutomationRules.Same(current, admission.Current)) return null;
         var before = (await ReadTenantAsync(db, tenant.TenantId, ct))!;
         var agentRow = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == current.Owner.AgentInstanceId.ToString("D"), ct) ?? throw new AccessDeniedException("resource_unavailable");
         var agent = Owned(agentRow); var policy = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct), agent.Instance.SettingsOverrides);
-            TenantAutomationRules.Admission(admission, agent, human?.PrincipalId); await TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId);
+            TenantAutomationRules.Admission(admission, agent, human?.PrincipalId); await TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId, admission.Occurrence.SourceKind, admission.EventSource);
         if (human is not null) await RequireAutomationHuman(before, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
         ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.occurrence.admit", audit);
         if (await TenantAutomationBusy(db, tenant.TenantId, admission.Current.AutomationId, ct)) return null;
+        await RequireTenantEventAdmission(db, admission, null, false, ct);
         await StageTenantBackgroundGraph(db, admission.SessionOwner, admission.Session, admission.Run, ct);
         StageAutomation(db, row, admission.Next); db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(admission.Occurrence));
+        await SettleTenantEventSource(db, admission.EventSource, admission.Occurrence.OccurrenceId, false, null, ct);
         db.Entry(tenant).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct); db.Add(audit);
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new(true, admission.Occurrence, admission.Run.SessionId, admission.Run.AgentRunId); }
         catch (DbUpdateConcurrencyException) { return null; }

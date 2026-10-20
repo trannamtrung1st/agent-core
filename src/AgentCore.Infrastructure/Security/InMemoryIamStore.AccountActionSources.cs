@@ -23,7 +23,7 @@ public sealed partial class InMemoryIamStore
             if (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision) throw new AccessDeniedException("account_source_changed");
             TenantAccountActionReferences.Receipt(reference, request, receipt, decision, _operationGrants.GetValueOrDefault(reference.RequestId), run);
             TenantAccountActionRules.PermissionsAsync(_tenants[tenant], run.AgentInstanceId, request.Operation.AccountAction, agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).GetAwaiter().GetResult();
-            TenantExecutionLineage.RequireRequesterAsync(run, _tenants[tenant], new IamAuthorizer(this), this, ct).GetAwaiter().GetResult();
+            RequireTenantExecutionSourcesAsync(run, _tenants[tenant], new IamAuthorizer(this), this, ct).GetAwaiter().GetResult();
             TenantAccountActionRules.ReviewerAsync(_tenants[tenant], request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
         }
     }
@@ -39,7 +39,7 @@ public sealed partial class InMemoryIamStore
         TenantAccountActionRules.PermissionsAsync(_tenants[request.TenantId], agent.Instance.InstanceId, action, agent.PrincipalId,
             new IamAuthorizer(this), request.Kind == ApprovalKind.Review, CancellationToken.None).GetAwaiter().GetResult();
         if (request.Snapshot?.Credential != TenantAccountReadRules.Snapshot(agent, bound).Credential) throw new SecurityConflictException("account_source_changed");
-        TenantExecutionLineage.RequireRequesterAsync(run, _tenants[request.TenantId], new IamAuthorizer(this), this, CancellationToken.None).GetAwaiter().GetResult();
+        RequireTenantExecutionSourcesAsync(run, _tenants[request.TenantId], new IamAuthorizer(this), this, CancellationToken.None).GetAwaiter().GetResult();
         if (action.ToolName == AgentCore.Application.Tools.ToolCatalog.EmailSend)
             TenantAccountActionRules.RequireDraft(action, agent.Instance.InstanceId, emailDrafts?.GetDraftAsync(action.Draft!.DraftId).Result);
         RequireAccountReadSources(run, CancellationToken.None);

@@ -42,8 +42,10 @@ public sealed partial class SqliteIamStore
                 if (parent.Instance.Lifecycle != "Active") throw new AccessDeniedException("agent_archived");
                 TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, root.TenantId, ct).ConfigureAwait(false))!, Owned(parent));
             }
-            var value = TenantSessionMutations.Apply(SqliteMemoryStore.ToSnapshot(row, []), change, at);
+            var previous = SqliteMemoryStore.ToSnapshot(row, []);
+            var value = TenantSessionMutations.Apply(previous, change, at);
             SqliteMemoryStore.ApplySession(row, value);
+            await TenantCoreEventProduction.StageSessionAsync(db, previous, value, root.Domain(), null, ct).ConfigureAwait(false);
             if (change.Action == TenantSessionAction.Delete)
                 foreach (var entry in await db.Entries.Where(e => e.SessionId == root.SessionId).ToArrayAsync(ct).ConfigureAwait(false)) RedactSessionEntry(entry);
             saved = new(root.Domain(), value); return true;

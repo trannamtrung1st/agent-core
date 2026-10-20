@@ -22,7 +22,7 @@ public sealed partial class SqliteIamStore
             : builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         TenantCompletionRules.Require(run, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), tool);
-        await TenantExecutionLineage.RequireRequesterAsync(run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false); return run;
+        await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false); return run;
     }
     private static async ValueTask<AgentRun?> CompletionRun(AgentCoreDbContext db, Guid tenant, Guid id, CancellationToken ct)
     {
@@ -114,6 +114,7 @@ public sealed partial class SqliteIamStore
     }
     private async Task RequireTenantOutputSources(AgentCoreDbContext db, AgentRun parent, CancellationToken ct)
     {
+        await RequireTenantEventRead(db, parent, ct).ConfigureAwait(false);
         await RequireCredentialReadSources(db, parent, ct).ConfigureAwait(false);
         await RequireAccountReadSources(db, parent, ct).ConfigureAwait(false);
         await RequireAccountActionSources(db, parent, ct).ConfigureAwait(false);

@@ -32,8 +32,10 @@ public sealed partial class InMemoryIamStore
                 if (parent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
                 TenantSessionRules.RequireExecutor(before, parent);
             }
+            var prior = sessionBacking.ReadTenantSession(next.Tenant.TenantId, change.SessionId);
             ct.ThrowIfCancellationRequested(); var saved = sessionBacking.ChangeTenantSession(next.Tenant.TenantId, change, at);
             if (saved is null) return ValueTask.FromResult<TenantSession?>(null);
+            AppendTenantCoreSession(prior!, saved);
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); return ValueTask.FromResult<TenantSession?>(saved);
         }
     }

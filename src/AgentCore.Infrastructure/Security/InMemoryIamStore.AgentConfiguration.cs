@@ -66,6 +66,8 @@ public sealed partial class InMemoryIamStore
                 SetExecutionBudgets: change.SetExecutionBudgets, ExecutionBudgets: change.ExecutionBudgets,
                 SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey,
                 UnattendedReasoningEffort: change.UnattendedReasoningEffort, HarnessManagement: change.HarnessManagement), at, ct).Result;
+            foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(current.Instance, updated,
+                AgentCore.Domain.Triggers.TriggerOwner.ForTenant(next.Tenant.TenantId, updated.InstanceId, current.PrincipalId))) AppendTenantCore(fact);
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
             return ValueTask.FromResult<TenantAgent?>(current with { Instance = updated });
         }

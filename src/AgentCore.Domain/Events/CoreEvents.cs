@@ -12,7 +12,7 @@ public sealed record CoreEventOccurrence(Guid EventId, string DedupeKey, Trigger
     DateTimeOffset OccurredAtUtc, string DataJson, Guid? RootAgentRunId = null, int TriggerDepth = 0,
     IReadOnlyList<Guid>? VisitedAutomationIds = null);
 
-public enum EventMatchStatus { Pending, Matched, Filtered, FilterError, PolicySkipped, LoopSkipped, Coalesced, BudgetSkipped, Admitted }
+public enum EventMatchStatus { Pending, Matched, Filtered, FilterError, PolicySkipped, LoopSkipped, Coalesced, BudgetSkipped, Admitted, AwaitingAdmission }
 public sealed record EventSubscriptionSnapshot(Guid AutomationId, TriggerOwner Owner, long TriggerRevision,
     string? FilterExpression, EventDispatch Dispatch, TriggerSourceKind SourceKind = TriggerSourceKind.CoreEvent, Guid? ResourceId = null)
 {

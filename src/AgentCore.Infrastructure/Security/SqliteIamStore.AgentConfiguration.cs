@@ -77,7 +77,9 @@ public sealed partial class SqliteIamStore
             AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct, next.Tenant.TenantId).ConfigureAwait(false);
         db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
-        // Tenant events need a tenant-aware owner; never fabricate the legacy LocalUserProfile attribution.
+        foreach (var fact in CoreEventPersistence.Instance(current, updated,
+            AgentCore.Domain.Triggers.TriggerOwner.ForTenant(next.Tenant.TenantId, updated.InstanceId, identity.PrincipalId)))
+            await TenantCoreEventProduction.StageAsync(db, fact, ct).ConfigureAwait(false);
         await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, change.Initiator, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
         catch (DbUpdateConcurrencyException) { return null; }

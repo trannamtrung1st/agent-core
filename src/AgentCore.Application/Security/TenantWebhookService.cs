@@ -92,6 +92,7 @@ public sealed class TenantWebhookService(IIamStore security, ITenantWebhookStore
     {
         if (!await CredentialsMatchAsync(tenant, source, token, ct)) return new(ExternalEventIngressKind.Unauthorized, null, "unauthorized");
         if (!ExternalEventEnvelope.TryNormalize(body.Span, out var evidence, out var sourceEventId, out var occurredAt, out var error)) return new(ExternalEventIngressKind.Invalid, null, error);
+        if (TenantWebhookRules.ContainsCredential(evidence, token)) return new(ExternalEventIngressKind.Invalid, null, "source_credential_in_payload");
         using var json = JsonDocument.Parse(evidence);
         if (json.RootElement.GetProperty("rootAgentRunId").ValueKind != JsonValueKind.Null || json.RootElement.GetProperty("triggerDepth").GetInt32() != 0)
             return new(ExternalEventIngressKind.Invalid, null, "untrusted_correlation");

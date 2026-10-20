@@ -18,7 +18,7 @@ public sealed partial class InMemoryIamStore
         TenantAutomationAdmission admission, TenantApprovalRequest request, HumanSessionReference? human, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
             if (!_tenants.TryGetValue(request.TenantId, out var state) || state.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAutomationAdmissionResult?>(null);
             var p = request.Operation.AutomationAdmission ?? throw new ArgumentException("Exact Automation consent source required.");
@@ -32,7 +32,7 @@ public sealed partial class InMemoryIamStore
             if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
             TenantAutomationAdmissionApprovalRules.Shape(request, agent);
             TenantAutomationRules.Admission(admission, agent, human?.PrincipalId, p);
-            var decision = TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct).Result;
+            var decision = TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct, p.Occurrence.SourceKind, p.EventSource).Result;
             if (decision.Kind != request.Kind || decision.Permission != request.Permission) throw new SecurityConflictException("operation_authority_changed");
             if (human is not null) RequireAutomationHuman(state, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
             if (automationBacking.TenantBusy(current.AutomationId)) throw new SecurityConflictException("automation_in_use");
@@ -45,9 +45,10 @@ public sealed partial class InMemoryIamStore
                 try { TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, request, user.PrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult(); return true; }
                 catch (AccessDeniedException) { return false; } });
             if (!qualified) throw new AccessDeniedException("no_eligible_approver");
+            RequireTenantEventAdmission(admission, p, false, ct);
             EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             var occurrence = TenantAutomationAdmissionApprovalRules.Pending(p);
-            automationBacking.CommitTenantOccurrence(p.Next, occurrence); _approvals.Add(request.RequestId, request); _tenants[request.TenantId] = next; _audit.Add(audit);
+            automationBacking.CommitTenantOccurrence(p.Next, occurrence); SettleTenantEventSource(p.EventSource, occurrence.OccurrenceId, true); _approvals.Add(request.RequestId, request); _tenants[request.TenantId] = next; _audit.Add(audit);
             return ValueTask.FromResult<TenantAutomationAdmissionResult?>(new(true, occurrence, null, null, request.RequestId));
         }
     }
@@ -68,8 +69,9 @@ public sealed partial class InMemoryIamStore
         var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
         TenantAutomationAdmissionApprovalRules.Shape(request, agent);
         var policy = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
-        try { TenantAutomationRules.AdmissionSource(state, p.Current, agent, policy, p.ManualInitiatorPrincipalId); }
+        try { TenantAutomationRules.AdmissionSource(state, p.Current, agent, policy, p.ManualInitiatorPrincipalId, p.Occurrence.SourceKind); }
         catch (ArgumentException) { throw new AccessDeniedException("operation_configuration_changed"); }
+        if (p.EventSource is { } eventSource) RequireTenantEventSource(p.Current, p.Occurrence, eventSource, true, ct);
         TenantAutomationAdmissionApprovalRules.ExecutorAsync(state, request, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
         return agent;
     }
@@ -78,7 +80,7 @@ public sealed partial class InMemoryIamStore
         TenantAutomationAdmission? admission, string? refusal, Guid auditId, DateTimeOffset at, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
             at = ApprovalNow;
             if (!_tenants.TryGetValue(signal.TenantId, out var state) || state.Tenant.Revision != expectedSecurityRevision
@@ -101,7 +103,7 @@ public sealed partial class InMemoryIamStore
                     if (admission is not null)
                     {
                         if (admission.Run.CreatedAtUtc < signal.CreatedAt || admission.Run.CreatedAtUtc > at) throw new SecurityConflictException("operation_witness_changed");
-                        TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); complete = true;
+                        TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); RequireTenantEventAdmission(admission, p, true, ct); complete = true;
                     }
                     else if (string.IsNullOrWhiteSpace(reason)) throw new SecurityConflictException("operation_mismatch");
                 }
@@ -112,6 +114,7 @@ public sealed partial class InMemoryIamStore
             if (complete) StageTenantBackgroundGraph(admission!.SessionOwner, admission.Session, admission.Run);
             automationBacking.ReplaceTenantOccurrence(complete ? admission!.Occurrence : source.WithRouting(OccurrenceRoutingDisposition.Rejected,
                 reason ?? "automation_admission_unavailable", source.RoutingRevision + 1, at, null, null));
+            SettleTenantEventSource(p.EventSource, p.Occurrence.OccurrenceId, false, complete ? null : reason ?? "automation_admission_unavailable");
             if (grant is { Status: OperationGrantStatus.Available }) _operationGrants[request.RequestId] = grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = grant.Revision + 1 };
             _approvalSignals[signal.SignalId] = signal with { Revision = signal.Revision + 1, ProcessedAt = at };
             _tenants[request.TenantId] = state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } };

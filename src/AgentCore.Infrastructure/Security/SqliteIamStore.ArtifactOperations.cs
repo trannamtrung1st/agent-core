@@ -24,7 +24,7 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
         var target = Owned(owned); TenantSessionRules.RequireExecutor(before, target);
         await ValidateTenantActorAsync(db, before, target.PrincipalId, ct).ConfigureAwait(false);
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) await ValidateTenantActorAsync(db, before, requester, ct).ConfigureAwait(false);
-        await TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+        await RequireTenantExecutionSourcesAsync(db, run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow(); var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
         var publication = new PreparedArtifactPublication(run.SessionId, args.CanonicalArguments, commit.Source);
         var prepared = TenantApprovalRules.PrepareArtifact(commit.OperationId, run.AgentInstanceId, publication, target.Instance.Revision, target.Instance.PersonaRevision);

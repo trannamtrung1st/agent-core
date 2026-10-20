@@ -16,7 +16,7 @@ public sealed partial class InMemoryIamStore
         var current = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
         TenantWorkspaceEffectRules.Session(run, agent, session);
         TenantBackgroundCreationRules.Require(request, run, agent, current);
-        TenantExecutionLineage.RequireRequesterAsync(run, state, new IamAuthorizer(this), this, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        RequireTenantExecutionSourcesAsync(run, state, new IamAuthorizer(this), this, CancellationToken.None).AsTask().GetAwaiter().GetResult();
         TenantBackgroundCreationRules.ExecutorAsync(state, request, new IamAuthorizer(this), CancellationToken.None).AsTask().GetAwaiter().GetResult();
         return session;
     }

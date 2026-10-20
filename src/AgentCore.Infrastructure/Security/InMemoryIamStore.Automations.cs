@@ -16,7 +16,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
     { ct.ThrowIfCancellationRequested(); lock (_gate) lock (automationBacking.AdmissionGate) return ValueTask.FromResult(automationBacking.ReadTenantOccurrence(tenant, occurrence)); }
     public ValueTask<TenantAutomationPage> ListTenantAutomationsAsync(Guid tenant, Guid instance, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); lock (_gate) lock (automationBacking.AdmissionGate)
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
             var rows = automationBacking.TenantAutomations(tenant).Where(a => a.Owner.AgentInstanceId == instance && (allowed is null || allowed.Contains(a.AutomationId)))
                 .OrderBy(a => a.AutomationId.ToString("D"), StringComparer.Ordinal).ToArray();
@@ -41,7 +41,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
         long expectedInstanceRevision, HumanSessionReference human, string permission, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); ct.ThrowIfCancellationRequested();
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult(false);
             RequireHumanSession(before.Tenant.TenantId, human); var current = automationBacking.ReadTenantAutomation(before.Tenant.TenantId, proposed.AutomationId);
@@ -54,6 +54,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
             if (current?.Status is AutomationStatus.Completed or AutomationStatus.Expired && proposed.Status != AutomationStatus.Cancelled) throw new AccessDeniedException("automation_terminal");
             AutomationRules.ValidateSave(current, proposed, expectedAutomationRevision); TenantAutomationRules.Configuration(proposed, policy, audit.At);
             RequireAutomationHuman(before, human.PrincipalId, agent, proposed.AutomationId, permission, current is null, ct);
+            if (permission is "automations.create" or "automations.update") TenantAutomationRules.HumanSourcesAsync(before, human.PrincipalId, proposed, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
             if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
                 && automationBacking.TenantAutomations(before.Tenant.TenantId).Count(a => a.Owner == proposed.Owner && a.Status == AutomationStatus.Active) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))
@@ -65,7 +66,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
     public ValueTask<bool> TryAdvanceTenantAutomationAsync(TenantSecurityState next, long expectedSecurityRevision, Automation current, Automation advanced, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); ct.ThrowIfCancellationRequested();
-        lock (_gate) lock (instances.CredentialGate) lock (automationBacking.AdmissionGate)
+        lock (_gate) lock (instances.CredentialGate) lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision
                 || automationBacking.ReadTenantAutomation(before.Tenant.TenantId, current.AutomationId) is not { } saved || !TenantAutomationRules.Same(saved, current)) return ValueTask.FromResult(false);
@@ -87,24 +88,25 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
         TenantAutomationAdmission admission, HumanSessionReference? human, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); ct.ThrowIfCancellationRequested();
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAutomationAdmissionResult?>(null);
             if (human is not null) RequireHumanSession(before.Tenant.TenantId, human);
             var current = automationBacking.ReadTenantAutomation(before.Tenant.TenantId, admission.Current.AutomationId);
             if (automationBacking.ReadTenantOccurrence(before.Tenant.TenantId, admission.Occurrence.OccurrenceId) is { } prior)
-                return ValueTask.FromResult<TenantAutomationAdmissionResult?>(new(false, prior, prior.ExecutionSessionId!.Value, prior.AcceptedAgentRunId!.Value));
+                return ValueTask.FromResult<TenantAutomationAdmissionResult?>(TenantAutomationRules.Existing(prior));
             if (current is null || !TenantAutomationRules.Same(current, admission.Current)) return ValueTask.FromResult<TenantAutomationAdmissionResult?>(null);
             var agent = FindTenantAgentAsync(before.Tenant.TenantId, current.Owner.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("resource_unavailable");
             var policy = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
             TenantAutomationRules.Admission(admission, agent, human?.PrincipalId);
-            TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId).GetAwaiter().GetResult();
+            TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId, admission.Occurrence.SourceKind, admission.EventSource).GetAwaiter().GetResult();
             if (human is not null) RequireAutomationHuman(before, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
             ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.occurrence.admit", audit);
             if (automationBacking.TenantBusy(current.AutomationId)) return ValueTask.FromResult<TenantAutomationAdmissionResult?>(null);
+            RequireTenantEventAdmission(admission, null, false, ct);
             EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             StageTenantBackgroundGraph(admission.SessionOwner, admission.Session, admission.Run);
-            automationBacking.CommitTenantOccurrence(admission.Next, admission.Occurrence); _tenants[before.Tenant.TenantId] = next; _audit.Add(audit);
+            automationBacking.CommitTenantOccurrence(admission.Next, admission.Occurrence); SettleTenantEventSource(admission.EventSource, admission.Occurrence.OccurrenceId, false); _tenants[before.Tenant.TenantId] = next; _audit.Add(audit);
             return ValueTask.FromResult<TenantAutomationAdmissionResult?>(new(true, admission.Occurrence, admission.Run.SessionId, admission.Run.AgentRunId));
         }
     }

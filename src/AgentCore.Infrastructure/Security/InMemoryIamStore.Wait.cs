@@ -33,6 +33,6 @@ public sealed partial class InMemoryIamStore
             : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).AsTask().GetAwaiter().GetResult();
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         TenantWaitRules.Require(run, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), suspend);
-        TenantExecutionLineage.RequireRequesterAsync(run, _tenants[tenant], new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
+        RequireTenantExecutionSourcesAsync(run, _tenants[tenant], new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
     }
 }

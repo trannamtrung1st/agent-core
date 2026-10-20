@@ -17,6 +17,6 @@ internal static class RunTaskIntents
         var text = TriggerText.RequireInstructions(instructions.GetString()!);
         var revision = data.TryGetProperty("automationRevision", out var value) && value.TryGetInt64(out var number)
             ? occurrence.AutomationId + ":" + number : null;
-        return new(text, AgentRunTaskSource.Automation, revision);
+        return new(text, AgentRunTaskSource.Automation, revision, occurrence.SourceKind is TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent ? occurrence.SourceKind : null);
     }
 }

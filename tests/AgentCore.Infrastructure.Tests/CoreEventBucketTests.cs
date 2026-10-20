@@ -11,6 +11,30 @@ public sealed class CoreEventBucketTests
 {
     [Theory]
     [InlineData(false)] [InlineData(true)]
+    public async Task Delayed_receipts_cannot_join_a_newer_coalescing_window(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"core-window-{Guid.NewGuid():N}.db");
+        var contexts = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        ICoreEventStore store = sqlite ? new SqliteCoreEventStore(contexts) : new InMemoryCoreEventStore();
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var subscription = new EventSubscriptionSnapshot(Guid.NewGuid(), owner, 1, null, new(EventDispatchMode.CoalesceLatest, 60), TriggerSourceKind.ApplicationEvent, Guid.NewGuid());
+        if (sqlite) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); }
+        try
+        {
+            var newer = new EventBucketSource(Guid.NewGuid(), owner, "orders", now.AddSeconds(120), "{}");
+            var delayed = new EventBucketSource(Guid.NewGuid(), owner, "orders", now, "{}");
+            var same = new EventBucketSource(Guid.NewGuid(), owner, "orders", now.AddSeconds(125), "{}");
+            await store.CoalesceAsync(newer, subscription); await store.CoalesceAsync(delayed, subscription); await store.CoalesceAsync(same, subscription);
+            var buckets = await store.DueBucketsAsync(now.AddSeconds(181)); Assert.Equal(2, buckets.Count);
+            var oldWindow = Assert.Single(buckets, b => b.Sources.Any(e => e.EventId == delayed.EventId)); Assert.Single(oldWindow.Sources);
+            var currentWindow = Assert.Single(buckets, b => b.Sources.Any(e => e.EventId == newer.EventId)); Assert.Equal(2, currentWindow.Sources.Count);
+            Assert.Contains(currentWindow.Sources, e => e.EventId == same.EventId);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
     public async Task Bounded_buckets_recover_with_all_sources_and_owner_checked_coverage(bool sqlite)
     {
         var path = Path.Combine(Path.GetTempPath(), $"core-buckets-{Guid.NewGuid():N}.db");

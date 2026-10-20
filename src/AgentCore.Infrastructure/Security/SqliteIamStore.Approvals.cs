@@ -419,6 +419,20 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         }
         if (automationVisibility is { } visibility)
         {
+            var webhookJson = System.Text.Json.JsonSerializer.Serialize(visibility.WebhookSources?.Select(id => id.ToString("D")).ToArray());
+            var coreJson = System.Text.Json.JsonSerializer.Serialize(visibility.CoreEvents?.Select(id => id.ToString("D")).ToArray());
+            var sourceReadable = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests WHERE AutomationId IS NULL
+                OR json_extract(PayloadJson, '$.Operation.AutomationAdmission.EventSource') IS NULL
+                OR (json_extract(PayloadJson, '$.Operation.AutomationAdmission.EventSource.SourceKind') = 1
+                    AND (json_type({webhookJson}) = 'null' OR EXISTS (SELECT 1 FROM json_each({webhookJson}) allowed
+                        WHERE allowed.value = json_extract(PayloadJson, '$.Operation.AutomationAdmission.EventSource.ResourceId'))))
+                OR (json_extract(PayloadJson, '$.Operation.AutomationAdmission.EventSource.SourceKind') = 3
+                    AND (json_type({coreJson}) = 'null' OR NOT EXISTS (
+                        SELECT 1 FROM json_each(PayloadJson, '$.Operation.AutomationAdmission.EventSource.EventIds') source
+                        WHERE NOT EXISTS (SELECT 1 FROM json_each({coreJson}) allowed WHERE allowed.value = source.value))))
+                """);
+            query = query.Where(r => sourceReadable.Any(owned => owned.RequestId == r.RequestId));
             var agentIds = visibility.Agents?.Select(id => id.ToString("D")).ToArray();
             var readIds = visibility.ReadAutomations?.Select(id => id.ToString("D")).ToArray();
             var runIds = visibility.RunAutomations?.Select(id => id.ToString("D")).ToArray();

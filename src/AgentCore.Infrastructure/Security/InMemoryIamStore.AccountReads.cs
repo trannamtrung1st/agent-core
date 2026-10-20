@@ -19,7 +19,7 @@ public sealed partial class InMemoryIamStore
             var bound = RequireAccountReadOperation(request, run, agent, exactSecret: false);
             TenantAccountReadReferences.Require(reference, request, bound, agent);
             TenantAccountReadRules.Receipt(request, run, receipt, decision, _operationGrants.GetValueOrDefault(request.RequestId));
-            TenantExecutionLineage.RequireRequesterAsync(run, state, iam, this, ct).GetAwaiter().GetResult();
+            RequireTenantExecutionSourcesAsync(run, state, iam, this, ct).GetAwaiter().GetResult();
             TenantAccountReadRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).GetAwaiter().GetResult();
         }
     }
@@ -57,7 +57,7 @@ public sealed partial class InMemoryIamStore
                 return ValueTask.FromResult(false);
             TenantAccountReadRules.Receipt(request, run, receipt, decision, _operationGrants.GetValueOrDefault(request.RequestId));
             TenantSessionRules.RequireExecutor(before, agent);
-            TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).GetAwaiter().GetResult();
+            RequireTenantExecutionSourcesAsync(run, before, new IamAuthorizer(this), this, ct).GetAwaiter().GetResult();
             TenantAccountReadRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             TenantRuntimeAccountReadRules.Transaction(next, expectedSecurityRevision, proof, request, maintenance, audit);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);

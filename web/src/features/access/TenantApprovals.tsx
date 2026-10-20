@@ -32,7 +32,7 @@ export interface TenantApproval {
 }
 interface ApprovalPage { items: TenantApproval[]; total: number; page: number; pageSize: number }
 const statuses: Record<Status, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', expired: 'Expired' };
-const fields: Record<string, string> = { admissionOccurrence: 'Exact occurrence', admissionPrimaryPermission: 'Primary consent permission', admissionAutomation: 'Saved Automation', admissionSource: 'Occurrence source', admissionObjective: 'Exact task', admissionSchedule: 'Saved schedule', admissionDestination: 'Destination', admissionModel: 'Selected model', admissionScope: 'Required permissions', admissionLimit: 'Consent boundary', path: 'Exact path', name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check',
+const fields: Record<string, string> = { admissionOccurrence: 'Exact occurrence', admissionPrimaryPermission: 'Primary consent permission', admissionAutomation: 'Saved Automation', admissionSource: 'Occurrence source', admissionObjective: 'Exact task', admissionSchedule: 'Saved triggers', admissionDestination: 'Destination', admissionModel: 'Selected model', admissionScope: 'Required permissions', admissionLimit: 'Consent boundary', admissionEventSource: 'Captured event source', admissionEventFilter: 'Captured filter', admissionEventDispatch: 'Captured dispatch', admissionEventData: 'Captured event data', path: 'Exact path', name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check',
   reportDestination: 'Destination', reportContent: 'Completion to deliver', reportModel: 'Selected model',
   backgroundObjective: 'Task', backgroundTitle: 'Title', backgroundReportCompletion: 'Report completion here', backgroundModel: 'Selected model', backgroundPrimaryPermission: 'Primary creation permission',
   accountName: 'Account', accountPurpose: 'Account type', accountReference: 'Bound reference', accountReadTool: 'Requested read', accountReadArguments: 'Exact parameters',
@@ -231,10 +231,14 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
       && typeof mutationField(field) === 'string' && String(mutationField(field)).trim().length > 0)
     && validDestination;
   const admissionFields = ['admissionOccurrence', 'admissionPrimaryPermission', 'admissionAutomation', 'admissionSource', 'admissionObjective', 'admissionSchedule', 'admissionDestination', 'admissionModel', 'admissionScope', 'admissionLimit'];
-  const validAdmission = data?.sessionId === null && data.runId === null && data.review.changes.length === admissionFields.length
-    && ['automations.run', 'sessions.create', 'agent-runs.create'].includes(String(mutationField('admissionPrimaryPermission')))
-    && mutationField('admissionScope') === 'automations.run; sessions.create; agent-runs.create'
-    && admissionFields.every(field => data.review.changes.filter(change => change.field === field && change.afterAvailable && typeof change.after === 'string' && change.after.trim().length > 0).length === 1);
+  const eventSource = mutationField('admissionSource');
+  const rawPermission = eventSource === 'Built-in event · no human requester' ? 'core-events.read' : eventSource === 'Webhook event · no human requester' ? 'webhooks.read' : null;
+  const requiredAdmissionFields = rawPermission ? [...admissionFields, 'admissionEventSource', 'admissionEventFilter', 'admissionEventDispatch', 'admissionEventData'] : admissionFields;
+  const primaryAdmissionPermission = String(mutationField('admissionPrimaryPermission'));
+  const validAdmission = ['Scheduled occurrence · no human requester', 'Explicit manual invocation', 'Built-in event · no human requester', 'Webhook event · no human requester'].includes(String(eventSource)) && data?.sessionId === null && data.runId === null && data.review.changes.length === requiredAdmissionFields.length
+    && ([...['automations.run', 'sessions.create', 'agent-runs.create'], ...(rawPermission && data.kind === 'review' ? [rawPermission] : [])]).includes(primaryAdmissionPermission)
+    && mutationField('admissionScope') === `automations.run; sessions.create; agent-runs.create${rawPermission ? `; ${rawPermission}` : ''}`
+    && requiredAdmissionFields.every(field => data.review.changes.filter(change => change.field === field && change.afterAvailable && typeof change.after === 'string' && change.after.trim().length > 0).length === 1);
   const invalidPreview = (automationAdmission && !validAdmission) || (accountAction && !account) || (reportSourceRead && !reportSource) || (completionRead && !completion) || (workspaceMutation && !mutation) || (artifactPublication && !publication) || (backgroundCreation && !validBackground) || (backgroundReport && !validReport);
   const blocked = !fresh || loading || !!acknowledged || expired || busy || command.requiresReload;
   const decide = (decision: 'approve' | 'reject' | 'cancel') => {

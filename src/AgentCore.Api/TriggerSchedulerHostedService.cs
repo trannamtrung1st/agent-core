@@ -23,9 +23,9 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         ExternalEventIngress events,
         TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
-        IDiagnosticIdSource diagnostics, CoreEventDispatcher coreEvents, SchedulerReadiness readiness, AgentCore.Application.Security.TenantAutomationService tenantAutomations)
+        IDiagnosticIdSource diagnostics, CoreEventDispatcher coreEvents, SchedulerReadiness readiness, AgentCore.Application.Security.TenantAutomationService tenantAutomations, AgentCore.Application.Events.TenantEventProcessor tenantEvents)
         : this(
-            cancellationToken => RunProductionAsync(scheduler, router, events, coreEvents, time, logger, diagnostics, cancellationToken, tenantAutomations),
+            cancellationToken => RunProductionAsync(scheduler, router, events, coreEvents, time, logger, diagnostics, cancellationToken, tenantAutomations, tenantEvents),
             time,
             logger,
             diagnostics, readiness)
@@ -103,10 +103,11 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
         IDiagnosticIdSource diagnostics,
-        CancellationToken cancellationToken, AgentCore.Application.Security.TenantAutomationService? tenantAutomations = null)
+        CancellationToken cancellationToken, AgentCore.Application.Security.TenantAutomationService? tenantAutomations = null, AgentCore.Application.Events.TenantEventProcessor? tenantEvents = null)
     {
         var succeeded = await RunPhasesAsync([
             async ct => { if (tenantAutomations is not null) await tenantAutomations.AdmitDueAsync(ct).ConfigureAwait(false); },
+            async ct => { if (tenantEvents is not null) await tenantEvents.RunOnceAsync(ct).ConfigureAwait(false); },
             async ct => { await coreEvents.RunOnceAsync(ct).ConfigureAwait(false); },
             async ct => { await events.ResumePendingAsync(ct).ConfigureAwait(false); },
             async ct => { await scheduler.RunOnceAsync(time.GetUtcNow(), ct).ConfigureAwait(false); },

@@ -4,16 +4,25 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryCoreEventStore : ICoreEventStore
+public sealed partial class InMemoryCoreEventStore : ICoreEventStore
 {
+    private InMemoryAgentInstanceStore? tenantInstances;
+    internal void BindTenantInstances(InMemoryAgentInstanceStore backing)
+    {
+        var prior = Interlocked.CompareExchange(ref tenantInstances, backing, null);
+        if (prior is not null && !ReferenceEquals(prior, backing)) throw new InvalidOperationException("Core facts must share the actual Instance backing.");
+    }
+    private void RequireLegacyOwner(TriggerOwner owner)
+    { if (owner.TenantId is not null || tenantInstances?.IsTenantOwned(owner.AgentInstanceId) == true) throw AgentCore.Application.Sessions.AgentCoreErrors.Forbidden("Tenant Core events require their canonical source transaction."); }
     private readonly Lock gate = new();
     private readonly Dictionary<Guid, CoreEventReceipt> receipts = [];
     private readonly Dictionary<(Guid, Guid), CoreEventDelivery> deliveries = [];
     private readonly HashSet<(Guid BucketId, Guid SourceId)> inspected = [];
     public ValueTask<EventCoveragePage> CoveragePageAsync(TriggerOwner owner, Guid automationId, string? cursor, int limit, CancellationToken ct = default)
-    { lock (gate) return ValueTask.FromResult(EventCoverage.Page(buckets.Values.Where(b => b.Flushed && b.Subscription.AutomationId == automationId).OrderBy(b => b.BucketId.ToString("D"), StringComparer.Ordinal).Select(b => (b, (IReadOnlyCollection<Guid>)b.Sources.Where(e => inspected.Contains((b.BucketId, e.EventId))).Select(e => e.EventId).ToArray())), owner, cursor, limit, false)); }
+    { RequireLegacyOwner(owner); lock (gate) return ValueTask.FromResult(EventCoverage.Page(buckets.Values.Where(b => b.Subscription.Owner.TenantId is null && b.Flushed && b.Subscription.AutomationId == automationId).OrderBy(b => b.BucketId.ToString("D"), StringComparer.Ordinal).Select(b => (b, (IReadOnlyCollection<Guid>)b.Sources.Where(e => inspected.Contains((b.BucketId, e.EventId))).Select(e => e.EventId).ToArray())), owner, cursor, limit, false)); }
     public ValueTask MarkSourceInspectedAsync(TriggerOwner owner, Guid bucketId, Guid sourceId, CancellationToken ct = default)
     {
+        RequireLegacyOwner(owner);
         lock (gate) { if (buckets.TryGetValue(bucketId, out var b) && b.Subscription.Owner == owner)
             foreach (var prior in buckets.Values.Where(prior => prior.Subscription.Owner == owner && prior.Subscription.TriggerId == b.Subscription.TriggerId))
                 foreach (var e in prior.Sources.Where(e => EventCoverage.SourceRunId(e) == sourceId)) inspected.Add((prior.BucketId, e.EventId)); }
@@ -22,12 +31,13 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
     private readonly Dictionary<Guid, CoreEventBucket> buckets = [];
     public ValueTask CoalesceAsync(EventBucketSource source, EventSubscriptionSnapshot subscription, CancellationToken ct = default)
     {
+        RequireLegacyOwner(source.Owner); RequireLegacyOwner(subscription.Owner);
         lock (gate)
         {
             deliveries.TryGetValue((source.EventId, subscription.TriggerId), out var delivery);
             if (subscription.SourceKind == TriggerSourceKind.CoreEvent && delivery?.Status != EventMatchStatus.Matched) return ValueTask.CompletedTask;
             if (buckets.Values.Any(b => b.Subscription.TriggerId == subscription.TriggerId && b.Sources.Any(e => e.EventId == source.EventId))) return ValueTask.CompletedTask;
-            var bucket = buckets.Values.Where(b => !b.Flushed && b.Subscription == subscription && b.DueAtUtc > source.ReceivedAtUtc && EventBucketPacking.CanAppend(b.Sources, source)).OrderBy(b => b.DueAtUtc).FirstOrDefault();
+            var bucket = buckets.Values.Where(b => !b.Flushed && b.Subscription == subscription && EventBucketPacking.Contains(b, source.ReceivedAtUtc) && EventBucketPacking.CanAppend(b.Sources, source)).OrderBy(b => b.DueAtUtc).FirstOrDefault();
             bucket = bucket is null ? new(CoreEventPersistence.Id($"bucket:{source.EventId:D}:{subscription.TriggerId:D}"), subscription, source.ReceivedAtUtc.AddSeconds(subscription.Dispatch.WindowSeconds!.Value), [source]) : bucket with { Sources = bucket.Sources.Append(source).ToArray() };
             if (!EventBucketPacking.CanAppend([], source))
                 bucket = bucket with { Flushed = true, CompletionCode = "evidence-budget" };
@@ -44,7 +54,7 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
         {
             var afterMs = after?.AtUtc.ToUnixTimeMilliseconds() ?? 0;
             var afterId = after?.Id.ToString("D");
-            var page = buckets.Values.Where(b => !b.Flushed && b.DueAtUtc <= now)
+            var page = buckets.Values.Where(b => b.Subscription.Owner.TenantId is null && !b.Flushed && b.DueAtUtc <= now)
                 .Where(b => after is null || b.DueAtUtc.ToUnixTimeMilliseconds() > afterMs
                     || b.DueAtUtc.ToUnixTimeMilliseconds() == afterMs && string.CompareOrdinal(b.BucketId.ToString("D"), afterId) > 0)
                 .OrderBy(b => b.DueAtUtc.ToUnixTimeMilliseconds()).ThenBy(b => b.BucketId.ToString("D"), StringComparer.Ordinal)
@@ -53,7 +63,7 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
         }
     }
     public ValueTask CompleteBucketAsync(Guid bucketId, CancellationToken ct = default, string? code = null)
-    { lock (gate) { if (buckets.TryGetValue(bucketId, out var b) && !b.Flushed) buckets[bucketId] = b with { Flushed = true, CompletionCode = code }; } return ValueTask.CompletedTask; }
+    { lock (gate) { if (buckets.TryGetValue(bucketId, out var b) && b.Subscription.Owner.TenantId is null && !b.Flushed) buckets[bucketId] = b with { Flushed = true, CompletionCode = code }; } return ValueTask.CompletedTask; }
     internal void Purge(Guid instanceId)
     {
         lock (gate)
@@ -77,6 +87,7 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
     internal void Append(CoreEventOccurrence? e, IReadOnlyList<EventSubscriptionSnapshot>? subscriptions = null)
     {
         if (e is null) return;
+        RequireLegacyOwner(e.Owner);
         lock (gate)
         {
             if (!receipts.TryAdd(e.EventId, new(e, e.OccurredAtUtc, false))) return;
@@ -89,7 +100,7 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
         {
             var afterMs = after?.AtUtc.ToUnixTimeMilliseconds() ?? 0;
             var afterId = after?.Id.ToString("D");
-            var page = receipts.Values.Where(e => !e.Snapshotted || deliveries.Values.Any(d => d.EventId == e.Event.EventId
+            var page = receipts.Values.Where(e => e.Event.Owner.TenantId is null).Where(e => !e.Snapshotted || deliveries.Values.Any(d => d.EventId == e.Event.EventId
                     && (d.Status is EventMatchStatus.Pending or EventMatchStatus.Matched || d.Status == EventMatchStatus.FilterError && d.Decision?.Retryable == true)))
                 .Where(e => after is null || e.ReceivedAtUtc.ToUnixTimeMilliseconds() > afterMs
                     || e.ReceivedAtUtc.ToUnixTimeMilliseconds() == afterMs && string.CompareOrdinal(e.Event.EventId.ToString("D"), afterId) > 0)
@@ -99,16 +110,16 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
         }
     }
     public ValueTask SnapshotAsync(Guid eventId, IReadOnlyList<EventSubscriptionSnapshot> subscriptions, CancellationToken ct = default)
-    { lock (gate) { if (!receipts.TryGetValue(eventId, out var r) || r.Snapshotted) return ValueTask.CompletedTask;
-        foreach (var s in subscriptions.Where(s => s.Owner == r.Event.Owner)) deliveries.TryAdd((eventId, s.TriggerId), new(eventId, s, EventMatchStatus.Pending));
+    { lock (gate) { if (!receipts.TryGetValue(eventId, out var r) || r.Event.Owner.TenantId is not null || r.Snapshotted) return ValueTask.CompletedTask;
+        foreach (var s in subscriptions.Where(s => s.Owner.TenantId is null && s.Owner == r.Event.Owner)) deliveries.TryAdd((eventId, s.TriggerId), new(eventId, s, EventMatchStatus.Pending));
         receipts[eventId] = r with { Snapshotted = true }; } return ValueTask.CompletedTask; }
     public ValueTask<IReadOnlyList<CoreEventDelivery>> DeliveriesAsync(Guid eventId, CancellationToken ct = default)
-    { lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventDelivery>>(deliveries.Values.Where(d => d.EventId == eventId).OrderBy(d => d.Subscription.AutomationId).ToArray()); }
+    { lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventDelivery>>(deliveries.Values.Where(d => d.Subscription.Owner.TenantId is null && d.EventId == eventId).OrderBy(d => d.Subscription.AutomationId).ToArray()); }
     public ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid triggerId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null)
     {
         lock (gate)
         {
-            if (!deliveries.TryGetValue((eventId, triggerId), out var d)) return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
+            if (!deliveries.TryGetValue((eventId, triggerId), out var d) || d.Subscription.Owner.TenantId is not null) return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
             if (d.Status is EventMatchStatus.PolicySkipped or EventMatchStatus.LoopSkipped or EventMatchStatus.BudgetSkipped) return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
             if (d.Decision is not null && (!d.Decision.Retryable || d.Decision != expectedDecision)) return ValueTask.FromResult(d.Decision);
             deliveries[(eventId, triggerId)] = d with { Decision = decision, Status = decision.Retryable ? EventMatchStatus.Pending : decision.Matched == true ? EventMatchStatus.Matched : decision.Matched == false ? EventMatchStatus.Filtered : EventMatchStatus.FilterError, Code = decision.Code };
@@ -116,7 +127,7 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
         }
     }
     public ValueTask FinishAsync(Guid eventId, Guid triggerId, EventMatchStatus status, string? code = null, CancellationToken ct = default)
-    { lock (gate) { if (deliveries.TryGetValue((eventId, triggerId), out var d) && (d.Status is EventMatchStatus.Pending or EventMatchStatus.Matched || d.Status == EventMatchStatus.FilterError && d.Decision?.Retryable == true)) deliveries[(eventId, triggerId)] = d with { Status = status, Code = code }; } return ValueTask.CompletedTask; }
+    { lock (gate) { if (deliveries.TryGetValue((eventId, triggerId), out var d) && d.Subscription.Owner.TenantId is null && (d.Status is EventMatchStatus.Pending or EventMatchStatus.Matched || d.Status == EventMatchStatus.FilterError && d.Decision?.Retryable == true)) deliveries[(eventId, triggerId)] = d with { Status = status, Code = code }; } return ValueTask.CompletedTask; }
     public ValueTask<IReadOnlyList<CoreEventDelivery>> ActivityAsync(TriggerOwner owner, CancellationToken ct = default)
-    { lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventDelivery>>(deliveries.Values.Where(d => d.Subscription.Owner == owner).TakeLast(100).ToArray()); }
+    { RequireLegacyOwner(owner); lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventDelivery>>(deliveries.Values.Where(d => d.Subscription.Owner == owner).TakeLast(100).ToArray()); }
 }

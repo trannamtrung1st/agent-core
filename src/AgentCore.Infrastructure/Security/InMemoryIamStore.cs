@@ -127,6 +127,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantEventAdmissionRules.TryId(a.Scope, out var coreEvent) && !sessionBacking.CoreEvents.OwnsTenantEvent(state.Tenant.TenantId, coreEvent)))
+            throw new ArgumentException("A Core event assignment requires its actual tenant fact.");
         if (state.Assignments.Any(a => TenantWebhookRules.TryId(a.Scope, out var webhook) && !webhookBacking.OwnsTenantSource(state.Tenant.TenantId, webhook)))
             throw new ArgumentException("A webhook assignment requires its actual tenant source.");
         if (state.Assignments.Any(a => TenantWorkspaceRules.TryParse(a.Scope, out _, out _) && !OwnsWorkspace(a.Scope, ct)))

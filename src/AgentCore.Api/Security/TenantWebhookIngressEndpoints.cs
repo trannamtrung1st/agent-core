@@ -22,7 +22,7 @@ public static class TenantWebhookIngressEndpoints
                 ExternalEventIngressKind.Invalid => Error(result.Code == "source_event_conflict" ? 409 : 400, result.Code ?? "invalid_payload"),
                 _ => Error(401, "unauthorized") };
         }
-        catch (SecurityConflictException) { return Error(409, "webhook_admission_conflict"); }
+        catch (SecurityConflictException error) { return Error(409, error.ReasonCode); }
     }
     private static IResult Error(int code, string reason) => Results.Json(new { reasonCode = reason }, statusCode: code);
 }

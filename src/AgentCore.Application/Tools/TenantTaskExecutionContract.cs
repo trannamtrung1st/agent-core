@@ -20,13 +20,16 @@ public static class TenantTaskExecutionContract
     public static bool IsBackground(AgentRun run) => run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;
     public static bool IsBackground(AgentContext? context) => context?.ExecutionContext is not null
         && context.OutputContract == AgentRunOutputContract.BackgroundOutcome;
-    // Currently converted independent ingress: no-human schedules and actual-human manual invocation.
+    // Independent ingress keeps its actual no-human Schedule/Core/Webhook or human manual source.
     // Approval successors keep the exact Automation task intent and the original initiator.
     private static TriggerSourceKind? IndependentSource(TrustedExecutionContext? execution, AgentRunTaskIntent? intent) => intent?.Source != AgentRunTaskSource.Automation ? null
         : execution?.Origin switch {
             ExecutionOrigin.ScheduledOccurrence when execution.OriginalInitiatorPrincipalId is null => TriggerSourceKind.Schedule,
+            ExecutionOrigin.CoreEvent when execution.OriginalInitiatorPrincipalId is null && intent.EventSourceKind == TriggerSourceKind.CoreEvent => TriggerSourceKind.CoreEvent,
+            ExecutionOrigin.ApplicationEvent when execution.OriginalInitiatorPrincipalId is null && intent.EventSourceKind == TriggerSourceKind.ApplicationEvent => TriggerSourceKind.ApplicationEvent,
             ExecutionOrigin.ManualInvocation when execution.OriginalInitiatorPrincipalId is not null => TriggerSourceKind.ManualInvocation,
-            ExecutionOrigin.ApprovalContinuation => execution.OriginalInitiatorPrincipalId is null ? TriggerSourceKind.Schedule : TriggerSourceKind.ManualInvocation,
+            ExecutionOrigin.ApprovalContinuation when execution.OriginalInitiatorPrincipalId is null && intent.EventSourceKind is TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent => intent.EventSourceKind,
+            ExecutionOrigin.ApprovalContinuation when intent.EventSourceKind is null => execution.OriginalInitiatorPrincipalId is null ? TriggerSourceKind.Schedule : TriggerSourceKind.ManualInvocation,
             _ => null };
     public static bool IsIndependent(AgentContext? context) => context?.OutputContract == AgentRunOutputContract.BackgroundOutcome
         && IndependentSource(context.ExecutionContext, context.RunTaskIntent) is not null;

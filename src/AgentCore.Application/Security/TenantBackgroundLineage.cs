@@ -13,7 +13,7 @@ public static class TenantBackgroundLineage
             if (!seen.Add(current.AgentRunId) || current.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome)
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (current.Admission.ExecutionContext?.Origin == ExecutionOrigin.ImmediateBackground) return current;
-            if (current.Admission.ExecutionContext is { Origin: ExecutionOrigin.ScheduledOccurrence or ExecutionOrigin.ManualInvocation } independent)
+            if (current.Admission.ExecutionContext is { Origin: ExecutionOrigin.ScheduledOccurrence or ExecutionOrigin.ManualInvocation or ExecutionOrigin.CoreEvent or ExecutionOrigin.ApplicationEvent } independent)
             {
                 if (!AgentCore.Application.Tools.TenantTaskExecutionContract.IsIndependent(current) || independent.RootActivationId != current.ActivationId
                     || independent.ParentRunId is not null || independent.ParentActivationId is not null || current.Admission.Activation.TriggerOccurrenceId is null)

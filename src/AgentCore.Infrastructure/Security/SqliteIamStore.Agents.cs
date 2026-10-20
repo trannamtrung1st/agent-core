@@ -77,7 +77,8 @@ public sealed partial class SqliteIamStore
         db.Entry(current).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
         var updated = SqliteAgentInstanceStore.Map(row);
-        foreach (var e in CoreEventPersistence.Instance(old, updated)) CoreEventPersistence.Stage(db, e);
+        foreach (var e in CoreEventPersistence.Instance(old, updated, AgentCore.Domain.Triggers.TriggerOwner.ForTenant(next.Tenant.TenantId, instanceId, before.SystemIdentities.Single(i => i.AgentInstanceId == instanceId).PrincipalId)))
+            await TenantCoreEventProduction.StageAsync(db, e, ct).ConfigureAwait(false);
         await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, initiator, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
         catch (DbUpdateConcurrencyException) { return null; }

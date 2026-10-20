@@ -18,17 +18,29 @@ public static class TenantAutomationAdmissionApprovalRules
     public static (string Permission, AccessScope Scope)[] Targets(Guid tenant, Guid automation) => Permissions.Select(key =>
         (key, key == "automations.run" ? TenantAutomationRules.Scope(tenant, automation) : AccessScope.ForTenant(tenant))).ToArray();
 
-    public static async ValueTask<TenantAutomationAdmissionDecision> EvaluateAsync(TenantSecurityState state, Automation value, TenantAgent agent,
-        AgentCore.Domain.Definitions.AgentDefinition definition, Guid? requester, IamAuthorizer iam, CancellationToken ct)
+    public static bool IsSourceRead(string permission) => permission is "webhooks.read" or "core-events.read";
+    public static (string Permission, AccessScope Scope)[] SourceTargets(PreparedEventAdmissionSource? source)
     {
-        TenantAutomationRules.AdmissionSource(state, value, agent, definition, requester);
+        if (source is null) return [];
+        return source.SourceKind == TriggerSourceKind.ApplicationEvent
+            ? [("webhooks.read", TenantWebhookRules.Scope(source.TenantId, source.ResourceId!.Value))]
+            : source.EventIds.Select(id => ("core-events.read", TenantEventAdmissionRules.Scope(source.TenantId, id))).ToArray();
+    }
+    public static (string Permission, AccessScope Scope)[] Targets(PreparedAutomationAdmission source) => Targets(source.TenantId, source.Current.AutomationId).Concat(SourceTargets(source.EventSource)).ToArray();
+    public static (string Permission, AccessScope Scope)[] Targets(TenantApprovalRequest request) => Targets(request.Operation.AutomationAdmission ?? throw new ArgumentException("An exact occurrence source is required."));
+
+    public static async ValueTask<TenantAutomationAdmissionDecision> EvaluateAsync(TenantSecurityState state, Automation value, TenantAgent agent,
+        AgentCore.Domain.Definitions.AgentDefinition definition, Guid? requester, IamAuthorizer iam, CancellationToken ct, TriggerSourceKind? sourceKind = null, PreparedEventAdmissionSource? eventSource = null)
+    {
+        TenantAutomationRules.AdmissionSource(state, value, agent, definition, requester, sourceKind);
         var missing = new List<string>(); var reviews = new List<string>();
-        foreach (var (key, scope) in Targets(state.Tenant.TenantId, value.AutomationId))
+        foreach (var (key, scope) in Targets(state.Tenant.TenantId, value.AutomationId).Concat(SourceTargets(eventSource)))
         {
             var access = await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false);
             if (!access.Allowed)
             {
                 if (access.ReasonCode != "permission_denied") throw new AccessDeniedException(access.ReasonCode);
+                if (IsSourceRead(key)) throw new AccessDeniedException("event_source_read_required");
                 missing.Add(key);
             }
             if (await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, key, scope, iam, ct).ConfigureAwait(false)) reviews.Add(key);
@@ -61,7 +73,7 @@ public static class TenantAutomationAdmissionApprovalRules
             ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, p.ManualInitiatorPrincipalId);
         return new(p.Current, p.Next, Pending(p).WithExecutionAcceptance(p.SessionId, p.RunId, 1, at),
             new(p.TenantId, p.SessionId, agent.Instance.InstanceId, agent.PrincipalId, agent.PrincipalId, at), graph.Session, graph.Run,
-            request.Operation.ExpectedInstanceRevision, p.ConfigurationHash);
+            request.Operation.ExpectedInstanceRevision, p.ConfigurationHash, p.EventSource);
     }
 
     public static void Shape(TenantApprovalRequest request, TenantAgent agent, bool current = true)
@@ -73,6 +85,7 @@ public static class TenantAutomationAdmissionApprovalRules
             || request.CreatedAt != p.Occurrence.AdmittedAtUtc || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
             || request.Revision < 1 || !Enum.IsDefined(request.Kind) || !Enum.IsDefined(request.Status))
             throw new ArgumentException("Approval does not match its reserved occurrence.");
+        if (IsSourceRead(request.Permission) && request.Kind != ApprovalKind.Review) throw new ArgumentException("Source read policy cannot be replaced by a creation grant.");
         TenantAutomationRules.Owner(p.Current, agent);
         TenantApprovalSnapshotRules.Shape(request);
         if (current && (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision))
@@ -83,14 +96,14 @@ public static class TenantAutomationAdmissionApprovalRules
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         var p = request.Operation.AutomationAdmission!;
-        foreach (var (key, scope) in Targets(request.TenantId, p.Current.AutomationId).Concat(new[] {
+        foreach (var (key, scope) in Targets(p).Concat(new[] {
             ("agents.read", AccessScope.ForResource(request.TenantId, "agent", request.Operation.InstanceId.ToString("D"))),
             ("automations.read", TenantAutomationRules.Scope(request.TenantId, p.Current.AutomationId)) }))
             if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("approval_unavailable");
     }
     public static async ValueTask ExecutorAsync(TenantSecurityState state, TenantApprovalRequest request, IamAuthorizer iam, CancellationToken ct)
     {
-        foreach (var (key, scope) in Targets(request.TenantId, request.Operation.AutomationAdmission!.Current.AutomationId))
+        foreach (var (key, scope) in Targets(request))
             if ((request.Kind == ApprovalKind.Review || key != request.Permission)
                 && !(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("operation_authority_changed");
@@ -105,7 +118,7 @@ public static class TenantAutomationAdmissionApprovalRules
     public static async ValueTask ReviewerAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         await ReadAsync(state, request, human, iam, ct).ConfigureAwait(false);
-        foreach (var (key, scope) in Targets(request.TenantId, request.Operation.AutomationAdmission!.Current.AutomationId))
+        foreach (var (key, scope) in Targets(request))
         {
             if (key != request.Permission && !await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false)) continue;
             if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview && human == request.OriginalInitiatorPrincipalId)

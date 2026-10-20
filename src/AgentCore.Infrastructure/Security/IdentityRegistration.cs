@@ -116,6 +116,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantWaitSourceAuthority>();
         services.TryAddSingleton<TenantCompletionReadService>();
         services.TryAddSingleton<TenantReportReadAuthority>();
+        services.TryAddSingleton<TenantEventReadAuthority>();
+        services.TryAddSingleton<TenantCoreEventReadService>();
+        services.TryAddSingleton<TenantEventActivityService>();
         services.TryAddSingleton<TenantReportSourceReadService>();
         services.TryAddSingleton<TenantAttachmentRuntimeContextService>();
         services.TryAddSingleton<TenantRunExecutionAuthority>();
@@ -141,6 +144,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAttachmentMaterializationService>();
         services.TryAddSingleton<ITenantAutomationStore>(p => (ITenantAutomationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAutomationService>();
+        services.TryAddSingleton<ITenantEventStore>(p => (ITenantEventStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Events.TenantEventProcessor>();
         services.TryAddSingleton<ITenantWebhookStore>(p => (ITenantWebhookStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantWebhookService>();
         services.TryAddSingleton<TenantAutomationAdmissionTarget>();

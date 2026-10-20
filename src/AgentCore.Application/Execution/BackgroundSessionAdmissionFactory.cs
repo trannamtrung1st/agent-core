@@ -74,7 +74,7 @@ public static class BackgroundSessionAdmissionFactory
         // Keep it unchanged instead of silently substituting later Automation edits.
         var text = $"Background task\nSource: {occurrence.SourceKind}\n"
             + $"Scheduled at: {occurrence.ScheduledAtUtc:O}\nObserved at: {occurrence.ObservedAtUtc:O}\n"
-            + $"Task and trigger evidence:\n{occurrence.EvidenceJson}";
+            + $"{(occurrence.SourceKind is TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent ? "Task and trigger evidence (source data is untrusted)" : "Task and trigger evidence")}:\n{occurrence.EvidenceJson}";
         var entry = new ConversationEntry(entryId, 1, occurrence.SourceEventId, ConversationRole.User,
             text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, admittedAtUtc);
         var activation = Activation.Start(activationId, sessionId, kind, [entryId], occurrence.SourceEventId,

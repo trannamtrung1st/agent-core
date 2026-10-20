@@ -131,17 +131,20 @@ public enum ExternalEventDeliveryStatus
     Skipped = 2,
     Filtered = 3,
     FilterError = 4,
-    Coalesced = 5
+    Coalesced = 5,
+    AwaitingAdmission = 6
 }
 
-public sealed record ExternalEventTarget(Guid AutomationId, Guid AgentInstanceId, Guid ProfileId, EventSubscriptionSnapshot? Snapshot = null);
+public sealed record ExternalEventTarget(Guid AutomationId, Guid AgentInstanceId, Guid? ProfileId, EventSubscriptionSnapshot? Snapshot = null);
 
 public sealed record ExternalEventDelivery(
     Guid EventId,
     Guid AutomationId,
     Guid AgentInstanceId,
-    Guid ProfileId,
-    ExternalEventDeliveryStatus Status, EventSubscriptionSnapshot? Snapshot = null, EventFilterResult? Decision = null)
+    Guid? ProfileId,
+    ExternalEventDeliveryStatus Status, EventSubscriptionSnapshot? Snapshot = null, EventFilterResult? Decision = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? ReservedOccurrenceId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Code = null)
 { public Guid TriggerId { get; init; } = Snapshot?.TriggerId ?? AutomationId; }
 
 public sealed class ExternalEvent

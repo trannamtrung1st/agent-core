@@ -26,7 +26,7 @@ public sealed partial class InMemoryIamStore : ITenantDeliveryReceiptStore
                 || frame.Owner.TenantId != proof.Owner.TenantId || frame.Owner.ExecutorPrincipalId != proof.Owner.ExecutorPrincipalId
                 || TenantDeliveryReceiptRules.Apply(proof, saved.Owner, entry) != entry)
                 throw new AccessDeniedException("receipt_unavailable");
-            sessionBacking.SaveTenantRuntime(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow());
+            SaveTenantRuntimeState(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow());
             return ValueTask.CompletedTask;
         }
     }

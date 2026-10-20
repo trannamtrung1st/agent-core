@@ -32,7 +32,7 @@ public sealed partial class SqliteIamStore
         var policy = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct), agent.Instance.SettingsOverrides);
         TenantAutomationAdmissionApprovalRules.Shape(request, agent);
         TenantAutomationRules.Admission(admission, agent, human?.PrincipalId, p);
-        var decision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, p.Current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct);
+        var decision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, p.Current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct, p.Occurrence.SourceKind, p.EventSource);
         if (decision.Kind != request.Kind || decision.Permission != request.Permission) throw new SecurityConflictException("operation_authority_changed");
         if (human is not null) await RequireAutomationHuman(state, human.PrincipalId, agent, p.Current.AutomationId, "automations.run", false, ct);
         if (await TenantAutomationBusy(db, request.TenantId, p.Current.AutomationId, ct)) throw new SecurityConflictException("automation_in_use");
@@ -49,6 +49,7 @@ public sealed partial class SqliteIamStore
             catch (AccessDeniedException) { }
         }
         if (!qualified) throw new AccessDeniedException("no_eligible_approver");
+        await RequireTenantEventAdmission(db, admission, p, false, ct);
         var occurrence = TenantAutomationAdmissionApprovalRules.Pending(p);
         try
         {
@@ -56,6 +57,11 @@ public sealed partial class SqliteIamStore
             // The request trigger proves the actual pending source. Both saves
             // belong to this transaction; no provisional work supplies an FK.
             await db.SaveChangesAsync(ct);
+            if (p.EventSource is not null)
+            {
+                await SettleTenantEventSource(db, p.EventSource, p.Occurrence.OccurrenceId, true, null, ct);
+                await db.SaveChangesAsync(ct);
+            }
             db.Add(TenantApprovalRecord.From(request));
             db.Entry(tenant).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct); db.Add(audit);
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new(true, occurrence, null, null, request.RequestId);
@@ -90,8 +96,9 @@ public sealed partial class SqliteIamStore
             ?? throw new AccessDeniedException("executor_unavailable");
         var agent = Owned(agentRow); TenantAutomationAdmissionApprovalRules.Shape(request, agent);
         var policy = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct), agent.Instance.SettingsOverrides);
-        try { TenantAutomationRules.AdmissionSource(state, p.Current, agent, policy, p.ManualInitiatorPrincipalId); }
+        try { TenantAutomationRules.AdmissionSource(state, p.Current, agent, policy, p.ManualInitiatorPrincipalId, p.Occurrence.SourceKind); }
         catch (ArgumentException) { throw new AccessDeniedException("operation_configuration_changed"); }
+        if (p.EventSource is { } eventSource) await RequireTenantEventSource(db, p.Current, p.Occurrence, eventSource, true, ct);
         await TenantAutomationAdmissionApprovalRules.ExecutorAsync(state, request, new IamAuthorizer(this), ct); return agent;
     }
 
@@ -121,7 +128,7 @@ public sealed partial class SqliteIamStore
                 if (admission is not null)
                 {
                     if (admission.Run.CreatedAtUtc < signal.CreatedAt || admission.Run.CreatedAtUtc > at) throw new SecurityConflictException("operation_witness_changed");
-                    TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); complete = true;
+                    TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); await RequireTenantEventAdmission(db, admission, p, true, ct); complete = true;
                 }
                 else if (string.IsNullOrWhiteSpace(reason)) throw new SecurityConflictException("operation_mismatch");
             }
@@ -131,6 +138,8 @@ public sealed partial class SqliteIamStore
         if (complete) await StageTenantBackgroundGraph(db, admission!.SessionOwner, admission.Session, admission.Run, ct);
         db.Entry(row).CurrentValues.SetValues(TriggerStoreMapping.ToRecord(complete ? admission!.Occurrence
             : source.WithRouting(OccurrenceRoutingDisposition.Rejected, reason ?? "automation_admission_unavailable", source.RoutingRevision + 1, at, null, null)));
+        if (p.EventSource is not null) await db.SaveChangesAsync(ct); // Source guards observe the settled occurrence inside this transaction.
+        await SettleTenantEventSource(db, p.EventSource, p.Occurrence.OccurrenceId, false, complete ? null : reason ?? "automation_admission_unavailable", ct);
         if (grant is { Status: OperationGrantStatus.Available }) db.Entry(grant).CurrentValues.SetValues(grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = grant.Revision + 1 });
         db.Entry(saved!).CurrentValues.SetValues(signal with { Revision = signal.Revision + 1, ProcessedAt = at });
         var tenant = await db.Set<Tenant>().SingleAsync(t => t.TenantId == request.TenantId, ct); db.Entry(tenant).CurrentValues.SetValues(tenant with { Revision = tenant.Revision + 1 });

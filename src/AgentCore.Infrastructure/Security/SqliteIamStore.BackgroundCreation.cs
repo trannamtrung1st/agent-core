@@ -17,7 +17,7 @@ public sealed partial class SqliteIamStore
         var current = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         TenantWorkspaceEffectRules.Session(run, agent, session);
         TenantBackgroundCreationRules.Require(request, run, agent, current);
-        await TenantExecutionLineage.RequireRequesterAsync(run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+        await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         await TenantBackgroundCreationRules.ExecutorAsync(state, request, new IamAuthorizer(this), ct).ConfigureAwait(false);
         return session;
     }

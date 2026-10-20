@@ -9,6 +9,18 @@ namespace AgentCore.Application.Security;
 
 public static class TenantWebhookRules
 {
+    public static bool ContainsCredential(string evidence, string credential)
+    {
+        if (evidence.Contains(credential, StringComparison.Ordinal)) return true;
+        using var document = JsonDocument.Parse(evidence);
+        return Contains(document.RootElement);
+        bool Contains(JsonElement value) => value.ValueKind switch {
+            JsonValueKind.String => value.GetString()!.Contains(credential, StringComparison.Ordinal),
+            JsonValueKind.Object => value.EnumerateObject().Any(p => p.Name.Contains(credential, StringComparison.Ordinal) || Contains(p.Value)),
+            JsonValueKind.Array => value.EnumerateArray().Any(Contains),
+            _ => false };
+    }
+
     public static AccessScope Scope(Guid tenant, Guid source) => AccessScope.ForResource(tenant, "webhook", source.ToString("D"));
     public static bool TryId(AccessScope scope, out Guid id)
     {

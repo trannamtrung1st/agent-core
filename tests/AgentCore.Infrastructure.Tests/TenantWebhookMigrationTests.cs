@@ -17,7 +17,7 @@ public sealed class TenantWebhookMigrationTests
         var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path + ";Foreign Keys=True").Options);
         try
         {
-            await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+            await using var db = factory.CreateDbContext(); await db.GetService<IMigrator>().MigrateAsync("20261021020000_TenantWebhookOwnership"); Assert.False(db.Database.HasPendingModelChanges());
             var at = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             var source = new WebhookEvent(Guid.NewGuid(), "Retained pre-cutover source", WebhookEventKind.Webhook, "retained.legacy", WebhookTokens.Hash("synthetic-old-key"), WebhookEventStatus.Active, 1, at, at);
             var store = new SqliteExternalEventStore(factory); await store.CreateAsync(source);
@@ -31,7 +31,7 @@ public sealed class TenantWebhookMigrationTests
                 var parameter = old.CreateParameter(); parameter.ParameterName = "$id"; parameter.Value = source.ResourceId.ToString("D"); old.Parameters.Add(parameter);
                 using var reader = await old.ExecuteReaderAsync(); Assert.True(await reader.ReadAsync()); Assert.Equal(source.EventKey, reader.GetString(0)); Assert.Equal(source.CredentialHash, reader.GetString(1));
             }
-            await db.Database.MigrateAsync(); Assert.Equal(guards, await Guards(db)); Assert.False(db.Database.HasPendingModelChanges());
+            await db.GetService<IMigrator>().MigrateAsync("20261021020000_TenantWebhookOwnership"); Assert.Equal(guards, await Guards(db)); Assert.False(db.Database.HasPendingModelChanges());
             var restored = (await store.GetAsync(source.ResourceId))!; Assert.Null(restored.TenantId); Assert.Null(restored.CreatedByPrincipalId); Assert.Equal(source.DisplayName, restored.DisplayName); Assert.Equal(source.Revision, restored.Revision);
             await db.Database.OpenConnectionAsync(); using var command = db.Database.GetDbConnection().CreateCommand(); command.CommandText = "PRAGMA foreign_key_check"; using var rows = await command.ExecuteReaderAsync(); Assert.False(await rows.ReadAsync());
         }

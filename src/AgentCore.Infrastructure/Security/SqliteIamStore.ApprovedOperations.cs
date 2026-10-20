@@ -46,6 +46,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         var source = sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow);
         var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
         TenantLocalEffectRules.Validate(request, decision, grant, run, commit, source);
+        if (commit.Outcome == TenantOperationOutcome.Completed) await RequireTenantEventRead(db, run, ct).ConfigureAwait(false);
         var owned = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
         if (owned is null) return null;
         var target = Owned(owned); TenantSessionRules.RequireExecutor(before, target);
@@ -160,6 +161,9 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             }
             else owned.Instance.SettingsOverridesJson = JsonSerializer.Serialize(updated.SettingsOverrides, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             owned.Instance.Revision = updated.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
+            foreach (var fact in CoreEventPersistence.Instance(target.Instance, updated,
+                AgentCore.Domain.Triggers.TriggerOwner.ForTenant(request.TenantId, updated.InstanceId, target.PrincipalId)))
+                await TenantCoreEventProduction.StageAsync(db, fact, ct).ConfigureAwait(false);
         }
         if (complete && control is { } current)
         {

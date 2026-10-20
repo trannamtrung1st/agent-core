@@ -17,6 +17,7 @@ public sealed class WebhookEventRecord
 
 public sealed class ExternalEventRecord
 {
+    public string? SubscriptionsJson { get; set; }
     public Guid? TenantId { get; set; }
     public long? SourceRevision { get; set; }
     public string EventId { get; set; } = "";
@@ -29,12 +30,16 @@ public sealed class ExternalEventRecord
 
 public sealed class ExternalEventDeliveryRecord
 {
+    public string? Code { get; set; }
+    public string? ReservedOccurrenceId { get; set; }
+    public Guid? TenantId { get; set; }
+    public Guid? ExecutorPrincipalId { get; set; }
     public string TriggerId { get; set; } = "";
     public string? SnapshotJson { get; set; }
     public string? DecisionJson { get; set; }
     public string EventId { get; set; } = "";
     public string AutomationId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
-    public string ProfileId { get; set; } = "";
+    public string? ProfileId { get; set; } = "";
     public int Status { get; set; }
 }

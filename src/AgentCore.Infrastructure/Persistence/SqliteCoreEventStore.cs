@@ -8,15 +8,18 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> contexts) : ICoreEventStore
 {
+    private static void RequireLegacyOwner(TriggerOwner owner)
+    { if (owner.TenantId is not null) throw AgentCore.Application.Sessions.AgentCoreErrors.Forbidden("Tenant Core events require their canonical source transaction."); }
     public async ValueTask<EventCoveragePage> CoveragePageAsync(TriggerOwner owner, Guid automationId, string? cursor, int limit, CancellationToken ct = default)
     {
-        var after = EventCoverage.Cursor(cursor);
+        RequireLegacyOwner(owner); var after = EventCoverage.Cursor(cursor);
         await using var db = await contexts.CreateDbContextAsync(ct);
         var rows = await db.CoreEventBuckets.AsNoTracking().Where(b => b.Flushed && b.AutomationId == automationId.ToString("D") && string.Compare(b.BucketId, after.Bucket) >= 0).OrderBy(b => b.BucketId).Take(32).ToArrayAsync(ct);
         return EventCoverage.Page(rows.Select(r => (JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!, (IReadOnlyCollection<Guid>)(JsonSerializer.Deserialize<Guid[]>(r.CoverageJson) ?? []))), owner, cursor, limit, rows.Length == 32);
     }
     public async ValueTask MarkSourceInspectedAsync(TriggerOwner owner, Guid bucketId, Guid sourceId, CancellationToken ct = default)
     {
+        RequireLegacyOwner(owner);
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var row = await db.CoreEventBuckets.SingleOrDefaultAsync(b => b.BucketId == bucketId.ToString("D"), ct);
@@ -36,13 +39,14 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
     }
     public async ValueTask CoalesceAsync(EventBucketSource source, EventSubscriptionSnapshot subscription, CancellationToken ct = default)
     {
+        RequireLegacyOwner(source.Owner); RequireLegacyOwner(subscription.Owner);
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var delivery = await db.CoreEventDeliveries.SingleOrDefaultAsync(d => d.EventId == source.EventId.ToString("D") && d.TriggerId == subscription.TriggerId.ToString("D"), ct);
         if (subscription.SourceKind == TriggerSourceKind.CoreEvent && delivery?.Status != (int)EventMatchStatus.Matched) return;
         if (await db.CoreEventBuckets.AnyAsync(b => b.TriggerId == subscription.TriggerId.ToString("D") && EF.Functions.Like(b.PayloadJson, "%" + source.EventId.ToString("D") + "%"), ct)) return;
         var rows = await db.CoreEventBuckets.Where(b => !b.Flushed && b.TriggerId == subscription.TriggerId.ToString("D") && b.TriggerRevision == subscription.TriggerRevision && b.DueAtUtc > source.ReceivedAtUtc.ToUnixTimeMilliseconds()).OrderBy(b => b.DueAtUtc).Take(32).ToArrayAsync(ct);
-        var row = rows.FirstOrDefault(r => { var b = JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!; return EventBucketPacking.CanAppend(b.Sources, source); });
+        var row = rows.FirstOrDefault(r => { var b = JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!; return EventBucketPacking.Contains(b, source.ReceivedAtUtc) && EventBucketPacking.CanAppend(b.Sources, source); });
         CoreEventBucket bucket;
         if (row is null)
         {
@@ -98,7 +102,7 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var r = await db.CoreEvents.SingleAsync(e => e.EventId == eventId.ToString("D"), ct);
         if (r.Snapshotted) return;
-        foreach (var s in subscriptions.Where(s => s.Owner.AgentInstanceId.ToString("D") == r.AgentInstanceId && s.Owner.ProfileId.ToString("D") == r.ProfileId))
+        foreach (var s in subscriptions.Where(s => s.Owner.TenantId is null && s.Owner.AgentInstanceId.ToString("D") == r.AgentInstanceId && s.Owner.ProfileId.ToString("D") == r.ProfileId))
             db.CoreEventDeliveries.Add(new() { EventId = r.EventId, AutomationId = s.AutomationId.ToString("D"), TriggerId = s.TriggerId.ToString("D"), AgentInstanceId = r.AgentInstanceId, ProfileId = r.ProfileId, SnapshotJson = JsonSerializer.Serialize(s, CoreEventPersistence.Json) });
         r.Snapshotted = true;
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
@@ -128,6 +132,6 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, (int)status).SetProperty(d => d.Code, code), ct);
     }
     public async ValueTask<IReadOnlyList<CoreEventDelivery>> ActivityAsync(TriggerOwner owner, CancellationToken ct = default)
-    { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.CoreEventDeliveries.AsNoTracking().Where(d => d.AgentInstanceId == owner.AgentInstanceId.ToString("D") && d.ProfileId == owner.ProfileId.ToString("D")).OrderByDescending(d => d.EventId).Take(100).ToArrayAsync(ct)).Select(Read).ToArray(); }
+    { RequireLegacyOwner(owner); await using var db = await contexts.CreateDbContextAsync(ct); return (await db.CoreEventDeliveries.AsNoTracking().Where(d => d.AgentInstanceId == owner.AgentInstanceId.ToString("D") && d.ProfileId == owner.ProfileId.ToString("D")).OrderByDescending(d => d.EventId).Take(100).ToArrayAsync(ct)).Select(Read).ToArray(); }
     private static CoreEventDelivery Read(CoreEventDeliveryRecord r) => new(Guid.Parse(r.EventId), JsonSerializer.Deserialize<EventSubscriptionSnapshot>(r.SnapshotJson, CoreEventPersistence.Json)!, (EventMatchStatus)r.Status, r.DecisionJson is null ? null : JsonSerializer.Deserialize<EventFilterResult>(r.DecisionJson, CoreEventPersistence.Json), r.Code);
 }

@@ -13,7 +13,7 @@ public sealed partial class InMemoryMemoryStore
         lock (_gate)
         {
             if (tenantInstances is not null && !ReferenceEquals(tenantInstances, backing)) throw new InvalidOperationException("Tenant Sessions must share the actual Instance backing.");
-            tenantInstances = backing; return this;
+            tenantInstances = backing; CoreEvents.BindTenantInstances(backing); backing.CoreEvents.BindTenantInstances(backing); return this;
         }
     }
     private readonly Dictionary<Guid, TenantSessionRoot> tenantSessions = [];

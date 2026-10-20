@@ -25,7 +25,7 @@ public sealed partial class SqliteIamStore
             TenantAccountReadReferences.Require(reference, request, bound, agent);
             var grant = await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == tenant && g.RequestId == reference.RequestId, ct).ConfigureAwait(false);
             TenantAccountReadRules.Receipt(request, run, receipt, decision, grant);
-            await TenantExecutionLineage.RequireRequesterAsync(run, state, iam, this, ct).ConfigureAwait(false);
+            await RequireTenantExecutionSourcesAsync(db, run, state, iam, this, ct).ConfigureAwait(false);
             await TenantAccountReadRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
         }
     }
@@ -73,7 +73,7 @@ public sealed partial class SqliteIamStore
         if (run.Revision != proof.RunRevision || bound.Credential.Value.Revision != proof.CredentialRevision || bound.Credential.Value.SecretRevision != proof.SecretRevision) return false;
         var grant = await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
         TenantAccountReadRules.Receipt(request, run, receipt, decision, grant); TenantSessionRules.RequireExecutor(before, agent);
-        await TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+        await RequireTenantExecutionSourcesAsync(db, run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         await TenantAccountReadRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         TenantRuntimeAccountReadRules.Transaction(next, expectedSecurityRevision, proof, request, maintenance, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);

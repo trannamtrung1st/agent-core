@@ -80,3 +80,42 @@ test('exact webhook read scope filters records and revocation retires protected 
     await expect(page.getByRole('button', { name: 'Reload Events', exact: true })).toBeFocused(); expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });
+
+test('typed subscriptions test filters, preserve child identities, and separate receipt approval from Run admission', async ({ page }) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    const agent = await call<{ principalId: string; instance: { instanceId: string; revision: number } }>(f.api, f.root + '/agents', { templateId: 'general-assistant', version: 32, expectedRevision: await f.revision() });
+    const instance = agent.instance.instanceId; const resource = f.root + `/agents/${instance}/automations`;
+    const role = await call<{ roleId: string }>(f.api, f.root + '/roles', { name: 'Independent event executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'webhooks.read', 'core-events.read'], expectedRevision: await f.revision() });
+    await call(f.api, f.root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await f.revision() });
+    const source = await call<{ source: { resourceId: string; ingressPath: string }; token: string }>(f.api, f.resource, { displayName: 'Typed order source', eventKey: 'typed.orders', expectedRevision: await f.revision() });
+    await call(f.api, f.root + '/operation-policies/agent-runs.create', { mode: 'always', independentReview: false, expectedRevision: await f.revision(), expectedPolicyRevision: 0 }, 'PUT');
+    await signIn(page); await page.goto(`/t/${f.tenant}/admin/agents/${instance}/automations`);
+    await page.getByRole('button', { name: 'New Automation', exact: true }).click(); const d = page.getByRole('dialog', { name: 'New Automation', exact: true });
+    await d.getByRole('textbox', { name: 'Automation name', exact: true }).fill('Typed order and configuration events');
+    await d.getByRole('textbox', { name: 'Automation instructions', exact: true }).fill('Inspect only the captured event facts.');
+    const choose = async (name: string, option: string) => { await d.getByRole('combobox', { name, exact: true }).click(); await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').getByText(option, { exact: true }).click(); };
+    await choose('Automation trigger type', 'Events'); await choose('Subscription 1 source family', 'Webhook connection'); await choose('Subscription 1 event source', 'Typed order source · typed.orders');
+    const first = d.getByRole('group', { name: 'Event subscription 1', exact: true });
+    await first.getByRole('textbox', { name: 'Event filter expression', exact: true }).fill("event.data.status === 'ready'");
+    await first.getByRole('textbox', { name: 'Sample event JSON', exact: true }).fill('{"schemaVersion":1,"data":{"status":"ready"}}'); await first.getByRole('button', { name: 'Test filter', exact: true }).click(); await expect(first.getByText('Matched', { exact: true })).toBeVisible();
+    await first.getByRole('textbox', { name: 'Event filter expression', exact: true }).fill("event.data.status = 'ready'"); await first.getByRole('button', { name: 'Test filter', exact: true }).click(); await expect(first.getByText('Filter error', { exact: true })).toBeVisible();
+    await first.getByRole('textbox', { name: 'Event filter expression', exact: true }).fill("event.data.status === 'ready'");
+    await d.getByRole('button', { name: 'Add event subscription', exact: true }).click(); await choose('Subscription 2 event source', 'instance.config_changed');
+    await d.getByRole('checkbox', { name: 'Enable automatic occurrences', exact: true }).check(); await d.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(d).toHaveCount(0);
+    const saved = (await call<{ items: { automation: { automationId: string; triggers: { triggerId: string; revision: number; source: { kind: string }; filterExpression: string | null }[] } }[] }>(f.api, resource + '/editor')).items[0].automation;
+    expect(saved.triggers).toHaveLength(2); const child = saved.triggers.find(t => t.source.kind === 'webhook')!; expect(child.filterExpression).toBe("event.data.status === 'ready'");
+    const sent = await f.api.post(source.source.ingressPath, { headers: { Authorization: `Bearer ${source.token}` }, data: { eventId: 'typed-e2e', data: { status: 'ready', note: '<script>literal</script>' } } }); expect(sent.status()).toBe(202);
+    await expect.poll(async () => (await call<{ items: { status: string }[] }>(f.api, resource + `/${saved.automationId}/events`)).items[0]?.status).toBe('awaitingAdmission');
+    await page.getByRole('button', { name: 'Edit Automation', exact: true }).click(); const current = page.getByRole('dialog', { name: 'Saved Automation', exact: true }); await current.getByRole('tab', { name: 'Event Activity', exact: true }).click();
+    await expect(current.getByText('Waiting for admission', { exact: true })).toBeVisible(); await expect(current.getByRole('link', { name: 'Open Run in Activity', exact: true })).toHaveCount(0);
+    await current.getByRole('button', { name: 'Inspect received data', exact: true }).click(); expect(await current.getByRole('textbox', { name: 'Received data', exact: true }).inputValue()).toContain('<script>literal</script>'); expect(await current.locator('script').count()).toBe(0);
+    await current.getByRole('link', { name: 'Review admission', exact: true }).click(); const approval = page.getByRole('dialog', { name: 'Approval details', exact: true }); await expect(approval.getByText('Captured filter', { exact: true })).toBeVisible();
+    await approval.getByRole('button', { name: 'Approve', exact: true }).click(); await page.getByRole('dialog', { name: 'Approve?', exact: true }).getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(async () => (await call<{ items: { status: string; runId: string | null }[] }>(f.api, resource + `/${saved.automationId}/events`)).items[0]?.status).toBe('admitted');
+    await page.goto(`/t/${f.tenant}/admin/agents/${instance}/automations`); await page.getByRole('button', { name: 'Edit Automation', exact: true }).click(); await current.getByRole('tab', { name: 'Configuration', exact: true }).click();
+    await current.getByRole('textbox', { name: 'Automation instructions', exact: true }).fill('Updated parent intent for future admission.'); await current.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(current).toHaveCount(0);
+    const updated = (await call<{ items: { automation: { triggers: { triggerId: string; revision: number }[] } }[] }>(f.api, resource + '/editor')).items[0].automation;
+    expect(updated.triggers.map(t => t.triggerId)).toEqual(saved.triggers.map(t => t.triggerId)); expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});

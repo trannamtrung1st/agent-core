@@ -6,9 +6,11 @@ namespace AgentCore.Application.Ports;
 public sealed record CoreEventReceipt(CoreEventOccurrence Event, DateTimeOffset ReceivedAtUtc, bool Snapshotted);
 public sealed record EventRecoveryCursor(DateTimeOffset AtUtc, Guid Id);
 public sealed record CoreEventDelivery(Guid EventId, EventSubscriptionSnapshot Subscription, EventMatchStatus Status,
-    EventFilterResult? Decision = null, string? Code = null);
+    EventFilterResult? Decision = null, string? Code = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? ReservedOccurrenceId = null);
 
-public sealed record CoreEventBucket(Guid BucketId, EventSubscriptionSnapshot Subscription, DateTimeOffset DueAtUtc, IReadOnlyList<EventBucketSource> Sources, bool Flushed = false, string? CompletionCode = null);
+public sealed record CoreEventBucket(Guid BucketId, EventSubscriptionSnapshot Subscription, DateTimeOffset DueAtUtc, IReadOnlyList<EventBucketSource> Sources, bool Flushed = false, string? CompletionCode = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? ReservedOccurrenceId = null);
 
 public sealed record EventSourceCoverage(Guid BucketId, EventBucketSource Source, string? CompletionCode = null, Guid? TriggerId = null);
 public sealed record EventCoveragePage(IReadOnlyList<EventSourceCoverage> Items, string? NextCursor);

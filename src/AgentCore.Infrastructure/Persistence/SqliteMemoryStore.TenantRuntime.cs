@@ -19,6 +19,8 @@ public sealed partial class SqliteMemoryStore
         var current = ToSnapshot(row, matched); TenantRuntimeRules.ValidateSnapshot(frame, current, snapshot, foreground);
         if (row.Revision == snapshot.Revision && MemoryStoreSemantics.SameContent(current, snapshot)) return;
         if (row.Revision != expectedRevision || snapshot.Revision != expectedRevision + 1) throw AgentCoreErrors.Conflict("Stale Session revision.");
+        var producerRow = await db.AgentRuns.SingleAsync(r => r.TenantId == frame.Owner.TenantId && r.AgentRunId == frame.RunId.ToString("D"), ct).ConfigureAwait(false);
         ApplySession(row, snapshot); await UpsertEntriesAsync(db, row, snapshot, ct).ConfigureAwait(false);
+        await TenantCoreEventProduction.StageSessionAsync(db, current, snapshot, owner.Domain(), AgentRunStoreMapping.ToDomain(producerRow), ct).ConfigureAwait(false);
     }
 }

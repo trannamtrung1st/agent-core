@@ -46,7 +46,7 @@ public sealed partial class SqliteIamStore
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
         await new SqliteMemoryStore(contexts, clock ?? TimeProvider.System).StageTenantRuntimeSaveAsync(db, frame, snapshot, expectedRevision, ct).ConfigureAwait(false);
         if (draft is not null) db.Entries.Remove(draft);
-        AgentRunStoreMapping.Apply(row, next); await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
+        AgentRunStoreMapping.Apply(row, next); await TenantCoreEventProduction.StageRunAsync(db, run, next, ct).ConfigureAwait(false); await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }
         catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Stale Run or Session revision."); }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { throw AgentCoreErrors.Conflict("Outcome ownership changed."); }

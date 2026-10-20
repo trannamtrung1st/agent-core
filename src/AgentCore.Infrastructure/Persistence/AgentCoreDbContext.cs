@@ -501,17 +501,43 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => row.DefinitionId);
         });
         modelBuilder.Entity<CoreEventBucketRecord>(entity =>
-        { entity.ToTable("CoreEventBuckets"); entity.HasKey(r => r.BucketId); entity.HasIndex(r => new { r.Flushed, r.DueAtUtc }); });
+        {
+            entity.ToTable("CoreEventBuckets", table => table.HasCheckConstraint("CK_CoreEventBuckets_TenantOwner",
+                "(TenantId IS NULL AND ExecutorPrincipalId IS NULL) OR COALESCE((TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND AgentInstanceId IS NOT NULL AND json_valid(PayloadJson) AND lower(json_extract(PayloadJson, '$.Subscription.Owner.TenantId')) = lower(TenantId) AND lower(json_extract(PayloadJson, '$.Subscription.Owner.ExecutorPrincipalId')) = lower(ExecutorPrincipalId) AND json_extract(PayloadJson, '$.Subscription.Owner.AgentInstanceId') IS AgentInstanceId AND json_extract(PayloadJson, '$.Subscription.Owner.profileId') IS NULL AND json_extract(PayloadJson, '$.BucketId') IS BucketId AND json_extract(PayloadJson, '$.Subscription.AutomationId') IS AutomationId AND json_extract(PayloadJson, '$.Subscription.TriggerId') IS TriggerId AND json_extract(PayloadJson, '$.Subscription.TriggerRevision') = TriggerRevision),0)"));
+            entity.HasKey(r => r.BucketId); entity.HasIndex(r => new { r.Flushed, r.DueAtUtc });
+            entity.HasOne<TriggerOccurrenceRecord>().WithMany().HasForeignKey(r => r.ReservedOccurrenceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(r => r.TenantId == null);
+            entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()
+                .HasForeignKey(r => new { r.TenantId, r.AgentInstanceId, r.ExecutorPrincipalId })
+                .HasPrincipalKey(owner => new { owner.TenantId, owner.AgentInstanceId, owner.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(r => new { r.TenantId, r.Flushed, r.DueAtUtc, r.BucketId });
+        });
         modelBuilder.Entity<CoreEventRecord>(entity =>
         {
-            entity.ToTable("CoreEvents"); entity.HasKey(r => r.EventId);
+            entity.ToTable("CoreEvents", table => table.HasCheckConstraint("CK_CoreEvents_TenantOwner",
+                "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR COALESCE((TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL AND json_valid(PayloadJson) AND json_extract(PayloadJson, '$.EventId') IS EventId AND json_extract(PayloadJson, '$.DedupeKey') IS DedupeKey AND lower(json_extract(PayloadJson, '$.Owner.TenantId')) = lower(TenantId) AND lower(json_extract(PayloadJson, '$.Owner.ExecutorPrincipalId')) = lower(ExecutorPrincipalId) AND json_extract(PayloadJson, '$.Owner.AgentInstanceId') IS AgentInstanceId AND json_extract(PayloadJson, '$.Owner.profileId') IS NULL AND json_extract(PayloadJson, '$.Key') IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted','email.message.received') AND json_valid(json_extract(PayloadJson, '$.DataJson')) AND length(CAST(json_extract(PayloadJson, '$.DataJson') AS BLOB)) <= 8192),0)"));
+            entity.HasKey(r => r.EventId);
+            entity.HasQueryFilter(r => r.TenantId == null);
+            entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()
+                .HasForeignKey(r => new { r.TenantId, r.AgentInstanceId, r.ExecutorPrincipalId })
+                .HasPrincipalKey(owner => new { owner.TenantId, owner.AgentInstanceId, owner.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(r => new { r.TenantId, r.AgentInstanceId, r.ReceivedAtUtc, r.EventId });
             entity.HasIndex(r => r.DedupeKey).IsUnique();
             entity.HasIndex(r => new { r.Snapshotted, r.ReceivedAtUtc, r.EventId });
             entity.Property(r => r.Snapshotted).IsConcurrencyToken();
         });
         modelBuilder.Entity<CoreEventDeliveryRecord>(entity =>
         {
-            entity.ToTable("CoreEventDeliveries"); entity.HasKey(r => new { r.EventId, r.TriggerId });
+            entity.ToTable("CoreEventDeliveries", table => table.HasCheckConstraint("CK_CoreEventDeliveries_TenantOwner",
+                "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR COALESCE((TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL AND json_valid(SnapshotJson) AND lower(json_extract(SnapshotJson, '$.Owner.TenantId')) = lower(TenantId) AND lower(json_extract(SnapshotJson, '$.Owner.ExecutorPrincipalId')) = lower(ExecutorPrincipalId) AND json_extract(SnapshotJson, '$.Owner.AgentInstanceId') IS AgentInstanceId AND json_extract(SnapshotJson, '$.Owner.profileId') IS NULL AND json_extract(SnapshotJson, '$.AutomationId') IS AutomationId AND json_extract(SnapshotJson, '$.TriggerId') IS TriggerId AND json_extract(SnapshotJson, '$.SourceKind') = 3),0)"));
+            entity.HasKey(r => new { r.EventId, r.TriggerId });
+            entity.HasOne<TriggerOccurrenceRecord>().WithMany().HasForeignKey(r => r.ReservedOccurrenceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(r => r.TenantId == null);
+            entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()
+                .HasForeignKey(r => new { r.TenantId, r.AgentInstanceId, r.ExecutorPrincipalId })
+                .HasPrincipalKey(owner => new { owner.TenantId, owner.AgentInstanceId, owner.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CoreEventRecord>().WithMany().HasForeignKey(r => r.EventId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(r => new { r.TenantId, r.Status, r.EventId, r.TriggerId });
             entity.HasIndex(r => new { r.AgentInstanceId, r.ProfileId, r.Status });
         });
         modelBuilder.Entity<AutomationRecord>(entity =>
@@ -593,12 +619,20 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<ExternalEventDeliveryRecord>(entity =>
         {
-            entity.ToTable("ExternalEventDeliveries");
+            entity.ToTable("ExternalEventDeliveries", table => table.HasCheckConstraint("CK_ExternalEventDeliveries_TenantOwner",
+                "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR COALESCE((TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL AND json_valid(SnapshotJson) AND lower(json_extract(SnapshotJson, '$.Owner.TenantId')) = lower(TenantId) AND lower(json_extract(SnapshotJson, '$.Owner.ExecutorPrincipalId')) = lower(ExecutorPrincipalId) AND json_extract(SnapshotJson, '$.Owner.AgentInstanceId') IS AgentInstanceId AND json_extract(SnapshotJson, '$.Owner.profileId') IS NULL AND json_extract(SnapshotJson, '$.AutomationId') IS AutomationId AND json_extract(SnapshotJson, '$.TriggerId') IS TriggerId AND json_extract(SnapshotJson, '$.SourceKind') = 1),0)"));
+            entity.HasQueryFilter(r => r.TenantId == null);
+            entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()
+                .HasForeignKey(r => new { r.TenantId, r.AgentInstanceId, r.ExecutorPrincipalId })
+                .HasPrincipalKey(owner => new { owner.TenantId, owner.AgentInstanceId, owner.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ExternalEventRecord>().WithMany().HasForeignKey(r => r.EventId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(r => new { r.TenantId, r.Status, r.EventId, r.TriggerId });
             entity.HasKey(row => new { row.EventId, row.TriggerId });
+            entity.HasOne<TriggerOccurrenceRecord>().WithMany().HasForeignKey(row => row.ReservedOccurrenceId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(row => row.EventId).HasMaxLength(36);
             entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ProfileId).HasMaxLength(36);
             entity.HasIndex(row => new { row.Status, row.EventId, row.TriggerId });
         });
         modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>

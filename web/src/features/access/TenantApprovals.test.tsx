@@ -774,3 +774,15 @@ it.each(['admitted', 'notAdmitted', 'awaitingAdmission'] as const)('presents fac
   const dialog = await screen.findByRole('dialog'); const expected = executionState === 'admitted' ? /One Background Session and Run were admitted/ : executionState === 'notAdmitted' ? /This occurrence was not admitted/ : /Decision recorded. No admission result yet/;
   expect(await within(dialog).findByText(expected)).toBeVisible(); expect(within(dialog).queryByRole('link', { name: /conversation/ })).not.toBeInTheDocument();
 });
+
+it.each(['Built-in event · no human requester', 'Webhook event · no human requester'])('reviews exact captured event admission: %s', async source => {
+  const item = admissionRequest(); const raw = source.startsWith('Built-in') ? 'core-events.read' : 'webhooks.read';
+  item.kind = 'review';
+  item.review.changes.find(c => c.field === 'admissionSource')!.after = source;
+  item.review.changes.find(c => c.field === 'admissionPrimaryPermission')!.after = raw;
+  item.review.changes.find(c => c.field === 'admissionScope')!.after += `; ${raw}`;
+  item.review.changes.push(...Object.entries({ admissionEventSource: 'One exact saved source', admissionEventFilter: 'event.data.status === "received"', admissionEventDispatch: 'Every matched receipt', admissionEventData: '{"note":"<script>literal event data</script>"}' }).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })));
+  view(item); const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('{"note":"<script>literal event data</script>"}')).toBeVisible(); expect(dialog.querySelector('script')).toBeNull();
+  expect(within(dialog).getByRole('button', { name: /^Approve$/ })).toBeEnabled();
+});

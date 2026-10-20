@@ -109,7 +109,7 @@ internal static class AdminAutomationEndpoints
         if (request.Triggers.Any(t => t is null)) throw AgentCoreErrors.Validation("Every trigger must be a configured child record.");
         return request.Triggers.Select(t => new AutomationTriggerRecord(Guid.Parse(t.TriggerId ?? ""), ParseTrigger(t), t.Enabled, t.Revision)).ToArray();
     }
-    private static AutomationTrigger ParseTrigger(AutomationTriggerDto? trigger)
+    internal static AutomationTrigger ParseTrigger(AutomationTriggerDto? trigger)
     {
         if (trigger is null) throw AgentCoreErrors.Validation("Trigger is required.");
         if (trigger.Source is { } sourceRef)

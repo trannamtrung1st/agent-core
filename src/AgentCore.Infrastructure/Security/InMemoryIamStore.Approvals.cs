@@ -28,6 +28,9 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                     && (automationVisibility?.Agents is null || automationVisibility.Agents.Contains(r.Operation.InstanceId))
                     && (automationVisibility?.ReadAutomations is null || automationVisibility.ReadAutomations.Contains(admission.Current.AutomationId))
                     && (automationVisibility?.RunAutomations is null || automationVisibility.RunAutomations.Contains(admission.Current.AutomationId))
+                    && (admission.EventSource is not { } eventSource || (eventSource.SourceKind == AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent
+                        ? automationVisibility?.WebhookSources is null || automationVisibility.WebhookSources.Contains(eventSource.ResourceId!.Value)
+                        : automationVisibility?.CoreEvents is null || eventSource.EventIds.All(automationVisibility.CoreEvents.Contains)))
                     && automationBacking.ReadTenantAutomation(r.TenantId, admission.Current.AutomationId) is { } ownedAdmission && ownedAdmission.Owner == admission.Current.Owner)
                 && (r.Operation.BackgroundStart is null || backgroundCreationReadable
                     && sessionBacking.ReadTenantSession(r.TenantId, r.SessionId) is { Snapshot.DurablyDeletedAt: null }

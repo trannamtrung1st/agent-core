@@ -11,21 +11,27 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class CoreEventRecord
 {
+    public string? SubscriptionsJson { get; set; }
+    public Guid? TenantId { get; set; }
+    public Guid? ExecutorPrincipalId { get; set; }
     public string EventId { get; set; } = "";
     public string DedupeKey { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
-    public string ProfileId { get; set; } = "";
+    public string? ProfileId { get; set; } = "";
     public long ReceivedAtUtc { get; set; }
     public string PayloadJson { get; set; } = "";
     public bool Snapshotted { get; set; }
 }
 public sealed class CoreEventDeliveryRecord
 {
+    public string? ReservedOccurrenceId { get; set; }
+    public Guid? TenantId { get; set; }
+    public Guid? ExecutorPrincipalId { get; set; }
     public string TriggerId { get; set; } = "";
     public string EventId { get; set; } = "";
     public string AutomationId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
-    public string ProfileId { get; set; } = "";
+    public string? ProfileId { get; set; } = "";
     public string SnapshotJson { get; set; } = "";
     public int Status { get; set; }
     public string? DecisionJson { get; set; }
@@ -33,6 +39,10 @@ public sealed class CoreEventDeliveryRecord
 }
 public sealed class CoreEventBucketRecord
 {
+    public string? ReservedOccurrenceId { get; set; }
+    public Guid? TenantId { get; set; }
+    public Guid? ExecutorPrincipalId { get; set; }
+    public string? AgentInstanceId { get; set; }
     public string TriggerId { get; set; } = "";
     public string CoverageJson { get; set; } = "[]";
     public string BucketId { get; set; } = "";
@@ -46,25 +56,26 @@ internal static class CoreEventPersistence
 {
     internal static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
     internal static Guid Id(string key) => new(SHA256.HashData(Encoding.UTF8.GetBytes(key)).AsSpan(0, 16));
-    internal static CoreEventOccurrence? Run(AgentRun previous, AgentRun current)
+    internal static CoreEventOccurrence? Run(AgentRun previous, AgentRun current, AgentRun? sourceRoot = null)
     {
         if (previous.IsTerminal || current.Status is not (AgentRunStatus.Completed or AgentRunStatus.Failed)) return null;
         var key = current.Status == AgentRunStatus.Completed ? "run.completed" : "run.failed";
         var dedupe = $"{key}:{current.AgentRunId:D}";
         Guid? root = null; var depth = 0; Guid[] visited = [];
-        if (Causation(current) is { } cause)
+        if (Causation(sourceRoot ?? current) is { } cause)
         { root = cause.Root; depth = cause.Depth; visited = cause.Visited; }
-        return new(Id(dedupe), dedupe, new(current.AgentInstanceId, current.ProfileId), key, current.UpdatedAtUtc,
+        return new(Id(dedupe), dedupe, current.Owner.TenantId is { } tenant ? TriggerOwner.ForTenant(tenant, current.AgentInstanceId, current.Owner.ExecutorPrincipalId!.Value) : new(current.AgentInstanceId, current.ProfileId), key, current.UpdatedAtUtc,
             JsonSerializer.Serialize(new { agentRunId = current.AgentRunId, sessionId = current.SessionId,
-                activationKind = current.Admission.Activation.Kind.ToString(), outcomeKind = current.Result?.OutcomeKind.ToString(), failureCode = current.Failure?.Code }), root ?? current.AgentRunId, depth, visited);
+                activationKind = current.Admission.Activation.Kind.ToString(), outcomeKind = current.Result?.OutcomeKind.ToString(), failureCode = current.Failure?.Code }), root ?? sourceRoot?.AgentRunId ?? current.AgentRunId, depth, visited);
     }
-    internal static CoreEventOccurrence? Session(SessionSnapshot? previous, SessionSnapshot current, AgentRun? originRun = null)
+    internal static CoreEventOccurrence? Session(SessionSnapshot? previous, SessionSnapshot current, AgentRun? originRun = null, TriggerOwner? sourceOwner = null)
     {
-        if (current.AgentInstanceId == Guid.Empty || current.ProfileId is not { } profile
-            || current.LifecycleStatus == previous?.LifecycleStatus || current.LifecycleStatus is not (SessionLifecycleStatus.Completed or SessionLifecycleStatus.Ended)) return null;
+        if (current.AgentInstanceId == Guid.Empty || current.ProfileId is null && sourceOwner?.TenantId is null
+            || sourceOwner is { } bound && bound.AgentInstanceId != current.AgentInstanceId || current.LifecycleStatus == previous?.LifecycleStatus || current.LifecycleStatus is not (SessionLifecycleStatus.Completed or SessionLifecycleStatus.Ended)) return null;
         var key = current.LifecycleStatus == SessionLifecycleStatus.Completed ? "session.completed" : "session.ended";
-        var dedupe = $"{key}:{current.SessionId:D}";
-        var signal = new CoreEventOccurrence(Id(dedupe), dedupe, new(current.AgentInstanceId, profile), key, current.UpdatedAt,
+        var dedupe = sourceOwner?.TenantId is null ? $"{key}:{current.SessionId:D}" : $"{key}:{current.SessionId:D}:{current.Revision}";
+        var owner = sourceOwner ?? new TriggerOwner(current.AgentInstanceId, current.ProfileId);
+        var signal = new CoreEventOccurrence(Id(dedupe), dedupe, owner, key, current.UpdatedAt,
             JsonSerializer.Serialize(new { sessionId = current.SessionId, previousLifecycle = previous?.LifecycleStatus.ToString(), lifecycle = current.LifecycleStatus.ToString() }), current.Origin.OriginatingAgentRunId ?? current.Origin.InitialBackgroundAgentRunId, current.Origin.AutomationId is null ? 0 : 1, current.Origin.AutomationId is { } automation ? [automation] : []);
         if (originRun is not null && Causation(originRun) is { } cause)
             signal = signal with { RootAgentRunId = cause.Root ?? originRun.AgentRunId, TriggerDepth = cause.Depth, VisitedAutomationIds = cause.Visited };
@@ -95,13 +106,15 @@ internal static class CoreEventPersistence
         }
         catch (JsonException) { return null; }
     }
-    internal static IReadOnlyList<CoreEventOccurrence> Instance(AgentInstance previous, AgentInstance current)
+    internal static IReadOnlyList<CoreEventOccurrence> Instance(AgentInstance previous, AgentInstance current, TriggerOwner? sourceOwner = null)
     {
         var result = new List<CoreEventOccurrence>();
+        var owner = sourceOwner ?? new TriggerOwner(current.InstanceId, LocalUserProfile.Id);
+        if (owner.AgentInstanceId != current.InstanceId) throw new ArgumentException("Core source Instance differs from its owner.");
         if (previous.ActiveVersion != current.ActiveVersion)
         {
             var key = $"harness.definition_adopted:{current.InstanceId:D}:{current.Revision}";
-            result.Add(new(Id(key), key, new(current.InstanceId, LocalUserProfile.Id), "harness.definition_adopted", current.UpdatedAt,
+            result.Add(new(Id(key), key, owner, "harness.definition_adopted", current.UpdatedAt,
                 JsonSerializer.Serialize(new { agentInstanceId = current.InstanceId, definitionId = current.DefinitionId, previousVersion = previous.ActiveVersion, activeVersion = current.ActiveVersion })));
         }
         var changed = new List<string>();
@@ -112,7 +125,7 @@ internal static class CoreEventPersistence
         if (changed.Count > 0)
         {
             var key = $"instance.config_changed:{current.InstanceId:D}:{current.Revision}";
-            result.Add(new(Id(key), key, new(current.InstanceId, LocalUserProfile.Id), "instance.config_changed", current.UpdatedAt,
+            result.Add(new(Id(key), key, owner, "instance.config_changed", current.UpdatedAt,
                 JsonSerializer.Serialize(new { agentInstanceId = current.InstanceId, revision = current.Revision, changedSections = changed, actor = "guardedWrite" })));
         }
         return result;
@@ -120,13 +133,17 @@ internal static class CoreEventPersistence
     internal static void Stage(AgentCoreDbContext db, CoreEventOccurrence? e, IReadOnlyList<EventSubscriptionSnapshot>? subscriptions = null)
     {
         if (e is null) return;
+        if (e.Owner.TenantId is not null && subscriptions is null) throw new ArgumentException("Tenant Core production requires an atomic subscription snapshot.");
+        if (e.Owner.TenantId is not null) e = e with { OccurredAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(e.OccurredAtUtc.ToUnixTimeMilliseconds()), VisitedAutomationIds = Array.AsReadOnly((e.VisitedAutomationIds ?? []).ToArray()) };
         db.CoreEvents.Add(new() { EventId = e.EventId.ToString("D"), DedupeKey = e.DedupeKey,
-            AgentInstanceId = e.Owner.AgentInstanceId.ToString("D"), ProfileId = e.Owner.ProfileId.ToString("D"),
+            SubscriptionsJson = e.Owner.TenantId is null ? null : JsonSerializer.Serialize(subscriptions, Json),
+            TenantId = e.Owner.TenantId, ExecutorPrincipalId = e.Owner.ExecutorPrincipalId,
+            AgentInstanceId = e.Owner.AgentInstanceId.ToString("D"), ProfileId = e.Owner.ProfileIdOrNull?.ToString("D"),
             ReceivedAtUtc = e.OccurredAtUtc.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(e, Json), Snapshotted = subscriptions is not null });
         if (subscriptions is not null)
             foreach (var subscription in subscriptions.Where(s => s.Owner == e.Owner))
                 db.CoreEventDeliveries.Add(new() { EventId = e.EventId.ToString("D"), AutomationId = subscription.AutomationId.ToString("D"),
-                    TriggerId = subscription.TriggerId.ToString("D"), AgentInstanceId = e.Owner.AgentInstanceId.ToString("D"),
-                    ProfileId = e.Owner.ProfileId.ToString("D"), SnapshotJson = JsonSerializer.Serialize(subscription, Json) });
+                    TriggerId = subscription.TriggerId.ToString("D"), TenantId = e.Owner.TenantId, ExecutorPrincipalId = e.Owner.ExecutorPrincipalId, AgentInstanceId = e.Owner.AgentInstanceId.ToString("D"),
+                    ProfileId = e.Owner.ProfileIdOrNull?.ToString("D"), SnapshotJson = JsonSerializer.Serialize(subscription, Json) });
     }
 }

@@ -7,7 +7,7 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantAutomationEditorItem(Automation Automation, bool CanUpdate, bool CanCancel, bool CanRun);
 public sealed record TenantAutomationEditor(TenantAgent Agent, TriggerPolicy? Policy, IReadOnlyList<TenantAutomationEditorItem> Items,
-    int Total, int Page, int PageSize, long SecurityRevision, bool CanCreate, bool CanSchedule);
+    int Total, int Page, int PageSize, long SecurityRevision, bool CanCreate, bool CanSchedule, bool CanCoreEvents = false, bool CanWebhookEvents = false);
 
 public sealed partial class TenantAutomationService
 {
@@ -37,6 +37,8 @@ public sealed partial class TenantAutomationService
         }
         var create = await Can("automations.create", AccessScope.ForTenant(tenant));
         await Unchanged(state, human, ct);
-        return new(agent, policy.TriggerPolicy, items, values.Total, values.Page, values.PageSize, state.Tenant.Revision, create, AgentCore.Application.Triggers.TriggerDurableSchedulingPolicy.AllowsScheduledOccurrence(policy));
+        return new(agent, policy.TriggerPolicy, items, values.Total, values.Page, values.PageSize, state.Tenant.Revision, create, AgentCore.Application.Triggers.TriggerDurableSchedulingPolicy.AllowsScheduledOccurrence(policy),
+            AgentCore.Application.Triggers.OccurrenceCompatibility.Allows(policy, TriggerSourceKind.CoreEvent),
+            AgentCore.Application.Triggers.OccurrenceCompatibility.Allows(policy, TriggerSourceKind.ApplicationEvent));
     }
 }

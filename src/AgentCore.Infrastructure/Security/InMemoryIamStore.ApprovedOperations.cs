@@ -33,6 +33,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var source = request.RunId != run.AgentRunId ? sessionBacking.ReadTenantRun(request.TenantId, request.RunId) : null;
             var grant = _operationGrants.GetValueOrDefault(commit.RequestId);
             TenantLocalEffectRules.Validate(request, decision, grant, run, commit, source);
+            if (commit.Outcome == TenantOperationOutcome.Completed) RequireTenantEventRead(run, ct);
             var target = FindTenantAgentAsync(next.Tenant.TenantId, request.Operation.InstanceId, ct).Result;
             if (target is null) return ValueTask.FromResult<TenantOperationReceipt?>(null);
             TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, request.ExecutorPrincipalId);
@@ -157,6 +158,8 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 var child = commit.BackgroundAdmission!;
                 StageTenantBackgroundGraph(childRoot, child.Session, child.Run);
             }
+            if (configure) foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(target.Instance, updated,
+                AgentCore.Domain.Triggers.TriggerOwner.ForTenant(request.TenantId, updated.InstanceId, target.PrincipalId))) AppendTenantCore(fact);
             sessionBacking.SaveTenantOperationRun(savedRun, run.Revision);
             if (pending is not null) sandboxBacking.SaveTenantLease(pending);
             if (stopped is not null) sandboxBacking.SaveTenantExecution(stopped);

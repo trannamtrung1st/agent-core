@@ -35,7 +35,7 @@ public sealed partial class SqliteIamStore
         if (bound.Credential.Value.Revision != credentialRevision || bound.Credential.Value.SecretRevision != secretRevision) return false;
         var grant = await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
         TenantAccountEffectRules.RequireFence(fence, request, run, source, grant); TenantSessionRules.RequireExecutor(before, agent);
-        await TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+        await RequireTenantExecutionSourcesAsync(db, run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         await TenantAccountEffectRules.RequireAuthorityAsync(before, request, decision, agent, new IamAuthorizer(this), grant, OperationGrantStatus.Claimed, OAuthNow, ct).ConfigureAwait(false);
         TenantAccountMaintenanceRules.Transaction(next, expectedSecurityRevision, fence, request, maintenance, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);

@@ -21,7 +21,7 @@ public sealed partial class InMemoryIamStore
             : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).AsTask().GetAwaiter().GetResult();
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         TenantCompletionRules.Require(run, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), tool);
-        TenantExecutionLineage.RequireRequesterAsync(run, _tenants[tenant], new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
+        RequireTenantExecutionSourcesAsync(run, _tenants[tenant], new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
         return run;
     }
     private TenantCompletionView? CompletionView(AgentRun parent, Guid session, DateTimeOffset now, CancellationToken ct)
@@ -85,6 +85,7 @@ public sealed partial class InMemoryIamStore
     }
     private void RequireTenantOutputSources(AgentRun parent, CancellationToken ct)
     {
+        RequireTenantEventRead(parent, ct);
         RequireCredentialReadSources(parent, ct);
         RequireAccountReadSources(parent, ct);
         RequireAccountActionSources(parent, ct);

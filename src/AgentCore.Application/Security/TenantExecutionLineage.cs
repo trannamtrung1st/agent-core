@@ -24,26 +24,43 @@ public static class TenantExecutionLineage
             if (!(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("requester_unavailable");
     }
-    private static async ValueTask RequireOccurrenceRootAsync(AgentRun root, ITenantRunStore runs, CancellationToken ct)
+    private static async ValueTask RequireOccurrenceRootAsync(AgentRun root, Func<Guid, CancellationToken, ValueTask<AgentCore.Domain.Triggers.TriggerOccurrence?>> occurrenceReader, CancellationToken ct)
     {
         var context = root.Admission.ExecutionContext!;
-        if (runs is not ITenantAutomationStore automations || root.Admission.Activation.TriggerOccurrenceId is not { } id)
+        if (root.Admission.Activation.TriggerOccurrenceId is not { } id)
             throw new AccessDeniedException("tenant_lineage_unavailable");
-        var occurrence = await automations.FindTenantOccurrenceAsync(context.TenantId, id, ct).ConfigureAwait(false)
+        var occurrence = await occurrenceReader(id, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("tenant_lineage_unavailable");
         if (occurrence.Owner != AgentCore.Domain.Triggers.TriggerOwner.ForTenant(context.TenantId, root.AgentInstanceId, context.AgentPrincipalId)
             || occurrence.Disposition != AgentCore.Domain.Triggers.OccurrenceRoutingDisposition.AcceptedDurable
             || occurrence.AcceptedAgentRunId != root.AgentRunId || occurrence.ExecutionSessionId != root.SessionId
             || occurrence.AutomationId != TenantAutomationRules.SourceAutomation(root)
-            || occurrence.SourceKind != (context.Origin == ExecutionOrigin.ScheduledOccurrence ? AgentCore.Domain.Triggers.TriggerSourceKind.Schedule : AgentCore.Domain.Triggers.TriggerSourceKind.ManualInvocation))
+            || occurrence.SourceKind != (context.Origin switch {
+                ExecutionOrigin.ScheduledOccurrence => AgentCore.Domain.Triggers.TriggerSourceKind.Schedule,
+                ExecutionOrigin.ManualInvocation => AgentCore.Domain.Triggers.TriggerSourceKind.ManualInvocation,
+                ExecutionOrigin.ApplicationEvent => AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent,
+                ExecutionOrigin.CoreEvent => AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent,
+                _ => throw new AccessDeniedException("tenant_lineage_unavailable") }))
             throw new AccessDeniedException("tenant_lineage_unavailable");
+        var eventKind = occurrence.SourceKind is AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent or AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent
+            ? occurrence.SourceKind : (AgentCore.Domain.Triggers.TriggerSourceKind?)null;
+        if (root.Admission.TaskIntent?.EventSourceKind != eventKind) throw new AccessDeniedException("tenant_lineage_unavailable");
         using var evidence = System.Text.Json.JsonDocument.Parse(occurrence.EvidenceJson);
         if (!evidence.RootElement.TryGetProperty("automationRevision", out var revision) || !revision.TryGetInt64(out var version)
             || root.Admission.TaskIntent?.SourceRevision != $"{occurrence.AutomationId:D}:{version}"
             || !evidence.RootElement.TryGetProperty("instructions", out var instructions) || instructions.GetString() != root.Admission.TaskIntent.Text)
             throw new AccessDeniedException("tenant_lineage_unavailable");
     }
-    public static async ValueTask<AgentRun> RootAsync(AgentRun run, ITenantRunStore runs, CancellationToken ct)
+    public static ValueTask<AgentRun> RootAsync(AgentRun run, ITenantRunStore runs, CancellationToken ct) =>
+        RootAsync(run, (id, token) => runs.FindTenantRunAsync(run.Owner.TenantId!.Value, id, token),
+            (id, token) => runs is ITenantAutomationStore automations
+                ? automations.FindTenantOccurrenceAsync(run.Owner.TenantId!.Value, id, token)
+                : ValueTask.FromException<AgentCore.Domain.Triggers.TriggerOccurrence?>(new AccessDeniedException("tenant_lineage_unavailable")), ct);
+
+    // Owning transactions can read the same stored graph without opening a second context.
+    public static async ValueTask<AgentRun> RootAsync(AgentRun run,
+        Func<Guid, CancellationToken, ValueTask<AgentRun?>> runReader,
+        Func<Guid, CancellationToken, ValueTask<AgentCore.Domain.Triggers.TriggerOccurrence?>> occurrenceReader, CancellationToken ct)
     {
         var initial = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var visited = new HashSet<Guid>();
@@ -60,8 +77,7 @@ public static class TenantExecutionLineage
                 if (context.Origin != ExecutionOrigin.ManualInvocation && context.OriginalInitiatorPrincipalId is not null || context.RootActivationId != run.ActivationId || context.ParentRunId is not null || context.ParentActivationId is not null
                     || run.Admission.Activation.Kind != expected || run.Admission.Activation.TriggerOccurrenceId is null || run.Admission.Activation.SourceAgentRunId is not null)
                     throw new AccessDeniedException("tenant_lineage_unavailable");
-                if (context.Origin is ExecutionOrigin.ScheduledOccurrence or ExecutionOrigin.ManualInvocation)
-                    await RequireOccurrenceRootAsync(run, runs, ct).ConfigureAwait(false);
+                await RequireOccurrenceRootAsync(run, occurrenceReader, ct).ConfigureAwait(false);
                 return run;
             }
             if (context.Origin == ExecutionOrigin.UserMessage)
@@ -74,7 +90,7 @@ public static class TenantExecutionLineage
             if (context.Origin is not (ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport or ExecutionOrigin.ApprovalContinuation)
                 || context.ParentRunId is not { } parentId || context.ParentActivationId is not { } activationId)
                 throw new AccessDeniedException("tenant_lineage_unavailable");
-            var parent = await runs.FindTenantRunAsync(initial.TenantId, parentId, ct).ConfigureAwait(false)
+            var parent = await runReader(parentId, ct).ConfigureAwait(false)
                 ?? throw new AccessDeniedException("tenant_lineage_unavailable");
             var a = run.Admission.Activation;
             if (parent.Owner != run.Owner || parent.ActivationId != activationId || a.ParentActivationId != activationId
@@ -87,7 +103,7 @@ public static class TenantExecutionLineage
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.CompletionReport
                 && (a.Kind != ActivationKind.BackgroundCompleted || !parent.IsTerminal || parent.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome
-                    || (await TenantBackgroundLineage.InitialAsync(parent, (id, token) => runs.FindTenantRunAsync(initial.TenantId, id, token), ct).ConfigureAwait(false)).Admission.Activation.SourceSessionId != run.SessionId
+                    || (await TenantBackgroundLineage.InitialAsync(parent, (id, token) => runReader(id, token), ct).ConfigureAwait(false)).Admission.Activation.SourceSessionId != run.SessionId
                     || run.Admission.OutputContract != AgentRunOutputContract.CompletionReport))
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.ApprovalContinuation

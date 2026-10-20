@@ -62,13 +62,29 @@ public sealed partial class SqliteIamStore : ITenantWebhookStore
         var current = await db.WebhookEvents.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == tenant && s.ResourceId == source.ToString("D"), ct);
         if (current?.Status != (int)WebhookEventStatus.Active || current.Revision != receipt.SourceRevision || !WebhookTokens.Matches(current.CredentialHash, token)
             || !await db.Set<Tenant>().AnyAsync(t => t.TenantId == tenant && t.Status == IdentityStatus.Active, ct)) return new(TenantWebhookAdmissionKind.Unauthorized);
+        if (TenantWebhookRules.ContainsCredential(receipt.EvidenceJson, token)) throw new ArgumentException("Source credentials cannot enter event evidence.");
         var prior = await db.ExternalEvents.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenant && r.ResourceId == source.ToString("D") && r.SourceEventId == receipt.SourceEventId, ct);
         if (prior is not null)
         {
             var same = TenantWebhookRules.SameReceipt(SqliteExternalEventStore.ToEvent(prior), receipt);
             return new(same ? TenantWebhookAdmissionKind.Duplicate : TenantWebhookAdmissionKind.Conflict, same ? Guid.Parse(prior.EventId) : null);
         }
-        db.ExternalEvents.Add(SqliteExternalEventStore.ToRecord(TenantWebhookRules.Record(receipt, ApprovalNow)));
+        var now = ApprovalNow;
+        var automations = await OwnedAutomations(db, tenant).AsNoTracking().Where(a => a.Status == (int)AgentCore.Domain.Triggers.AutomationStatus.Active
+            && (a.ExpiresAtUtc == null || a.ExpiresAtUtc > now.ToUnixTimeMilliseconds())
+            && a.Triggers.Any(t => t.Enabled && t.Kind == (int)AgentCore.Domain.Triggers.AutomationTriggerKind.Event && t.EventId == current.ResourceId)).Take(AgentCore.Domain.Triggers.TriggerLimits.MaxWebhookFanoutTargets + 1).ToArrayAsync(ct);
+        if (automations.Length > AgentCore.Domain.Triggers.TriggerLimits.MaxWebhookFanoutTargets) throw new SecurityConflictException("webhook_fanout_limit");
+        var targets = automations.Select(TriggerStoreMapping.ToRegistration).SelectMany(a => a.Triggers
+            .Where(t => t.Enabled && t.Configuration is AgentCore.Domain.Triggers.EventTrigger e && e.EventId == source)
+            .Select(t => new AgentCore.Domain.Events.EventSubscriptionSnapshot(a.AutomationId, a.Owner, t.Revision,
+                ((AgentCore.Domain.Triggers.EventTrigger)t.Configuration).FilterExpression, ((AgentCore.Domain.Triggers.EventTrigger)t.Configuration).Dispatch,
+                AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent, source) { TriggerId = t.TriggerId })).ToArray();
+        var stored = SqliteExternalEventStore.ToRecord(TenantWebhookRules.Record(receipt, now));
+        stored.SubscriptionsJson = System.Text.Json.JsonSerializer.Serialize(targets, CoreEventPersistence.Json);
+        db.ExternalEvents.Add(stored);
+        foreach (var target in targets) db.ExternalEventDeliveries.Add(new() { TenantId = tenant, ExecutorPrincipalId = target.Owner.ExecutorPrincipalId,
+            AgentInstanceId = target.Owner.AgentInstanceId.ToString("D"), EventId = receipt.EventId.ToString("D"), AutomationId = target.AutomationId.ToString("D"),
+            TriggerId = target.TriggerId.ToString("D"), ProfileId = null, SnapshotJson = System.Text.Json.JsonSerializer.Serialize(target, CoreEventPersistence.Json), Status = (int)ExternalEventDeliveryStatus.Pending });
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new(TenantWebhookAdmissionKind.Accepted, receipt.EventId); }
         catch (DbUpdateException error) when (IsConstraint(error)) { throw new SecurityConflictException("webhook_admission_conflict"); }
     }

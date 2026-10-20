@@ -1,0 +1,51 @@
+# Tenant Core and webhook event Automation verification — 2026-10-21
+
+This completes the canonical Core/webhook event Automation module on top of `ffb67bea`. It is focused local qualification, not milestone or full multitenant proposal acceptance. CI was not requested or run. Email watcher conversion, existing-Session destinations and automatic reporting, voice/System/audit work, final route inventory and obsolete authority/schema removal retain their separate gates.
+
+## Implemented ownership and behavior
+
+Typed Event children reuse existing Automation, CoreEvents/ExternalEvents, delivery, bucket, occurrence, consent, Session and Run owners. Receipts atomically freeze complete subscription recipients, exact tenant/Instance/executor, child/revision, source, filter and dispatch. Later subscriptions cannot consume historical receipts. Current parent intent/model, source identity/enablement, raw reads and compound admission authority are checked independently at preparation/settlement and inside owning transactions. No Task, replacement queue or permission snapshot is introduced.
+
+Core Run/Session/Instance producers derive actual committed ownership and causal root; they emit closed metadata rather than conversation/response/persona content. Independent arrivals have no human requester. Technical filter evaluation grants no execution authority. EveryMatch and bounded CoalesceLatest retain source attribution and first-receipt windows. Source rotation invalidates prepared consent; already-admitted work retains its factual source under current raw read/Review checks, including protected effects and NoAction completion. Missing raw read cannot be supplied by a creation exception.
+
+Canonical Core fact reads and Automation Event Activity filter raw sources before counts/paging. Partial Core batch access reveals neither larger batch membership/count nor its work/approval references. Run/Session/approval links require independent current reads. The native editor preserves existing saved child IDs/revisions, current witness/reload behavior and explicit unavailable source selections; source changes create a new child. Shared filter/model/schedule/approval components and Ant Design v6 remain the presentation owners. Consent shows all fourteen exact event fields, frozen filter/dispatch and literal data; raw read Review is distinct from primary creation exception.
+
+Migration `20261021030000_TenantEventOwnership` freezes the rebuild/guards, preserves the preceding 54 guards and installs 68 total, with correct rebuild ordering and foreign-key handling. Existing source-only tenant webhook receipts backfill an empty recipient snapshot. Canonical owner/data shapes, actual committed producer/source membership, immutable snapshots/reservations and unique same-child bucket coverage are guarded. Legacy ownership cannot conceal canonical rows through case aliases or an actual tenant Instance ID. Lossy downgrade refuses retained canonical data. This is a fail-closed coexistence boundary, not completion of the proposal's final legacy/schema removal.
+
+## Executed local checks
+
+.NET builds used `--no-restore --nologo --disable-build-servers -m:1 -p:UseSharedCompilation=false`; focused tests used `--no-build --no-restore --nologo`. API and Infrastructure test-project builds passed with zero warnings/errors. Frontend `pnpm --dir web run build` passed. Existing vendor annotation and bundle-size notices remain; JSDOM emits the incumbent native textarea height warning in some tests.
+
+| Selection | Observed result |
+| --- | --- |
+| API `FullyQualifiedName~Tenant_event_receipt_snapshots\|FullyQualifiedName~Tenant_event_recovers` | **50 passed**, both-store event/Activity cases plus ten actual SQLite application-host recreation cases |
+| Infrastructure `FullyQualifiedName~TenantEventMigrationTests\|FullyQualifiedName~TenantWebhookMigrationTests\|FullyQualifiedName~CoreEventBucketTests` on final migration | **22 passed**, guard inventory, legacy roundtrip, model parity, FK check and incumbent bucket/retry behavior |
+| Vitest `TenantAutomationEventActivity.test.tsx`, `TenantAgentAutomations.test.tsx`, `TenantApprovals.test.tsx`, `AutomationEventFilter.test.tsx` | **113 passed** |
+| `TENANT_CHAT_API_PORT=5098 TENANT_CHAT_WEB_PORT=5198 CI=1 pnpm exec playwright test --config playwright.tenant-events.config.ts` | **3 passed**, disposable Synthetic API/Vite, no server reuse |
+| Earlier backend batch retained during the same module: event/Automation admission/Webhook ingress | **116 passed** (30 then-current event, 38 incumbent consent, 48 Webhook cases) |
+| Subsequent expanded Core scope/filter API selection before Activity addition | **38 passed**; superseded event selection is now covered by the final50 above |
+| Earlier persistence/historical migration selection | **23 passed**, including case-variant ownership concealment and latest-schema guards/model/FKs |
+| Application event admission contract selection | **5 passed**, including maximum 32 children with 1024-byte predicates and unknown/shadowed Schema2 metadata rejection |
+
+These are overlapping focused verification batches, not an additive single full-suite count. Earlier batches were not rerun solely to repeat unaffected checks. No hosted provider keys, provider HTTP, production deployment or multi-instance acceptance was used or inferred.
+
+## Observed use cases
+
+- Both stores: save typed subscriptions; authenticate a Webhook receipt or commit a real owned Core configuration fact; freeze recipient filters; process matching, filtering, late subscriber refusal and coalescing; reserve exact consent without work; approve once; admit one owned Run with the correct trusted source origin. Pending rotation, missing/revoked raw reads, exceptional creation-only consent, retained accepted sources and owning completion fences have negative coverage. Foreign source reads are denied or excluded before counts.
+- Scoped Core coalescing: produce two actual configuration facts in one window. A reader granted only one fact sees exactly that Activity row, with batch/work/approval fields null and no hidden approval count. Granting the second raw fact exposes the authorized exact batch/consent. Run links remain independently gated.
+- SQLite recreation: close the actual application host at receipt, pending bucket, pending consent, approved consent and already-admitted phases for both Core and Webhook sources. Recreate from the same disposable database, settle only the exact persisted consent and observe one retained source/child and one Run, with no duplicate consent/work or provider HTTP.
+- Actual Playwright MCP: sign in to a dedicated Synthetic host on 5096/5196; create/test/save an enabled Webhook subscription; send literal external data; inspect pending admission with no Run; review frozen predicate/dispatch/data; approve; observe the separately readable admitted/completed Run link. Add a distinct Core child, preserve saved child identity, encounter a stale parent witness, retain the local draft, explicitly reload and save. The observed 409 was the expected stale refusal; navigation/unmount aborts were lifecycle cancellation, not failed effects.
+- MCP recovery fault injection after a real successful Activity read: return 503 on its refresh. The row retains Admitted/Run completed with explicit stale/retry copy, while data, batch/work/consent IDs and links are unavailable. Restore the real read and observe data/links return. Return 403 and verify all prior facts/payloads/links clear; restore the authorized endpoint and reload successfully. These injected browser responses establish UI recovery behavior; the real scoped authorization boundary is separately exercised by the API cases.
+- Repeatable browser journey: create two distinct typed sources through native controls, test a matching and disallowed predicate without creating work, save, receive a Webhook, inspect literal data, approve exact admission, then edit the parent while preserving child IDs. Existing Webhook management tests also verify token rotation/revocation/re-activation, stale rename recovery, exact scoped listing and protected detail retirement on read loss.
+
+## UI finish and documentation
+
+Captured native editor, literal Activity and exact consent at 1440/1024/768/390/320, plus scrolled shared filter fields and stale Activity at all five widths. Internal Drawer scrolling and wrapping footer controls remain usable; no document overflow was observed. Capture files live under `.impeccable/review/tenant-event-automations/` in the local ignored evidence directory.
+
+The detector ran once over the five affected component targets and returned no findings. A fresh independent finish reviewer first requested replacement of two captures caught during a Collapse animation; those were replaced after settlement and reopened. Full review then identified one material issue: ordinary Activity refresh failure discarded safe factual status. One correction batch added path-bound safe retention, explicit stale/retry copy, payload/link removal and read-loss clearing, with a focused regression and the runtime fault-injection checks above. The reviewer subsequently scored that P2 **resolved**, with disposition **ship at the listed fix's scope**. The report does not broaden that verdict to whole-repository design acceptance.
+
+The independent ordinary-extension documenter compared finished code/captures with the incumbent system and preserved PRODUCT.md, DESIGN.md and `.impeccable/design.json`. Historical context/sidecar drift was reported without repair. No new visual identity, tokens, CSS layout system, generic wrappers, assets or UI kit were introduced.
+
+## Limits and remaining proposal work
+
+Synthetic/offline and disposable local SQLite evidence does not establish production traffic behavior, live OAuth/provider behavior, real device audio, or distributed/multi-host acceptance. Event Activity is a bounded explicit-refresh view, not a new live subscription protocol. Core production remains metadata-only, and canonical email watcher production remains fenced until its own source conversion. The original full proposal goal remains active; this report closes this complete Core/Webhook event module only.

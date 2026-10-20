@@ -29,7 +29,7 @@ public sealed partial class SqliteIamStore
             TenantAccountActionReferences.Receipt(reference, request, receipt, decision, grant, run);
             var state = (await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!;
             await TenantAccountActionRules.PermissionsAsync(state, run.AgentInstanceId, request.Operation.AccountAction, agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
-            await TenantExecutionLineage.RequireRequesterAsync(run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+            await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
             await TenantAccountActionRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
     }
@@ -44,7 +44,7 @@ public sealed partial class SqliteIamStore
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
         await TenantAccountActionRules.PermissionsAsync(state, agent.Instance.InstanceId, action, agent.PrincipalId, new IamAuthorizer(this), request.Kind == ApprovalKind.Review, ct).ConfigureAwait(false);
         if (request.Snapshot?.Credential != TenantAccountReadRules.Snapshot(agent, bound).Credential) throw new SecurityConflictException("account_source_changed");
-        await TenantExecutionLineage.RequireRequesterAsync(run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+        await RequireTenantExecutionSourcesAsync(db, run, state, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         if (action.ToolName == AgentCore.Application.Tools.ToolCatalog.EmailSend)
         {
             var row = await db.Set<EmailDraftRecord>().AsNoTracking().SingleOrDefaultAsync(d => d.DraftId == action.Draft!.DraftId, ct).ConfigureAwait(false);

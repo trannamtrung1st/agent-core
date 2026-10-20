@@ -15,6 +15,15 @@ public static class TenantWebhookEndpoints
         app.MapGet("/api/v2/tenants/{tenantId:guid}/events/builtin", (HttpContext http, TenantWebhookService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
             var actor = IdentityHttp.TenantContext(http); return Results.Json(new { items = await service.BuiltinsAsync(actor.TenantId, Human(http, actor), ct) });
         })).RequireAuthorization();
+        app.MapGet("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/events/core/{key}",
+            (Guid instanceId, string key, int? page, int? pageSize, HttpContext http, TenantCoreEventReadService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+                var actor = IdentityHttp.TenantContext(http); var result = await service.ListAsync(actor.TenantId, instanceId, key, Human(http, actor), page ?? 0, pageSize ?? 20, ct);
+                return Results.Json(new { items = result.Page.Items.Select(CoreReceipt), result.Page.Total, result.Page.Page, result.Page.PageSize, result.SecurityRevision });
+            })).RequireAuthorization();
+        app.MapGet("/api/v2/tenants/{tenantId:guid}/events/core/{eventId:guid}",
+            (Guid eventId, HttpContext http, TenantCoreEventReadService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+                var actor = IdentityHttp.TenantContext(http); return Results.Json(CoreReceipt(await service.ReadAsync(actor.TenantId, eventId, Human(http, actor), ct)));
+            })).RequireAuthorization();
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/webhooks").RequireAuthorization();
         group.MapGet("", (int? page, int? pageSize, HttpContext http, TenantWebhookService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
             var actor = IdentityHttp.TenantContext(http); var result = await service.ListAsync(actor.TenantId, Human(http, actor), page ?? 0, pageSize ?? 20, ct);
@@ -42,6 +51,11 @@ public static class TenantWebhookEndpoints
             var actor = IdentityHttp.TenantContext(http); return Results.Json(Safe(await service.RevokeAsync(actor.TenantId, sourceId, Human(http, actor), body.ExpectedRevision, body.ExpectedSourceRevision, ct)));
         }));
     }
+    private static object CoreReceipt(CoreEventReceipt receipt) => new {
+        receipt.Event.EventId, agentInstanceId = receipt.Event.Owner.AgentInstanceId, receipt.Event.Key, receipt.Event.OccurredAtUtc,
+        receipt.ReceivedAtUtc, data = JsonSerializer.Deserialize<JsonElement>(receipt.Event.DataJson), receipt.Event.RootAgentRunId,
+        receipt.Event.TriggerDepth, visitedAutomationIds = receipt.Event.VisitedAutomationIds ?? []
+    };
     private static HumanSessionReference Human(HttpContext http, AuthenticatedTenant actor) => new(actor.AccountId,
         IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
     private static object Safe(TenantWebhookWrite value) => new { value.Source.ResourceId, value.Source.DisplayName, value.Source.EventKey,

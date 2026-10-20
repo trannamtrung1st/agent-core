@@ -26,7 +26,7 @@ public sealed partial class InMemoryIamStore
                 return ValueTask.FromResult(false);
             TenantAccountEffectRules.RequireFence(fence, request, run, source, _operationGrants.GetValueOrDefault(request.RequestId));
             TenantSessionRules.RequireExecutor(before, agent);
-            TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).GetAwaiter().GetResult();
+            RequireTenantExecutionSourcesAsync(run, before, new IamAuthorizer(this), this, ct).GetAwaiter().GetResult();
             TenantAccountEffectRules.RequireAuthorityAsync(before, request, decision, agent, new IamAuthorizer(this), _operationGrants.GetValueOrDefault(request.RequestId),
                 OperationGrantStatus.Claimed, ApprovalNow, ct).GetAwaiter().GetResult();
             TenantAccountMaintenanceRules.Transaction(next, expectedSecurityRevision, fence, request, maintenance, audit);

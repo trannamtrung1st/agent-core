@@ -121,6 +121,7 @@ public sealed partial class InMemoryExternalEventStore : IExternalEventStore
         lock (_gate)
         {
             var rows = _deliveries.Values
+                .Where(item => item.Snapshot?.Owner.TenantId is null)
                 .Where(item => (item.Status == ExternalEventDeliveryStatus.Pending || item.Status == ExternalEventDeliveryStatus.FilterError && item.Decision?.Retryable == true)
                     && (eventId is null || item.EventId == eventId))
                 .Where(item => after == null || string.CompareOrdinal(item.EventId.ToString("D"), after.EventId.ToString("D")) > 0 || item.EventId == after.EventId && string.CompareOrdinal(item.TriggerId.ToString("D"), after.TriggerId.ToString("D")) > 0)
@@ -136,7 +137,7 @@ public sealed partial class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            if (!_deliveries.TryGetValue((eventId, triggerId), out var d) || d.Status == ExternalEventDeliveryStatus.Skipped)
+            if (!_deliveries.TryGetValue((eventId, triggerId), out var d) || d.Snapshot?.Owner.TenantId is not null || d.Status == ExternalEventDeliveryStatus.Skipped)
                 return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
             if (d.Decision is not null && (!d.Decision.Retryable || d.Decision != expectedDecision)) return ValueTask.FromResult(d.Decision);
             _deliveries[(eventId, triggerId)] = d with { Decision = decision, Status = d.Status == ExternalEventDeliveryStatus.FilterError && d.Decision?.Retryable == true ? ExternalEventDeliveryStatus.Pending : d.Status };
@@ -152,7 +153,7 @@ public sealed partial class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            if (_deliveries.TryGetValue((eventId, triggerId), out var current)
+            if (_deliveries.TryGetValue((eventId, triggerId), out var current) && current.Snapshot?.Owner.TenantId is null
                 && (current.Status == ExternalEventDeliveryStatus.Pending || current.Status == ExternalEventDeliveryStatus.FilterError && current.Decision?.Retryable == true))
             {
                 _deliveries[(eventId, triggerId)] = current with { Status = status };

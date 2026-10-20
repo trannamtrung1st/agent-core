@@ -81,15 +81,15 @@ it('confirms saved Run admission separately from completion and links to canonic
   await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel Automation' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Cancel Automation' })); const cancel = await screen.findByRole('dialog', { name: 'Cancel this Automation?' });
   fireEvent.click(within(cancel).getByRole('button', { name: 'Cancel Automation' })); await waitFor(() => expect(writes()).toHaveLength(2));
-  await screen.findByText('cancelled'); expect(screen.getByText('Next: Not scheduled · Scheduled occurrences: 2')).toBeVisible();
+  await screen.findByText('cancelled'); expect(screen.getByText('Next: Not scheduled · Occurrences: 2')).toBeVisible();
   expect(screen.getByRole('link', { name: 'Open the admitted Run in Activity' })).toHaveAttribute('href', '/t/tenant/admin/agents/agent/activity/runs?run=admitted-run');
 });
 it('starts disabled, requires valid instructions and refuses enabled timing outside current policy', async () => {
   current.canSchedule = false; await open(); fireEvent.click(screen.getByRole('button', { name: 'New Automation' })); await screen.findByRole('dialog');
   fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'New task' } }); fireEvent.change(screen.getByRole('textbox', { name: 'Automation instructions' }), { target: { value: 'New saved objective' } });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Enable scheduled occurrences' })); expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
-  expect(await screen.findByText('The current Definition does not permit this schedule')).toBeVisible();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Enable automatic occurrences' })); expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
+  expect(await screen.findByText('The current Definition does not permit these triggers')).toBeVisible();
 });
 
 it('acknowledges pending admission consent without claiming a Run exists or replaying the action', async () => {

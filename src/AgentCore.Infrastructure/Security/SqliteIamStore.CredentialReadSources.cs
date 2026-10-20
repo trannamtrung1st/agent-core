@@ -19,7 +19,7 @@ public sealed partial class SqliteIamStore
                 var row = await OwnedAgents(db, tenant).AsNoTracking().SingleOrDefaultAsync(a => a.Instance.InstanceId == run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
                 if (row is null) throw new AccessDeniedException("executor_unavailable"); var agent = Owned(row);
                 TenantSessionRules.RequireExecutor(state, agent);
-                await TenantExecutionLineage.RequireRequesterAsync(run, state, iam, this, ct).ConfigureAwait(false);
+                await RequireTenantExecutionSourcesAsync(db, run, state, iam, this, ct).ConfigureAwait(false);
                 if (source.RequestId is { } requestId)
                 {
                     var request = (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenant && r.RequestId == requestId, ct).ConfigureAwait(false))?.Domain();

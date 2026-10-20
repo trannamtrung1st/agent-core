@@ -10,7 +10,7 @@ public sealed record TenantAttachmentReadApprovalVisibility(IReadOnlyList<Guid>?
 public sealed record TenantArtifactReadApprovalVisibility(IReadOnlyList<Guid>? Artifacts, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantCredentialReadApprovalVisibility(IReadOnlyList<Guid>? Credentials, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? EmailCredentials = null, IReadOnlyList<Guid>? DriveCredentials = null, IReadOnlyList<Guid>? EmailDraftCredentials = null, IReadOnlyList<Guid>? EmailSendCredentials = null, IReadOnlyList<Guid>? DriveWriteCredentials = null, IReadOnlyList<Guid>? DriveDeleteCredentials = null);
 public sealed record TenantBackgroundReportApprovalVisibility(bool CanCreate, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? Runs);
-public sealed record TenantAutomationApprovalVisibility(bool CanCreate, IReadOnlyList<Guid>? Agents, IReadOnlyList<Guid>? ReadAutomations, IReadOnlyList<Guid>? RunAutomations);
+public sealed record TenantAutomationApprovalVisibility(bool CanCreate, IReadOnlyList<Guid>? Agents, IReadOnlyList<Guid>? ReadAutomations, IReadOnlyList<Guid>? RunAutomations, IReadOnlyList<Guid>? WebhookSources = null, IReadOnlyList<Guid>? CoreEvents = null);
 public sealed record TenantApprovalContinuationIds(Guid ActivationId, Guid RunId);
 public sealed record TenantApprovalQuery(int Page = 0, int PageSize = 20, TenantApprovalStatus? Status = null, ApprovalKind? Kind = null, Guid? SessionId = null)
 {

@@ -19,8 +19,9 @@ const failureText: Record<string, string> = {
   "filter-evaluation-error": "Check missing fields and simplify the expression before retrying."
 };
 type Trigger = Exclude<AutomationChild, { kind: "schedule" }>;
-export function AutomationEventFilter({ instanceId, trigger, example, disabled, onChange, sampleValue, onSampleChange }: {
+export function AutomationEventFilter({ instanceId, trigger, example, disabled, onChange, sampleValue, onSampleChange, testFilter }: {
   instanceId: string; trigger: Trigger; example: Record<string, unknown>; disabled: boolean; onChange: (trigger: Trigger) => void; sampleValue?: string; onSampleChange?: (sample: string) => void;
+  testFilter?: (expression: string | null, event: unknown) => Promise<FilterTestResult>;
 }) {
   const { token } = theme.useToken();
   const [localSample, setLocalSample] = useState(() => JSON.stringify(example, null, 2));
@@ -37,7 +38,7 @@ export function AutomationEventFilter({ instanceId, trigger, example, disabled, 
     setBusy(true); setResult(null);
     try {
       const event: unknown = JSON.parse(sample);
-      const next = await instanceContinuityRequest<FilterTestResult>(instanceId, "automations/filter-test", "POST", { expression: trigger.filterExpression || null, event });
+      const next = await (testFilter ? testFilter(trigger.filterExpression || null, event) : instanceContinuityRequest<FilterTestResult>(instanceId, "automations/filter-test", "POST", { expression: trigger.filterExpression || null, event }));
       if (version === generation.current) setResult(next);
     } catch { if (version === generation.current) setResult({ matched: null, status: "error", code: "Check sample JSON and connection, then retry." }); }
     finally { if (version === generation.current) setBusy(false); }

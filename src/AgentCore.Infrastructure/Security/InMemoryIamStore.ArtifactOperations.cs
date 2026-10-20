@@ -20,7 +20,7 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             var target = FindTenantAgentAsync(before.Tenant.TenantId, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
             TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, target.PrincipalId);
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
-            TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
+            RequireTenantExecutionSourcesAsync(run, before, new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
             var at = (clock ?? TimeProvider.System).GetUtcNow();
             var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
             var publication = new PreparedArtifactPublication(run.SessionId, args.CanonicalArguments, commit.Source);

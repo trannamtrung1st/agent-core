@@ -36,9 +36,9 @@ public sealed partial class InMemoryIamStore
             AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft);
             AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
             catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
-            sessionBacking.SaveTenantRuntime(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow());
+            SaveTenantRuntimeState(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow());
             if (draftEntryId is { } removed) sessionBacking.RemoveResponseDraft(run.SessionId, removed);
-            sessionBacking.SaveTenantOperationRun(next, run.Revision); SettleTenantCompletion(next, run.Claim?.Generation);
+            sessionBacking.SaveTenantOperationRun(next, run.Revision); AppendTenantCoreRun(run, next); SettleTenantCompletion(next, run.Claim?.Generation);
             return ValueTask.FromResult(next);
         }
     }

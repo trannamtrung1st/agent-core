@@ -26,7 +26,7 @@ public sealed partial class TenantCredentialAccessTests
         {
             var cases = new TheoryData<bool, string>();
             foreach (var sqlite in new[] { false, true })
-                foreach (var mode in new[] { "receipt", "cookie-no-token", "concurrent-replay", "builtin", "restore", "duplicate", "changed-evidence", "rename", "rotate", "revoke", "stale", "cross-tenant", "scoped-reader", "manage-without-read", "untrusted-root", "unexpected-identity", "large", "bad-token-before-body", "raw-owner", "raw-receipt", "direct-stale-token", "same-key" }) cases.Add(sqlite, mode);
+                foreach (var mode in new[] { "receipt", "cookie-no-token", "credential-in-body", "credential-in-escaped-body", "concurrent-replay", "builtin", "restore", "duplicate", "changed-evidence", "rename", "rotate", "revoke", "stale", "cross-tenant", "scoped-reader", "manage-without-read", "untrusted-root", "unexpected-identity", "large", "bad-token-before-body", "raw-owner", "raw-receipt", "direct-stale-token", "same-key" }) cases.Add(sqlite, mode);
             return cases;
         }
     }
@@ -90,6 +90,14 @@ public sealed partial class TenantCredentialAccessTests
             var catalog = await Json(await owner.GetAsync(root + "/events/builtin")); Assert.NotEmpty(catalog.GetProperty("items").EnumerateArray());
             Assert.DoesNotContain(token, catalog.GetRawText()); Assert.DoesNotContain(id.ToString("D"), catalog.GetRawText()); return;
         }
+        if (mode is "credential-in-body" or "credential-in-escaped-body")
+        {
+            var bodyJson = mode == "credential-in-body" ? JsonSerializer.Serialize(new { eventId = "credential-echo", data = new { echoed = token } })
+                : "{\"eventId\":\"credential-echo\",\"data\":{\"echoed\":\"" + string.Concat(token.Select(c => "\\u" + ((int)c).ToString("x4"))) + "\"}}";
+            var echo = await Send(bodyJson);
+            Assert.Equal(HttpStatusCode.BadRequest, echo.StatusCode); Assert.DoesNotContain(token, await echo.Content.ReadAsStringAsync());
+            Assert.Equal(0, (await store.ListTenantWebhookReceiptsAsync(tenant, id, 0, 100)).Total); return;
+        }
         if (mode == "cookie-no-token")
         {
             Assert.Equal(HttpStatusCode.Unauthorized, (await owner.PostAsync(ingress, new StringContent(evidence, Encoding.UTF8, "application/json"))).StatusCode);
@@ -119,6 +127,9 @@ public sealed partial class TenantCredentialAccessTests
                     await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlRawAsync(sql));
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261021010000_TenantAutomationAdmissionApproval"));
                 Assert.Contains("20261021020000_TenantWebhookOwnership", await db.Database.GetAppliedMigrationsAsync());
+                // An earlier independent migration may have safely downgraded
+                // before the retained webhook source blocks the older target.
+                await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             }
             if (mode == "raw-owner") return;
         }
