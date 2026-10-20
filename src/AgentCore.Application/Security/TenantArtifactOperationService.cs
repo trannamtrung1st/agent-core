@@ -37,7 +37,7 @@ public sealed class TenantArtifactOperationService(ITenantArtifactOperationStore
             var decision = await operations.Check(state, run, TenantArtifactToolContract.Permission, scope, ct).ConfigureAwait(false);
             if (decision.Decision != OperationDecisionKind.Allowed) return new(decision.Decision, decision.ReasonCode);
             await TenantArtifactOperationRules.RequireAuthorityAsync(state, run, iam, ct).ConfigureAwait(false);
-            if (!TenantArtifactToolContract.AllowsPublication(current.Configuration.Configuration.Definition, publication)) throw new AccessDeniedException("capability_unavailable");
+            if (!TenantFileExecutionContract.Allows(run, current.Configuration.Configuration.Definition) || !TenantArtifactToolContract.AllowsPublication(current.Configuration.Configuration.Definition, publication)) throw new AccessDeniedException("capability_unavailable");
             var commit = new TenantArtifactCommit(operation.OperationId, run.AgentRunId, generation, run.Revision, callId, canonical,
                 parametersHash, current.Agent.Instance.Revision, TenantArtifactToolContract.ActionHash(run.SessionId, parametersHash), publication.Source, source);
             _ = TenantArtifactOperationRules.Validate(run, current.Agent, commit, time.GetUtcNow());

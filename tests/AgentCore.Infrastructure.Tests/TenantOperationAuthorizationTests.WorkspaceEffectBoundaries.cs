@@ -106,6 +106,8 @@ public sealed partial class TenantOperationAuthorizationTests
             row.PayloadJson = payload.ToJsonString(); Assert.Equal(1811, Assert.IsType<SqliteException>((await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync())).InnerException).SqliteExtendedErrorCode);
         }
         await using (var db = f.Contexts!.CreateDbContext()) await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261018225721_TenantWorkspaceSearchReview"));
+        // Later migrations can roll back before the retained-effect guard refuses its own downgrade.
+        await using (var db = f.Contexts!.CreateDbContext()) await db.Database.MigrateAsync();
         var reopened = new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: f.Clock);
         clock.Advance(TimeSpan.FromMinutes(6)); Assert.Equal(fence, Assert.Single(await ((ITenantWorkspaceOperationStore)reopened).RecoverableWorkspaceEffectsAsync(f.Clock.GetUtcNow(), 100)));
         Assert.Equal(1, await WorkspaceEffects(f).RecoverAsync());

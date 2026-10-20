@@ -21,6 +21,7 @@ public sealed partial class InMemoryIamStore : ITenantWorkspaceOperationStore
             var agent = FindTenantAgentAsync(before.Tenant.TenantId, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
             TenantSessionRules.RequireExecutor(before, agent); ValidateAgentActor(before, agent.PrincipalId);
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human) ValidateAgentActor(before, human);
+            TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
             var session = sessionBacking.ReadTenantSession(before.Tenant.TenantId, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
             TenantWorkspaceEffectRules.Session(run, agent, session);
             var definition = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);

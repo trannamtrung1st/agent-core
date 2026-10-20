@@ -76,9 +76,8 @@ public static class TenantArtifactSourceRules
         }
         else TenantWorkspaceRules.Path(Owner(run, path), path, file: true);
         current = InstanceSettingsResolver.Resolve(current, agent.Instance.SettingsOverrides);
-        if (run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
-            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation))
-            throw new AccessDeniedException("artifact_direct_chat_required");
+        if (!TenantFileExecutionContract.Allows(run, current))
+            throw new AccessDeniedException("artifact_execution_unavailable");
         if (!TenantWorkspaceArtifactContract.Allows(run.Admission.Configuration!.Definition) || !TenantWorkspaceArtifactContract.Allows(current))
             throw new AccessDeniedException("capability_unavailable");
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy ?? StateIsolationPolicy.Default;

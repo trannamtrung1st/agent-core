@@ -10,6 +10,7 @@ public sealed partial class InMemoryIamStore
 {
     private TenantArtifactPublicationArguments RequireArtifactOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent, AgentRun? source = null)
     {
+        TenantExecutionLineage.RequireRequesterAsync(run, _tenants[request.TenantId], new IamAuthorizer(this), this, CancellationToken.None).AsTask().GetAwaiter().GetResult();
         var session = sessionBacking.ReadTenantSession(request.TenantId, request.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
         var args = TenantArtifactReviewRules.Require(request, run, agent, TenantAgentDefinitionBaseline(agent), session, source);
         TenantArtifactReviewRules.ExecutorAsync(_tenants[request.TenantId], request, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();

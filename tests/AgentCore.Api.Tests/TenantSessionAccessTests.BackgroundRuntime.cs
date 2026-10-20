@@ -44,8 +44,11 @@ public sealed partial class TenantSessionAccessTests
             if (origin == ExecutionOrigin.ImmediateBackground)
             {
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-                Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.WorkspaceWrite or ToolCatalog.ArtifactsCreate);
-                Assert.DoesNotContain("mutate_workspace", Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
+                Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate or ToolCatalog.ArtifactsCreate);
+                var authorization = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
+                Assert.DoesNotContain("update_persona", authorization);
+                Assert.DoesNotContain("run_browser_command", authorization);
+                Assert.DoesNotContain("run_sandbox_command", authorization);
                 yield return new ModelToolCallEvent(new("tenant-background-finish", ToolCatalog.WorkComplete,
                     """{"outcome":"Response","summary":"Owned background result.","attentionRequired":false}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
@@ -92,17 +95,17 @@ public sealed partial class TenantSessionAccessTests
             });
         }
     }
-    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false)
+    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null)
     {
         await Login(owner,"owner@example.test","explicit-synthetic-test-password");
         var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();var api=$"/api/v2/tenants/{tenant}";
         var human=(await Json(await owner.GetAsync(api+"/access/me"))).GetProperty("principalId").GetGuid();
         JsonElement agent;
-        if (attachmentCapability)
+        if (attachmentCapability || fileCapabilities is not null)
         {
             var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Background exact file reader", expectedRevision = await Revision(owner, tenant) }));
             var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
-            var capabilities = new[] { ToolCatalog.BackgroundStart, ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
+            var capabilities = fileCapabilities ?? new[] { ToolCatalog.BackgroundStart, ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
             candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
                 capabilities = new { mode = "Selected", resolvedCapabilities = capabilities }, projection = new { alwaysCapabilities = capabilities.Where(c => c != ToolCatalog.AttachmentsRead).ToArray() } });
             var draftId = draft.GetProperty("draftId").GetGuid();

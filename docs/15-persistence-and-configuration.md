@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant background file effects
+
+Protected background Workspace/Office changes reuse the existing direct or approved external-effect origin, exact operation arguments/witnesses, Run claim and durable receipt. Current root requester, executor/primary/source authority, capability and state isolation repeat at start and the native file commit gate. Known effects and uncertainty settle factually through the existing operation owner; loss of acknowledgement never authorizes replay. Artifact publication reuses the existing atomic file bytes, Artifact metadata, security/audit, operation receipt and exact one-time grant consumption. A grant covers only the primary operation, with raw source and secondary permissions independent.
+
+Root activation and original requester remain immutable through every approval successor, including later publication requests. Only the terminal task successor generates the existing completion receipt/report. Artifact ownership is the actual child Session; creation/receipt/reporting grants no recipient read or download. No new table, migration, effect executor, role grant or approval authority is introduced. [Focused qualification](reports/tenant-background-file-effects-verification-2026-10-20.md) records actual file effects, independent current authority, same-task successors and host recreation.
+
 ## Canonical tenant live-input transaction
 
 Live human text/file intake uses the existing Session, Entry, MessageAttachment, Activation/Run, tenant security and authorization-audit records. The owning Runtime writer stages its captured output snapshot at expected Session revision N and human admission advances the same transaction to N+2. The returned Runtime snapshot contains only its own input window and committed sequence/activity metadata; later saves retain the high-water sequence and last-user-activity timestamp. Same-message replay performs no write and returns the original graph/current durable revision. The mailbox reserves opaque sequence slots before I/O, so refused commands may leave gaps without creating an entry or binding.

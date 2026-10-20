@@ -30,8 +30,7 @@ public static class TenantWorkspaceMutationOperationRules
         var args = Arguments(value); TenantWorkspaceEffectRules.Session(run, agent, session);
         if (value.SessionId != run.SessionId || agent.TenantId != request.TenantId || agent.PrincipalId != request.ExecutorPrincipalId
             || agent.Instance.InstanceId != request.Operation.InstanceId || run.Owner.ExecutorPrincipalId != agent.PrincipalId
-            || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
-            || run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is null || run.Admission.ExecutionContext.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)
+            || !TenantFileExecutionContract.Allows(run, current)
             || !TenantWorkspaceMutationContract.Allows(run.Admission.Configuration!.Definition, value.ToolName)
             || !TenantWorkspaceMutationContract.Allows(current, value.ToolName)) throw new AccessDeniedException("capability_unavailable");
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy ?? StateIsolationPolicy.Default;
@@ -48,10 +47,7 @@ public static class TenantWorkspaceMutationOperationRules
             if (!(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, permission, scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException(key.EndsWith(".read", StringComparison.Ordinal) ? "executor_read_required" : "operation_authority_changed");
         }
-        if (request.OriginalInitiatorPrincipalId is not { } requester) throw new AccessDeniedException("requester_unavailable");
-        foreach (var (key, scope) in new[] { ("sessions.read", TenantSessionRules.Scope(request.TenantId, request.SessionId)),
-            ("agents.chat", AccessScope.ForResource(request.TenantId, "agent", request.Operation.InstanceId.ToString("D"))) })
-            if (!(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("requester_unavailable");
+        if (request.OriginalInitiatorPrincipalId is null) throw new AccessDeniedException("requester_unavailable");
     }
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {

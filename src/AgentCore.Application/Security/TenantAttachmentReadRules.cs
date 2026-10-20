@@ -16,7 +16,7 @@ public static class TenantAttachmentReadRules
     public static void Require(PreparedAttachmentRead read, AgentRun run, TenantAgent agent, AgentDefinition current, TenantSession session, AttachmentRecord item)
     {
         TenantAttachmentReadContract.Window(TenantAttachmentReadContract.Parse(read.ArgumentsJson), item.ContentType);
-        if (!TenantFileObservationContract.Allows(run, current) || item.State != AttachmentState.Bound || Witness(item, read.ArgumentsJson, read.ProcessorVersion, read.Vision) != read || item.TenantId != run.Owner.TenantId || read.SessionId != run.SessionId
+        if (!TenantFileExecutionContract.Allows(run, current) || item.State != AttachmentState.Bound || Witness(item, read.ArgumentsJson, read.ProcessorVersion, read.Vision) != read || item.TenantId != run.Owner.TenantId || read.SessionId != run.SessionId
             || session.Owner.TenantId != run.Owner.TenantId || session.Owner.SessionId != run.SessionId
             || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId
             || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != run.Owner.ExecutorPrincipalId

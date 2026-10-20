@@ -20,6 +20,7 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             var target = FindTenantAgentAsync(before.Tenant.TenantId, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
             TenantSessionRules.RequireExecutor(before, target); ValidateAgentActor(before, target.PrincipalId);
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
+            TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
             var at = (clock ?? TimeProvider.System).GetUtcNow();
             var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
             var publication = new PreparedArtifactPublication(run.SessionId, args.CanonicalArguments, commit.Source);
@@ -27,7 +28,7 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             var correlated = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, target.PrincipalId, prepared.OperationFingerprint);
             if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated));
             var definition = TenantAgentDefinitionBaseline(target);
-            if (!AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
+            if (!AgentCore.Application.Tools.TenantFileExecutionContract.Allows(run, definition) || !AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
             TenantArtifactOperationRules.RequireAuthorityAsync(before, run, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             if (args.SourcePath is { } path)
             {

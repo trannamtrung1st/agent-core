@@ -13,7 +13,7 @@ public sealed class TenantBackgroundFileObservationTests
         var definition = await CapabilityProjectionTests.Definition([ToolCatalog.WorkspaceWrite]);
         var context = CapabilityProjectionTests.Context(definition) with { ExecutionContext = null,
             OutputContract = AgentRunOutputContract.BackgroundOutcome, LoadedCapabilityIds = [ToolCatalog.WorkspaceWrite] };
-        Assert.False(TenantFileObservationContract.IsBackground(context));
+        Assert.False(TenantFileExecutionContract.IsBackground(context));
         Assert.Contains(ToolProjectionService.Project(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.WorkspaceWrite);
     }
     [Theory] [InlineData(ExecutionOrigin.ImmediateBackground)] [InlineData(ExecutionOrigin.ApprovalContinuation)]
@@ -29,13 +29,14 @@ public sealed class TenantBackgroundFileObservationTests
         Assert.Contains(tools, t => t.Name == ToolCatalog.WorkComplete);
         foreach (var read in new[] { ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch, ToolCatalog.OfficeDocumentInspect, ToolCatalog.OfficeSpreadsheetInspect, ToolCatalog.ArtifactsVerify })
             Assert.Contains(tools, t => t.Name == read);
-        Assert.All(tools, t => Assert.True(TenantFileObservationContract.IsTool(t.Name) || IamToolContracts.IsInspection(t.Name) || t.Name is ToolCatalog.RequestAuthorization or ToolCatalog.WorkComplete, t.Name));
+        Assert.All(tools, t => Assert.True(TenantFileExecutionContract.IsTool(t.Name) || IamToolContracts.IsInspection(t.Name) || t.Name is ToolCatalog.RequestAuthorization or ToolCatalog.WorkComplete, t.Name));
         var authorization = Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization);
         using var schema = JsonDocument.Parse(authorization.ParametersJson);
         var operations = schema.RootElement.GetProperty("oneOf").EnumerateArray().Select(b => b.GetProperty("properties").GetProperty("operation").GetProperty("enum")[0].GetString()).ToArray();
-        Assert.All(operations, operation => Assert.Contains(operation, new[] { "inspect_workspace", "read_attachment", "verify_artifact" }));
+        Assert.All(operations, operation => Assert.Contains(operation, new[] { "inspect_workspace", "read_attachment", "verify_artifact", "mutate_workspace", "publish_artifact", "publish_workspace_artifact" }));
         Assert.Contains("inspect_workspace", operations); Assert.Contains("verify_artifact", operations);
-        Assert.DoesNotContain(ToolProjectionService.Project(definition, context with { ModelSupportsTools = false }, ToolConfigurationGates.AllowAll), t => TenantFileObservationContract.IsTool(t.Name));
-        Assert.DoesNotContain(ToolProjectionService.Project(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll), t => TenantFileObservationContract.IsTool(t.Name));
+        Assert.Contains("mutate_workspace", operations); Assert.Contains("publish_artifact", operations); Assert.Contains("publish_workspace_artifact", operations);
+        Assert.DoesNotContain(ToolProjectionService.Project(definition, context with { ModelSupportsTools = false }, ToolConfigurationGates.AllowAll), t => TenantFileExecutionContract.IsTool(t.Name));
+        Assert.DoesNotContain(ToolProjectionService.Project(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll), t => TenantFileExecutionContract.IsTool(t.Name));
     }
 }

@@ -32,8 +32,7 @@ public static class TenantWorkspaceEffectRules
     public static TenantWorkspaceMutationArguments Validate(AgentRun run, TenantAgent agent, AgentDefinition current, AgentRunDirectOperation operation, Guid generation, DateTimeOffset at, bool started = false)
     {
         if (run.Owner.TenantId is null || run.Status != AgentRunStatus.Running || run.CancellationRequested || run.Claim?.Generation != generation || run.Claim.LeaseExpiresAtUtc <= at
-            || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
-            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation)) throw new AccessDeniedException("tenant_runtime_unavailable");
+            || !TenantFileExecutionContract.Allows(run, current)) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (agent.TenantId != run.Owner.TenantId || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != run.Owner.ExecutorPrincipalId
             || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || agent.Instance.Revision != operation.InstanceRevision || agent.Instance.PersonaRevision != operation.PersonaRevision)
             throw new SecurityConflictException("workspace_source_changed");
@@ -72,10 +71,6 @@ public static class TenantWorkspaceEffectRules
                 && (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is not { } human
                     || !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)) throw new AccessDeniedException("workspace_mutation_review_required");
         }
-        if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester)
-            foreach (var (key, scope) in new[] { ("sessions.read", TenantSessionRules.Scope(state.Tenant.TenantId, run.SessionId)),
-                ("agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D"))) })
-                if (!(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("requester_unavailable");
     }
     public static TenantWorkspaceDispatch Fence(AgentRun run) => new(run.Owner.TenantId!.Value, run.AgentRunId, run.Owner, run.SessionId, run.SideEffect.ActionHash!, run.SideEffect.ExternalEffect!);
     public static void RequireFence(AgentRun run, TenantWorkspaceDispatch fence)

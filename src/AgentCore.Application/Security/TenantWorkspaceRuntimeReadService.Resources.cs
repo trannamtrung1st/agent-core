@@ -27,12 +27,12 @@ public sealed partial class TenantWorkspaceRuntimeReadService
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId
-            || !TenantFileObservationContract.Allows(run, run.Admission.Configuration!.Definition)
+            || !TenantFileExecutionContract.Allows(run, run.Admission.Configuration!.Definition)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended) throw new AccessDeniedException("resource_unavailable");
         var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
         var agent = current.Snapshot.Agent;
-        if (!TenantFileObservationContract.Allows(run, current.Definition)) throw new AccessDeniedException("capability_unavailable");
+        if (!TenantFileExecutionContract.Allows(run, current.Definition)) throw new AccessDeniedException("capability_unavailable");
         if (agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool)
             || !TenantWorkspaceReadContract.Allows(current.Definition, tool)) throw new AccessDeniedException("capability_unavailable");
         async ValueTask Policy(string key, AccessScope scope)

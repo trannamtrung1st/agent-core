@@ -11,9 +11,7 @@ public static class TenantArtifactOperationRules
     public static TenantArtifactPublicationArguments Validate(AgentRun run, TenantAgent target, TenantArtifactCommit commit, DateTimeOffset at)
     {
         TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
-        if (run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is null || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
-            || run.Admission.Activation.Kind != ActivationKind.UserTurn || run.ActivationId != run.Admission.Activation.RootActivationId)
-            throw new AccessDeniedException("artifact_direct_chat_required");
+        TenantArtifactReviewRules.RequireTask(run);
         if (commit.OperationId == Guid.Empty || run.AgentRunId != commit.RunId || run.Revision != commit.ExpectedRunRevision
             || target.TenantId != run.Owner.TenantId || target.Instance.InstanceId != run.AgentInstanceId || target.PrincipalId != run.Owner.ExecutorPrincipalId
             || target.Instance.Revision != commit.ExpectedInstanceRevision || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200)

@@ -1,11 +1,21 @@
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
 // Stored lineage is attribution and causal fencing, never a permission snapshot.
 public static class TenantExecutionLineage
 {
+    public static async ValueTask RequireRequesterAsync(AgentRun run, TenantSecurityState state, IamAuthorizer iam, ITenantRunStore runs, CancellationToken ct)
+    {
+        var root = await RootAsync(run, runs, ct).ConfigureAwait(false);
+        if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is not { } requester) return;
+        foreach (var (key, scope) in new[] { ("sessions.read", TenantSessionRules.Scope(state.Tenant.TenantId, root.SessionId)),
+            ("agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D"))) })
+            if (!(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
+                throw new AccessDeniedException("requester_unavailable");
+    }
     public static async ValueTask<AgentRun> RootAsync(AgentRun run, ITenantRunStore runs, CancellationToken ct)
     {
         var initial = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");

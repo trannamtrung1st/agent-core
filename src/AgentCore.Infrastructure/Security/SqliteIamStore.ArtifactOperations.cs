@@ -24,13 +24,14 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
         var target = Owned(owned); TenantSessionRules.RequireExecutor(before, target);
         await ValidateTenantActorAsync(db, before, target.PrincipalId, ct).ConfigureAwait(false);
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } requester) await ValidateTenantActorAsync(db, before, requester, ct).ConfigureAwait(false);
+        await TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow(); var args = TenantArtifactOperationRules.Validate(run, target, commit, at);
         var publication = new PreparedArtifactPublication(run.SessionId, args.CanonicalArguments, commit.Source);
         var prepared = TenantApprovalRules.PrepareArtifact(commit.OperationId, run.AgentInstanceId, publication, target.Instance.Revision, target.Instance.PersonaRevision);
         var correlated = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), target.PrincipalId, prepared).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated.Domain()));
         var definition = await TenantAgentDefinitionBaseline(db, target, ct).ConfigureAwait(false);
-        if (!AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
+        if (!AgentCore.Application.Tools.TenantFileExecutionContract.Allows(run, definition) || !AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
         await TenantArtifactOperationRules.RequireAuthorityAsync(before, run, new IamAuthorizer(this), ct).ConfigureAwait(false);
         if (args.SourcePath is { } path)
         {

@@ -8,23 +8,22 @@ namespace AgentCore.Application.Security;
 
 public static class TenantArtifactReviewRules
 {
-    public static void HumanRoot(AgentRun run)
+    public static void RequireTask(AgentRun run)
     {
-        if (run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is null || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
-            || run.Admission.Activation.Kind != ActivationKind.UserTurn || run.ActivationId != run.Admission.Activation.RootActivationId)
-            throw new AccessDeniedException("artifact_direct_chat_required");
+        if (!TenantFileExecutionContract.Allows(run, run.Admission.Configuration!.Definition))
+            throw new AccessDeniedException("artifact_execution_unavailable");
     }
     public static TenantArtifactPublicationArguments Require(TenantApprovalRequest request, AgentRun run, TenantAgent agent,
         AgentDefinition current, TenantSession session, AgentRun? source = null)
     {
         TenantApprovalContinuationRules.Require(request, run, source);
-        HumanRoot(request.RunId == run.AgentRunId ? run : source ?? throw new AccessDeniedException("artifact_direct_chat_required"));
+        RequireTask(request.RunId == run.AgentRunId ? run : source ?? throw new AccessDeniedException("artifact_direct_chat_required"));
         var value = request.Operation.ArtifactPublication ?? throw new SecurityConflictException("operation_mismatch");
         if (value.SessionId != request.SessionId || value.SessionId != run.SessionId || session.Owner.TenantId != request.TenantId
             || session.Owner.SessionId != value.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != request.ExecutorPrincipalId
             || agent.TenantId != request.TenantId || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != request.ExecutorPrincipalId)
             throw new SecurityConflictException("operation_mismatch");
-        if (!TenantArtifactToolContract.AllowsPublication(run.Admission.Configuration!.Definition, value) || !TenantArtifactToolContract.AllowsPublication(current, value)) throw new AccessDeniedException("capability_unavailable");
+        if (!TenantFileExecutionContract.Allows(run, current) || !TenantArtifactToolContract.AllowsPublication(run.Admission.Configuration!.Definition, value) || !TenantArtifactToolContract.AllowsPublication(current, value)) throw new AccessDeniedException("capability_unavailable");
         var args = TenantArtifactToolContract.ParsePublication(value);
         if (args.SourcePath is { } path) TenantArtifactSourceRules.Require(run, agent, current, session, path, value.Source);
         return args;
@@ -41,9 +40,7 @@ public static class TenantArtifactReviewRules
                 throw new AccessDeniedException("executor_read_required");
         if (request.Kind == ApprovalKind.Review && !(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, PermissionCatalog.Get("artifacts.create"), scope, ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("operation_authority_changed");
-        if (request.OriginalInitiatorPrincipalId is { } requester)
-            foreach (var target in new[] { ("sessions.read", scope), ("agents.chat", AccessScope.ForResource(request.TenantId, "agent", request.Operation.InstanceId.ToString("D"))) })
-                if (!(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get(target.Item1), target.Item2, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("requester_unavailable");
+        if (request.OriginalInitiatorPrincipalId is null) throw new AccessDeniedException("requester_unavailable");
     }
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct, bool ownedSources = false)
     {
@@ -92,6 +89,6 @@ public static class TenantArtifactReviewRules
     }
     private static readonly HashSet<string> Denials = new(StringComparer.Ordinal) { "approval_expired", "grant_expired", "grantor_authority_lost",
         "operation_authority_changed", "operation_witness_changed", "requester_unavailable", "root_operation_conflict", "executor_read_required",
-        "capability_unavailable", "resource_unavailable", "artifact_direct_chat_required", "approver_unqualified", "approval_unavailable", "tenant_effect_unavailable", "artifact_publication_mismatch", "artifact_content_unavailable",
+        "capability_unavailable", "resource_unavailable", "artifact_direct_chat_required", "artifact_execution_unavailable", "approver_unqualified", "approval_unavailable", "tenant_effect_unavailable", "artifact_publication_mismatch", "artifact_content_unavailable",
         "workspace_source_changed", "attachment_source_changed", "attachment_content_unavailable", "resource_source_changed", "resource_content_unavailable", "home_access_disabled", "independent_reviewer_required" };
 }

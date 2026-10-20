@@ -32,7 +32,7 @@ public sealed partial class TenantApprovalService
     {
         var inline = workspace is null ? TenantArtifactToolContract.Parse(arguments) : null;
         var (run, state) = await operations.ResolveForDecisionAsync(reference, "artifacts.create", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
-        TenantArtifactReviewRules.HumanRoot(run);
+        TenantArtifactReviewRules.RequireTask(run);
         TenantLocalEffectRules.RequireDirectRun(run, generation, time.GetUtcNow());
         if (run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
         PreparedArtifactSource? source = null;
@@ -52,7 +52,7 @@ public sealed partial class TenantApprovalService
             foreach (var (key, scope) in TenantArtifactSourceRules.Targets(run, source.Path))
                 compoundReview |= await TenantSandboxReadOperationRules.NeedsReviewAsync(state, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, key, scope, authorizer, ct).ConfigureAwait(false);
         var decision = await operations.Check(state, run, op.Permission, TenantSessionRules.Scope(reference.TenantId, run.SessionId), ct, compoundReview, ExecutionAuthorizationPurpose.ApprovalPreparation).ConfigureAwait(false);
-        var request = new TenantApprovalRequest(ids.NewId(), reference.TenantId, run.AgentRunId, run.SessionId, run.ActivationId, current.Agent.PrincipalId,
+        var request = new TenantApprovalRequest(ids.NewId(), reference.TenantId, run.AgentRunId, run.SessionId, run.Admission.ExecutionContext!.RootActivationId, current.Agent.PrincipalId,
             run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, decision.ApprovalKind ?? (decision.Decision == OperationDecisionKind.Allowed ? ApprovalKind.Review : ApprovalKind.ExceptionalGrant), op, TenantApprovalStatus.Pending, 1,
             time.GetUtcNow(), time.GetUtcNow().AddHours(1), new(current.Agent.Instance.Persona.Name));
         await RequireArtifactAsync(request, run, state, ct).ConfigureAwait(false);

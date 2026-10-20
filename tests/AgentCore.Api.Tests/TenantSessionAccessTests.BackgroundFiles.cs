@@ -34,10 +34,10 @@ public sealed partial class TenantSessionAccessTests
             { await foreach (var item in base.GenerateAsync(request, cancellationToken)) yield return item; yield break; }
             ChildRequests.Enqueue(request); Entered.TrySetResult(); await Release.Task.WaitAsync(cancellationToken);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-            Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.WorkspaceWrite or ToolCatalog.ArtifactsCreate or ToolCatalog.SandboxExec);
+            Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec);
             var authorization = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization);
-            Assert.DoesNotContain("mutate_workspace", authorization.ParametersJson); Assert.DoesNotContain("run_browser_command", authorization.ParametersJson);
-            Assert.DoesNotContain("update_persona", authorization.ParametersJson); Assert.DoesNotContain("publish_artifact", authorization.ParametersJson);
+            Assert.DoesNotContain("run_browser_command", authorization.ParametersJson);
+            Assert.DoesNotContain("update_persona", authorization.ParametersJson);
             var callName = Review ? ToolCatalog.RequestAuthorization : Tool;
             var replies = request.Messages.Where(m => m.Role == ModelRole.Tool && m.Name == callName).ToArray();
             if (replies.Length == 0 || RepeatRefusal && replies.Length == 1)
@@ -165,9 +165,9 @@ public sealed partial class TenantSessionAccessTests
                 var admission = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: instance, SupportsTools: true,
                     OwnedSessionId: held.SessionId, AgentRunId: held.AgentRunId, TenantId: tenant, AgentRunGeneration: held.Claim!.Generation);
                 var guard = factory.Services.GetRequiredService<TenantToolAuthorization>();
-                Assert.Equal(ToolPolicyDecision.Deny, await guard.PolicyAsync(held.SessionId, new("blocked-write", ToolCatalog.WorkspaceWrite, "{}"), admission, default));
+                Assert.Equal(ToolPolicyDecision.Deny, await guard.PolicyAsync(held.SessionId, new("blocked-native", ToolCatalog.SandboxExec, "{}"), admission, default));
                 var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => guard.PrepareAsync(held.SessionId,
-                    new("blocked-publication", ToolCatalog.RequestAuthorization, """{"operation":"publish_artifact","artifact":{"displayName":"blocked.txt","contentType":"text/plain","content":"must not publish"}}"""), admission, default).AsTask());
+                    new("blocked-persona", ToolCatalog.RequestAuthorization, """{"operation":"update_persona","persona":{"name":"Blocked","role":"Blocked","description":"Blocked","tone":"Blocked"}}"""), admission, default).AsTask());
                 Assert.Equal("tenant_effect_unavailable", denied.ReasonCode);
             }
             model.Release.TrySetResult();

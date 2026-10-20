@@ -12,6 +12,8 @@ public sealed partial class TenantOperationAuthorizationTests
     private static async Task<(Environment Setup, Guid Id, byte[] Bytes)> AttachmentExportCase(Fixture f)
     {
         var s = await Setup(f, "general-assistant", 32);
+        // Finish the setup input before claiming the later file-bearing input.
+        await CancelArtifactRun(f, s, await ClaimArtifactRun(f, s));
         var session = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Run.SessionId))!;
         var files = (ITenantAttachmentStore)f.Attachments; var bytes = "Exact original Attachment → thử nghiệm"u8.ToArray(); var request = f.Ids.NewId();
         var upload = await files.PrepareUploadTenantAsync(session.Owner, f.Ids.NewId(), request, s.Owner.PrincipalId, "Private original.txt", "text/plain", new MemoryStream(bytes));

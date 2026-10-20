@@ -13,7 +13,7 @@ public static class TenantArtifactVerificationRules
     public static PreparedArtifactVerification Witness(ArtifactRecord item) => new(item.SessionId, item.ArtifactId, item.DisplayName, item.ContentType, item.ByteSize, item.Sha256Hex);
     public static void Require(PreparedArtifactVerification read, AgentRun run, TenantAgent agent, AgentDefinition current, TenantSession session, ArtifactRecord item)
     {
-        if (!TenantFileObservationContract.Allows(run, current) || Witness(item) != read || item.TenantId != run.Owner.TenantId || read.SessionId != run.SessionId
+        if (!TenantFileExecutionContract.Allows(run, current) || Witness(item) != read || item.TenantId != run.Owner.TenantId || read.SessionId != run.SessionId
             || session.Owner.TenantId != run.Owner.TenantId || session.Owner.SessionId != run.SessionId
             || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId
             || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != run.Owner.ExecutorPrincipalId

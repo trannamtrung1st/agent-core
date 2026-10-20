@@ -204,35 +204,35 @@ public static class ToolPolicy
         if (context?.ExecutionContext is not null && TenantBackgroundToolContract.IsTool(descriptor.Name))
             return TenantBackgroundToolContract.IsOffered(definition, context, descriptor.Name);
         // Completion reports do not generate protected work. Immediate background work and
-        // its approval successors expose only the converted file-observation family.
+        // its approval successors expose only the converted file-operation family.
         if (context?.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
             && !IamToolContracts.IsInspection(descriptor.Name)) return false;
-        if (TenantFileObservationContract.IsBackground(context)
-            && !IamToolContracts.IsInspection(descriptor.Name) && !TenantFileObservationContract.IsTool(descriptor.Name)
+        if (TenantFileExecutionContract.IsBackground(context)
+            && !IamToolContracts.IsInspection(descriptor.Name) && !TenantFileExecutionContract.IsTool(descriptor.Name)
             && descriptor.Name != ToolCatalog.RequestAuthorization) return false;
         if (context?.ExecutionContext is { } mutation && TenantWorkspaceMutationContract.IsMutation(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && mutation.Origin is AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage or AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation
+                && TenantFileExecutionContract.Allows(context)
                 && mutation.SessionId == context.OwnedSessionId && TenantWorkspaceMutationContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } workspaceExecution && TenantWorkspaceReadContract.IsRead(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileObservationContract.Allows(context)
+                && TenantFileExecutionContract.Allows(context)
                 && workspaceExecution.SessionId == context.OwnedSessionId && TenantWorkspaceReadContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } attachment && descriptor.Name == ToolCatalog.AttachmentsRead)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileObservationContract.Allows(context)
+                && TenantFileExecutionContract.Allows(context)
                 && attachment.SessionId == context.OwnedSessionId && TenantAttachmentReadContract.Allows(definition) && ToolCatalog.SessionHasAttachments(context);
         if (context?.ExecutionContext is { } verification && descriptor.Name == ToolCatalog.ArtifactsVerify)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileObservationContract.Allows(context)
+                && TenantFileExecutionContract.Allows(context)
                 && verification.SessionId == context.OwnedSessionId && TenantArtifactVerificationContract.Allows(definition);
         if (context?.ExecutionContext is { } sourceExecution && descriptor.Name == ToolCatalog.ArtifactsCreateFromWorkspace)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && sourceExecution.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage
+                && TenantFileExecutionContract.Allows(context)
                 && sourceExecution.SessionId == context.OwnedSessionId && TenantWorkspaceArtifactContract.Allows(definition);
         if (context?.ExecutionContext is { } artifactExecution && descriptor.Name == ToolCatalog.ArtifactsCreate)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && artifactExecution.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage
+                && TenantFileExecutionContract.Allows(context)
                 && artifactExecution.SessionId == context.OwnedSessionId && TenantArtifactToolContract.Allows(definition);
         if (context?.ExecutionContext is { } credentialExecution && descriptor.Name == ToolCatalog.CredentialsList)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, CredentialMetadataAvailable: true }

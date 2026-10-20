@@ -87,7 +87,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId)
             throw new AccessDeniedException("resource_unavailable");
-        if (!TenantFileObservationContract.Allows(run, run.Admission.Configuration!.Definition)
+        if (!TenantFileExecutionContract.Allows(run, run.Admission.Configuration!.Definition)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended) throw new AccessDeniedException("resource_unavailable");
         if (tool == ToolCatalog.KnowledgeRetrieve && knowledgeIdentity is null) throw new AccessDeniedException("knowledge_source_unavailable");
@@ -111,7 +111,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             if (decision.Decision != OperationDecisionKind.Allowed) throw new AccessDeniedException(decision.ReasonCode);
         }
         var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-        if (current.Snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantFileObservationContract.Allows(run, current.Definition) || !Allows(current.Definition))
+        if (current.Snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantFileExecutionContract.Allows(run, current.Definition) || !Allows(current.Definition))
             throw new AccessDeniedException("capability_unavailable");
         if (tool == ToolCatalog.KnowledgeRetrieve)
         {

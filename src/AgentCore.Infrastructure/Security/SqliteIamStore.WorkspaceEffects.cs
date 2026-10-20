@@ -25,6 +25,7 @@ public sealed partial class SqliteIamStore : ITenantWorkspaceOperationStore
         var owned = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == row.AgentInstanceId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
         var agent = Owned(owned); TenantSessionRules.RequireExecutor(before, agent); await ValidateTenantActorAsync(db, before, agent.PrincipalId, ct).ConfigureAwait(false);
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human) await ValidateTenantActorAsync(db, before, human, ct).ConfigureAwait(false);
+        await TenantExecutionLineage.RequireRequesterAsync(run, before, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         TenantWorkspaceEffectRules.Session(run, agent, await ReadSandboxSession(db, tenant.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable"));
         var definition = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         var at = ApprovalNow; var args = TenantWorkspaceEffectRules.Validate(run, agent, definition, commit.Operation, commit.Generation, at);

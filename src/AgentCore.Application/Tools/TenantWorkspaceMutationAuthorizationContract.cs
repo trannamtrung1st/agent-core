@@ -16,11 +16,11 @@ public sealed record TenantWorkspaceMutationIntent(string Tool, string Arguments
 // Closed exact proposal; identity, permission and witnesses are derived by Core.
 public static class TenantWorkspaceMutationAuthorizationContract
 {
-    public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => context?.ExecutionContext is { OriginalInitiatorPrincipalId: not null,
-        Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation }
-        ? new[] { ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch,
+    public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => TenantFileExecutionContract.Allows(context) ? Allowed(definition) : [];
+    public static IReadOnlyList<string> Allowed(AgentDefinition definition) =>
+        new[] { ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch,
                 ToolCatalog.OfficeDocumentCreate, ToolCatalog.OfficeDocumentEdit, ToolCatalog.OfficeSpreadsheetCreate, ToolCatalog.OfficeSpreadsheetEdit }
-            .Where(t => TenantWorkspaceMutationContract.Allows(definition, t)).ToArray() : [];
+            .Where(t => TenantWorkspaceMutationContract.Allows(definition, t)).ToArray();
     public static JsonNode Schema(IReadOnlyList<string> tools)
     {
         var branches = new JsonArray();

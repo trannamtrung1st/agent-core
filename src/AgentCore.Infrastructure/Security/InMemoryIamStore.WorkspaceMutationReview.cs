@@ -9,6 +9,7 @@ public sealed partial class InMemoryIamStore
 {
     private void RequireWorkspaceMutationOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent, AgentRun? source = null)
     {
+        TenantExecutionLineage.RequireRequesterAsync(run, _tenants[request.TenantId], new IamAuthorizer(this), this, CancellationToken.None).AsTask().GetAwaiter().GetResult();
         var session = sessionBacking.ReadTenantSession(request.TenantId, request.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
         var current = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
         TenantWorkspaceMutationOperationRules.Require(request, run, agent, current, session, source);

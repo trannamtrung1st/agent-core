@@ -16,6 +16,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var configuration = f.RunConfiguration();
         if (template == "general-assistant")
         {
+            await CancelArtifactRun(f, setup, await ClaimArtifactRun(f, setup));
             configuration = f.RunConfiguration(new ResourceExportOnlyBuiltIns(f.BuiltIns));
             var currentSession = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(setup.Tenant, setup.Run.SessionId))!;
             var admission = await new TenantRunService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, configuration,

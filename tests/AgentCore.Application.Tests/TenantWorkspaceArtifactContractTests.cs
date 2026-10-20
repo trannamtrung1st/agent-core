@@ -10,7 +10,7 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantWorkspaceArtifactContractTests
 {
     [Fact]
-    public async Task Source_projection_offers_only_the_admitted_variant_in_a_current_human_message()
+    public async Task Source_projection_offers_only_the_admitted_variant_in_current_owned_task_execution()
     {
         var definition = await CapabilityProjectionTests.Definition(ToolCatalog.ArtifactsCreateFromWorkspace);
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
@@ -23,8 +23,10 @@ public sealed class TenantWorkspaceArtifactContractTests
         using var schema = JsonDocument.Parse(Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
         var variants = schema.RootElement.GetProperty("oneOf").EnumerateArray().Select(b => b.GetProperty("properties").GetProperty("operation").GetProperty("enum")[0].GetString()).ToArray();
         Assert.Contains("publish_workspace_artifact", variants); Assert.DoesNotContain("publish_artifact", variants);
+        var continuation = context with { ExecutionContext = new(context.ExecutionContext!.TenantId, context.ExecutionContext.AgentPrincipalId, context.ExecutionContext.OriginalInitiatorPrincipalId, session, Guid.NewGuid(), Guid.NewGuid(), activation, context.ExecutionContext.RunId, activation, AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation) };
+        Assert.Contains(ToolProjectionService.Project(definition, continuation, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.ArtifactsCreateFromWorkspace);
         foreach (var invalid in new[] { context with { ModelSupportsTools = false }, context with { OwnedSessionId = Guid.NewGuid() },
-            context with { ExecutionContext = new(context.ExecutionContext!.TenantId, context.ExecutionContext.AgentPrincipalId, context.ExecutionContext.OriginalInitiatorPrincipalId, session, Guid.NewGuid(), Guid.NewGuid(), activation, context.ExecutionContext.RunId, activation, AgentCore.Domain.Conversation.ExecutionOrigin.ApprovalContinuation) } })
+            continuation with { OutputContract = AgentCore.Domain.Conversation.AgentRunOutputContract.CompletionReport } })
             Assert.DoesNotContain(ToolProjectionService.Project(definition, invalid, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.ArtifactsCreateFromWorkspace);
     }
 

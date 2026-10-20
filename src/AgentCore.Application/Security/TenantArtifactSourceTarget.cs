@@ -26,7 +26,7 @@ public sealed class TenantArtifactSourceTarget(TenantOperationAuthorizer operati
             if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
             else if (frame.Owner != run.Owner || frame.RunId != run.AgentRunId || frame.SessionId != run.SessionId
                 || run.CancellationRequested || run.Status is not (AgentRunStatus.Running or AgentRunStatus.WaitingForApproval)) throw new AccessDeniedException("tenant_runtime_unavailable");
-            if (run.Admission.ExecutionContext?.Origin != ExecutionOrigin.ApprovalContinuation) TenantArtifactReviewRules.HumanRoot(run);
+            if (run.Admission.ExecutionContext?.Origin != ExecutionOrigin.ApprovalContinuation) TenantArtifactReviewRules.RequireTask(run);
             TenantArtifactSourceRules.Require(run, current.Agent, current.Definition, session, args.Path);
             await TenantArtifactSourceRules.RequireAuthorityAsync(state, run, args.Path, iam, review, ct).ConfigureAwait(false);
             return (run, state, current.Agent, session);

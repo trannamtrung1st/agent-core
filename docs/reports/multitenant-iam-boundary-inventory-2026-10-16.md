@@ -1,5 +1,9 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+## Tenant background file effects successor — 2026-10-20
+
+Human-attributed immediate-background tasks and exact same-task successors now use incumbent Workspace/Office mutation and Artifact inline/source publication owners. Independent current root/executor/source authority, primary-only grants, one-time facts and no-replay uncertainty have [focused qualification](tenant-background-file-effects-verification-2026-10-20.md). The [live-input prerequisite](tenant-live-input-queue-verification-2026-10-20.md) supplies actual bound-Attachment sources without exposing future human input to the active task. These checkpoints supersede file-effect/background-source gaps only; native effects, creation Review, inbox/wait/autonomous origins and final resource/authority/schema acceptance remain open. The full original goal remains active.
+
 ## Exact tenant Attachment publication checkpoint — 2026-10-19
 
 Bound Attachment originals now use the existing source-export tool and canonical Artifact/Run/receipt transaction with independent current source reads, creation policy and exact Review/creation-only grants. The shared inspector recognizes converted resource/Attachment sources, requires the canonical original filename, and preserves cancellation for unavailable detail. Typed live delivery plus durable receipts, raw-byte integrity and pending-consent SQLite host recreation have focused evidence. This supersedes exact conversational Attachment-publication-pending notes only. Attachment virtual overlays/legacy human materialization, other Browser/resource adapters, autonomous/background/events/transports and final obsolete-authority/schema removal remain open. The full goal stays active; no full Attachment, milestone or proposal acceptance is claimed. [Focused qualification](tenant-attachment-artifact-verification-2026-10-19.md).
@@ -184,8 +188,8 @@ Nested routes retain their source suffix and receiver. Prefixes are defined by `
 | [AdminAutomationEndpoints.cs:86](../../src/AgentCore.Api/AdminAutomationEndpoints.cs#L86) | PUT | `"/{automationId:guid}"` | `group` | Tenant resource | Pending cutover |
 | [AdminAutomationEndpoints.cs:88](../../src/AgentCore.Api/AdminAutomationEndpoints.cs#L88) | DELETE | `"/{automationId:guid}"` | `group` | Tenant resource | Pending cutover |
 | [AdminAutomationEndpoints.cs:90](../../src/AgentCore.Api/AdminAutomationEndpoints.cs#L90) | POST | `"/{automationId:guid}/run"` | `group` | Tenant resource | Pending cutover |
-| [AdminBrowserPrivacyEndpoints.cs:13](../../src/AgentCore.Api/AdminBrowserPrivacyEndpoints.cs#L13) | GET | `"/browser/privacy"` | `admin` | Tenant resource | Pending cutover |
-| [AdminBrowserPrivacyEndpoints.cs:15](../../src/AgentCore.Api/AdminBrowserPrivacyEndpoints.cs#L15) | PUT | `"/browser/privacy"` | `admin` | Tenant resource | Pending cutover |
+| [SystemBrowserPrivacyEndpoints.cs:13](../../src/AgentCore.Api/Security/SystemBrowserPrivacyEndpoints.cs#L13) | GET | `"/api/v2/system/browser/privacy"` | `app` | System governance | [Converted System owner](system-browser-privacy-verification-2026-10-20.md) |
+| [SystemBrowserPrivacyEndpoints.cs:15](../../src/AgentCore.Api/Security/SystemBrowserPrivacyEndpoints.cs#L15) | PUT | `"/api/v2/system/browser/privacy"` | `app` | System governance | [Converted System owner](system-browser-privacy-verification-2026-10-20.md) |
 | [AdminCredentialEndpoints.cs:16](../../src/AgentCore.Api/AdminCredentialEndpoints.cs#L16) | GET | `"/email-accounts/{credentialId:guid}/monitoring"` | `group` | Tenant resource | Pending cutover |
 | [AdminCredentialEndpoints.cs:18](../../src/AgentCore.Api/AdminCredentialEndpoints.cs#L18) | PUT | `"/email-accounts/{credentialId:guid}/monitoring"` | `group` | Tenant resource | Pending cutover |
 | [AdminCredentialEndpoints.cs:20](../../src/AgentCore.Api/AdminCredentialEndpoints.cs#L20) | POST | `"/email-accounts/{credentialId:guid}/monitoring/check"` | `group` | Tenant resource | Pending cutover |
