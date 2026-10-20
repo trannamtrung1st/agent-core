@@ -420,41 +420,41 @@ public partial class TenantBackgroundCreationReview : Migration
                 CONSTRAINT "FK_TenantApprovalRequests_TenantSessions_TenantId_SessionId_InstanceId_ExecutorPrincipalId" FOREIGN KEY ("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId") REFERENCES "TenantSessions" ("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId") ON DELETE RESTRICT,
                 CONSTRAINT "FK_TenantApprovalRequests_TenantUsers_TenantId_OriginalInitiatorPrincipalId" FOREIGN KEY ("TenantId", "OriginalInitiatorPrincipalId") REFERENCES "TenantUsers" ("TenantId", "PrincipalId") ON DELETE RESTRICT
             );
-            
+
             INSERT INTO "ef_temp_TenantApprovalRequests" ("RequestId", "CreatedAt", "CredentialId", "ExecutorPrincipalId", "ExpiresAt", "Fingerprint", "InstanceId", "Kind", "OperationId", "OriginalInitiatorPrincipalId", "PayloadJson", "Permission", "ResourceId", "ResourceType", "Revision", "RootActivationId", "RunId", "SandboxProfileId", "SandboxProfileRevision", "SessionId", "Status", "TenantId")
             SELECT "RequestId", "CreatedAt", "CredentialId", "ExecutorPrincipalId", "ExpiresAt", "Fingerprint", "InstanceId", "Kind", "OperationId", "OriginalInitiatorPrincipalId", "PayloadJson", "Permission", "ResourceId", "ResourceType", "Revision", "RootActivationId", "RunId", "SandboxProfileId", "SandboxProfileRevision", "SessionId", "Status", "TenantId"
             FROM "TenantApprovalRequests";
-            
-            
-            
+
+
+
             DROP TABLE "TenantApprovalRequests";
-            
+
             ALTER TABLE "ef_temp_TenantApprovalRequests" RENAME TO "TenantApprovalRequests";
-            
-            
-            
+
+
+
             CREATE UNIQUE INDEX "IX_TenantApprovalRequests_OperationId" ON "TenantApprovalRequests" ("OperationId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_RunId_RootActivationId" ON "TenantApprovalRequests" ("RunId", "RootActivationId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_RunId_SessionId" ON "TenantApprovalRequests" ("RunId", "SessionId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_SandboxProfileId_SandboxProfileRevision" ON "TenantApprovalRequests" ("SandboxProfileId", "SandboxProfileRevision");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_Status_ExpiresAt_RequestId" ON "TenantApprovalRequests" ("Status", "ExpiresAt", "RequestId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_CredentialId" ON "TenantApprovalRequests" ("TenantId", "CredentialId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_ExecutorPrincipalId_CreatedAt" ON "TenantApprovalRequests" ("TenantId", "ExecutorPrincipalId", "CreatedAt");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_OriginalInitiatorPrincipalId" ON "TenantApprovalRequests" ("TenantId", "OriginalInitiatorPrincipalId");
-            
+
             CREATE UNIQUE INDEX "IX_TenantApprovalRequests_TenantId_RootActivationId_ExecutorPrincipalId_Fingerprint" ON "TenantApprovalRequests" ("TenantId", "RootActivationId", "ExecutorPrincipalId", "Fingerprint");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_SandboxProfileId" ON "TenantApprovalRequests" ("TenantId", "SandboxProfileId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_SessionId_InstanceId_ExecutorPrincipalId" ON "TenantApprovalRequests" ("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_Status_CreatedAt_RequestId" ON "TenantApprovalRequests" ("TenantId", "Status", "CreatedAt", "RequestId");
             CREATE TRIGGER TR_TenantApprovals_BrowserArtifacts_Insert BEFORE INSERT ON TenantApprovalRequests
             WHEN json_extract(NEW.PayloadJson, '$.Operation.BrowserCommand.Artifacts') IS NOT NULL
@@ -989,41 +989,41 @@ public partial class TenantBackgroundCreationReview : Migration
                 CONSTRAINT "FK_TenantApprovalRequests_TenantSessions_TenantId_SessionId_InstanceId_ExecutorPrincipalId" FOREIGN KEY ("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId") REFERENCES "TenantSessions" ("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId") ON DELETE RESTRICT,
                 CONSTRAINT "FK_TenantApprovalRequests_TenantUsers_TenantId_OriginalInitiatorPrincipalId" FOREIGN KEY ("TenantId", "OriginalInitiatorPrincipalId") REFERENCES "TenantUsers" ("TenantId", "PrincipalId") ON DELETE RESTRICT
             );
-            
+
             INSERT INTO "ef_temp_TenantApprovalRequests" ("RequestId", "CreatedAt", "CredentialId", "ExecutorPrincipalId", "ExpiresAt", "Fingerprint", "InstanceId", "Kind", "OperationId", "OriginalInitiatorPrincipalId", "PayloadJson", "Permission", "ResourceId", "ResourceType", "Revision", "RootActivationId", "RunId", "SandboxProfileId", "SandboxProfileRevision", "SessionId", "Status", "TenantId")
             SELECT "RequestId", "CreatedAt", "CredentialId", "ExecutorPrincipalId", "ExpiresAt", "Fingerprint", "InstanceId", "Kind", "OperationId", "OriginalInitiatorPrincipalId", "PayloadJson", "Permission", "ResourceId", "ResourceType", "Revision", "RootActivationId", "RunId", "SandboxProfileId", "SandboxProfileRevision", "SessionId", "Status", "TenantId"
             FROM "TenantApprovalRequests";
-            
-            
-            
+
+
+
             DROP TABLE "TenantApprovalRequests";
-            
+
             ALTER TABLE "ef_temp_TenantApprovalRequests" RENAME TO "TenantApprovalRequests";
-            
-            
-            
+
+
+
             CREATE UNIQUE INDEX "IX_TenantApprovalRequests_OperationId" ON "TenantApprovalRequests" ("OperationId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_RunId_RootActivationId" ON "TenantApprovalRequests" ("RunId", "RootActivationId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_RunId_SessionId" ON "TenantApprovalRequests" ("RunId", "SessionId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_SandboxProfileId_SandboxProfileRevision" ON "TenantApprovalRequests" ("SandboxProfileId", "SandboxProfileRevision");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_Status_ExpiresAt_RequestId" ON "TenantApprovalRequests" ("Status", "ExpiresAt", "RequestId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_CredentialId" ON "TenantApprovalRequests" ("TenantId", "CredentialId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_ExecutorPrincipalId_CreatedAt" ON "TenantApprovalRequests" ("TenantId", "ExecutorPrincipalId", "CreatedAt");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_OriginalInitiatorPrincipalId" ON "TenantApprovalRequests" ("TenantId", "OriginalInitiatorPrincipalId");
-            
+
             CREATE UNIQUE INDEX "IX_TenantApprovalRequests_TenantId_RootActivationId_ExecutorPrincipalId_Fingerprint" ON "TenantApprovalRequests" ("TenantId", "RootActivationId", "ExecutorPrincipalId", "Fingerprint");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_SandboxProfileId" ON "TenantApprovalRequests" ("TenantId", "SandboxProfileId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_SessionId_InstanceId_ExecutorPrincipalId" ON "TenantApprovalRequests" ("TenantId", "SessionId", "InstanceId", "ExecutorPrincipalId");
-            
+
             CREATE INDEX "IX_TenantApprovalRequests_TenantId_Status_CreatedAt_RequestId" ON "TenantApprovalRequests" ("TenantId", "Status", "CreatedAt", "RequestId");
             CREATE TRIGGER TR_TenantApprovals_BrowserArtifacts_Insert BEFORE INSERT ON TenantApprovalRequests
             WHEN json_extract(NEW.PayloadJson, '$.Operation.BrowserCommand.Artifacts') IS NOT NULL
