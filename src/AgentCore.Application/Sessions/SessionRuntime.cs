@@ -981,6 +981,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     await DispatchAsync(urgent, cancellationToken).ConfigureAwait(false);
                 }
+                await DrainTenantInterruptionOutputsAsync(cancellationToken).ConfigureAwait(false);
 
                 while (_mailbox.Reader.TryRead(out var input))
                 {
@@ -994,6 +995,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         await DispatchAsync(nested, cancellationToken).ConfigureAwait(false);
                     }
+                    await DrainTenantInterruptionOutputsAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 TrySignalIdle();
@@ -1025,10 +1027,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (OperationCanceledException)
         {
         }
+        finally { DiscardTenantInterruptionOutputs(); }
     }
 
     private async Task DispatchAsync(SessionInput input, CancellationToken cancellationToken)
     {
+        if (HoldTenantInterruptionOutput(input)) return;
         try
         {
             switch (input)
@@ -6488,6 +6492,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (_runtimeOwner?.TenantId is not null) _snapshot = CarryTenantReceipts(_snapshot, saved) with { Surfaces = _snapshot.Surfaces | saved.Surfaces,
                     LastEntrySequence = Math.Max(_snapshot.DurableLastEntrySequence, saved.DurableLastEntrySequence),
                     LastUserActivityAt = (_snapshot.LastUserActivityAt ?? DateTimeOffset.MinValue) > (saved.LastUserActivityAt ?? DateTimeOffset.MinValue) ? _snapshot.LastUserActivityAt : saved.LastUserActivityAt };
+                if (job.InputCommit?.Interrupted is { } interrupted)
+                {
+                    await ApplyTenantInputInterruptionAsync(input.Context, interrupted, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
                 foreach (var entry in saved.Entries)
                 {
                     if (entry.Role == ConversationRole.User)
@@ -6529,6 +6538,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 EndUserConversationTerminalPersist();
             }
 
+            CompleteTenantInputInterruption(job.HumanInputCompleted);
             job.HumanInputCompleted?.TrySetResult(job.InputCommit);
             job.Applied.TrySetResult();
         }

@@ -10,7 +10,8 @@ public static class TenantSessionEndpoints
     public sealed record CreateRequest(Guid AgentInstanceId, long ExpectedRevision, long ExpectedInstanceRevision, string Mode = "text", string? ModelKey = null, string? ReasoningEffort = null);
     public sealed record Witness(long ExpectedRevision, long ExpectedSessionRevision);
     public sealed record RenameRequest(string Title, long ExpectedRevision, long ExpectedSessionRevision);
-    public sealed record MessageRequest(Guid MessageId, string Text, long ExpectedRevision, long ExpectedSessionRevision, IReadOnlyList<Guid>? AttachmentIds = null, string? Behavior = null);
+    public sealed record MessageRequest(Guid MessageId, string Text, long ExpectedRevision, long ExpectedSessionRevision, IReadOnlyList<Guid>? AttachmentIds = null, string? Behavior = null,
+        Guid? InterruptedRunId = null, long? ExpectedRunRevision = null);
     public sealed record RunWitness(long ExpectedRevision, long ExpectedRunRevision);
     public static void Map(WebApplication app)
     {
@@ -71,9 +72,9 @@ public static class TenantSessionEndpoints
         group.MapPost("/{sessionId:guid}/messages", (Guid sessionId, MessageRequest body, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            if (body.Behavior is not (null or "queue")) throw AgentCoreErrors.Validation("Tenant messages currently support queue behavior.");
+            var interruption = TenantInputInterruptionRules.Request(body.Behavior, body.InterruptedRunId, body.ExpectedRunRevision);
             var receipt = await service.SubmitMessageAsync(actor.TenantId, sessionId, Initiator(http, actor), body.MessageId, body.Text, body.AttachmentIds ?? [],
-                body.ExpectedRevision, body.ExpectedSessionRevision, ct).ConfigureAwait(false);
+                body.ExpectedRevision, body.ExpectedSessionRevision, ct, interruption).ConfigureAwait(false);
             return Results.Json(receipt, statusCode: receipt.Created ? StatusCodes.Status202Accepted : StatusCodes.Status200OK);
         }));
         app.MapGet("/api/v2/tenants/{tenantId:guid}/agent-runs/{runId:guid}", (Guid runId, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>

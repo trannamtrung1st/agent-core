@@ -22,6 +22,8 @@ public sealed partial class SqliteIamStore : ITenantRuntimeInputStore
         var visible = result.Created ? snapshot with { Revision = result.SessionRevision, LastEntrySequence = admission.Input.Sequence,
             LastUserActivityAt = snapshot.LastUserActivityAt > admission.Input.CreatedAt ? snapshot.LastUserActivityAt : admission.Input.CreatedAt, UpdatedAt = admission.Input.CreatedAt > snapshot.UpdatedAt ? admission.Input.CreatedAt : snapshot.UpdatedAt }
             : await LoadTenantRuntimeAsync(frame, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_runtime_unavailable");
-        return new(result, visible, result.Created ? next.Tenant.Revision : state.Tenant.Revision);
+        var stopped = result.Interrupted;
+        if (stopped is not null) visible = TenantInputInterruptionRules.Interrupt(visible, stopped, stopped.UpdatedAtUtc);
+        return new(result, visible, result.Created ? next.Tenant.Revision : state.Tenant.Revision, stopped);
     }
 }

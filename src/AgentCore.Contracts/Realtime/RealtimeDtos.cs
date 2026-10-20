@@ -117,6 +117,10 @@ public sealed class AttachPayload
 [MessagePackObject]
 public sealed class UserTextPayload
 {
+    [Key("interruptedRunId")]
+    public string? InterruptedRunId { get; set; }
+    [Key("expectedRunRevision")]
+    public long? ExpectedRunRevision { get; set; }
     [Key("expectedRevision")]
     public long? ExpectedRevision { get; set; }
     [Key("expectedSessionRevision")]

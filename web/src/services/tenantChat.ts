@@ -83,3 +83,8 @@ export async function tenantCancelWitness(run: string) {
   const [saved, access] = await Promise.all([request<{ revision: number }>(path(`/agent-runs/${encodeURIComponent(run)}`)), tenantChatAccess()]);
   return { expectedRevision: access.revision, expectedRunRevision: saved.revision };
 }
+export async function tenantInterruptWitness(id: string, run: string) {
+  const [view, saved, access] = await Promise.all([tenantSessionMetadata(id), request<{ revision: number; canCancel: boolean; context: { sessionId: string } }>(path(`/agent-runs/${encodeURIComponent(run)}`)), tenantChatAccess()]);
+  if (!saved.canCancel || saved.context.sessionId !== id) throw new Error('This response can no longer be interrupted. Check the current conversation before trying again.');
+  return { expectedRevision: access.revision, expectedSessionRevision: view.revision, interruptedRunId: run, expectedRunRevision: saved.revision };
+}

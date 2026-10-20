@@ -43,15 +43,20 @@ public sealed partial class TenantSessionLiveDelivery
         {
             var body = command.Payload;
             if (body is null || body.ExpectedRevision is not >= 1 || body.ExpectedSessionRevision is not >= 1
-                || body.Parts is { Length: > 0 } || body.Behavior is not (null or "queue") || MessageAttachmentIds(body) is not { } attachmentIds)
-                return Reject(command.EventId, "ValidationError", "Tenant messages require revision witnesses, queue behavior, plain text and at most ten Attachment IDs.", "Validation");
+                || body.Parts is { Length: > 0 } || MessageAttachmentIds(body) is not { } attachmentIds
+                || body.InterruptedRunId is not null && !Guid.TryParse(body.InterruptedRunId, out var parsedInterruption))
+                return Reject(command.EventId, "ValidationError", "Tenant messages require revision witnesses, exact input behavior, plain text and at most ten Attachment IDs.", "Validation");
+            var interruption = TenantInputInterruptionRules.Request(body.Behavior, body.InterruptedRunId is null ? null : Guid.Parse(body.InterruptedRunId), body.ExpectedRunRevision);
             var result = await service.SubmitMessageAsync(subscription.Tenant, subscription.Session, subscription.Human, Guid.Parse(command.EventId),
-                body.Text, attachmentIds, body.ExpectedRevision.Value, body.ExpectedSessionRevision.Value, token).ConfigureAwait(false);
+                body.Text, attachmentIds, body.ExpectedRevision.Value, body.ExpectedSessionRevision.Value, token, interruption).ConfigureAwait(false);
             return new() { EventId = command.EventId, Accepted = true, Result = new() {
                 ["created"] = result.Created, ["runId"] = result.RunId.ToString("D"), ["entryId"] = result.EntryId.ToString("D"),
                 ["responseId"] = result.ResponseId.ToString("D"), ["activationId"] = result.ActivationId.ToString("D"),
                 ["rootActivationId"] = result.RootActivationId.ToString("D"), ["sessionRevision"] = result.SessionRevision, ["securityRevision"] = result.SecurityRevision } };
         }, ct, async (subscription, token) => {
+            if (command.Payload is { Behavior: "interrupt", ExpectedRunRevision: >= 1 } interrupted && Guid.TryParse(interrupted.InterruptedRunId, out var interruptedRun))
+                await service.RequireMessageInterruptionAsync(subscription.Tenant, subscription.Session, subscription.Human,
+                    new(interruptedRun, interrupted.ExpectedRunRevision.Value), token).ConfigureAwait(false);
             if (MessageAttachmentIds(command.Payload) is { Length: > 0 } ids)
                 await service.RequireMessageAttachmentsAsync(subscription.Tenant, subscription.Session, subscription.Human, ids, token).ConfigureAwait(false);
         });
@@ -129,8 +134,8 @@ public sealed partial class TenantSessionLiveDelivery
             // Never hold the publication gate while a command waits on the Runtime mailbox: cancellation
             // itself publishes its interruption through that gate before acknowledging its durable commit.
             try { ack = await action(subscription, target, ct).ConfigureAwait(false); }
-            catch (AccessDeniedException ex) { ack = Reject(command.EventId, ex.ReasonCode, ex.ReasonCode == "attachment_unavailable" ? "The selected files are unavailable. Remove them or check current file access before trying again." : "This command is not authorized.", "Authorization"); }
-            catch (SecurityConflictException ex) { ack = Reject(command.EventId, ex.ReasonCode, "State changed. Reload before trying again."); }
+            catch (AccessDeniedException ex) { ack = Reject(command.EventId, ex.ReasonCode, AuthorizationMessage(ex.ReasonCode), "Authorization"); }
+            catch (SecurityConflictException ex) { ack = Reject(command.EventId, ex.ReasonCode, ConflictMessage(ex.ReasonCode)); }
             catch (AgentCoreException ex) when (ex.Code is "ValidationError" or "Conflict" or "NotFound")
             { ack = Reject(command.EventId, ex.ValidationCode ?? ex.Code, "The command could not be admitted.", ex.Code == "ValidationError" ? "Validation" : "Session"); }
             subscription.LastCommand = command.Sequence;
@@ -138,10 +143,16 @@ public sealed partial class TenantSessionLiveDelivery
             while (subscription.DedupeOrder.Count > 128) subscription.Dedupe.Remove(subscription.DedupeOrder.Dequeue());
             return ack;
         }
-        catch (AccessDeniedException ex) { return Reject(command.EventId, ex.ReasonCode, ex.ReasonCode == "attachment_unavailable" ? "The selected files are unavailable. Remove them or check current file access before trying again." : "This command is not authorized.", "Authorization"); }
-        catch (SecurityConflictException ex) { return Reject(command.EventId, ex.ReasonCode, "State changed. Reload before trying again."); }
+        catch (AccessDeniedException ex) { return Reject(command.EventId, ex.ReasonCode, AuthorizationMessage(ex.ReasonCode), "Authorization"); }
+        catch (SecurityConflictException ex) { return Reject(command.EventId, ex.ReasonCode, ConflictMessage(ex.ReasonCode)); }
         finally { connection.Commands.Release(); }
     }
+    private static string AuthorizationMessage(string reason) => reason switch {
+        "attachment_unavailable" => "The selected files are unavailable. Remove them or check current file access before trying again.",
+        "interruption_unavailable" => "You can still queue messages. Permission to stop this response is required to steer.",
+        _ => "This command is not authorized." };
+    private static string ConflictMessage(string reason) => reason == "stale_interruption"
+        ? "That response changed. Check the current response before steering again." : "State changed. Reload before trying again.";
     private static CommandAck Reject(string id, string reason, string message, string category = "Session") => new() { EventId = id, Accepted = false,
         Error = new() { Category = category, Code = reason, Message = message, Fatal = false } };
 }

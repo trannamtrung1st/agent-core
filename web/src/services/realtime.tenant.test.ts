@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const tenant = vi.hoisted(() => ({ witness: vi.fn() }));
+const tenant = vi.hoisted(() => ({ witness: vi.fn(), interruption: vi.fn() }));
 vi.mock('./tenantChat', async importOriginal => ({
   ...await importOriginal<typeof import('./tenantChat')>(),
   chatTenantId: '11111111-1111-1111-1111-111111111111',
-  tenantTextWitness: tenant.witness
+  tenantTextWitness: tenant.witness,
+  tenantInterruptWitness: tenant.interruption
 }));
 import { emptySession, useSessionStore } from '../state/sessionStore';
-import { realtimeTestHooks, sendDraft, reportCommittedEntries } from './realtime';
+import { realtimeTestHooks, sendDraft, reportCommittedEntries, steerQueuedSend } from './realtime';
 const hooks = realtimeTestHooks!;
 beforeEach(() => {
-  tenant.witness.mockReset(); hooks.resetOutput();
+  tenant.witness.mockReset(); tenant.interruption.mockReset(); hooks.resetOutput();
   useSessionStore.setState({ ...emptySession(), connection: 'ready', sessionId: 'session-one', attachmentId: 'attachment-one', status: 'attached', draft: 'Prepared text', agents: [] });
 });
 afterEach(() => { hooks.resetOutput(); hooks.setConnection(null); });
@@ -56,3 +57,35 @@ it('sends file-only tenant input with exact selected IDs and fresh witnesses whi
    useSessionStore.setState({ draft: 'Keep this draft', pendingAttachments: [file] }); await sendDraft();
    expect(useSessionStore.getState()).toMatchObject({ sessionId: 'session-one', connection: 'ready', draft: 'Keep this draft', pendingAttachments: [file] });
  });
+
+it('steers with the captured current Run and exact fresh cancellation witnesses', async () => {
+  const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke } as never);
+  useSessionStore.setState({ agentRunId: 'run-one', liveResponseId: 'response-one' });
+  tenant.interruption.mockResolvedValue({ expectedRevision: 7, expectedSessionRevision: 9, interruptedRunId: 'run-one', expectedRunRevision: 3 });
+  await sendDraft('interrupt');
+  expect(tenant.interruption).toHaveBeenCalledWith('session-one', 'run-one');
+  expect(invoke).toHaveBeenCalledWith('SendText', expect.objectContaining({ payload: {
+    text: 'Prepared text', behavior: 'interrupt', interruptedRunId: 'run-one', expectedRunRevision: 3, expectedRevision: 7, expectedSessionRevision: 9
+  } }));
+});
+
+it('refuses a prepared steer if a different Run becomes current before dispatch', async () => {
+  const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke } as never);
+  useSessionStore.setState({ agentRunId: 'run-one', liveResponseId: 'response-one' });
+  let resolve!: (value: unknown) => void; tenant.interruption.mockImplementation(() => new Promise(done => { resolve = done; }));
+  const pending = sendDraft('interrupt'); await vi.waitFor(() => expect(tenant.interruption).toHaveBeenCalled());
+  useSessionStore.setState({ agentRunId: 'run-two', liveResponseId: 'response-two' });
+  resolve({ expectedRevision: 7, expectedSessionRevision: 9, interruptedRunId: 'run-one', expectedRunRevision: 3 }); await pending;
+  expect(invoke).not.toHaveBeenCalled(); expect(useSessionStore.getState().draft).toBe('Prepared text');
+  expect(useSessionStore.getState().connection).toBe('ready');
+});
+
+it('keeps the queued draft and files when independent interruption permission is refused', async () => {
+  const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { category: 'Authorization', code: 'interruption_unavailable', message: 'This interruption is unavailable.' } });
+  hooks.setConnection({ invoke } as never); useSessionStore.setState({ agentRunId: 'run-one', liveResponseId: 'response-one', draft: '' });
+  tenant.interruption.mockResolvedValue({ expectedRevision: 7, expectedSessionRevision: 9, interruptedRunId: 'run-one', expectedRunRevision: 3 });
+  const item = { localId: 'queued-one', eventId: 'first-event', text: 'A different objective', attachmentIds: [], attachments: [], createdAt: 1, dispatching: false, error: null };
+  useSessionStore.setState({ pendingSendQueue: [item] }); await steerQueuedSend(item.localId);
+  expect(useSessionStore.getState()).toMatchObject({ sessionId: 'session-one', connection: 'ready', pendingSendQueue: [{ text: item.text, dispatching: false, error: 'This interruption is unavailable.' }] });
+  expect(useSessionStore.getState().pendingSendQueue[0].eventId).not.toBe(item.eventId);
+});

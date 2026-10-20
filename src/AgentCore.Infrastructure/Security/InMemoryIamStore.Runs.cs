@@ -67,6 +67,8 @@ public sealed partial class InMemoryIamStore
             if (agent is null || agent.Instance.Revision != admission.ExpectedInstanceRevision) return ValueTask.FromResult<TenantRunAdmissionResult?>(null);
             if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
             TenantSessionRules.RequireExecutor(before, agent); ct.ThrowIfCancellationRequested();
+            TenantInputInterruptionRules.Shape(admission);
+            TenantInputInterruptionRules.PermissionsAsync(before, initiator.PrincipalId, admission.Interruption, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             var sources = admission.Attachments ?? [];
             if (sources.Count > 0 && attachmentBacking is null) throw new AccessDeniedException("attachment_unavailable");
             TenantAttachmentBindingRules.PermissionsAsync(before, initiator.PrincipalId, run.SessionId, sources, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
@@ -76,7 +78,17 @@ public sealed partial class InMemoryIamStore
                 TenantAttachmentBindingRules.Current(admission, actual, (clock ?? TimeProvider.System).GetUtcNow());
             }, frame, liveSnapshot, runtimeExpectedRevision, clock ?? TimeProvider.System);
             if (result?.Created == true) attachmentBacking?.BindTenantSources(admission);
-            if (result?.Created == true) { _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); }
+            if (result?.Created == true)
+            {
+                if (result.Interrupted is { } stopped)
+                {
+                    SettleTenantCompletion(stopped, frame!.Generation);
+                    if (stopped.ApprovalRequestId is { } requestId && _operationGrants.GetValueOrDefault(requestId) is { Status: OperationGrantStatus.Available } grant)
+                        _operationGrants[requestId] = grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) };
+                    _audit.Add(TenantInputInterruptionRules.Audit(admission, initiator, stopped.UpdatedAtUtc));
+                }
+                _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
+            }
             return ValueTask.FromResult(result);
         }
     }

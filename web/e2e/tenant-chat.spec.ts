@@ -221,3 +221,68 @@ for (const decision of ['approve', 'reject'] as const) test(`original Chat recov
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });
+
+test('tenant Steer atomically interrupts the current Run with row and keyboard controls', async ({ page }, testInfo) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    await page.setViewportSize({ width: 1440, height: 1000 }); await signIn(page); await page.goto(f.path);
+    await send(page, '[test:durable-stream-long] original steer objective');
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+    const session = page.url().split('/').pop()!;
+    const before = await call<{ items: { runId: string; status: string }[] }>(f.api, `${f.prefix}/agents/${f.agent}/activity/runs?page=0&pageSize=20`);
+    const original = before.items.find(item => item.status === 'running')!; expect(original).toBeTruthy();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Steered exact human objective');
+    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Steer queued message 1' })).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath('steer-wide.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Steer queued message 1' }).click();
+    await reply(page); await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toHaveCount(0);
+    await expect.poll(async () => (await call<{ status: string }>(f.api, `${f.prefix}/agent-runs/${original.runId}`)).status).toBe('cancelled');
+    const history = await call<{ items: { text: string; status: string; interruptReason?: string }[] }>(f.api, `${f.prefix}/sessions/${session}/messages?limit=100`);
+    expect(history.items.filter(item => item.text === 'Steered exact human objective')).toHaveLength(1);
+    expect(history.items.filter(item => item.status === 'interrupted')).toHaveLength(1);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await send(page, '[test:durable-stream-long] narrow explicit interruption');
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Retain this unrelated queued objective');
+    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Steer queued message 1' })).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath('steer-narrow.png'), fullPage: true });
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Keyboard steered objective');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+Enter'); await reply(page, 3);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.reload(); await reply(page, 3);
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});
+
+test('Chat permission permits Queue while Steer requires independent Run cancellation authority', async ({ page }) => {
+  const f = await fixture(); const nonce = crypto.randomUUID().slice(0, 8), email = `steer-reader-${nonce}@example.test`, secret = 'synthetic-steer-reader-password';
+  try {
+    const role = await call<{ roleId: string }>(f.api, `${f.prefix}/roles`, { name: `Chat without cancellation ${nonce}`, permissions: ['sessions.read', 'sessions.create', 'agents.chat'], expectedRevision: await f.revision() });
+    const invitation = await call<{ invitationId: string; token: string }>(f.api, `${f.prefix}/members/invite`, { login: email, roleId: role.roleId, expectedRevision: await f.revision() });
+    await call(page.request, '/api/v2/auth/register', { login: email, displayName: 'Chat reader', password: secret, invitation: { tenantId: f.tenant, invitationId: invitation.invitationId, token: invitation.token } });
+    const observed = watch(page); await signIn(page, email, secret); await page.goto(f.path);
+    await send(page, '[test:durable-stream-long] Chat-only live objective');
+    await expect(page.getByRole('button', { name: 'Queue', exact: true })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Retain my unprivileged queued objective');
+    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Steer queued message 1' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
+    const session = page.url().split('/').pop()!;
+    let active: { runId: string; status: string; revision: number } | undefined;
+    await expect.poll(async () => {
+      active = (await call<{ items: { runId: string; status: string; revision: number }[] }>(f.api, `${f.prefix}/agents/${f.agent}/activity/runs?page=0&pageSize=20`)).items.find(item => item.status === 'running');
+      return !!active;
+    }).toBe(true);
+    const meta = await call<{ revision: number }>(page.request, `${f.prefix}/sessions/${session}`), access = await call<{ revision: number }>(page.request, `${f.prefix}/access/me`);
+    const csrf = await call<{ token: string }>(page.request, '/api/v2/auth/csrf');
+    const denied = await page.request.post(`${f.prefix}/sessions/${session}/messages`, { headers: { 'X-AgentCore-CSRF': csrf.token }, data: {
+      messageId: crypto.randomUUID(), text: 'Forbidden interruption', behavior: 'interrupt', interruptedRunId: active!.runId, expectedRunRevision: active!.revision, expectedRevision: access.revision, expectedSessionRevision: meta.revision
+    } });
+    expect(denied.status()).toBe(403);
+    expect((await call<{ status: string }>(f.api, `${f.prefix}/agent-runs/${active!.runId}`)).status).toBe('running');
+    await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toContainText('Retain my unprivileged queued objective');
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]); // The independent Run-read metadata request is expected to return 403.
+  } finally { await f.api.dispose(); }
+});

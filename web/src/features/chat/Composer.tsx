@@ -358,7 +358,7 @@ export function Composer({
           >
             {visibleQueue.map((item) => {
               const position = pendingSendQueue.findIndex((queued) => queued.localId === item.localId) + 1;
-              const steerEnabled = composerSteerEnabled(item.localId);
+              const steerEnabled = composerSteerEnabled(item.localId) && (!plainTextOnly || canStop);
               return (
                 <li key={item.localId} className="pending-send-queue-item">
                   <UnorderedListOutlined className="pending-send-queue-icon" aria-hidden="true" />
@@ -378,7 +378,7 @@ export function Composer({
                     ) : null}
                   </div>
                   <Flex gap={token.paddingXS} align="center" className="pending-send-queue-actions">
-                    {!plainTextOnly && <Tooltip title="Steer">
+                    <Tooltip title={plainTextOnly && !canStop ? "Steer requires permission to stop the current response." : "Use this message to interrupt the current response"}>
                       <Button
                         type="text"
                         size="small"
@@ -388,7 +388,7 @@ export function Composer({
                       >
                         Steer
                       </Button>
-                    </Tooltip>}
+                    </Tooltip>
                     <Tooltip title="Remove">
                       <Button
                         type="text"
@@ -431,7 +431,7 @@ export function Composer({
             ))}
           </ul>
         ) : null}
-        {plainTextOnly ? <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} onPaste={event => { if (fileAttachmentsEnabled && event.clipboardData.files.length) { event.preventDefault(); takeFiles(event.clipboardData.files); } }} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (canSend) onSend(); } }} /> : <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>}
+        {plainTextOnly ? <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} onPaste={event => { if (fileAttachmentsEnabled && event.clipboardData.files.length) { event.preventDefault(); takeFiles(event.clipboardData.files); } }} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!canSend) return; if (event.metaKey || event.ctrlKey) { if (canStop) onSend('interrupt'); } else onSend(); } }} /> : <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>}
         <input
           ref={fileInput}
           className="attach-input"
@@ -527,7 +527,7 @@ export function Composer({
                 />
               </ComposerActionTooltip>
             ) : (
-              <ComposerActionTooltip suppressed={approvalPending} title={plainTextOnly ? `${sendLabel} (Enter)` : `${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
+              <ComposerActionTooltip suppressed={approvalPending} title={plainTextOnly && !canStop ? `${sendLabel} (Enter)` : `${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
                 <Button
                   type="primary"
                   htmlType="submit"

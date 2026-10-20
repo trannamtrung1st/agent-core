@@ -27,7 +27,9 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeInputStore
             var visible = result.Created ? snapshot with { Revision = result.SessionRevision, LastEntrySequence = admission.Input.Sequence,
                 LastUserActivityAt = snapshot.LastUserActivityAt > admission.Input.CreatedAt ? snapshot.LastUserActivityAt : admission.Input.CreatedAt, UpdatedAt = admission.Input.CreatedAt > snapshot.UpdatedAt ? admission.Input.CreatedAt : snapshot.UpdatedAt }
                 : sessionBacking.LoadTenantRuntime(frame, (clock ?? TimeProvider.System).GetUtcNow())!;
-            return ValueTask.FromResult(new TenantHumanInputCommit(result, visible, result.Created ? next.Tenant.Revision : state.Tenant.Revision));
+            var stopped = result.Interrupted;
+            if (stopped is not null) visible = TenantInputInterruptionRules.Interrupt(visible, stopped, stopped.UpdatedAtUtc);
+            return ValueTask.FromResult(new TenantHumanInputCommit(result, visible, result.Created ? next.Tenant.Revision : state.Tenant.Revision, stopped));
         }
     }
 }

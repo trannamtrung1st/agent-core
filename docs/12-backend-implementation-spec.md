@@ -94,7 +94,7 @@ This module does not open Browser/Sandbox execution, Credentials/configuration c
 
 Runnable filtering excludes blocked same-Session inputs before the global batch limit, then repeats that fence at claim. Human Runs dispatch in saved creation/source-entry/ID order; earlier retries retain their position and approval waits release the slot. Queued completion reports yield to nonterminal human work, and reports order among themselves without circular waiting. Already-running factual reports and terminal/suspended Runtime generations finish before the host rebases only the Session witness and retries intake; current human/security/configuration/source checks still apply. Accepted input survives current-task cancellation and uses the same durable graph after restart.
 
-Only null/queue behavior is admitted. Interrupt/Steer, voice arbitration and frontend live-send interaction remain separate proposal work. No new queue table, competing mutable Session owner, protocol event or raw-audio mailbox path is introduced.
+Null/queue remains the default. Explicit Interrupt/Steer uses the exact cancellation/admission extension below; voice arbitration remains separate proposal work. No new queue table, competing mutable Session owner, protocol event or raw-audio mailbox path is introduced.
 
 ## Tenant immediate-background file observation
 
@@ -1254,3 +1254,10 @@ The existing canonical filesystem owns no-follow exclusive collision attempts, q
 
 
 Human copy access hints reuse `TenantAttachmentMaterializationService.InspectAsync` and the original-human facade. The read computes current independent copy permissions only after exact source and parent reads, repeats the source/identity/Instance/security fence and exposes no workspace or Artifact contents. This supplies the shared frontend copy inspector; execution still uses the existing independently checked POST transaction.
+
+
+## Tenant interruption implementation
+
+`TenantInputInterruptionRules` normalizes explicit behavior and exact target/revision, freezes it in Activation evidence and checks current independent cancellation permissions. The incumbent human admission transaction rechecks the exact live frame, claim, lease and revision; uses its transaction clock for cancellation; preserves the captured Interrupted prefix; settles completion accounting/revokes an available exact grant; and admits the new root with both audits and one security revision. The retiring validated source credits one nonterminal queue slot. Same-message replay compares immutable interruption evidence before touching live work and returns the original fact.
+
+The Runtime holds normalized model/brain callbacks while the matching input persistence job is pending. Existing producer Processed acknowledgements bound the hold. The mailbox remains available for persistence completion; refusal drains held callbacks, success completes/discards them without publishing. The host supervises an enqueued input and retires its committed source even when the requesting HTTP/Hub caller disconnects. The atomic result carries the exact cancelled source rather than reloading it after commit. [Focused qualification](reports/tenant-input-interruption-verification-2026-10-21.md).

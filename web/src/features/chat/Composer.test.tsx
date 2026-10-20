@@ -445,3 +445,14 @@ describe("Composer voice toolbar", () => {
     fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), { clipboardData: { files: [file] } });
     expect(queueComposerFiles).toHaveBeenCalledWith([file]); expect(queueComposerFiles).toHaveBeenCalledTimes(1);
  });
+
+it('offers tenant Steer only with current cancellation authority and keeps Ctrl+Enter explicit', () => {
+  const onSend = vi.fn();
+  const view = render(<Composer {...emptyComposerProps()} plainTextOnly canSend draft="New objective" canStop={false} onSend={onSend} pendingSendQueue={[queueItem(1, 'Queued objective')]} />);
+  expect(screen.getByRole('button', { name: 'Steer queued message 1' })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true }); expect(onSend).not.toHaveBeenCalled();
+  view.rerender(<Composer {...emptyComposerProps()} plainTextOnly canSend draft="New objective" canStop onSend={onSend} pendingSendQueue={[queueItem(1, 'Queued objective')]} />);
+  expect(screen.getByRole('button', { name: 'Steer queued message 1' })).toBeEnabled();
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true }); expect(onSend).toHaveBeenLastCalledWith('interrupt');
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' }); expect(onSend).toHaveBeenLastCalledWith();
+});

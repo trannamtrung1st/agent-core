@@ -1,5 +1,5 @@
 import { hasTask, messageText, snapshotParts, wireParts, type MessagePart, type ResourceReference } from "./messageParts";
-import { chatTenantId, retireTenantChatRequests, tenantCanCreateChat, tenantCancelWitness, tenantChatCandidates, tenantTextWitness } from './tenantChat';
+import { chatTenantId, retireTenantChatRequests, tenantCanCreateChat, tenantCancelWitness, tenantChatCandidates, tenantTextWitness, tenantInterruptWitness } from './tenantChat';
 import { newChatPath } from '../app/sessionRoute';
 import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
@@ -276,7 +276,7 @@ async function invoke(
     // Authorization. Reattach without replaying this command; actual access is checked again.
     void recoverFromSequenceGap('explicit');
   } else if (chatTenantId && result.error?.category === 'Authorization'
-    && !(method === 'SendText' && result.error.code === 'attachment_unavailable')
+    && !(method === 'SendText' && ['attachment_unavailable', 'interruption_unavailable'].includes(result.error.code ?? ''))
     && !['receipt_unavailable', 'receipt_out_of_bounds', 'UnknownResponse', 'tenant_runtime_unavailable'].includes(result.error.code ?? '')) {
     // A queued receipt can lose to Stop's interrupted-row commit. That refusal (and an
     // unknown response target) says nothing about this human's access to the conversation.
@@ -621,6 +621,7 @@ let pendingUserText: {
   pendingAttachments: PendingAttachment[];
   behavior: "queue" | "interrupt";
   queueLocalId?: string;
+  interruption?: { interruptedRunId: string; expectedRunRevision: number };
 } | null = null;
 
 function delay(ms: number): Promise<void> {
@@ -3263,6 +3264,8 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     && pendingUserText.behavior === behavior
     && pendingUserText.attachmentIds.join() === readyAttachmentIds.join();
   const eventId = reusePending ? pendingUserText!.eventId : message.eventId ?? uuid();
+  const interruption = reusePending ? pendingUserText?.interruption : undefined;
+  const interruptedRun = interruption?.interruptedRunId ?? snapshot.agentRunId;
   const pendingAttachmentSnapshot = message.attachments.slice();
   const queueLocalId = message.source?.kind === "queue" ? message.source.localId : null;
   pendingUserText = {
@@ -3272,6 +3275,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     attachmentIds: readyAttachmentIds,
     pendingAttachments: pendingAttachmentSnapshot,
     behavior,
+    interruption,
     queueLocalId: queueLocalId ?? undefined
   };
   const refs: HistoryAttachment[] = message.attachments
@@ -3298,12 +3302,27 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   }
 
   let accepted = false;
+  let dispatched = false;
   awaitingAgentResponseStart = true;
   sendRequest = (async () => {
     try {
-      const ack = await dispatchHubCommand((sequence) =>
-        invoke("SendText", "user.text", payload, sequence, null, eventId)
-      , chatTenantId ? async () => { payload = { text, ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...await tenantTextWitness(snapshot.sessionId!) }; } : undefined);
+      const ack = await dispatchHubCommand((sequence) => {
+        dispatched = true;
+        return invoke("SendText", "user.text", payload, sequence, null, eventId);
+      }
+      , chatTenantId ? async () => {
+        let witness: Record<string, unknown>;
+        if (behavior === 'interrupt') {
+          if (!interruptedRun) throw new Error('The response changed. Check the current conversation before steering.');
+          if (interruption) witness = { ...await tenantTextWitness(snapshot.sessionId!), ...interruption };
+          else {
+            witness = await tenantInterruptWitness(snapshot.sessionId!, interruptedRun);
+            if (useSessionStore.getState().agentRunId !== interruptedRun) throw new Error('The response changed. Steer the current response explicitly.');
+          }
+          if (pendingUserText?.eventId === eventId) pendingUserText.interruption = { interruptedRunId: interruptedRun, expectedRunRevision: Number(witness.expectedRunRevision) };
+        } else witness = await tenantTextWitness(snapshot.sessionId!);
+        payload = { text, ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...witness, ...(behavior === 'interrupt' ? { behavior } : {}) };
+      } : undefined);
       if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
       if (!ack?.accepted) {
         clearAwaitingAgentResponseStart();
@@ -3319,7 +3338,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
           clearQueueItemDispatchState(queueLocalId);
           useSessionStore.setState((state) => ({
             pendingSendQueue: state.pendingSendQueue.map((item) =>
-              item.localId === queueLocalId ? { ...item, error: errorMessage } : item),
+              item.localId === queueLocalId ? { ...item, eventId: uuid(), error: errorMessage } : item),
             ...(state.errorFatal ? {} : failure)
           }));
         } else {
@@ -3344,6 +3363,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
       }
     } catch (error) {
       if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
+      if (!dispatched && pendingUserText?.eventId === eventId) pendingUserText = null;
       clearAwaitingAgentResponseStart();
       const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";
       if (queueLocalId) {
@@ -3355,6 +3375,10 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
           ...sessionFailurePatch(errorMessage, { category: "Transport", code: "SendFailed" })
         }));
       } else {
+        if (!dispatched) {
+          restoreDraft(text, errorMessage, undefined, pendingAttachmentSnapshot, message.parts);
+          return;
+        }
         useSessionStore.setState({
           pendingAttachments: mergePendingAttachments(pendingUserText?.pendingAttachments ?? pendingAttachmentSnapshot),
           ...sessionFailurePatch(errorMessage, { category: "Transport", code: "SendFailed" })
@@ -3404,7 +3428,6 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
 }
 
 export function composerSteerEnabled(localId: string): boolean {
-  if (chatTenantId) return false;
   const snapshot = useSessionStore.getState();
   const item = snapshot.pendingSendQueue.find((queued) => queued.localId === localId);
   const anyDispatching = snapshot.pendingSendQueue.some((queued) => queued.dispatching);

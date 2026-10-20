@@ -114,6 +114,8 @@ public sealed partial class SqliteIamStore
             var value = TenantRunRules.Admit(new(root.Domain(), frame is null ? current : liveSnapshot!), admission, agent, initiator, live: frame is not null);
             var sources = admission.Attachments ?? [];
             var currentState = (await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!;
+            TenantInputInterruptionRules.Shape(admission);
+            await TenantInputInterruptionRules.PermissionsAsync(currentState, initiator.PrincipalId, admission.Interruption, new IamAuthorizer(this), ct).ConfigureAwait(false);
             await TenantAttachmentBindingRules.PermissionsAsync(currentState, initiator.PrincipalId, run.SessionId, sources, new IamAuthorizer(this), ct).ConfigureAwait(false);
             var key = run.Admission.Activation.DedupeKey;
             var duplicate = await db.Activations.AsNoTracking().SingleOrDefaultAsync(a => a.SessionId == root.SessionId && a.DedupeKey == key, ct).ConfigureAwait(false);
@@ -127,7 +129,14 @@ public sealed partial class SqliteIamStore
                 result = new(false, saved, Guid.Parse(inputId), current.Revision); return false;
             }
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status == (int)AgentRunStatus.Running && (frame == null || r.AgentRunId != frame.RunId.ToString("D")), ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
-            if (await db.AgentRuns.CountAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false) >= 100)
+            AgentRunRecord? interruptedRow = null; AgentRun? interrupted = null;
+            if (admission.Interruption is { } interruption)
+            {
+                interruptedRow = await OwnedRuns(db, next.Tenant.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == interruption.RunId.ToString("D"), ct).ConfigureAwait(false);
+                interrupted = TenantInputInterruptionRules.Target(admission, interruptedRow is null ? null : AgentRunStoreMapping.ToDomain(interruptedRow), frame, (clock ?? TimeProvider.System).GetUtcNow());
+                value = TenantInputInterruptionRules.Interrupt(value, interrupted, interrupted.UpdatedAtUtc);
+            }
+            if (await db.AgentRuns.CountAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false) - (interrupted is null ? 0 : 1) >= 100)
                 throw new SecurityConflictException("session_queue_full");
             var attachmentRows = new List<AttachmentRecordRow>(sources.Count);
             foreach (var source in sources)
@@ -151,7 +160,26 @@ public sealed partial class SqliteIamStore
                 }
             }
             if (frame is not null) _ = await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
-            result = new(true, run, admission.Input.EntryId, value.Revision); return true;
+            if (interrupted is not null)
+            {
+                var response = interrupted.ResponseId!.Value.ToString("D");
+                await db.Entries.Where(e => e.SessionId == root.SessionId && e.ResponseId == response).LoadAsync(ct).ConfigureAwait(false);
+                foreach (var entry in db.Entries.Local.Where(e => e.SessionId == root.SessionId && e.ResponseId == response).ToArray())
+                {
+                    var old = SqliteMemoryStore.ToEntry(entry);
+                    var changed = TenantInputInterruptionRules.Interrupt(value with { Entries = [old] }, interrupted, interrupted.UpdatedAtUtc).Entries.Single();
+                    db.Entry(entry).CurrentValues.SetValues(SqliteMemoryStore.ToRecord(root.SessionId, changed));
+                }
+                AgentRunStoreMapping.Apply(interruptedRow!, interrupted);
+                await SettleTenantCompletion(db, interrupted, frame!.Generation, ct).ConfigureAwait(false);
+                if (interrupted.ApprovalRequestId is { } requestId)
+                {
+                    var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == next.Tenant.TenantId && g.RequestId == requestId, ct).ConfigureAwait(false);
+                    if (grant is { Status: OperationGrantStatus.Available }) db.Entry(grant).CurrentValues.SetValues(grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
+                }
+                db.Add(TenantInputInterruptionRules.Audit(admission, initiator, interrupted.UpdatedAtUtc));
+            }
+            result = new(true, run, admission.Input.EntryId, value.Revision, interrupted); return true;
         }, ct).ConfigureAwait(false);
         return written || result is { Created: false } ? result : null;
     }

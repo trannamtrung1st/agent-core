@@ -1584,6 +1584,11 @@ body,
     min-height: 44px;
   }
 
+  .pending-send-queue-actions .ant-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   .admin-run-source.ant-btn,
   .background-work-drawer .ant-btn,
   .session-sandbox-drawer .ant-btn,

@@ -19,6 +19,7 @@ public static class TenantRunRules
         var run = admission.Run; var a = run.Admission.Activation; var context = run.Admission.ExecutionContext;
         var current = session.Snapshot; var input = admission.Input;
         TenantAttachmentBindingRules.Shape(admission);
+        TenantInputInterruptionRules.Shape(admission);
         if (context is null || context.Origin != ExecutionOrigin.UserMessage || context.OriginalInitiatorPrincipalId != initiator.PrincipalId
             || context.TenantId != session.Owner.TenantId || context.AgentPrincipalId != session.Owner.ExecutorPrincipalId
             || run.Owner != AgentRunOwner.ForTenant(session.Owner.TenantId, session.Owner.AgentInstanceId, session.Owner.ExecutorPrincipalId)
@@ -50,5 +51,6 @@ public static class TenantRunRules
         && saved.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage
         && saved.Admission.ExecutionContext?.OriginalInitiatorPrincipalId == proposed.Run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId
         && savedInput.SourceEventId == proposed.Input.SourceEventId && savedInput.Text == proposed.Input.Text
+        && saved.Admission.Activation.EvidenceJson == proposed.Run.Admission.Activation.EvidenceJson
         && (savedInput.Attachments ?? []).SequenceEqual(proposed.Input.Attachments ?? []);
 }

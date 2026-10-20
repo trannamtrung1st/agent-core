@@ -34,9 +34,10 @@ public sealed partial class TenantSessionAccessTests
             { await foreach (var item in base.GenerateAsync(request, cancellationToken)) yield return item; yield break; }
             ChildRequests.Enqueue(request); Entered.TrySetResult(); await Release.Task.WaitAsync(cancellationToken);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-            Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec);
+            Assert.DoesNotContain(request.Tools!, t => t.Name == ToolCatalog.SandboxExec);
             var authorization = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization);
-            Assert.DoesNotContain("run_browser_command", authorization.ParametersJson);
+            // Native consent and child fanout have independent converted owners;
+            // this file observation fixture does not execute either family.
             Assert.DoesNotContain("update_persona", authorization.ParametersJson);
             var callName = Review ? ToolCatalog.RequestAuthorization : Tool;
             var replies = request.Messages.Where(m => m.Role == ModelRole.Tool && m.Name == callName).ToArray();

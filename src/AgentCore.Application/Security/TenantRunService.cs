@@ -19,7 +19,8 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         => await SubmitMessageAsync(tenant, sessionId, initiator, messageId, text, [], expectedSecurityRevision, expectedSessionRevision, ct).ConfigureAwait(false);
 
     public async ValueTask<TenantRunReceipt> SubmitMessageAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
-        Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
+        Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default,
+        TenantInputInterruption? interruption = null)
     {
         var requested = attachmentIds.ToArray();
         if (requested.Length > AttachmentLimits.MaxPerMessage || requested.Any(id => id == Guid.Empty) || requested.Distinct().Count() != requested.Length)
@@ -48,7 +49,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
             text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, now,
             Attachments: sources.Count == 0 ? null : sources.Select(a => new ConversationAttachmentRef(a.AttachmentId, a.DisplayName, a.ContentType)).ToArray());
         var activation = Activation.Start(activationId, sessionId, ActivationKind.UserTurn, [entryId], messageId, null, null, null,
-            $"human:{initiator.PrincipalId:D}:{messageId:D}", now);
+            $"human:{initiator.PrincipalId:D}:{messageId:D}", now, TenantInputInterruptionRules.Evidence(interruption));
         var context = new TrustedExecutionContext(tenant, agent.PrincipalId, initiator.PrincipalId, sessionId, runId, activationId, activationId, null, null, ExecutionOrigin.UserMessage);
         var definition = resolved.Configuration.Definition;
         var selected = SessionModelBinder.RefreshDefault(models, definition, session.Snapshot.ModelSelection)
@@ -58,7 +59,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
                 ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, false), resolved.Configuration, executionContext: context),
             new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
-        var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray());
+        var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption);
         var prepared = new TenantHumanInput(session.Owner, initiator, state.Tenant.Revision, TenantAttachmentBindingRules.Freeze(admission));
         await TenantHumanInputRules.RequireAsync(prepared, session, agent, state, authorizer, live: inputs is not null, ct).ConfigureAwait(false);
         var committed = inputs is not null ? await inputs.SubmitAsync(prepared, ct).ConfigureAwait(false)
@@ -66,6 +67,16 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         return TenantHumanInputRules.Receipt(committed);
     }
     // A cached transport acknowledgement is a fact about earlier admission, never a file-read token.
+    public async ValueTask RequireMessageInterruptionAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
+        TenantInputInterruption? interruption, CancellationToken ct = default)
+    {
+        if (interruption is null) return;
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
+        var source = await runs.FindTenantRunAsync(tenant, interruption.RunId, ct).ConfigureAwait(false);
+        if (source?.SessionId != sessionId) throw new AccessDeniedException("resource_unavailable");
+        await TenantInputInterruptionRules.PermissionsAsync(state, initiator.PrincipalId, interruption, authorizer, ct).ConfigureAwait(false);
+    }
+
     public async ValueTask RequireMessageAttachmentsAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         IReadOnlyList<Guid> attachmentIds, CancellationToken ct = default)
     {

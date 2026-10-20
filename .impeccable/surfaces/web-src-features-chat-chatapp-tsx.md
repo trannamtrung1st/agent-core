@@ -124,3 +124,5 @@ FIRST VIEWPORT: Preserve the rail, reading column and reachable composer; compac
 FORM: Code-led ordinary extension of the incumbent Chat and Approval detail. No new world, concept seed or approved comp. Reuse one inspector from inbox and Chat; close restores focus without navigating or deciding.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+TENANT STEER — 2026-10-21: Reuse the queued-message row and explicit Ctrl/Cmd+Enter without a second composer. Default Send/Queue does not cancel. Current exact response-cancellation eligibility gates Steer, and refusal preserves local text/files with row recovery. Shared mobile queue actions keep 44px minimum hits and 8px gaps; desktop retains compact native buttons. Synthetic MCP row/keyboard interruption, separate queued-draft consumption and 1440/390px geometry are observed; the successor report owns repeatable browser, denial and recovery qualification. Normative tokens, fonts, theme and historical evidence remain unchanged.

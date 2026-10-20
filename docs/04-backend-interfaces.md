@@ -122,7 +122,7 @@ The mailbox reserves an opaque entry sequence before asynchronous persistence so
 
 `TenantHumanInput` carries server-prepared owner, original-human and frozen admission witnesses. `ITenantSessionInputControl` routes intake through the current owner; `ITenantRuntimeInputWriter` is the claimed Runtime's scoped adapter; `ITenantRuntimeInputStore` owns the atomic frame-checked write. `TenantHumanInputCommit` returns the saved admission, filtered Runtime snapshot and security revision. Caller cancellation stops waiting; already-enqueued work remains supervised and must be recovered by exact message identity under current authority.
 
-This canonical path admits queue behavior; it does not implicitly interrupt or cancel the current task. Tenant interrupt/Steer and voice arbitration remain separate unconverted work under the full proposal. Legacy interaction behavior is preserved; the tenant background schema gate requires actual trusted tenant execution context.
+Queue remains the default and does not cancel the current task. Explicit tenant interrupt/Steer uses the exact atomic extension below; voice arbitration remains separate unconverted work under the full proposal. Legacy interaction behavior is preserved; the tenant background schema gate requires actual trusted tenant execution context.
 
 ## Tenant immediate-background file observation
 
@@ -1731,3 +1731,9 @@ Prepared native user text preserves only hidden IDs explicitly submitted in curr
 
 
 The original-human materialization service also exposes a read-only `InspectAsync` projection containing current exact source name, security revision, writable-lifecycle state and compound-copy hint. Exact original Session/Attachment reads are required independently from working write/Artifact creation. Original identity/source/security/Instance checks repeat before release; POST never treats the hint as authority. [Wire owner](14-api-and-realtime-protocol.md#canonical-human-attachment-materialization).
+
+## Tenant exact live input interruption
+
+The queued-input port also accepts an explicit exact `TenantInputInterruption` naming the current owned Run and revision. Core records its canonical behavior/target witnesses in the new UserTurn Activation evidence; the new message owns a fresh original-human root and inherits no task authority or refusal lifetime. Current human Session read/Agent Chat and independent exact Run read/cancel permissions are required. Chat permission alone cannot interrupt. The target must still be the actual running claimed generation in this Session; an old target cannot select a newer response.
+
+The existing admission transaction stages the captured response prefix as Interrupted (`userSteer`), cancels that Run, releases its completion accounting, revokes an available exact grant, binds selected files and admits the new user entry/Activation/Run, with one security revision and explicit admission/cancellation audits. Any stale authority/source or invalid input refuses the whole change. Same-message retry includes behavior/target evidence and returns the original fact without stopping later work. While the interruption write is pending, the mailbox holds current normalized model/brain output with existing producer acknowledgements providing backpressure. Refusal resumes that output; success discards it and tombstones the response before cancelling workers. Accepted work and generation retirement remain supervised after the caller disconnects. The returned commit includes the exact cancelled Run, without a postcommit authority reload. Queueing and Stop retain their separate meanings. Qualification is recorded in the [interruption report](reports/tenant-input-interruption-verification-2026-10-21.md).

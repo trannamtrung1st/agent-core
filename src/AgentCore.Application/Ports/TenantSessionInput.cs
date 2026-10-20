@@ -5,7 +5,7 @@ namespace AgentCore.Application.Ports;
 // Server-prepared original-human references and frozen admission. Never model arguments.
 public sealed record TenantHumanInput(TenantSessionRoot Owner, TenantSessionInitiator Human, long SecurityRevision,
     TenantHumanRunAdmission Admission);
-public sealed record TenantHumanInputCommit(TenantRunAdmissionResult Admission, SessionSnapshot Snapshot, long SecurityRevision);
+public sealed record TenantHumanInputCommit(TenantRunAdmissionResult Admission, SessionSnapshot Snapshot, long SecurityRevision, AgentRun? Interrupted = null);
 public interface ITenantSessionInputControl
 {
     ValueTask<TenantHumanInputCommit> SubmitAsync(TenantHumanInput input, CancellationToken ct = default);

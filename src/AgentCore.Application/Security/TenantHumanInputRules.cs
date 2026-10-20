@@ -18,6 +18,8 @@ public static class TenantHumanInputRules
             if (!(await iam.CheckTenantAsync(state, input.Human.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("permission_denied");
         TenantSessionRules.RequireExecutor(state, agent);
+        TenantInputInterruptionRules.Shape(input.Admission);
+        await TenantInputInterruptionRules.PermissionsAsync(state, input.Human.PrincipalId, input.Admission.Interruption, iam, ct).ConfigureAwait(false);
         if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
         if (state.Tenant.Revision != input.SecurityRevision || agent.Instance.Revision != input.Admission.ExpectedInstanceRevision
             || (live ? session.Snapshot.Revision < input.Admission.ExpectedSessionRevision : session.Snapshot.Revision != input.Admission.ExpectedSessionRevision))

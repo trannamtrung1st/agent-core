@@ -523,6 +523,19 @@
         "captureReview": "Fresh finish reviewer individually inspected all 25 named captures and returned ship. Collection at 1440/1024/768/390/320px, narrow row/paging, editor/import top and lower regions, copy confirmation/provenance, DOCX/XLSX/image previews, empty/read-only/archived/denied views. Documenter sampled shipped source plus resources-320-row.png and resources-provenance-1440.png; no new captures or app checks.",
         "visualAcceptanceLimits": "Loading, transient, stale and malformed-acknowledgement presentation were not visually accepted from the current captures. Functional interactions, exact download bytes, partial imports, stale drafts and nested revoked reads stay separately scoped by the verification report.",
         "openScope": "Sandbox, other resource Access/effect families, Governance/platform, voice/rich Chat delivery, autonomous origins, obsolete-authority/schema consolidation and earlier SQLite preference follow-up. Full proposal remains active; no CI or milestone acceptance."
+      },
+      "tenantSteerDocumentationRefresh": {
+        "date": "2026-10-21",
+        "scope": "Bounded tenant queued-message Steer behavior and shared mobile row-action touch-target merge. Normative tokens, theme, fonts, prior inspection and historical source hashes are preserved; this is not a broad sidecar re-extraction.",
+        "sources": [
+          "web/src/features/chat/Composer.tsx",
+          "web/src/services/realtime.ts",
+          "web/src/services/tenantChat.ts",
+          "web/src/app.css",
+          "docs/13-frontend-implementation-spec.md"
+        ],
+        "verificationReport": "docs/reports/tenant-input-interruption-verification-2026-10-21.md",
+        "observed": "Synthetic MCP row Steer and Ctrl+Enter at 1440/390px; original Interrupted prefix retained; independent queued draft consumed once afterward; no horizontal overflow; final mobile actions are at least 44px with an 8px row gap."
       }
     }
   },
@@ -579,9 +592,9 @@
       "name": "Queued messages",
       "kind": "card",
       "refersTo": "queued-messages",
-      "description": "Compact local work list above the composer. Rows truncate safely, expansion is bounded, and Steer/Remove remain trailing actions.",
+      "description": "Compact local work list above the composer. Rows truncate safely, expansion is bounded, and Steer/Remove remain trailing actions. Tenant Steer requires current exact-response cancellation eligibility; refused drafts/files remain local. Shared mobile actions use 44px minimum hits and an 8px gap.",
       "html": "<section class=\"ds-queue\" aria-label=\"Queued messages\"><strong>Queued · 2</strong><div class=\"ds-queue-row\"><span aria-hidden=\"true\">☷</span><span class=\"ds-queue-copy\">Compare the two attachments<small>brief.pdf, notes.txt</small></span><span><button type=\"button\">Steer</button><button type=\"button\" aria-label=\"Remove queued message\">×</button></span></div></section>",
-      "css": ".ds-queue { padding: 8px 12px; border: 1px solid var(--ac-color-border, #303030); border-radius: 12px; background: var(--ac-color-elevated, #1f1f1f); color: var(--ac-color-text, rgba(255,255,255,.85)); font: 400 13px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-queue > strong { color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-queue-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; padding-block: 8px; border-bottom: 1px solid color-mix(in srgb, var(--ac-color-border, #303030) 70%, transparent); } .ds-queue-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-queue-copy small { display: block; overflow: hidden; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); text-overflow: ellipsis; } .ds-queue button { min-height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; } .ds-queue button:hover, .ds-queue button:focus-visible { outline: 0; background: var(--ac-color-fill, rgba(255,255,255,.08)); }"
+      "css": ".ds-queue { padding: 8px 12px; border: 1px solid var(--ac-color-border, #303030); border-radius: 12px; background: var(--ac-color-elevated, #1f1f1f); color: var(--ac-color-text, rgba(255,255,255,.85)); font: 400 13px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-queue > strong { color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-queue-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; padding-block: 8px; border-bottom: 1px solid color-mix(in srgb, var(--ac-color-border, #303030) 70%, transparent); } .ds-queue-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-queue-copy small { display: block; overflow: hidden; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); text-overflow: ellipsis; } .ds-queue button { min-height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; } .ds-queue button:hover, .ds-queue button:focus-visible { outline: 0; background: var(--ac-color-fill, rgba(255,255,255,.08)); } @media (max-width: 767px) { .ds-queue button { min-height: 44px; min-width: 44px; } }"
     },
     {
       "name": "User bubble",
@@ -830,7 +843,7 @@
       "**Do** disclose a failed turn, AgentRun, or admin error with one Ant Design popover, Error details, and a keyboard-reachable Copy control. Keep the Failed label. Show the popover only when a diagnostic id exists. Space the id and the copy control with `paddingXS`.",
       "**Do** put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.",
       "**Do** show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.",
-      "**Do** keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions.",
+      "**Do** keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions. Tenant Steer requires current cancellation eligibility; refusal preserves local text/files. Below 768px shared row actions have 44px minimum hits with an 8px gap.",
       "**Do** compose Model/catalog rows with Ant Design `Button type=\"text\"` and `Flex`; keep `app.css` for shell chrome, overflow, and ring suppression only.",
       "**Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.",
       "**Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.",

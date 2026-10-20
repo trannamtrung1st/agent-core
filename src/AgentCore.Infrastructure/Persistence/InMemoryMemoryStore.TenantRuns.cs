@@ -108,15 +108,21 @@ public sealed partial class InMemoryMemoryStore
                 return new(false, saved, input.EntryId, session.Snapshot.Revision);
             }
             if (AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Status == AgentRunStatus.Running && (frame is null || r.AgentRunId != frame.RunId))) throw new SecurityConflictException("session_in_use");
-            if (AgentRuns.Runs.Values.Count(r => r.SessionId == run.SessionId && !r.IsTerminal) >= 100) throw new SecurityConflictException("session_queue_full");
+            AgentRun? interrupted = null;
+            if (admission.Interruption is { } interruption)
+                interrupted = TenantInputInterruptionRules.Target(admission, ReadTenantRun(tenant, interruption.RunId), frame, (clock ?? TimeProvider.System).GetUtcNow());
+            if (AgentRuns.Runs.Values.Count(r => r.SessionId == run.SessionId && !r.IsTerminal) - (interrupted is null ? 0 : 1) >= 100)
+                throw new SecurityConflictException("session_queue_full");
             if (AgentRuns.Runs.ContainsKey(run.AgentRunId) || AgentRuns.Activations.ContainsKey(run.ActivationId)
                 || _entries.Values.Any(entries => entries.Any(e => e.EntryId == admission.Input.EntryId))) throw new SecurityConflictException("identity_conflict");
             validateCreate?.Invoke();
             if (frame is not null) _ = LoadTenantRuntime(frame, (clock ?? TimeProvider.System).GetUtcNow()) ?? throw new AccessDeniedException("tenant_runtime_unavailable");
+            if (interrupted is not null) next = TenantInputInterruptionRules.Interrupt(next, interrupted, interrupted.UpdatedAtUtc);
             var activation = AgentRunStoreMapping.ToActivationRecord(next, run);
             Store(next); AgentRuns.Runs.Add(run.AgentRunId, run); AgentRuns.Activations.Add(run.ActivationId, activation);
             AgentRuns.ByAdmission.Add(key, run.AgentRunId); AgentRuns.BySourceEntry.Add((run.SessionId, admission.Input.EntryId), run.ActivationId);
-            return new(true, run, admission.Input.EntryId, next.Revision);
+            if (interrupted is not null) AgentRuns.Runs[interrupted.AgentRunId] = interrupted;
+            return new(true, run, admission.Input.EntryId, next.Revision, interrupted);
         }
     }
 }
