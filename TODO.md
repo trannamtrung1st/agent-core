@@ -174,6 +174,7 @@ Always keep this section. These personal ideas are future direction, not approve
 
 ### Additional maintainer directions
 
+- **Built-in general-purpose assistant:** add a full-capability, ChatGPT-like assistant that users can optionally use alongside their own agents. This built-in assistant can only be enabled or disabled; it cannot be deleted. Record this as future product direction for specification before implementation.
 - **Unopinionated Core/system context:** later, refine Core instructions to explain how an agent uses and interacts with Agent Core, without prescribing its personality, behavioral style or discretionary choices. Leave those choices to the agent's judgment, influenced by its persona and authorized configuration. Preserve required platform contracts, context trust boundaries and deterministic IAM/approval enforcement. This is a future context-policy review, not a change to the current Core contract.
 - **Decision engine abstraction** (within [initiative 6](#6-self-hosted-decision-intelligence)): later, place intelligent decision logic behind a shared abstraction so the current LLM-based approach and a future Jev-like engine can coexist as interchangeable implementations. Keep callers independent of the selected engine; backend selection and any fallback policy remain design decisions. Deterministic authorization stays outside this abstraction. Record this direction for future design without introducing another execution engine.
 
