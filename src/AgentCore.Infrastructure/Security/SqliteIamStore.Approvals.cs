@@ -24,7 +24,13 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.BackgroundStart is { } background
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.BackgroundReport is { } report
+        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE ResourceType = 'tenant'
+            AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ChildRunId') = {report.ChildRunId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') = {report.ParentSessionId.ToString("D")}
+            """)
+        : operation.BackgroundStart is { } background
         ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE ResourceType = 'tenant'
             AND json_extract(PayloadJson, '$.Operation.BackgroundStart.SessionId') = {background.SessionId.ToString("D")}
@@ -93,7 +99,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests
             WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -130,8 +136,22 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             foreach (var scope in await ChildCatalogAsync(db, tenantId, Guid.Parse(owner), null, ct).ConfigureAwait(false))
                 if (scope.ResourceType == "resource") ownedResources.Add(scope.ResourceId!);
         var ownedResourceJson = System.Text.Json.JsonSerializer.Serialize(ownedResources);
+        var reportCanCreate = reportVisibility?.CanCreate ?? true;
+        var reportSessionsJson = System.Text.Json.JsonSerializer.Serialize(reportVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
+        var reportRunsJson = System.Text.Json.JsonSerializer.Serialize(reportVisibility?.Runs?.Select(id => id.ToString("D")).ToArray());
         var source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE
+            (json_type(PayloadJson, '$.Operation.BackgroundStart') IS NOT 'object' OR ({backgroundCreationReadable}
+                AND ({artifactReadJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactReadJson})))
+                AND EXISTS (SELECT 1 FROM Sessions s WHERE s.SessionId = TenantApprovalRequests.SessionId AND s.DurablyDeletedAtUtc IS NULL)))
+            AND (json_type(PayloadJson, '$.Operation.BackgroundReport') IS NOT 'object' OR ({reportCanCreate}
+                AND ({reportSessionsJson} = 'null' OR (SessionId IN (SELECT value FROM json_each({reportSessionsJson}))
+                    AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') IN (SELECT value FROM json_each({reportSessionsJson}))))
+                AND ({reportRunsJson} = 'null' OR RunId IN (SELECT value FROM json_each({reportRunsJson})))
+                AND EXISTS (SELECT 1 FROM Sessions s WHERE s.SessionId = TenantApprovalRequests.SessionId AND s.DurablyDeletedAtUtc IS NULL)
+                AND EXISTS (SELECT 1 FROM TenantSessions root JOIN Sessions s ON s.SessionId = root.SessionId WHERE root.TenantId = TenantApprovalRequests.TenantId
+                    AND root.SessionId = json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') AND s.DurablyDeletedAtUtc IS NULL)))
+            AND
             (json_type(PayloadJson, '$.Operation.WorkspaceMutation') IS NOT 'object' OR (
                 ({mutationSessionsJson} = 'null' OR SessionId IN (SELECT value FROM json_each({mutationSessionsJson})))
                 AND (NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.WorkspaceMutation.TargetsJson')) t WHERE json_extract(t.value, '$.Working') = 0)
@@ -243,11 +263,13 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                                     AND source.SessionId = a.SessionId AND source.AttachmentId = a.SourceAttachmentId))))))
             """);
         var query = source.AsNoTracking().Where(r => r.TenantId == tenantId);
-        query = query.Where(r => r.ResourceType != "tenant" || backgroundCreationReadable
-            && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null));
-        if (sandboxVisibility?.Sessions is { } readableParents)
-        { var ids = readableParents.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.ResourceType != "tenant" || ids.Contains(r.SessionId)); }
-        if (page.SessionId is { } session) query = query.Where(r => r.SessionId == session.ToString("D"));
+        if (page.SessionId is { } session)
+        {
+            var id = session.ToString("D");
+            query = query.Where(r => r.SessionId == id || db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests WHERE json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') = {id}
+                """).Any(parent => parent.RequestId == r.RequestId));
+        }
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
         if (allowedInstances is not null)
         { var ids = allowedInstances.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "agents.update" || ids.Contains(r.InstanceId)); }
@@ -292,6 +314,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (row is null || target is null || row.Revision != expectedRunRevision) return false;
             var run = AgentRunStoreMapping.ToDomain(row); var agent = Owned(target);
             TenantApprovalRules.Validate(request, run, agent);
+            if (request.Operation.BackgroundReport is not null) await RequireBackgroundReportOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BackgroundStart is not null) await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -320,8 +343,8 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 && r.RootActivationId == request.RootActivationId.ToString("D"), ct).ConfigureAwait(false);
             TenantApprovalLimits.Require(counts?.Tenant ?? 0, counts?.Executor ?? 0, counts?.Requester ?? 0, operationCount, rootCount);
             if (run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= ApprovalNow) throw new SecurityConflictException("execution_claim_expired");
-            var saved = run.WaitForDurableApproval(expectedRunRevision, request.RequestId, generation, request.CreatedAt);
-            AgentRunStoreMapping.Apply(row, saved); db.Add(TenantApprovalRecord.From(request)); result = request; return true;
+            if (request.Operation.BackgroundReport is null)
+                AgentRunStoreMapping.Apply(row, run.WaitForDurableApproval(expectedRunRevision, request.RequestId, generation, request.CreatedAt)); db.Add(TenantApprovalRecord.From(request)); result = request; return true;
         }, ct).ConfigureAwait(false);
         return written || result is not null && result.RequestId != request.RequestId ? result : null;
     }
@@ -339,7 +362,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var target = await OwnedAgents(db, request.TenantId).SingleOrDefaultAsync(r => r.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
         if (runRow is null || target is null) return false;
         var run = AgentRunStoreMapping.ToDomain(runRow); var agent = Owned(target);
-        if (run.ApprovalRequestId != request.RequestId || run.Status != AgentRunStatus.WaitingForApproval) return false;
+        if (request.Operation.BackgroundReport is null && (run.ApprovalRequestId != request.RequestId || run.Status != AgentRunStatus.WaitingForApproval)) return false;
         TenantApprovalRules.Validate(request, run, agent, request.Status != TenantApprovalStatus.Cancelled);
         if (request.Operation.CredentialCheck is not null && request.Status != TenantApprovalStatus.Cancelled)
             TenantCredentialOperationRules.RequireRequest(request, run, agent, await CredentialOperationTarget(db, request, ct).ConfigureAwait(false));
@@ -348,6 +371,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
         if (request.Status != TenantApprovalStatus.Cancelled)
         {
+            if (request.Operation.BackgroundReport is not null)
+            {
+                await RequireBackgroundReportOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantBackgroundReportRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
             if (request.Operation.BackgroundStart is not null)
             {
                 await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);

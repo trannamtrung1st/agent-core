@@ -46,6 +46,7 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.BackgroundReport => PrepareBackgroundReport(op.OperationId, op.InstanceId, op.BackgroundReport!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.BackgroundStart => PrepareBackgroundStart(op.OperationId, op.InstanceId, op.BackgroundStart!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.WorkspaceMutation => PrepareWorkspaceMutation(op.OperationId, op.InstanceId, op.WorkspaceMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.WorkspaceRead => PrepareWorkspaceRead(op.OperationId, op.InstanceId, op.WorkspaceRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -67,7 +68,8 @@ public static partial class TenantApprovalRules
     {
         var context = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var op = request.Operation;
-        TenantApprovalContinuationRules.Require(request, run, source);
+        if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
+        else TenantApprovalContinuationRules.Require(request, run, source);
         if (op.BackgroundStart is { } background && (background.SessionId != request.SessionId || background.TenantId != request.TenantId)
             || op.AttachmentRead is { } attachment && attachment.SessionId != request.SessionId
             || op.WorkspaceMutation is { } mutation && mutation.SessionId != request.SessionId

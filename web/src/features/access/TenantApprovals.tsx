@@ -16,7 +16,7 @@ import { useTenantCommand } from './useTenantCommand';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
 export interface TenantApproval {
-  requestId: string; tenantId: string; runId: string; sessionId: string; rootActivationId: string;
+  destinationSessionId?: string | null; requestId: string; tenantId: string; runId: string; sessionId: string; rootActivationId: string;
   kind: 'review' | 'exceptionalGrant'; status: Status; requestRevision: number; securityRevision: number;
   summary: string; createdAt: string; expiresAt: string;
   preparedAction: { actionHash: string; operationId: string; operation?: string; expectedInstanceRevision: number; expectedPersonaRevision: number };
@@ -29,6 +29,7 @@ export interface TenantApproval {
 interface ApprovalPage { items: TenantApproval[]; total: number; page: number; pageSize: number }
 const statuses: Record<Status, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', expired: 'Expired' };
 const fields: Record<string, string> = { path: 'Exact path', name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check',
+  reportDestination: 'Destination', reportContent: 'Completion to deliver', reportModel: 'Selected model',
   backgroundObjective: 'Task', backgroundTitle: 'Title', backgroundReportCompletion: 'Report completion here', backgroundModel: 'Selected model', backgroundPrimaryPermission: 'Primary creation permission',
   credentialMetadata: 'Requested read', readCredentials: 'Credential scope', readPage: 'Page',
   browserTool: 'Browser command', browserOrigin: 'Current origin', browserProfileMode: 'Browser state', browserArguments: 'Exact parameters', browserEffect: 'Requested action', browserLimit: 'Execution boundary',
@@ -40,6 +41,9 @@ const fields: Record<string, string> = { path: 'Exact path', name: 'Name', role:
   attachmentByteSize: 'Stored bytes', attachmentChecksum: 'File checksum (SHA-256)', attachmentDisplayName: 'File name', attachmentContentType: 'File type',
   artifactStoredByteSize: 'Stored bytes', artifactChecksum: 'File checksum (SHA-256)', artifactDisplayName: 'File name', artifactContentType: 'File type', artifactByteSize: 'UTF-8 bytes' };
 const reasons: Record<string, string> = {
+  completion_report_created: 'One report Run was created in the original conversation. Delivery and recipient access remain separately checked.',
+  completion_unavailable: 'This completion can no longer be delivered. The finished background result remains separate.',
+  report_approval_required: 'This completion already has its own authorization request. Review that saved action.',
   background_created: 'One background Session and Run were created. Execution status and results remain in Background work under separate access.',
   background_unavailable: 'The current task or capability no longer permits background creation. Cancel this request and prepare a new action.',
   attachment_read_authorized: 'Consent was recorded for this exact saved file and read window. Current access and file integrity are checked before delivery. File changes, later reads and recipient download access remain separate.',
@@ -101,6 +105,7 @@ const reasons: Record<string, string> = {
 const isSandboxControl = (item?: TenantApproval) => item?.preparedAction.operation === 'stop_sandbox_process' || item?.preparedAction.operation === 'reset_sandbox_environment';
 const isReadOperation = (operation?: string) => operation === 'read_attachment' || operation === 'inspect_workspace' || operation === 'verify_artifact' || operation === 'inspect_credential_metadata' || operation === 'inspect_sandbox_profiles' || operation === 'inspect_sandbox_status' || operation === 'inspect_sandbox_process' || operation === 'sandbox_read';
 export function approvalResultLabel(operation: string | undefined, outcome: string) {
+  if (operation === 'deliver_background_completion') return outcome === 'completed' ? 'Report Run created' : outcome === 'denied' ? 'Report Run not created' : 'Report creation outcome unavailable';
   if (operation === 'start_background_work') return outcome === 'completed' ? 'Background work created' : outcome === 'denied' ? 'Background work not created' : 'Creation outcome unavailable';
   if (operation === 'mutate_workspace') return outcome === 'completed' ? 'Workspace changes completed' : outcome === 'denied' ? 'Workspace changes not applied' : 'Workspace outcome uncertain';
   if (operation === 'verify_artifact' && (outcome === 'completed' || outcome === 'denied')) return outcome === 'completed' ? 'Metadata inspection authorized' : 'Metadata not authorized';
@@ -175,6 +180,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     return () => window.clearTimeout(timer);
   }, [data]);
   const busy = command.busy || confirming;
+  const backgroundReport = data?.preparedAction.operation === 'deliver_background_completion';
   const backgroundCreation = data?.preparedAction.operation === 'start_background_work';
   const workspaceMutation = data?.preparedAction.operation === 'mutate_workspace';
   const artifactPublication = data?.preparedAction.operation === 'publish_artifact';
@@ -189,7 +195,13 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     && typeof mutationField('backgroundReportCompletion') === 'boolean'
     && typeof mutationField('backgroundModel') === 'string' && String(mutationField('backgroundModel')).trim().length > 0
     && ['sessions.create', 'agent-runs.create'].includes(String(mutationField('backgroundPrimaryPermission')));
-  const invalidPreview = (workspaceMutation && !mutation) || (artifactPublication && !publication) || (backgroundCreation && !validBackground);
+  const reportFields = ['reportDestination', 'reportContent', 'reportModel'];
+  const validDestination = typeof data?.destinationSessionId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(data.destinationSessionId);
+  const validReport = data?.review.changes.length === reportFields.length
+    && reportFields.every(field => data.review.changes.filter(change => change.field === field && change.afterAvailable).length === 1
+      && typeof mutationField(field) === 'string' && String(mutationField(field)).trim().length > 0)
+    && validDestination;
+  const invalidPreview = (workspaceMutation && !mutation) || (artifactPublication && !publication) || (backgroundCreation && !validBackground) || (backgroundReport && !validReport);
   const blocked = !fresh || loading || !!acknowledged || expired || busy || command.requiresReload;
   const decide = (decision: 'approve' | 'reject' | 'cancel') => {
     if (!data || blocked || (invalidPreview && decision !== 'cancel') || (decision === 'cancel' ? !data.review.canCancel : !data.review.canDecide)) return;
@@ -197,7 +209,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setConfirming(true);
     confirmation.current = confirmAction(modal, { title: `${label}?`, okText: label, cancelText: 'Keep reviewing', danger: decision !== 'approve',
-      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.preparedAction.operation === 'start_background_work' ? 'Authorize one child Session and Run for this exact saved task. Both creation permissions and current configuration are checked again. A one-time grant replaces only the primary creation permission. No role, child read access or later-task authority is granted.' : saved.preparedAction.operation === 'mutate_workspace' ? 'Authorize only these exact saved workspace changes once. Current source and access are checked again. No role, file read, recipient download or later mutation authority is granted. Earlier or partial copy/batch effects may remain; uncertain work will not be repeated.' : saved.preparedAction.operation === 'read_attachment' ? 'Approve only this exact saved file and read window for this continuation. Current file integrity and access are checked again. No role, file changes, recipient download access or later-read authority is granted.' : saved.preparedAction.operation === 'inspect_workspace' ? 'Approve one exact saved workspace observation for this continuation. This grants no file changes, recipient download access or later-read authority.' : saved.preparedAction.operation === 'verify_artifact' ? 'Approve one exact metadata inspection of this saved file. This grants no file creation, contents, download access or later-read authority.' : saved.preparedAction.operation === 'publish_artifact' ? publication?.source ? 'Authorize one immutable copy of only the exact saved source bytes, before expiry. Current source and access are checked again. No role, source read or recipient download access is granted.' : `${saved.kind === 'exceptionalGrant' ? 'Authorize' : 'Approve'} publication of only this exact saved file once, before expiry. No role or file read access is granted. Execution checks current access again.` : saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
+      content: <Flex vertical gap="var(--ac-space-compact)"><Typography.Text>{saved.summary} for {saved.review.agentName} in {organization}.</Typography.Text><Typography.Text>{decision === 'approve' ? saved.preparedAction.operation === 'deliver_background_completion' ? 'Authorize one report Run for this exact saved completion in the original conversation. Current source, destination, configuration and access are checked again. This grants no role, source read, new Session or later-report authority. Creating the Run does not confirm delivery.' : saved.preparedAction.operation === 'start_background_work' ? 'Authorize one child Session and Run for this exact saved task. Both creation permissions and current configuration are checked again. A one-time grant replaces only the primary creation permission. No role, child read access or later-task authority is granted.' : saved.preparedAction.operation === 'mutate_workspace' ? 'Authorize only these exact saved workspace changes once. Current source and access are checked again. No role, file read, recipient download or later mutation authority is granted. Earlier or partial copy/batch effects may remain; uncertain work will not be repeated.' : saved.preparedAction.operation === 'read_attachment' ? 'Approve only this exact saved file and read window for this continuation. Current file integrity and access are checked again. No role, file changes, recipient download access or later-read authority is granted.' : saved.preparedAction.operation === 'inspect_workspace' ? 'Approve one exact saved workspace observation for this continuation. This grants no file changes, recipient download access or later-read authority.' : saved.preparedAction.operation === 'verify_artifact' ? 'Approve one exact metadata inspection of this saved file. This grants no file creation, contents, download access or later-read authority.' : saved.preparedAction.operation === 'publish_artifact' ? publication?.source ? 'Authorize one immutable copy of only the exact saved source bytes, before expiry. Current source and access are checked again. No role, source read or recipient download access is granted.' : `${saved.kind === 'exceptionalGrant' ? 'Authorize' : 'Approve'} publication of only this exact saved file once, before expiry. No role or file read access is granted. Execution checks current access again.` : saved.kind === 'exceptionalGrant' ? 'Authorize only the exact saved action before its expiry. No role is assigned. Execution checks current access again.' : isReadOperation(saved.preparedAction.operation) ? 'Approve this exact stored read once. Current access is checked before data is returned to the agent.' : isSandboxControl(saved) ? 'Approve this exact cleanup request. Writes may continue until termination is confirmed. Canonical files are retained.' : 'Approve only the exact saved action. Execution checks current access again.' : 'The saved action will not be authorized by this request.'}</Typography.Text></Flex>,
       afterClose: () => { if (active.current) setConfirming(false); },
       onOk: () => command.run(async signal => {
         if (!active.current) throw new Error('Review closed.');
@@ -215,7 +227,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const attachmentRead = data?.preparedAction.operation === 'read_attachment';
   const artifactVerification = data?.preparedAction.operation === 'verify_artifact';
   const artifactChecksum = data?.review.changes.find(change => change.field === 'artifactChecksum' || change.field === 'attachmentChecksum');
-  const savedTitle = backgroundCreation ? 'Exact saved background task' : artifactPublication ? 'Exact saved file' : workspaceMutation ? 'Exact saved workspace changes' : savedRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
+  const savedTitle = backgroundReport ? 'Exact saved completion report' : backgroundCreation ? 'Exact saved background task' : artifactPublication ? 'Exact saved file' : workspaceMutation ? 'Exact saved workspace changes' : savedRead ? 'Exact saved read' : sandboxControl ? 'Exact saved control request' : sandboxCommand || browserCommand ? 'Exact saved command' : 'Exact saved changes';
   return <Drawer open title="Approval details" aria-label="Approval details" className="access-editor-drawer" size="large" styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden
     onClose={() => { if (!busy) onClose(); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
     footer={<Flex wrap gap="var(--ac-space-compact)" justify="end">
@@ -237,7 +249,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: approvalDate(data.decision.decidedAt) }] : [])
         ]} />
         <section aria-label={savedTitle}><Typography.Title level={5}>{savedTitle}</Typography.Title>
-          {workspaceMutation ? <WorkspaceMutationPreview proposal={mutation} /> : artifactPublication ? <ArtifactPublicationPreview publication={publication} /> : backgroundCreation || browserCommand || sandboxCommand || sandboxControl || savedRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.filter(change => change.field !== 'artifactChecksum' && change.field !== 'attachmentChecksum').map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
+          {workspaceMutation ? <WorkspaceMutationPreview proposal={mutation} /> : artifactPublication ? <ArtifactPublicationPreview publication={publication} /> : backgroundReport || backgroundCreation || browserCommand || sandboxCommand || sandboxControl || savedRead ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.filter(change => change.field !== 'artifactChecksum' && change.field !== 'attachmentChecksum').map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
             { key: 'before', label: 'Before', children: change.beforeAvailable ? value(change.before) : 'Not recorded for this request' },
             { key: 'after', label: 'After', children: <Flex vertical gap="var(--ac-space-tight)">{change.afterAvailable ? value(change.after) : 'Definition default was not recorded'}{change.restoresDefault && <Typography.Text type="secondary">Restore the Definition default</Typography.Text>}</Flex> }
           ]} />)}</Flex>}
@@ -255,7 +267,8 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           { key: 'hash', label: 'Exact action hash', children: data.preparedAction.actionHash },
           ...((attachmentRead || artifactVerification || publication?.source) && artifactChecksum?.afterAvailable ? [{ key: 'artifact-checksum', label: fields.artifactChecksum, children: value(artifactChecksum.after) }] : []), { key: 'revision', label: 'Request revision', children: data.requestRevision }, { key: 'access', label: 'Access revision', children: data.securityRevision }
         ]} /> }]} />
-        <Typography.Link href={`/t/${tenant}/c/${data.sessionId}`}>Open original conversation</Typography.Link>
+        {backgroundReport && !validDestination ? <Typography.Text type="secondary">Destination is not recorded for this request.</Typography.Text>
+          : <Typography.Link href={`/t/${tenant}/c/${backgroundReport ? data.destinationSessionId : data.sessionId}`}>{backgroundReport ? 'Open destination conversation' : 'Open original conversation'}</Typography.Link>}
       </>}
     </Flex>
   </Drawer>;

@@ -11,6 +11,11 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
+    public async ValueTask<TenantBackgroundCompletion?> ReadTenantBackgroundCompletionAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default)
+    {
+        TenantRuntimeRules.RequireOwner(owner); await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await CompletionSource(db, owner, childRunId, ct).ConfigureAwait(false);
+    }
     private static async Task<TenantBackgroundCompletion?> CompletionSource(AgentCoreDbContext db, AgentRunOwner owner, Guid childRunId, CancellationToken ct)
     {
         var row = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == owner.TenantId && r.AgentRunId == childRunId.ToString("D")
@@ -28,7 +33,8 @@ public sealed partial class SqliteIamStore
             var previous = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == owner.TenantId && r.AgentRunId == id.ToString("D"), token).ConfigureAwait(false);
             return previous is null ? null : AgentRunStoreMapping.ToDomain(previous);
         }, ct).ConfigureAwait(false);
-        return new(run, child, parent, initial);
+        var receipt = await db.BackgroundCompletionReceipts.AsNoTracking().SingleOrDefaultAsync(r => r.ChildAgentRunId == childRunId.ToString("D") && r.ProfileId == null, ct).ConfigureAwait(false);
+        return new(run, child, parent, initial, receipt is null ? null : CompletionInboxMapping.Read(receipt));
     }
     public async ValueTask<IReadOnlyList<TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default)
     {
@@ -69,6 +75,9 @@ public sealed partial class SqliteIamStore
             if (previous is not null) return new(false, AgentRunStoreMapping.ToDomain(previous));
             throw new AccessDeniedException("completion_unavailable");
         }
+        if (await db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE json_extract(PayloadJson, '$.Operation.BackgroundReport.ChildRunId') = {source.Child.AgentRunId.ToString("D")}
+            """).AnyAsync(r => r.TenantId == tenant, ct).ConfigureAwait(false)) throw new AccessDeniedException("report_approval_required");
         var state = await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var agentRow = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == report.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false) ?? throw new AccessDeniedException("executor_unavailable");
         var agent = Owned(agentRow); TenantSessionRules.RequireExecutor(state, agent); var now = (clock ?? TimeProvider.System).GetUtcNow();

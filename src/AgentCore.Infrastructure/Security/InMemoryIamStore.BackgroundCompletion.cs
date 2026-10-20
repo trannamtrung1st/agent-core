@@ -10,13 +10,18 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
+    public ValueTask<TenantBackgroundCompletion?> ReadTenantBackgroundCompletionAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested(); TenantRuntimeRules.RequireOwner(owner);
+        lock (_gate) lock (sessionBacking.AdmissionGate) return ValueTask.FromResult(CompletionSource(owner, childRunId));
+    }
     private TenantBackgroundCompletion? CompletionSource(AgentRunOwner owner, Guid childRunId)
     {
         var run = sessionBacking.ReadRetainedTenantOperationRun(owner.TenantId!.Value, childRunId);
         if (run?.Owner != owner || sessionBacking.ReadRetainedTenantBackgroundSession(owner.TenantId.Value, run.SessionId) is not { } child) return null;
         var parent = child.Snapshot.Origin.OriginatingSessionId is { } parentId ? sessionBacking.ReadTenantSession(owner.TenantId.Value, parentId) : null;
         var initial = TenantBackgroundLineage.InitialAsync(run, (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(owner.TenantId.Value, id)), CancellationToken.None).AsTask().GetAwaiter().GetResult();
-        return new(run, child, parent, initial);
+        return new(run, child, parent, initial, sessionBacking.AgentRuns.CompletionReceipts.TryGetValue(childRunId, out var receipt) ? CompletionInboxMapping.Read(receipt) : null);
     }
     public ValueTask<IReadOnlyList<TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default)
     {
@@ -61,6 +66,8 @@ public sealed partial class InMemoryIamStore
                     return ValueTask.FromResult(new AgentRunAdmissionResult(false, existing));
                 throw new AccessDeniedException("completion_unavailable");
             }
+            if (_approvals.Values.Any(r => r.TenantId == tenant && r.Operation.BackgroundReport?.ChildRunId == source.Child.AgentRunId))
+                throw new AccessDeniedException("report_approval_required");
             var agent = FindTenantAgentAsync(tenant, report.AgentInstanceId, ct).Result!;
             var now = (clock ?? TimeProvider.System).GetUtcNow();
             TenantBackgroundCompletionRules.Shape(source, report, agent, expectedParentRevision, now);

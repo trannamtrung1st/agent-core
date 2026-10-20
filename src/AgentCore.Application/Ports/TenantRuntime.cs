@@ -8,6 +8,8 @@ public sealed record TenantRuntimeFrame(AgentRunOwner Owner, Guid SessionId, Gui
 
 public interface ITenantRuntimeStore
 {
+    ValueTask<AgentCore.Application.Security.TenantBackgroundCompletion?> ReadTenantBackgroundCompletionAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default) => throw new NotSupportedException();
+    ValueTask<bool> SettleTenantBackgroundReportApprovalAsync(AgentCore.Domain.Security.ApprovalProcessedSignal signal, AgentRun? report, string? refusal, Guid auditId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<IReadOnlyList<AgentCore.Application.Security.TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<AgentRunAdmissionResult> AdmitTenantBackgroundCompletionAsync(AgentRun report, long expectedParentRevision, Guid auditId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask SkipTenantBackgroundCompletionAsync(AgentRunOwner owner, Guid childRunId, string reason, CancellationToken ct = default) => throw new NotSupportedException();

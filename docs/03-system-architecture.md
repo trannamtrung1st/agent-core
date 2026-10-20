@@ -1,5 +1,10 @@
 # System Architecture
 
+## Completion-report consent ownership
+
+A policy-required completion report uses the existing approval graph while its source child remains terminal and immutable. Its request binds the source and destination as distinct owners; the completion inbox stays pending, and no report Run exists before authorization. The incumbent approval processed signal routes the typed report operation to the existing completion-admission transaction. Report graph creation, source accounting, exact grant disposition, operation receipt, security revision/audit and signal processing share that transaction. The Session Runtime later executes the admitted report under the existing destination mailbox. There is no second completion queue, alternate effect executor or live-modal authority. [Contract](04-backend-interfaces.md#tenant-completion-report-creation-consent).
+
+
 Canonical Agent decommission extends existing IAM/Instance lifecycle owners: an archived unreferenced Agent commits Removed SystemIdentity/Principal status and one canonical audit receipt, retaining its FK-backed Instance owner tombstone. Live discovery and ordinary authorization exclude that owner, and restoration/reuse is fenced. Technical cleanup follows that committed marker through the incumbent resource sweep, native profile gates and no-follow workspace purge; physical uncertainty does not undo logical retirement or authorize a replacement owner. [Port contract](04-backend-interfaces.md#tenant-agent-decommission).
 
 ## Tenant Browser human profile reset ownership

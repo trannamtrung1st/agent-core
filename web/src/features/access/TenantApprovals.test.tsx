@@ -568,3 +568,28 @@ it('distinguishes created background work from task completion', async () => {
   expect(within(result).getByText('Background work created')).toBeVisible(); expect(within(result).getByText(/Execution status and results remain in Background work/)).toBeVisible();
   expect(within(result).queryByText('Task completed')).not.toBeInTheDocument();
 });
+
+const completionReportRequest = (): TenantApproval => ({ ...request, destinationSessionId: '12345678-1234-1234-1234-123456789abc', summary: 'Deliver exact background completion', preparedAction: { ...request.preparedAction, operation: 'deliver_background_completion' },
+  review: { ...request.review, changes: Object.entries({ reportDestination: 'Original conversation', reportContent: 'Background work: <script>literal completion</script>\nKết quả cần xem xét.', reportModel: 'synthetic' })
+    .map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } });
+it.each(['review', 'exceptionalGrant'] as const)('reviews saved completion and independent %s report-creation consequences', async kind => {
+  view({ ...completionReportRequest(), kind }); const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved completion report' });
+  expect(within(saved).getByText(/Kết quả cần xem xét/)).toBeVisible(); expect(saved.querySelector('script')).toBeNull();
+  expect(within(dialog).getByRole('link', { name: 'Open destination conversation' })).toHaveAttribute('href', '/t/tenant-a/c/12345678-1234-1234-1234-123456789abc');
+  fireEvent.click(within(dialog).getByRole('button', { name: kind === 'review' ? 'Approve' : 'Authorize once' }));
+  const confirm = (await screen.findAllByText(kind === 'review' ? 'Approve?' : 'Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/one report Run for this exact saved completion/)).toBeVisible());
+  expect(within(confirm).getByText(/does not confirm delivery/)).toBeVisible(); fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it.each(['content', 'destination'] as const)('withholds completion decisions for missing %s without removing cancellation', async missing => {
+  const item = completionReportRequest(); if (missing === 'content') item.review.changes = item.review.changes.filter(c => c.field !== 'reportContent'); else delete item.destinationSessionId;
+  view(item); const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByRole('button', { name: 'Authorize once' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+it('separates report Run creation from completion delivery', async () => {
+  view({ ...completionReportRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'completion_report_created', recordedAt: request.review.serverNow } });
+  const result = await screen.findByRole('region', { name: 'Operation result' }); expect(within(result).getByText('Report Run created')).toBeVisible();
+  expect(within(result).getByText(/Delivery and recipient access remain separately checked/)).toBeVisible(); expect(within(result).queryByText('Report delivered')).not.toBeInTheDocument();
+});

@@ -149,9 +149,15 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(initialChild.AgentRunId, completed.Child.AgentRunId);
                 if (mode == "grant-run")
                 {
-                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); CompletionInboxItem? item;
-                    do { item = await runs.FindTenantCompletionAsync(initialChild.Owner, initialChild.AgentRunId); if (item?.Status != CompletionInboxStatus.Skipped) await Task.Delay(25, timeout.Token); } while (item?.Status != CompletionInboxStatus.Skipped);
-                    Assert.Equal("permission_denied", item.SkipReason);
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); TenantApprovalRequest? reportRequest;
+                    do
+                    {
+                        reportRequest = (await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(PageSize: 100))).Items
+                            .SingleOrDefault(r => r.Operation.BackgroundReport?.ChildRunId == initialChild.AgentRunId);
+                        if (reportRequest is null) await Task.Delay(25, timeout.Token);
+                    } while (reportRequest is null);
+                    Assert.Equal(ApprovalKind.ExceptionalGrant, reportRequest.Kind);
+                    Assert.Equal(CompletionInboxStatus.Pending, (await runs.FindTenantCompletionAsync(initialChild.Owner, initialChild.AgentRunId))!.Status);
                 }
             }
             else if (saved is not null) Assert.Null(await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, saved.Operation.OperationId));

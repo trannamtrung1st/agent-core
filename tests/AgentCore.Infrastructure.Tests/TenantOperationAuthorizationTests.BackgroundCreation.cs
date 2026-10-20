@@ -126,7 +126,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.False(db.Database.HasPendingModelChanges());
         await using var command = db.Database.GetDbConnection().CreateCommand(); await db.Database.OpenConnectionAsync();
         command.CommandText = "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_TenantApprovals_%'";
-        Assert.Equal(5L, await command.ExecuteScalarAsync());
+        Assert.Equal(7L, await command.ExecuteScalarAsync());
     }
 
 }

@@ -5,10 +5,11 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed record TenantBackgroundCompletion(AgentRun Child, TenantSession ChildSession, TenantSession? Parent, AgentRun? InitialChild = null);
+public sealed record TenantBackgroundCompletion(AgentRun Child, TenantSession ChildSession, TenantSession? Parent, AgentRun? InitialChild = null, CompletionInboxItem? Item = null);
 
 public static class TenantBackgroundCompletionFactory
 {
@@ -54,7 +55,7 @@ public static class TenantBackgroundCompletionFactory
 
 // The incumbent supervised tenant coordinator invokes this bounded admission pass.
 public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storage, TenantRunConfigurationResolver configurations,
-    IModelCatalog models, IIdGenerator ids, TimeProvider time)
+    IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantApprovalService? approvals = null)
 {
     public async ValueTask AdmitPendingAsync(int limit, CancellationToken ct)
     {
@@ -63,6 +64,12 @@ public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storag
             try
             {
                 TenantBackgroundCompletionFactory.RequireParent(source);
+                if (approvals is not null)
+                {
+                    var prepared = await approvals.PrepareBackgroundReportAsync(source, ct).ConfigureAwait(false);
+                    if (prepared.Request is not null) continue;
+                    if (prepared.Decision == OperationDecisionKind.Denied) throw new AccessDeniedException(prepared.ReasonCode);
+                }
                 var resolved = await configurations.ResolveAsync(source.Child.Owner.TenantId!.Value, source.Child.AgentInstanceId, ct).ConfigureAwait(false);
                 var model = SessionModelBinder.RefreshDefault(models, resolved.Configuration.Configuration.Definition, source.Parent!.Snapshot.ModelSelection)
                     ?? throw new AccessDeniedException("target_model_unavailable");

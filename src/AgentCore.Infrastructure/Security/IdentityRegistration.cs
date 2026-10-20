@@ -124,6 +124,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantWorkspaceMutationEffectService>();
         services.TryAddSingleton<TenantWorkspaceMutationTarget>();
         services.TryAddSingleton<TenantBackgroundCreationTarget>();
+        services.TryAddSingleton<TenantBackgroundReportTarget>();
         services.TryAddSingleton<ITenantAttachmentStore>(p => (ITenantAttachmentStore)p.GetRequiredService<IAttachmentStore>());
         services.TryAddSingleton<ITenantAttachmentMutationStore>(p => (ITenantAttachmentMutationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAttachmentService>();

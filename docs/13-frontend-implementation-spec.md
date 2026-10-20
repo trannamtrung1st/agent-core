@@ -1,5 +1,12 @@
 # Frontend Implementation Specification
 
+## Exact completion-report creation review
+
+The shared organization/Chat approval inspector presents an exact saved completion, original-conversation destination and selected model for `deliver_background_completion`. Values are inert wrapping text. Its optional `destinationSessionId` is a current-authorized navigation projection; `sessionId` and `runId` retain the actual terminal child owner. The destination link is withheld when malformed/missing; missing or ambiguous preview fields disable Approve/Reject while authorized cancellation remains available.
+
+Protected confirmation authorizes one report Run, with current source/destination/configuration/access rechecks and no role, source read, new Session or later-report authority. The receipt says Report Run created or not created; creating a Run does not confirm delivery. Chat includes the source-owned request in the original parent conversation's minimal approval status, with separate inspection authority and the same exact detail. Configuration changes preserve cancellation and explicit refresh recovery. The existing large Drawer, responsive Descriptions, semantic Alerts and wrapping footer own presentation. [Focused qualification](reports/tenant-background-report-creation-verification-2026-10-20.md) records this bounded implementation. The full proposal stays active.
+
+
 ## Exact tenant background creation review
 
 The incumbent approval inspector in organization Access and Chat presents one exact saved background task, title, explicit completion-report preference, selected model and primary creation permission. It uses the existing responsive Descriptions and inert wrapping text; there is no separate creation screen or layout system. Missing, duplicate or malformed task fields withhold Approve and Reject while retaining authorized cancellation. False completion preferences remain visible as No.

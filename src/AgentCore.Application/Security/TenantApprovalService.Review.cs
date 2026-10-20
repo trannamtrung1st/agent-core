@@ -43,7 +43,7 @@ public sealed partial class TenantApprovalService
         var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(r.Permission));
         var independent = policy.IndependentReview;
         var source = await operations.FindRunAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
-        var waiting = source?.Status == AgentRunStatus.WaitingForApproval && source.ApprovalRequestId == r.RequestId;
+        var waiting = op.BackgroundReport is not null ? source?.IsTerminal == true : source?.Status == AgentRunStatus.WaitingForApproval && source.ApprovalRequestId == r.RequestId;
         var cancel = r.Status == TenantApprovalStatus.Pending && at < r.ExpiresAt && waiting && target is not null
             && (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("approvals.cancel"),
                 AccessScope.ForResource(r.TenantId, "approval", r.RequestId.ToString("D")), ct).ConfigureAwait(false)).Allowed;
@@ -54,10 +54,18 @@ public sealed partial class TenantApprovalService
         {
             try
             {
-                var (run, current) = await operations.ResolveAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
+                AgentRun run; TenantSecurityState current;
+                if (op.BackgroundReport is not null)
+                {
+                    var reportState = await (backgroundReports ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, ct).ConfigureAwait(false);
+                    (run, current) = (reportState.Source.Child, reportState.State);
+                }
+                else (run, current) = await operations.ResolveAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
                 if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
                 TenantApprovalRules.Validate(r, run, target!);
-                if (op.BackgroundStart is not null)
+                if (op.BackgroundReport is not null)
+                    await TenantBackgroundReportRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                else if (op.BackgroundStart is not null)
                 {
                     independent = await TenantBackgroundCreationRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
                     await (backgroundCreations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, state, ct).ConfigureAwait(false);
@@ -161,6 +169,12 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.BackgroundReport is { } report)
+        {
+            var evidence = System.Text.Json.JsonSerializer.Deserialize<AgentCore.Application.Execution.AgentRunAdmissionFactory.SignalInput>(report.EvidenceJson)!;
+            return [new("reportDestination", null, "Original conversation", false),
+                new("reportContent", null, AgentCore.Application.Execution.BackgroundCompletionProjection.ReportText(evidence.Text!), false), new("reportModel", null, report.Model.CatalogKey, false)];
+        }
         if (op.BackgroundStart is { } task) return [new("backgroundObjective", null, task.Objective, false), new("backgroundTitle", null, task.Title, false),
             new("backgroundReportCompletion", null, task.ReportCompletion, false), new("backgroundModel", null, task.Model.CatalogKey, false), new("backgroundPrimaryPermission", null, task.Permission, false)];
         if (op.WorkspaceMutation is { } mutation)

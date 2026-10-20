@@ -5,7 +5,8 @@ public sealed record TenantApprovalDto(Guid RequestId, Guid TenantId, Guid RunId
     Guid ExecutorPrincipalId, Guid? OriginalInitiatorPrincipalId, string Kind, string Status, long RequestRevision,
     long SecurityRevision, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, string Summary, string Permission,
     TenantApprovalTargetDto TargetResource, TenantPreparedActionDto PreparedAction, TenantApprovalDecisionDto? Decision,
-    TenantApprovalOperationResultDto? OperationResult, TenantApprovalReviewDto? Review);
+    TenantApprovalOperationResultDto? OperationResult, TenantApprovalReviewDto? Review,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? DestinationSessionId = null);
 public sealed record TenantApprovalTargetDto(string Type, string Id);
 public sealed record TenantPreparedActionDto(Guid OperationId, string Operation, TenantPreparedPersonaDto? Persona,
     TenantPreparedPreferencesDto? Preferences, long ExpectedInstanceRevision, long ExpectedPersonaRevision, string ActionHash,

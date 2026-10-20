@@ -46,6 +46,7 @@ public static class TenantApprovalEndpoints
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
+            TenantOperationKind.BackgroundReport => ("Deliver exact background completion", "deliver_background_completion"),
             TenantOperationKind.BackgroundStart => ("Start exact background work", "start_background_work"),
             TenantOperationKind.WorkspaceMutation => ("Change exact workspace paths", "mutate_workspace"),
             TenantOperationKind.WorkspaceRead => ("Read exact workspace observation", "inspect_workspace"),
@@ -75,7 +76,7 @@ public static class TenantApprovalEndpoints
             view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson)) : null,
             review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,
                 review.Changes.Select(c => new TenantApprovalChangeDto(c.Field, c.Before, c.After, c.BeforeAvailable, c.AfterAvailable, c.RestoresDefault)).ToArray(),
-                review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState));
+                review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState), op.BackgroundReport?.ParentSessionId);
     }
     private static T? Parse<T>(string? value) where T : struct, Enum => value is null ? null
         : Enum.TryParse<T>(value, true, out var parsed) && Enum.IsDefined(parsed) && !int.TryParse(value, out _) ? parsed
