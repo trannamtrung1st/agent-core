@@ -28,7 +28,7 @@ public sealed partial class SqliteIamStore
             : builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
-        await TenantBackgroundAdmissionRules.AuthorizeAsync(state, parent, current, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        await TenantBackgroundAdmissionRules.AuthorizeAsync(state, parent, current, new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         var key = AgentRunStoreMapping.BackgroundSourceKey(snapshot, child)!;
         var duplicate = await db.Activations.AsNoTracking().SingleOrDefaultAsync(a => a.TenantId == tenant
             && a.AgentInstanceId == root.AgentInstanceId && a.ExecutorPrincipalId == root.ExecutorPrincipalId && a.BackgroundSourceKey == key, ct).ConfigureAwait(false);

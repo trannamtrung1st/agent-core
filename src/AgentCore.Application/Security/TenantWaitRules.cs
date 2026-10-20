@@ -20,10 +20,7 @@ public static class TenantWaitRules
             || snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason))
             throw new AccessDeniedException("wait_unavailable");
     }
-    public static bool Allows(AgentRun run) => TenantTaskExecutionContract.IsIndependent(run)
-        || run.Admission.ExecutionContext is { OriginalInitiatorPrincipalId: not null,
-            Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation }
-            && run.Admission.OutputContract is (AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.BackgroundOutcome);
+    public static bool Allows(AgentRun run) => TenantTaskExecutionContract.Allows(run);
 
     public static void Require(AgentRun run, AgentDefinition current, AgentRunCommand.SuspendWait suspend)
     {
@@ -83,8 +80,8 @@ public static class TenantWaitRules
             if (!(await authorizer.CheckOwnedTenantAsync(state, executor, permission, scope, ct).ConfigureAwait(false)).Allowed) return false;
             var policy = TenantOperationPolicyService.Effective(state, permission);
             if (policy.Mode == OperationApprovalMode.Always || policy.Mode == OperationApprovalMode.WhenRequesterLacksPermission
-                && (parent.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is not { } requester
-                    || !(await authorizer.CheckOwnedTenantAsync(state, requester, permission, scope, ct).ConfigureAwait(false)).Allowed)) return false;
+                && parent.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } requester
+                && !(await authorizer.CheckOwnedTenantAsync(state, requester, permission, scope, ct).ConfigureAwait(false)).Allowed) return false;
         }
         return true;
     }

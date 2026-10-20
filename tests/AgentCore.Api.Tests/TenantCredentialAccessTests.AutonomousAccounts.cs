@@ -134,7 +134,7 @@ public sealed partial class TenantCredentialAccessTests
                 foreach (var request in reviewed)
                 {
                     var rejected = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET OriginalInitiatorPrincipalId = NULL, PayloadJson = json_set(PayloadJson, '$.OriginalInitiatorPrincipalId', NULL) WHERE RequestId = {request.RequestId}"));
-                    Assert.Contains("independent account consent requires its owned scheduled occurrence", rejected.Message);
+                    Assert.Contains("independent task consent requires its exact owned scheduled lineage", rejected.Message);
                 }
             }
         }

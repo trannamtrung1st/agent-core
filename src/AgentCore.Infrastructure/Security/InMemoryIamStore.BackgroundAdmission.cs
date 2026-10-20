@@ -28,7 +28,7 @@ public sealed partial class InMemoryIamStore
                 : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).AsTask().GetAwaiter().GetResult();
             if (baseline is null) throw new AccessDeniedException("definition_unavailable");
             var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
-            TenantBackgroundAdmissionRules.AuthorizeAsync(state, parent, current, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+            TenantBackgroundAdmissionRules.AuthorizeAsync(state, parent, current, new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
             var key = AgentRunStoreMapping.BackgroundSourceKey(snapshot, child)!;
             var all = sessionBacking.AgentRuns;
             if (all.ByBackgroundSource.TryGetValue((child.Owner, key), out var previous))

@@ -122,11 +122,13 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Tenant_background_creation_empty_SQLite_downgrade_upgrade_restores_current_guards()
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true); await using var db = f.Contexts!.CreateDbContext();
+        const string query = "SELECT name AS Value FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_TenantApprovals_%' ORDER BY name";
+        var before = await db.Database.SqlQueryRaw<string>(query).ToArrayAsync();
+        Assert.Contains("TR_TenantApprovals_BackgroundCreation_Update", before);
+        Assert.Contains("TR_TenantApprovals_IndependentTask_Insert", before); Assert.Contains("TR_TenantApprovals_IndependentTask_Update", before);
         await db.GetService<IMigrator>().MigrateAsync("20261020100000_TenantBackgroundRuntime"); await db.Database.MigrateAsync();
         Assert.False(db.Database.HasPendingModelChanges());
-        await using var command = db.Database.GetDbConnection().CreateCommand(); await db.Database.OpenConnectionAsync();
-        command.CommandText = "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_TenantApprovals_%'";
-        Assert.Equal(7L, await command.ExecuteScalarAsync());
+        Assert.Equal(before, await db.Database.SqlQueryRaw<string>(query).ToArrayAsync());
     }
 
 }

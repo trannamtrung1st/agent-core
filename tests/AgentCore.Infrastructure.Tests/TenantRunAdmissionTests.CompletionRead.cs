@@ -159,11 +159,15 @@ public sealed partial class TenantRunAdmissionTests
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true);
         await using var db = f.Contexts!.CreateDbContext();
+        const string query = "SELECT name AS Value FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_Tenant%' ORDER BY name";
+        var before = await db.Database.SqlQueryRaw<string>(query).ToArrayAsync();
+        Assert.Contains("TR_TenantApprovals_CompletionRead_Insert", before); Assert.Contains("TR_TenantApprovals_CompletionRead_Update", before);
+        Assert.Contains("TR_TenantApprovals_IndependentTask_Insert", before); Assert.Contains("TR_TenantApprovals_IndependentTask_Update", before);
         await db.GetService<IMigrator>().MigrateAsync("20261020120000_TenantBackgroundReportReview");
         Assert.Equal(9, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_Tenant%'").SingleAsync());
         await db.Database.MigrateAsync();
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(13, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_Tenant%'").SingleAsync());
+        Assert.Equal(before, await db.Database.SqlQueryRaw<string>(query).ToArrayAsync());
         Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM pragma_foreign_key_check").SingleAsync());
     }
 

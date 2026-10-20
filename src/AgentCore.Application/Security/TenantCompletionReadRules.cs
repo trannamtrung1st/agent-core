@@ -53,7 +53,7 @@ public static class TenantCompletionReadRules
     public static void Require(PreparedCompletionRead read, AgentRun parent, TenantAgent agent, AgentDefinition current, BackgroundCompletionCandidate child)
     {
         var source = child.CurrentTaskRun ?? child.Run;
-        if (!TenantWaitRules.Allows(parent) || TenantTaskExecutionContract.IsIndependent(parent) || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, ToolCatalog.BackgroundInspect)
+        if (!TenantWaitRules.Allows(parent) || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, ToolCatalog.BackgroundInspect)
             || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundInspect) || parent.Owner != child.Run.Owner || source.Owner != parent.Owner
             || read.ParentSessionId != parent.SessionId || read.ChildSessionId != source.SessionId || read.InitialRunId != child.Run.AgentRunId
             || read.SourceRunId != source.AgentRunId || read.SourceRevision != source.Revision || !source.IsTerminal || source.Result?.OutcomeKind == AgentRunOutcomeKind.Continued

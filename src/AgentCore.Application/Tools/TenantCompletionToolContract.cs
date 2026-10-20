@@ -11,9 +11,7 @@ public static class TenantCompletionToolContract
         or ToolCatalog.BackgroundTake or ToolCatalog.BackgroundAcknowledge;
     public static bool IsOffered(AgentDefinition definition, AgentContext? context, string name) =>
         IsTool(name) && context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
-        && !TenantTaskExecutionContract.IsIndependent(context) && execution.SessionId == context.OwnedSessionId && execution.Origin is
-            (ExecutionOrigin.UserMessage or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation)
-        && context.OutputContract is (AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.BackgroundOutcome)
+        && TenantTaskExecutionContract.Allows(context)
         && (name != ToolCatalog.BackgroundAcknowledge || context.HasBackgroundClaim)
         && RolePermissions.AllowsTool(definition, name);
 }

@@ -95,7 +95,7 @@ public sealed partial class SqliteIamStore
             ? (await FindDefinitionPublicationAsync(tenant, definition, agent.Instance.ActiveVersion, ct).ConfigureAwait(false))?.Payload
             : builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
-        await TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), ct).ConfigureAwait(false);
+        await TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), this, ct).ConfigureAwait(false);
         if (source.Parent!.Snapshot.PendingAgentInputIds.Count > 0 || await db.AgentRuns.AnyAsync(r => r.SessionId == report.SessionId.ToString("D") && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false))
             throw new SecurityConflictException("parent_busy");
         db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(source.Parent.Snapshot, report)); db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(report));

@@ -24,6 +24,7 @@ public sealed class TenantAutomationMigrationTests
                 null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null);
             await new SqliteTriggerStore(factory).CreateAsync(legacy);
             var guards = await Guards(db); Assert.Contains("TR_TenantOccurrences_Source_Insert", guards); Assert.Contains("TR_TenantSessions_Creator_Insert", guards);
+            Assert.Contains("TR_TenantApprovals_IndependentTask_Insert", guards); Assert.Contains("TR_TenantApprovals_IndependentTask_Update", guards);
             await db.GetService<IMigrator>().MigrateAsync("20261020170000_TenantAccountOperationRead");
             var previousGuards = await Guards(db); Assert.Equal(guards.Length - 7, previousGuards.Length);
             await db.Database.MigrateAsync(); Assert.Equal(guards, await Guards(db));

@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Independent child and completion qualification
+
+Exercise both stores and actual Schedule/manual roots through child admission, exact creation Review/primary-only grants, child protected-read successors, background waits and exclusive list/inspect/take/acknowledge consumption. Include two-level nested children under the existing root budget, rejection without a partial graph, missing secondary creation authority, missing raw completion reads, late source-read revocation and Stop after provisional acknowledgment. Verify exact parent/root/initial child/source identities, real or absent requester, actual System Session creator, factual terminal outcomes and zero provider calls.
+
+Exercise independent source-read and report-creation Review before same-parent reporting; verify current scheduled policy revocation separately from explicit manual invocation semantics. Recreate SQLite application hosts with creation, completion-read or report consent pending and compare the exact saved request before dispatch. Verify no-human consent against actual accepted root/child/approval lineage, raw manual-requester spoof rejection, all restored guard names, model parity, safe no-new-data migration roundtrip and lossy downgrade refusal. Preserve independently passing cases after assertion-only repairs. [Execution evidence](reports/tenant-independent-child-verification-2026-10-20.md) distinguishes this backend scope from pending UI/destination/ingress and full-proposal acceptance.
+
 ## Independent protected-task runtime qualification
 
 Exercise manual and scheduled roots through the existing coordinator, mailbox and exact-operation owners, including definitions without chat-child creation capability. Cover direct Workspace write/read/publication, Office binary creation/inspection/copy, Review, primary-only grants, rejection, missing source reads, permission loss and fresh SQLite host recovery of pending consent. Verify immutable root/task/occurrence linkage, actual manual invoker versus absent scheduled requester, original bytes, no inherited grant and no implicit report.

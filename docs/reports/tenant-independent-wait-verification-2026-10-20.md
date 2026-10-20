@@ -19,6 +19,8 @@ Admitted Schedule/manual Automation tasks and their exact approval successors ca
 
 The final focused groups pass **116 distinct cases, zero failures and zero skips**: API independent 30, API adjacent 22, Application 38 and Infrastructure 26. The three affected test-project builds pass with zero warnings/errors. Passing adjacent groups were retained after the final API-only fixture barrier; only the affected 30-case independent matrix needed another grouped run.
 
+The [independent child/inbox successor](tenant-independent-child-verification-2026-10-20.md) extends the historical conversion boundary below. This wait report remains evidence for its original scoped change.
+
 ## Ownership and limits
 
 `TenantWaitToolContract` reuses the converted task-shape contract. `TenantWaitRules` accepts actual independent tasks while retaining explicit human attribution for the earlier conversational/immediate-background path. The existing store suspension transaction verifies current capability, saved pending call/checkpoint, live frame and actual lineage. Resumed provider admission repeats current executor, requester, source and source-kind policy checks. No new scheduler, worker, permission family, database migration or task entity is introduced.

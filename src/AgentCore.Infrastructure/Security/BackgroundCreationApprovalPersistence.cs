@@ -6,7 +6,6 @@ internal static class BackgroundCreationApprovalPersistence
     private static string Shape => """
         Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64
         AND Permission IN ('sessions.create','agent-runs.create') AND ResourceType = 'tenant' AND ResourceId IS lower(TenantId)
-        AND OriginalInitiatorPrincipalId IS NOT NULL
         AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
         AND json_type(PayloadJson, '$.Operation.BackgroundStart') IS 'object'
         AND json_extract(PayloadJson, '$.Operation.BackgroundStart.TenantId') IS lower(TenantId)

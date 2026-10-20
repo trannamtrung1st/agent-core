@@ -7,6 +7,30 @@ namespace AgentCore.Application.Tests;
 public sealed class TenantIndependentTaskContractTests
 {
     [Theory]
+    [InlineData(ExecutionOrigin.ImmediateBackground, true)] [InlineData(ExecutionOrigin.ApprovalContinuation, true)]
+    [InlineData(ExecutionOrigin.ImmediateBackground, false)] [InlineData(ExecutionOrigin.ApprovalContinuation, false)]
+    public async Task No_human_child_controls_require_a_frozen_child_task_and_owned_trusted_parent(ExecutionOrigin origin, bool task)
+    {
+        var names = new[] { ToolCatalog.BackgroundStart, ToolCatalog.BackgroundList, ToolCatalog.BackgroundInspect,
+            ToolCatalog.BackgroundTake, ToolCatalog.BackgroundAcknowledge, ToolCatalog.ExecutionWait };
+        var definition = await CapabilityProjectionTests.Definition(names); var session = Guid.NewGuid(); var parent = Guid.NewGuid();
+        var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
+            OutputContract = AgentRunOutputContract.BackgroundOutcome, DetachedExecution = true, LoadedCapabilityIds = names, HasBackgroundClaim = true,
+            ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), null, session, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), parent, Guid.NewGuid(), origin),
+            RunTaskIntent = task ? new("Exact child task", AgentRunTaskSource.AgentRun, parent.ToString("D")) : null };
+        var tools = ToolProjectionService.Project(definition, context, ToolConfigurationGates.AllowAll);
+        foreach (var name in names) Assert.Equal(task, tools.Any(t => t.Name == name));
+        if (task)
+        {
+            var schema = Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
+            Assert.Contains("start_background_work", schema); Assert.Contains("inspect_background_completion", schema);
+            Assert.DoesNotContain("update_persona", schema);
+        }
+        var foreign = ToolProjectionService.Project(definition, context with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll);
+        foreach (var name in names) Assert.DoesNotContain(foreign, t => t.Name == name);
+    }
+
+    [Theory]
     [InlineData(ExecutionOrigin.ScheduledOccurrence, false, true, true)]
     [InlineData(ExecutionOrigin.ManualInvocation, true, true, true)]
     [InlineData(ExecutionOrigin.ApprovalContinuation, false, true, true)]
@@ -23,7 +47,7 @@ public sealed class TenantIndependentTaskContractTests
         var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var continuation = origin == ExecutionOrigin.ApprovalContinuation;
         var context = CapabilityProjectionTests.Context(definition) with {
             AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session, ModelSupportsTools = true, DetachedExecution = true, OutputContract = AgentRunOutputContract.BackgroundOutcome,
-            LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.ExecutionWait],
+            LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.ExecutionWait, ToolCatalog.BackgroundInspect],
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), human ? Guid.NewGuid() : null, session, Guid.NewGuid(), activation,
                 continuation ? Guid.NewGuid() : activation, continuation ? Guid.NewGuid() : null, continuation ? Guid.NewGuid() : null, origin),
             RunTaskIntent = new("The exact frozen task", automation ? AgentRunTaskSource.Automation : AgentRunTaskSource.AgentRun, Guid.NewGuid().ToString("D") + ":1") };
@@ -36,8 +60,8 @@ public sealed class TenantIndependentTaskContractTests
         if (expected)
         {
             Assert.Contains(tools, t => t.Name == ToolCatalog.ExecutionWait);
-            Assert.DoesNotContain(tools, t => t.Name == ToolCatalog.BackgroundInspect);
-            Assert.DoesNotContain("inspect_background_completion", Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
+            Assert.Contains(tools, t => t.Name == ToolCatalog.BackgroundInspect);
+            Assert.Contains("inspect_background_completion", Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
         }
     }
     [Theory] [InlineData(false, 32, 0, 0, 0, 0, null)] [InlineData(true, 32, 0, 0, 0, 0, "approval_rate_limited")]

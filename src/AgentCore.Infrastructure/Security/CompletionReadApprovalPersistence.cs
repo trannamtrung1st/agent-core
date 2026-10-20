@@ -7,7 +7,7 @@ internal static class CompletionReadApprovalPersistence
         Kind = 0 AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64
         AND Permission = 'agent-runs.read' AND ResourceType = 'agent-run'
         AND ResourceId IS json_extract(PayloadJson, '$.Operation.CompletionRead.SourceRunId')
-        AND OriginalInitiatorPrincipalId IS NOT NULL AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
+        AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
         AND json_type(PayloadJson, '$.Operation.CompletionRead') IS 'object'
         AND json_extract(PayloadJson, '$.Operation.CompletionRead.ParentSessionId') IS SessionId
         AND json_type(PayloadJson, '$.Operation.CompletionRead.SourceRevision') IS 'integer'

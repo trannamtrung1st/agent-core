@@ -18,7 +18,7 @@ public sealed class TenantBackgroundCreationContractTests
         Assert.Contains(tools, t => t.Name == ToolCatalog.BackgroundStart);
         Assert.Contains("start_background_work", Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson);
         foreach (var invalid in new[] { context with { ModelSupportsTools = false }, context with { OwnedSessionId = Guid.NewGuid() },
-            context with { OutputContract = AgentRunOutputContract.CompletionReport }, context with { OutputContract = AgentRunOutputContract.BackgroundOutcome } })
+            context with { OutputContract = AgentRunOutputContract.CompletionReport } })
             Assert.DoesNotContain(ToolProjectionService.Project(definition, invalid, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.BackgroundStart);
     }
     [Theory] [InlineData("tenantId")] [InlineData("principalId")] [InlineData("childSessionId")] [InlineData("runId")]

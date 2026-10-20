@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Independent child and completion controls
+
+Converted Schedule/manual tasks and their exact children may use the existing explicitly enabled `background.start`, typed wait, completion list/inspect/take/acknowledge and exact authorization schemas. Public tools accept objectives or exact child identifiers only; Core derives the parent, executor, root, actual requester and child identities. They never accept a caller-selected execution origin or requester. Scheduled ancestry keeps a null requester, including protected consent; manual ancestry retains its real invoker. Completion-report Runs cannot start children.
+
+Child creation still needs independent `sessions.create` and `agent-runs.create`; an exact grant substitutes for one primary permission only. Completion observations still need current raw child Session/initial/source Run reads and any separate exact read Review. Acknowledgment is provisional until a successful current-source parent answer. Automatic same-parent reports independently authorize source read and report-Run creation. Disabling scheduling blocks scheduled report admission; an explicitly manual task retains manual source-kind policy semantics. No arbitrary destination or new public report-initiation endpoint is introduced. [Backend qualification](reports/tenant-independent-child-verification-2026-10-20.md).
+
 ## Independent Automation protected-operation consent
 
 The existing protected-operation tools and tenant Approval HTTP endpoints also serve admitted Schedule/manual Background tasks. Core supplies all tenant, executor, Session/Run, root and source facts. Scheduled requests have a genuinely null `originalInitiatorPrincipalId` and requester label; explicit manual requests retain the actual current invoker. Registration authors and human reviewers are never substituted for that requester. Exact action parameters, raw independent reads, current reviewer checks, grants, receipts and factual native outcomes retain their existing contracts.

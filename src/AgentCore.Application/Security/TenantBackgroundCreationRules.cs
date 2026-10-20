@@ -12,13 +12,12 @@ public static class TenantBackgroundCreationRules
 {
     public const string AuditAction = "operations.background.admit";
     public static readonly string[] Permissions = ["sessions.create", "agent-runs.create"];
-    public static bool Allows(AgentRun run) => run.Admission.OutputContract == AgentRunOutputContract.ConversationResponse
-        && run.Admission.ExecutionContext is { OriginalInitiatorPrincipalId: not null, Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation };
+    public static bool Allows(AgentRun run) => TenantTaskExecutionContract.Allows(run);
     public static string Hash(ResolvedAgentRunConfiguration value) => TenantWorkspaceMutationContract.Hash(JsonSerializer.Serialize(value));
     public static void Require(TenantApprovalRequest request, AgentRun run, TenantAgent agent, AgentCore.Domain.Definitions.AgentDefinition current)
     {
         var value = request.Operation.BackgroundStart ?? throw new SecurityConflictException("operation_mismatch");
-        if (!Allows(run) || value.TenantId != request.TenantId || value.SessionId != run.SessionId
+        if (!TenantTaskExecutionContract.Allows(run, current) || value.TenantId != request.TenantId || value.SessionId != run.SessionId
             || agent.PrincipalId != run.Owner.ExecutorPrincipalId || agent.Instance.InstanceId != request.Operation.InstanceId
             || !RolePermissions.AllowsTool(run.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
             || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)) throw new AccessDeniedException("background_unavailable");

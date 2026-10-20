@@ -6,7 +6,7 @@ internal static class BackgroundReportApprovalPersistence
     private static string Shape => """
         Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64
         AND Permission = 'agent-runs.create' AND ResourceType = 'tenant' AND ResourceId IS lower(TenantId)
-        AND OriginalInitiatorPrincipalId IS NOT NULL AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
+        AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
         AND json_type(PayloadJson, '$.Operation.BackgroundReport') IS 'object'
         AND json_extract(PayloadJson, '$.Operation.BackgroundReport.TenantId') IS lower(TenantId)
         AND json_extract(PayloadJson, '$.Operation.BackgroundReport.SessionId') IS SessionId

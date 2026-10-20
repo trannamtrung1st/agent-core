@@ -44,7 +44,7 @@ public sealed partial class TenantSessionAccessTests
             if (origin == ExecutionOrigin.ImmediateBackground)
             {
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-                Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate or ToolCatalog.ArtifactsCreate);
+                Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate or ToolCatalog.ArtifactsCreate);
                 var authorization = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
                 Assert.DoesNotContain("update_persona", authorization);
                 yield return new ModelToolCallEvent(new("tenant-background-finish", ToolCatalog.WorkComplete,

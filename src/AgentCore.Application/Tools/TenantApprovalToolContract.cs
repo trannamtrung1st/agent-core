@@ -40,8 +40,7 @@ public static class TenantApprovalToolContract
             || AgentCore.Application.Agents.RolePermissions.AllowsTool(definition, ToolCatalog.DriveAccounts));
     public static bool AllowsAccountAction(AgentDefinition definition, AgentContext? context) => context?.Configuration?.CredentialBindings.Count > 0 && TenantAccountActionContract.Allowed(definition).Count > 0;
     public static bool AllowsAccountRead(AgentDefinition definition, AgentContext? context) => context?.Configuration?.CredentialBindings.Count > 0 && TenantAccountReadContract.Allowed(definition).Count > 0;
-    public static bool AllowsBackground(AgentDefinition definition, AgentContext? context) => context?.OutputContract == AgentCore.Domain.Conversation.AgentRunOutputContract.ConversationResponse
-        && TenantTaskExecutionContract.Allows(context) && AgentCore.Application.Agents.RolePermissions.AllowsTool(definition, ToolCatalog.BackgroundStart);
+    public static bool AllowsBackground(AgentDefinition definition, AgentContext? context) => TenantTaskExecutionContract.Allows(context) && AgentCore.Application.Agents.RolePermissions.AllowsTool(definition, ToolCatalog.BackgroundStart);
     public static bool AllowsArtifact(AgentDefinition definition, AgentContext? context) => TenantTaskExecutionContract.Allows(context) && TenantArtifactToolContract.Allows(definition);
     public static bool AllowsWorkspaceArtifact(AgentDefinition definition, AgentContext? context) => TenantTaskExecutionContract.Allows(context) && TenantWorkspaceArtifactContract.Allows(definition);
     public static bool AllowsCompletion(AgentDefinition definition, AgentContext? context) => TenantCompletionToolContract.IsOffered(definition, context, ToolCatalog.BackgroundInspect);

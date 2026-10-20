@@ -44,19 +44,20 @@ public static class TenantBackgroundAdmissionRules
             || child.Checkpoint is not null || child.ApprovalRequestId is not null)
             throw new AccessDeniedException("background_admission_mismatch");
         return new(previous.TenantId, child.SessionId, child.AgentInstanceId, previous.AgentPrincipalId,
-            previous.OriginalInitiatorPrincipalId ?? throw new AccessDeniedException("requester_unavailable"), child.CreatedAtUtc);
+            parent.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome ? previous.AgentPrincipalId
+                : previous.OriginalInitiatorPrincipalId ?? throw new AccessDeniedException("requester_unavailable"), child.CreatedAtUtc);
     }
 
     public static ValueTask AuthorizeAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
-        IamAuthorizer authorizer, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, ct, true);
+        IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, runs, ct, true);
     public static ValueTask AuthorizeReportAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
-        IamAuthorizer authorizer, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, ct, false);
+        IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, runs, ct, false);
     private static async ValueTask AuthorizeAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
-        IamAuthorizer authorizer, CancellationToken ct, bool createSession)
+        IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct, bool createSession)
     {
         var execution = parent.Admission.ExecutionContext!;
         if (state.Tenant.Status != IdentityStatus.Active || state.Tenant.TenantId != execution.TenantId
-            || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
+            || !TenantTaskExecutionContract.Allows(parent, current) || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
             || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)) throw new AccessDeniedException("background_unavailable");
         foreach (var key in createSession ? new[] { "sessions.create", "agent-runs.create" } : new[] { "agent-runs.create" })
         {
@@ -65,15 +66,11 @@ public static class TenantBackgroundAdmissionRules
                 throw new AccessDeniedException("permission_denied");
             var mode = TenantOperationPolicyService.Effective(state, permission).Mode;
             if (mode == OperationApprovalMode.Always || mode == OperationApprovalMode.WhenRequesterLacksPermission
-                && (execution.OriginalInitiatorPrincipalId is not { } requester
-                    || !(await authorizer.CheckTenantAsync(state, requester, permission, scope, ct).ConfigureAwait(false)).Allowed))
+                && execution.OriginalInitiatorPrincipalId is { } requester
+                && !(await authorizer.CheckTenantAsync(state, requester, permission, scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("background_review_required");
         }
-        var original = execution.OriginalInitiatorPrincipalId ?? throw new AccessDeniedException("requester_unavailable");
-        foreach (var pair in new[] { ("sessions.read", TenantSessionRules.Scope(execution.TenantId, parent.SessionId)),
-            ("agents.chat", AccessScope.ForResource(execution.TenantId, "agent", parent.AgentInstanceId.ToString("D"))) })
-            if (!(await authorizer.CheckTenantAsync(state, original, PermissionCatalog.Get(pair.Item1), pair.Item2, ct).ConfigureAwait(false)).Allowed)
-                throw new AccessDeniedException("requester_unavailable");
+        await TenantExecutionLineage.RequireRequesterAsync(parent, state, authorizer, runs, ct).ConfigureAwait(false);
     }
 
     public static bool Same(AgentRun existing, SessionSnapshot saved, AgentRun proposed, SessionSnapshot candidate) =>

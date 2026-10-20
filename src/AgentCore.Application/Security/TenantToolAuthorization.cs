@@ -203,7 +203,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
         if (TenantTaskExecutionContract.IsBackground(run) && intent.WorkspaceRead is null && intent.AttachmentArguments is null && intent.ArtifactId is null
-            && intent.WorkspaceMutation is null && intent.ArtifactArguments is null && intent.CompletionArguments is null
+            && intent.WorkspaceMutation is null && intent.ArtifactArguments is null && intent.CompletionArguments is null && intent.BackgroundArguments is null
             && intent.MetadataArguments is null && intent.AccountAction is null && intent.AccountRead is null && intent.Browser is null && intent.Sandbox is null && intent.SandboxRead is null && intent.SandboxControl is null)
         {
             await authorizer.RecordFailureAsync(boundary.Reference, "", "tenant_effect_unavailable", AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ApprovalPreparation, ct, session).ConfigureAwait(false);

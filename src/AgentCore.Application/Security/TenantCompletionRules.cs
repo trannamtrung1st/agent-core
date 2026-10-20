@@ -14,7 +14,7 @@ public static class TenantCompletionRules
 {
     public static void Require(AgentRun parent, AgentDefinition current, string tool)
     {
-        if (!TenantWaitRules.Allows(parent) || TenantTaskExecutionContract.IsIndependent(parent) || !TenantCompletionToolContract.IsTool(tool)
+        if (!TenantWaitRules.Allows(parent) || !TenantCompletionToolContract.IsTool(tool)
             || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, tool) || !RolePermissions.AllowsTool(current, tool))
             throw new AccessDeniedException("completion_unavailable");
     }
@@ -71,8 +71,8 @@ public static class TenantCompletionRules
         if (!(await iam.CheckOwnedTenantAsync(state, parent.Owner.ExecutorPrincipalId!.Value, permission, scope, ct).ConfigureAwait(false)).Allowed) return false;
         var policy = TenantOperationPolicyService.Effective(state, permission);
         return policy.Mode != OperationApprovalMode.Always && (policy.Mode != OperationApprovalMode.WhenRequesterLacksPermission
-            || parent.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } human
-                && (await iam.CheckOwnedTenantAsync(state, human, permission, scope, ct).ConfigureAwait(false)).Allowed);
+            || parent.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is not { } human
+            || (await iam.CheckOwnedTenantAsync(state, human, permission, scope, ct).ConfigureAwait(false)).Allowed);
     }
 
     // Metadata only, independently filtered before the two-link page boundary; no artifact bytes.

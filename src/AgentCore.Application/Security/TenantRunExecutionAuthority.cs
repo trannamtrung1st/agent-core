@@ -31,7 +31,7 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                     && !AgentCore.Application.Agents.RolePermissions.AllowsTool(current.Definition, AgentCore.Application.Tools.ToolCatalog.BackgroundStart)) return null;
                 if (before.State.Tenant.Revision == after.State.Tenant.Revision)
                 {
-                    if (after.Run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome)
+                    if (after.Run.Admission.OutputContract is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport)
                     {
                         var root = await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false);
                         if (root.Admission.ExecutionContext!.Origin == ExecutionOrigin.UserMessage)

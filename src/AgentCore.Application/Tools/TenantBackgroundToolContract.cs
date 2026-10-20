@@ -12,7 +12,7 @@ public static class TenantBackgroundToolContract
         context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
         && execution.SessionId == context.OwnedSessionId
         && (name == ToolCatalog.BackgroundStart
-            ? context.OutputContract == AgentRunOutputContract.ConversationResponse && execution.Origin is (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation) && RolePermissions.AllowsTool(definition, name)
+            ? TenantTaskExecutionContract.Allows(context) && RolePermissions.AllowsTool(definition, name)
             : name == ToolCatalog.WorkComplete && IsWorkOrigin(execution.Origin) && context.OutputContract == AgentRunOutputContract.BackgroundOutcome);
     public static bool Allows(AgentRun run, string name) => name == ToolCatalog.BackgroundStart
         ? AgentCore.Application.Security.TenantBackgroundCreationRules.Allows(run)

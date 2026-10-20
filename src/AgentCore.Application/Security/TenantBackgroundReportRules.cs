@@ -53,7 +53,7 @@ public static class TenantBackgroundReportRules
     }
     public static async ValueTask ExecutorAsync(TenantSecurityState state, TenantApprovalRequest request, AgentRun root, AgentDefinition current, IamAuthorizer iam, CancellationToken ct)
     {
-        if (state.Tenant.Status != IdentityStatus.Active || !RolePermissions.AllowsTool(root.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
+        if (state.Tenant.Status != IdentityStatus.Active || !TenantTaskExecutionContract.Allows(root, current) || !RolePermissions.AllowsTool(root.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
             || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)) throw new AccessDeniedException("background_unavailable");
         if (request.Kind == ApprovalKind.Review && !(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId,
             PermissionCatalog.Get("agent-runs.create"), AccessScope.ForTenant(request.TenantId), ct).ConfigureAwait(false)).Allowed)
