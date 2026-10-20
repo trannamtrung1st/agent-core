@@ -12,7 +12,7 @@ import { ExecutionModelFields } from '../admin/ExecutionModelFields';
 import { scheduleTimingLabel } from '../admin/AutomationScheduleFields';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { TenantAgentHeading } from './TenantAgentHeading';
-import { tenantAccessPath, tenantAgentPath } from './accessRoute';
+import { tenantAccessPath, tenantAgentPath, tenantApprovalPath } from './accessRoute';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
@@ -27,6 +27,7 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
   const pendingFocus = useRef<{ id?: string; opener: HTMLElement } | null>(null);
   const [page, setPage] = useState(0); const [search, setSearch] = useState(''); const [selection, setSelection] = useState<Selection>();
   const [attempted, setAttempted] = useState(false); const [unknown, setUnknown] = useState(false); const [admitted, setAdmitted] = useState<string>();
+  const [approval, setApproval] = useState<string>();
   const [confirming, setConfirming] = useState(false); const confirmation = useRef<ReturnType<typeof confirmAction> | null>(null);
   const state = useIdentityQuery<TenantAutomationEditor>(tenantAutomationsApi(tenant, id, `/editor?page=${page}&pageSize=10`));
   const view = state.data; const alive = useRef(false); const busy = command.busy || confirming;
@@ -40,7 +41,7 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
       (row ?? (target.opener.isConnected ? target.opener : newButton.current && !newButton.current.disabled ? newButton.current : reloadButton.current))?.focus(); pendingFocus.current = null;
     }
   }, [state.data]);
-  useEffect(() => { if (lostRead(state.error)) { setSelection(undefined); setAdmitted(undefined); } }, [state.error]);
+  useEffect(() => { if (lostRead(state.error)) { setSelection(undefined); setAdmitted(undefined); setApproval(undefined); } }, [state.error]);
   const reload = () => { if (busy) return; command.clearError(); state.reload(); };
   const close = () => { const opener = selection?.opener; setSelection(undefined); if (opener?.isConnected) opener.focus(); };
   const blocked = busy || attempted || unknown || command.requiresReload || !!selection;
@@ -56,14 +57,15 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
         void command.run(async signal => {
           try {
             if (run) {
-              const result = await identityRequest<{ runId: string; sessionId: string }>(tenantAutomationsApi(tenant, id, `/${value.automationId}/run`), { method: 'POST', signal, body: automationWitness(view, value) });
+              const result = await identityRequest<{ runId: string | null; sessionId: string | null; approvalRequestId?: string | null }>(tenantAutomationsApi(tenant, id, `/${value.automationId}/run`), { method: 'POST', signal, body: automationWitness(view, value) });
+              if (result?.approvalRequestId && !result.runId && !result.sessionId) return { approval: result.approvalRequestId };
               if (!result?.runId || !result.sessionId) throw new IdentityCompletionError();
-              return result.runId;
+              return { run: result.runId };
             }
             const witness = new URLSearchParams(Object.entries(automationWitness(view, value)).map(([key, number]) => [key, String(number)]));
             await identityRequest(tenantAutomationsApi(tenant, id, `/${value.automationId}?${witness}`), { method: 'DELETE', signal }); return undefined;
           } catch (error) { if (!(error instanceof IdentityError)) setUnknown(true); throw error; }
-        }, runId => { if (runId) setAdmitted(runId); message.success(run ? 'Run admitted. Open Activity for its outcome.' : 'Automation cancelled. Existing work remains separate.'); state.reload(); });
+        }, result => { if (result?.run) { setAdmitted(result.run); setApproval(undefined); } if (result?.approval) setApproval(result.approval); message.success(run ? result?.approval ? 'Occurrence is waiting for approval. No work has been created.' : 'Run admitted. Open Activity for its outcome.' : 'Automation cancelled. Existing work remains separate.'); state.reload(); });
       } });
   }
   const rows = view?.items.filter(item => `${item.automation.name} ${item.automation.instructions}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [];
@@ -71,6 +73,7 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
     <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Automations</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
     {unknown && <Alert type="warning" showIcon title="Check the outcome before another action" description="This action may have been admitted. Inspect current Automations and Activity before leaving and starting another deliberate action. Reload never repeats it." />}
+    {approval && <Alert type="info" showIcon title="Waiting for admission approval" description={<><Typography.Paragraph>No Session or Run has been created for this occurrence. Approval and admission remain separate steps.</Typography.Paragraph><Typography.Link href={tenantApprovalPath(tenant, approval)} onClick={followAppLink}>Review the exact admission request</Typography.Link></>} />}
     {admitted && <Alert type="success" showIcon title="Run admitted" description={<Typography.Link href={`${tenantAgentPath(tenant, id, 'activity-runs')}?run=${encodeURIComponent(admitted)}`} onClick={followAppLink}>Open the admitted Run in Activity</Typography.Link>} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && <>
       <TenantAgentHeading view={{ agent: view.agent, canUpdate: view.canCreate || view.items.some(i => i.canUpdate || i.canCancel || i.canRun) }} readOnlyDescription="Automation actions require independent access on the exact registration." />

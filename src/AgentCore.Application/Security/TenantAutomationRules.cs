@@ -68,9 +68,7 @@ public static class TenantAutomationRules
     public static async ValueTask AdmissionAuthority(TenantSecurityState state, Automation automation, TenantAgent agent, AgentDefinition definition,
         IamAuthorizer iam, CancellationToken ct, Guid? requester = null)
     {
-        Owner(automation, agent); TenantSessionRules.RequireExecutor(state, agent);
-        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || automation.Status != AutomationStatus.Active) throw new AccessDeniedException("automation_unavailable");
-        Configuration(automation, definition, automation.Provenance.CreatedAt, requester is null);
+        AdmissionSource(state, automation, agent, definition, requester);
         foreach (var (key, scope) in new[] { ("automations.run", Scope(state.Tenant.TenantId, automation.AutomationId)),
             ("sessions.create", AccessScope.ForTenant(state.Tenant.TenantId)), ("agent-runs.create", AccessScope.ForTenant(state.Tenant.TenantId)) })
         {
@@ -81,6 +79,12 @@ public static class TenantAutomationRules
                 throw new AccessDeniedException("automation_admission_review_required");
         }
     }
+    public static void AdmissionSource(TenantSecurityState state, Automation automation, TenantAgent agent, AgentDefinition definition, Guid? requester)
+    {
+        Owner(automation, agent); TenantSessionRules.RequireExecutor(state, agent);
+        if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || automation.Status != AutomationStatus.Active) throw new AccessDeniedException("automation_unavailable");
+        Configuration(automation, definition, automation.Provenance.CreatedAt, requester is null);
+    }
     public static void TechnicalAdvance(Automation current, Automation advanced, DateTimeOffset at)
     {
         var decision = TriggerScheduleAdmission.Decide(current, at);
@@ -88,28 +92,34 @@ public static class TenantAutomationRules
             || !Same(TriggerScheduleAdmission.Advance(current, decision, at), advanced))
             throw new ArgumentException("Only an exact non-executing schedule closure may advance without an occurrence.");
     }
-    public static void Admission(TenantAutomationAdmission value, TenantAgent agent, Guid? manualInitiator = null)
+    public static void Admission(TenantAutomationAdmission value, TenantAgent agent, Guid? manualInitiator = null, PreparedAutomationAdmission? consent = null)
     {
         var current = value.Current; var next = value.Next; var occurrence = value.Occurrence; var root = value.SessionOwner; var run = value.Run;
         Owner(current, agent); Owner(next, agent);
         if ((occurrence.SourceKind == TriggerSourceKind.ManualInvocation) != (manualInitiator is not null)) throw new ArgumentException("Manual admission requires its actual human invoker.");
         var context = run.Admission.ExecutionContext;
         var at = run.CreatedAtUtc;
+        var sourceAt = consent?.Occurrence.AdmittedAtUtc ?? at;
         var pin = occurrence.ModelPin ?? throw new ArgumentException("An occurrence requires its exact model pin.");
         Automation expectedNext; TriggerOccurrence expectedOccurrence;
         if (occurrence.SourceKind == TriggerSourceKind.ManualInvocation)
         {
-            expectedNext = current.WithScheduleAdvance(current.Status, current.NextOccurrenceAtUtc, current.OccurrenceCount, current.Revision + 1, at, null);
-            expectedOccurrence = AutomationRules.ManualOccurrence(current, pin, at);
+            expectedNext = current.WithScheduleAdvance(current.Status, current.NextOccurrenceAtUtc, current.OccurrenceCount, current.Revision + 1, sourceAt, null);
+            expectedOccurrence = AutomationRules.ManualOccurrence(current, pin, sourceAt);
         }
         else
         {
-            var decision = TriggerScheduleAdmission.Decide(current, at);
+            var decision = TriggerScheduleAdmission.Decide(current, sourceAt);
             if (decision.Kind != ScheduleAdmissionKind.Admit) throw new ArgumentException("The exact schedule is not due.");
-            expectedNext = TriggerScheduleAdmission.Advance(current, decision, at);
-            expectedOccurrence = TriggerScheduleAdmission.CreateOccurrence(current, decision, at).WithModelPin(pin);
+            expectedNext = TriggerScheduleAdmission.Advance(current, decision, sourceAt);
+            expectedOccurrence = TriggerScheduleAdmission.CreateOccurrence(current, decision, sourceAt).WithModelPin(pin);
         }
-        expectedOccurrence = expectedOccurrence.WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork, null, expectedOccurrence.RoutingRevision + 1, at, null, null)
+        if (consent is not null)
+        {
+            if (!Same(consent.Current, current) || !Same(consent.Next, next) || !TenantAutomationAdmissionApprovalRules.SameOccurrence(consent.Occurrence, expectedOccurrence)) throw new ArgumentException("Consent source differs from the exact occurrence.");
+            expectedOccurrence = TenantAutomationAdmissionApprovalRules.Source(consent);
+        }
+        expectedOccurrence = expectedOccurrence.WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork, null, expectedOccurrence.RoutingRevision + 1, sourceAt, null, null)
             .WithExecutionAcceptance(root.SessionId, run.AgentRunId, expectedOccurrence.RoutingRevision + 1, at);
         if (!Same(expectedNext, next) || JsonSerializer.Serialize(expectedOccurrence) != JsonSerializer.Serialize(occurrence))
             throw new ArgumentException("Occurrence intent differs from its current owned registration.");

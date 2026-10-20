@@ -1,7 +1,7 @@
 namespace AgentCore.Contracts.Http;
 
 public sealed record TenantApprovalPageDto(IReadOnlyList<TenantApprovalDto> Items, int Total, int Page, int PageSize);
-public sealed record TenantApprovalDto(Guid RequestId, Guid TenantId, Guid RunId, Guid SessionId, Guid RootActivationId,
+public sealed record TenantApprovalDto(Guid RequestId, Guid TenantId, Guid? RunId, Guid? SessionId, Guid RootActivationId,
     Guid ExecutorPrincipalId, Guid? OriginalInitiatorPrincipalId, string Kind, string Status, long RequestRevision,
     long SecurityRevision, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, string Summary, string Permission,
     TenantApprovalTargetDto TargetResource, TenantPreparedActionDto PreparedAction, TenantApprovalDecisionDto? Decision,

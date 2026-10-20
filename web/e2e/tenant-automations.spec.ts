@@ -79,3 +79,31 @@ test('scoped Automation reader has no mutation controls and read revocation reti
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });
+
+test('exact Automation admission is reviewed before any work exists and settles truthfully at narrow width', async ({ page }, info) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    await call(f.api, f.root + '/operation-policies/agent-runs.create', { mode: 'always', independentReview: false, expectedRevision: await f.revision(), expectedPolicyRevision: 0 }, 'PUT');
+    await call(f.api, f.resource, { enabled: true, name: 'Approval before work exists', instructions: 'synthetic-automation-attention: finish this exact approved occurrence', schedule: { kind: 'daily', interval: 1, timeZone: 'UTC', localTime: '09:00' }, expectedRevision: await f.revision(), expectedInstanceRevision: 1, requiresTools: true });
+    await page.setViewportSize({ width: 390, height: 844 }); await signIn(page); await page.goto(f.route);
+    await page.getByRole('button', { name: 'Run now', exact: true }).click(); const confirmation = page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true });
+    await confirmation.getByRole('button', { name: 'Run now', exact: true }).click();
+    const link = page.getByRole('link', { name: 'Review the exact admission request', exact: true }); await expect(link).toBeVisible();
+    expect(await page.getByRole('link', { name: 'Open the admitted Run in Activity', exact: true }).count()).toBe(0);
+    const requestId = (await link.getAttribute('href'))!.split('/').at(-1)!;
+    const pending = await call<{ runId: null; sessionId: null; review: { executionState: string } }>(f.api, f.root + `/approvals/${requestId}`);
+    expect(pending.runId).toBeNull(); expect(pending.sessionId).toBeNull(); expect(pending.review.executionState).toBe('waitingDecision');
+    await link.click(); const review = page.getByRole('dialog', { name: 'Approval details', exact: true });
+    await expect(review).toBeVisible(); await expect(review.getByText('synthetic-automation-attention: finish this exact approved occurrence', { exact: true })).toBeVisible();
+    expect(await review.getByRole('link', { name: 'Open original conversation', exact: true }).count()).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect.poll(async () => Math.round(await review.evaluate(element => element.getBoundingClientRect().x))).toBe(0);
+    await expect(review).toContainText('UTC · saved registration revision');
+    await page.screenshot({ path: info.outputPath('admission-narrow-review.png'), fullPage: true });
+    await review.getByRole('button', { name: 'Approve', exact: true }).click(); const decide = page.getByRole('dialog', { name: 'Approve?', exact: true });
+    await expect(decide).toContainText('Later tools need their own authority'); await decide.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(async () => (await call<{ review: { executionState: string } }>(f.api, f.root + `/approvals/${requestId}`)).review.executionState).toBe('admitted');
+    await review.getByRole('button', { name: 'Refresh details', exact: true }).click(); await expect(review.getByText(/One Background Session and Run were admitted/)).toBeVisible();
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});

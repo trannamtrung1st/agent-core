@@ -46,6 +46,7 @@ public static class TenantApprovalEndpoints
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
+            TenantOperationKind.AutomationAdmission => ("Admit exact Automation occurrence", "admit_automation_occurrence"),
             TenantOperationKind.ReportSourceRead => ("Read exact background report source", "inspect_background_report_source"),
             TenantOperationKind.CompletionRead => ("Read exact background result", "inspect_background_completion"),
             TenantOperationKind.BackgroundReport => ("Deliver exact background completion", "deliver_background_completion"),
@@ -67,7 +68,7 @@ public static class TenantApprovalEndpoints
                 ? ("Stop exact Sandbox process", "stop_sandbox_process") : ("Reset existing Sandbox environment", "reset_sandbox_environment"),
             TenantOperationKind.SandboxCommand => ("Run exact Sandbox command", "run_sandbox_command"),
             _ => throw new InvalidOperationException("Unsupported prepared operation.") };
-        return new(r.RequestId, r.TenantId, r.RunId, r.SessionId, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
+        return new(r.RequestId, r.TenantId, op.AutomationAdmission is null ? r.RunId : null, op.AutomationAdmission is null ? r.SessionId : null, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
             Camel(r.Kind), Camel(r.Status), r.Revision, view.SecurityRevision, r.CreatedAt, r.ExpiresAt,
             summary, r.Permission,
             new(r.ResourceType, r.ResourceId), new(op.OperationId, operation,

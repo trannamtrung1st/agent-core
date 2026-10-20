@@ -120,7 +120,7 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         var tenant = current.Owner.TenantId!.Value; var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         var (agent, resolved) = await configurations.ResolveAsync(tenant, current.Owner.AgentInstanceId, ct);
         if (instanceRevision is { } expected && agent.Instance.Revision != expected) throw new SecurityConflictException("stale_revision");
-        await TenantAutomationRules.AdmissionAuthority(state, current, agent, resolved.Configuration.Definition, iam, ct, human?.PrincipalId);
+        var admissionDecision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, resolved.Configuration.Definition, human?.PrincipalId, iam, ct);
         var model = ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, current);
         if (!model.Accepted || model.Pin is null) throw new AccessDeniedException("automation_model_unavailable");
         TriggerOccurrence occurrence; Automation next;
@@ -139,11 +139,34 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         var graph = BackgroundSessionAdmissionFactory.ForOccurrence(ids.NewSessionId(), ids.NewId(), ids.NewId(), ids.NewId(), ids.NewId(), occurrence,
             resolved.Configuration.Definition, agent.Instance.Persona, agent.Instance.PersonaRevision, model.Pin, resolved.Skills, at, current.Name,
             ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, manual ? human?.PrincipalId : null);
+        var initialOccurrence = occurrence;
         occurrence = occurrence.WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork, null, occurrence.RoutingRevision + 1, at, null, null)
             .WithExecutionAcceptance(graph.Session.SessionId, graph.Run.AgentRunId, occurrence.RoutingRevision + 1, at);
         var admission = new TenantAutomationAdmission(current, next, occurrence, new(tenant, graph.Session.SessionId, agent.Instance.InstanceId, agent.PrincipalId, agent.PrincipalId, at),
             graph.Session, graph.Run, agent.Instance.Revision, TenantAutomationRules.Hash(resolved));
         TenantAutomationRules.Admission(admission, agent, human?.PrincipalId);
+        if (admissionDecision.Kind is { } kind)
+        {
+            var requestId = ids.NewId();
+            var initial = initialOccurrence;
+            var intent = new PreparedAutomationAdmission(tenant, current, next, initial, requestId, graph.Session.SessionId, graph.Session.Entries[0].EntryId,
+                graph.Run.ActivationId, graph.Run.AgentRunId, graph.Run.ResponseId!.Value, human?.PrincipalId, admissionDecision.Permission,
+                TenantAutomationRules.Hash(resolved), new(model.Pin.CatalogKey, model.Pin.ProviderAlias, model.Pin.ModelId, model.Pin.ReasoningEffort));
+            var op = TenantApprovalRules.PrepareAutomationAdmission(ids.NewId(), agent.Instance.InstanceId, intent, agent.Instance.Revision, agent.Instance.PersonaRevision);
+            var request = new TenantApprovalRequest(requestId, tenant, intent.RunId, intent.SessionId, intent.ActivationId, agent.PrincipalId, human?.PrincipalId,
+                kind, op, TenantApprovalStatus.Pending, 1, at, at.AddHours(1), new(agent.Instance.Persona.Name));
+            var qualified = false;
+            foreach (var user in state.Users.Where(u => u.Status == IdentityStatus.Active))
+            {
+                try { await TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, request, user.PrincipalId, iam, ct); qualified = true; break; }
+                catch (AccessDeniedException) { }
+            }
+            if (!qualified) throw new AccessDeniedException("no_eligible_approver");
+            admission = TenantAutomationAdmissionApprovalRules.Build(request, agent, resolved);
+            TenantAutomationRules.Admission(admission, agent, human?.PrincipalId, intent);
+            return await store.TryPrepareTenantAutomationApprovalAsync(Next(state), state.Tenant.Revision, admission, request, human,
+                new(ids.NewId(), tenant, agent.PrincipalId, "approvals.request", requestId.ToString("D"), "allowed", "automation_admission_pending", at), ct);
+        }
         return await store.TryAdmitTenantAutomationAsync(Next(state), state.Tenant.Revision, admission, human,
             new(ids.NewId(), tenant, agent.PrincipalId, "automations.occurrence.admit", current.AutomationId.ToString("D"), "allowed", manual ? "manual_occurrence_admitted" : "scheduled_occurrence_admitted", at), ct);
     }

@@ -91,3 +91,14 @@ it('starts disabled, requires valid instructions and refuses enabled timing outs
   fireEvent.click(screen.getByRole('checkbox', { name: 'Enable scheduled occurrences' })); expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
   expect(await screen.findByText('The current Definition does not permit this schedule')).toBeVisible();
 });
+
+it('acknowledges pending admission consent without claiming a Run exists or replaying the action', async () => {
+  const original = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation(async (path, options) => String(path).endsWith('/run') ? response({ runId: null, sessionId: null, approvalRequestId: 'exact-approval' }, 202) : original(path, options));
+  await open(); fireEvent.click(screen.getByRole('button', { name: 'Run now' })); const dialog = await screen.findByRole('dialog', { name: 'Run saved Automation now?' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Run now' }));
+  expect(await screen.findByRole('link', { name: 'Review the exact admission request' })).toHaveAttribute('href', '/t/tenant/admin/approvals/exact-approval');
+  expect(screen.queryByRole('link', { name: 'Open the admitted Run in Activity' })).not.toBeInTheDocument();
+  expect(screen.getByText('No Session or Run has been created for this occurrence. Approval and admission remain separate steps.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Reload Automations' })); await waitFor(() => expect(writes()).toHaveLength(1));
+});

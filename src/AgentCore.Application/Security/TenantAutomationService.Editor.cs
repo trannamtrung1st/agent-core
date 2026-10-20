@@ -33,7 +33,7 @@ public sealed partial class TenantAutomationService
             var scope = TenantAutomationRules.Scope(tenant, value.AutomationId);
             var editable = value.Status is not (AutomationStatus.Cancelled or AutomationStatus.Completed or AutomationStatus.Expired);
             items.Add(new(value, editable && await Can("automations.update", scope), value.Status != AutomationStatus.Cancelled && await Can("automations.delete", scope),
-                value.Status == AutomationStatus.Active && await Can("automations.run", scope)));
+                value.Status == AutomationStatus.Active && !await store.IsTenantAutomationBusyAsync(tenant, value.AutomationId, ct) && await Can("automations.run", scope)));
         }
         var create = await Can("automations.create", AccessScope.ForTenant(tenant));
         await Unchanged(state, human, ct);

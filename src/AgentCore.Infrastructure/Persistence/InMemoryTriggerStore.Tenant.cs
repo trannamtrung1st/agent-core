@@ -21,7 +21,9 @@ public sealed partial class InMemoryTriggerStore
     internal TriggerOccurrence? ReadTenantOccurrence(Guid tenant, Guid id) => _state.Occurrences.TryGetValue(id, out var value) && value.Owner.TenantId == tenant ? value : null;
     internal IReadOnlyList<Automation> TenantAutomations(Guid? tenant = null) => _state.Registrations.Values.Where(v => v.Owner.TenantId is not null && (tenant is null || v.Owner.TenantId == tenant)).ToArray();
     internal void SaveTenantAutomation(Automation value) => _state.Registrations[value.AutomationId] = value;
-    internal bool TenantBusy(Guid automation) => RegistrationBusy(automation);
+    internal bool TenantBusy(Guid automation) => RegistrationBusy(automation) || _state.Occurrences.Values.Any(o => o.AutomationId == automation
+        && o.Owner.TenantId is not null && o.Disposition == OccurrenceRoutingDisposition.AwaitingDurableWork && o.DispositionReason == "admission_approval_pending");
+    internal void ReplaceTenantOccurrence(TriggerOccurrence value) => _state.Occurrences[value.OccurrenceId] = value;
     internal void CommitTenantOccurrence(Automation next, TriggerOccurrence occurrence)
     {
         _state.Registrations[next.AutomationId] = next;

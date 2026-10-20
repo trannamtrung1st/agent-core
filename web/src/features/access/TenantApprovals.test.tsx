@@ -747,3 +747,30 @@ it('removes account content when refresh loses current read authority', async ()
   await waitFor(() => expect(within(dialog).queryByRole('textbox', { name: 'Exact email body' })).not.toBeInTheDocument());
   expect(within(dialog).queryByText('private@example.test')).not.toBeInTheDocument();
 });
+
+const admissionRequest = (): TenantApproval => ({ ...request, summary: 'Admit exact Automation occurrence', runId: null, sessionId: null,
+  preparedAction: { ...request.preparedAction, operation: 'admit_automation_occurrence' },
+  review: { ...request.review, requesterName: null, changes: Object.entries({ admissionAutomation: 'Saved exact task', admissionSource: 'Scheduled occurrence · no human requester',
+    admissionOccurrence: 'Invoked at the saved UTC time · registration revision 1', admissionPrimaryPermission: 'agent-runs.create', admissionObjective: '<script>Literal admission objective</script>', admissionSchedule: 'Once at the saved UTC time', admissionDestination: 'New separate Background Session · no completion report',
+    admissionModel: 'Synthetic model', admissionScope: 'automations.run; sessions.create; agent-runs.create', admissionLimit: 'One exact occurrence. Primary grant only; later tools remain independent.' })
+    .map(([field, after]) => ({ field, before: null, after, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } });
+it('reviews source-less exact admission intent without inventing a conversation or executing work', async () => {
+  view(admissionRequest()); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('<script>Literal admission objective</script>')).toBeVisible(); expect(dialog.querySelector('script')).toBeNull();
+  expect(within(dialog).queryByRole('link', { name: 'Open original conversation' })).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Authorize once' }));
+  const confirm = (await screen.findAllByText('Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/Current registration, configuration, requester, executor and reviewer authority/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it.each(['missing', 'duplicate', 'source', 'permission'] as const)('blocks a malformed admission preview: %s', async mode => {
+  const item = admissionRequest(); if (mode === 'missing') item.review.changes.pop(); else if (mode === 'duplicate') item.review.changes[0] = item.review.changes[1]; else if (mode === 'permission') item.review.changes.find(change => change.field === 'admissionPrimaryPermission')!.after = 'system.admin'; else item.sessionId = 'invented-session';
+  view(item); const dialog = await screen.findByRole('dialog'); await within(dialog).findByText('Saved exact task').catch(() => {});
+  expect(within(dialog).getByRole('button', { name: 'Authorize once' })).toBeDisabled();
+});
+it.each(['admitted', 'notAdmitted', 'awaitingAdmission'] as const)('presents factual Automation settlement separately from approval: %s', async executionState => {
+  const item = admissionRequest(); item.status = 'approved'; item.review = { ...item.review, canDecide: false, canCancel: false, executionState }; view(item);
+  const dialog = await screen.findByRole('dialog'); const expected = executionState === 'admitted' ? /One Background Session and Run were admitted/ : executionState === 'notAdmitted' ? /This occurrence was not admitted/ : /Decision recorded. No admission result yet/;
+  expect(await within(dialog).findByText(expected)).toBeVisible(); expect(within(dialog).queryByRole('link', { name: /conversation/ })).not.toBeInTheDocument();
+});

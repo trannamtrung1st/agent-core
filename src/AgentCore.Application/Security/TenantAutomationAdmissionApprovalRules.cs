@@ -1,0 +1,132 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using AgentCore.Application.Execution;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Triggers;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
+using AgentCore.Domain.Triggers;
+
+namespace AgentCore.Application.Security;
+
+public sealed record TenantAutomationAdmissionDecision(string Permission, ApprovalKind? Kind);
+
+public static class TenantAutomationAdmissionApprovalRules
+{
+    public const string PendingReason = "admission_approval_pending";
+    public static readonly string[] Permissions = ["automations.run", "sessions.create", "agent-runs.create"];
+    public static (string Permission, AccessScope Scope)[] Targets(Guid tenant, Guid automation) => Permissions.Select(key =>
+        (key, key == "automations.run" ? TenantAutomationRules.Scope(tenant, automation) : AccessScope.ForTenant(tenant))).ToArray();
+
+    public static async ValueTask<TenantAutomationAdmissionDecision> EvaluateAsync(TenantSecurityState state, Automation value, TenantAgent agent,
+        AgentCore.Domain.Definitions.AgentDefinition definition, Guid? requester, IamAuthorizer iam, CancellationToken ct)
+    {
+        TenantAutomationRules.AdmissionSource(state, value, agent, definition, requester);
+        var missing = new List<string>(); var reviews = new List<string>();
+        foreach (var (key, scope) in Targets(state.Tenant.TenantId, value.AutomationId))
+        {
+            var access = await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false);
+            if (!access.Allowed)
+            {
+                if (access.ReasonCode != "permission_denied") throw new AccessDeniedException(access.ReasonCode);
+                missing.Add(key);
+            }
+            if (await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, key, scope, iam, ct).ConfigureAwait(false)) reviews.Add(key);
+        }
+        if (missing.Count > 1) throw new AccessDeniedException("automation_executor_required");
+        return missing.Count == 1 ? new(missing[0], ApprovalKind.ExceptionalGrant)
+            : reviews.Count > 0 ? new(reviews[0], ApprovalKind.Review) : new("agent-runs.create", null);
+    }
+
+    public static TriggerOccurrence Source(PreparedAutomationAdmission p)
+    {
+        var evidence = JsonNode.Parse(p.Occurrence.EvidenceJson)!.AsObject();
+        evidence["admissionApproval"] = JsonSerializer.SerializeToNode(new { requestId = p.RequestId, sessionId = p.SessionId, runId = p.RunId,
+            activationId = p.ActivationId, entryId = p.EntryId, responseId = p.ResponseId, requesterPrincipalId = p.ManualInitiatorPrincipalId });
+        return p.Occurrence.WithAdmissionEvidence(evidence.ToJsonString());
+    }
+    public static TriggerOccurrence Pending(PreparedAutomationAdmission p) => Source(p).WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork,
+        PendingReason, 1, p.Occurrence.AdmittedAtUtc, null, null);
+    public static bool SameOccurrence(TriggerOccurrence a, TriggerOccurrence b) => JsonSerializer.Serialize(a) == JsonSerializer.Serialize(b);
+
+    public static TenantAutomationAdmission Build(TenantApprovalRequest request, TenantAgent agent, ResolvedAgentRunConfiguration resolved, DateTimeOffset? admittedAt = null)
+    {
+        var p = request.Operation.AutomationAdmission ?? throw new SecurityConflictException("operation_mismatch");
+        Shape(request, agent);
+        if (TenantAutomationRules.Hash(resolved) != p.ConfigurationHash) throw new SecurityConflictException("operation_witness_changed");
+        var source = Source(p); var at = admittedAt ?? source.AdmittedAtUtc; var model = p.Occurrence.ModelPin ?? throw new ArgumentException("An exact occurrence model is required.");
+        if (p.Model.CatalogKey != model.CatalogKey || p.Model.ProviderAlias != model.ProviderAlias || p.Model.ModelId != model.ModelId || p.Model.ReasoningEffort != model.ReasoningEffort) throw new ArgumentException("Model witness changed.");
+        var graph = BackgroundSessionAdmissionFactory.ForOccurrence(p.SessionId, p.EntryId, p.ActivationId, p.RunId, p.ResponseId, source,
+            resolved.Configuration.Definition, agent.Instance.Persona, agent.Instance.PersonaRevision, model, resolved.Skills, at, p.Current.Name,
+            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, p.ManualInitiatorPrincipalId);
+        return new(p.Current, p.Next, Pending(p).WithExecutionAcceptance(p.SessionId, p.RunId, 1, at),
+            new(p.TenantId, p.SessionId, agent.Instance.InstanceId, agent.PrincipalId, agent.PrincipalId, at), graph.Session, graph.Run,
+            request.Operation.ExpectedInstanceRevision, p.ConfigurationHash);
+    }
+
+    public static void Shape(TenantApprovalRequest request, TenantAgent agent, bool current = true)
+    {
+        var p = request.Operation.AutomationAdmission ?? throw new ArgumentException("Automation admission source required.");
+        if (TenantApprovalRules.Rebuild(request.Operation) != request.Operation || request.TenantId != p.TenantId || request.RequestId != p.RequestId
+            || request.RunId != p.RunId || request.SessionId != p.SessionId || request.RootActivationId != p.ActivationId
+            || request.ExecutorPrincipalId != p.Current.Owner.ExecutorPrincipalId || request.OriginalInitiatorPrincipalId != p.ManualInitiatorPrincipalId
+            || request.CreatedAt != p.Occurrence.AdmittedAtUtc || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
+            || request.Revision < 1 || !Enum.IsDefined(request.Kind) || !Enum.IsDefined(request.Status))
+            throw new ArgumentException("Approval does not match its reserved occurrence.");
+        TenantAutomationRules.Owner(p.Current, agent);
+        TenantApprovalSnapshotRules.Shape(request);
+        if (current && (agent.Instance.Revision != request.Operation.ExpectedInstanceRevision || agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision))
+            throw new SecurityConflictException("operation_witness_changed");
+        if (current) TenantApprovalSnapshotRules.RequireCurrent(request, agent);
+    }
+
+    public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
+    {
+        var p = request.Operation.AutomationAdmission!;
+        foreach (var (key, scope) in Targets(request.TenantId, p.Current.AutomationId).Concat(new[] {
+            ("agents.read", AccessScope.ForResource(request.TenantId, "agent", request.Operation.InstanceId.ToString("D"))),
+            ("automations.read", TenantAutomationRules.Scope(request.TenantId, p.Current.AutomationId)) }))
+            if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("approval_unavailable");
+    }
+    public static async ValueTask ExecutorAsync(TenantSecurityState state, TenantApprovalRequest request, IamAuthorizer iam, CancellationToken ct)
+    {
+        foreach (var (key, scope) in Targets(request.TenantId, request.Operation.AutomationAdmission!.Current.AutomationId))
+            if ((request.Kind == ApprovalKind.Review || key != request.Permission)
+                && !(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
+                throw new AccessDeniedException("operation_authority_changed");
+        if (request.OriginalInitiatorPrincipalId is { } human)
+            foreach (var key in new[] { "agents.read", "automations.read", "automations.run" })
+            {
+                var scope = key == "agents.read" ? AccessScope.ForResource(request.TenantId, "agent", request.Operation.InstanceId.ToString("D"))
+                    : TenantAutomationRules.Scope(request.TenantId, request.Operation.AutomationAdmission!.Current.AutomationId);
+                if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("requester_unavailable");
+            }
+    }
+    public static async ValueTask ReviewerAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
+    {
+        await ReadAsync(state, request, human, iam, ct).ConfigureAwait(false);
+        foreach (var (key, scope) in Targets(request.TenantId, request.Operation.AutomationAdmission!.Current.AutomationId))
+        {
+            if (key != request.Permission && !await TenantSandboxReadOperationRules.NeedsReviewAsync(state, request.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false)) continue;
+            if (TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview && human == request.OriginalInitiatorPrincipalId)
+                throw new AccessDeniedException("independent_reviewer_required");
+            if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("approvals.approve"), scope, ct).ConfigureAwait(false)).Allowed
+                || key == request.Permission && request.Kind == ApprovalKind.ExceptionalGrant && !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get("approvals.grant_exception"), scope, ct).ConfigureAwait(false)).Allowed)
+                throw new AccessDeniedException("approver_unqualified");
+        }
+    }
+
+    public static void Decision(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant, DateTimeOffset at)
+    {
+        if (request.Status != TenantApprovalStatus.Approved || decision.Status != request.Status || decision.RequestId != request.RequestId
+            || decision.TenantId != request.TenantId || decision.ActionHash != request.Operation.ActionHash || decision.RequestRevision != request.Revision)
+            throw new SecurityConflictException("operation_mismatch");
+        if (at >= request.ExpiresAt) throw new AccessDeniedException("approval_expired");
+        if (request.Kind == ApprovalKind.Review)
+        { if (grant is not null) throw new SecurityConflictException("operation_mismatch"); return; }
+        if (grant is null || grant.Status != OperationGrantStatus.Available || grant.RequestId != request.RequestId || grant.TenantId != request.TenantId
+            || grant.OperationId != request.Operation.OperationId || grant.ExecutorPrincipalId != request.ExecutorPrincipalId || grant.ActionHash != request.Operation.ActionHash
+            || grant.ExpiresAt != request.ExpiresAt || grant.EffectIdempotencyKey != "operation:" + request.Operation.OperationId.ToString("D"))
+            throw new AccessDeniedException("grant_unavailable");
+    }
+}

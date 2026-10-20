@@ -46,6 +46,7 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.AutomationAdmission => PrepareAutomationAdmission(op.OperationId, op.InstanceId, op.AutomationAdmission!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.AccountAction => PrepareAccountAction(op.OperationId, op.InstanceId, op.AccountAction!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.AccountRead => PrepareAccountRead(op.OperationId, op.InstanceId, op.AccountRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ReportSourceRead => PrepareReportSourceRead(op.OperationId, op.InstanceId, op.ReportSourceRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -70,6 +71,7 @@ public static partial class TenantApprovalRules
 
     public static void Validate(TenantApprovalRequest request, AgentRun run, TenantAgent target, bool requireCurrentWitness = true, AgentRun? source = null)
     {
+        if (request.Operation.AutomationAdmission is not null) throw new ArgumentException("Admission consent requires its reserved occurrence owner.");
         var context = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var op = request.Operation;
         if (op.ReportSourceRead is not null) TenantReportSourceReadRules.Source(request, run);

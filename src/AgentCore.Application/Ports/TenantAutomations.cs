@@ -7,7 +7,7 @@ namespace AgentCore.Application.Ports;
 public sealed record TenantAutomationPage(IReadOnlyList<Automation> Items, int Total, int Page, int PageSize);
 public sealed record TenantAutomationAdmission(Automation Current, Automation Next, TriggerOccurrence Occurrence,
     TenantSessionRoot SessionOwner, SessionSnapshot Session, AgentRun Run, long ExpectedInstanceRevision, string ConfigurationHash);
-public sealed record TenantAutomationAdmissionResult(bool Created, TriggerOccurrence Occurrence, Guid SessionId, Guid RunId);
+public sealed record TenantAutomationAdmissionResult(bool Created, TriggerOccurrence Occurrence, Guid? SessionId, Guid? RunId, Guid? ApprovalRequestId = null);
 
 // Facet of the existing IAM, Automation/occurrence and Session/Run transaction.
 // No caller may turn the legacy global-profile API into a tenant authority path.
@@ -22,5 +22,10 @@ public interface ITenantAutomationStore
     ValueTask<TenantAutomationAdmissionResult?> TryAdmitTenantAutomationAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantAutomationAdmission admission, HumanSessionReference? human, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<bool> TryAdvanceTenantAutomationAsync(TenantSecurityState next, long expectedSecurityRevision, Automation current, Automation advanced, AuthorizationAudit audit, CancellationToken ct = default);
+    ValueTask<TenantAutomationAdmissionResult?> TryPrepareTenantAutomationApprovalAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantAutomationAdmission admission, TenantApprovalRequest request, HumanSessionReference? human, AuthorizationAudit audit, CancellationToken ct = default);
+    ValueTask<bool> TrySettleTenantAutomationApprovalAsync(long expectedSecurityRevision,
+        ApprovalProcessedSignal signal, TenantAutomationAdmission? admission, string? refusal, Guid auditId, DateTimeOffset at, CancellationToken ct = default);
+    ValueTask<bool> IsTenantAutomationBusyAsync(Guid tenant, Guid automation, CancellationToken ct = default);
     ValueTask<TriggerOccurrence?> FindTenantOccurrenceAsync(Guid tenant, Guid occurrence, CancellationToken ct = default);
 }

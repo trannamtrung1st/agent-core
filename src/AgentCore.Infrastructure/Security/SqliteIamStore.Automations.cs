@@ -116,9 +116,7 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
             TenantAutomationRules.Admission(admission, agent, human?.PrincipalId); await TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId);
         if (human is not null) await RequireAutomationHuman(before, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
         ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.occurrence.admit", audit);
-        if (await db.TriggerOccurrences.IgnoreQueryFilters().AnyAsync(o => o.TenantId == tenant.TenantId && o.AutomationId == row!.AutomationId
-            && db.AgentRuns.Any(r => r.AgentRunId == o.AcceptedAgentRunId && r.Status != (int)AgentCore.Domain.Conversation.AgentRunStatus.Completed
-                && r.Status != (int)AgentCore.Domain.Conversation.AgentRunStatus.Failed && r.Status != (int)AgentCore.Domain.Conversation.AgentRunStatus.Cancelled), ct)) return null;
+        if (await TenantAutomationBusy(db, tenant.TenantId, admission.Current.AutomationId, ct)) return null;
         await StageTenantBackgroundGraph(db, admission.SessionOwner, admission.Session, admission.Run, ct);
         StageAutomation(db, row, admission.Next); db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(admission.Occurrence));
         db.Entry(tenant).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct); db.Add(audit);

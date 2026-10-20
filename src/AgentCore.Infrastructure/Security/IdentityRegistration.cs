@@ -141,6 +141,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAttachmentMaterializationService>();
         services.TryAddSingleton<ITenantAutomationStore>(p => (ITenantAutomationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAutomationService>();
+        services.TryAddSingleton<TenantAutomationAdmissionTarget>();
         services.TryAddSingleton<TenantSessionService>();
         services.TryAddSingleton<TenantSessionForegroundService>();
         services.TryAddSingleton<TenantActivityService>();

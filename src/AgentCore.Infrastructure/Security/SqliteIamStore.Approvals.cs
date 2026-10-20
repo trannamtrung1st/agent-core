@@ -24,7 +24,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.AccountAction is { } action
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.AutomationAdmission is { } admission ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE AutomationId = {admission.Current.AutomationId.ToString("D")}
+              AND Permission = {operation.Permission} AND json_extract(PayloadJson, '$.Operation.AutomationAdmission.Occurrence.OccurrenceId') = {admission.Occurrence.OccurrenceId.ToString("D")}
+            """)
+        : operation.AccountAction is { } action
         ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.AccountAction.SessionId') = {action.SessionId.ToString("D")}
@@ -129,7 +133,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests
             WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -413,6 +417,16 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 """);
             query = query.Where(r => actionQuery.Any(a => a.RequestId == r.RequestId));
         }
+        if (automationVisibility is { } visibility)
+        {
+            var agentIds = visibility.Agents?.Select(id => id.ToString("D")).ToArray();
+            var readIds = visibility.ReadAutomations?.Select(id => id.ToString("D")).ToArray();
+            var runIds = visibility.RunAutomations?.Select(id => id.ToString("D")).ToArray();
+            query = query.Where(r => r.AutomationId == null || visibility.CanCreate && (agentIds == null || agentIds.Contains(r.InstanceId))
+                && (readIds == null || readIds.Contains(r.AutomationId)) && (runIds == null || runIds.Contains(r.AutomationId))
+                && db.Automations.IgnoreQueryFilters().Any(a => a.AutomationId == r.AutomationId && a.TenantId == r.TenantId
+                    && a.AgentInstanceId == r.InstanceId && a.ExecutorPrincipalId == r.ExecutorPrincipalId));
+        }
         if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);
         if (page.Kind is { } kind) query = query.Where(r => r.Kind == (int)kind);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -491,6 +505,17 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var row = await db.Set<TenantApprovalRecord>().SingleOrDefaultAsync(r => r.TenantId == request.TenantId && r.RequestId == request.RequestId, ct).ConfigureAwait(false);
         if (row is null || row.Revision != expectedRequestRevision || row.Status != (int)TenantApprovalStatus.Pending) return false;
         TenantApprovalRules.ValidateDecision(row.Domain(), request, expectedRequestRevision, decision, grant, signal, human, audit);
+        if (request.Operation.AutomationAdmission is not null)
+        {
+            if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
+            if (request.Status != TenantApprovalStatus.Cancelled)
+            {
+                var admissionState = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
+                _ = await RequireAutomationAdmissionOperation(db, request, admissionState, ct).ConfigureAwait(false);
+                await TenantAutomationAdmissionApprovalRules.ReviewerAsync(admissionState, request, human.PrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            db.Entry(row).CurrentValues.SetValues(TenantApprovalRecord.From(request)); db.Add(decision); db.Add(signal); if (grant is not null) db.Add(grant); return true;
+        }
         var runRow = await OwnedRuns(db, request.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
         var target = await OwnedAgents(db, request.TenantId).SingleOrDefaultAsync(r => r.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
         if (runRow is null || target is null) return false;

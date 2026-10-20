@@ -1,0 +1,97 @@
+using AgentCore.Application.Ports;
+using AgentCore.Application.Triggers;
+using AgentCore.Domain.Security;
+using AgentCore.Application.Sessions;
+using AgentCore.Domain.Triggers;
+
+namespace AgentCore.Application.Security;
+
+public sealed partial class TenantApprovalService
+{
+    private async ValueTask<TenantApprovalRequest> ChangeAutomationAdmissionAsync(TenantSecurityState state, TenantApprovalRequest request,
+        TenantSessionInitiator human, TenantApprovalStatus outcome, CancellationToken ct)
+    {
+        if (outcome != TenantApprovalStatus.Cancelled)
+        {
+            var current = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request, ct).ConfigureAwait(false);
+            if (current.State.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
+            await TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, request, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+        }
+        var at = time.GetUtcNow(); var next = request.Decide(outcome, request.Revision, at);
+        var decision = new TenantApprovalDecision(ids.NewId(), request.RequestId, request.TenantId, human.PrincipalId, outcome, request.Operation.ActionHash, next.Revision, at);
+        var grant = outcome == TenantApprovalStatus.Approved && request.Kind == ApprovalKind.ExceptionalGrant
+            ? new TenantOperationGrant(ids.NewId(), request.RequestId, request.TenantId, request.ExecutorPrincipalId, request.Operation.OperationId, request.Operation.ActionHash,
+                "operation:" + request.Operation.OperationId.ToString("D"), OperationGrantStatus.Available, 1, request.ExpiresAt) : null;
+        var signal = new ApprovalProcessedSignal(ids.NewId(), request.TenantId, request.RequestId, request.RunId, next.Revision, 1, at, null);
+        var audit = new AuthorizationAudit(ids.NewId(), request.TenantId, human.PrincipalId, "approvals.decide", request.RequestId.ToString("D"), "allowed",
+            outcome switch { TenantApprovalStatus.Approved => "approval_approved", TenantApprovalStatus.Rejected => "approval_rejected", _ => "approval_cancelled" }, at);
+        if (!await approvals.TryDecideApprovalAsync(Next(state), state.Tenant.Revision, next, request.Revision, decision, grant, signal, human, audit, ct).ConfigureAwait(false))
+            throw new SecurityConflictException("stale_revision");
+        return next;
+    }
+
+    private async ValueTask<bool> ProcessAutomationAdmissionAsync(ApprovalProcessedSignal signal, TenantApprovalRequest request, CancellationToken ct)
+    {
+        var store = automationStore ?? throw new AccessDeniedException("tenant_effect_unavailable");
+        var state = await security.ReadTenantAsync(request.TenantId, ct).ConfigureAwait(false); if (state is null) return false;
+        TenantAutomationAdmission? admission = null; string? refusal = null;
+        if (request.Status == TenantApprovalStatus.Approved)
+        {
+            try
+            {
+                var current = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request, ct).ConfigureAwait(false);
+                if (current.State.Tenant.Revision != state.Tenant.Revision) return false;
+                var decision = await (effects ?? throw new AccessDeniedException("tenant_effect_unavailable")).FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false)
+                    ?? throw new AccessDeniedException("approval_unavailable");
+                TenantAutomationAdmissionApprovalRules.Decision(request, decision, await approvals.FindOperationGrantAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false), time.GetUtcNow());
+                await TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, request, decision.HumanPrincipalId, authorizer, ct).ConfigureAwait(false);
+                admission = TenantAutomationAdmissionApprovalRules.Build(request, current.Agent, current.Configuration, time.GetUtcNow());
+            }
+            catch (AccessDeniedException error) { refusal = error.ReasonCode; }
+            catch (SecurityConflictException error) { refusal = error.ReasonCode; }
+            catch (AgentCoreException) { refusal = "operation_configuration_changed"; }
+        }
+        return await store.TrySettleTenantAutomationApprovalAsync(state.Tenant.Revision, signal, admission, refusal, ids.NewId(), time.GetUtcNow(), ct).ConfigureAwait(false);
+    }
+
+    private async ValueTask<TenantApprovalReview> ReviewAutomationAdmissionAsync(TenantApprovalView view, TenantSecurityState state, TenantSessionInitiator human, CancellationToken ct)
+    {
+        var r = view.Request; var p = r.Operation.AutomationAdmission!; var at = time.GetUtcNow();
+        var target = await agents.FindTenantAgentAsync(r.TenantId, r.Operation.InstanceId, ct).ConfigureAwait(false);
+        var occurrence = automationStore is null ? null : await automationStore.FindTenantOccurrenceAsync(r.TenantId, p.Occurrence.OccurrenceId, ct).ConfigureAwait(false);
+        var cancel = r.Status == TenantApprovalStatus.Pending && at < r.ExpiresAt
+            && (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("approvals.cancel"), AccessScope.ForResource(r.TenantId, "approval", r.RequestId.ToString("D")), ct).ConfigureAwait(false)).Allowed;
+        string? unavailable = r.Status != TenantApprovalStatus.Pending ? "request_terminal" : at >= r.ExpiresAt ? "approval_expired" : null;
+        if (unavailable is null)
+        {
+            try
+            {
+                var current = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, ct).ConfigureAwait(false);
+                if (current.State.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
+                await TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+            }
+            catch (AccessDeniedException error) { unavailable = error.ReasonCode; }
+            catch (SecurityConflictException error) when (error.ReasonCode != "stale_revision") { unavailable = error.ReasonCode; }
+            catch (AgentCoreException) { unavailable = "operation_configuration_changed"; }
+        }
+        var independent = false;
+        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(r.TenantId, p.Current.AutomationId))
+            independent |= TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key)).IndependentReview
+                && (key == r.Permission || await TenantSandboxReadOperationRules.NeedsReviewAsync(state, r.OriginalInitiatorPrincipalId, key, scope, authorizer, ct).ConfigureAwait(false));
+        async ValueTask<string?> Name(Guid? principal)
+        {
+            var user = state.Users.SingleOrDefault(u => u.PrincipalId == principal);
+            return user is null ? null : (await security.ReadAccountAsync(user.AccountId, ct).ConfigureAwait(false))?.DisplayName;
+        }
+        var execution = occurrence?.Disposition == OccurrenceRoutingDisposition.AcceptedDurable ? "admitted"
+            : occurrence?.Disposition == OccurrenceRoutingDisposition.Rejected ? "notAdmitted" : r.Status == TenantApprovalStatus.Pending ? "waitingDecision" : "awaitingAdmission";
+        return new(r.Snapshot?.AgentName ?? target?.Instance.Persona.Name ?? "Unavailable agent", await Name(r.OriginalInitiatorPrincipalId), await Name(view.Decision?.HumanPrincipalId),
+            [new("admissionAutomation", null, p.Current.Name, false), new("admissionSource", null, p.Occurrence.SourceKind == TriggerSourceKind.Schedule ? "Scheduled occurrence · no human requester" : "Explicit manual invocation", false),
+                new("admissionOccurrence", null, $"{(p.Occurrence.ScheduledAtUtc is null ? "Invoked" : "Scheduled")} at {(p.Occurrence.ScheduledAtUtc ?? p.Occurrence.ObservedAtUtc).ToUniversalTime():yyyy-MM-dd HH:mm:ss.fff} UTC · saved registration revision {p.Current.Revision}", false),
+                new("admissionPrimaryPermission", null, r.Permission, false), new("admissionObjective", null, p.Current.Instructions, false), new("admissionSchedule", null, AutomationRules.Describe(p.Current), false),
+                new("admissionDestination", null, "New separate Background Session · no completion report", false), new("admissionModel", null, p.Model.CatalogKey, false),
+                new("admissionScope", null, string.Join("; ", TenantAutomationAdmissionApprovalRules.Permissions), false),
+                new("admissionLimit", null, "One exact reserved occurrence. No work is created before settlement. An exceptional grant covers only its named primary permission; other permissions and all later tools remain independent.", false)],
+            unavailable is null, cancel, unavailable, independent, at, execution);
+    }
+}

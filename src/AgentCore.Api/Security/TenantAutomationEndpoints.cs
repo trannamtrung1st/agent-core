@@ -46,7 +46,7 @@ public static class TenantAutomationEndpoints
             var actor = IdentityHttp.TenantContext(http); var human = Human(http, actor.AccountId, actor.PrincipalId);
             Route(await service.ReadAsync(actor.TenantId, automationId, human, ct), instanceId);
             var result = await service.RunAsync(actor.TenantId, automationId, human, body.ExpectedRevision, body.ExpectedInstanceRevision, body.ExpectedAutomationRevision, ct);
-            return Results.Json(new { result.Created, occurrenceId = result.Occurrence.OccurrenceId, result.SessionId, result.RunId }, statusCode: result.Created ? 201 : 200);
+            return Results.Json(new { result.Created, occurrenceId = result.Occurrence.OccurrenceId, result.SessionId, result.RunId, result.ApprovalRequestId }, statusCode: result.ApprovalRequestId is not null ? 202 : result.Created ? 201 : 200);
         }));
     }
     private static HumanSessionReference Human(HttpContext http, Guid account, Guid principal) => new(account, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), principal);

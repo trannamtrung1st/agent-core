@@ -104,7 +104,15 @@ public sealed partial class TenantCredentialAccessTests
             clock.Advance(TimeSpan.FromMinutes(31)); await factory.Services.GetRequiredService<TenantAutomationService>().AdmitDueAsync();
             Assert.Empty((await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items); return;
         }
-        if (mode is "disabled" or "missing-executor" or "review-required")
+        if (mode == "review-required")
+        {
+            using var pending = await owner.PostAsJsonAsync(route + $"/{id}/run", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = saved.Revision });
+            Assert.Equal(HttpStatusCode.Accepted, pending.StatusCode); var ack = await Json(pending);
+            Assert.Equal(JsonValueKind.Null, ack.GetProperty("runId").ValueKind); Assert.Equal(JsonValueKind.Null, ack.GetProperty("sessionId").ValueKind);
+            Assert.NotEqual(Guid.Empty, ack.GetProperty("approvalRequestId").GetGuid());
+            Assert.Empty((await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items); return;
+        }
+        if (mode is "disabled" or "missing-executor")
         {
             using var refused = await owner.PostAsJsonAsync(route + $"/{id}/run", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = saved.Revision });
             Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);

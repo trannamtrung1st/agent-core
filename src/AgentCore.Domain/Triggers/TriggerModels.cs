@@ -956,6 +956,16 @@ public sealed class TriggerOccurrence
     public Guid? LiveSessionId { get; }
     public DateTimeOffset? LiveEvaluationCompletedAtUtc { get; }
 
+    public TriggerOccurrence WithAdmissionEvidence(string evidence)
+    {
+        if (Disposition != OccurrenceRoutingDisposition.Pending || RoutingRevision != 0)
+            throw new ArgumentException("Only an unclaimed occurrence may freeze admission evidence.");
+        return new(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc, ObservedAtUtc, AdmittedAtUtc,
+            evidence, SourceEventId, TriggerRevision, Disposition, DispositionReason, RoutingRevision, RoutingUpdatedAtUtc,
+            ClaimId, ClaimLeaseExpiresAtUtc, ModelPin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc,
+            ExecutionTarget, CompletionDelivery, TriggerId);
+    }
+
     public TriggerOccurrence WithModelPin(ExecutionModelPin pin) =>
         ModelPin is null
             ? new TriggerOccurrence(
