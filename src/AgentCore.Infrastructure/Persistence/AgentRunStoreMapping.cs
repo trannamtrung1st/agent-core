@@ -294,7 +294,8 @@ internal static class AgentRunStoreMapping
     {
         var owned = runs.Where(run => run.Owner == child.Owner).ToArray();
         if (owned.Count(run => run.Admission.Activation.Kind == ActivationKind.ImmediateBackground
-            && run.Admission.Activation.SourceAgentRunId == child.Admission.Activation.SourceAgentRunId) >= AgentRunLimits.MaxImmediateChildren
+            && (child.Owner.TenantId is not null ? run.Admission.Activation.RootActivationId == child.Admission.Activation.RootActivationId
+                : run.Admission.Activation.SourceAgentRunId == child.Admission.Activation.SourceAgentRunId)) >= AgentRunLimits.MaxImmediateChildren
             || owned.Count(run => !run.IsTerminal && run.Admission.Activation.Kind is ActivationKind.ImmediateBackground
                 or ActivationKind.ManualBackground or ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.CoreEvent) >= AgentRunLimits.MaxActiveBackgroundRuns)
             throw AgentCoreErrors.Conflict("Background work capacity reached.");

@@ -1,5 +1,11 @@
 # Frontend Implementation Specification
 
+## Exact tenant background creation review
+
+The incumbent approval inspector in organization Access and Chat presents one exact saved background task, title, explicit completion-report preference, selected model and primary creation permission. It uses the existing responsive Descriptions and inert wrapping text; there is no separate creation screen or layout system. Missing, duplicate or malformed task fields withhold Approve and Reject while retaining authorized cancellation. False completion preferences remain visible as No.
+
+Review and one-time authorization keep their current protected confirmation and explicit freshness/recovery behavior. Copy explains one child Session/Run, independent compound creation permissions, primary-only grants and no role, child-read or later-task authority. A recorded result says Background work created or not created; creation never implies task completion or report delivery. Conversation status uses the same operation name and opens the same inspector. Current server scope and witnesses remain authoritative. [Focused qualification](reports/tenant-background-creation-verification-2026-10-20.md) records actual approval, one-time authorization, stale cancellation and responsive captures. The full proposal remains active.
+
 ## Tenant Agent Lifecycle
 
 `TenantAgentLifecycle` is the single canonical UI owner for archive, restore and permanent decommission at `/t/{tenantId}/admin/agents/{instanceId}/lifecycle`. Instance navigation and inventory link to it; Access retains audience/execution roles and links to Lifecycle. The established AdminShell, AgentConfigurationPanel, responsive Descriptions, native Alerts/Buttons and shared `confirmAction` own presentation without new CSS or tokens.

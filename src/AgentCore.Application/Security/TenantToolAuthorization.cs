@@ -214,6 +214,8 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
             return intent.ArtifactFromWorkspace
                 ? await approvals.PrepareWorkspaceArtifactAsync(boundary.Reference, artifact, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false)
                 : await approvals.PrepareArtifactAsync(boundary.Reference, artifact, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+        if (intent.BackgroundArguments is { } background)
+            return await approvals.PrepareBackgroundStartAsync(boundary.Reference, background, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.MetadataArguments is { } metadata)
             return await approvals.PrepareCredentialReadAsync(boundary.Reference, metadata, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.Browser is { } browser)

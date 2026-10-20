@@ -43,7 +43,7 @@ public static class TenantExecutionLineage
                 || a.SourceAgentRunId != parentId || a.SourceSessionId != parent.SessionId)
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.ImmediateBackground
-                && (a.Kind != ActivationKind.ImmediateBackground || parent.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage
+                && (a.Kind != ActivationKind.ImmediateBackground || !TenantBackgroundCreationRules.Allows(parent)
                     || run.SessionId == parent.SessionId || run.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome))
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.CompletionReport

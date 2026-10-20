@@ -39,7 +39,7 @@ public sealed partial class TenantApprovalService
             var user = state.Users.SingleOrDefault(u => u.PrincipalId == principal);
             return user is null ? null : (await security.ReadAccountAsync(user.AccountId, ct).ConfigureAwait(false))?.DisplayName;
         }
-        var scope = AccessScope.ForResource(r.TenantId, r.ResourceType, r.ResourceId);
+        var scope = TenantApprovalRules.Scope(r.TenantId, r.Operation);
         var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(r.Permission));
         var independent = policy.IndependentReview;
         var source = await operations.FindRunAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
@@ -57,7 +57,13 @@ public sealed partial class TenantApprovalService
                 var (run, current) = await operations.ResolveAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
                 if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
                 TenantApprovalRules.Validate(r, run, target!);
-                if (op.ArtifactPublication is not null)
+                if (op.BackgroundStart is not null)
+                {
+                    independent = await TenantBackgroundCreationRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
+                    await (backgroundCreations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, state, ct).ConfigureAwait(false);
+                    await TenantBackgroundCreationRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
+                else if (op.ArtifactPublication is not null)
                 {
                     independent = await TenantArtifactReviewRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
                     await RequireArtifactAsync(r, run, state, ct).ConfigureAwait(false);
@@ -155,6 +161,8 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.BackgroundStart is { } task) return [new("backgroundObjective", null, task.Objective, false), new("backgroundTitle", null, task.Title, false),
+            new("backgroundReportCompletion", null, task.ReportCompletion, false), new("backgroundModel", null, task.Model.CatalogKey, false), new("backgroundPrimaryPermission", null, task.Permission, false)];
         if (op.WorkspaceMutation is { } mutation)
             return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),

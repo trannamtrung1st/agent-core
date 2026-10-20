@@ -19,7 +19,7 @@ public static class ToolPolicy
         }
         if (admission?.TenantId is not null && TenantBackgroundToolContract.IsTool(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
-                && (toolName == ToolCatalog.WorkComplete || !admission.Detached && admission.TriggerKind == TriggerKind.UserTurn && RolePermissions.AllowsTool(definition, toolName))
+                && (toolName == ToolCatalog.WorkComplete || RolePermissions.AllowsTool(definition, toolName))
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantWorkspaceMutationContract.IsMutation(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }

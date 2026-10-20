@@ -2,9 +2,11 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
 
+public sealed record TenantBackgroundAdmission(AgentCore.Domain.Conversation.SessionSnapshot Session, AgentCore.Domain.Conversation.AgentRun Run);
+
 public sealed record TenantOperationCommit(Guid RequestId, Guid OperationId, Guid RunId, Guid Generation,
     long ExpectedRunRevision, long ExpectedRequestRevision, Guid ExpectedDecisionId, long? ExpectedGrantRevision,
-    string ActionHash, TenantOperationOutcome Outcome, string ReasonCode, ITenantWorkspaceArtifactSource? ArtifactSourceContent = null);
+    string ActionHash, TenantOperationOutcome Outcome, string ReasonCode, ITenantWorkspaceArtifactSource? ArtifactSourceContent = null, TenantBackgroundAdmission? BackgroundAdmission = null);
 
 public sealed record TenantBrowserEffectFence(Guid TenantId, Guid RequestId, Guid OperationId, Guid RunId,
     string ActionHash, AgentCore.Domain.Conversation.AgentRunExternalEffect Origin);

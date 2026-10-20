@@ -107,6 +107,13 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
             }
+            TenantSessionRoot? childRoot = null;
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.BackgroundStart is not null)
+            {
+                var parent = RequireBackgroundCreationOperation(request, run, target);
+                TenantBackgroundCreationRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+                childRoot = TenantBackgroundCreationRules.Admission(request, run, parent, target, commit.BackgroundAdmission!, at);
+            }
             audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
@@ -133,6 +140,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, commit.Generation); var bytes = artifact.Bytes;
                 (artifactBacking ?? throw new AccessDeniedException("tenant_effect_unavailable")).PublishTenantLocal(frame,
                     TenantArtifactRules.Record(frame, commit.OperationId, artifact.DisplayName, artifact.ContentType, bytes, at), bytes, false, ct);
+            }
+            if (complete && childRoot is not null)
+            {
+                var child = commit.BackgroundAdmission!;
+                StageTenantBackgroundGraph(childRoot, child.Session, child.Run);
             }
             sessionBacking.SaveTenantOperationRun(savedRun, run.Revision);
             if (pending is not null) sandboxBacking.SaveTenantLease(pending);

@@ -538,3 +538,33 @@ it('inspects published files deliberately with independent current access, recov
   expect(within(refreshed).queryByText('current-capture.png')).not.toBeInTheDocument();
   expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
 });
+
+const backgroundRequest = (): TenantApproval => ({ ...request, summary: 'Start exact background work', preparedAction: { ...request.preparedAction, operation: 'start_background_work' },
+  review: { ...request.review, changes: Object.entries({ backgroundObjective: '<script>literal task only</script>\nExact Unicode task: thử nghiệm.', backgroundTitle: 'Reviewed task',
+    backgroundReportCompletion: false, backgroundModel: 'synthetic', backgroundPrimaryPermission: 'agent-runs.create' }).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } });
+it.each(['review', 'exceptionalGrant'] as const)('reviews one exact background task and %s consequences through the shared inspector', async kind => {
+  view({ ...backgroundRequest(), kind });
+  const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved background task' });
+  expect(within(saved).getByText(/Exact Unicode task: thử nghiệm/)).toBeVisible();
+  expect(within(saved).getByText('No')).toBeVisible(); expect(within(saved).getByText('agent-runs.create')).toBeVisible();
+  expect(within(saved).queryByText('Before')).not.toBeInTheDocument(); expect(saved.querySelector('script')).toBeNull();
+  fireEvent.click(within(dialog).getByRole('button', { name: kind === 'review' ? 'Approve' : 'Authorize once' }));
+  const confirm = (await screen.findAllByText(kind === 'review' ? 'Approve?' : 'Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/one child Session and Run/)).toBeVisible());
+  expect(within(confirm).getByText(/No role, child read access or later-task authority/)).toBeVisible();
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it('withholds background decisions when the exact completion preference is missing while preserving cancellation', async () => {
+  const item = backgroundRequest(); item.review.changes = item.review.changes.filter(change => change.field !== 'backgroundReportCompletion'); view(item);
+  const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByRole('button', { name: 'Authorize once' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+it('distinguishes created background work from task completion', async () => {
+  view({ ...backgroundRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'background_created', recordedAt: request.createdAt } });
+  const dialog = await screen.findByRole('dialog'); const result = await within(dialog).findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText('Background work created')).toBeVisible(); expect(within(result).getByText(/Execution status and results remain in Background work/)).toBeVisible();
+  expect(within(result).queryByText('Task completed')).not.toBeInTheDocument();
+});

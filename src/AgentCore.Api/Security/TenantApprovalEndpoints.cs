@@ -46,6 +46,7 @@ public static class TenantApprovalEndpoints
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
+            TenantOperationKind.BackgroundStart => ("Start exact background work", "start_background_work"),
             TenantOperationKind.WorkspaceMutation => ("Change exact workspace paths", "mutate_workspace"),
             TenantOperationKind.WorkspaceRead => ("Read exact workspace observation", "inspect_workspace"),
             TenantOperationKind.AttachmentRead => ("Read attached file", "read_attachment"),

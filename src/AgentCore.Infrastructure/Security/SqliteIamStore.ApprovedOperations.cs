@@ -126,6 +126,13 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
         }
+        TenantSessionRoot? childRoot = null;
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.BackgroundStart is not null)
+        {
+            var parent = await RequireBackgroundCreationOperation(db, request, run, target, ct).ConfigureAwait(false);
+            await TenantBackgroundCreationRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            childRoot = TenantBackgroundCreationRules.Admission(request, run, parent, target, commit.BackgroundAdmission!, at);
+        }
         audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
         var configure = complete && request.Operation.IsLocalConfiguration;
@@ -157,6 +164,11 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             }
         }
         if (complete && artifactRow is not null) db.Artifacts.Add(artifactRow);
+        if (complete && childRoot is not null)
+        {
+            var child = commit.BackgroundAdmission!;
+            await StageTenantBackgroundGraph(db, childRoot, child.Session, child.Run, ct).ConfigureAwait(false);
+        }
         AgentRunStoreMapping.Apply(row, savedRun);
         if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
         var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,

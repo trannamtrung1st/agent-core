@@ -38,7 +38,7 @@ public static class TenantOperationAuditRules
     {
         Execution = new(run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required"), run.Revision,
             state.Tenant.Revision, run.Claim?.Generation, request.Permission,
-            AccessScope.ForResource(state.Tenant.TenantId, request.ResourceType, request.ResourceId),
+            TenantApprovalRules.Scope(state.Tenant.TenantId, request.Operation),
             null, ExecutionAuthorizationPurpose.EffectResult, request.RequestId, request.Operation.OperationId, grantId)
     };
 

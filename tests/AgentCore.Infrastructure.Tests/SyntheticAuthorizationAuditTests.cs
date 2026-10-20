@@ -7,6 +7,34 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class SyntheticAuthorizationAuditTests
 {
     [Theory]
+    [InlineData(true)] [InlineData(false)]
+    public async Task Synthetic_background_creation_continuation_reports_saved_result_without_original_prompt(bool started)
+    {
+        var call = new ModelToolCall("review-creation", ToolCatalog.RequestAuthorization,
+            """{"operation":"start_background_work","task":{"objective":"Check progress","title":"Progress","reportCompletion":true}}""");
+        var request = new ModelRequest(Guid.NewGuid(), [new(ModelRole.System, "Continue the approved task."),
+            new(ModelRole.Assistant, "", ToolCalls: [call]),
+            new(ModelRole.Tool, started ? """{"started":true,"outcome":"completed"}""" : """{"started":false,"outcome":"denied"}""", ToolCallId: call.Id, Name: call.Name)]);
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in new ScriptedLanguageModel(["fallback"]).GenerateAsync(request)) events.Add(item);
+        Assert.Empty(events.OfType<ModelToolCallEvent>());
+        Assert.Contains(events.OfType<ModelTextDelta>(), item => item.Text.Contains(started ? "exact reviewed background task was created" : "not authorized", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Synthetic_background_creation_allowed_policy_uses_direct_tool_once()
+    {
+        var call = new ModelToolCall("check-creation", ToolCatalog.RequestAuthorization,
+            """{"operation":"start_background_work","task":{"objective":"Check progress","title":"Progress","reportCompletion":true}}""");
+        var request = new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, "[test:background-start] [test:background-creation-review]"),
+            new(ModelRole.Assistant, "", ToolCalls: [call]),
+            new(ModelRole.Tool, """{"decision":"allowed"}""", ToolCallId: call.Id, Name: call.Name)],
+            Tools: [TenantApprovalToolContract.Descriptor(backgroundStart: true).ModelDefinition, new(ToolCatalog.BackgroundStart, "Start", "{}")]);
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in new ScriptedLanguageModel(["fallback"]).GenerateAsync(request)) events.Add(item);
+        Assert.Equal(ToolCatalog.BackgroundStart, Assert.Single(events.OfType<ModelToolCallEvent>()).Call.Name);
+    }
+    [Theory]
     [InlineData("work-drive", true)] [InlineData("bad/reference", true)] [InlineData("work-drive", false)]
     public async Task Synthetic_credential_fixture_uses_only_an_offered_valid_reference_and_reports_saved_uncertainty(string reference, bool offered)
     {

@@ -42,12 +42,7 @@ public sealed partial class SqliteIamStore
                 throw new SecurityConflictException("background_id_conflict");
             return new(false, saved);
         }
-        var all = (await OwnedRuns(db, tenant).AsNoTracking().Where(r => r.AgentInstanceId == root.AgentInstanceId)
-            .ToArrayAsync(ct).ConfigureAwait(false)).Select(AgentRunStoreMapping.ToDomain);
-        AgentRunStoreMapping.ValidateBackgroundBudget(child, all);
-        db.Sessions.Add(SqliteMemoryStore.ToRecord(snapshot)); db.Add(TenantSessionRecord.Row(childRoot));
-        db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(snapshot, child)); db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(child));
-        db.ActivationSourceEntries.Add(new() { ActivationId = child.ActivationId.ToString("D"), SessionId = child.SessionId.ToString("D"), EntryId = snapshot.Entries[0].EntryId.ToString("D"), Ordinal = 0 });
+        await StageTenantBackgroundGraph(db, childRoot, snapshot, child, ct).ConfigureAwait(false);
         var tenantRow = await db.Set<Tenant>().SingleAsync(t => t.TenantId == tenant, ct).ConfigureAwait(false);
         db.Entry(tenantRow).CurrentValues.SetValues(state.Tenant with { Revision = checked(state.Tenant.Revision + 1) });
         db.Add(new AuthorizationAudit(auditId, tenant, frame.Owner.ExecutorPrincipalId!.Value, "agent-runs.background.admit",

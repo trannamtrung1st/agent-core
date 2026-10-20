@@ -6,6 +6,8 @@ This file records open acceptance gaps and owner-intended product direction. The
 
 ## Current status
 
+Tenant immediate-background creation now has [exact consent and atomic child-graph qualification](docs/reports/tenant-background-creation-verification-2026-10-20.md): compound tenant creation authority, Review or a primary-only one-time grant, frozen task/model/configuration, same-root refusal suppression, current reviewer checks, truthful creation results and pending-consent SQLite host recreation. This supersedes child-creation-Review-pending notes below for human conversational tasks only. Report-Run creation Review, native background effects, inbox/wait tools, autonomous origins, remaining interaction/System/audit families and final authority/schema cutover remain open. The full proposal and original goal stay active.
+
 ### Existing foundations
 
 | Foundation | Verified scope and remaining boundary |

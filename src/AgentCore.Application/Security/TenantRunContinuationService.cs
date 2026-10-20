@@ -158,6 +158,11 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                 var text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
                     reasonCode = reason, operationId = outcome.OperationId, applied = request.Operation.Kind == TenantOperationKind.SandboxCommand && outcome.Outcome != TenantOperationOutcome.Denied ? null : outcome.Outcome switch {
                         TenantOperationOutcome.Completed => (bool?)true, TenantOperationOutcome.Denied => false, _ => null } });
+                if (request.Operation.BackgroundStart is { } background)
+                    text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
+                        reasonCode = reason, applied = outcome.Outcome == TenantOperationOutcome.Completed, started = outcome.Outcome == TenantOperationOutcome.Completed,
+                        backgroundSessionId = outcome.Outcome == TenantOperationOutcome.Completed ? (Guid?)background.ChildSessionId : null,
+                        agentRunId = outcome.Outcome == TenantOperationOutcome.Completed ? (Guid?)background.RunId : null });
                 if (request.Operation.SandboxControl is not null)
                     text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()),
                         outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()), reasonCode = reason, operationId = outcome.OperationId,

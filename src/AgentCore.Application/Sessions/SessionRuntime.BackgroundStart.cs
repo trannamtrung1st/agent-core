@@ -27,7 +27,7 @@ public sealed partial class SessionRuntime
         try
         {
             if (_deactivated || _responseTerminal || _activeResponseId != input.ResponseId
-                || input.Context.Epoch != _epoch || _activeResponseTriggerKind != TriggerKind.UserTurn
+                || input.Context.Epoch != _epoch || _runtimeOwner is null && _activeResponseTriggerKind != TriggerKind.UserTurn
                 || !await OwnsWorkerAsync(input.Context, input.ResponseId, ct).ConfigureAwait(false))
             { input.Completed.TrySetResult(SkillLoadAdmission.Error("stale", "The background request is no longer owned by this turn.")); return; }
             var source = _boundAgentRun!;

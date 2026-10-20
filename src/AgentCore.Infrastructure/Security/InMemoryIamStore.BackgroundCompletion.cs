@@ -69,7 +69,7 @@ public sealed partial class InMemoryIamStore
                 ? definitions.TenantPublication(tenant, definition, agent.Instance.ActiveVersion)?.Payload
                 : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).AsTask().GetAwaiter().GetResult();
             if (baseline is null) throw new AccessDeniedException("definition_unavailable");
-            TenantBackgroundAdmissionRules.AuthorizeAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+            TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             if (source.Parent!.Snapshot.PendingAgentInputIds.Count > 0 || all.Runs.Values.Any(r => r.SessionId == report.SessionId && !r.IsTerminal))
                 throw new SecurityConflictException("parent_busy");
             if (all.Runs.ContainsKey(report.AgentRunId) || all.Activations.ContainsKey(report.ActivationId) || _audit.Any(a => a.AuditId == auditId)) throw new SecurityConflictException("identity_conflict");

@@ -64,7 +64,24 @@ internal static class BackgroundSessionScript
                 ? Call(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/followup.md", displayName = "followup.md" })
                 : Call(ToolCatalog.WorkspaceWrite, new { path = "/working/followup.md", content = prompt });
         }
+        var authorization = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization
+            && request.Messages.SelectMany(previous => previous.ToolCalls ?? []).Any(call => call.Id == m.ToolCallId && call.Name == m.Name
+                && TenantApprovalToolContract.Parse(call).BackgroundArguments is not null));
+        if (authorization is not null)
+        {
+            using var accepted = JsonDocument.Parse(authorization.Text);
+            if (!accepted.RootElement.TryGetProperty("decision", out var policy) || policy.GetString() != "allowed")
+                return [new ModelTextDelta(accepted.RootElement.TryGetProperty("started", out var started) && started.ValueKind == JsonValueKind.True
+                ? "The exact reviewed background task was created. Its execution is tracked in Background work." : "Background creation was not authorized."), new ModelCompleted(ModelStopReason.Completed)];
+        }
+
         if (!prompt.Contains("[test:background-start]", StringComparison.Ordinal)) return null;
+        if (prompt.Contains("[test:background-creation-review]", StringComparison.Ordinal))
+        {
+            if (authorization is null && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) == true)
+                return Call(ToolCatalog.RequestAuthorization, new { operation = "start_background_work", task = new {
+                    objective = "synthetic-automation-attention: review the requested progress and report the outcome", title = "Reviewed background progress check", reportCompletion = true } });
+        }
         var result = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.BackgroundStart);
         if (result is not null)
         {

@@ -38,21 +38,12 @@ public sealed partial class InMemoryIamStore
                     throw new SecurityConflictException("background_id_conflict");
                 return ValueTask.FromResult(new AgentRunAdmissionResult(false, saved));
             }
-            AgentRunStoreMapping.ValidateBackgroundBudget(child, all.Runs.Values);
-            if (sessionBacking.HasTenantBackgroundIdentityConflict(snapshot) || all.Runs.ContainsKey(child.AgentRunId) || all.Activations.ContainsKey(child.ActivationId)
-                || all.ByAdmission.ContainsKey((child.SessionId, child.Admission.Activation.DedupeKey))
-                || sessionBacking.FindEntry(child.SessionId, snapshot.Entries[0].EntryId) is not null
-                || _audit.Any(a => a.AuditId == auditId)) throw new SecurityConflictException("identity_conflict");
-            var activation = AgentRunStoreMapping.ToActivationRecord(snapshot, child);
+            if (_audit.Any(a => a.AuditId == auditId)) throw new SecurityConflictException("identity_conflict");
             var audit = new AuthorizationAudit(auditId, tenant, frame.Owner.ExecutorPrincipalId!.Value,
                 "agent-runs.background.admit", child.AgentRunId.ToString("D"), "allowed", "owned_parent_child_admitted", now);
             var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
             ct.ThrowIfCancellationRequested();
-            if (!sessionBacking.CreateTenantSession(root, snapshot)) throw new SecurityConflictException("identity_conflict");
-            all.Runs.Add(child.AgentRunId, child); all.Activations.Add(child.ActivationId, activation);
-            all.ByAdmission.Add((child.SessionId, child.Admission.Activation.DedupeKey), child.AgentRunId);
-            all.BySourceEntry.Add((child.SessionId, snapshot.Entries[0].EntryId), child.ActivationId);
-            all.ByBackgroundSource.Add((child.Owner, key), child.AgentRunId);
+            StageTenantBackgroundGraph(root, snapshot, child);
             _tenants[tenant] = next; _audit.Add(audit);
             return ValueTask.FromResult(new AgentRunAdmissionResult(true, child));
         }

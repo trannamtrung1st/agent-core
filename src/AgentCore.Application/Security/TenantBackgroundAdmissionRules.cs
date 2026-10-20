@@ -21,7 +21,7 @@ public static class TenantBackgroundAdmissionRules
         var previous = parent.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var activation = child.Admission.Activation;
         var configuration = child.Admission.Configuration;
-        if (parent.Admission.Activation.Kind != ActivationKind.UserTurn || previous.Origin != ExecutionOrigin.UserMessage
+        if (!TenantBackgroundCreationRules.Allows(parent)
             || parent.CancellationRequested || parentSession.Snapshot.DurablyDeletedAt is not null || parentSession.Snapshot.ArchivedAt is not null
             || LifecycleTransition.IsTerminal(parentSession.Snapshot) || parentSession.Snapshot.Status is SessionStatus.Ended or SessionStatus.Ending
             || child.Owner != parent.Owner || !child.IsInitialQueued || child.AgentRunId == parent.AgentRunId || child.SessionId == parent.SessionId
@@ -47,14 +47,18 @@ public static class TenantBackgroundAdmissionRules
             previous.OriginalInitiatorPrincipalId ?? throw new AccessDeniedException("requester_unavailable"), child.CreatedAtUtc);
     }
 
-    public static async ValueTask AuthorizeAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
-        IamAuthorizer authorizer, CancellationToken ct)
+    public static ValueTask AuthorizeAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
+        IamAuthorizer authorizer, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, ct, true);
+    public static ValueTask AuthorizeReportAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
+        IamAuthorizer authorizer, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, ct, false);
+    private static async ValueTask AuthorizeAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
+        IamAuthorizer authorizer, CancellationToken ct, bool createSession)
     {
         var execution = parent.Admission.ExecutionContext!;
         if (state.Tenant.Status != IdentityStatus.Active || state.Tenant.TenantId != execution.TenantId
             || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
             || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)) throw new AccessDeniedException("background_unavailable");
-        foreach (var key in new[] { "sessions.create", "agent-runs.create" })
+        foreach (var key in createSession ? new[] { "sessions.create", "agent-runs.create" } : new[] { "agent-runs.create" })
         {
             var permission = PermissionCatalog.Get(key); var scope = AccessScope.ForTenant(execution.TenantId);
             if (!(await authorizer.CheckTenantAsync(state, execution.AgentPrincipalId, permission, scope, ct).ConfigureAwait(false)).Allowed)
