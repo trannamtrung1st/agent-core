@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? attachmentReads = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantCompletionReadService? completionReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null)
 {
     public ValueTask<List<ModelMessage>> RehydrateBrowserImagesAsync(AgentRun run, List<ModelMessage> messages, bool vision, CancellationToken ct) =>
         browserEffects is null ? ValueTask.FromResult(messages) : browserEffects.RehydrateCapturesAsync(run, messages, vision, ct);
@@ -50,9 +50,9 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
         var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
         TenantRunContinuationRules.Require(run, request, source);
-        ValidateAuthorizationCheckpoint(run, request!, (request!.Operation.Kind is TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand or TenantOperationKind.WorkspaceMutation)
+        ValidateAuthorizationCheckpoint(run, request!, (request!.Operation.Kind is TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand or TenantOperationKind.WorkspaceMutation or TenantOperationKind.AccountAction)
             && run.Admission.ApprovalResume is not null && run.SideEffect.ToolCallId != "operation:" + request.Operation.OperationId.ToString("D"));
-        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind is not (TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand or TenantOperationKind.WorkspaceMutation)) return;
+        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind is not (TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand or TenantOperationKind.BrowserCommand or TenantOperationKind.WorkspaceMutation or TenantOperationKind.AccountAction)) return;
         var remaining = run.Checkpoint?.PauseBudgetClock(time.GetUtcNow()).RemainingOverallBudgetMs
             ?? (run.Admission.ExecutionBudget?.Profile.DurationSeconds ?? 180) * 1000;
         if (remaining <= 0) throw new AccessDeniedException("execution_budget_exhausted");
@@ -60,7 +60,10 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, budget.Token);
         try
         {
-            if (request.Operation.Kind == TenantOperationKind.WorkspaceMutation)
+            if (request.Operation.Kind == TenantOperationKind.AccountAction)
+                await (accountEffects ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteApprovedAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
+                    run.Claim!.Generation, request.Operation.ActionHash, linked.Token).ConfigureAwait(false);
+            else if (request.Operation.Kind == TenantOperationKind.WorkspaceMutation)
                 await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteApprovedAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
                     run.Claim!.Generation, request.Operation.ActionHash, linked.Token).ConfigureAwait(false);
             else if (request.Operation.Kind == TenantOperationKind.BrowserCommand)
@@ -79,12 +82,25 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
     {
         var tenant = dispatched.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         var run = await Current(dispatched, ct).ConfigureAwait(false);
-        if (run.ApprovalRequestId is not { } requestId) return (run, null);
+        if (run.ApprovalRequestId is not { } requestId)
+        {
+            if (run.WaitCount > 0 && run.Checkpoint is { AwaitingSignalAdmission: true } signal)
+            {
+                if (runtimeStore is null || ids is null) throw new SecurityConflictException("signal_continuation_unavailable");
+                run = await runtimeStore.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
+                    new AgentRunCommand.Checkpoint(run.Revision, time.GetUtcNow(), run.Claim!.Generation, signal.WithRuntimeAdmissionPending(false), null),
+                    ids.NewId(), ct, run.Claim.Generation).ConfigureAwait(false);
+            }
+            return (run, null);
+        }
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
         var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
         TenantRunContinuationRules.Require(run, request, source);
         ValidateAuthorizationCheckpoint(run, request!);
         if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(run, ct).ConfigureAwait(false);
+        if (accountReads is not null) await accountReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
+        if (accountEffects is not null) await accountEffects.RequireStoredAsync(run, ct).ConfigureAwait(false);
+        else if (TenantAccountActionReferences.Read(run).Count > 0) throw new AccessDeniedException("account_source_changed");
         if (credentialReads is not null) await credentialReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
         if (attachmentReads is not null) await attachmentReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
         if (artifactReads is not null) await artifactReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
@@ -131,12 +147,28 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
                     catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
                 }
+                if (request.Operation.CompletionRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
+                {
+                    try { inspection = await (completionReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
+                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
+                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
+                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
+                }
                 if (request.Operation.ArtifactVerification is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
                 {
                     try { inspection = await (artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
                         new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
                     catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
                     catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
+                }
+                if (request.Operation.AccountRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
+                {
+                    try { inspection = await (accountReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
+                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
+                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
+                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
+                    catch (AgentCore.Application.Sessions.AgentCoreException e) { readUnavailable = e.Code; }
+                    run = await Current(dispatched, ct).ConfigureAwait(false);
                 }
                 if (request.Operation.CredentialRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
                 {
@@ -169,14 +201,20 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                         applied = outcome.Outcome == TenantOperationOutcome.Completed, controlRequestAccepted = outcome.Outcome == TenantOperationOutcome.Completed,
                         terminationConfirmed = false, filesRetained = true });
                 var paused = checkpoint.PauseBudgetClock(time.GetUtcNow());
-                var resumed = request.Operation.WorkspaceMutation is not null
+                var resumed = request.Operation.AccountAction is { } accountAction
+                    ? TenantAccountActionContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason,
+                        outcome.Outcome == TenantOperationOutcome.Completed && accountAction.ToolName == ToolCatalog.EmailCreateDraft
+                            ? new TenantAccountActionResult("draft_created", DraftId: accountAction.Draft!.DraftId) : null)
+                    : request.Operation.WorkspaceMutation is not null
                     ? TenantWorkspaceMutationContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason)
                     : request.Operation.BrowserCommand is not null
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
                         request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched", receipt)
                     : request.Operation.WorkspaceRead is not null ? TenantWorkspaceReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.AttachmentRead is not null ? TenantAttachmentReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
+                    : request.Operation.CompletionRead is not null ? TenantCompletionReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ArtifactVerification is not null ? TenantArtifactVerificationContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
+                    : request.Operation.AccountRead is not null ? TenantAccountReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.CredentialRead is not null ? TenantCredentialReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.SandboxRead is not null ? TenantSandboxContinuationProjection.CompleteRead(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : sandbox is null ? AgentRunToolCallCheckpoint.CompleteTenantAuthorization(paused, pending[0], text)

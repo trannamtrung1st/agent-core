@@ -151,7 +151,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(descriptor.ModelDefinition);
+            offered.Add(context?.ExecutionContext is not null && TenantCredentialDiscoveryContract.IsFamilyTool(descriptor.Name) ? TenantCredentialDiscoveryContract.Descriptor(descriptor.Name) : descriptor.ModelDefinition);
         }
 
         if (ToolRegistry.TryGet(AttachmentsRead, out var attachmentDescriptor)
@@ -182,7 +182,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(descriptor.ModelDefinition);
+            offered.Add(context?.ExecutionContext is not null && TenantCredentialDiscoveryContract.IsFamilyTool(descriptor.Name) ? TenantCredentialDiscoveryContract.Descriptor(descriptor.Name) : descriptor.ModelDefinition);
         }
 
         AddContextTools(offered, seen, definition, context, configurationGate);
@@ -199,7 +199,7 @@ public static class ToolCatalog
         foreach (var authority in ToolRegistry.All)
             if (authority.OfferRule is ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority or ToolOfferRule.TenantExecutionAuthority
                 && ToolPolicy.IsOffered(authority, definition, context, configurationGate) && seen.Add(authority.Name))
-                offered.Add(authority.Name == RequestAuthorization && TenantFileExecutionContract.IsBackground(context) ? TenantFileExecutionContract.Authorization(definition).ModelDefinition
+                offered.Add(authority.Name == RequestAuthorization && TenantTaskExecutionContract.IsBackground(context) ? TenantTaskExecutionContract.Authorization(definition).ModelDefinition
                     : authority.Name == RequestAuthorization ? TenantApprovalToolContract.Descriptor(
                     definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == true,
                     TenantApprovalToolContract.AllowsCredentialCheck(definition, context),
@@ -207,7 +207,7 @@ public static class ToolCatalog
                         && definition.SandboxPolicy!.AllowedProfileIds.Contains(p.Id, StringComparer.Ordinal)).Select(p => p.Id).ToArray() : null,
                     TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.StopProcess),
                     TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.ResetEnvironment),
-                    TenantSandboxReadAuthorizationContract.Allowed(definition), TenantBrowserAuthorizationContract.Allowed(definition), TenantCredentialReadAuthorizationContract.Allows(definition, context), TenantApprovalToolContract.AllowsArtifact(definition, context), TenantArtifactVerificationContract.Allows(definition), TenantWorkspaceReadAuthorizationContract.Allowed(definition), TenantWorkspaceMutationAuthorizationContract.Allowed(definition, context), TenantApprovalToolContract.AllowsWorkspaceArtifact(definition, context), TenantAttachmentReadContract.Allows(definition), TenantApprovalToolContract.AllowsBackground(definition, context)).ModelDefinition : authority.ModelDefinition);
+                    TenantSandboxReadAuthorizationContract.Allowed(definition), TenantBrowserAuthorizationContract.Allowed(definition), TenantCredentialReadAuthorizationContract.Allows(definition, context), TenantApprovalToolContract.AllowsArtifact(definition, context), TenantArtifactVerificationContract.Allows(definition), TenantWorkspaceReadAuthorizationContract.Allowed(definition), TenantWorkspaceMutationAuthorizationContract.Allowed(definition, context), TenantApprovalToolContract.AllowsWorkspaceArtifact(definition, context), TenantAttachmentReadContract.Allows(definition), TenantApprovalToolContract.AllowsBackground(definition, context), TenantApprovalToolContract.AllowsCompletion(definition, context), TenantApprovalToolContract.AllowsAccountRead(definition, context) ? TenantAccountReadContract.Allowed(definition) : [], TenantApprovalToolContract.AllowsAccountAction(definition, context) ? TenantAccountActionContract.Allowed(definition) : [], credentialFamilies: TenantCredentialDiscoveryContract.Families(definition)).ModelDefinition : authority.ModelDefinition);
         foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate, AgentCore.Application.Experience.ExperienceService.SourceTool, AgentCore.Application.Experience.ExperienceService.RecordTool })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))

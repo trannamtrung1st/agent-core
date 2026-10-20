@@ -71,7 +71,7 @@ public static class TenantSandboxReadOperationRules
         TenantSandboxRuntimeSnapshot snapshot, IReadOnlyList<SandboxProfile> sources)
     {
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
-        if (run.Admission.Configuration is null || !TenantSandboxInspectionContract.Allows(run.Admission.Configuration.Definition, Tool(value.Kind))
+        if (run.Admission.Configuration is null || !TenantTaskExecutionContract.Allows(run, current) || !TenantSandboxInspectionContract.Allows(run.Admission.Configuration.Definition, Tool(value.Kind))
             || !TenantSandboxInspectionContract.Allows(current, Tool(value.Kind))) throw new AccessDeniedException("sandbox_policy_changed");
         if (session.Owner.SessionId != value.SessionId || value.SessionId != run.SessionId || session.Owner.TenantId != run.Owner.TenantId
             || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId || session.Owner.AgentInstanceId != run.AgentInstanceId

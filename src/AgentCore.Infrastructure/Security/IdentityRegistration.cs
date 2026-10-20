@@ -68,6 +68,10 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantBrowserCredentialTarget>();
         services.TryAddSingleton<TenantBrowserUploadTarget>();
         services.TryAddSingleton<TenantCredentialRuntimeReadService>();
+        services.TryAddSingleton<TenantAccountRuntimeReadService>();
+        services.TryAddSingleton<ITenantAccountOperationStore>(p => (ITenantAccountOperationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantAccountActionTarget>();
+        services.TryAddSingleton<TenantAccountEffectService>();
         services.TryAddSingleton<TenantBrowserEffectService>();
         services.TryAddSingleton<TenantBrowserReadService>();
         services.TryAddSingleton<TenantSandboxControlOperationTarget>();
@@ -78,6 +82,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantSandboxInstanceVerificationService>();
         services.TryAddSingleton<TenantSandboxVerificationCleanup>();
         services.AddHostedService<TenantSandboxVerificationCleanupWorker>();
+        services.TryAddSingleton<ITenantConnectedAccountReadStore>(p => (ITenantConnectedAccountReadStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantConnectedAccountService>();
         services.TryAddSingleton<ITenantCredentialBindingStore>(provider => (ITenantCredentialBindingStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantCredentialBindingService>();
         services.TryAddSingleton<ITenantCredentialOAuthStore>(provider => (ITenantCredentialOAuthStore)provider.GetRequiredService<IIamStore>());
@@ -107,6 +113,10 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantApprovedOperationStore>(p => (ITenantApprovedOperationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantApprovedOperationService>();
         services.TryAddSingleton<ITenantRuntimeStore>(p => (ITenantRuntimeStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantWaitSourceAuthority>();
+        services.TryAddSingleton<TenantCompletionReadService>();
+        services.TryAddSingleton<TenantReportReadAuthority>();
+        services.TryAddSingleton<TenantReportSourceReadService>();
         services.TryAddSingleton<TenantAttachmentRuntimeContextService>();
         services.TryAddSingleton<TenantRunExecutionAuthority>();
         services.TryAddSingleton<TenantRunContinuationService>();
@@ -129,6 +139,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantAttachmentMutationStore>(p => (ITenantAttachmentMutationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAttachmentService>();
         services.TryAddSingleton<TenantAttachmentMaterializationService>();
+        services.TryAddSingleton<ITenantAutomationStore>(p => (ITenantAutomationStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantAutomationService>();
         services.TryAddSingleton<TenantSessionService>();
         services.TryAddSingleton<TenantSessionForegroundService>();
         services.TryAddSingleton<TenantActivityService>();
@@ -143,6 +155,6 @@ public static class IdentityRegistration
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
             provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>(),
-            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>());
+            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(), provider.GetService<IEmailStore>() as InMemoryEmailStore, provider.GetRequiredService<InMemoryTriggerStore>());
     }
 }

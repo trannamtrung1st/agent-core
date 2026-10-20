@@ -40,7 +40,14 @@ public sealed partial class SqliteIamStore
     {
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var rows = await db.AgentRuns.AsNoTracking().Where(r => r.TenantId != null && db.BackgroundCompletionReceipts.Any(i => i.ChildAgentRunId == r.AgentRunId && i.ProfileId == null && i.Status == (int)CompletionInboxStatus.Pending
+        var blocked = db.Set<TenantApprovalRecord>().FromSqlRaw("""
+            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.BackgroundReport') IS 'object'
+              OR (json_type(PayloadJson, '$.Operation.ReportSourceRead') IS 'object' AND (Status <> 1 OR NOT EXISTS (
+                SELECT 1 FROM TenantOperationReceipts receipt WHERE receipt.TenantId = TenantApprovalRequests.TenantId
+                AND receipt.OperationId = TenantApprovalRequests.OperationId AND receipt.RequestId = TenantApprovalRequests.RequestId
+                AND receipt.Outcome = 0 AND receipt.ReasonCode = 'report_source_read_authorized')))
+            """);
+        var rows = await db.AgentRuns.AsNoTracking().Where(r => r.TenantId != null && !blocked.Any(a => a.TenantId == r.TenantId && a.ExecutorPrincipalId == r.ExecutorPrincipalId && a.RunId == r.AgentRunId && a.RootActivationId == r.RootActivationId) && db.BackgroundCompletionReceipts.Any(i => i.ChildAgentRunId == r.AgentRunId && i.ProfileId == null && i.Status == (int)CompletionInboxStatus.Pending
                 && !db.AgentRuns.Any(parent => parent.SessionId == i.ParentSessionId && parent.Status != (int)AgentRunStatus.Completed && parent.Status != (int)AgentRunStatus.Failed && parent.Status != (int)AgentRunStatus.Cancelled)
                 && !db.Sessions.Any(parent => parent.SessionId == i.ParentSessionId && parent.PendingAgentInputIdsJson != "[]")))
             .OrderBy(r => r.UpdatedAtUtc).ThenBy(r => r.AgentRunId).Take(limit).ToArrayAsync(ct).ConfigureAwait(false);
@@ -67,6 +74,7 @@ public sealed partial class SqliteIamStore
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var tenant = report.Owner.TenantId!.Value;
         var source = await CompletionSource(db, report.Owner, report.Admission.ExecutionContext?.ParentRunId ?? Guid.Empty, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("completion_unavailable");
+        await RequireTenantReportRead(db, (await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!, source, ct).ConfigureAwait(false);
         var receipt = await db.BackgroundCompletionReceipts.SingleOrDefaultAsync(r => r.ChildAgentRunId == source.Child.AgentRunId.ToString("D") && r.ProfileId == null, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("completion_unavailable");
         var item = CompletionInboxMapping.Read(receipt); if (item.Owner != report.Owner) throw new AccessDeniedException("completion_unavailable");
         if (item.Status != CompletionInboxStatus.Pending)

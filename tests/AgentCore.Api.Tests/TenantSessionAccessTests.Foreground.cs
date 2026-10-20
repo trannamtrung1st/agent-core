@@ -35,7 +35,7 @@ public sealed partial class TenantSessionAccessTests
             var model = new ForegroundGateModel();
             await using WebApplicationFactory<Program> factory = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
             using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
-            var started = await StartTenantBackground(factory, owner);
+            var started = await StartTenantBackground(factory, owner, reportReads: true);
             await model.ChildEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
             var child = Assert.Single((await sessions.ListTenantSessionsAsync(started.Tenant, null, 0, 100)).Items, s => s.Owner.SessionId != started.Session);
@@ -99,7 +99,7 @@ public sealed partial class TenantSessionAccessTests
             var model = new ForegroundGateModel();
             await using WebApplicationFactory<Program> factory = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
             using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
-            var started = await StartTenantBackground(factory, owner); await model.ChildEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            var started = await StartTenantBackground(factory, owner, reportReads: true); await model.ChildEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             var child = Assert.Single((await sessions.ListTenantSessionsAsync(started.Tenant, null, 0, 100)).Items, s => s.Owner.SessionId != started.Session);
             var actor = (await Json(await owner.GetAsync($"/api/v2/tenants/{started.Tenant}/access/me"))).GetProperty("principalId").GetGuid();
@@ -130,7 +130,7 @@ public sealed partial class TenantSessionAccessTests
             await using (var first = new TenantBackgroundSqliteFactory(root, new TenantBackgroundModel()))
             {
                 using var owner = first.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
-                var started = await StartTenantBackground(first, owner); var result = await WaitTenantBackground(first, started.Tenant, started.Session, started.Source, true);
+                var started = await StartTenantBackground(first, owner, reportReads: true); var result = await WaitTenantBackground(first, started.Tenant, started.Session, started.Source, true);
                 tenant = started.Tenant; session = result.Child.SessionId; instance = result.Child.AgentInstanceId; initial = result.Child.AgentRunId;
                 var saved = (await first.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!;
                 Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync($"/api/v2/tenants/{tenant}/sessions/{session}/continue-in-chat",

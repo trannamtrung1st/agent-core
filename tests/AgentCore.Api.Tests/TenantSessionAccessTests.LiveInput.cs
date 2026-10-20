@@ -25,7 +25,7 @@ public sealed partial class TenantSessionAccessTests
             var model = new BackgroundFileModel();
             await using WebApplicationFactory<Program> factory = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
             using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
-            var setup = await StartTenantBackground(factory, owner);
+            var setup = await StartTenantBackground(factory, owner, reportReads: true);
             await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
             var child = (await sessions.ListTenantSessionsAsync(setup.Tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == setup.Source);
@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
         {
             var model = new BackgroundFileModel();
             await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model) : new NativeTenantMemoryFactory(root, model);
-            factory.UseKestrel(0); using var owner = factory.CreateClient(); var setup = await StartTenantBackground(factory, owner);
+            factory.UseKestrel(0); using var owner = factory.CreateClient(); var setup = await StartTenantBackground(factory, owner, reportReads: true);
             await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             var child = (await sessions.ListTenantSessionsAsync(setup.Tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == setup.Source);
@@ -127,7 +127,7 @@ public sealed partial class TenantSessionAccessTests
             await using (var first = new NativeTenantSqliteFactory(root, firstModel, services => services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p =>
                 new MetadataExecutionGate(() => Volatile.Read(ref enabled), new TenantRunExecution(p.GetRequiredService<ITenantRuntimeStore>(), p.GetRequiredService<ITenantRunStore>(), p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>()))))))
             {
-                using var owner = first.CreateClient(); var setup = await StartTenantBackground(first, owner); tenant = setup.Tenant;
+                using var owner = first.CreateClient(); var setup = await StartTenantBackground(first, owner, reportReads: true); tenant = setup.Tenant;
                 await firstModel.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30)); var sessions = first.Services.GetRequiredService<ITenantSessionStore>();
                 var child = (await sessions.ListTenantSessionsAsync(tenant, null, 0, 100)).Items.Single(s => s.Snapshot.Origin.OriginatingAgentRunId == setup.Source); session = child.Owner.SessionId;
                 var api = $"/api/v2/tenants/{tenant}"; var url = api + $"/sessions/{session}";
@@ -171,7 +171,7 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> factory = sqlite ? new NativeTenantSqliteFactory(root, model) : new NativeTenantMemoryFactory(root, model);
             factory.UseKestrel(0); using var ready = factory.CreateClient(); var cookies = new CookieContainer();
             using var owner = new HttpClient(new HttpClientHandler { CookieContainer = cookies }) { BaseAddress = ready.BaseAddress };
-            var setup = await StartTenantBackground(factory, owner, submit: false); var url = $"/api/v2/tenants/{setup.Tenant}/sessions/{setup.Session}";
+            var setup = await StartTenantBackground(factory, owner, submit: false, reportReads: true); var url = $"/api/v2/tenants/{setup.Tenant}/sessions/{setup.Session}";
             var events = new ConcurrentQueue<ServerEvent>(); await using var hub = TenantSocket(ready.BaseAddress!, cookies, events); await hub.StartAsync();
             Assert.True((await hub.InvokeAsync<CommandAck>("AttachTenant", TenantAttach(setup.Tenant, setup.Session))).Accepted);
             var first = await Json(await owner.PostAsJsonAsync(url + "/messages", new { messageId = Guid.NewGuid(), text = "Hello active source", expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = 1 }));

@@ -14,7 +14,7 @@ public sealed record DriveTrashBatchResult(int RequestedCount, int TrashedCount,
 
 public sealed partial class DriveService
 {
-    private static Guid TrashOperationId(Guid batch, int index, string id)
+    internal static Guid TrashOperationId(Guid batch, int index, string id)
         => new(SHA256.HashData(Encoding.UTF8.GetBytes($"{batch:D}|{index}|{id}")).AsSpan(0, 16));
     private static DriveTrashBatchResult BatchResult(DriveTrashBatchItem[] items) => new(items.Length,
         items.Count(i => i.Status == "Succeeded"), items.Count(i => i.Status == "Failed"),

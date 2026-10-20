@@ -166,7 +166,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(0, factory.Outbound); Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
     private sealed class OAuthFactory(string? existingRoot = null, bool sqlite = false, bool preserve = false, bool driveEnabled = true,
-        ITenantCredentialOAuthVerifier? checkOverride = null, bool execute = false, ILanguageModel? model = null) : AgentCoreApiFactory
+        ITenantCredentialOAuthVerifier? checkOverride = null, bool execute = false, ILanguageModel? model = null, Action<IServiceCollection>? servicesOverride = null) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => TenantExecutionEnabled;
         public bool TenantExecutionEnabled = execute;
@@ -208,6 +208,7 @@ public sealed partial class TenantCredentialAccessTests
                 if (TenantExecutionEnabled) services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new ExecutionGate(this,
                     new AgentCore.Application.Execution.TenantRunExecution(p.GetRequiredService<ITenantRuntimeStore>(), p.GetRequiredService<ITenantRunStore>(),
                         p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>()))));
+                servicesOverride?.Invoke(services);
             });
         }
         public override async ValueTask DisposeAsync()

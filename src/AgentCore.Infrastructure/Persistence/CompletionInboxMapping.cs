@@ -43,7 +43,7 @@ internal static class CompletionInboxMapping
         if (item.Status != CompletionInboxStatus.Claimed) return item;
         var parent = runs.SingleOrDefault(r => r.AgentRunId == item.ClaimRunId && r.Owner == item.Owner);
         // A durable wait retains ownership, but not an expired consumption lease.
-        if (parent is null || parent.IsTerminal || parent.Status == AgentRunStatus.WaitingToRetry
+        if (parent is null || parent.IsTerminal || parent.Status is AgentRunStatus.WaitingToRetry or AgentRunStatus.Queued
             || item.ClaimExpiresAtUtc <= now || parent.Status == AgentRunStatus.Running && parent.Claim?.Generation != item.ClaimGeneration)
         { RuntimeTelemetry.RecordBackgroundSession("inbox-claim-expired"); return item.Release(); }
         return item;

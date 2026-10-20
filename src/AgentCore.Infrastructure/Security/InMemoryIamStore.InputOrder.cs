@@ -8,7 +8,7 @@ public sealed partial class InMemoryIamStore
         .Select(id => sessionBacking.FindEntry(run.SessionId, id)?.Sequence ?? long.MaxValue).DefaultIfEmpty(long.MaxValue).Min();
     private bool TenantInputBlocked(AgentRun run)
     {
-        if (run.Status == AgentRunStatus.Running) return false; // Expired claims still require recovery.
+        if (run.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForSignal) return false; // The current execution retains ownership while waiting.
         return sessionBacking.AgentRuns.Runs.Values.Any(other => other.Owner == run.Owner && other.SessionId == run.SessionId
             && other.AgentRunId != run.AgentRunId && !other.IsTerminal
             && (other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForSignal

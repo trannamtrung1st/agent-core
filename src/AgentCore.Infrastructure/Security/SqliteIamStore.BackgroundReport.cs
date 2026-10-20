@@ -16,6 +16,7 @@ public sealed partial class SqliteIamStore
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!; var iam = new IamAuthorizer(this);
         var current = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         TenantApprovalRules.Validate(request, child, agent); TenantSessionRules.RequireExecutor(state, agent);
+        await RequireTenantReportRead(db, state, source, ct).ConfigureAwait(false);
         TenantBackgroundReportRules.Require(request, source, agent, current);
         await TenantExecutionLineage.RequireRequesterAsync(child, state, iam, this, ct).ConfigureAwait(false);
         var root = await TenantExecutionLineage.RootAsync(child, this, ct).ConfigureAwait(false);

@@ -66,7 +66,7 @@ public sealed record CompletionInboxItem(Guid ChildAgentRunId, AgentRunOwner Own
                     return this with { Revision = Revision + 1, ClaimGeneration = claim.Generation,
                         ClaimExpiresAtUtc = claim.LeaseExpiresAtUtc };
             }
-            if (run.IsTerminal || run.Status == AgentRunStatus.WaitingToRetry) return Release();
+            if (run.IsTerminal || run.Status is AgentRunStatus.WaitingToRetry or AgentRunStatus.Queued) return Release();
         }
         if (Status == CompletionInboxStatus.DeliveryQueued && ReportActivationId == run.ActivationId
             && run.Status == AgentRunStatus.Completed && run.Result?.OutcomeEntryId is not null)

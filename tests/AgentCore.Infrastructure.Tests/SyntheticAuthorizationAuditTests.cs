@@ -6,6 +6,24 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SyntheticAuthorizationAuditTests
 {
+    [Theory] [InlineData(true)] [InlineData(false)]
+    public async Task Synthetic_completion_read_continuation_uses_saved_consent_without_original_prompt(bool approved)
+    {
+        var child = Guid.NewGuid();
+        var request = new ModelRequest(Guid.NewGuid(), [new(ModelRole.System, "Continue the approved task."),
+            new(ModelRole.Tool, System.Text.Json.JsonSerializer.Serialize(new { backgroundSessionId = child }), ToolCallId: "read-start", Name: ToolCatalog.BackgroundStart),
+            new(ModelRole.Tool, "{}", ToolCallId: "read-duration", Name: ToolCatalog.ExecutionWait),
+            new(ModelRole.Tool, approved ? """{"readAuthorized":true,"completion":{}}""" : """{"readAuthorized":false}""", ToolCallId: "read-consent", Name: ToolCatalog.RequestAuthorization)]);
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in new ScriptedLanguageModel(["fallback"]).GenerateAsync(request)) events.Add(item);
+        if (approved)
+        {
+            var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
+            Assert.Equal(ToolCatalog.BackgroundInspect, call.Name); Assert.Contains(child.ToString("D"), call.ArgumentsJson);
+        }
+        else Assert.Contains(events.OfType<ModelTextDelta>(), item => item.Text.Contains("not delivered", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(true)] [InlineData(false)]
     public async Task Synthetic_background_creation_continuation_reports_saved_result_without_original_prompt(bool started)

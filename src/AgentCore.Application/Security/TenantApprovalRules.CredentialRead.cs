@@ -17,8 +17,7 @@ public static partial class TenantApprovalRules
         if (Encoding.UTF8.GetByteCount(arguments) > 4096) throw new ArgumentException("Use bounded Credential discovery arguments.");
         try
         {
-            using var doc = JsonDocument.Parse(arguments); var value = CredentialDiscovery.Parse(doc.RootElement);
-            return JsonSerializer.Serialize(new { cursor = value.Cursor, limit = value.Limit });
+            return TenantCredentialDiscoveryContract.Parse(arguments).Json;
         }
         catch (AgentCore.Application.Sessions.AgentCoreException e) { throw new ArgumentException("Use only bounded cursor and limit discovery arguments.", e); }
     }
@@ -26,7 +25,7 @@ public static partial class TenantApprovalRules
     {
         if (read.ReferencesJson is not { Length: <= 65536 } || read.ArgumentsJson != CredentialReadArguments(read.ArgumentsJson))
             throw new ArgumentException("Use canonical metadata read scopes.");
-        using var args = JsonDocument.Parse(read.ArgumentsJson); var request = CredentialDiscovery.Parse(args.RootElement);
+        var request = TenantCredentialDiscoveryContract.Parse(read.ArgumentsJson).Page;
         var refs = JsonSerializer.Deserialize<CredentialReadReference[]>(read.ReferencesJson);
         if (refs is null || refs.Length > 101 || refs.Length > request.Limit + 1
             || refs.Any(r => r is null || r.CredentialId == Guid.Empty || r.BindingId == Guid.Empty || r.BindingRevision < 1 || r.CredentialRevision < 1

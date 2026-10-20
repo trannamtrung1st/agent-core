@@ -14,7 +14,7 @@ public sealed partial class InMemoryIamStore
         var state = sessionBacking.AgentRuns;
         if (next.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome && next.IsTerminal && next.Result?.OutcomeKind != AgentRunOutcomeKind.Continued && !state.CompletionReceipts.ContainsKey(next.AgentRunId)
             && sessionBacking.ReadTenantSession(next.Owner.TenantId!.Value, next.SessionId) is { } child
-            && child.Snapshot.Origin.MayReportCompletion(TenantBackgroundLineage.InitialAsync(next, (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(next.Owner.TenantId.Value, id)), CancellationToken.None).AsTask().GetAwaiter().GetResult().AgentRunId))
+            && child.Snapshot.Origin.ReportCompletionToOrigin && child.Snapshot.Origin.MayReportCompletion(TenantBackgroundLineage.InitialAsync(next, (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(next.Owner.TenantId.Value, id)), CancellationToken.None).AsTask().GetAwaiter().GetResult().AgentRunId))
             state.CompletionReceipts.Add(next.AgentRunId, CompletionInboxMapping.Create(next, child.Snapshot));
         foreach (var row in state.CompletionReceipts.Values.Where(r => r.AgentInstanceId == next.AgentInstanceId.ToString("D") && r.ProfileId is null))
         {
@@ -25,13 +25,14 @@ public sealed partial class InMemoryIamStore
     public ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
         AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate)
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
         {
             RequireRuntimeOwner(frame.Owner);
             var run = sessionBacking.ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
             _ = sessionBacking.LoadTenantRuntime(frame, (clock ?? TimeProvider.System).GetUtcNow());
             var draft = draftEntryId is { } id ? sessionBacking.FindEntry(frame.SessionId, id) : null;
             if (draftEntryId is not null && draft is null) throw AgentCoreErrors.Conflict("Response draft was not found.");
+            RequireTenantOutputSources(run, ct);
             AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft);
             AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
             catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }

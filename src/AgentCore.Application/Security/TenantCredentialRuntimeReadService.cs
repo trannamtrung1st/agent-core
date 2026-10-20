@@ -19,10 +19,10 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
 {
     private sealed record Read(AgentRun Run, TenantSecurityState State, TenantSession Session, TenantAgent Agent,
         AgentDefinition Current, IReadOnlyList<TenantCredentialBinding> Bindings);
-    private sealed record Witness(Guid BindingId, Guid CredentialId, long BindingRevision, long CredentialRevision);
-    public async ValueTask<string> InspectAsync(TenantRuntimeFrame frame, string arguments, int remainingBytes, CancellationToken ct)
+
+    public async ValueTask<string> InspectAsync(TenantRuntimeFrame frame, string arguments, int remainingBytes, CancellationToken ct, string? tool = null)
     {
-        try { return await InspectCoreAsync(frame, arguments, remainingBytes, ct).ConfigureAwait(false); }
+        try { return await InspectCoreAsync(frame, arguments, remainingBytes, ct, tool).ConfigureAwait(false); }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
         {
             if (frame.Owner.TenantId is { } tenant)
@@ -31,15 +31,15 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
             throw;
         }
     }
-    private async ValueTask<string> InspectCoreAsync(TenantRuntimeFrame frame, string arguments, int remainingBytes, CancellationToken ct)
+    private async ValueTask<string> InspectCoreAsync(TenantRuntimeFrame frame, string arguments, int remainingBytes, CancellationToken ct, string? tool)
     {
         if (Encoding.UTF8.GetByteCount(arguments) > 4096) throw new ArgumentException("Use bounded Credential discovery arguments.");
-        using var json = JsonDocument.Parse(arguments); var request = CredentialDiscovery.Parse(json.RootElement);
-        var before = await RequireAsync(frame, ct, audit: true).ConfigureAwait(false); var allowed = new List<TenantCredentialBinding>();
+        var input = TenantCredentialDiscoveryContract.Parse(arguments, tool); var request = input.Page; var family = input.Family;
+        var before = await RequireAsync(frame, ct, audit: true).ConfigureAwait(false); RequireFamily(before, family); var allowed = new List<TenantCredentialBinding>();
         foreach (var bound in before.Bindings.OrderBy(b => b.Binding.Reference, StringComparer.Ordinal))
         {
-            if (!Eligible(before, bound) || request.Cursor is not null && string.CompareOrdinal(bound.Binding.Reference, request.Cursor) <= 0) continue;
-            if (!await AllowedAsync(before, bound, ct, audit: true).ConfigureAwait(false)) continue;
+            if (!Eligible(before, bound, family) || request.Cursor is not null && string.CompareOrdinal(bound.Binding.Reference, request.Cursor) <= 0) continue;
+            if (!await AllowedAsync(before, bound, ct, audit: true, family: family).ConfigureAwait(false)) continue;
             allowed.Add(bound); if (allowed.Count > request.Limit) break;
         }
         var after = await RequireAsync(frame, ct).ConfigureAwait(false);
@@ -49,23 +49,23 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
         foreach (var bound in allowed)
         {
             var current = after.Bindings.SingleOrDefault(b => b.Binding.BindingId == bound.Binding.BindingId);
-            if (current is null || Fingerprint(current) != Fingerprint(bound) || !Eligible(after, current) || !await AllowedAsync(after, current, ct).ConfigureAwait(false))
+            if (current is null || Fingerprint(current) != Fingerprint(bound) || !Eligible(after, current, family) || !await AllowedAsync(after, current, ct, family: family).ConfigureAwait(false))
                 throw new AccessDeniedException("credential_source_changed");
         }
         await FenceAsync(frame, after, ct).ConfigureAwait(false);
-        return Serialize(allowed, request, remainingBytes);
+        return Serialize(allowed, request, remainingBytes, family);
     }
-    private static string Serialize(IReadOnlyList<TenantCredentialBinding> allowed, CredentialDiscoveryRequest request, int remainingBytes)
+    private static string Serialize(IReadOnlyList<TenantCredentialBinding> allowed, CredentialDiscoveryRequest request, int remainingBytes, string? family = null)
     {
         var metadata = allowed.Select(b => new BoundCredentialMetadata(b.Binding.Reference, b.Credential.Value.DisplayName,
-            b.Credential.Value.Kind.ToString(), b.Credential.Value.Metadata)).ToArray();
+            b.Credential.Value.Kind.ToString(), Metadata(b.Credential.Value, family))).ToArray();
         var page = CredentialDiscovery.Serialize(metadata, request, Math.Max(0, remainingBytes - 256 - allowed.Count * 256));
         var node = JsonNode.Parse(page)!.AsObject();
         if (node["items"] is JsonArray items)
         {
-            var refs = items.Select(i => i!["reference"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
             node["tenantCredentialRead"] = true;
-            node["credentialReads"] = JsonSerializer.SerializeToNode(allowed.Where(b => refs.Contains(b.Binding.Reference)).Select(Fingerprint));
+            node["credentialReadFamily"] = family;
+            node["credentialReads"] = JsonSerializer.SerializeToNode(allowed.Take(items.Count + (node["hasMore"]!.GetValue<bool>() ? 1 : 0)).Select(Fingerprint));
         }
         var text = node.ToJsonString();
         return Encoding.UTF8.GetByteCount(text) <= remainingBytes ? text : """{"error":"output_limit"}""";
@@ -74,17 +74,19 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
     {
         if (run.Checkpoint is null || !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages)) return;
         Read? current = null;
-        foreach (var message in messages!.Where(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.CredentialsList))
+        foreach (var message in messages!.Where(m => m.Role == ModelRole.Tool && TenantCredentialDiscoveryContract.IsTool(m.Name ?? "")))
         {
             using var json = JsonDocument.Parse(message.Text); var root = json.RootElement;
             if (!root.TryGetProperty("tenantCredentialRead", out var marker) || marker.ValueKind != JsonValueKind.True) continue;
             current ??= await RequireAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), ct).ConfigureAwait(false);
-            var witnesses = root.GetProperty("credentialReads").Deserialize<Witness[]>() ?? throw new AccessDeniedException("credential_source_changed");
-            if (witnesses.Length > 100) throw new AccessDeniedException("credential_source_changed");
+            var family = TenantCredentialReadReferences.Family(root); RequireFamily(current, family);
+            if (TenantCredentialDiscoveryContract.Family(message.Name ?? "") != family) throw new AccessDeniedException("credential_source_changed");
+            var witnesses = root.GetProperty("credentialReads").Deserialize<TenantCredentialReadWitness[]>() ?? throw new AccessDeniedException("credential_source_changed");
+            if (witnesses.Length > 101) throw new AccessDeniedException("credential_source_changed");
             foreach (var witness in witnesses)
             {
                 var bound = current.Bindings.SingleOrDefault(b => Fingerprint(b) == witness);
-                if (bound is null || !Eligible(current, bound) || !await AllowedAsync(current, bound, ct).ConfigureAwait(false))
+                if (bound is null || !Eligible(current, bound, family) || !await AllowedAsync(current, bound, ct, family: family).ConfigureAwait(false))
                     throw new AccessDeniedException("credential_source_changed");
             }
         }
@@ -116,15 +118,41 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
             throw new SecurityConflictException("credential_source_changed");
         return new(run, state, session, agent, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), snapshot.Bindings);
     }
-    private static bool Eligible(Read read, TenantCredentialBinding bound) => TenantCredentialReadOperationRules.Eligible(read.Run, read.Agent, read.Current, bound);
-    private async ValueTask<bool> AllowedAsync(Read read, TenantCredentialBinding bound, CancellationToken ct, bool audit = false)
+    private static bool Eligible(Read read, TenantCredentialBinding bound, string? family = null) => TenantCredentialReadOperationRules.Eligible(read.Run, read.Agent, read.Current, bound)
+        && TenantCredentialDiscoveryContract.Matches(family, bound.Credential.Value.Purpose);
+    private static void RequireFamily(Read read, string? family)
+    {
+        if (family is not null && (!TenantTaskExecutionContract.Allows(read.Run, read.Current)
+            || !TenantCredentialDiscoveryContract.Allows(read.Current, family) || !TenantCredentialDiscoveryContract.Allows(read.Run.Admission.Configuration!.Definition, family)))
+            throw new AccessDeniedException("capability_unavailable");
+    }
+    private static IReadOnlyDictionary<string, string> Metadata(Credential value, string? family)
+    {
+        if (family is null) return value.Metadata;
+        var result = new Dictionary<string, string>(value.Metadata, StringComparer.Ordinal) {
+            ["accountPurpose"] = value.Purpose.ToString(), ["emailAddress"] = value.EmailAccount?.EmailAddress ?? value.DriveAccount!.EmailAddress,
+            ["connectionStatus"] = value.EmailAccount?.ConnectionStatus.ToString() ?? value.DriveAccount!.ConnectionStatus.ToString(),
+            ["authEpoch"] = (value.EmailAccount?.AuthEpoch ?? value.DriveAccount!.AuthEpoch).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["synthetic"] = (value.EmailAccount?.Synthetic ?? value.DriveAccount!.Synthetic) ? "true" : "false",
+            ["accountUse"] = "Separate authorization required"
+        };
+        return result;
+    }
+    private async ValueTask<bool> AllowedAsync(Read read, TenantCredentialBinding bound, CancellationToken ct, bool audit = false, string? family = null)
     {
         var scope = TenantCredentialRules.Scope(read.State.Tenant.TenantId, bound.Credential.Value.CredentialId);
-        if (!(await authorizer.CheckTenantAsync(read.State, read.Run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false)).Allowed) return false;
-        var decision = audit ? await operations.Check(read.State, read.Run, "credentials.read", scope, ct, purpose: ExecutionAuthorizationPurpose.ToolBoundary).ConfigureAwait(false)
-            : await operations.Evaluate(read.State, read.Run.Admission.ExecutionContext!, "credentials.read", scope, ct).ConfigureAwait(false);
-        if (decision.Decision == OperationDecisionKind.RequiresApproval) throw new AccessDeniedException("credential_read_review_required");
-        return decision.Decision == OperationDecisionKind.Allowed;
+        foreach (var permission in family is null ? new[] { "credentials.read" } : new[] { "credentials.read", family + ".read" })
+        {
+            if (!(await authorizer.CheckTenantAsync(read.State, read.Run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed) return false;
+        }
+        foreach (var permission in family is null ? new[] { "credentials.read" } : new[] { "credentials.read", family + ".read" })
+        {
+            var decision = audit ? await operations.Check(read.State, read.Run, permission, scope, ct, purpose: ExecutionAuthorizationPurpose.ToolBoundary).ConfigureAwait(false)
+                : await operations.Evaluate(read.State, read.Run.Admission.ExecutionContext!, permission, scope, ct).ConfigureAwait(false);
+            if (decision.Decision == OperationDecisionKind.RequiresApproval) throw new AccessDeniedException("credential_read_review_required");
+            if (decision.Decision != OperationDecisionKind.Allowed) return false;
+        }
+        return true;
     }
     private async ValueTask FenceAsync(TenantRuntimeFrame frame, Read before, CancellationToken ct)
     {
@@ -137,5 +165,5 @@ public sealed partial class TenantCredentialRuntimeReadService(TenantOperationAu
         TenantRuntimeRules.Require(frame, before.Session.Owner, final, time.GetUtcNow());
         if (final.Revision != current.Revision) throw new SecurityConflictException("credential_source_changed");
     }
-    private static Witness Fingerprint(TenantCredentialBinding bound) => new(bound.Binding.BindingId, bound.Credential.Value.CredentialId, bound.Binding.Revision, bound.Credential.Value.Revision);
+    private static TenantCredentialReadWitness Fingerprint(TenantCredentialBinding bound) => new(bound.Binding.BindingId, bound.Credential.Value.CredentialId, bound.Binding.Revision, bound.Credential.Value.Revision);
 }

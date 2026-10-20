@@ -74,7 +74,7 @@ public sealed partial class SqliteIamStore
         row.Revision = updated.Revision; row.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, change.InstanceId, change.DefinitionSkills, at, ct).ConfigureAwait(false);
         await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(change.InstanceId, change.ExpectedInstanceRevision,
-            AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).ConfigureAwait(false);
+            AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct, next.Tenant.TenantId).ConfigureAwait(false);
         db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
         // Tenant events need a tenant-aware owner; never fabricate the legacy LocalUserProfile attribution.

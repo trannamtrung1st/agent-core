@@ -10,7 +10,7 @@ public static class TenantArtifactReviewRules
 {
     public static void RequireTask(AgentRun run)
     {
-        if (!TenantFileExecutionContract.Allows(run, run.Admission.Configuration!.Definition))
+        if (!TenantTaskExecutionContract.Allows(run, run.Admission.Configuration!.Definition))
             throw new AccessDeniedException("artifact_execution_unavailable");
     }
     public static TenantArtifactPublicationArguments Require(TenantApprovalRequest request, AgentRun run, TenantAgent agent,
@@ -23,7 +23,7 @@ public static class TenantArtifactReviewRules
             || session.Owner.SessionId != value.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != request.ExecutorPrincipalId
             || agent.TenantId != request.TenantId || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != request.ExecutorPrincipalId)
             throw new SecurityConflictException("operation_mismatch");
-        if (!TenantFileExecutionContract.Allows(run, current) || !TenantArtifactToolContract.AllowsPublication(run.Admission.Configuration!.Definition, value) || !TenantArtifactToolContract.AllowsPublication(current, value)) throw new AccessDeniedException("capability_unavailable");
+        if (!TenantTaskExecutionContract.Allows(run, current) || !TenantArtifactToolContract.AllowsPublication(run.Admission.Configuration!.Definition, value) || !TenantArtifactToolContract.AllowsPublication(current, value)) throw new AccessDeniedException("capability_unavailable");
         var args = TenantArtifactToolContract.ParsePublication(value);
         if (args.SourcePath is { } path) TenantArtifactSourceRules.Require(run, agent, current, session, path, value.Source);
         return args;

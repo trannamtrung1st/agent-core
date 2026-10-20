@@ -25,7 +25,7 @@ public sealed partial class SessionRuntime
             if (_runtimeOwner is not { } runtime || runtime.TenantId != owner.TenantId || runtime.AgentInstanceId != owner.AgentInstanceId
                 || runtime.ExecutorPrincipalId != owner.ExecutorPrincipalId || SessionId != owner.SessionId
                 || _store is not ITenantRuntimeForegroundWriter) throw new AccessDeniedException("tenant_context_mismatch");
-            if (_tenantCancellationCommitted || _tenantApprovalPending || _tenantApprovalSuspended)
+            if (_tenantTerminalCommitted || _tenantApprovalPending || _tenantApprovalSuspended)
             { input.Completed.TrySetResult(false); return; }
             TenantSessionForegroundRules.Eligible(_snapshot);
             // The serialized writer rechecks the original human and current IAM before adopting visibility.

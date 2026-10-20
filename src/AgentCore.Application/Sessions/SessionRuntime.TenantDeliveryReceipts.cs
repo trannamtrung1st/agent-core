@@ -26,7 +26,7 @@ public sealed partial class SessionRuntime
             if (_runtimeOwner is not { } owner || owner.TenantId != proof.Owner.TenantId || owner.AgentInstanceId != proof.Owner.AgentInstanceId
                 || owner.ExecutorPrincipalId != proof.Owner.ExecutorPrincipalId || SessionId != proof.Owner.SessionId
                 || _store is not ITenantRuntimeReceiptWriter) throw new AccessDeniedException("receipt_unavailable");
-            if (_tenantCancellationCommitted || _tenantApprovalPending || _tenantApprovalSuspended)
+            if (_tenantTerminalCommitted || _tenantApprovalPending || _tenantApprovalSuspended)
             { input.Completed.TrySetResult(false); return; }
             if (_activeEntryId is not null && !_responseTerminal) UpdateStreamingAssistant();
             var entry = _snapshot.Entries.SingleOrDefault(e => e.EntryId == proof.EntryId);

@@ -10,7 +10,8 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
-            return ValueTask.FromResult(TenantWorkspaceRules.TryParse(scope, out _, out _) ? OwnsWorkspace(scope, ct)
+            return ValueTask.FromResult(TenantAutomationRules.TryId(scope, out var automation) ? automationBacking.OwnsTenantAutomation(scope.TenantId!.Value, automation)
+                : TenantWorkspaceRules.TryParse(scope, out _, out _) ? OwnsWorkspace(scope, ct)
                 : TenantSandboxProfileRules.TryId(scope, out var profile) ? FindTenantSandboxProfileAsync(scope.TenantId!.Value, profile, ct: ct).Result is not null
                 : TenantApprovalRules.TryApprovalId(scope, out var approval) ? _approvals.GetValueOrDefault(approval)?.TenantId == scope.TenantId
                 : TenantAttachmentRules.TryId(scope, out var attachment) ? attachmentBacking?.OwnsTenantAttachment(scope.TenantId!.Value, attachment) == true

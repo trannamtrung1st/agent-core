@@ -86,13 +86,13 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
         using var client = clients.CreateClient(HttpClientName);
         HttpRequestMessage Request(string value)
         { var request = new HttpRequestMessage(HttpMethod.Get, "https://gmail.googleapis.com/gmail/v1/users/me/" + path); request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", value); return request; }
-        var response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct);
+        var response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct, recheck);
         try
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 response.Dispose(); access = await (freshToken ?? token)(ct); await recheck(ct);
-                response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct);
+                response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct, recheck);
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     if (rejectAuthorization is not null) await rejectAuthorization(ct);

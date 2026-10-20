@@ -92,6 +92,7 @@ public sealed partial class TenantCredentialIntegrationTests
         public ITenantCredentialStore Credentials => (ITenantCredentialStore)Iam;
         public IArtifactStore Artifacts { get; private set; } = null!;
         public IAttachmentStore Attachments { get; private set; } = null!;
+        public IEmailStore EmailDrafts { get; private set; } = null!;
         public ISandboxStore Sandboxes { get; private set; } = null!;
         public ICredentialStore Legacy { get; private set; } = null!;
         public IAgentInstanceStore Instances { get; private set; } = null!;
@@ -151,6 +152,7 @@ public sealed partial class TenantCredentialIntegrationTests
                     if (attachmentAuthority) f.Attachments = new SqliteAttachmentStore(f.Contexts, f.Clock, Path.Combine(f.Root, "attachments"));
                     if (artifactAuthority) f.Artifacts = new SqliteArtifactStore(f.Contexts, f.Clock, Path.Combine(f.Root, "artifacts"));
                     f.Sandboxes = new SqliteSandboxStore(f.Contexts);
+                    f.EmailDrafts = new SqliteEmailStore(f.Contexts);
                     f.Resources = new SqliteAgentDefinitionResourceAdminStore(f.Contexts, f.RunContent, f.Ids);
                     f.Iam = new SqliteIamStore(f.Contexts, definitionContent: f.RunContent, builtIns: builtInAuthority ? f.BuiltIns : null, inheritedResources: builtInAuthority ? f.RunResourceCatalog() : null, clock: f.Clock, artifactBacking: artifactAuthority ? (SqliteArtifactStore)f.Artifacts : null, attachmentBacking: attachmentAuthority ? (SqliteAttachmentStore)f.Attachments : null); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
                     f.Memory = new SqliteMemoryStore(f.Contexts, f.Clock);
@@ -163,9 +165,10 @@ public sealed partial class TenantCredentialIntegrationTests
                     if (attachmentAuthority) f.Attachments = new InMemoryAttachmentStore(f.Clock).BindTenantAuthority(memory);
                     if (artifactAuthority) f.Artifacts = new InMemoryArtifactStore(f.Clock).BindTenantAuthority(memory);
                     f.Sandboxes = new InMemorySandboxStore();
+                    f.EmailDrafts = new InMemoryEmailStore();
                     var definitions = new InMemoryAgentDefinitionAdminStore(f.Ids);
                     var resources = new InMemoryAgentDefinitionResourceAdminStore(definitions, f.RunContent, f.Ids); definitions.ResourceStore = resources; f.Resources = resources;
-                    f.Iam = new InMemoryIamStore(instances, definitions, memory, builtIns: builtInAuthority ? f.BuiltIns : null, inheritedResources: builtInAuthority ? f.RunResourceCatalog() : null, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes, artifacts: artifactAuthority ? (InMemoryArtifactStore)f.Artifacts : null, attachments: attachmentAuthority ? (InMemoryAttachmentStore)f.Attachments : null);
+                    f.Iam = new InMemoryIamStore(instances, definitions, memory, builtIns: builtInAuthority ? f.BuiltIns : null, inheritedResources: builtInAuthority ? f.RunResourceCatalog() : null, credentials: credentials, clock: f.Clock, sandboxProfiles: (InMemorySandboxStore)f.Sandboxes, artifacts: artifactAuthority ? (InMemoryArtifactStore)f.Artifacts : null, attachments: attachmentAuthority ? (InMemoryAttachmentStore)f.Attachments : null, emailDrafts: (InMemoryEmailStore)f.EmailDrafts);
                 }
                 return f;
             }

@@ -24,7 +24,7 @@ public enum CompactionFixture
     Late
 }
 
-public sealed class ScriptedLanguageModel : ILanguageModel
+public sealed partial class ScriptedLanguageModel : ILanguageModel
 {
     private readonly IReadOnlyList<string> _chunks;
     private readonly TaskCompletionSource? _release;
@@ -122,6 +122,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in backgroundEvents) yield return item;
             yield break;
         }
+        if (CompletionReadScript.Generate(request) is { } completionReadEvents)
+        {
+            foreach (var item in completionReadEvents) yield return item;
+            yield break;
+        }
         if (CompletionHandoffScript.Generate(request) is { } handoffEvents)
         {
             foreach (var item in handoffEvents) yield return item;
@@ -130,6 +135,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         if (IdentityMaintenanceScript.Generate(request) is { } maintenanceEvents)
         {
             foreach (var item in maintenanceEvents) yield return item;
+            yield break;
+        }
+        if (AccountActionScript.Generate(request) is { } accountActions)
+        {
+            foreach (var item in accountActions) yield return item;
             yield break;
         }
         if (AutomationRunScript.Generate(request) is { } automationEvents)
@@ -391,6 +401,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+
+        if (AccountReadResult(request) is { } accountResult)
+        {
+            yield return new ModelTextDelta(AccountReadSummary(accountResult));
+            yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+        }
         if (CredentialCheckResult(request) is { } credentialResult)
         {
             using var saved = JsonDocument.Parse(credentialResult.Text);
@@ -514,6 +530,15 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var lastTool = currentResults.LastOrDefault()?.Text ?? string.Empty;
         var scheduleLastTool = LastToolTextSinceLastUser(request.Messages);
         var lastToolMessage = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool);
+        if (lastUser.Contains(AccountReadMarker, StringComparison.OrdinalIgnoreCase)
+            && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) == true)
+        {
+            var text = lastUser[(lastUser.IndexOf(AccountReadMarker, StringComparison.OrdinalIgnoreCase) + AccountReadMarker.Length)..].Trim();
+            using var read = JsonDocument.Parse(text);
+            yield return new ModelToolCallEvent(new("synthetic-account-read", ToolCatalog.RequestAuthorization,
+                JsonSerializer.Serialize(new { operation = TenantAccountReadContract.Operation, read = read.RootElement })));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+        }
         if (lastUser.Contains(CredentialCheckMarker, StringComparison.OrdinalIgnoreCase)
             && request.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) == true)
         {
@@ -1267,6 +1292,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var lastUser = SyntheticTaskContext.Text(request);
         if (_chunks.Any(c => c.Contains("[[speech:", StringComparison.Ordinal))) return false;
         return lastUser.Contains(AuthorizationAuditMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(AccountActionScript.Marker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(AccountReadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(CredentialCheckMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(ApprovalReviewMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)

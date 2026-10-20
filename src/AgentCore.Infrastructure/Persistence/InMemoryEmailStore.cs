@@ -6,6 +6,9 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class InMemoryEmailStore : IEmailStore
 {
     private readonly object _gate = new();
+    internal object TenantGate => _gate;
+    private static StoredEmailDraft Freeze(StoredEmailDraft stored) => stored with { Draft = stored.Draft with {
+        To = Array.AsReadOnly(stored.Draft.To.ToArray()), Cc = Array.AsReadOnly(stored.Draft.Cc.ToArray()), Bcc = Array.AsReadOnly(stored.Draft.Bcc.ToArray()) } };
     private readonly Dictionary<Guid, EmailAccountSelection> _selections = [];
     public ValueTask CreateSelectionAsync(EmailAccountSelection request, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) { _selections.TryAdd(request.RequestId, request); return ValueTask.CompletedTask; } }
@@ -25,12 +28,12 @@ public sealed class InMemoryEmailStore : IEmailStore
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
-            if (!_drafts.TryAdd(draft.Draft.DraftId, draft)) throw AgentCoreErrors.Conflict("Draft already exists.");
+            if (!_drafts.TryAdd(draft.Draft.DraftId, Freeze(draft))) throw AgentCoreErrors.Conflict("Draft already exists.");
             return ValueTask.CompletedTask;
         }
     }
     public ValueTask<StoredEmailDraft?> GetDraftAsync(string id, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_drafts.GetValueOrDefault(id)); }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_drafts.TryGetValue(id, out var draft) ? Freeze(draft) : null); }
     public ValueTask<bool> TryClaimSendAsync(EmailSendOperation operation, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)

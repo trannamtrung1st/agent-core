@@ -31,7 +31,7 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
         var correlated = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), target.PrincipalId, prepared).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated.Domain()));
         var definition = await TenantAgentDefinitionBaseline(db, target, ct).ConfigureAwait(false);
-        if (!AgentCore.Application.Tools.TenantFileExecutionContract.Allows(run, definition) || !AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
+        if (!AgentCore.Application.Tools.TenantTaskExecutionContract.Allows(run, definition) || !AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
         await TenantArtifactOperationRules.RequireAuthorityAsync(before, run, new IamAuthorizer(this), ct).ConfigureAwait(false);
         if (args.SourcePath is { } path)
         {

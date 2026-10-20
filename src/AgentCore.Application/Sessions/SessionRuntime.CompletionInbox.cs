@@ -10,6 +10,7 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
+    private bool _tenantWaitSuspended;
     private sealed record CompletionToolResult(string Json, bool Suspended = false);
     private sealed record CompletionToolReceived(EventContext Context, Guid ResponseId, ModelToolCall Call,
         TaskCompletionSource<CompletionToolResult> Completed) : SessionInput(Context);
@@ -39,23 +40,27 @@ public sealed partial class SessionRuntime
             var now = _time.GetUtcNow();
             if (input.Call.Name == ToolCatalog.ExecutionWait)
             {
-                var mode = args.GetProperty("mode").GetString();
-                var duration = mode == "duration";
-                var allowed = duration ? new[] { "mode", "seconds" } : new[] { "mode", "backgroundSessionIds", "until", "timeoutSeconds" };
-                if (mode is not ("duration" or "background") || args.EnumerateObject().Any(p => !allowed.Contains(p.Name))) throw new ArgumentException("Wait condition is unsupported.");
-                var seconds = args.GetProperty(duration ? "seconds" : "timeoutSeconds").GetDouble();
-                if (!double.IsFinite(seconds) || seconds <= 0 || seconds > AgentRunLimits.MaxWaitSeconds) throw new ArgumentException("Wait seconds must be greater than zero and at most 300.");
-                var ids = duration ? [] : args.GetProperty("backgroundSessionIds").EnumerateArray().Select(v => v.GetGuid()).ToArray();
-                var until = duration ? "all" : args.GetProperty("until").GetString();
-                if (until is not ("all" or "any")) throw new ArgumentException("Wait until must be all or any.");
-                var wait = new AgentRunWait(input.Call.Id, duration ? AgentRunWaitMode.Duration : AgentRunWaitMode.Background,
-                    ids, until == "all" ? AgentRunWaitUntil.All : AgentRunWaitUntil.Any, now, now.AddSeconds(seconds));
+                var wait = ExecutionWaitContract.Parse(input.Call.Id, args, now);
                 _boundAgentRun = await _agentRuns.ApplyAsync(parent.Owner, parent.AgentRunId,
                     new AgentRunCommand.SuspendWait(parent.Revision, now, parent.Claim!.Generation,
                         parent.Checkpoint ?? throw new ArgumentException("Pending wait checkpoint is missing."), wait), ct).ConfigureAwait(false);
-                await PublishProgressAsync(input.Context, input.ResponseId, ResponseProgressKind.WaitingExternal,
-                    ResponseProgressState.Started, _ids.NewId(), duration ? "Waiting for the requested duration…" : "Waiting for background results…", ct).ConfigureAwait(false);
-                input.Completed.TrySetResult(new("", true));
+                if (_runtimeOwner is not null) _tenantWaitSuspended = true;
+                try
+                {
+                    await PublishProgressAsync(input.Context, input.ResponseId, ResponseProgressKind.WaitingExternal,
+                        ResponseProgressState.Started, _ids.NewId(), wait.Mode == AgentRunWaitMode.Duration ? "Waiting for the requested duration…" : "Waiting for background results…", ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (_runtimeOwner is not null) { _activeResponseId = null; _activeEntryId = null; _outputActivity = OutputActivity.Idle; }
+                    // Once the wait committed, transport progress cannot turn it back into model work.
+                    input.Completed.TrySetResult(new("", true));
+                }
+                return;
+            }
+            if (_runtimeOwner is not null)
+            {
+                input.Completed.TrySetResult(new(await ExecuteTenantCompletionToolAsync(parent, input.Call, args, ct).ConfigureAwait(false)));
                 return;
             }
             var permitted = input.Call.Name switch {
@@ -117,6 +122,10 @@ public sealed partial class SessionRuntime
                 receipt = input.Call.Name == ToolCatalog.BackgroundTake ? new { parentAgentRunId = item?.ClaimRunId, toolCallId = item?.ClaimToolCallId, generation = item?.ClaimGeneration, expiresAtUtc = item?.ClaimExpiresAtUtc } : null,
                 acknowledgmentPending = item?.Acknowledgment is not null })));
         }
+        catch (AgentCore.Application.Security.AccessDeniedException e)
+        { input.Completed.TrySetResult(new(SkillLoadAdmission.Error("forbidden", e.ReasonCode))); }
+        catch (AgentCore.Application.Security.SecurityConflictException e)
+        { input.Completed.TrySetResult(new(SkillLoadAdmission.Error("Conflict", e.ReasonCode))); }
         catch (Exception e) when (e is AgentCoreException or ArgumentException or JsonException or InvalidOperationException or KeyNotFoundException or FormatException)
         { input.Completed.TrySetResult(new(SkillLoadAdmission.Error(e is AgentCoreException core ? core.Code : "ValidationError", e is AgentCoreException ? e.Message : "Provide a supported bounded completion or wait request."))); }
         finally { input.Completed.TrySetResult(new(SkillLoadAdmission.Error("failed", "Completion operation did not finish."))); }

@@ -320,10 +320,12 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
         if (!json.RootElement.TryGetProperty("emailAddress", out var email) || !string.Equals(expected, email.GetString(), StringComparison.OrdinalIgnoreCase))
             throw Failure("email_oauth_identity_mismatch", "Gmail mailbox verification failed. Reconnect the original account.", 403);
     }
-    internal static async Task<HttpResponseMessage> SendBoundedAsync(HttpClient client, Func<HttpRequestMessage> request, bool retrySafe, TimeProvider time, CancellationToken ct)
+    internal static async Task<HttpResponseMessage> SendBoundedAsync(HttpClient client, Func<HttpRequestMessage> request, bool retrySafe, TimeProvider time, CancellationToken ct,
+        Func<CancellationToken, ValueTask>? recheck = null)
     {
         for (var attempt = 0; ; attempt++)
         {
+            if (recheck is not null) await recheck(ct);
             using var outgoing = request();
             try
             {

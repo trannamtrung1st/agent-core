@@ -143,7 +143,7 @@ internal static class AdminAutomationEndpoints
             Source: new(t.Source!.Kind, t.Source.Key, t.Source.EventId?.ToString("D"))),
         _ => throw AgentCoreErrors.Validation("Trigger is unavailable.")
     }) with { TriggerId = t.TriggerId.ToString("D"), Enabled = t.Enabled, Revision = t.Revision };
-    private static TriggerSchedule Parse(AutomationTiming? t)
+    internal static TriggerSchedule Parse(AutomationTiming? t)
     {
         if (t is null) throw AgentCoreErrors.Validation("Schedule timing is required.");
         DateTimeOffset Utc(string? value) => DateTimeOffset.Parse(value ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();

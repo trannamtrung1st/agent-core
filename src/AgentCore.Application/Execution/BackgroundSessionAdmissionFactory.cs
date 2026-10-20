@@ -59,7 +59,7 @@ public static class BackgroundSessionAdmissionFactory
     public static (SessionSnapshot Session, AgentRun Run) ForOccurrence(Guid sessionId, Guid entryId,
         Guid activationId, Guid agentRunId, Guid responseId, TriggerOccurrence occurrence,
         AgentDefinition definition, AgentIdentity persona, long personaRevision, ExecutionModelPin model,
-        IReadOnlyList<EffectiveSkill> skills, DateTimeOffset admittedAtUtc, string? title = null, EffectiveExecutionBudget? budget = null, AgentRunConfiguration? configuration = null)
+        IReadOnlyList<EffectiveSkill> skills, DateTimeOffset admittedAtUtc, string? title = null, EffectiveExecutionBudget? budget = null, AgentRunConfiguration? configuration = null, Guid? manualInitiator = null)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         var kind = occurrence.SourceKind switch
@@ -79,9 +79,13 @@ public static class BackgroundSessionAdmissionFactory
             text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, admittedAtUtc);
         var activation = Activation.Start(activationId, sessionId, kind, [entryId], occurrence.SourceEventId,
             occurrence.OccurrenceId, null, null, occurrence.DedupeKey, admittedAtUtc, occurrence.EvidenceJson);
+        var trusted = occurrence.Owner.TenantId is { } tenant ? new TrustedExecutionContext(tenant, occurrence.Owner.ExecutorPrincipalId!.Value, occurrence.SourceKind == TriggerSourceKind.ManualInvocation ? manualInitiator : null,
+            sessionId, agentRunId, activationId, activationId, null, null, occurrence.SourceKind switch {
+                TriggerSourceKind.Schedule => ExecutionOrigin.ScheduledOccurrence, TriggerSourceKind.ApplicationEvent => ExecutionOrigin.ApplicationEvent,
+                TriggerSourceKind.CoreEvent => ExecutionOrigin.CoreEvent, _ => ExecutionOrigin.ManualInvocation }) : null;
         var run = AgentRun.Create(agentRunId,
-            new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
-            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration ?? new(definition, 0, personaRevision, []), taskIntent: RunTaskIntents.FromOccurrence(occurrence)),
+            trusted is null ? new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId) : AgentRunOwner.ForTenant(trusted.TenantId, occurrence.Owner.AgentInstanceId, trusted.AgentPrincipalId),
+            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration ?? new(definition, 0, personaRevision, []), taskIntent: RunTaskIntents.FromOccurrence(occurrence), executionContext: trusted),
             new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc, pinnedSkillCatalog: skills,
             activeSkillKeys: skills.Where(skill => skill.Projection == SkillProjection.Always)
@@ -93,7 +97,7 @@ public static class BackgroundSessionAdmissionFactory
             : new SessionOrigin(SessionOriginKind.SourceOccurrence, initialBackgroundAgentRunId: agentRunId,
                 triggerOccurrenceId: occurrence.OccurrenceId, initialTitle: string.IsNullOrWhiteSpace(title) ? "Background task" : title.Trim()[..Math.Min(title.Trim().Length, 80)]);
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null,
-            SessionStatus.Created, [entry], string.Empty, 0, null, occurrence.Owner.ProfileId,
+            SessionStatus.Created, [entry], string.Empty, 0, null, occurrence.Owner.ProfileIdOrNull,
             admittedAtUtc, admittedAtUtc, occurrence.Owner.AgentInstanceId,
             Title: string.IsNullOrWhiteSpace(title) ? "Background task" : title.Trim()[..Math.Min(title.Trim().Length, 80)],
             LastEntrySequence: 1, Purpose: SessionPurpose.OngoingDefault,

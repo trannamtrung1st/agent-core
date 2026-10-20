@@ -7,6 +7,12 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
+    private static bool CredentialFamilyApprovalVisible(PreparedCredentialRead read, TenantCredentialReadApprovalVisibility? visibility)
+    {
+        var family = AgentCore.Application.Tools.TenantCredentialDiscoveryContract.Parse(read.ArgumentsJson).Family;
+        var allowed = family == "email" ? visibility?.EmailCredentials : family == "drive" ? visibility?.DriveCredentials : null;
+        return allowed is null || TenantApprovalRules.CredentialReadReferences(read).All(r => allowed.Contains(r.CredentialId));
+    }
     private void RequireCredentialReadOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent)
     {
         var value = request.Operation.CredentialRead!;

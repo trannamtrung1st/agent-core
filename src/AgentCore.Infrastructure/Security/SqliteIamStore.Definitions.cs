@@ -11,6 +11,11 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (TenantAutomationRules.TryId(scope, out var automation))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+            return await db.Automations.IgnoreQueryFilters().AnyAsync(a => a.TenantId == scope.TenantId && a.AutomationId == automation.ToString("D"), ct).ConfigureAwait(false);
+        }
         if (TenantWorkspaceRules.TryParse(scope, out _, out _))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

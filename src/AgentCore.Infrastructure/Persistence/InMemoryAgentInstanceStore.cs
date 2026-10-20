@@ -672,7 +672,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             _instances[update.InstanceId] = next;
             if (!tenantMutation) foreach (var e in CoreEventPersistence.Instance(instance, next)) CoreEvents.Append(e);
             }
-            if (TriggerStore is not null) TriggerStore.CommitConfigurationPolicy(update.InstanceId, update.AutomationPolicyChanges, updatedAt, CommitOwner);
+            if (TriggerStore is not null) TriggerStore.CommitConfigurationPolicy(update.InstanceId, update.AutomationPolicyChanges, updatedAt, CommitOwner, tenantMutation);
             else if (update.AutomationPolicyChanges?.Count > 0) throw AgentCoreErrors.Persistence("Atomic Automation store is unavailable.");
             else CommitOwner();
             return ValueTask.FromResult(CopyInstance(next));

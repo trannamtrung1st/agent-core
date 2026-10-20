@@ -69,7 +69,7 @@ public sealed partial class TenantWorkspaceMutationTarget(TenantOperationAuthori
         else if (frame.Owner != run.Owner || frame.RunId != run.AgentRunId || frame.SessionId != run.SessionId || session.Owner.SessionId != run.SessionId
             || run.CancellationRequested || run.Status is not (AgentRunStatus.Running or AgentRunStatus.WaitingForApproval)) throw new AccessDeniedException("tenant_runtime_unavailable");
         TenantWorkspaceEffectRules.Session(run, current.Agent, session);
-        if (!TenantFileExecutionContract.Allows(run, current.Definition)
+        if (!TenantTaskExecutionContract.Allows(run, current.Definition)
             || !TenantWorkspaceMutationContract.Allows(run.Admission.Configuration!.Definition, args.Tool)
             || !TenantWorkspaceMutationContract.Allows(current.Definition, args.Tool)) throw new AccessDeniedException("capability_unavailable");
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current.Definition).StateIsolationPolicy ?? StateIsolationPolicy.Default;

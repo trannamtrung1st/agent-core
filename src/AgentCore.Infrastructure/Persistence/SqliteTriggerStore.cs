@@ -12,6 +12,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
     public async ValueTask<Automation> SaveAutomationAsync(Automation proposed, long expectedRevision,
         AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32)
     {
+        if (proposed.Owner.TenantId is not null) throw AgentCoreErrors.Forbidden("Tenant Automation requires its canonical transaction.");
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var row = await TrackRowAsync(db, proposed.Owner, proposed.AutomationId, ct);
@@ -72,6 +73,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         Automation registration,
         CancellationToken cancellationToken = default)
     {
+        if (registration.Owner.TenantId is not null) throw AgentCoreErrors.Forbidden("Tenant Automation requires its canonical transaction.");
         ArgumentNullException.ThrowIfNull(registration);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         db.Automations.Add(TriggerStoreMapping.ToRecord(registration));
@@ -372,6 +374,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         TriggerOccurrence occurrence,
         CancellationToken cancellationToken = default)
     {
+        if (occurrence.Owner.TenantId is not null) throw AgentCoreErrors.Forbidden("Tenant Automation requires its canonical transaction.");
         ArgumentNullException.ThrowIfNull(occurrence);
         if (occurrence.Disposition != OccurrenceRoutingDisposition.Pending
             || occurrence.RoutingRevision != 0
@@ -1082,7 +1085,7 @@ internal static class TriggerStoreMapping
         ReportToSessionId = registration.CompletionDelivery.SessionId?.ToString("D"),
         AutomationId = registration.AutomationId.ToString("D"),
         AgentInstanceId = registration.Owner.AgentInstanceId.ToString("D"),
-        ProfileId = registration.Owner.ProfileId.ToString("D"),
+        ProfileId = registration.Owner.ProfileIdOrNull?.ToString("D"), TenantId = registration.Owner.TenantId, ExecutorPrincipalId = registration.Owner.ExecutorPrincipalId,
         Status = (int)registration.Status,
         Instructions = registration.Instructions,
         Name = registration.Name,
@@ -1107,7 +1110,7 @@ internal static class TriggerStoreMapping
 
     public static Automation ToRegistration(AutomationRecord row) => new(
         Guid.Parse(row.AutomationId),
-        new TriggerOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
+        new TriggerOwner(Guid.Parse(row.AgentInstanceId), row.ProfileId is null ? null : Guid.Parse(row.ProfileId), row.TenantId, row.ExecutorPrincipalId),
         (AutomationStatus)row.Status,
         row.Instructions,
         row.Triggers.OrderBy(t => t.TriggerId).Select(ToChild).ToArray(),
@@ -1158,7 +1161,7 @@ internal static class TriggerStoreMapping
         DedupeKey = occurrence.DedupeKey,
         AutomationId = occurrence.AutomationId?.ToString("D"),
         AgentInstanceId = occurrence.Owner.AgentInstanceId.ToString("D"),
-        ProfileId = occurrence.Owner.ProfileId.ToString("D"),
+        ProfileId = occurrence.Owner.ProfileIdOrNull?.ToString("D"), TenantId = occurrence.Owner.TenantId, ExecutorPrincipalId = occurrence.Owner.ExecutorPrincipalId,
         SourceKind = (int)occurrence.SourceKind,
         ScheduledAtUtc = occurrence.ScheduledAtUtc?.ToUnixTimeMilliseconds(),
         ObservedAtUtc = occurrence.ObservedAtUtc.ToUnixTimeMilliseconds(),
@@ -1201,7 +1204,7 @@ internal static class TriggerStoreMapping
         Guid.Parse(row.OccurrenceId),
         row.DedupeKey,
         ParseOptional(row.AutomationId),
-        new TriggerOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
+        new TriggerOwner(Guid.Parse(row.AgentInstanceId), row.ProfileId is null ? null : Guid.Parse(row.ProfileId), row.TenantId, row.ExecutorPrincipalId),
         (TriggerSourceKind)row.SourceKind,
         FromUnix(row.ScheduledAtUtc),
         DateTimeOffset.FromUnixTimeMilliseconds(row.ObservedAtUtc),

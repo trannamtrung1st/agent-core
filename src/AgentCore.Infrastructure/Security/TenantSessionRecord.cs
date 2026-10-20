@@ -21,8 +21,7 @@ public sealed record TenantSessionRecord(string SessionId, Guid TenantId, string
             .HasPrincipalKey<SessionRecord>(s => new { s.SessionId, s.AgentInstanceId }).OnDelete(DeleteBehavior.Restrict);
         entity.HasOne<IamSystemIdentityRow>().WithMany().HasForeignKey(s => new { s.TenantId, s.AgentInstanceId, s.ExecutorPrincipalId })
             .HasPrincipalKey(i => new { i.TenantId, i.AgentInstanceId, i.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
-        entity.HasOne<TenantUser>().WithMany().HasForeignKey(s => new { s.TenantId, s.CreatedByPrincipalId })
-            .HasPrincipalKey(p => new { p.TenantId, p.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
+        entity.HasOne<Principal>().WithMany().HasForeignKey(s => s.CreatedByPrincipalId).OnDelete(DeleteBehavior.Restrict);
         var activations = model.Entity<ActivationRecord>();
         activations.HasOne<TenantSessionRecord>().WithMany().HasForeignKey(a => new { a.TenantId, a.SessionId, a.AgentInstanceId, a.ExecutorPrincipalId })
             .HasPrincipalKey(s => new { s.TenantId, s.SessionId, s.AgentInstanceId, s.ExecutorPrincipalId }).OnDelete(DeleteBehavior.Restrict);

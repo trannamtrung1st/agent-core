@@ -41,7 +41,7 @@ public sealed partial class TenantAgentConfigurationService
         AgentInstanceSettingsService.ValidateBrowser(effective, browser);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
         _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, definition, token).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
-        var plan = await automationPolicy.PlanAsync(current, effective, time.GetUtcNow(), token).ConfigureAwait(false);
+        var plan = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), current, effective, time.GetUtcNow(), token).ConfigureAwait(false);
         var updated = await Commit(actor, tenant, state, new(id, instanceRevision, SetSettingsOverrides: true,
             SettingsOverrides: next, AutomationPolicyChanges: plan), "agents.settings.update", token, initiator).ConfigureAwait(false);
         if (sandbox is not null) await sandbox.EnforceAsync(id, token).ConfigureAwait(false);

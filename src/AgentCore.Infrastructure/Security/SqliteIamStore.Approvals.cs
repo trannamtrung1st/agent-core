@@ -24,7 +24,23 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.BackgroundReport is { } report
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.AccountAction is { } action
+        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.AccountAction.SessionId') = {action.SessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') = {action.ToolName}
+            AND json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson') = {action.ArgumentsJson}
+            AND json_extract(PayloadJson, '$.Operation.AccountAction.Credential.CredentialId') = {action.Credential.CredentialId.ToString("D")}
+            """)
+        : operation.AccountRead is { } accountRead
+        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE Permission = 'credentials.use' AND InstanceId = {operation.InstanceId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.AccountRead.SessionId') = {accountRead.SessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.AccountRead.ToolName') = {accountRead.ToolName}
+            AND json_extract(PayloadJson, '$.Operation.AccountRead.ArgumentsJson') = {accountRead.ArgumentsJson}
+            AND json_extract(PayloadJson, '$.Operation.AccountRead.Credential.CredentialId') = {accountRead.Credential.CredentialId.ToString("D")}
+            """)
+        : operation.BackgroundReport is { } report
         ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE ResourceType = 'tenant'
             AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ChildRunId') = {report.ChildRunId.ToString("D")}
@@ -57,6 +73,20 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests WHERE Permission = 'attachments.read' AND ResourceType = 'attachment' AND ResourceId = {operation.ResourceId}
             AND json_extract(PayloadJson, '$.Operation.AttachmentRead.SessionId') = {attachment.SessionId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.AttachmentRead.ArgumentsJson') = {attachment.ArgumentsJson}
+            """)
+         : operation.ReportSourceRead is { } readSource
+        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.ReportSourceRead') IS 'object'
+            AND json_extract(PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId') = {readSource.ParentSessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.ReportSourceRead.ChildSessionId') = {readSource.ChildSessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.ReportSourceRead.InitialRunId') = {readSource.InitialRunId.ToString("D")}
+            """)
+        : operation.CompletionRead is { } completion
+        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.CompletionRead') IS 'object'
+            AND json_extract(PayloadJson, '$.Operation.CompletionRead.ParentSessionId') = {completion.ParentSessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.CompletionRead.ChildSessionId') = {completion.ChildSessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.CompletionRead.InitialRunId') = {completion.InitialRunId.ToString("D")}
             """)
         : operation.ArtifactVerification is { } verification
         ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
@@ -144,6 +174,35 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             (json_type(PayloadJson, '$.Operation.BackgroundStart') IS NOT 'object' OR ({backgroundCreationReadable}
                 AND ({artifactReadJson} = 'null' OR SessionId IN (SELECT value FROM json_each({artifactReadJson})))
                 AND EXISTS (SELECT 1 FROM Sessions s WHERE s.SessionId = TenantApprovalRequests.SessionId AND s.DurablyDeletedAtUtc IS NULL)))
+            AND (json_type(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead') IS NOT 'object' OR (
+                ({reportSessionsJson} = 'null' OR (SessionId IN (SELECT value FROM json_each({reportSessionsJson}))
+                    AND json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId') IN (SELECT value FROM json_each({reportSessionsJson}))))
+                AND ({reportRunsJson} = 'null' OR (json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.InitialRunId') IN (SELECT value FROM json_each({reportRunsJson}))
+                    AND json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.SourceRunId') IN (SELECT value FROM json_each({reportRunsJson}))))
+                AND ({artifactVerifyJson} = 'null' OR NOT EXISTS (SELECT 1 FROM json_each(json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ArtifactsJson')) file
+                    WHERE json_extract(file.value, '$.ArtifactId') NOT IN (SELECT value FROM json_each({artifactVerifyJson}))))
+                AND EXISTS (SELECT 1 FROM TenantSessions child JOIN Sessions saved ON saved.SessionId = child.SessionId
+                    WHERE child.TenantId = TenantApprovalRequests.TenantId AND child.AgentInstanceId = TenantApprovalRequests.InstanceId
+                    AND child.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL
+                    AND child.SessionId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId'))
+                AND EXISTS (SELECT 1 FROM AgentRuns initial WHERE initial.TenantId = TenantApprovalRequests.TenantId
+                    AND initial.SessionId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId')
+                    AND initial.AgentRunId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.InitialRunId'))
+                AND EXISTS (SELECT 1 FROM AgentRuns source WHERE source.TenantId = TenantApprovalRequests.TenantId
+                    AND source.SessionId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.ChildSessionId')
+                    AND source.AgentRunId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.CompletionRead.SourceRunId'))))
+            AND (json_type(TenantApprovalRequests.PayloadJson, '$.Operation.ReportSourceRead') IS NOT 'object' OR (
+                ({reportSessionsJson} = 'null' OR (SessionId IN (SELECT value FROM json_each({reportSessionsJson}))
+                    AND json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId') IN (SELECT value FROM json_each({reportSessionsJson}))))
+                AND ({reportRunsJson} = 'null' OR (RunId IN (SELECT value FROM json_each({reportRunsJson}))
+                    AND json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.ReportSourceRead.InitialRunId') IN (SELECT value FROM json_each({reportRunsJson}))))
+                AND EXISTS (SELECT 1 FROM TenantSessions child JOIN Sessions saved ON saved.SessionId = child.SessionId
+                    WHERE child.TenantId = TenantApprovalRequests.TenantId AND child.AgentInstanceId = TenantApprovalRequests.InstanceId
+                    AND child.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL AND child.SessionId = TenantApprovalRequests.SessionId)
+                AND EXISTS (SELECT 1 FROM TenantSessions parent JOIN Sessions saved ON saved.SessionId = parent.SessionId
+                    WHERE parent.TenantId = TenantApprovalRequests.TenantId AND parent.AgentInstanceId = TenantApprovalRequests.InstanceId
+                    AND parent.ExecutorPrincipalId = TenantApprovalRequests.ExecutorPrincipalId AND saved.DurablyDeletedAtUtc IS NULL
+                    AND parent.SessionId = json_extract(TenantApprovalRequests.PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId'))))
             AND (json_type(PayloadJson, '$.Operation.BackgroundReport') IS NOT 'object' OR ({reportCanCreate}
                 AND ({reportSessionsJson} = 'null' OR (SessionId IN (SELECT value FROM json_each({reportSessionsJson}))
                     AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') IN (SELECT value FROM json_each({reportSessionsJson}))))
@@ -267,7 +326,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         {
             var id = session.ToString("D");
             query = query.Where(r => r.SessionId == id || db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-                SELECT * FROM TenantApprovalRequests WHERE json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') = {id}
+                SELECT * FROM TenantApprovalRequests WHERE json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') = {id} OR json_extract(PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId') = {id}
                 """).Any(parent => parent.RequestId == r.RequestId));
         }
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
@@ -284,6 +343,76 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         { var ids = sandboxVisibility.Sessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "sandbox.execute" && r.Permission != "sandbox.manage" && r.Permission != "sandbox.read") || ids.Contains(r.SessionId)); }
         if (allowedCredentials is not null)
         { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission == "credentials.read" || r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
+        if (reportVisibility?.Sessions is not null || reportVisibility?.Runs is not null)
+        {
+            var visibleAccountSources = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.AccountRead.Source') IS NOT 'object' OR
+                  ((json_type({reportSessionsJson}) = 'null' OR json_extract(PayloadJson, '$.Operation.AccountRead.Source.SessionId') IN (SELECT value FROM json_each({reportSessionsJson})))
+                   AND (json_type({reportRunsJson}) = 'null' OR json_extract(PayloadJson, '$.Operation.AccountRead.Source.RunId') IN (SELECT value FROM json_each({reportRunsJson}))))
+                """);
+            query = query.Where(r => visibleAccountSources.Any(a => a.RequestId == r.RequestId));
+        }
+        if (credentialReadVisibility is not null)
+        {
+            var readSessions = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.Sessions?.Select(id => id.ToString("D")).ToArray());
+            var emails = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.EmailCredentials?.Select(id => id.ToString("D")).ToArray());
+            var drives = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.DriveCredentials?.Select(id => id.ToString("D")).ToArray());
+            var emailPurpose = (int)AgentCore.Domain.Credentials.CredentialPurpose.EmailAccount;
+            var drivePurpose = (int)AgentCore.Domain.Credentials.CredentialPurpose.GoogleDriveAccount;
+            var visibleAccounts = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.AccountRead') IS NOT 'object' OR
+                    ((json_type({readSessions}) = 'null' OR SessionId IN (SELECT value FROM json_each({readSessions})))
+                     AND ((json_extract(PayloadJson, '$.Operation.AccountRead.Purpose') = {emailPurpose}
+                         AND (json_type({emails}) = 'null' OR CredentialId IN (SELECT value FROM json_each({emails}))))
+                       OR (json_extract(PayloadJson, '$.Operation.AccountRead.Purpose') = {drivePurpose}
+                         AND (json_type({drives}) = 'null' OR CredentialId IN (SELECT value FROM json_each({drives}))))))
+                """);
+            query = query.Where(r => visibleAccounts.Any(a => a.RequestId == r.RequestId));
+            var visibleMetadata = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.CredentialRead') IS NOT 'object' OR
+                    ((json_extract(json_extract(PayloadJson, '$.Operation.CredentialRead.ArgumentsJson'), '$.family') IS NOT 'email'
+                      OR json_type({emails}) = 'null' OR NOT EXISTS (
+                        SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.CredentialRead.ReferencesJson')) member
+                        WHERE json_extract(member.value, '$.CredentialId') NOT IN (SELECT value FROM json_each({emails}))))
+                     AND (json_extract(json_extract(PayloadJson, '$.Operation.CredentialRead.ArgumentsJson'), '$.family') IS NOT 'drive'
+                      OR json_type({drives}) = 'null' OR NOT EXISTS (
+                        SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.CredentialRead.ReferencesJson')) member
+                        WHERE json_extract(member.value, '$.CredentialId') NOT IN (SELECT value FROM json_each({drives})))) )
+                """);
+            query = query.Where(r => visibleMetadata.Any(a => a.RequestId == r.RequestId));
+
+        }
+        if (credentialReadVisibility is not null)
+        {
+            var actionUses = System.Text.Json.JsonSerializer.Serialize(allowedCredentials?.Select(id => id.ToString("D")).ToArray());
+            var actionReads = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.Credentials?.Select(id => id.ToString("D")).ToArray());
+            var actionSessions = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.Sessions?.Select(id => id.ToString("D")).ToArray());
+            var actionDriveReads = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.DriveCredentials?.Select(id => id.ToString("D")).ToArray());
+            var actionDrafts = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.EmailDraftCredentials?.Select(id => id.ToString("D")).ToArray());
+            var actionSends = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.EmailSendCredentials?.Select(id => id.ToString("D")).ToArray());
+            var actionWrites = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.DriveWriteCredentials?.Select(id => id.ToString("D")).ToArray());
+            var actionDeletes = System.Text.Json.JsonSerializer.Serialize(credentialReadVisibility.DriveDeleteCredentials?.Select(id => id.ToString("D")).ToArray());
+            var actionQuery = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.AccountAction') IS NOT 'object' OR
+                  ((json_type({actionUses}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionUses})))
+                   AND (json_type({actionReads}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionReads})))
+                   AND (json_type({actionSessions}) = 'null' OR SessionId IN (SELECT value FROM json_each({actionSessions})))
+                   AND (json_extract(PayloadJson, '$.Operation.AccountAction.Purpose') <> 2 OR json_type({actionDriveReads}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionDriveReads})))
+                   AND ((Permission = 'email.draft' AND (json_type({actionDrafts}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionDrafts}))))
+                     OR (Permission = 'email.send' AND (json_type({actionSends}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionSends}))))
+                     OR (Permission = 'drive.write' AND (json_type({actionWrites}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionWrites}))))
+                     OR (Permission = 'drive.delete' AND (json_type({actionDeletes}) = 'null' OR CredentialId IN (SELECT value FROM json_each({actionDeletes}))))
+                     OR Permission = 'workspaces.write')
+                   AND (json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') NOT IN ('drive.upload','drive.download') OR
+                     ((substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,6) <> '/home/'
+                         OR json_type({mutationAgentsJson}) = 'null' OR InstanceId IN (SELECT value FROM json_each({mutationAgentsJson})))
+                      AND (json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') <> 'drive.upload' OR json_type({mutationReadJson}) = 'null'
+                         OR (CASE WHEN substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,9) = '/working/' THEN 'working:' || SessionId ELSE 'home:' || InstanceId END) IN (SELECT value FROM json_each({mutationReadJson})))
+                      AND (json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') <> 'drive.download' OR json_type({mutationWriteJson}) = 'null'
+                         OR ResourceId IN (SELECT value FROM json_each({mutationWriteJson}))))))
+                """);
+            query = query.Where(r => actionQuery.Any(a => a.RequestId == r.RequestId));
+        }
         if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);
         if (page.Kind is { } kind) query = query.Where(r => r.Kind == (int)kind);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -321,7 +450,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.WorkspaceRead is not null) await RequireWorkspaceReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.WorkspaceMutation is not null) await RequireWorkspaceMutationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.AttachmentRead is not null) await RequireAttachmentReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.ReportSourceRead is not null) await RequireReportSourceReadOperation(db, request, ct, pending: true).ConfigureAwait(false);
+            if (request.Operation.CompletionRead is not null) await RequireCompletionReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ArtifactVerification is not null) await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.AccountAction is not null) await RequireAccountActionOperation(db, request, run, agent, ct).ConfigureAwait(false);
+        if (request.Operation.AccountRead is not null) await RequireAccountReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.CredentialRead is not null) await RequireCredentialReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxCommand is not null) await RequireSandboxOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.SandboxControl is not null) await RequireSandboxControlOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -343,7 +476,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 && r.RootActivationId == request.RootActivationId.ToString("D"), ct).ConfigureAwait(false);
             TenantApprovalLimits.Require(counts?.Tenant ?? 0, counts?.Executor ?? 0, counts?.Requester ?? 0, operationCount, rootCount);
             if (run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= ApprovalNow) throw new SecurityConflictException("execution_claim_expired");
-            if (request.Operation.BackgroundReport is null)
+            if ((request.Operation.BackgroundReport is null && request.Operation.ReportSourceRead is null))
                 AgentRunStoreMapping.Apply(row, run.WaitForDurableApproval(expectedRunRevision, request.RequestId, generation, request.CreatedAt)); db.Add(TenantApprovalRecord.From(request)); result = request; return true;
         }, ct).ConfigureAwait(false);
         return written || result is not null && result.RequestId != request.RequestId ? result : null;
@@ -362,7 +495,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var target = await OwnedAgents(db, request.TenantId).SingleOrDefaultAsync(r => r.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false);
         if (runRow is null || target is null) return false;
         var run = AgentRunStoreMapping.ToDomain(runRow); var agent = Owned(target);
-        if (request.Operation.BackgroundReport is null && (run.ApprovalRequestId != request.RequestId || run.Status != AgentRunStatus.WaitingForApproval)) return false;
+        if ((request.Operation.BackgroundReport is null && request.Operation.ReportSourceRead is null) && (run.ApprovalRequestId != request.RequestId || run.Status != AgentRunStatus.WaitingForApproval)) return false;
         TenantApprovalRules.Validate(request, run, agent, request.Status != TenantApprovalStatus.Cancelled);
         if (request.Operation.CredentialCheck is not null && request.Status != TenantApprovalStatus.Cancelled)
             TenantCredentialOperationRules.RequireRequest(request, run, agent, await CredentialOperationTarget(db, request, ct).ConfigureAwait(false));
@@ -371,6 +504,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
         if (request.Status != TenantApprovalStatus.Cancelled)
         {
+            if (request.Operation.ReportSourceRead is not null)
+            {
+                await RequireReportSourceReadOperation(db, request, ct, pending: true).ConfigureAwait(false);
+                await TenantReportSourceReadRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
             if (request.Operation.BackgroundReport is not null)
             {
                 await RequireBackgroundReportOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -415,10 +553,25 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 await RequireAttachmentReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantAttachmentReadRules.ReviewerAsync(state, request.Operation.AttachmentRead, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
+            if (request.Operation.CompletionRead is not null)
+            {
+                await RequireCompletionReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantCompletionReadRules.ReviewerAsync(state, request.Operation.CompletionRead, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
             if (request.Operation.ArtifactVerification is not null)
             {
                 await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantArtifactVerificationRules.ReviewerAsync(state, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.AccountAction is not null)
+            {
+                await RequireAccountActionOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantAccountActionRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.AccountRead is not null)
+            {
+                await RequireAccountReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
+                await TenantAccountReadRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.CredentialRead is not null)
             {

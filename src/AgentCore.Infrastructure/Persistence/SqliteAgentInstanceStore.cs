@@ -587,11 +587,11 @@ public sealed partial class SqliteAgentInstanceStore(
     }
 
     internal static async Task StageAutomationPolicyAsync(AgentCoreDbContext db, AgentInstanceRevisionUpdate update,
-        DateTimeOffset now, CancellationToken ct)
+        DateTimeOffset now, CancellationToken ct, Guid? tenant = null)
     {
         if (update.AutomationPolicyChanges is not { } changes) return;
         var id = update.InstanceId.ToString("D");
-        var relevant = await db.Automations.Where(r => r.AgentInstanceId == id).ToArrayAsync(ct);
+        var relevant = await db.Automations.IgnoreQueryFilters().Where(r => r.AgentInstanceId == id && r.TenantId == tenant).ToArrayAsync(ct);
         var rows = relevant.Where(r => r.Status == (int)AgentCore.Domain.Triggers.AutomationStatus.Active
             || r.Status == (int)AgentCore.Domain.Triggers.AutomationStatus.SuspendedPolicy).ToArray();
         if (rows.Length != changes.Count || rows.Any(r => !changes.Any(c => c.AutomationId.ToString("D") == r.AutomationId && c.ExpectedRevision == r.Revision)))

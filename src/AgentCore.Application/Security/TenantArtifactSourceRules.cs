@@ -76,7 +76,7 @@ public static class TenantArtifactSourceRules
         }
         else TenantWorkspaceRules.Path(Owner(run, path), path, file: true);
         current = InstanceSettingsResolver.Resolve(current, agent.Instance.SettingsOverrides);
-        if (!TenantFileExecutionContract.Allows(run, current))
+        if (!TenantTaskExecutionContract.Allows(run, current))
             throw new AccessDeniedException("artifact_execution_unavailable");
         if (!TenantWorkspaceArtifactContract.Allows(run.Admission.Configuration!.Definition) || !TenantWorkspaceArtifactContract.Allows(current))
             throw new AccessDeniedException("capability_unavailable");

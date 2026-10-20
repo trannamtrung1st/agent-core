@@ -593,3 +593,157 @@ it('separates report Run creation from completion delivery', async () => {
   const result = await screen.findByRole('region', { name: 'Operation result' }); expect(within(result).getByText('Report Run created')).toBeVisible();
   expect(within(result).getByText(/Delivery and recipient access remain separately checked/)).toBeVisible(); expect(within(result).queryByText('Report delivered')).not.toBeInTheDocument();
 });
+
+const completionReadRequest = (): TenantApproval => {
+  const parent = '12345678-1234-1234-1234-123456789abc'; const child = '22345678-1234-1234-1234-123456789abc';
+  const initial = '32345678-1234-1234-1234-123456789abc'; const source = '42345678-1234-1234-1234-123456789abc';
+  const after: Record<string, string> = { completionInitialRunId: initial, completionSourceRunId: source, completionSessionId: child,
+    completionObjective: 'Use the exact owned result', completionObservationHash: 'b'.repeat(64), completionMetadata: '[]',
+    readDisclosure: 'Return this exact result without file bytes.', readLimit: 'Use only this unchanged observation in the same task.',
+    completionObservation: JSON.stringify({ untrusted: true, tenantCompletionRead: true, backgroundSessionId: child, parentSessionId: parent, agentRunId: initial,
+      sourceAgentRunId: source, status: 'Completed', outcome: 'Response', summary: '<script>saved result only</script>\nExact UTF-8: thử nghiệm',
+      progress: null, updatedAtUtc: request.createdAt, attentionRequired: false, failureCode: null, artifacts: [], artifactsHasMore: false }) };
+  return { ...request, sessionId: parent, kind: 'review', summary: 'Read exact background result', preparedAction: { ...request.preparedAction, operation: 'inspect_background_completion' },
+    review: { ...request.review, changes: Object.entries(after).map(([field, value]) => ({ field, before: null, after: value, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } };
+};
+it('reviews literal completed-child evidence with distinct initial/result Runs and separate read/handled truth', async () => {
+  view(completionReadRequest()); const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved background result' });
+  expect(within(saved).getByText('<script>saved result only</script> Exact UTF-8: thử nghiệm')).toBeVisible();
+  expect(within(saved).getByText('Result Run')).toBeVisible(); expect(saved.querySelector('script')).toBeNull();
+  expect(within(saved).getByText(/Taking or acknowledging the result does not mark it handled/)).toBeVisible();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/raw read permissions and reviewer authority are checked again/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it.each(['missing', 'duplicate', 'source', 'metadata', 'hash'] as const)('blocks decisions but retains cancellation for %s completion evidence', async invalid => {
+  const item = completionReadRequest(); const change = (field: string) => item.review.changes.find(c => c.field === field)!;
+  if (invalid === 'missing') item.review.changes.pop();
+  else if (invalid === 'duplicate') item.review.changes[1] = { ...item.review.changes[0] };
+  else if (invalid === 'source') change('completionSourceRunId').after = '52345678-1234-1234-1234-123456789abc';
+  else if (invalid === 'metadata') change('completionMetadata').after = '[{"ArtifactId":"not-an-exact-file"}]';
+  else change('completionObservationHash').after = 'untrusted-checksum';
+  view(item); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Saved completion read unavailable')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+it('labels a completion-read receipt as read authorization while consumption stays separate', async () => {
+  view({ ...completionReadRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'completion_read_authorized', recordedAt: request.review.serverNow } });
+  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Read authorized')).toBeVisible();
+  expect(within(dialog).getByText(/Completion accounting remains separate/)).toBeVisible();
+  expect(within(dialog).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+});
+
+function accountReadRequest(): TenantApproval {
+  return { ...request, kind: 'review', summary: 'Read exact connected account',
+    preparedAction: { ...request.preparedAction, operation: 'read_connected_account' },
+    review: { ...request.review, changes: [
+      { field: 'accountName', before: null, after: 'Work <script> mailbox', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'accountPurpose', before: null, after: 'Email', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'accountReference', before: null, after: 'exact-account', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'accountReadTool', before: null, after: 'Search mailbox', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'accountReadArguments', before: null, after: '{"accountRef":"exact-account","query":"from:work@example.test subject:<img src=x>","limit":1}', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } };
+}
+it('reviews exact account parameters as literal text and confirms only the bounded read', async () => {
+  view(accountReadRequest()); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Account type')).toBeVisible(); expect(within(dialog).getByText('Search mailbox')).toBeVisible();
+  expect(within(dialog).getByText(/subject:<img src=x>/)).toBeVisible(); expect(dialog.querySelector('img')).toBeNull();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirmation = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirmation).getByText(/Authorize only the saved bounded read/)).toBeVisible());
+  expect(within(confirmation).getByText(/permits no send, write or later query/)).toBeVisible();
+});
+it('labels exact account consent as read authorization without claiming data delivery', async () => {
+  view({ ...accountReadRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'account_read_authorized', recordedAt: request.review.serverNow } });
+  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Read authorized')).toBeVisible();
+  expect(within(dialog).getByText(/Current access is checked before data reaches the agent/)).toBeVisible();
+  expect(within(dialog).queryByText('Applied', { exact: true })).toBeNull();
+});
+
+const reportSourceReadRequest = (): TenantApproval => {
+  const parent = '12345678-1234-1234-1234-123456789abc', child = '22345678-1234-1234-1234-123456789abc';
+  const initial = '32345678-1234-1234-1234-123456789abc', source = '42345678-1234-1234-1234-123456789abc';
+  const fields = { reportSourceParentSessionId: parent, reportSourceInitialRunId: initial, reportSourceRunId: source, reportSourceSessionId: child,
+    reportSourceObjective: 'Report the exact finished result', reportSourceHash: 'b'.repeat(64),
+    reportSourceObservation: JSON.stringify({ TriggerKind: 7, Text: JSON.stringify({ childSessionId: child, initialAgentRunId: source,
+      objective: 'Report exact result', status: 'Completed', summary: '<script>literal report source</script>', attentionRequired: false, artifacts: [] }), EnvironmentKind: null }),
+    readDisclosure: 'Read this saved result for its original conversation. No file bytes.', readLimit: 'Report creation requires separate authority.' };
+  return { ...request, sessionId: child, destinationSessionId: parent, kind: 'review', summary: 'Read exact background report source',
+    preparedAction: { ...request.preparedAction, operation: 'inspect_background_report_source' },
+    review: { ...request.review, changes: Object.entries(fields).map(([field, after]) => ({ field, before: null, after, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } };
+};
+it('reviews exact report source with destination and separate creation consequences', async () => {
+  view(reportSourceReadRequest()); const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved report source' });
+  expect(within(saved).getByText('<script>literal report source</script>')).toBeVisible(); expect(saved.querySelector('script')).toBeNull();
+  expect(within(saved).getByText('Destination conversation', { exact: true })).toBeVisible(); expect(within(saved).getByText('Result Run', { exact: true })).toBeVisible();
+  expect(within(dialog).getByRole('link', { name: 'Open destination conversation' })).toHaveAttribute('href', '/t/tenant-a/c/12345678-1234-1234-1234-123456789abc');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirm = (await screen.findAllByRole('dialog')).find(el => el !== dialog)!;
+  await waitFor(() => expect(within(confirm).getByText(/This creates no report Run/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it.each(['source', 'destination', 'missing'] as const)('withholds report source read decisions for %s mismatch while retaining cancel', async invalid => {
+  const item = reportSourceReadRequest();
+  if (invalid === 'source') item.review.changes.find(c => c.field === 'reportSourceRunId')!.after = '52345678-1234-1234-1234-123456789abc';
+  else if (invalid === 'destination') delete item.destinationSessionId;
+  else item.review.changes.pop();
+  view(item); const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Saved completion read unavailable')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+it('separates report source read receipt from report creation and delivery', async () => {
+  view({ ...reportSourceReadRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'report_source_read_authorized', recordedAt: request.review.serverNow } });
+  const result = await screen.findByRole('region', { name: 'Operation result' }); expect(within(result).getByText('Read authorized', { exact: true })).toBeVisible();
+  expect(within(result).getByText(/Report creation and delivery remain separate/)).toBeVisible(); expect(within(result).queryByText('Report Run created')).not.toBeInTheDocument();
+});
+
+
+const accountActionRequest = (): TenantApproval => {
+  const args = { accountRef: 'operations-mail', to: ['friend@example.test'], cc: [], bcc: ['private@example.test'], subject: '<script>Exact subject</script>', body: '<script>window.accountShouldNotRun = true</script>\nFinal exact line' };
+  const fields: Record<string, string> = { accountName: 'Exact connected mailbox', accountPurpose: 'Email', accountReference: 'operations-mail', accountActionTool: 'email.create_draft', accountActionArguments: JSON.stringify(args),
+    accountActionDisclosure: 'Save this exact immutable draft. Sending needs separate consent.', accountActionLimit: 'No role or later action authority is granted.',
+    emailSender: 'sender@example.test', emailTo: 'friend@example.test', emailCc: '', emailBcc: 'private@example.test', emailSubject: args.subject, emailBody: args.body, emailDraftId: 'exact-draft' };
+  return { ...request, kind: 'review', summary: 'Use exact connected account', preparedAction: { ...request.preparedAction, operation: 'use_connected_account' },
+    review: { ...request.review, changes: Object.entries(fields).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })) } };
+};
+it.each(['review', 'exceptionalGrant'] as const)('reviews full inert account content with independent %s consequences', async kind => {
+  const item = { ...accountActionRequest(), kind }; view(item);
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved account action' });
+  expect(within(saved).getByRole('textbox', { name: 'Exact email body' })).toHaveValue('<script>window.accountShouldNotRun = true</script>\nFinal exact line');
+  expect(within(saved).getByText('private@example.test')).toBeVisible(); expect(saved.querySelector('script')).toBeNull();
+  fireEvent.click(within(dialog).getByRole('button', { name: kind === 'review' ? 'Approve' : 'Authorize once' }));
+  const confirm = (await screen.findAllByText(kind === 'review' ? 'Approve?' : 'Authorize once?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/Raw account use, source reads and reviewer authority are checked again/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+it.each(['missing', 'duplicate', 'substituted'])('withholds decisions for %s account evidence while preserving cancel', async mode => {
+  const item = accountActionRequest();
+  if (mode === 'missing') item.review.changes = item.review.changes.filter(c => c.field !== 'emailBody');
+  if (mode === 'duplicate') item.review.changes.push({ ...item.review.changes[0] });
+  if (mode === 'substituted') item.review.changes.find(c => c.field === 'emailBody')!.after = 'Substituted body';
+  view(item); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Saved account action unavailable')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});
+it('shows the draft receipt separately and never infers a send or permission from it', async () => {
+  view({ ...accountActionRequest(), status: 'approved', operationResult: { outcome: 'completed', reasonCode: 'account_action_completed', recordedAt: request.createdAt,
+    accountAction: { status: 'draft_created', draftId: 'exact-draft', fileId: null, path: null, byteSize: null, sha256: null, items: null } } });
+  const result = await screen.findByRole('region', { name: 'Operation result' });
+  expect(within(result).getByText(/No message was sent. Sending requires separate consent/)).toBeVisible();
+  expect(within(result).getByText('Recorded draft')).toBeVisible(); expect(within(result).getByText('exact-draft')).toBeVisible();
+});
+it('removes account content when refresh loses current read authority', async () => {
+  view(accountActionRequest()); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByRole('textbox', { name: 'Exact email body' })).toBeVisible();
+  fetchMock.mockImplementation(async path => String(path).includes('/approvals?') ? response({ items: [], total: 0, page: 0, pageSize: 20 }) : response({ reasonCode: 'approval_unavailable' }, 403));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Refresh details' }));
+  await waitFor(() => expect(within(dialog).queryByRole('textbox', { name: 'Exact email body' })).not.toBeInTheDocument());
+  expect(within(dialog).queryByText('private@example.test')).not.toBeInTheDocument();
+});

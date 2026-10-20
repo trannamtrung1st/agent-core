@@ -69,15 +69,30 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
     public async ValueTask<IReadOnlyList<AgentRun>> ListRunnableTenantRunsAsync(DateTimeOffset at, int limit, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var millis = at.ToUnixTimeMilliseconds();
-        var rows = await UnblockedTenantInput(db).AsNoTracking().Where(r => r.TenantId != null && !db.Set<TenantApprovalRecord>().Any(a => a.TenantId == r.TenantId && a.RunId == r.AgentRunId && a.Status == (int)TenantApprovalStatus.Pending)
+        var query = UnblockedTenantInput(db).AsNoTracking().Where(r => r.TenantId != null && !db.Set<TenantApprovalRecord>().Any(a => a.TenantId == r.TenantId && a.RunId == r.AgentRunId && a.Status == (int)TenantApprovalStatus.Pending)
             && db.Set<Tenant>().Any(t => t.TenantId == r.TenantId && t.Status == IdentityStatus.Active)
             && db.Set<TenantSessionRecord>().Any(s => s.SessionId == r.SessionId && s.TenantId == r.TenantId)
             && db.Sessions.Any(s => s.SessionId == r.SessionId && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null)
             && (r.Status == (int)AgentRunStatus.Queued || r.Status == (int)AgentRunStatus.WaitingToRetry && r.NextRetryAtUtc <= millis
-                || r.Status == (int)AgentRunStatus.Running && r.LeaseExpiresAtUtc <= millis))
+                || r.Status == (int)AgentRunStatus.Running && r.LeaseExpiresAtUtc <= millis || r.Status == (int)AgentRunStatus.WaitingForSignal))
             .OrderBy(r => r.CreatedAtUtc).ThenBy(r => db.ActivationSourceEntries.Where(e => e.ActivationId == r.ActivationId).Join(db.Entries, source => source.EntryId, entry => entry.EntryId, (source, entry) => (long?)entry.EntrySequence).Min() ?? long.MaxValue)
-            .ThenBy(r => r.AgentRunId).Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(ct).ConfigureAwait(false);
-        return rows.Select(AgentRunStoreMapping.ToDomain).Where(r => r.Admission.Activation.Kind is ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted).ToArray();
+            .ThenBy(r => r.AgentRunId);
+        var ready = new List<AgentRun>();
+        // Apply signal readiness before the result limit. Unready waits cannot hide later runnable work.
+        for (var offset = 0; ready.Count < Math.Clamp(limit, 1, 100); offset += 32)
+        {
+            var rows = await query.Skip(offset).Take(32).ToArrayAsync(ct).ConfigureAwait(false);
+            foreach (var row in rows)
+            {
+                var run = AgentRunStoreMapping.ToDomain(row);
+                if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground)) continue;
+                if (run.Status != AgentRunStatus.WaitingForSignal || AgentRunWaitExecution.IsReady(run, at,
+                    await TenantWaitChildren(db, run, run.Wait!, false, ct).ConfigureAwait(false))) ready.Add(run);
+                if (ready.Count == Math.Clamp(limit, 1, 100)) break;
+            }
+            if (rows.Length < 32) break;
+        }
+        return ready;
     }
     public async ValueTask<AgentRun> ApplyTenantRuntimeCommandAsync(AgentRunOwner owner, Guid runId, AgentRunCommand command, Guid diagnosticId, CancellationToken ct = default, Guid? runtimeGeneration = null)
     {
@@ -88,7 +103,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (runtimeGeneration is { } generation && run.Claim?.Generation != generation) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (command is AgentRunCommand.Claim)
         {
-            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+            if (run.Admission.Activation.Kind is not (ActivationKind.UserTurn or ActivationKind.ApprovalContinuation or ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ScheduledWork or ActivationKind.ManualBackground)) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
             _ = await TenantExecutionLineage.RootAsync(run, this, ct).ConfigureAwait(false);
             if (run.ApprovalRequestId is { } approvalId)
             {
@@ -103,13 +118,32 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
                 throw AgentCoreErrors.Conflict("Completion waits for pending user work.");
             if (!await UnblockedTenantInput(db).AnyAsync(r => r.AgentRunId == row.AgentRunId, ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Session owns an active execution.");
         }
+        if (command is AgentRunCommand.Complete { OutcomeEntryId: not null })
+        {
+            await RequireTenantOutputSources(db, run, ct).ConfigureAwait(false);
+            var inboxRows = await db.BackgroundCompletionReceipts.AsNoTracking().Where(i => i.ClaimRunId == row.AgentRunId && i.Status == (int)CompletionInboxStatus.Claimed).ToArrayAsync(ct).ConfigureAwait(false);
+            if (inboxRows.Select(CompletionInboxMapping.Read).Any(i => i.Owner == owner && i.Acknowledgment is not null))
+                throw AgentCoreErrors.Conflict("Acknowledgment requires the atomic outcome transaction.");
+        }
         if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId }
             && !await db.Entries.AnyAsync(e => e.SessionId == row.SessionId && e.EntryId == entryId.ToString("D") && e.Role == nameof(ConversationRole.Assistant)
                 && e.Status == nameof(EntryStatus.Completed) && e.ResponseId == run.ResponseId!.Value.ToString("D"), ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Outcome must reference the saved response.");
-        if (command is AgentRunCommand.SuspendWait or AgentRunCommand.ResumeWait or AgentRunCommand.BeginApproval or AgentRunCommand.DecideApproval or AgentRunCommand.ExpireApproval) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+        if (command is AgentRunCommand.BeginApproval or AgentRunCommand.DecideApproval or AgentRunCommand.ExpireApproval) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
         if (run.Claim is { } claim && claim.LeaseExpiresAtUtc <= (clock ?? TimeProvider.System).GetUtcNow()
             && command is not (AgentRunCommand.Recover or AgentRunCommand.RequestCancellation or AgentRunCommand.DeadlineExceeded)) throw AgentCoreErrors.Conflict("Execution claim expired.");
-        AgentRun next; try { next = command.Apply(run, () => diagnosticId); } catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
+        AgentRun next;
+        try
+        {
+            if (command is AgentRunCommand.SuspendWait suspend)
+            {
+                await RequireTenantWait(db, run, suspend, ct).ConfigureAwait(false);
+                next = AgentRunWaitExecution.Apply(run, command, await TenantWaitChildren(db, run, suspend.Wait, true, ct).ConfigureAwait(false));
+            }
+            else if (command is AgentRunCommand.ResumeWait)
+                next = AgentRunWaitExecution.Apply(run, command, await TenantWaitChildren(db, run, run.Wait ?? throw AgentCoreErrors.Conflict("Run is not waiting."), false, ct).ConfigureAwait(false));
+            else next = command.Apply(run, () => diagnosticId);
+        }
+        catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
         AgentRunStoreMapping.Apply(row, next);
         await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }

@@ -16,7 +16,7 @@ public sealed partial class TenantAttachmentRuntimeContextService
     {
         var view = await Load(frame, ct, live).ConfigureAwait(false);
         var current = await configurations.CurrentPolicyAsync(frame.Owner.TenantId!.Value, frame.Owner.AgentInstanceId, ct).ConfigureAwait(false);
-        if (current.Agent.Instance.Revision != view.Agent.Instance.Revision || !TenantFileExecutionContract.Allows(view.Run, current.Definition) || !TenantAttachmentReadContract.Allows(view.Run.Admission.Configuration!.Definition)
+        if (current.Agent.Instance.Revision != view.Agent.Instance.Revision || !TenantTaskExecutionContract.Allows(view.Run, current.Definition) || !TenantAttachmentReadContract.Allows(view.Run.Admission.Configuration!.Definition)
             || !TenantAttachmentReadContract.Allows(current.Definition)) throw new AccessDeniedException("capability_unavailable");
         await TenantAttachmentRules.PermissionsAsync(view.State, view.Agent.PrincipalId, frame.SessionId, args.AttachmentId, "attachments.read", iam, ct).ConfigureAwait(false);
         if (!approved)

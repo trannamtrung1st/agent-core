@@ -144,12 +144,14 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     }
     private async ValueTask DeferUnacceptedAsync(AgentRun run, CancellationToken ct)
     {
-        if (run.Admission.ApprovalResume is null) return;
+        var signal = run.WaitCount > 0 && run.Checkpoint?.AwaitingSignalAdmission == true;
+        if (run.Admission.ApprovalResume is null && !signal) return;
         var at = time.GetUtcNow();
         try
         {
-            await storage.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId,
-                new AgentRunCommand.DeferApprovalDispatch(run.Revision, at, run.Claim!.Generation, at.AddSeconds(5)), ids.NewId(), ct, run.Claim.Generation).ConfigureAwait(false);
+            AgentRunCommand command = signal ? new AgentRunCommand.DeferSignalDispatch(run.Revision, at, run.Claim!.Generation, at.AddSeconds(5))
+                : new AgentRunCommand.DeferApprovalDispatch(run.Revision, at, run.Claim!.Generation, at.AddSeconds(5));
+            await storage.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, command, ids.NewId(), ct, run.Claim!.Generation).ConfigureAwait(false);
         }
         catch (AgentCoreException ex) when (ex.Code is "Conflict" or "NotFound") { }
         catch (AccessDeniedException) { }

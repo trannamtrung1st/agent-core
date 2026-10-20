@@ -73,7 +73,7 @@ public sealed partial class GoogleDriveTests
         public Fixture() { var instances = new InMemoryAgentInstanceStore(); Store = new(instances); Protector = new(root); Credentials = new(Store, Store, Protector, instances, new SystemIdGenerator(TimeProvider.System), TimeProvider.System); OAuth = NewService(); }
         public GoogleDriveOAuthService NewService() => new(Store, Protector, Transport, new() { Enabled = true }, new() { ClientId = "client", ClientSecret = "secret-client", PublicAppUrl = "https://app.example.test" }, TimeProvider.System, false) { IdentityProof = (token, client, nonce, ct) => Task.FromResult(new GoogleOAuthIdentity("subject", "work@example.test")) };
         public Task<DriveOAuthStart> Start(CredentialView c) => OAuth.StartAsync(c.CredentialId, c.Revision, Owner, default).AsTask(); public string State(DriveOAuthStart s) => QueryHelpers.ParseQuery(new Uri(s.AuthorizationUrl).Query)["state"].ToString(); public Task Complete(DriveOAuthStart s) => OAuth.CompleteAsync(State(s), s.Correlation, Owner, "code", null, default).AsTask();
-        public GoogleDriveProvider Provider(Guid id) => new(id, 2, OAuth, Transport, Operations, Protector, TimeProvider.System); public void Dispose() { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        public GoogleDriveProvider Provider(Guid id) => new(id, (ct, fresh) => OAuth.AccessTokenAsync(id, 2, ct, fresh), ct => OAuth.RejectAuthorizationAsync(id, 2, ct), Transport, Operations, Protector, TimeProvider.System); public void Dispose() { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
     private sealed class Transport : HttpMessageHandler, IHttpClientFactory
     {

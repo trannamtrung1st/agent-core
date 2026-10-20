@@ -42,7 +42,7 @@ public static class TenantSandboxControlOperationRules
         TenantSession session, SandboxLease lease, SandboxExecution? execution)
     {
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
-        if (run.Admission.Configuration is null || !RolePermissions.AllowsTool(run.Admission.Configuration.Definition, Tool(value.Kind))
+        if (run.Admission.Configuration is null || !TenantTaskExecutionContract.Allows(run, current) || !RolePermissions.AllowsTool(run.Admission.Configuration.Definition, Tool(value.Kind))
             || !RolePermissions.AllowsTool(current, Tool(value.Kind))) throw new AccessDeniedException("sandbox_policy_changed");
         if (session.Owner.TenantId != run.Owner.TenantId || session.Owner.SessionId != run.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId
             || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId || session.Snapshot.ArchivedAt is not null

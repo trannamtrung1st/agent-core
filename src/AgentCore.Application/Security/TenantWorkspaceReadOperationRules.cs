@@ -61,7 +61,7 @@ public static class TenantWorkspaceReadOperationRules
             || session.Owner.ExecutorPrincipalId != agent.PrincipalId || session.Owner.AgentInstanceId != agent.Instance.InstanceId
             || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null
             || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended
-            || !TenantFileExecutionContract.Allows(run, current)
+            || !TenantTaskExecutionContract.Allows(run, current)
             || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, value.ToolName) || !TenantWorkspaceReadContract.Allows(current, value.ToolName))
             throw new AccessDeniedException("workspace_source_changed");
         if (value.AttachmentMembersJson is null && value.ResourceMembersJson is null && value.ResourceKey is null && !value.Working && StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy!.HomeAccess == HomeAccess.Disabled)

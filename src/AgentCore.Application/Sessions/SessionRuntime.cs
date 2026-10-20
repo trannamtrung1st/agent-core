@@ -6358,7 +6358,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentRun? admittedRun = null,
         AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false, TenantDeliveryReceipt? tenantReceipt = null, TenantSessionForeground? tenantForeground = null, TenantHumanInput? tenantInput = null, TaskCompletionSource<TenantHumanInputCommit?>? tenantInputCompleted = null)
     {
-        if (_tenantCancellationCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
+        if (_tenantTerminalCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
         { ended?.TrySetResult(false); tenantInputCompleted?.TrySetResult(null); return; }
         if (snapshot.Entries.Count > 1000)
         {
@@ -6403,7 +6403,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
 
             RuntimeTelemetry.Record("persist", RuntimeTelemetry.ElapsedMs(job.Started));
-            if (input.Superseded || _tenantCancellationCommitted)
+            if (input.Superseded || _tenantTerminalCommitted)
             {
                 job.Ended?.TrySetResult(false);
                 return;
@@ -6416,6 +6416,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     // A refused human receipt/surface change must not fail the independently
                     // authorized Run or leak uncommitted state into an ordinary snapshot.
                     job.Ended?.TrySetException(input.Error); job.HumanInputCompleted?.TrySetException(input.Error); return;
+                }
+                if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
+                    && input.Error is AgentCore.Application.Security.AccessDeniedException denied && denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal))
+                {
+                    await RefuseProtectedAccountOutcomeAsync(input.Context, cancellationToken).ConfigureAwait(false);
+                    job.Ended?.TrySetResult(false); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
                 if (job.AdmittedRun?.Admission.Activation.Kind == ActivationKind.UserTurn
@@ -6791,7 +6797,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         else if (job.UserConversationTerminal && _boundAgentRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
             && !terminalRun.CancellationRequested
-            && (terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
+            && (terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
             && toSave.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant && e.ResponseId == terminalRun.ResponseId) is { Status: EntryStatus.Completed } finalEntry)
         {
             var current = await _agentRuns.GetAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false)

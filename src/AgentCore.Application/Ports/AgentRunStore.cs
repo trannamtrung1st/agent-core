@@ -5,7 +5,7 @@ namespace AgentCore.Application.Ports;
 
 public sealed record AgentRunPage(IReadOnlyList<AgentRun> Items, Guid? NextCursor, bool HasMore);
 
-public sealed record BackgroundCompletionCandidate(AgentRun Run, SessionSnapshot Session);
+public sealed record BackgroundCompletionCandidate(AgentRun Run, SessionSnapshot Session, AgentRun? CurrentTaskRun = null, Guid? CompletionReadRequestId = null, IReadOnlyList<ArtifactRecord>? ReviewedArtifacts = null);
 
 public sealed record AgentRunAdmissionResult(bool Created, AgentRun Run);
 

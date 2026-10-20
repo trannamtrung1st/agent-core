@@ -30,7 +30,7 @@ public static class TenantWorkspaceMutationOperationRules
         var args = Arguments(value); TenantWorkspaceEffectRules.Session(run, agent, session);
         if (value.SessionId != run.SessionId || agent.TenantId != request.TenantId || agent.PrincipalId != request.ExecutorPrincipalId
             || agent.Instance.InstanceId != request.Operation.InstanceId || run.Owner.ExecutorPrincipalId != agent.PrincipalId
-            || !TenantFileExecutionContract.Allows(run, current)
+            || !TenantTaskExecutionContract.Allows(run, current)
             || !TenantWorkspaceMutationContract.Allows(run.Admission.Configuration!.Definition, value.ToolName)
             || !TenantWorkspaceMutationContract.Allows(current, value.ToolName)) throw new AccessDeniedException("capability_unavailable");
         var isolation = StateIsolationAccess.RestrictDefinition(run.Admission.Configuration.Definition, current).StateIsolationPolicy ?? StateIsolationPolicy.Default;

@@ -11,6 +11,14 @@ public static class TenantExecutionLineage
     {
         var root = await RootAsync(run, runs, ct).ConfigureAwait(false);
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is not { } requester) return;
+        if (root.Admission.ExecutionContext?.Origin == ExecutionOrigin.ManualInvocation)
+        {
+            var source = TenantAutomationRules.Scope(state.Tenant.TenantId, TenantAutomationRules.SourceAutomation(root));
+            foreach (var key in new[] { "automations.read", "automations.run" })
+                if (!(await iam.CheckTenantAsync(state, requester, PermissionCatalog.Get(key), source, ct).ConfigureAwait(false)).Allowed)
+                    throw new AccessDeniedException("requester_unavailable");
+            return;
+        }
         foreach (var (key, scope) in new[] { ("sessions.read", TenantSessionRules.Scope(state.Tenant.TenantId, root.SessionId)),
             ("agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D"))) })
             if (!(await iam.CheckOwnedTenantAsync(state, requester, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
@@ -26,6 +34,15 @@ public static class TenantExecutionLineage
             if (!visited.Add(run.AgentRunId) || run.Owner.TenantId != initial.TenantId || run.Owner.ExecutorPrincipalId != initial.AgentPrincipalId
                 || context.OriginalInitiatorPrincipalId != initial.OriginalInitiatorPrincipalId || context.RootActivationId != initial.RootActivationId)
                 throw new AccessDeniedException("tenant_lineage_unavailable");
+            if (context.Origin is ExecutionOrigin.ScheduledOccurrence or ExecutionOrigin.ManualInvocation or ExecutionOrigin.ApplicationEvent or ExecutionOrigin.CoreEvent)
+            {
+                var expected = context.Origin switch { ExecutionOrigin.ScheduledOccurrence => ActivationKind.ScheduledWork,
+                    ExecutionOrigin.ManualInvocation => ActivationKind.ManualBackground, ExecutionOrigin.ApplicationEvent => ActivationKind.ApplicationEvent, _ => ActivationKind.CoreEvent };
+                if (context.Origin != ExecutionOrigin.ManualInvocation && context.OriginalInitiatorPrincipalId is not null || context.RootActivationId != run.ActivationId || context.ParentRunId is not null || context.ParentActivationId is not null
+                    || run.Admission.Activation.Kind != expected || run.Admission.Activation.TriggerOccurrenceId is null || run.Admission.Activation.SourceAgentRunId is not null)
+                    throw new AccessDeniedException("tenant_lineage_unavailable");
+                return run;
+            }
             if (context.Origin == ExecutionOrigin.UserMessage)
             {
                 if (run.Admission.Activation.Kind != ActivationKind.UserTurn || context.RootActivationId != run.ActivationId

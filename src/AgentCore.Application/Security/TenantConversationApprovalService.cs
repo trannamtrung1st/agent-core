@@ -22,7 +22,7 @@ public sealed class TenantConversationApprovalService(TenantConversationService 
         var items = new List<TenantConversationApproval>(saved.Items.Count);
         foreach (var request in saved.Items)
         {
-            if (request.TenantId != tenant || (request.Operation.BackgroundReport is { } report ? report.ParentSessionId != session : request.SessionId != session)) throw new AccessDeniedException("approval_unavailable");
+            if (request.TenantId != tenant || (request.Operation.ReportSourceRead is { } sourceRead ? sourceRead.ParentSessionId != session : request.Operation.BackgroundReport is { } report ? report.ParentSessionId != session : request.SessionId != session)) throw new AccessDeniedException("approval_unavailable");
             var run = await runs.FindTenantRunAsync(tenant, request.RunId, ct).ConfigureAwait(false);
             if (run is null || run.SessionId != request.SessionId || run.AgentInstanceId != before.Owner.AgentInstanceId) throw new AccessDeniedException("approval_unavailable");
             var result = await effects.FindOperationReceiptAsync(tenant, request.Operation.OperationId, ct).ConfigureAwait(false);
@@ -30,7 +30,7 @@ public sealed class TenantConversationApprovalService(TenantConversationService 
             try { await review.ReadViewAsync(tenant, request.RequestId, human, ct).ConfigureAwait(false); inspect = true; }
             catch (AccessDeniedException) { }
             items.Add(new(request.RequestId, request.RunId, run.ResponseId, request.Operation.Kind, request.Kind, request.Status,
-                request.CreatedAt, request.ExpiresAt, request.Status == TenantApprovalStatus.Pending && (request.Operation.BackgroundReport is not null ? run.IsTerminal : run.Status == AgentRunStatus.WaitingForApproval),
+                request.CreatedAt, request.ExpiresAt, request.Status == TenantApprovalStatus.Pending && (request.Operation.BackgroundReport is not null || request.Operation.ReportSourceRead is not null ? run.IsTerminal : run.Status == AgentRunStatus.WaitingForApproval),
                 inspect, result?.Outcome));
         }
         var after = await conversations.AuthorizeRecipientAsync(tenant, session, human, ct).ConfigureAwait(false);

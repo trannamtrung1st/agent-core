@@ -95,7 +95,7 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> initial = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
             var factory = initial;
             using var initialOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var owner = initialOwner;
-            var setup = await StartTenantBackground(factory, owner, submit: false, attachmentCapability: decision.StartsWith("bound", StringComparison.Ordinal)); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
+            var setup = await StartTenantBackground(factory, owner, submit: false, attachmentCapability: decision.StartsWith("bound", StringComparison.Ordinal), reportReads: true); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
             var session = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, setup.Session))!;
             var instance = session.Owner.AgentInstanceId; var executor = session.Owner.ExecutorPrincipalId;
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();

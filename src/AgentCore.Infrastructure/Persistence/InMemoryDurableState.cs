@@ -13,6 +13,6 @@ internal sealed class InMemoryDurableState
 
     public Dictionary<DedupeIdentity, Guid> DedupeKeys { get; } = [];
 
-    public readonly record struct DedupeIdentity(Guid AgentInstanceId, Guid ProfileId, string DedupeKey);
+    public readonly record struct DedupeIdentity(Guid AgentInstanceId, Guid? ProfileId, string DedupeKey, Guid? TenantId = null, Guid? ExecutorPrincipalId = null);
 
 }

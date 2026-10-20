@@ -40,7 +40,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
             Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate);
             var schema = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
-            Assert.DoesNotContain("update_persona", schema); Assert.DoesNotContain("run_browser_command", schema);
+            Assert.DoesNotContain("update_persona", schema); Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, schema);
             var refused = request.Messages.Where(m => m.Role == ModelRole.Tool && m.ToolCallId?.StartsWith("background-file-stage-", StringComparison.Ordinal) == true)
                 .FirstOrDefault(m => !m.Text.Contains("\"applied\":true", StringComparison.Ordinal));
             if (refused is not null && (!RepeatRefusal || request.Messages.Any(m => m.Role == ModelRole.Tool && m.ToolCallId == "background-file-refusal-repeat")))
@@ -119,7 +119,7 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> initial = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             var factory = initial;
             using var firstOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var owner = firstOwner;
-            var setup = await StartTenantBackground(factory, owner, submit: false, fileCapabilities: kind == "inline" ? new[] { ToolCatalog.BackgroundStart, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreate } : null); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
+            var setup = await StartTenantBackground(factory, owner, submit: false, fileCapabilities: kind == "inline" ? new[] { ToolCatalog.BackgroundStart, ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreate } : null, reportReads: true); var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
             var parent = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!;
             var instance = parent.Owner.AgentInstanceId; var executor = parent.Owner.ExecutorPrincipalId;

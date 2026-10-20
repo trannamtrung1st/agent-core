@@ -392,12 +392,12 @@ public sealed partial class AgentRun
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Execution is no longer waiting.");
         return Copy(AgentRunStatus.Running, Revision + 1, AttemptCount, null,
             new AgentRunClaim(generation, now, leaseExpiresAt), false, null, KnownEffectSummary, Progress,
-            checkpoint, null, null, SideEffect, Approval, now);
+            Owner.TenantId is not null ? checkpoint.WithSignalAdmissionPending() : checkpoint, null, null, SideEffect, Approval, now);
     }
 
     public AgentRun TakeClaim(Guid generation, DateTimeOffset claimedAtUtc, DateTimeOffset leaseExpiresAtUtc)
     {
-        var resumeSameAttempt = IsApprovalResume;
+        var resumeSameAttempt = IsApprovalResume || SignalAwaitingAdmission;
         if (CancellationRequested
             || (!resumeSameAttempt && AttemptCount >= MaxAttempts)
             || Status is not (AgentRunStatus.Queued or AgentRunStatus.WaitingToRetry)
@@ -682,6 +682,20 @@ public sealed partial class AgentRun
             CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary, Progress, null, Result, Failure, SideEffect, Approval, atUtc);
     }
 
+    private bool SignalAwaitingAdmission => Owner.TenantId is not null && WaitCount > 0 && AttemptCount > 0
+        && Checkpoint?.AwaitingSignalAdmission == true;
+
+    public AgentRun DeferUnacceptedSignalDispatch(long revision, Guid generation, DateTimeOffset at, DateTimeOffset retryAt)
+    {
+        RequireOperational(revision, generation);
+        AgentRunTime.RequireUtc(retryAt, "Signal dispatch retry");
+        if (!SignalAwaitingAdmission || retryAt <= at || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared
+            or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Only an unaccepted signal continuation can defer with its checkpoint.");
+        return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, retryAt, null, false, null,
+            KnownEffectSummary, Progress, Checkpoint!.PauseBudgetClock(Claim!.ClaimedAtUtc), Result, Failure, SideEffect, Approval, at);
+    }
+
     public AgentRun RecoverExpiredClaim(DateTimeOffset asOfUtc, Func<Guid>? allocateDiagnosticId = null)
     {
         AgentRunTime.RequireUtc(asOfUtc, "Recovery");
@@ -695,7 +709,7 @@ public sealed partial class AgentRun
             return AsCancelled(asOfUtc, KnownEffectSummary);
         }
 
-        if (ExternalResultAwaitingAdmission(Checkpoint, SideEffect))
+        if (SignalAwaitingAdmission || ExternalResultAwaitingAdmission(Checkpoint, SideEffect))
             return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, asOfUtc, null, false, null, KnownEffectSummary,
                 Progress, Checkpoint, Result, Failure, SideEffect, Approval, asOfUtc);
 
@@ -1265,7 +1279,7 @@ public sealed partial class AgentRun
             throw new ArgumentException("Updated time cannot move backwards.");
         }
 
-        if (ExternalResultAwaitingAdmission(checkpoint, sideEffect))
+        if (ExternalResultAwaitingAdmission(checkpoint, sideEffect) || Owner.TenantId is not null && checkpoint?.AwaitingSignalAdmission == true)
             checkpoint = checkpoint!.PauseBudgetClock(updatedAtUtc);
         else if (Status == AgentRunStatus.Running && status == AgentRunStatus.Running && Claim?.Generation != claim?.Generation && checkpoint is not null)
             checkpoint = checkpoint.PauseBudgetClock(Claim is { } expired && expired.LeaseExpiresAtUtc < updatedAtUtc

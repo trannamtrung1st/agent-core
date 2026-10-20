@@ -46,6 +46,10 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.AccountAction => PrepareAccountAction(op.OperationId, op.InstanceId, op.AccountAction!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.AccountRead => PrepareAccountRead(op.OperationId, op.InstanceId, op.AccountRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.ReportSourceRead => PrepareReportSourceRead(op.OperationId, op.InstanceId, op.ReportSourceRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.CompletionRead => PrepareCompletionRead(op.OperationId, op.InstanceId, op.CompletionRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.BackgroundReport => PrepareBackgroundReport(op.OperationId, op.InstanceId, op.BackgroundReport!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.BackgroundStart => PrepareBackgroundStart(op.OperationId, op.InstanceId, op.BackgroundStart!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.WorkspaceMutation => PrepareWorkspaceMutation(op.OperationId, op.InstanceId, op.WorkspaceMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -68,9 +72,13 @@ public static partial class TenantApprovalRules
     {
         var context = run.Admission.ExecutionContext ?? throw new AccessDeniedException("tenant_context_required");
         var op = request.Operation;
-        if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
+        if (op.ReportSourceRead is not null) TenantReportSourceReadRules.Source(request, run);
+        else if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
         else TenantApprovalContinuationRules.Require(request, run, source);
-        if (op.BackgroundStart is { } background && (background.SessionId != request.SessionId || background.TenantId != request.TenantId)
+        if (op.AccountAction is { } accountAction && accountAction.SessionId != request.SessionId
+            || op.AccountRead is { } accountRead && accountRead.SessionId != request.SessionId
+            || op.CompletionRead is { } completion && completion.ParentSessionId != request.SessionId
+            || op.BackgroundStart is { } background && (background.SessionId != request.SessionId || background.TenantId != request.TenantId)
             || op.AttachmentRead is { } attachment && attachment.SessionId != request.SessionId
             || op.WorkspaceMutation is { } mutation && mutation.SessionId != request.SessionId
             || op.WorkspaceRead is { } workspace && workspace.SessionId != request.SessionId
@@ -79,7 +87,7 @@ public static partial class TenantApprovalRules
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || op.InstanceId != run.AgentInstanceId
             || target.TenantId != request.TenantId || target.Instance.InstanceId != op.InstanceId || target.PrincipalId != context.AgentPrincipalId
-            || !Enum.IsDefined(request.Kind) || (request.Operation.AttachmentRead is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
+            || !Enum.IsDefined(request.Kind) || (request.Operation.ReportSourceRead is not null || request.Operation.CompletionRead is not null || request.Operation.AttachmentRead is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
             || request.CreatedAt.Offset != TimeSpan.Zero || request.ExpiresAt.Offset != TimeSpan.Zero
             || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
             || Rebuild(op) != op)

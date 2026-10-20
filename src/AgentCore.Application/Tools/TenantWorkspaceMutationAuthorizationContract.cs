@@ -16,7 +16,7 @@ public sealed record TenantWorkspaceMutationIntent(string Tool, string Arguments
 // Closed exact proposal; identity, permission and witnesses are derived by Core.
 public static class TenantWorkspaceMutationAuthorizationContract
 {
-    public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => TenantFileExecutionContract.Allows(context) ? Allowed(definition) : [];
+    public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => TenantTaskExecutionContract.Allows(context) ? Allowed(definition) : [];
     public static IReadOnlyList<string> Allowed(AgentDefinition definition) =>
         new[] { ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch,
                 ToolCatalog.OfficeDocumentCreate, ToolCatalog.OfficeDocumentEdit, ToolCatalog.OfficeSpreadsheetCreate, ToolCatalog.OfficeSpreadsheetEdit }

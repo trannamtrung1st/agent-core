@@ -38,11 +38,11 @@ public sealed partial class TenantWorkspaceRuntimeReadService(TenantOperationAut
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId)
             throw new AccessDeniedException("resource_unavailable");
-        if (!TenantFileExecutionContract.Allows(run, run.Admission.Configuration!.Definition)
+        if (!TenantTaskExecutionContract.Allows(run, run.Admission.Configuration!.Definition)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended) throw new AccessDeniedException("resource_unavailable");
         var current = await configurations.CurrentPolicyAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-        if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantFileExecutionContract.Allows(run, current.Definition) || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool)
+        if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantTaskExecutionContract.Allows(run, current.Definition) || !TenantWorkspaceReadContract.Allows(run.Admission.Configuration!.Definition, tool)
             || !TenantWorkspaceReadContract.Allows(current.Definition, tool)) throw new AccessDeniedException("capability_unavailable");
         var owner = new TenantWorkspaceReference(tenant, run.AgentInstanceId, args.Path.StartsWith("/working", StringComparison.Ordinal) ? run.SessionId : null);
         TenantWorkspaceRules.Path(owner, args.Path, TenantWorkspaceReadContract.IsFile(tool));

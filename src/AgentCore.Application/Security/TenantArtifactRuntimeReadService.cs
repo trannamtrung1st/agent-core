@@ -46,12 +46,12 @@ public sealed partial class TenantArtifactRuntimeReadService(TenantOperationAuth
         var session = await sessions.FindTenantSessionAsync(tenant, frame.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (live) TenantRuntimeRules.Require(frame, session.Owner, run, time.GetUtcNow());
         if (run.Owner != frame.Owner || run.SessionId != frame.SessionId || session.Owner.AgentInstanceId != run.AgentInstanceId
-            || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId || !TenantFileExecutionContract.Allows(run, run.Admission.Configuration!.Definition)
+            || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId || !TenantTaskExecutionContract.Allows(run, run.Admission.Configuration!.Definition)
             || session.Snapshot.DurablyDeletedAt is not null || session.Snapshot.ArchivedAt is not null
             || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended)
             throw new AccessDeniedException("resource_unavailable");
         var current = await configurations.ResolveAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
-        if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantFileExecutionContract.Allows(run, current.Configuration.Configuration.Definition) || !TenantArtifactVerificationContract.Allows(run.Admission.Configuration!.Definition)
+        if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantTaskExecutionContract.Allows(run, current.Configuration.Configuration.Definition) || !TenantArtifactVerificationContract.Allows(run.Admission.Configuration!.Definition)
             || !TenantArtifactVerificationContract.Allows(current.Configuration.Configuration.Definition)) throw new AccessDeniedException("capability_unavailable");
         var item = await artifacts.FindTenantAsync(tenant, frame.SessionId, artifact, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         if (item.TenantId != tenant || item.SessionId != frame.SessionId) throw new AccessDeniedException("resource_unavailable");

@@ -1,5 +1,28 @@
 # Frontend Implementation Specification
 
+## Tenant connected-account action review
+
+Organization Approvals and Conversation approvals use the same `TenantApprovalDetail` native large Drawer for `use_connected_account`. A focused account-action preview validates the complete closed saved projection before enabling Approve/Authorize once or Reject; malformed, duplicate, missing or contradictory evidence retains authorized cancellation and refresh. Server IAM and exact witnesses remain authoritative.
+
+Account name/reference/type and the concrete action precede its saved effects. Email draft/send shows the exact sender, all To/Cc/Bcc addresses (empty optional lists remain visible), full subject and bounded literal body in labeled read-only native text controls. Draft creation explicitly sends nothing; send reviews the immutable draft, names irreversible delivery and uncertainty, and requires separate consent. Supplied text is inert and never interpreted as HTML or Markdown. Long addresses, subjects and bodies wrap or scroll without hiding supplied content.
+
+Drive review shows all saved remote file names, IDs, types, sizes, versions and parent membership; manifest targets retain their original order, with destination folder evidence identified separately. Create/rename/move show exact new name and source/destination parents. Upload shows its exact owned source path, byte count, SHA and remote destination. Download shows the exact source version and new local destination, with no overwrite. Trash describes recoverable trash rather than permanent deletion; batch trash explains possible completed prefix and unattempted suffix. One shared parent stack owns section spacing and responsive Descriptions own label/value layout; native Drawer/footer/confirmation behavior is retained with no new CSS or design tokens.
+
+Review versus one-time authorization, current independent raw source access, freshness/reload, stale-source cancellation, lost decision recovery and operation results remain separate. Confirmation names the saved action and its consequence. Completed, not applied and uncertain copy describes factual execution without claiming recipient access or application success; uncertain effects never offer replay. Chat uses the same names and inspector. Technical references remain collapsed. [Focused qualification](reports/tenant-account-action-model-ui-verification-2026-10-20.md) separates actual Synthetic model/HTTP and draft/send cold-host browser journeys from controlled Drive presentation and remaining module work.
+
+
+## Exact connected-account read preview
+
+The shared organization/Chat approval inspector presents `read_connected_account` with account name/type, bound reference, friendly method and complete canonical parameters as inert selectable wrapping text. Account data and tokens are absent from consent. Review and primary-only one-time authorization retain the existing protected confirmation and responsive native Drawer/Descriptions/footer. Confirmation authorizes only the saved bounded read; it grants no send, write, later-query or general Credential authority. `Read authorized` describes the local consent receipt separately from actual data delivery. Current source loss disables decisions while preserving cancellation and explicit refresh. [Focused qualification](reports/tenant-agent-account-read-verification-2026-10-20.md) owns current browser and presentation evidence.
+
+## Automatic report source-read preview
+
+The existing organization/Chat inspector recognizes server-only `inspect_background_report_source` ordinary Review. Its exact saved preview shows the separately readable destination, task/result, initial and distinct terminal Run when applicable, and checksum. It includes no file metadata or bytes. Missing, duplicate or inconsistent saved evidence disables approval/rejection while preserving cancellation. Protected confirmation describes read-only consent; Read authorized remains visibly separate from report-Run creation and Reported delivery. The shared responsive native Drawer/Descriptions/footer own presentation. [Focused qualification](reports/tenant-report-source-read-verification-2026-10-20.md) records actual Synthetic consent/delivery and stale-configuration cancellation, all shared inspector cases and fresh finish review.
+
+## Exact completion-read consent preview
+
+The shared approval inspector presents `inspect_background_completion` as ordinary read consent, including the saved task/result, distinct initial/final Run identity when applicable, observation checksum and exact related file metadata. Untrusted text stays inert. Malformed or missing fields disable approve/reject while preserving Cancel. The result label is Read authorized; taking/acknowledging remains separate from Handled accounting and requires a successful saved task answer. No new page or UI kit is introduced.
+
 ## Exact completion-report creation review
 
 The shared organization/Chat approval inspector presents an exact saved completion, original-conversation destination and selected model for `deliver_background_completion`. Values are inert wrapping text. Its optional `destinationSessionId` is a current-authorized navigation projection; `sessionId` and `runId` retain the actual terminal child owner. The destination link is withheld when malformed/missing; missing or ambiguous preview fields disable Approve/Reject while authorized cancellation remains available.

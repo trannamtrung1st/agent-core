@@ -5,7 +5,7 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryTriggerStore : ITriggerStore
+public sealed partial class InMemoryTriggerStore : ITriggerStore
 {
     private readonly InMemoryDurableState _state;
     private readonly AgentCore.Infrastructure.Admin.InMemoryAdminEventStore? _admin;
@@ -22,12 +22,12 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     }
 
     internal void CommitConfigurationPolicy(Guid id, IReadOnlyList<InstanceAutomationPolicyChange>? changes,
-        DateTimeOffset now, Action commitOwner)
+        DateTimeOffset now, Action commitOwner, bool tenantMutation = false)
     {
         lock (_state.Gate)
         {
             if (changes is null) { commitOwner(); return; }
-            var current = _state.Registrations.Values.Where(r => r.Owner.AgentInstanceId == id
+            var current = _state.Registrations.Values.Where(r => r.Owner.AgentInstanceId == id && (r.Owner.TenantId is not null) == tenantMutation
                 && r.Status is AutomationStatus.Active or AutomationStatus.SuspendedPolicy).ToArray();
             if (current.Length != changes.Count || current.Any(r => !changes.Any(c => c.AutomationId == r.AutomationId && c.ExpectedRevision == r.Revision)))
                 throw AgentCoreErrors.Conflict("Automation changed during configuration adoption. Reload and retry.");
@@ -53,6 +53,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         lock (_state.Gate)
         {
             var current = Find(proposed.Owner, proposed.AutomationId);
+            RequireLegacy(proposed.Owner);
             AutomationRules.ValidateSave(current, proposed, expectedRevision);
             if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active && CountActiveSchedules(proposed.Owner) >= maxActiveRegistrations)
                 throw AgentCoreErrors.Validation("Active schedule limit has been reached.");
@@ -137,6 +138,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         Automation registration,
         CancellationToken cancellationToken = default)
     {
+        RequireLegacy(registration.Owner);
         ArgumentNullException.ThrowIfNull(registration);
         lock (_state.Gate)
         {
@@ -168,7 +170,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var items = _state.Registrations.Values
+            var items = LegacyRegistrations
                 .Where(item => item.Owner.Equals(owner) && (status is null || item.Status == status))
                 .OrderByDescending(item => item.Provenance.CreatedAt)
                 .ThenByDescending(item => item.AutomationId)
@@ -182,7 +184,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var owned = _state.Registrations.Values.Where(item => item.Owner.Equals(owner)).ToArray();
+            var owned = LegacyRegistrations.Where(item => item.Owner.Equals(owner)).ToArray();
             var anchor = before is Guid id ? owned.FirstOrDefault(item => item.AutomationId == id)
                 ?? throw AgentCoreErrors.NotFound("Page cursor was not found.") : null;
             var page = owned.Where(item => anchor is null || item.Provenance.CreatedAt < anchor.Provenance.CreatedAt ||
@@ -200,7 +202,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var items = _state.Registrations.Values
+            var items = LegacyRegistrations
                 .Where(item =>
                     item.Owner.AgentInstanceId == agentInstanceId
                     && item.Status == AutomationStatus.SuspendedPolicy)
@@ -219,7 +221,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var items = _state.Registrations.Values
+            var items = LegacyRegistrations
                 .Where(item =>
                     item.Owner.AgentInstanceId == agentInstanceId
                     && item.Status is AutomationStatus.Active or AutomationStatus.SuspendedPolicy)
@@ -231,7 +233,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
-    private int CountActiveSchedules(TriggerOwner owner) => _state.Registrations.Values.Count(item =>
+    private int CountActiveSchedules(TriggerOwner owner) => LegacyRegistrations.Count(item =>
         item.Owner.Equals(owner) && item.Status == AutomationStatus.Active);
 
     public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
@@ -250,7 +252,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var items = _state.Registrations.Values
+            var items = LegacyRegistrations
                 .Where(item =>
                     (!activeOnly || item.Status == AutomationStatus.Active)
                     && item.Status != AutomationStatus.Cancelled && item.Triggers.Any(t => t.Configuration is EventTrigger e && e.EventId == eventId && (!activeOnly || t.Enabled)))
@@ -332,6 +334,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         TriggerOccurrence occurrence,
         CancellationToken cancellationToken = default)
     {
+        RequireLegacy(occurrence.Owner);
         ArgumentNullException.ThrowIfNull(occurrence);
         RequireFreshOccurrence(occurrence);
         lock (EmailNeedsFence?.Invoke(occurrence) == true ? EmailAdmissionGate ?? _state.Gate : _state.Gate)
@@ -372,7 +375,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            if (!_state.Occurrences.TryGetValue(occurrenceId, out var occurrence) || !occurrence.Owner.Equals(owner))
+            if (!TryGetLegacyOccurrence(occurrenceId, out var occurrence) || !occurrence.Owner.Equals(owner))
             {
                 return ValueTask.FromResult<TriggerOccurrence?>(null);
             }
@@ -390,7 +393,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
         lock (_state.Gate)
         {
-            var due = _state.Registrations.Values
+            var due = LegacyRegistrations
                 .Where(item => item.Status == AutomationStatus.Active
                     && item.NextOccurrenceAtUtc is DateTimeOffset next
                     && next <= asOf)
@@ -639,7 +642,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         cancellationToken.ThrowIfCancellationRequested();
         if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Live repair limit is invalid.");
         lock (AdmissionGate)
-            return ValueTask.FromResult<IReadOnlyList<TriggerOccurrence>>(_state.Occurrences.Values
+            return ValueTask.FromResult<IReadOnlyList<TriggerOccurrence>>(LegacyOccurrences
                 .Where(item => item.Disposition == OccurrenceRoutingDisposition.AcceptedLive
                     && item.LiveSessionId is not null && item.LiveEvaluationCompletedAtUtc is null
                     && (after is null || string.CompareOrdinal(item.OccurrenceId.ToString("D"), after.Value.ToString("D")) > 0))
@@ -770,7 +773,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         lock (_state.Gate)
         {
             var recovered = 0;
-            foreach (var current in _state.Occurrences.Values.ToArray())
+            foreach (var current in LegacyOccurrences.ToArray())
             {
                 if (current.Disposition != OccurrenceRoutingDisposition.Claimed
                     || current.ClaimLeaseExpiresAtUtc is not DateTimeOffset lease
@@ -801,7 +804,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         ArgumentNullException.ThrowIfNull(pin);
         lock (_state.Gate)
         {
-            if (!_state.Occurrences.TryGetValue(occurrenceId, out var current))
+            if (!TryGetLegacyOccurrence(occurrenceId, out var current))
             {
                 return ValueTask.FromResult<TriggerOccurrence?>(null);
             }
@@ -824,7 +827,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var items = _state.Occurrences.Values
+            var items = LegacyOccurrences
                 .Where(item => item.Disposition == disposition)
                 .OrderBy(item => item.AdmittedAtUtc)
                 .ThenBy(item => item.OccurrenceId)
@@ -838,7 +841,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            if (!_state.Occurrences.TryGetValue(occurrenceId, out var current))
+            if (!TryGetLegacyOccurrence(occurrenceId, out var current))
             {
                 return null;
             }
@@ -855,7 +858,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     }
 
     private static InMemoryDurableState.DedupeIdentity Dedupe(TriggerOwner owner, string dedupeKey) =>
-        new(owner.AgentInstanceId, owner.ProfileId, dedupeKey);
+        new(owner.AgentInstanceId, owner.ProfileIdOrNull, dedupeKey, owner.TenantId, owner.ExecutorPrincipalId);
 
     private static bool IsCurrent(
         Automation? current,
@@ -867,7 +870,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         && current.NextOccurrenceAtUtc == expectedNext;
 
     private Automation? Find(TriggerOwner owner, Guid automationId) =>
-        _state.Registrations.TryGetValue(automationId, out var registration) && registration.Owner.Equals(owner)
+        owner.TenantId is null && _state.Registrations.TryGetValue(automationId, out var registration) && registration.Owner.Equals(owner)
             ? registration
             : null;
 

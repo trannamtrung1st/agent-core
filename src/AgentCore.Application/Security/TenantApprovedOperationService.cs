@@ -9,7 +9,7 @@ namespace AgentCore.Application.Security;
 
 public sealed partial class TenantApprovedOperationService(IIamStore security, ITenantRunStore runs, ITenantAgentStore agents,
     ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantOperationAuthorizer operations,
-    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantBackgroundCreationTarget? backgroundCreations = null)
+    TenantRunConfigurationResolver configuration, IIdGenerator ids, TimeProvider time, IModelCatalog models, ProviderAliasSet aliases, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantBackgroundCreationTarget? backgroundCreations = null, TenantCompletionReadService? completionReads = null, TenantAccountRuntimeReadService? accountReads = null)
 {
     // Trusted server frame only. The saved request supplies every action parameter and target.
     public async ValueTask<TenantOperationReceipt> ExecuteAsync(TenantRunReference reference, Guid requestId, Guid operationId,
@@ -45,10 +45,13 @@ public sealed partial class TenantApprovedOperationService(IIamStore security, I
         if (existing is not null) return Existing(existing, request, run);
         if (request.Operation.BackgroundStart is not null) return await ExecuteBackgroundStartAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
         if (request.Operation.WorkspaceMutation is not null) throw new SecurityConflictException("workspace_effect_unsettled");
+        if (request.Operation.AccountAction is not null) throw new SecurityConflictException("account_effect_unsettled");
         if (request.Operation.ArtifactPublication is not null) return await ExecuteArtifactAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);
         if (request.Operation.WorkspaceRead is not null) return await ExecuteWorkspaceReadAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
         if (request.Operation.AttachmentRead is not null) return await ExecuteAttachmentReadAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
+        if (request.Operation.CompletionRead is not null) return await ExecuteCompletionReadAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
         if (request.Operation.ArtifactVerification is not null) return await ExecuteArtifactVerificationAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
+        if (request.Operation.AccountRead is not null) return await ExecuteAccountReadAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
         if (request.Operation.CredentialRead is not null) return await ExecuteMetadataReadAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
         if (request.Operation.SandboxRead is not null) return await ExecuteReadAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);
         if (request.Operation.SandboxControl is not null) return await ExecuteControlAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);

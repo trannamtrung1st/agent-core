@@ -17,6 +17,9 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && (toolName == ToolCatalog.ExecutionWait || TenantCompletionToolContract.IsTool(toolName)))
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && RolePermissions.AllowsTool(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantBackgroundToolContract.IsTool(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && (toolName == ToolCatalog.WorkComplete || RolePermissions.AllowsTool(definition, toolName))
@@ -39,7 +42,7 @@ public static class ToolPolicy
         if (admission?.TenantId is not null && toolName == ToolCatalog.ArtifactsCreate)
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && TenantArtifactToolContract.Allows(definition) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
-        if (admission?.TenantId is not null && toolName == ToolCatalog.CredentialsList)
+        if (admission?.TenantId is not null && TenantCredentialDiscoveryContract.IsTool(toolName))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantBrowserInspectionContract.IsInspection(toolName))
@@ -201,38 +204,44 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is not null && TenantCompletionToolContract.IsTool(descriptor.Name))
+            return TenantCompletionToolContract.IsOffered(definition, context, descriptor.Name);
+        if (context?.ExecutionContext is not null && descriptor.Name == ToolCatalog.ExecutionWait)
+            return TenantWaitToolContract.IsOffered(definition, context);
+        if (context?.ExecutionContext is not null && TenantCredentialDiscoveryContract.IsFamilyTool(descriptor.Name))
+            return TenantCredentialDiscoveryContract.Allows(definition, context, descriptor.Name);
         if (context?.ExecutionContext is not null && TenantBackgroundToolContract.IsTool(descriptor.Name))
             return TenantBackgroundToolContract.IsOffered(definition, context, descriptor.Name);
         // Completion reports do not generate protected work. Immediate background work and
-        // its approval successors expose only the converted file-operation family.
+        // its approval successors use the converted file and native owners.
         if (context?.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
             && !IamToolContracts.IsInspection(descriptor.Name)) return false;
-        if (TenantFileExecutionContract.IsBackground(context)
-            && !IamToolContracts.IsInspection(descriptor.Name) && !TenantFileExecutionContract.IsTool(descriptor.Name)
+        if (TenantTaskExecutionContract.IsBackground(context)
+            && !IamToolContracts.IsInspection(descriptor.Name) && !TenantTaskExecutionContract.IsTool(descriptor.Name) && !TenantTaskExecutionContract.IsNativeInspection(descriptor.Name)
             && descriptor.Name != ToolCatalog.RequestAuthorization) return false;
         if (context?.ExecutionContext is { } mutation && TenantWorkspaceMutationContract.IsMutation(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileExecutionContract.Allows(context)
+                && TenantTaskExecutionContract.Allows(context)
                 && mutation.SessionId == context.OwnedSessionId && TenantWorkspaceMutationContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } workspaceExecution && TenantWorkspaceReadContract.IsRead(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileExecutionContract.Allows(context)
+                && TenantTaskExecutionContract.Allows(context)
                 && workspaceExecution.SessionId == context.OwnedSessionId && TenantWorkspaceReadContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } attachment && descriptor.Name == ToolCatalog.AttachmentsRead)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileExecutionContract.Allows(context)
+                && TenantTaskExecutionContract.Allows(context)
                 && attachment.SessionId == context.OwnedSessionId && TenantAttachmentReadContract.Allows(definition) && ToolCatalog.SessionHasAttachments(context);
         if (context?.ExecutionContext is { } verification && descriptor.Name == ToolCatalog.ArtifactsVerify)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileExecutionContract.Allows(context)
+                && TenantTaskExecutionContract.Allows(context)
                 && verification.SessionId == context.OwnedSessionId && TenantArtifactVerificationContract.Allows(definition);
         if (context?.ExecutionContext is { } sourceExecution && descriptor.Name == ToolCatalog.ArtifactsCreateFromWorkspace)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileExecutionContract.Allows(context)
+                && TenantTaskExecutionContract.Allows(context)
                 && sourceExecution.SessionId == context.OwnedSessionId && TenantWorkspaceArtifactContract.Allows(definition);
         if (context?.ExecutionContext is { } artifactExecution && descriptor.Name == ToolCatalog.ArtifactsCreate)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
-                && TenantFileExecutionContract.Allows(context)
+                && TenantTaskExecutionContract.Allows(context)
                 && artifactExecution.SessionId == context.OwnedSessionId && TenantArtifactToolContract.Allows(definition);
         if (context?.ExecutionContext is { } credentialExecution && descriptor.Name == ToolCatalog.CredentialsList)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, CredentialMetadataAvailable: true }

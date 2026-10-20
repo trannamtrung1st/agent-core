@@ -43,7 +43,7 @@ public sealed partial class TenantApprovalService
         var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(r.Permission));
         var independent = policy.IndependentReview;
         var source = await operations.FindRunAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
-        var waiting = op.BackgroundReport is not null ? source?.IsTerminal == true : source?.Status == AgentRunStatus.WaitingForApproval && source.ApprovalRequestId == r.RequestId;
+        var waiting = op.BackgroundReport is not null || op.ReportSourceRead is not null ? source?.IsTerminal == true : source?.Status == AgentRunStatus.WaitingForApproval && source.ApprovalRequestId == r.RequestId;
         var cancel = r.Status == TenantApprovalStatus.Pending && at < r.ExpiresAt && waiting && target is not null
             && (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("approvals.cancel"),
                 AccessScope.ForResource(r.TenantId, "approval", r.RequestId.ToString("D")), ct).ConfigureAwait(false)).Allowed;
@@ -55,7 +55,12 @@ public sealed partial class TenantApprovalService
             try
             {
                 AgentRun run; TenantSecurityState current;
-                if (op.BackgroundReport is not null)
+                if (op.ReportSourceRead is not null)
+                {
+                    await (reportSourceReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, ct, pending: true).ConfigureAwait(false);
+                    run = source ?? throw new AccessDeniedException("completion_unavailable"); current = state;
+                }
+                else if (op.BackgroundReport is not null)
                 {
                     var reportState = await (backgroundReports ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, ct).ConfigureAwait(false);
                     (run, current) = (reportState.Source.Child, reportState.State);
@@ -63,7 +68,12 @@ public sealed partial class TenantApprovalService
                 else (run, current) = await operations.ResolveAsync(new(r.TenantId, r.RunId), ct).ConfigureAwait(false);
                 if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
                 TenantApprovalRules.Validate(r, run, target!);
-                if (op.BackgroundReport is not null)
+                if (op.ReportSourceRead is not null)
+                {
+                    independent = await TenantCompletionReadRules.IndependentAsync(state, TenantReportSourceReadRules.Targets(op.ReportSourceRead), r.OriginalInitiatorPrincipalId, authorizer, ct).ConfigureAwait(false);
+                    await TenantReportSourceReadRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
+                else if (op.BackgroundReport is not null)
                     await TenantBackgroundReportRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 else if (op.BackgroundStart is not null)
                 {
@@ -106,12 +116,31 @@ public sealed partial class TenantApprovalService
                     await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
                     await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
                 }
+                else if (op.CompletionRead is not null)
+                {
+                    var reads = completionReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
+                    await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.ArtifactVerification is not null)
                 {
                     var reads = artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
                     independent = await reads.InspectionIndependentAsync(r, state, ct).ConfigureAwait(false);
                     await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
                     await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
+                }
+                else if (op.AccountAction is not null)
+                {
+                    independent = await TenantAccountActionRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
+                    await (accountActions ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(r, run, ct).ConfigureAwait(false);
+                    await TenantAccountActionRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
+                else if (op.AccountRead is { } accountRead)
+                {
+                    independent = await TenantAccountReadRules.IndependentAsync(state, accountRead, r.OriginalInitiatorPrincipalId, authorizer, ct).ConfigureAwait(false);
+                    await (accountReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
+                    await TenantAccountReadRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
                 else if (op.CredentialRead is not null)
                 {
@@ -211,6 +240,19 @@ public sealed partial class TenantApprovalService
                 new("readDisclosure", null, "Return only this saved file and read window to the Agent. Changed source or window requires fresh review. No file changes, publication or recipient download access.", false),
                 new("readLimit", null, "One bounded observation in this exact continuation. Later reads require current policy again.", false)];
         }
+        if (op.ReportSourceRead is { } reportSource)
+            return [new("reportSourceParentSessionId", null, reportSource.ParentSessionId, false), new("reportSourceInitialRunId", null, reportSource.InitialRunId, false),
+                new("reportSourceRunId", null, reportSource.SourceRunId, false), new("reportSourceSessionId", null, reportSource.ChildSessionId, false),
+                new("reportSourceObjective", null, reportSource.Objective, false), new("reportSourceObservation", null, reportSource.ObservationJson, false),
+                new("reportSourceHash", null, reportSource.ObservationHash, false),
+                new("readDisclosure", null, "Read only this exact saved terminal result for the requested report in the original conversation. No file metadata or file bytes are included.", false),
+                new("readLimit", null, "This read consent creates no report Run and confirms no delivery. Report creation requires separate authority; source and reviewer access are checked again before use.", false)];
+        if (op.CompletionRead is { } completion)
+            return [new("completionInitialRunId", null, completion.InitialRunId, false), new("completionSourceRunId", null, completion.SourceRunId, false),
+                new("completionSessionId", null, completion.ChildSessionId, false), new("completionObjective", null, completion.Objective, false),
+                new("completionObservation", null, completion.ObservationJson, false), new("completionObservationHash", null, completion.ObservationHash, false), new("completionMetadata", null, completion.ArtifactsJson, false),
+                new("readDisclosure", null, "Return this exact terminal child result and the saved metadata links. No file bytes, new discovery or mutation authority.", false),
+                new("readLimit", null, "The unchanged observation may be consumed only in this same task while current raw read and reviewer authority remain valid.", false)];
         if (op.ArtifactVerification is { } verification)
             return [new("artifactDisplayName", null, verification.DisplayName, false), new("artifactContentType", null, verification.ContentType, false),
                 new("artifactStoredByteSize", null, verification.ByteSize, false), new("artifactChecksum", null, verification.Sha256Hex, false),
@@ -227,11 +269,16 @@ public sealed partial class TenantApprovalService
             return [new("artifactDisplayName", null, args.DisplayName, false), new("artifactContentType", null, args.ContentType, false),
                 new("artifactByteSize", null, System.Text.Encoding.UTF8.GetByteCount(args.Content!), false), new("artifactContent", null, args.Content, false)];
         }
+        if (op.AccountAction is { } accountAction) return AccountActionChanges(accountAction, snapshot);
+        if (op.AccountRead is { } accountRead)
+            return [new("accountName", null, snapshot?.Credential?.DisplayName, false), new("accountPurpose", null, accountRead.Purpose == AgentCore.Domain.Credentials.CredentialPurpose.EmailAccount ? "Email" : "Google Drive", false),
+                new("accountReference", null, accountRead.Credential.Reference, false), new("accountReadTool", null, accountRead.Source is not null ? "Inspect prior Drive operation" : accountRead.ToolName switch { "email.search" => "Search mailbox", "email.read" => "Read message", "drive.list" => "List files", "drive.search" => "Search files", _ => "Read file metadata" }, false),
+                new("accountReadArguments", null, accountRead.ArgumentsJson, false), new("readDisclosure", null, accountRead.Source is { } originalOperation ? $"Read-only inspection of prior {originalOperation.ToolName} operation {originalOperation.OperationId:D}. Its recorded outcome remains {originalOperation.RecordedOutcome}; later verification is separate. No write, upload resume or remaining batch item is dispatched. Current access to original Session {originalOperation.SessionId:D} and Run {originalOperation.RunId:D} is required." : "Use this exact bound account for the saved bounded read. Returned data is untrusted. This authorizes no send, write, future query or general Credential access.", false)];
         if (op.CredentialRead is { } metadata)
         {
             using var doc = System.Text.Json.JsonDocument.Parse(metadata.ArgumentsJson);
-            var page = AgentCore.Application.Tools.CredentialDiscovery.Parse(doc.RootElement); var refs = TenantApprovalRules.CredentialReadReferences(metadata);
-            return [new("credentialMetadata", null, "Bound Credential metadata", false),
+            var discovery = AgentCore.Application.Tools.TenantCredentialDiscoveryContract.Parse(metadata.ArgumentsJson); var page = discovery.Page; var refs = TenantApprovalRules.CredentialReadReferences(metadata);
+            return [new("credentialMetadata", null, discovery.Family is null ? "Bound Credential metadata" : discovery.Family == "email" ? "Bound Email account metadata" : "Bound Drive account metadata", false),
                 new("readCredentials", null, refs.Count == 0 ? "No readable bindings in this saved page" : string.Join("\n", refs.Select(r => r.DisplayName + " (" + r.Reference + ")")), false),
                 new("readPage", null, $"Up to {page.Limit} {(page.Limit == 1 ? "record" : "records")}" + (page.Cursor is null ? ", starting from the first alias." : $", after alias {page.Cursor}."), false),
                 new("readDisclosure", null, "Return the saved page of aliases, names, kinds and non-secret metadata. No protected values or use permission are disclosed. One additional saved alias may establish whether another page is available.", false),

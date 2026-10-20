@@ -13,7 +13,17 @@ public static class TenantCredentialReadAuthorizationContract
     public static bool Allows(AgentDefinition definition, AgentContext? context) => context?.Configuration?.CredentialBindings.Count > 0
         && (RolePermissions.AllowsTool(definition, ToolCatalog.BrowserFillCredential) || RolePermissions.AllowsTool(definition, ToolCatalog.EmailAccounts)
             || RolePermissions.AllowsTool(definition, ToolCatalog.DriveAccounts));
-    public static JsonNode Schema() => JsonNode.Parse("""{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["inspect_credential_metadata"]},"arguments":{"type":"object","additionalProperties":false,"properties":{"cursor":{"type":["string","null"],"maxLength":64},"limit":{"type":"integer","minimum":1,"maximum":100}}}},"required":["operation","arguments"]}""")!;
+    public static JsonNode Schema(IReadOnlyList<string>? families = null)
+    {
+        var schema = JsonNode.Parse("""{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["inspect_credential_metadata"]},"arguments":{"type":"object","additionalProperties":false,"properties":{"cursor":{"type":["string","null"],"maxLength":64},"limit":{"type":"integer","minimum":1,"maximum":100},"family":{"type":"string","enum":["email","drive"]}}}},"required":["operation","arguments"]}""")!;
+        if (families is not null)
+        {
+            var properties = schema["properties"]!["arguments"]!["properties"]!.AsObject();
+            if (families.Count == 0) properties.Remove("family");
+            else properties["family"]!["enum"] = new JsonArray(families.Select(f => JsonValue.Create(f)).ToArray());
+        }
+        return schema;
+    }
     public static string Parse(JsonElement root)
     {
         var names = root.EnumerateObject().Select(p => p.Name).ToArray();

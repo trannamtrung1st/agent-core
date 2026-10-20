@@ -1,6 +1,6 @@
-import { useId } from 'react';
-import { Alert, Descriptions, Flex, Input, Typography } from 'antd';
+import { Alert, Descriptions, Flex, Typography } from 'antd';
 import { savedOfficeMutation, type OfficeProposal } from './OfficeMutationProposal';
+import { SavedApprovalText as Literal } from './SavedApprovalText';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 
 type Operation = { op: string; path?: string; source?: string; destination?: string; recursive?: boolean };
@@ -38,10 +38,6 @@ export function savedWorkspaceMutation(tool: unknown, json: unknown): Proposal |
     }
     const item = structural(args, tool.slice('workspace.'.length)); return item ? { tool, operations: [item] } : null;
   } catch { return null; }
-}
-function Literal({ label, text }: { label: string; text: string }) {
-  const id = useId();
-  return <Flex vertical gap="var(--ac-space-compact)"><label htmlFor={id}>{label}</label><Input.TextArea id={id} readOnly value={text} autoSize={{ minRows: 3, maxRows: 10 }} />{text.length === 0 && <Typography.Text type="secondary">Empty text</Typography.Text>}</Flex>;
 }
 export function WorkspaceMutationPreview({ proposal }: { proposal: Proposal | null }) {
   const layout = useAdminDetailLayout();

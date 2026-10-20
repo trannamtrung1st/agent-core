@@ -47,8 +47,6 @@ public sealed partial class TenantSessionAccessTests
                 Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate or ToolCatalog.ArtifactsCreate);
                 var authorization = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
                 Assert.DoesNotContain("update_persona", authorization);
-                Assert.DoesNotContain("run_browser_command", authorization);
-                Assert.DoesNotContain("run_sandbox_command", authorization);
                 yield return new ModelToolCallEvent(new("tenant-background-finish", ToolCatalog.WorkComplete,
                     """{"outcome":"Response","summary":"Owned background result.","attentionRequired":false}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
@@ -95,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
             });
         }
     }
-    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null)
+    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null,bool reportReads=false)
     {
         await Login(owner,"owner@example.test","explicit-synthetic-test-password");
         var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();var api=$"/api/v2/tenants/{tenant}";
@@ -118,6 +116,7 @@ public sealed partial class TenantSessionAccessTests
         var instance=agent.GetProperty("instance").GetProperty("instanceId").GetGuid();var executor=agent.GetProperty("principalId").GetGuid();
         if(createAuthority){var access=factory.Services.GetRequiredService<TenantAccessService>();var role=await access.SaveRoleAsync(human,tenant,null,"Background executor",["sessions.create","agent-runs.create"],await Revision(owner,tenant));
         await access.AssignRoleAsync(human,tenant,executor,role.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant));}
+        if(reportReads) { var access=factory.Services.GetRequiredService<TenantAccessService>(); var readRole=await access.SaveRoleAsync(human,tenant,null,"Independent completion source reader",["sessions.read","agent-runs.read"],await Revision(owner,tenant)); await access.AssignRoleAsync(human,tenant,executor,readRole.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant)); }
         var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new{agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=1}))).GetProperty("sessionId").GetGuid();
         if(!submit)return(tenant,session,Guid.Empty);
         var result=await Json(await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new{messageId=Guid.NewGuid(),text="Start the exact owned background check",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1}));
@@ -151,7 +150,7 @@ public sealed partial class TenantSessionAccessTests
         try{
             var model=new TenantBackgroundModel();await using WebApplicationFactory<Program> factory=sqlite?new TenantBackgroundSqliteFactory(root,model):new TenantBackgroundMemoryFactory(root,model);
             using var owner=factory.CreateClient(new WebApplicationFactoryClientOptions{BaseAddress=new("https://localhost")});
-            var started=await StartTenantBackground(factory,owner);var(child,report)=await WaitTenantBackground(factory,started.Tenant,started.Session,started.Source,true);
+            var started=await StartTenantBackground(factory,owner,reportReads:true);var(child,report)=await WaitTenantBackground(factory,started.Tenant,started.Session,started.Source,true);
             Assert.Equal("Owned background result.",child.Result!.Text);Assert.Equal(started.Session,report!.SessionId);
             Assert.Equal(child.AgentRunId,report.Admission.ExecutionContext!.ParentRunId);Assert.Equal(child.Admission.ExecutionContext!.RootActivationId,report.Admission.ExecutionContext.RootActivationId);
             Assert.Null(child.Owner.ProfileIdOrNull);Assert.Null(report.Owner.ProfileIdOrNull);
@@ -192,7 +191,7 @@ public sealed partial class TenantSessionAccessTests
             var firstModel=new TenantBackgroundModel();
             await using(var first=new TenantBackgroundSqliteFactory(root,firstModel,holdCompletion:true))
             {
-                using var owner=first.CreateClient(new WebApplicationFactoryClientOptions{BaseAddress=new("https://localhost")});var started=await StartTenantBackground(first,owner);(tenant,session,source)=started;
+                using var owner=first.CreateClient(new WebApplicationFactoryClientOptions{BaseAddress=new("https://localhost")});var started=await StartTenantBackground(first,owner,reportReads:true);(tenant,session,source)=started;
                 var result=await WaitTenantBackground(first,tenant,session,source,false);childId=result.Child.AgentRunId;
                 Assert.Single(await first.Services.GetRequiredService<ITenantRuntimeStore>().ListTenantBackgroundCompletionsAsync(100));
                 Assert.DoesNotContain(firstModel.Requests,r=>TenantBackgroundModel.Origin(r)==ExecutionOrigin.CompletionReport);
@@ -214,7 +213,7 @@ public sealed partial class TenantSessionAccessTests
         var root=Path.Combine(Path.GetTempPath(),"tenant-background-wire-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         try{
             var model=new TenantBackgroundModel();await using WebApplicationFactory<Program> factory=sqlite?new NativeTenantSqliteFactory(root,model):new NativeTenantMemoryFactory(root,model);
-            factory.UseKestrel(0);using var ready=factory.CreateClient();var setup=await StartTenantBackground(factory,ready,submit:false);
+            factory.UseKestrel(0);using var ready=factory.CreateClient();var setup=await StartTenantBackground(factory,ready,submit:false,reportReads:true);
             var repo=new DirectoryInfo(AppContext.BaseDirectory);while(repo is not null&&!File.Exists(Path.Combine(repo.FullName,"AgentCore.sln")))repo=repo.Parent;Assert.NotNull(repo);
             var start=new ProcessStartInfo("node","tenant-background.mjs"){WorkingDirectory=Path.Combine(repo.FullName,"tests","realtime-js"),UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true};
             start.Environment["BASE_URL"]=ready.BaseAddress!.ToString().TrimEnd('/');start.Environment["TENANT_ID"]=setup.Tenant.ToString("D");start.Environment["SESSION_ID"]=setup.Session.ToString("D");

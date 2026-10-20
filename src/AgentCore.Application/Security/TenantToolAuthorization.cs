@@ -50,11 +50,17 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                     && run.Claim?.Generation == admission.AgentRunGeneration;
                 return new(true, background, reference, background ? "allowed" : "tenant_effect_unavailable");
             }
+            if (tool == ToolCatalog.ExecutionWait || TenantCompletionToolContract.IsTool(tool))
+            {
+                var allowedWait = TenantWaitRules.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
+                    && run.Claim?.Generation == admission.AgentRunGeneration;
+                return new(true, allowedWait, reference, allowedWait ? "allowed" : "wait_unavailable");
+            }
             if (!IamToolContracts.IsInspection(tool)
                 && (run.Admission.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
-                    || TenantFileExecutionContract.IsBackground(run) && !TenantFileExecutionContract.IsTool(tool) && tool != ToolCatalog.RequestAuthorization))
+                    || TenantTaskExecutionContract.IsBackground(run) && !TenantTaskExecutionContract.IsTool(tool) && !TenantTaskExecutionContract.IsNativeInspection(tool) && tool != ToolCatalog.RequestAuthorization))
                 return new(true, false, reference, "tenant_effect_unavailable");
-            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || tool == ToolCatalog.CredentialsList || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
+            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || TenantCredentialDiscoveryContract.IsTool(tool) || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -141,11 +147,11 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                 var current = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
                 return await artifactReads.InspectAsync(new(current.Owner, session, current.AgentRunId, generation), call.ArgumentsJson, remainingBytes, ct).ConfigureAwait(false);
             }
-            if (call.Name == ToolCatalog.CredentialsList)
+            if (TenantCredentialDiscoveryContract.IsTool(call.Name))
             {
                 if (credentialReads is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
                 var current = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
-                return await credentialReads.InspectAsync(new(current.Owner, session, current.AgentRunId, generation), call.ArgumentsJson, remainingBytes, ct).ConfigureAwait(false);
+                return await credentialReads.InspectAsync(new(current.Owner, session, current.AgentRunId, generation), call.ArgumentsJson, remainingBytes, ct, call.Name).ConfigureAwait(false);
             }
             if (TenantBrowserInspectionContract.IsInspection(call.Name))
             {
@@ -196,8 +202,9 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
-        if (TenantFileExecutionContract.IsBackground(run) && intent.WorkspaceRead is null && intent.AttachmentArguments is null && intent.ArtifactId is null
-            && intent.WorkspaceMutation is null && intent.ArtifactArguments is null)
+        if (TenantTaskExecutionContract.IsBackground(run) && intent.WorkspaceRead is null && intent.AttachmentArguments is null && intent.ArtifactId is null
+            && intent.WorkspaceMutation is null && intent.ArtifactArguments is null && intent.CompletionArguments is null
+            && intent.MetadataArguments is null && intent.AccountAction is null && intent.AccountRead is null && intent.Browser is null && intent.Sandbox is null && intent.SandboxRead is null && intent.SandboxControl is null)
         {
             await authorizer.RecordFailureAsync(boundary.Reference, "", "tenant_effect_unavailable", AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ApprovalPreparation, ct, session).ConfigureAwait(false);
             throw new AccessDeniedException("tenant_effect_unavailable");
@@ -208,6 +215,8 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
             return await approvals.PrepareWorkspaceReadAsync(boundary.Reference, new(call.Id, readWorkspace.Tool, readWorkspace.ArgumentsJson), run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.AttachmentArguments is { } attachment)
             return await approvals.PrepareAttachmentReadAsync(boundary.Reference, attachment, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+        if (intent.CompletionArguments is { } completion)
+            return await approvals.PrepareCompletionReadAsync(boundary.Reference, completion, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactId is { } artifactId)
             return await approvals.PrepareArtifactVerificationAsync(boundary.Reference, artifactId, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.ArtifactArguments is { } artifact)
@@ -216,6 +225,10 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                 : await approvals.PrepareArtifactAsync(boundary.Reference, artifact, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.BackgroundArguments is { } background)
             return await approvals.PrepareBackgroundStartAsync(boundary.Reference, background, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+        if (intent.AccountAction is { } accountAction)
+            return await approvals.PrepareAccountActionAsync(boundary.Reference, accountAction, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+        if (intent.AccountRead is { } accountRead)
+            return await approvals.PrepareAccountReadAsync(boundary.Reference, accountRead, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.MetadataArguments is { } metadata)
             return await approvals.PrepareCredentialReadAsync(boundary.Reference, metadata, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.Browser is { } browser)

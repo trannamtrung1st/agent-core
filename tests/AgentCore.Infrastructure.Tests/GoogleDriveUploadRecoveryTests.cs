@@ -116,7 +116,8 @@ public sealed partial class GoogleDriveTests
         };
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.UploadAsync("file-1", "report.bin", "root", "application/octet-stream", bytes, operation, cancellation.Token).AsTask());
         var saved = (await f.Operations.GetAsync(f.Owner, operation.OperationId, default))!;
-        provider = new(saved.CredentialId, 2, f.NewService(), f.Transport, f.Operations, f.Protector, TimeProvider.System);
+        var reopenedOAuth = f.NewService();
+        provider = new(saved.CredentialId, (ct, fresh) => reopenedOAuth.AccessTokenAsync(saved.CredentialId, 2, ct, fresh), ct => reopenedOAuth.RejectAuthorizationAsync(saved.CredentialId, 2, ct), f.Transport, f.Operations, f.Protector, TimeProvider.System);
         await provider.UploadAsync("file-1", "report.bin", "root", "application/octet-stream", bytes, saved, default);
         Assert.Equal(1, starts); Assert.Equal(1, probes); Assert.Equal(bytes.Length, accepted);
     }

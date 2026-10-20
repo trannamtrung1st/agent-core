@@ -27,7 +27,7 @@ public static class TenantSandboxRuntimeRules
         SandboxProfile source, SandboxMountAuthority? mounted)
     {
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
-        if (agent.Instance.DefinitionId != run.DefinitionId || !RolePermissions.AllowsTool(current, ToolCatalog.SandboxExec)
+        if (!TenantTaskExecutionContract.Allows(run, current) || agent.Instance.DefinitionId != run.DefinitionId || !RolePermissions.AllowsTool(current, ToolCatalog.SandboxExec)
             || current.SandboxPolicy?.AllowedProfileIds.Contains(admitted.Id, StringComparer.Ordinal) != true)
             throw new AccessDeniedException("sandbox_policy_changed");
         var setup = SandboxSetupResolver.Resolve(source, agent.Instance.SettingsOverrides, agent.Instance.Revision);

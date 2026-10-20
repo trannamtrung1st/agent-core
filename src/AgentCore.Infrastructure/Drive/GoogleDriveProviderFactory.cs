@@ -9,5 +9,5 @@ public sealed class GoogleDriveProviderFactory(GoogleDriveOptions options, Googl
     public bool Configured => oauth.IsConfigured;
     public bool Synthetic => synthetic;
     public IGoogleDriveProvider Create(Guid credential, long revision) => !Enabled ? throw new AgentCoreException("drive_host_disabled", "Google Drive is disabled on this host.", 403)
-        : synthetic ? new SyntheticGoogleDriveProvider(credential, syntheticFiles, ids) : new GoogleDriveProvider(credential, revision, oauth, clients, operations, protector, time);
+        : synthetic ? new SyntheticGoogleDriveProvider(credential, syntheticFiles, ids) : new GoogleDriveProvider(credential, (ct, fresh) => oauth.AccessTokenAsync(credential, revision, ct, fresh), ct => oauth.RejectAuthorizationAsync(credential, revision, ct), clients, operations, protector, time);
 }

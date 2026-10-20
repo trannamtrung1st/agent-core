@@ -70,25 +70,24 @@ public enum OccurrenceRoutingDisposition
 public readonly record struct TriggerOwner
 {
     [System.Text.Json.Serialization.JsonConstructor]
-    public TriggerOwner(Guid agentInstanceId, Guid profileId)
+    public TriggerOwner(Guid agentInstanceId, Guid? profileIdOrNull, Guid? tenantId = null, Guid? executorPrincipalId = null)
     {
-        if (agentInstanceId == Guid.Empty)
-        {
-            throw new ArgumentException("Trigger owner requires an Agent Instance.", nameof(agentInstanceId));
-        }
-
-        if (profileId == Guid.Empty)
-        {
-            throw new ArgumentException("Trigger owner requires a trusted profile.", nameof(profileId));
-        }
-
-        AgentInstanceId = agentInstanceId;
-        ProfileId = profileId;
+        if (agentInstanceId == Guid.Empty || (tenantId is null
+            ? profileIdOrNull is null || profileIdOrNull == Guid.Empty || executorPrincipalId is not null
+            : tenantId == Guid.Empty || executorPrincipalId is null || executorPrincipalId == Guid.Empty || profileIdOrNull is not null))
+            throw new ArgumentException("Trigger ownership requires either a trusted legacy profile or concrete tenant executor identity.");
+        AgentInstanceId = agentInstanceId; ProfileIdOrNull = profileIdOrNull; TenantId = tenantId; ExecutorPrincipalId = executorPrincipalId;
     }
-
     public Guid AgentInstanceId { get; }
-
-    public Guid ProfileId { get; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Guid ProfileId => ProfileIdOrNull ?? throw new InvalidOperationException("Tenant automation has no global profile.");
+    [System.Text.Json.Serialization.JsonPropertyName("profileId")]
+    public Guid? ProfileIdOrNull { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? TenantId { get; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? ExecutorPrincipalId { get; }
+    public static TriggerOwner ForTenant(Guid tenant, Guid instance, Guid executor) => new(instance, null, tenant, executor);
 }
 
 public static class TriggerTimeZone
@@ -602,7 +601,7 @@ public sealed class Automation
         RequireUtc(nextOccurrenceAtUtc, "Next occurrence");
         RequireUtc(expiresAtUtc, "Expiry");
         AutomationId = automationId;
-        Owner = new TriggerOwner(owner.AgentInstanceId, owner.ProfileId);
+        Owner = new TriggerOwner(owner.AgentInstanceId, owner.ProfileIdOrNull, owner.TenantId, owner.ExecutorPrincipalId);
         Status = status;
         Instructions = AutomationText.RequireInstructions(instructions);
         Name = AutomationText.RequireName(name ?? Instructions[..Math.Min(Instructions.Length, 80)]);
@@ -892,7 +891,7 @@ public sealed class TriggerOccurrence
         OccurrenceId = occurrenceId;
         DedupeKey = TriggerText.RequireDedupeKey(dedupeKey);
         AutomationId = automationId;
-        Owner = new TriggerOwner(owner.AgentInstanceId, owner.ProfileId);
+        Owner = new TriggerOwner(owner.AgentInstanceId, owner.ProfileIdOrNull, owner.TenantId, owner.ExecutorPrincipalId);
         SourceKind = sourceKind;
         ScheduledAtUtc = scheduledAtUtc;
         ObservedAtUtc = observedAtUtc;

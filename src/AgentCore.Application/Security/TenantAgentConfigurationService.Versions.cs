@@ -82,7 +82,7 @@ public sealed partial class TenantAgentConfigurationService
             .Select(s => new AgentDefinitionSkillState(current.InstanceId, s.Id, null, 1, time.GetUtcNow()))).ToArray(), snapshot.Skills.InstanceSkills);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, skills);
         _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, target, ct).ConfigureAwait(false), snapshot.Resources, skills);
-        var policy = await automationPolicy.PlanAsync(current, effective, time.GetUtcNow(), ct).ConfigureAwait(false);
+        var policy = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), current, effective, time.GetUtcNow(), ct).ConfigureAwait(false);
         return new(target, metadataRevision, policy);
     }
 }

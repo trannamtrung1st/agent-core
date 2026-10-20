@@ -10,7 +10,7 @@ namespace AgentCore.Domain.Security;
 public enum TenantApprovalStatus { Pending, Approved, Rejected, Expired, Cancelled }
 public enum OperationGrantStatus { Available, Claimed, Consumed, Revoked, Indeterminate }
 
-public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification, WorkspaceRead, WorkspaceMutation, AttachmentRead, BackgroundStart, BackgroundReport }
+public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification, WorkspaceRead, WorkspaceMutation, AttachmentRead, BackgroundStart, BackgroundReport, CompletionRead, ReportSourceRead, AccountRead, AccountAction }
 public sealed record PreparedConversationPreferences(string? ResponseLength, string? Language, bool? AskOneQuestionAtATime,
     bool ClearResponseLength = false, bool ClearLanguage = false, bool ClearAskOneQuestionAtATime = false);
 public sealed record PreparedCredentialConnectionCheck(Guid CredentialId, Guid BindingId, string Reference,
@@ -36,6 +36,21 @@ public sealed record PreparedBrowserCommand(Guid SessionId, string ToolName, str
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ArtifactSourcesJson = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FileInputOrigin = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBrowserArtifacts? Artifacts = null);
+
+public sealed record PreparedAccountDraft(string DraftId, string RecipientsJson, string Subject, string Body, string Sender, long Revision);
+public sealed record PreparedAccountRemoteFile(string Id, string Name, string MimeType, long ByteSize, string Version, string? Md5Checksum,
+    IReadOnlyList<string> Parents, bool Trashed);
+public sealed record PreparedAccountAction(Guid SessionId, string ToolName, string ArgumentsJson, PreparedCredentialConnectionCheck Credential,
+    AgentCore.Domain.Credentials.CredentialPurpose Purpose, string Permission, string RemoteSourcesJson,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedAccountDraft? Draft = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactSource? UploadSource = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DestinationObservationHash = null);
+
+public sealed record PreparedAccountOperationRead(Guid OperationId, Guid RequestId, Guid RunId, Guid SessionId, string ActionHash,
+    string ToolName, string RecordedOutcome, string NativeReferencesJson);
+public sealed record PreparedAccountRead(Guid SessionId, string ToolName, string ArgumentsJson, PreparedCredentialConnectionCheck Credential,
+    AgentCore.Domain.Credentials.CredentialPurpose Purpose,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedAccountOperationRead? Source = null);
 
 public sealed record PreparedCredentialRead(Guid SessionId, Guid? CredentialId, string ArgumentsJson, string ReferencesJson);
 
@@ -71,43 +86,67 @@ public sealed record PreparedBackgroundModel(string CatalogKey, string ProviderA
 public sealed record PreparedBackgroundStart(Guid TenantId, Guid SessionId, Guid ChildSessionId, Guid EntryId, Guid ActivationId,
     Guid RunId, Guid ResponseId, string Objective, string Title, bool ReportCompletion, string Permission, string ConfigurationHash, PreparedBackgroundModel Model);
 
+public sealed record PreparedReportSourceRead(Guid ParentSessionId, Guid ChildSessionId, Guid InitialRunId,
+    Guid SourceRunId, long SourceRevision, string Objective, string ObservationJson, string ObservationHash);
+
 // Exactly one typed payload is allowed. No secret or bearer authority is part of this shape.
 public sealed record PreparedBackgroundReport(Guid TenantId, Guid SessionId, Guid ChildRunId, long SourceRevision,
     Guid ParentSessionId, long ParentRevision, long InputBoundarySequence, Guid ActivationId, Guid RunId, Guid ResponseId,
     string EvidenceJson, string ConfigurationHash, PreparedBackgroundModel Model);
 
+// Exact terminal child observation. Accounting and claim tokens remain outside read consent.
+public sealed record PreparedCompletionRead(Guid ParentSessionId, Guid ChildSessionId, Guid InitialRunId,
+    Guid SourceRunId, long SourceRevision, string Objective, string ObservationJson, string ObservationHash,
+    string ArtifactsJson);
+
 public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, AgentIdentity? Persona,
     long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
-    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null, PreparedSandboxControl? SandboxControl = null, PreparedSandboxRead? SandboxRead = null, PreparedBrowserCommand? BrowserCommand = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedCredentialRead? CredentialRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactPublication? ArtifactPublication = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactVerification? ArtifactVerification = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedWorkspaceRead? WorkspaceRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedWorkspaceMutation? WorkspaceMutation = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedAttachmentRead? AttachmentRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBackgroundStart? BackgroundStart = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBackgroundReport? BackgroundReport = null)
+    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null, PreparedSandboxControl? SandboxControl = null, PreparedSandboxRead? SandboxRead = null, PreparedBrowserCommand? BrowserCommand = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedCredentialRead? CredentialRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactPublication? ArtifactPublication = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedArtifactVerification? ArtifactVerification = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedWorkspaceRead? WorkspaceRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedWorkspaceMutation? WorkspaceMutation = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedAttachmentRead? AttachmentRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBackgroundStart? BackgroundStart = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedBackgroundReport? BackgroundReport = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedCompletionRead? CompletionRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedReportSourceRead? ReportSourceRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedAccountRead? AccountRead = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedAccountAction? AccountAction = null)
 {
     [JsonIgnore]
-    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification, WorkspaceRead, WorkspaceMutation, AttachmentRead, BackgroundStart, BackgroundReport) switch {
-        (not null, null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.Persona,
-        (null, not null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.ConversationPreferences,
-        (null, null, not null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.CredentialConnectionCheck,
-        (null, null, null, not null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.SandboxCommand,
-        (null, null, null, null, not null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.SandboxControl,
-        (null, null, null, null, null, not null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.SandboxRead,
-        (null, null, null, null, null, null, not null, null, null, null, null, null, null, null, null) => TenantOperationKind.BrowserCommand,
-        (null, null, null, null, null, null, null, not null, null, null, null, null, null, null, null) => TenantOperationKind.CredentialRead,
-        (null, null, null, null, null, null, null, null, not null, null, null, null, null, null, null) => TenantOperationKind.ArtifactPublication,
-        (null, null, null, null, null, null, null, null, null, not null, null, null, null, null, null) => TenantOperationKind.ArtifactVerification,
-        (null, null, null, null, null, null, null, null, null, null, not null, null, null, null, null) => TenantOperationKind.WorkspaceRead,
-        (null, null, null, null, null, null, null, null, null, null, null, not null, null, null, null) => TenantOperationKind.WorkspaceMutation,
-        (null, null, null, null, null, null, null, null, null, null, null, null, not null, null, null) => TenantOperationKind.AttachmentRead,
-        (null, null, null, null, null, null, null, null, null, null, null, null, null, not null, null) => TenantOperationKind.BackgroundStart,
-        (null, null, null, null, null, null, null, null, null, null, null, null, null, null, not null) => TenantOperationKind.BackgroundReport,
+    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck, SandboxCommand, SandboxControl, SandboxRead, BrowserCommand, CredentialRead, ArtifactPublication, ArtifactVerification, WorkspaceRead, WorkspaceMutation, AttachmentRead, BackgroundStart, BackgroundReport, CompletionRead, ReportSourceRead, AccountRead, AccountAction) switch {
+        (not null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.Persona,
+        (null, not null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.ConversationPreferences,
+        (null, null, not null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.CredentialConnectionCheck,
+        (null, null, null, not null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.SandboxCommand,
+        (null, null, null, null, not null, null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.SandboxControl,
+        (null, null, null, null, null, not null, null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.SandboxRead,
+        (null, null, null, null, null, null, not null, null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.BrowserCommand,
+        (null, null, null, null, null, null, null, not null, null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.CredentialRead,
+        (null, null, null, null, null, null, null, null, not null, null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.ArtifactPublication,
+        (null, null, null, null, null, null, null, null, null, not null, null, null, null, null, null, null, null, null, null) => TenantOperationKind.ArtifactVerification,
+        (null, null, null, null, null, null, null, null, null, null, not null, null, null, null, null, null, null, null, null) => TenantOperationKind.WorkspaceRead,
+        (null, null, null, null, null, null, null, null, null, null, null, not null, null, null, null, null, null, null, null) => TenantOperationKind.WorkspaceMutation,
+        (null, null, null, null, null, null, null, null, null, null, null, null, not null, null, null, null, null, null, null) => TenantOperationKind.AttachmentRead,
+        (null, null, null, null, null, null, null, null, null, null, null, null, null, not null, null, null, null, null, null) => TenantOperationKind.BackgroundStart,
+        (null, null, null, null, null, null, null, null, null, null, null, null, null, null, not null, null, null, null, null) => TenantOperationKind.BackgroundReport,
+        (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, not null, null, null, null) => TenantOperationKind.CompletionRead,
+        (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, not null, null, null) => TenantOperationKind.ReportSourceRead,
+        (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, not null, null) => TenantOperationKind.AccountRead,
+        (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, not null) => TenantOperationKind.AccountAction,
         _ => throw new ArgumentException("Exactly one supported operation payload is required.") };
     [JsonIgnore] public bool IsLocalConfiguration => Kind is TenantOperationKind.Persona or TenantOperationKind.ConversationPreferences;
-    [JsonIgnore] public string Permission => BackgroundReport is not null ? "agent-runs.create" : BackgroundStart is { } background ? background.Permission : Kind == TenantOperationKind.AttachmentRead ? "attachments.read" : Kind == TenantOperationKind.WorkspaceMutation ? WorkspaceMutation!.Permission : Kind == TenantOperationKind.WorkspaceRead ? (WorkspaceRead!.ResourceMembersJson is not null || WorkspaceRead.AttachmentMembersJson is not null) ? "sessions.read" : WorkspaceRead.ResourceKey is null ? "workspaces.read" : "resources.read" : Kind == TenantOperationKind.ArtifactVerification ? "artifacts.read" : Kind == TenantOperationKind.ArtifactPublication ? "artifacts.create" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "sessions.read" : "credentials.read" : Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.Credential is not null ? "credentials.use" : BrowserCommand.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
-    [JsonIgnore] public string ResourceType => BackgroundReport is not null || BackgroundStart is not null ? "tenant" : Kind == TenantOperationKind.AttachmentRead ? "attachment" : Kind == TenantOperationKind.WorkspaceMutation ? "workspace" : Kind == TenantOperationKind.WorkspaceRead ? (WorkspaceRead!.ResourceMembersJson is not null || WorkspaceRead.AttachmentMembersJson is not null) ? "session" : WorkspaceRead.ResourceKey is null ? "workspace" : "resource" : Kind == TenantOperationKind.ArtifactVerification ? "artifact" : Kind == TenantOperationKind.ArtifactPublication ? "session" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "session" : "credential" : Kind == TenantOperationKind.CredentialConnectionCheck || BrowserCommand?.Credential is not null ? "credential" : "agent";
-    [JsonIgnore] public string ResourceId => BackgroundReport is { } report ? report.TenantId.ToString("D") : BackgroundStart is { } background ? background.TenantId.ToString("D") : Kind == TenantOperationKind.AttachmentRead ? AttachmentRead!.AttachmentId.ToString("D") : Kind == TenantOperationKind.WorkspaceMutation ? (WorkspaceMutation!.Working ? "working:" + WorkspaceMutation.SessionId.ToString("D") : "home:" + InstanceId.ToString("D")) : Kind == TenantOperationKind.WorkspaceRead ? (WorkspaceRead!.ResourceMembersJson is not null || WorkspaceRead.AttachmentMembersJson is not null) ? WorkspaceRead.SessionId.ToString("D") : WorkspaceRead.ResourceKey is { } resourceKey ? InstanceId.ToString("D") + ":" + resourceKey : (WorkspaceRead!.Working ? "working:" + WorkspaceRead.SessionId.ToString("D") : "home:" + InstanceId.ToString("D")) : (Kind == TenantOperationKind.ArtifactVerification ? ArtifactVerification!.ArtifactId : Kind == TenantOperationKind.ArtifactPublication ? ArtifactPublication!.SessionId : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId ?? CredentialRead.SessionId : Kind == TenantOperationKind.CredentialConnectionCheck ? CredentialCheck!.CredentialId
+    [JsonIgnore] public string Permission => AccountAction is { } accountAction ? accountAction.Permission : AccountRead is not null ? "credentials.use" : ReportSourceRead is not null || CompletionRead is not null ? "agent-runs.read" : BackgroundReport is not null ? "agent-runs.create" : BackgroundStart is { } background ? background.Permission : Kind == TenantOperationKind.AttachmentRead ? "attachments.read" : Kind == TenantOperationKind.WorkspaceMutation ? WorkspaceMutation!.Permission : Kind == TenantOperationKind.WorkspaceRead ? (WorkspaceRead!.ResourceMembersJson is not null || WorkspaceRead.AttachmentMembersJson is not null) ? "sessions.read" : WorkspaceRead.ResourceKey is null ? "workspaces.read" : "resources.read" : Kind == TenantOperationKind.ArtifactVerification ? "artifacts.read" : Kind == TenantOperationKind.ArtifactPublication ? "artifacts.create" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "sessions.read" : "credentials.read" : Kind == TenantOperationKind.BrowserCommand ? BrowserCommand!.Credential is not null ? "credentials.use" : BrowserCommand.ReadOnly ? "browser.read" : "browser.use" : Kind == TenantOperationKind.SandboxRead ? "sandbox.read" : Kind == TenantOperationKind.SandboxControl ? "sandbox.manage" : Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
+    [JsonIgnore] public string ResourceType => AccountAction is { } action ? action.Permission == "workspaces.write" ? "workspace" : "credential" : AccountRead is not null ? "credential" : ReportSourceRead is not null || CompletionRead is not null ? "agent-run" : BackgroundReport is not null || BackgroundStart is not null ? "tenant" : Kind == TenantOperationKind.AttachmentRead ? "attachment" : Kind == TenantOperationKind.WorkspaceMutation ? "workspace" : Kind == TenantOperationKind.WorkspaceRead ? (WorkspaceRead!.ResourceMembersJson is not null || WorkspaceRead.AttachmentMembersJson is not null) ? "session" : WorkspaceRead.ResourceKey is null ? "workspace" : "resource" : Kind == TenantOperationKind.ArtifactVerification ? "artifact" : Kind == TenantOperationKind.ArtifactPublication ? "session" : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId is null ? "session" : "credential" : Kind == TenantOperationKind.CredentialConnectionCheck || BrowserCommand?.Credential is not null ? "credential" : "agent";
+    [JsonIgnore] public string ResourceId => AccountAction is { } action ? action.Permission == "workspaces.write"
+        ? (AccountActionWorking(action) ? "working:" + action.SessionId.ToString("D") : "home:" + InstanceId.ToString("D"))
+        : action.Credential.CredentialId.ToString("D") : AccountRead is { } accountRead ? accountRead.Credential.CredentialId.ToString("D") : ReportSourceRead is { } sourceRead ? sourceRead.SourceRunId.ToString("D") : CompletionRead is { } completion ? completion.SourceRunId.ToString("D") : BackgroundReport is { } report ? report.TenantId.ToString("D") : BackgroundStart is { } background ? background.TenantId.ToString("D") : Kind == TenantOperationKind.AttachmentRead ? AttachmentRead!.AttachmentId.ToString("D") : Kind == TenantOperationKind.WorkspaceMutation ? (WorkspaceMutation!.Working ? "working:" + WorkspaceMutation.SessionId.ToString("D") : "home:" + InstanceId.ToString("D")) : Kind == TenantOperationKind.WorkspaceRead ? (WorkspaceRead!.ResourceMembersJson is not null || WorkspaceRead.AttachmentMembersJson is not null) ? WorkspaceRead.SessionId.ToString("D") : WorkspaceRead.ResourceKey is { } resourceKey ? InstanceId.ToString("D") + ":" + resourceKey : (WorkspaceRead!.Working ? "working:" + WorkspaceRead.SessionId.ToString("D") : "home:" + InstanceId.ToString("D")) : (Kind == TenantOperationKind.ArtifactVerification ? ArtifactVerification!.ArtifactId : Kind == TenantOperationKind.ArtifactPublication ? ArtifactPublication!.SessionId : Kind == TenantOperationKind.CredentialRead ? CredentialRead!.CredentialId ?? CredentialRead.SessionId : Kind == TenantOperationKind.CredentialConnectionCheck ? CredentialCheck!.CredentialId
         : Kind == TenantOperationKind.BrowserCommand && BrowserCommand!.Credential is { } c ? c.CredentialId : InstanceId).ToString("D");
+
+    private static bool AccountActionWorking(PreparedAccountAction action)
+    {
+        using var json = JsonDocument.Parse(action.ArgumentsJson);
+        return json.RootElement.GetProperty("path").GetString()!.StartsWith("/working/", StringComparison.Ordinal);
+    }
 
     // Root correlation excludes mutable witnesses; grants still bind ActionHash exactly.
     [JsonIgnore]
     public string SemanticActionJson => Kind switch
     {
+        TenantOperationKind.AccountAction => JsonSerializer.Serialize(new { operation = "accounts.action", AccountAction!.SessionId, AccountAction.ToolName, AccountAction.ArgumentsJson, AccountAction.Credential.CredentialId }),
+        TenantOperationKind.AccountRead => JsonSerializer.Serialize(new { operation = "accounts.read", AccountRead!.SessionId, AccountRead.ToolName, AccountRead.ArgumentsJson, AccountRead.Credential.CredentialId }),
+        TenantOperationKind.ReportSourceRead => JsonSerializer.Serialize(new { operation = "background.report.source.read", ReportSourceRead!.ParentSessionId, ReportSourceRead.ChildSessionId, ReportSourceRead.InitialRunId }),
+        TenantOperationKind.CompletionRead => JsonSerializer.Serialize(new { operation = "background.inspect", CompletionRead!.ParentSessionId, CompletionRead.ChildSessionId, CompletionRead.InitialRunId }),
         TenantOperationKind.BackgroundReport => JsonSerializer.Serialize(new { operation = "background.report", BackgroundReport!.ChildRunId, BackgroundReport.ParentSessionId }),
         TenantOperationKind.BackgroundStart => JsonSerializer.Serialize(new { operation = "background.start", BackgroundStart!.SessionId, BackgroundStart.Objective, BackgroundStart.Title, BackgroundStart.ReportCompletion }),
         TenantOperationKind.AttachmentRead => JsonSerializer.Serialize(new { operation = "attachments.read", sessionId = AttachmentRead!.SessionId, arguments = AttachmentRead.ArgumentsJson }),

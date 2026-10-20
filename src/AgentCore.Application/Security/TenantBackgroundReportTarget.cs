@@ -7,7 +7,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, ITenantRunStore runs, IIamStore security,
-    TenantRunConfigurationResolver configurations, IamAuthorizer iam, IModelCatalog models)
+    TenantRunConfigurationResolver configurations, IamAuthorizer iam, IModelCatalog models, TenantReportSourceReadService? sourceReads = null)
 {
     public async ValueTask<(TenantBackgroundCompletion Source, TenantSecurityState State, TenantAgent Agent, ResolvedAgentRunConfiguration Configuration, SessionModelSelection Model)> ResolveAsync(AgentRunOwner owner, Guid child, CancellationToken ct)
     {
@@ -16,6 +16,8 @@ public sealed class TenantBackgroundReportTarget(ITenantRuntimeStore runtime, IT
         var current = await configurations.ResolveAsync(owner.TenantId!.Value, owner.AgentInstanceId, ct).ConfigureAwait(false);
         var state = await security.ReadTenantAsync(owner.TenantId.Value, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         TenantSessionRules.RequireExecutor(state, current.Agent);
+        if (sourceReads is not null) await sourceReads.RequireAuthorizedAsync(source, state, ct).ConfigureAwait(false);
+        else await TenantReportReadRules.RequireAsync(state, source, iam, ct).ConfigureAwait(false);
         await TenantExecutionLineage.RequireRequesterAsync(source.Child, state, iam, runs, ct).ConfigureAwait(false);
         var model = SessionModelBinder.RefreshDefault(models, current.Configuration.Configuration.Definition, source.Parent!.Snapshot.ModelSelection)
             ?? throw new AccessDeniedException("target_model_unavailable");

@@ -16,13 +16,13 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantRunAdmissionTests
 {
-    private static TenantBackgroundReportTarget ReportTarget(Fixture f) => new((ITenantRuntimeStore)f.Iam, (ITenantRunStore)f.Iam, f.Iam, f.RunConfiguration(), f.Authorizer, ModelCatalogFactory.Synthetic());
+    private static TenantBackgroundReportTarget ReportTarget(Fixture f) => new((ITenantRuntimeStore)f.Iam, (ITenantRunStore)f.Iam, f.Iam, f.RunConfiguration(), f.Authorizer, ModelCatalogFactory.Synthetic(), ReportSourceReads(f));
     private static TenantApprovalService ReportApprovals(Fixture f) => new(f.Iam, (ITenantApprovalStore)f.Iam, (ITenantAgentStore)f.Iam, AttachmentOperations(f), f.Authorizer,
         f.Identity, f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)f.Iam,
-        backgroundReports: ReportTarget(f), reportRuntime: (ITenantRuntimeStore)f.Iam);
+        backgroundReports: ReportTarget(f), reportRuntime: (ITenantRuntimeStore)f.Iam, reportSourceReads: ReportSourceReads(f));
     private static async Task<(BackgroundSetup Parent, TenantBackgroundCompletion Source, TenantApprovalRequest Request)> CompletedReportCase(Fixture f)
     {
-        var parent = await BackgroundParent(f); var child = await BackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
+        var parent = await BackgroundParent(f); await WaitReadAuthority(f, parent); var child = await BackgroundChild(f, parent); var runtime = (ITenantRuntimeStore)f.Iam;
         await runtime.AdmitTenantImmediateAsync(parent.Frame, child.Session, child.Run, f.Ids.NewId());
         var claimed = await ClaimBackground(f, child.Run); var outcome = BackgroundOutcome(f, claimed.Run, claimed.Snapshot);
         await runtime.CommitTenantOutcomeAsync(claimed.Frame, outcome.Snapshot, claimed.Snapshot.Revision, outcome.Complete, null, f.Ids.NewId());

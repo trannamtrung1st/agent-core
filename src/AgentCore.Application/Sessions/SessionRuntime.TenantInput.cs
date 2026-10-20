@@ -24,7 +24,7 @@ public sealed partial class SessionRuntime
             if (_runtimeOwner is not { } runtime || runtime.TenantId != owner.TenantId || runtime.AgentInstanceId != owner.AgentInstanceId
                 || runtime.ExecutorPrincipalId != owner.ExecutorPrincipalId || SessionId != owner.SessionId || _store is not ITenantRuntimeInputWriter)
                 throw new AccessDeniedException("tenant_context_mismatch");
-            if (_tenantCancellationCommitted || _tenantApprovalPending || _tenantApprovalSuspended || _responseTerminal)
+            if (_tenantTerminalCommitted || _tenantApprovalPending || _tenantApprovalSuspended || _tenantWaitSuspended || _responseTerminal)
             { message.Completed.TrySetResult(null); return; }
             TenantHumanInputRules.Eligible(_snapshot);
             if (_activeEntryId is not null) UpdateStreamingAssistant();

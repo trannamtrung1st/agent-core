@@ -188,7 +188,7 @@ public sealed class AgentRunProgress
 
 public sealed class AgentRunCheckpoint
 {
-    public AgentRunCheckpoint(string payloadJson, int stepCount, long outputBytes, int remainingOverallBudgetMs, int? activeExecutionMs = null, DateTimeOffset? budgetRecordedAtUtc = null, bool awaitingRuntimeAdmission = false)
+    public AgentRunCheckpoint(string payloadJson, int stepCount, long outputBytes, int remainingOverallBudgetMs, int? activeExecutionMs = null, DateTimeOffset? budgetRecordedAtUtc = null, bool awaitingRuntimeAdmission = false, bool awaitingSignalAdmission = false)
     {
         if (stepCount < 0 || outputBytes < 0 || remainingOverallBudgetMs < 0 || activeExecutionMs < 0)
         {
@@ -203,6 +203,8 @@ public sealed class AgentRunCheckpoint
         ActiveExecutionMs = activeExecutionMs;
         BudgetRecordedAtUtc = budgetRecordedAtUtc;
         AwaitingRuntimeAdmission = awaitingRuntimeAdmission;
+        if (awaitingSignalAdmission && !awaitingRuntimeAdmission) throw new ArgumentException("Signal admission requires the pending Runtime boundary.");
+        AwaitingSignalAdmission = awaitingSignalAdmission;
     }
 
     public string PayloadJson { get; }
@@ -215,13 +217,16 @@ public sealed class AgentRunCheckpoint
     public int? ActiveExecutionMs { get; }
     public DateTimeOffset? BudgetRecordedAtUtc { get; }
     public bool AwaitingRuntimeAdmission { get; }
-    public AgentRunCheckpoint WithRuntimeAdmissionPending(bool pending) => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, BudgetRecordedAtUtc, pending);
-    public AgentRunCheckpoint StampBudgetClock(DateTimeOffset? atUtc) => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, atUtc);
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AwaitingSignalAdmission { get; }
+    public AgentRunCheckpoint WithRuntimeAdmissionPending(bool pending) => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, BudgetRecordedAtUtc, pending, pending && AwaitingSignalAdmission);
+    public AgentRunCheckpoint WithSignalAdmissionPending() => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, BudgetRecordedAtUtc, true, true);
+    public AgentRunCheckpoint StampBudgetClock(DateTimeOffset? atUtc) => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, atUtc, AwaitingRuntimeAdmission, AwaitingSignalAdmission);
     public AgentRunCheckpoint PauseBudgetClock(DateTimeOffset atUtc)
     {
         if (BudgetRecordedAtUtc is not { } recorded || ActiveExecutionMs is not { } active) return this;
         var elapsed = (int)Math.Clamp((atUtc - recorded).TotalMilliseconds, 0, RemainingOverallBudgetMs);
-        return new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs - elapsed, checked(active + elapsed), awaitingRuntimeAdmission: AwaitingRuntimeAdmission);
+        return new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs - elapsed, checked(active + elapsed), awaitingRuntimeAdmission: AwaitingRuntimeAdmission, awaitingSignalAdmission: AwaitingSignalAdmission);
     }
 }
 

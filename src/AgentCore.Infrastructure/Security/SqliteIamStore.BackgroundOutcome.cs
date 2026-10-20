@@ -16,11 +16,11 @@ public sealed partial class SqliteIamStore
         if (next.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome && next.IsTerminal && next.Result?.OutcomeKind != AgentRunOutcomeKind.Continued && !await db.BackgroundCompletionReceipts.AnyAsync(r => r.ChildAgentRunId == runId, ct).ConfigureAwait(false))
         {
             var row = await db.Sessions.AsNoTracking().Include(s => s.Snapshot).SingleOrDefaultAsync(s => s.SessionId == next.SessionId.ToString("D") && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false);
-            var initial = await TenantBackgroundLineage.InitialAsync(next, async (id, token) => {
+            var initial = row is not null && SqliteMemoryStore.ToSnapshot(row, []).Origin.ReportCompletionToOrigin ? await TenantBackgroundLineage.InitialAsync(next, async (id, token) => {
                 var previous = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == next.Owner.TenantId && r.AgentRunId == id.ToString("D"), token).ConfigureAwait(false);
                 return previous is null ? null : AgentRunStoreMapping.ToDomain(previous);
-            }, ct).ConfigureAwait(false);
-            if (row is not null && SqliteMemoryStore.ToSnapshot(row, []).Origin.MayReportCompletion(initial.AgentRunId))
+            }, ct).ConfigureAwait(false) : null;
+            if (row is not null && initial is not null && SqliteMemoryStore.ToSnapshot(row, []).Origin.MayReportCompletion(initial.AgentRunId))
                 db.BackgroundCompletionReceipts.Add(CompletionInboxMapping.Create(next, SqliteMemoryStore.ToSnapshot(row, [])));
         }
         var rows = await db.BackgroundCompletionReceipts.Where(r => r.AgentInstanceId == next.AgentInstanceId.ToString("D") && r.ProfileId == null
@@ -40,6 +40,7 @@ public sealed partial class SqliteIamStore
         var row = await OwnedRuns(db, frame.Owner.TenantId!.Value).SingleAsync(r => r.AgentRunId == frame.RunId.ToString("D"), ct).ConfigureAwait(false);
         var draft = draftEntryId is { } id ? await db.Entries.SingleOrDefaultAsync(e => e.SessionId == frame.SessionId.ToString("D") && e.EntryId == id.ToString("D"), ct).ConfigureAwait(false) : null;
         if (draftEntryId is not null && draft is null) throw AgentCoreErrors.Conflict("Response draft was not found.");
+        await RequireTenantOutputSources(db, run, ct).ConfigureAwait(false);
         AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft is null ? null : SqliteMemoryStore.ToEntry(draft));
         AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }

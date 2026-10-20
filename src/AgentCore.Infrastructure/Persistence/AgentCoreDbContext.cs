@@ -521,12 +521,19 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
                 table.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
                 table.HasCheckConstraint("CK_Automations_Preset", "(PresetId IS NULL AND PresetVersion IS NULL) OR (PresetId IS NOT NULL AND PresetVersion >= 1)");
             });
+            entity.ToTable("Automations", table => table.HasCheckConstraint("CK_Automations_TenantOwner",
+                "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)"));
+            entity.HasQueryFilter(row => row.TenantId == null);
+            entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()
+                .HasForeignKey(row => new { row.TenantId, row.AgentInstanceId, row.ExecutorPrincipalId })
+                .HasPrincipalKey(owner => new { owner.TenantId, owner.AgentInstanceId, owner.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.TenantId, row.AgentInstanceId, row.Status });
             entity.HasKey(row => row.AutomationId);
             entity.HasMany(row => row.Triggers).WithOne().HasForeignKey(t => t.AutomationId).OnDelete(DeleteBehavior.Cascade);
             entity.Navigation(row => row.Triggers).AutoInclude();
             entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ProfileId).HasMaxLength(36);
             entity.Property(row => row.Name).HasMaxLength(120).IsRequired();
             entity.Property(row => row.Instructions).HasMaxLength(2000).IsRequired();
             entity.Property(row => row.Revision).IsConcurrencyToken();
@@ -587,12 +594,20 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         {
             entity.ToTable("TriggerOccurrences", table => { table.HasCheckConstraint("CK_TriggerOccurrences_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)"); table.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink",
                 "(ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)"); });
+            entity.ToTable("TriggerOccurrences", table => table.HasCheckConstraint("CK_TriggerOccurrences_TenantOwner",
+                "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)"));
+            entity.HasQueryFilter(row => row.TenantId == null);
+            entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()
+                .HasForeignKey(row => new { row.TenantId, row.AgentInstanceId, row.ExecutorPrincipalId })
+                .HasPrincipalKey(owner => new { owner.TenantId, owner.AgentInstanceId, owner.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.TenantId, row.AgentInstanceId, row.Disposition });
+            entity.HasIndex(row => new { row.TenantId, row.AgentInstanceId, row.DedupeKey }).IsUnique().HasFilter("TenantId IS NOT NULL");
             entity.HasKey(row => row.OccurrenceId);
             entity.Property(row => row.OccurrenceId).HasMaxLength(36);
             entity.Property(row => row.DedupeKey).HasMaxLength(200).IsRequired();
             entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ProfileId).HasMaxLength(36);
             entity.Property(row => row.EvidenceJson).HasMaxLength(4096).IsRequired();
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.DispositionReason).HasMaxLength(200);

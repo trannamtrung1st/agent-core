@@ -82,7 +82,7 @@ public static class TenantBrowserOperationRules
     {
         var admitted = run.Admission.Configuration?.Definition ?? throw new AccessDeniedException("tenant_context_required");
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
-        if (!RolePermissions.AllowsTool(admitted, tool) || !RolePermissions.AllowsTool(current, tool))
+        if (!TenantTaskExecutionContract.Allows(run, current) || !RolePermissions.AllowsTool(admitted, tool) || !RolePermissions.AllowsTool(current, tool))
             throw new AccessDeniedException("browser_policy_changed");
         if (session.Owner.TenantId != run.Owner.TenantId || session.Owner.SessionId != sessionId || run.SessionId != sessionId
             || session.Owner.AgentInstanceId != run.AgentInstanceId || session.Owner.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId

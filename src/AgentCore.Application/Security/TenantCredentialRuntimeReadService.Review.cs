@@ -14,13 +14,15 @@ public sealed partial class TenantCredentialRuntimeReadService
     public async ValueTask<TenantCredentialPreparedRead> PrepareInspectionAsync(TenantRuntimeFrame frame, string arguments, CancellationToken ct = default)
     {
         var canonical = TenantApprovalRules.CredentialReadArguments(arguments);
-        using var doc = JsonDocument.Parse(canonical); var input = CredentialDiscovery.Parse(doc.RootElement);
-        var before = await RequireAsync(frame, ct, approved: true).ConfigureAwait(false);
+        var args = TenantCredentialDiscoveryContract.Parse(canonical); var input = args.Page; var family = args.Family;
+        var before = await RequireAsync(frame, ct, approved: true).ConfigureAwait(false); RequireFamily(before, family);
         var references = new List<CredentialReadReference>();
         foreach (var bound in before.Bindings.OrderBy(b => b.Binding.Reference, StringComparer.Ordinal))
         {
-            if (!Eligible(before, bound) || input.Cursor is not null && string.CompareOrdinal(bound.Binding.Reference, input.Cursor) <= 0) continue;
+            if (!Eligible(before, bound, family) || input.Cursor is not null && string.CompareOrdinal(bound.Binding.Reference, input.Cursor) <= 0) continue;
             if (!(await authorizer.CheckTenantAsync(before.State, before.Agent.PrincipalId, PermissionCatalog.Get("credentials.read"),
+                TenantCredentialRules.Scope(before.State.Tenant.TenantId, bound.Credential.Value.CredentialId), ct).ConfigureAwait(false)).Allowed) continue;
+            if (family is not null && !(await authorizer.CheckTenantAsync(before.State, before.Agent.PrincipalId, PermissionCatalog.Get(family + ".read"),
                 TenantCredentialRules.Scope(before.State.Tenant.TenantId, bound.Credential.Value.CredentialId), ct).ConfigureAwait(false)).Allowed) continue;
             references.Add(TenantCredentialReadOperationRules.Reference(bound)); if (references.Count > input.Limit) break;
         }
@@ -38,10 +40,11 @@ public sealed partial class TenantCredentialRuntimeReadService
     }
     private async ValueTask RequireBoundAsync(Read current, PreparedCredentialRead value, CancellationToken ct)
     {
+        var family = TenantCredentialDiscoveryContract.Parse(value.ArgumentsJson).Family; RequireFamily(current, family);
         foreach (var reference in TenantApprovalRules.CredentialReadReferences(value))
         {
             var bound = current.Bindings.SingleOrDefault(b => b.Binding.BindingId == reference.BindingId);
-            if (bound is null || TenantCredentialReadOperationRules.Reference(bound) != reference || !Eligible(current, bound))
+            if (bound is null || TenantCredentialReadOperationRules.Reference(bound) != reference || !Eligible(current, bound, family))
                 throw new SecurityConflictException("credential_source_changed");
         }
         await TenantCredentialReadOperationRules.PermissionsAsync(current.State, value, current.Agent.PrincipalId, authorizer, ct).ConfigureAwait(false);
@@ -97,8 +100,8 @@ public sealed partial class TenantCredentialRuntimeReadService
         await RequireApprovedDataAsync(after, request, receipt, ct).ConfigureAwait(false); await FenceAsync(frame, after, ct).ConfigureAwait(false);
         var selected = TenantApprovalRules.CredentialReadReferences(request.Operation.CredentialRead!).Select(r =>
             after.Bindings.Single(b => b.Binding.BindingId == r.BindingId)).ToArray();
-        using var doc = JsonDocument.Parse(request.Operation.CredentialRead!.ArgumentsJson);
-        return Serialize(selected, CredentialDiscovery.Parse(doc.RootElement), remainingBytes);
+        var input = TenantCredentialDiscoveryContract.Parse(request.Operation.CredentialRead!.ArgumentsJson);
+        return Serialize(selected, input.Page, remainingBytes, input.Family);
     }
     private async ValueTask RequireStoredApprovedAsync(AgentRun run, IReadOnlyList<ModelMessage> messages, CancellationToken ct)
     {
@@ -115,9 +118,11 @@ public sealed partial class TenantCredentialRuntimeReadService
             var receipt = await effects.FindOperationReceiptAsync(request.TenantId, operationId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("credential_source_changed");
             current ??= await RequireAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), ct, approved: true).ConfigureAwait(false);
             await RequireApprovedDataAsync(current, request, receipt, ct).ConfigureAwait(false);
-            var witnesses = metadata.GetProperty("credentialReads").Deserialize<Witness[]>() ?? throw new AccessDeniedException("credential_source_changed");
-            if (witnesses.Length > 100) throw new AccessDeniedException("credential_source_changed");
+            var witnesses = metadata.GetProperty("credentialReads").Deserialize<TenantCredentialReadWitness[]>() ?? throw new AccessDeniedException("credential_source_changed");
+            if (witnesses.Length > 101) throw new AccessDeniedException("credential_source_changed");
             var saved = TenantApprovalRules.CredentialReadReferences(request.Operation.CredentialRead!);
+            if (TenantCredentialReadReferences.Family(metadata) != TenantCredentialDiscoveryContract.Parse(request.Operation.CredentialRead!.ArgumentsJson).Family)
+                throw new AccessDeniedException("credential_source_changed");
             foreach (var witness in witnesses)
                 if (!saved.Any(r => r.BindingId == witness.BindingId && r.CredentialId == witness.CredentialId
                     && r.BindingRevision == witness.BindingRevision && r.CredentialRevision == witness.CredentialRevision))

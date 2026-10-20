@@ -46,6 +46,8 @@ public static class TenantApprovalEndpoints
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
+            TenantOperationKind.ReportSourceRead => ("Read exact background report source", "inspect_background_report_source"),
+            TenantOperationKind.CompletionRead => ("Read exact background result", "inspect_background_completion"),
             TenantOperationKind.BackgroundReport => ("Deliver exact background completion", "deliver_background_completion"),
             TenantOperationKind.BackgroundStart => ("Start exact background work", "start_background_work"),
             TenantOperationKind.WorkspaceMutation => ("Change exact workspace paths", "mutate_workspace"),
@@ -53,6 +55,8 @@ public static class TenantApprovalEndpoints
             TenantOperationKind.AttachmentRead => ("Read attached file", "read_attachment"),
             TenantOperationKind.ArtifactVerification => ("Verify file metadata", "verify_artifact"),
             TenantOperationKind.ArtifactPublication => ("Publish exact file", "publish_artifact"),
+            TenantOperationKind.AccountAction => ("Use exact connected account", "use_connected_account"),
+            TenantOperationKind.AccountRead => ("Read exact connected account", "read_connected_account"),
             TenantOperationKind.CredentialRead => ("Read bound Credential metadata", "inspect_credential_metadata"),
             TenantOperationKind.BrowserCommand => ("Review exact Browser command", "browser_command"),
             TenantOperationKind.Persona => ("Update agent persona", "update_persona"),
@@ -73,10 +77,10 @@ public static class TenantApprovalEndpoints
                 op.SandboxCommand is { } sandbox ? new(sandbox.SessionId, sandbox.ProfileId, sandbox.ProfileRevision, sandbox.CommandJson,
                     sandbox.ExpectedLeaseRevision, sandbox.ExpectedGeneration, sandbox.HomeAccess.ToString()) : null),
             view.Decision is { } d ? new(d.HumanPrincipalId, Camel(d.Status), d.DecidedAt) : null,
-            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson)) : null,
+            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson), view.AccountResult is { } account ? new(account.Status, account.DraftId, account.FileId, account.Path, account.ByteSize, account.Sha256, account.Items?.Select(i => new TenantAccountActionItemResultDto(i.FileId, i.Status)).ToArray()) : null) : null,
             review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,
                 review.Changes.Select(c => new TenantApprovalChangeDto(c.Field, c.Before, c.After, c.BeforeAvailable, c.AfterAvailable, c.RestoresDefault)).ToArray(),
-                review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState), op.BackgroundReport?.ParentSessionId);
+                review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState), op.ReportSourceRead?.ParentSessionId ?? op.BackgroundReport?.ParentSessionId);
     }
     private static T? Parse<T>(string? value) where T : struct, Enum => value is null ? null
         : Enum.TryParse<T>(value, true, out var parsed) && Enum.IsDefined(parsed) && !int.TryParse(value, out _) ? parsed

@@ -55,6 +55,7 @@ public sealed partial class SessionRuntime
 
     private bool HasAcceptedConversationWork()
     {
+        if (_tenantWaitSuspended) return !_pendingPersist.IsEmpty;
         if (_tenantApprovalPending) return true;
         if (_tenantApprovalSuspended) return !_pendingPersist.IsEmpty;
         if (_requestIsolationRecheckPending && !LifecycleTransition.IsTerminal(_snapshot)

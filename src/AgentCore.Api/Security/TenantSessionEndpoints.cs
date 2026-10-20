@@ -22,6 +22,8 @@ public static class TenantSessionEndpoints
             var result = await service.ListAsync(actor.TenantId, sessionId, Initiator(http, actor), page ?? 0, pageSize ?? 20, ct).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(item => new { item.RequestId, item.RunId, item.ResponseId,
                 operation = item.Operation switch { AgentCore.Domain.Security.TenantOperationKind.Persona => "update_persona",
+                    AgentCore.Domain.Security.TenantOperationKind.ReportSourceRead => "inspect_background_report_source",
+                    AgentCore.Domain.Security.TenantOperationKind.CompletionRead => "inspect_background_completion",
                     AgentCore.Domain.Security.TenantOperationKind.BackgroundReport => "deliver_background_completion",
                     AgentCore.Domain.Security.TenantOperationKind.BackgroundStart => "start_background_work",
                     AgentCore.Domain.Security.TenantOperationKind.WorkspaceRead => "inspect_workspace",
@@ -29,6 +31,8 @@ public static class TenantSessionEndpoints
                     AgentCore.Domain.Security.TenantOperationKind.AttachmentRead => "read_attachment",
                     AgentCore.Domain.Security.TenantOperationKind.ArtifactVerification => "verify_artifact",
                     AgentCore.Domain.Security.TenantOperationKind.ArtifactPublication => "publish_artifact",
+                    AgentCore.Domain.Security.TenantOperationKind.AccountAction => "use_connected_account",
+                    AgentCore.Domain.Security.TenantOperationKind.AccountRead => "read_connected_account",
                     AgentCore.Domain.Security.TenantOperationKind.CredentialRead => "inspect_credential_metadata",
                     AgentCore.Domain.Security.TenantOperationKind.BrowserCommand => "browser_command",
                     AgentCore.Domain.Security.TenantOperationKind.SandboxRead => "sandbox_read",

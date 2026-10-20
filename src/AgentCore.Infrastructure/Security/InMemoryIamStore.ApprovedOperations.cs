@@ -80,11 +80,22 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 TenantAttachmentReadRules.ReviewerAsync(before, request.Operation.AttachmentRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CompletionRead is not null)
+            {
+                RequireCompletionReadOperation(request, run, target);
+                TenantCompletionReadRules.ReviewerAsync(before, request.Operation.CompletionRead, request.OriginalInitiatorPrincipalId,
+                    decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactVerification is not null)
             {
                 RequireArtifactVerificationOperation(request, run, target);
                 TenantArtifactVerificationRules.ReviewerAsync(before, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AccountRead is not null)
+            {
+                RequireAccountReadOperation(request, run, target);
+                TenantAccountReadRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CredentialRead is not null)
             {

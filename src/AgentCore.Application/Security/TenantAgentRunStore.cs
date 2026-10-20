@@ -5,8 +5,28 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantAgentRunStore(ITenantRuntimeStore storage, ITenantRunStore runs, IIdGenerator ids, TenantRuntimeFrame? frame = null) : IAgentRunStore
+public sealed class TenantAgentRunStore(ITenantRuntimeStore storage, ITenantRunStore runs, IIdGenerator ids, TenantRuntimeFrame? frame = null, TenantRunExecutionAuthority? authority = null) : IAgentRunStore, ITenantCompletionRuntimeStore
 {
+    private TenantRuntimeFrame CompletionFrame() => frame ?? throw new AccessDeniedException("tenant_runtime_scope_mismatch");
+    public ValueTask<TenantCompletionPage> ReadTenantCompletionsAsync(TenantRuntimeFrame requested, string tool, Guid? childSessionId, Guid? cursor, bool pendingOnly, int limit, CancellationToken ct = default)
+    {
+        if (requested != CompletionFrame()) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
+        return storage.ReadTenantCompletionsAsync(frame!, tool, childSessionId, cursor, pendingOnly, limit, ct);
+    }
+    public ValueTask<TenantCompletionView> MutateTenantCompletionAsync(TenantRuntimeFrame requested, Guid childSessionId, long expectedRevision, string toolCallId, Guid token, string? usage, CancellationToken ct = default)
+    {
+        if (requested != CompletionFrame()) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
+        return storage.MutateTenantCompletionAsync(frame!, childSessionId, expectedRevision, toolCallId, token, usage, ct);
+    }
+    public ValueTask<bool> HasTenantCompletionClaimAsync(TenantRuntimeFrame requested, bool acknowledgedOnly, CancellationToken ct = default)
+    {
+        if (requested != CompletionFrame()) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
+        return storage.HasTenantCompletionClaimAsync(frame!, acknowledgedOnly, ct);
+    }
+    public ValueTask<bool> HasCompletionClaimAsync(AgentRunOwner owner, Guid parentRunId, Guid generation, DateTimeOffset now, CancellationToken ct = default)
+    { Scope(owner, mutation: parentRunId); if (generation != CompletionFrame().Generation) throw new AccessDeniedException("tenant_runtime_scope_mismatch"); return storage.HasTenantCompletionClaimAsync(frame!, false, ct); }
+    public ValueTask<bool> HasCompletionAcknowledgmentAsync(AgentRunOwner owner, Guid parentRunId, CancellationToken ct = default)
+    { Scope(owner, mutation: parentRunId); return storage.HasTenantCompletionClaimAsync(CompletionFrame(), true, ct); }
     private void Scope(AgentRunOwner owner, Guid? session = null, Guid? mutation = null)
     {
         TenantRuntimeRules.RequireOwner(owner);
@@ -56,10 +76,14 @@ public sealed class TenantAgentRunStore(ITenantRuntimeStore storage, ITenantRunS
     }
     public ValueTask<AgentRunAdmissionResult> AdmitCompletionReportAsync(SessionSnapshot parent, long expectedRevision, AgentRun report, Guid childRunId, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_continuation_unavailable");
     public ValueTask<AgentRunAdmissionResult> AdmitOccurrenceAsync(SessionSnapshot snapshot, AgentRun run, long expectedRoutingRevision, CancellationToken cancellationToken = default) => throw new AccessDeniedException("tenant_trigger_unavailable");
-    public ValueTask<AgentRun> CommitOutcomeAsync(SessionSnapshot snapshot, long expectedSessionRevision, AgentRunOwner owner, Guid agentRunId, AgentRunCommand.Complete completion, Guid? draftEntryId, CancellationToken cancellationToken = default)
+    public async ValueTask<AgentRun> CommitOutcomeAsync(SessionSnapshot snapshot, long expectedSessionRevision, AgentRunOwner owner, Guid agentRunId, AgentRunCommand.Complete completion, Guid? draftEntryId, CancellationToken cancellationToken = default)
     {
         Scope(owner, snapshot.SessionId, agentRunId);
         if (frame is null) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
-        return storage.CommitTenantOutcomeAsync(frame, snapshot, expectedSessionRevision, completion, draftEntryId, ids.NewId(), cancellationToken);
+        try { return await storage.CommitTenantOutcomeAsync(frame, snapshot, expectedSessionRevision, completion, draftEntryId, ids.NewId(), cancellationToken).ConfigureAwait(false); }
+        catch (AccessDeniedException e) when (authority is not null && e.ReasonCode.StartsWith("account_", StringComparison.Ordinal))
+        {
+            await authority.RecordAccountOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false); throw;
+        }
     }
 }

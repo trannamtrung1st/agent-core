@@ -4,10 +4,11 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Application.Sessions;
 namespace AgentCore.Infrastructure.Drive;
 
-internal sealed partial class GoogleDriveProvider(Guid credential, long revision, GoogleDriveOAuthService oauth, IHttpClientFactory clients,
+internal sealed partial class GoogleDriveProvider(Guid credential, Func<CancellationToken, bool, ValueTask<string>> accessToken, Func<CancellationToken, ValueTask> rejectAuthorization, IHttpClientFactory clients,
     IDriveOperationStore operations, ICredentialProtector protector, TimeProvider time) : IGoogleDriveProvider
 {
     public const string HttpClientName = "GoogleDrive";
@@ -19,12 +20,15 @@ internal sealed partial class GoogleDriveProvider(Guid credential, long revision
     {
         using var client = clients.CreateClient(HttpClientName);
         string token;
-        try { ct.ThrowIfCancellationRequested(); token = await oauth.AccessTokenAsync(credential, revision, ct); }
-        catch (AgentCoreException ex) when (effectStart) { throw new DriveEffectNotExecutedException(ex.Code, ex.Message); }
-        catch (OperationCanceledException) when (effectStart) { throw new DriveEffectNotExecutedException("drive_cancelled_before_dispatch", "The write was cancelled before its request was sent."); }
         var refreshed = false;
         for (var attempt = 0; ; attempt++)
         {
+            // Retry/hedging never carries a prior authority check across a delay.
+            try { ct.ThrowIfCancellationRequested(); token = await accessToken(ct, false); }
+            catch (AgentCoreException ex) when (effectStart) { throw new DriveEffectNotExecutedException(ex.Code, ex.Message); }
+            catch (AccessDeniedException ex) when (effectStart) { throw new DriveEffectNotExecutedException(ex.ReasonCode, "Current account access refused dispatch."); }
+            catch (SecurityConflictException ex) when (effectStart) { throw new DriveEffectNotExecutedException(ex.ReasonCode, "The account source changed before dispatch."); }
+            catch (OperationCanceledException) when (effectStart) { throw new DriveEffectNotExecutedException("drive_cancelled_before_dispatch", "The write was cancelled before its request was sent."); }
             using var request = create(); request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             HttpResponseMessage response;
             try { response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct); }
@@ -34,8 +38,10 @@ internal sealed partial class GoogleDriveProvider(Guid credential, long revision
             if (response.StatusCode == HttpStatusCode.Unauthorized && !refreshed)
             {
                 response.Dispose();
-                try { token = await oauth.AccessTokenAsync(credential, revision, ct, true); }
+                try { token = await accessToken(ct, true); }
                 catch (AgentCoreException ex) when (effectStart) { throw new DriveEffectNotExecutedException(ex.Code, ex.Message); }
+                catch (AccessDeniedException ex) when (effectStart) { throw new DriveEffectNotExecutedException(ex.ReasonCode, "Authority changed before the rejected write could be retried."); }
+                catch (SecurityConflictException ex) when (effectStart) { throw new DriveEffectNotExecutedException(ex.ReasonCode, "Account source changed before the rejected write could be retried."); }
                 catch (OperationCanceledException) when (effectStart) { throw new DriveEffectNotExecutedException("drive_cancelled_before_dispatch", "The rejected write was cancelled before authorization recovery."); }
                 refreshed = true; continue;
             }
@@ -45,7 +51,7 @@ internal sealed partial class GoogleDriveProvider(Guid credential, long revision
             var status = (int)response.StatusCode; response.Dispose();
             if (status == 401)
             {
-                await oauth.RejectAuthorizationAsync(credential, revision, ct);
+                await rejectAuthorization(ct);
                 if (effectStart) throw new DriveEffectNotExecutedException("drive_access_revoked", "Drive rejected authorization. Reconnect the account.");
                 throw Failure("drive_access_revoked", "Drive authorization was revoked. Reconnect the account.", 403);
             }

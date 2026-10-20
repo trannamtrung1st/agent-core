@@ -2,6 +2,8 @@ using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Drive;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using AgentCore.Infrastructure.Email;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Infrastructure.Credentials;
@@ -17,6 +19,13 @@ internal static class TenantOAuthRegistration
         services.TryAddSingleton<TenantGoogleOAuthProvider>(p => new TenantGoogleOAuthProvider(p.GetRequiredService<GoogleOAuthConfiguration>(),
             p.GetRequiredService<GoogleDriveOptions>(), p.GetRequiredService<TenantOAuthProofProtector>(), p.GetRequiredService<ICredentialProtector>(),
             p.GetRequiredService<IHttpClientFactory>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)));
+        services.TryAddSingleton<TenantConnectedAccountReader>(p => new TenantConnectedAccountReader(p.GetRequiredService<TenantGoogleOAuthProvider>(),
+            p.GetRequiredService<EmailTransportOptions>(), p.GetRequiredService<GoogleDriveOptions>(), p.GetRequiredService<IHttpClientFactory>(),
+            p.GetRequiredService<ICredentialProtector>(), p.GetRequiredService<IDriveOperationStore>(), p.GetRequiredService<ISyntheticDriveStore>(),
+            p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase),
+            p.GetRequiredService<ILoggerFactory>(), p.GetRequiredService<IDiagnosticIdSource>()));
+        services.TryAddSingleton<ITenantConnectedAccountReader>(p => p.GetRequiredService<TenantConnectedAccountReader>());
+        services.TryAddSingleton<ITenantConnectedAccountTransportFactory>(p => p.GetRequiredService<TenantConnectedAccountReader>());
         services.TryAddSingleton<ITenantCredentialOAuthProvider>(p => p.GetRequiredService<TenantGoogleOAuthProvider>());
         services.TryAddSingleton<ITenantCredentialOAuthVerifier>(p => p.GetRequiredService<TenantGoogleOAuthProvider>());
     }

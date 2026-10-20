@@ -39,7 +39,7 @@ public sealed partial class SessionRuntime
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
             ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
             { ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
-                Configuration = _boundAgentRun?.Admission.Configuration };
+                Configuration = _boundAgentRun?.Admission.Configuration, RunTaskIntent = _boundAgentRun?.Admission.TaskIntent };
     }
 
     private async Task<CapabilityLoadMailboxResult> RequestCapabilityLoadAsync(EventContext cause, Guid responseId,

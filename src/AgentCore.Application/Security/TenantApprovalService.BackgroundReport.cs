@@ -10,7 +10,7 @@ public sealed partial class TenantApprovalService
     public async ValueTask<TenantApprovalPreparationResult> PrepareBackgroundReportAsync(TenantBackgroundCompletion source, CancellationToken ct)
     {
         try { return await PrepareBackgroundReportCoreAsync(source, ct).ConfigureAwait(false); }
-        catch (Exception error) when (error is AccessDeniedException or SecurityConflictException)
+        catch (Exception error) when (error is (AccessDeniedException or SecurityConflictException) && error is not AccessDeniedException { ReasonCode: "completion_read_review_required" })
         {
             await operations.RecordFailureAsync(new(source.Child.Owner.TenantId!.Value, source.Child.AgentRunId), "agent-runs.create",
                 error is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)error).ReasonCode, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);

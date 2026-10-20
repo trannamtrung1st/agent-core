@@ -324,10 +324,10 @@ public sealed class SqliteAdminLifecycleDeletion(
     internal static async Task<AdminDeletionReferenceCounts> CountInstanceAsync(
         AgentCoreDbContext db,
         string instanceId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Guid? tenant = null)
     {
         var runs = db.AgentRuns.Where(item => item.AgentInstanceId == instanceId);
-        var deletedAutomations = DeletedAutomations(db, instanceId).Select(r => r.AutomationId);
+        var deletedAutomations = DeletedAutomations(db, instanceId, tenant).Select(r => r.AutomationId);
         return new AdminDeletionReferenceCounts(
             await db.Sessions.CountAsync(
                 item => item.AgentInstanceId == instanceId && item.DurablyDeletedAtUtc == null,
@@ -335,10 +335,10 @@ public sealed class SqliteAdminLifecycleDeletion(
             await db.StructuredMemories.CountAsync(
                 item => item.OwnerInstanceId == instanceId && item.Scope == 1 && item.Status == 0,
                 cancellationToken).ConfigureAwait(false),
-            await db.Automations.CountAsync(
+            await db.Automations.IgnoreQueryFilters().Where(a => a.TenantId == null || a.TenantId == tenant).CountAsync(
                 item => item.AgentInstanceId == instanceId && !deletedAutomations.Contains(item.AutomationId),
                 cancellationToken).ConfigureAwait(false),
-            await db.TriggerOccurrences.CountAsync(
+            await db.TriggerOccurrences.IgnoreQueryFilters().Where(a => a.TenantId == null || a.TenantId == tenant).CountAsync(
                 item => item.AgentInstanceId == instanceId && !(deletedAutomations.Contains(item.AutomationId!)
 
                     && item.Disposition == (int)OccurrenceRoutingDisposition.Rejected && item.AcceptedAgentRunId == null),
@@ -349,8 +349,8 @@ public sealed class SqliteAdminLifecycleDeletion(
             Instances: 0);
     }
 
-    private static IQueryable<AutomationRecord> DeletedAutomations(AgentCoreDbContext db, string instanceId) =>
-        db.Automations.Where(r => r.AgentInstanceId == instanceId
+    private static IQueryable<AutomationRecord> DeletedAutomations(AgentCoreDbContext db, string instanceId, Guid? tenant = null) =>
+        db.Automations.IgnoreQueryFilters().Where(r => (r.TenantId == null || r.TenantId == tenant) && r.AgentInstanceId == instanceId
             && r.Status == (int)AutomationStatus.Cancelled);
 
     internal static async Task<AdminDeletionReferenceCounts> CountDefinitionAsync(

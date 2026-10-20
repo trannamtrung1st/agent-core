@@ -66,6 +66,9 @@ public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storag
                 TenantBackgroundCompletionFactory.RequireParent(source);
                 if (approvals is not null)
                 {
+                    var read = await approvals.PrepareReportSourceReadAsync(source, ct).ConfigureAwait(false);
+                    if (read.Decision == OperationDecisionKind.Denied) throw new AccessDeniedException(read.ReasonCode);
+                    if (read.Decision == OperationDecisionKind.RequiresApproval) continue;
                     var prepared = await approvals.PrepareBackgroundReportAsync(source, ct).ConfigureAwait(false);
                     if (prepared.Request is not null) continue;
                     if (prepared.Decision == OperationDecisionKind.Denied) throw new AccessDeniedException(prepared.ReasonCode);
@@ -76,6 +79,7 @@ public sealed class TenantBackgroundCompletionService(ITenantRuntimeStore storag
                 var report = TenantBackgroundCompletionFactory.Create(source, resolved.Configuration, model, ids.NewId(), ids.NewId(), ids.NewId(), time.GetUtcNow());
                 _ = await storage.AdmitTenantBackgroundCompletionAsync(report, source.Parent.Snapshot.Revision, ids.NewId(), ct).ConfigureAwait(false);
             }
+            catch (AccessDeniedException error) when (error.ReasonCode == "completion_read_review_required") { } // Keep the independent read-consent intent pending.
             catch (SecurityConflictException) { } // Fresh bounded pass resolves a busy/stale parent; no replay of effects.
             catch (AccessDeniedException exception)
             {

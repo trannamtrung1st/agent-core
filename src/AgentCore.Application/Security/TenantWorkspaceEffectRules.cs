@@ -32,7 +32,7 @@ public static class TenantWorkspaceEffectRules
     public static TenantWorkspaceMutationArguments Validate(AgentRun run, TenantAgent agent, AgentDefinition current, AgentRunDirectOperation operation, Guid generation, DateTimeOffset at, bool started = false)
     {
         if (run.Owner.TenantId is null || run.Status != AgentRunStatus.Running || run.CancellationRequested || run.Claim?.Generation != generation || run.Claim.LeaseExpiresAtUtc <= at
-            || !TenantFileExecutionContract.Allows(run, current)) throw new AccessDeniedException("tenant_runtime_unavailable");
+            || !TenantTaskExecutionContract.Allows(run, current)) throw new AccessDeniedException("tenant_runtime_unavailable");
         if (agent.TenantId != run.Owner.TenantId || agent.Instance.InstanceId != run.AgentInstanceId || agent.PrincipalId != run.Owner.ExecutorPrincipalId
             || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || agent.Instance.Revision != operation.InstanceRevision || agent.Instance.PersonaRevision != operation.PersonaRevision)
             throw new SecurityConflictException("workspace_source_changed");

@@ -8,7 +8,7 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
-    private bool _tenantCancellationCommitted;
+    private bool _tenantTerminalCommitted;
     private sealed record TenantRunCancellationReceived(EventContext Context, TenantRunCancellation Request,
         TenantRunCancellationService Service, TaskCompletionSource<AgentRun> Completed) : SessionInput(Context);
 
@@ -36,7 +36,7 @@ public sealed partial class SessionRuntime
         catch (Exception ex) { input.Completed.TrySetException(ex); return; }
 
         // The owning mailbox issued the atomic terminal write. Supersede before cancelling any worker.
-        _tenantCancellationCommitted = true;
+        _tenantTerminalCommitted = true;
         _responseLifecycle = ResponseLifecycle.Superseded;
         _allowQueuedSuffixAutoDispatch = false;
         _boundAgentRun = saved;

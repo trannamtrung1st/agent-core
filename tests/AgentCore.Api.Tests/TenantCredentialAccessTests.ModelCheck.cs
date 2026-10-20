@@ -23,11 +23,14 @@ public sealed partial class TenantCredentialAccessTests
     {
         private readonly ScriptedLanguageModel inner = new();
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
+        public Func<Task>? AfterAccountRead;
         public ModelCapabilities Capabilities => inner.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            if (request.Messages.Any(m => m.Role == ModelRole.Tool && m.Text.Contains("tenantAccountRead", StringComparison.Ordinal))
+                && Interlocked.Exchange(ref AfterAccountRead, null) is { } after) await after();
             await foreach (var item in inner.GenerateAsync(request, cancellationToken)) yield return item;
         }
     }

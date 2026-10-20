@@ -28,7 +28,7 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             var correlated = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, target.PrincipalId, prepared.OperationFingerprint);
             if (correlated is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(correlated));
             var definition = TenantAgentDefinitionBaseline(target);
-            if (!AgentCore.Application.Tools.TenantFileExecutionContract.Allows(run, definition) || !AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
+            if (!AgentCore.Application.Tools.TenantTaskExecutionContract.Allows(run, definition) || !AgentCore.Application.Tools.TenantArtifactToolContract.AllowsPublication(definition, publication)) throw new AccessDeniedException("capability_unavailable");
             TenantArtifactOperationRules.RequireAuthorityAsync(before, run, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             if (args.SourcePath is { } path)
             {

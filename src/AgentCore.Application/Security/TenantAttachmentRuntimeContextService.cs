@@ -20,7 +20,8 @@ public sealed partial class TenantAttachmentRuntimeContextService(TenantOperatio
         var current = await configurations.ResolveAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
         TenantAttachmentRules.Session(session.Owner, session, current.Agent, true);
         if (run.Owner != frame.Owner || run.Admission.OutputContract is not (AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport)
-            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport)) throw new AccessDeniedException("resource_unavailable");
+            || run.Admission.ExecutionContext?.Origin is not (ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.CompletionReport)
+                && !AgentCore.Application.Tools.TenantTaskExecutionContract.IsIndependent(run)) throw new AccessDeniedException("resource_unavailable");
         return new(run, state, session, current.Agent);
     }
     private async ValueTask<bool> Allowed(View view, Guid attachment, CancellationToken ct, bool audit)

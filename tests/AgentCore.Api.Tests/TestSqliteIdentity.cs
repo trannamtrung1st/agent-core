@@ -21,6 +21,12 @@ internal static class TestSqliteIdentity
         options.AttachmentRoot = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource + ".attachments";
         services.TryAddSingleton<SqliteAttachmentStore>(p => new(p.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), p.GetRequiredService<TimeProvider>(), p.GetRequiredService<PersistenceOptions>().AttachmentRoot));
         services.Replace(ServiceDescriptor.Singleton<IAttachmentStore>(p => p.GetRequiredService<SqliteAttachmentStore>()));
+        // Keep account-effect owners on the same database as tenant IAM/receipts.
+        // A Core draft inserted by the IAM transaction must be read by this store.
+        services.Replace(ServiceDescriptor.Singleton<IEmailStore, SqliteEmailStore>());
+        services.TryAddSingleton<SqliteDriveStore>();
+        services.Replace(ServiceDescriptor.Singleton<IDriveOperationStore>(p => p.GetRequiredService<SqliteDriveStore>()));
+        services.Replace(ServiceDescriptor.Singleton<ISyntheticDriveStore>(p => p.GetRequiredService<SqliteDriveStore>()));
         services.RemoveAll<IBrowserPrivacyStore>();
         services.AddSingleton<IBrowserPrivacyStore, SqliteBrowserPrivacyStore>();
         services.RemoveAll<IIamStore>();

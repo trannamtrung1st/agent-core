@@ -35,16 +35,26 @@ public static class TenantCredentialReadOperationRules
             || session.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || session.Snapshot.Status is SessionStatus.Ending or SessionStatus.Ended)
             throw new AccessDeniedException("credential_source_changed");
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
+        var family = TenantCredentialDiscoveryContract.Parse(read.ArgumentsJson).Family;
+        if (family is not null && (!TenantTaskExecutionContract.Allows(run, current) || !TenantCredentialDiscoveryContract.Allows(current, family) || !TenantCredentialDiscoveryContract.Allows(run.Admission.Configuration!.Definition, family))) throw new AccessDeniedException("capability_unavailable");
         foreach (var reference in TenantApprovalRules.CredentialReadReferences(read))
         {
             var bound = bindings.SingleOrDefault(b => b.Binding.BindingId == reference.BindingId);
-            if (bound is null || Reference(bound) != reference || !Eligible(run, agent, current, bound))
+            if (bound is null || Reference(bound) != reference || !Eligible(run, agent, current, bound) || !TenantCredentialDiscoveryContract.Matches(family, bound.Credential.Value.Purpose))
                 throw new SecurityConflictException("credential_source_changed");
         }
     }
-    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, PreparedCredentialRead read) =>
-        new[] { ("sessions.read", TenantSessionRules.Scope(tenant, read.SessionId)) }.Concat(TenantApprovalRules.CredentialReadReferences(read)
-            .Select(r => r.CredentialId).Distinct().Select(id => ("credentials.read", TenantCredentialRules.Scope(tenant, id))));
+    public static IEnumerable<(string Permission, AccessScope Scope)> Targets(Guid tenant, PreparedCredentialRead read)
+    {
+        yield return ("sessions.read", TenantSessionRules.Scope(tenant, read.SessionId));
+        var family = TenantCredentialDiscoveryContract.Parse(read.ArgumentsJson).Family;
+        foreach (var id in TenantApprovalRules.CredentialReadReferences(read).Select(r => r.CredentialId).Distinct())
+        {
+            var scope = TenantCredentialRules.Scope(tenant, id);
+            yield return ("credentials.read", scope);
+            if (family is not null) yield return (family + ".read", scope);
+        }
+    }
     public static async ValueTask PermissionsAsync(TenantSecurityState state, PreparedCredentialRead read, Guid principal, IamAuthorizer iam, CancellationToken ct)
     {
         foreach (var (permission, scope) in Targets(state.Tenant.TenantId, read))

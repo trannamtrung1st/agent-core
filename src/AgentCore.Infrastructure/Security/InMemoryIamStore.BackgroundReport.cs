@@ -15,6 +15,7 @@ public sealed partial class InMemoryIamStore
         var state = _tenants[request.TenantId]; var iam = new IamAuthorizer(this);
         var current = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
         TenantApprovalRules.Validate(request, child, agent); TenantSessionRules.RequireExecutor(state, agent);
+        RequireTenantReportRead(state, source, CancellationToken.None);
         TenantBackgroundReportRules.Require(request, source, agent, current);
         TenantExecutionLineage.RequireRequesterAsync(child, state, iam, this, CancellationToken.None).AsTask().GetAwaiter().GetResult();
         var root = TenantExecutionLineage.RootAsync(child, this, CancellationToken.None).AsTask().GetAwaiter().GetResult();

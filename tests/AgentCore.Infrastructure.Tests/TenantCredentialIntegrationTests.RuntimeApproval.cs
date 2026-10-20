@@ -26,14 +26,17 @@ public sealed partial class TenantCredentialIntegrationTests
             iam, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default,
             (ITenantApprovedOperationStore)current, new((ITenantCredentialBindingStore)current, f.RunConfiguration()));
     }
-    private static async Task<RuntimeCredentialSetup> RuntimeCredential(Fixture f, bool use, CredentialPurpose purpose = CredentialPurpose.GoogleDriveAccount)
+    private static async Task<RuntimeCredentialSetup> RuntimeCredential(Fixture f, bool use, CredentialPurpose purpose = CredentialPurpose.GoogleDriveAccount, bool password = false)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var agent = await f.Agents.CreateAsync(human.PrincipalId, owner.TenantId, "general-assistant", 32, await Revision());
-        var credential = await ConnectForCheck(f, owner.TenantId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), purpose);
+        var credential = password
+            ? (await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, new("Custom mail", CredentialKind.Password, CredentialPurpose.EmailAccount,
+                null, null, "private-mail-password", EmailAccountProfile.Custom("fixture@example.test")), await Revision())).Credential.CredentialId
+            : await ConnectForCheck(f, owner.TenantId, new(human.AccountId, human.AuthenticationSessionId, human.PrincipalId), purpose);
         var value = (await f.Credentials.FindTenantCredentialAsync(owner.TenantId, credential))!.Value;
         await f.BindingService.BindAsync(human.PrincipalId, owner.TenantId, agent.Instance.InstanceId, credential, "work-drive", await Revision(), agent.Instance.Revision, value.Revision);
         agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, agent.Instance.InstanceId))!;

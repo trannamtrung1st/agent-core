@@ -11,7 +11,13 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Drive;
 
 public sealed record DriveAccountView(string AccountRef, string DisplayName, string EmailAddress, string Status, long AuthEpoch, bool Available, string? Recovery, Guid BindingId, bool Synthetic);
-public sealed record DriveAccess(Guid InstanceId, AgentCredentialBinding Binding, Credential Credential, IGoogleDriveProvider Provider);
+public sealed record DriveAccess(Guid InstanceId, AgentCredentialBinding Binding, Credential Credential, IGoogleDriveProvider Provider)
+{
+    // Installed only by the canonical tenant service after resolving its actual owned
+    // Run/binding. The same native effect ledger never resolves a legacy credential
+    // when this live authority callback is present.
+    internal Func<bool, CancellationToken, ValueTask>? TenantAuthority { get; init; }
+}
 public sealed record DriveEffect(string Name, string Parent, string? SourceSha256 = null, long SourceBytes = 0, string? MimeType = null, string? ExpectedVersion = null, string? SourceParent = null, string? SourceMd5 = null);
 public sealed record DriveReceipt(Guid OperationId, string Status, DriveFile File, bool Reconciled, bool Synthetic, string? Limitation = null);
 public sealed class DriveIndeterminateException(Guid operationId, string fileId, string? causeCode = null, bool resumeAllowed = false,
@@ -72,6 +78,10 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     }
     public async ValueTask RecheckAsync(DriveAccess access, bool write, CancellationToken ct)
     {
+        if (access.TenantAuthority is { } tenant)
+        {
+            await tenant(write, ct).ConfigureAwait(false); return;
+        }
         var current = await ResolveAsync(access.InstanceId, access.Binding.Reference, [access.Binding], write, ct);
         if (current.Credential.CredentialId != access.Credential.CredentialId || current.Credential.Revision != access.Credential.Revision || current.Credential.DriveAccount!.AuthEpoch != access.Credential.DriveAccount!.AuthEpoch)
             throw Failure("drive_access_changed", "Drive authorization changed. Read the current account and file state before acting.", 403);
@@ -135,7 +145,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
             throw AgentCoreErrors.Conflict("Drive operation identity is already claimed.");
         // Exact identity takes precedence over coalescing a later matching effect.
         // A terminal ID must never act as a different pending operation.
-        var previous = known ?? await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, ct);
+        var previous = known ?? (access.TenantAuthority is null ? await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, ct) : null);
         if (previous is { State: "Planned" } && previous.AuthEpoch != expectedEpoch)
         { await operations.UpdateAsync(previous with { State = "Rejected", Revision = previous.Revision + 1 }, previous.Revision, ct); previous = null; }
         var op = previous ?? await operations.ClaimAsync(new(operationId, access.InstanceId, access.Credential.CredentialId, hash, expectedEpoch, tool, fileId ?? await access.Provider.GenerateIdAsync(ct), snapshot, "Planned", 1, time.GetUtcNow()), ct);
@@ -179,7 +189,8 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
                 case "drive.trash": await access.Provider.TrashAsync(op.FileId, ct); break;
                 default: throw Failure("drive_invalid", "Unsupported Drive effect.");
             }
-            op = await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, ct) ?? op;
+            op = (access.TenantAuthority is null ? await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, ct)
+                : await operations.GetAsync(access.InstanceId, op.OperationId, ct)) ?? op;
             return await Reconcile(access, op, effect, bytes, ct);
         }
         catch (DriveIndeterminateException) { throw; }
@@ -195,7 +206,8 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
         catch (Exception ex)
         {
             logger?.LogWarning("Drive operation uncertain. OperationId {OperationId} Tool {Tool} Stage {Stage} Code {Code}", op.OperationId, tool, "dispatch", (ex as AgentCoreException)?.Code ?? "drive_provider_unavailable");
-            var current = await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, CancellationToken.None) ?? op;
+            var current = (access.TenantAuthority is null ? await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, CancellationToken.None)
+                : await operations.GetAsync(access.InstanceId, op.OperationId, CancellationToken.None)) ?? op;
             if (current.State != "Indeterminate") await operations.UpdateAsync(current with { State = "Indeterminate", Revision = current.Revision + 1 }, current.Revision, CancellationToken.None);
             throw new DriveIndeterminateException(op.OperationId, op.FileId, (ex as AgentCoreException)?.Code, CanResume(access, current));
         }

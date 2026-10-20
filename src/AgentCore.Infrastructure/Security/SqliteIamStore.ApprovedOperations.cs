@@ -95,11 +95,22 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             await TenantAttachmentReadRules.ReviewerAsync(before, request.Operation.AttachmentRead, request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CompletionRead is not null)
+        {
+            await RequireCompletionReadOperation(db, request, run, target, ct).ConfigureAwait(false);
+            await TenantCompletionReadRules.ReviewerAsync(before, request.Operation.CompletionRead, request.OriginalInitiatorPrincipalId,
+                decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        }
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactVerification is not null)
         {
             await RequireArtifactVerificationOperation(db, request, run, target, ct).ConfigureAwait(false);
             await TenantArtifactVerificationRules.ReviewerAsync(before, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        }
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AccountRead is not null)
+        {
+            await RequireAccountReadOperation(db, request, run, target, ct).ConfigureAwait(false);
+            await TenantAccountReadRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.CredentialRead is not null)
         {

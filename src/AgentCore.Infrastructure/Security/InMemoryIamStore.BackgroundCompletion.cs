@@ -33,6 +33,11 @@ public sealed partial class InMemoryIamStore
                 .Where(i => i.Owner.TenantId is not null).Select(i => CompletionSource(i.Owner, i.ChildAgentRunId)).OfType<TenantBackgroundCompletion>()
                 .Where(source => source.Parent is null || source.Parent.Snapshot.PendingAgentInputIds.Count == 0
                     && !sessionBacking.AgentRuns.Runs.Values.Any(run => run.SessionId == source.Parent.Owner.SessionId && !run.IsTerminal))
+                .Where(source => !_approvals.Values.Any(r => r.TenantId == source.Child.Owner.TenantId && r.ExecutorPrincipalId == source.Child.Owner.ExecutorPrincipalId
+                    && r.RootActivationId == source.Child.Admission.ExecutionContext!.RootActivationId
+                    && (r.Operation.BackgroundReport?.ChildRunId == source.Child.AgentRunId || r.Operation.ReportSourceRead?.SourceRunId == source.Child.AgentRunId
+                        && (r.Status != TenantApprovalStatus.Approved || !_operationReceipts.TryGetValue(r.Operation.OperationId, out var receipt)
+                            || receipt.Outcome != TenantOperationOutcome.Completed || receipt.ReasonCode != TenantReportSourceReadRules.Reason))))
                 .Take(limit).ToArray();
             return ValueTask.FromResult<IReadOnlyList<TenantBackgroundCompletion>>(values);
         }
@@ -57,6 +62,7 @@ public sealed partial class InMemoryIamStore
         {
             RequireRuntimeOwner(report.Owner); var tenant = report.Owner.TenantId!.Value; var state = _tenants[tenant];
             var source = CompletionSource(report.Owner, report.Admission.ExecutionContext?.ParentRunId ?? Guid.Empty) ?? throw new AccessDeniedException("completion_unavailable");
+            RequireTenantReportRead(state, source, ct);
             var all = sessionBacking.AgentRuns;
             if (!all.CompletionReceipts.TryGetValue(source.Child.AgentRunId, out var row)) throw new AccessDeniedException("completion_unavailable");
             var item = CompletionInboxMapping.Read(row); if (item.Owner != report.Owner) throw new AccessDeniedException("completion_unavailable");
