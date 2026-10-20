@@ -161,6 +161,7 @@ IdentityEndpoints.Map(app);
 TenantAccessEndpoints.Map(app);
 TenantAgentEndpoints.Map(app);
 TenantCredentialEndpoints.Map(app);
+TenantEmailMonitoringEndpoints.Map(app);
 TenantConnectedAccountEndpoints.Map(app);
 TenantSandboxProfileEndpoints.Map(app);
 TenantSandboxRuntimeEndpoints.Map(app);

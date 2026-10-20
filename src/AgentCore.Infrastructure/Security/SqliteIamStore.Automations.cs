@@ -114,7 +114,7 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
         var before = (await ReadTenantAsync(db, tenant.TenantId, ct))!;
         var agentRow = await OwnedAgents(db, tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == current.Owner.AgentInstanceId.ToString("D"), ct) ?? throw new AccessDeniedException("resource_unavailable");
         var agent = Owned(agentRow); var policy = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct), agent.Instance.SettingsOverrides);
-            TenantAutomationRules.Admission(admission, agent, human?.PrincipalId); await TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId, admission.Occurrence.SourceKind, admission.EventSource);
+            TenantAutomationRules.Admission(admission, agent, human?.PrincipalId); await TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId, admission.Occurrence.SourceKind, admission.EventSource, TenantEventAdmissionRules.EmailAccounts(admission));
         if (human is not null) await RequireAutomationHuman(before, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
         ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.occurrence.admit", audit);
         if (await TenantAutomationBusy(db, tenant.TenantId, admission.Current.AutomationId, ct)) return null;

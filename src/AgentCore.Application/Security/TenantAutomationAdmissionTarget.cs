@@ -12,7 +12,7 @@ public sealed record TenantAutomationAdmissionState(TenantSecurityState State, T
     Automation Automation, TriggerOccurrence Occurrence);
 
 public sealed class TenantAutomationAdmissionTarget(IIamStore security, ITenantAutomationStore store, TenantRunConfigurationResolver configuration,
-    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null)
+    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null)
 {
     public async ValueTask<TenantAutomationAdmissionState> RequireAsync(TenantApprovalRequest request, CancellationToken ct)
     {
@@ -43,6 +43,9 @@ public sealed class TenantAutomationAdmissionTarget(IIamStore security, ITenantA
             if (resource is not { Status: WebhookEventStatus.Active } || resource.Revision != source.ResourceRevision)
                 throw new SecurityConflictException("event_source_changed");
         }
+        foreach (var id in p.EmailSourceAccountIds.Count > 0 ? source.EventIds : [])
+            if (emailWatches is null || !await emailWatches.CanDeliverTenantEmailEventAsync(p.TenantId, id, ct).ConfigureAwait(false))
+                throw new AccessDeniedException("email_event_source_changed");
         PreparedEventAdmissionSource frozen; TriggerOccurrence occurrence;
         if (!source.IsBucket)
         {
@@ -60,6 +63,7 @@ public sealed class TenantAutomationAdmissionTarget(IIamStore security, ITenantA
                 ?? throw new AccessDeniedException("event_source_unavailable");
             if (bucket.Bucket.Flushed || bucket.Bucket.ReservedOccurrenceId != p.Occurrence.OccurrenceId)
                 throw new SecurityConflictException("event_source_changed");
+            if (TenantEventAdmissionRules.EmailBucket(bucket.Bucket)) bucket = TenantEventAdmissionRules.Retain(bucket, source.EventIds);
             frozen = TenantEventAdmissionRules.Freeze(bucket, source.ResourceRevision);
             occurrence = TenantEventAdmissionRules.Occurrence(p.Current, bucket, p.Occurrence.ModelPin!, p.Occurrence.AdmittedAtUtc, source.ResourceRevision);
         }

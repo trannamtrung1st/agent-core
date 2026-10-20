@@ -115,3 +115,33 @@ it('shows account-wide status read-only in an Instance with canonical management
   expect(report).not.toHaveBeenCalledWith(true);
   expect(api.saveEmailMonitoring).not.toHaveBeenCalled(); expect(api.checkEmailMonitoring).not.toHaveBeenCalled();
 });
+
+vi.mock('../../services/identity', async original => ({ ...await original<typeof import('../../services/identity')>(), identityRequest: vi.fn() }));
+import { identityRequest, IdentityError } from '../../services/identity';
+const owned = { ...initial, subscribedInstances: undefined, securityRevision: 7, credentialRevision: 3, canManage: true, canEnable: true, canCheck: false };
+function tenantView() { return render(<ConfigProvider><App><EmailMonitoringSection tenant="tenant" account={account} /></App></ConfigProvider>); }
+it('uses only the displayed tenant, account and watch witnesses and never a legacy mutation', async () => {
+  vi.mocked(identityRequest).mockResolvedValueOnce(owned).mockResolvedValueOnce({ ...owned, enabled: true, configurationRevision: 1, securityRevision: 8 });
+  tenantView(); fireEvent.click(await screen.findByRole('switch')); fireEvent.click(screen.getByRole('button', { name: 'Save monitoring' }));
+  await screen.findByText('Monitoring settings saved.');
+  expect(identityRequest).toHaveBeenLastCalledWith('/api/v2/tenants/tenant/credentials/fixture/monitoring', { method: 'PUT', body: {
+    expectedRevision: 7, expectedCredentialRevision: 3, expectedWatchRevision: 0, enabled: true, intervalSeconds: 300 } });
+  expect(api.saveEmailMonitoring).not.toHaveBeenCalled(); expect(screen.queryByText('No subscribed Automations')).not.toBeInTheDocument();
+});
+it('retains a conflicting tenant draft and requires an explicit reload before another command', async () => {
+  vi.mocked(identityRequest).mockResolvedValueOnce(owned).mockRejectedValueOnce(new IdentityError(409, 'stale_revision')).mockResolvedValue(owned);
+  tenantView(); const toggle = await screen.findByRole('switch'); fireEvent.click(toggle); fireEvent.click(screen.getByRole('button', { name: 'Save monitoring' }));
+  await screen.findByText('Reload monitoring before trying again'); expect(toggle).toBeChecked(); expect(screen.getByRole('button', { name: 'Save monitoring' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Reload monitoring' })); await waitFor(() => expect(toggle).not.toBeChecked()); expect(toggle).toBeEnabled();
+});
+it('retires tenant monitoring data after permission loss and leaves a reload action', async () => {
+  vi.mocked(identityRequest).mockResolvedValueOnce(owned).mockRejectedValue(new IdentityError(403, 'permission_denied'));
+  tenantView(); await screen.findByRole('switch'); fireEvent.click(screen.getByRole('button', { name: 'Reload monitoring' }));
+  await waitFor(() => expect(screen.queryByRole('switch')).not.toBeInTheDocument()); expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled();
+});
+
+it('allows a tenant account manager without account use access to stop monitoring but prevents enabling it', async () => {
+  vi.mocked(identityRequest).mockResolvedValue({ ...owned, enabled: true, canEnable: false });
+  tenantView(); const toggle = await screen.findByRole('switch'); expect(toggle).toBeEnabled(); fireEvent.click(toggle);
+  expect(screen.getByRole('button', { name: 'Save monitoring' })).toBeEnabled(); expect(toggle).toBeDisabled(); expect(screen.getByRole('button', { name: 'Check now' })).toBeDisabled();
+});

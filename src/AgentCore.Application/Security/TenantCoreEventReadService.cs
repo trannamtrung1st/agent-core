@@ -32,7 +32,7 @@ public sealed class TenantCoreEventReadService(IIamStore security, ITenantEventS
                     && (await iam.CheckOwnedTenantAsync(state, human.PrincipalId, permission, scope, ct).ConfigureAwait(false)).Allowed) ids.Add(id);
             allowed = ids;
         }
-        var result = await events.ListTenantCoreEventsAsync(tenant, instance, key, page, pageSize, ct, allowed).ConfigureAwait(false);
+        var result = await events.ListTenantCoreEventsAsync(tenant, instance, key, page, pageSize, ct, allowed, await TenantEmailWatchRules.VisibleAccountsAsync(state, human.PrincipalId, iam, ct).ConfigureAwait(false)).ConfigureAwait(false);
         await Unchanged(state, human, ct).ConfigureAwait(false); return new(result, state.Tenant.Revision);
     }
     public async ValueTask<CoreEventReceipt> ReadAsync(Guid tenant, Guid eventId, HumanSessionReference human, CancellationToken ct = default)
@@ -41,6 +41,8 @@ public sealed class TenantCoreEventReadService(IIamStore security, ITenantEventS
         if (!(await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("core-events.read"), TenantEventAdmissionRules.Scope(tenant, eventId), ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("event_source_unavailable");
         var source = await events.FindTenantCoreEventAsync(tenant, eventId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("event_source_unavailable");
+        if (source.Event.Key == "email.message.received")
+            await TenantEmailWatchRules.RequireExecutorAsync(state, human.PrincipalId, AgentCore.Domain.Email.EmailEventReferences.AccountId(source.Event.DataJson), iam, ct).ConfigureAwait(false);
         await Unchanged(state, human, ct).ConfigureAwait(false); return source;
     }
     private async ValueTask Unchanged(TenantSecurityState state, HumanSessionReference human, CancellationToken ct)

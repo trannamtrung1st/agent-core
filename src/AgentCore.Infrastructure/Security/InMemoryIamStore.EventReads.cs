@@ -26,7 +26,8 @@ public sealed partial class InMemoryIamStore
                 (id, _) => ValueTask.FromResult(sessionBacking.CoreEvents.TenantBucket(tenant, id) is { } b ? new TenantEventBucket(tenant, b) : null),
                 (id, _) => ValueTask.FromResult(_approvals.GetValueOrDefault(id)),
                 (id, _) => ValueTask.FromResult(_approvalDecisions.GetValueOrDefault(id)),
-                (id, _) => ValueTask.FromResult(_operationGrants.GetValueOrDefault(id)), ct).AsTask().GetAwaiter().GetResult();
+                (id, _) => ValueTask.FromResult(_operationGrants.GetValueOrDefault(id)), ct,
+                (id, _) => ValueTask.FromResult(CanDeliverTenantEmail(tenant, id, retained: true))).AsTask().GetAwaiter().GetResult();
         }
     }
 }

@@ -31,6 +31,8 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                     && (admission.EventSource is not { } eventSource || (eventSource.SourceKind == AgentCore.Domain.Triggers.TriggerSourceKind.ApplicationEvent
                         ? automationVisibility?.WebhookSources is null || automationVisibility.WebhookSources.Contains(eventSource.ResourceId!.Value)
                         : automationVisibility?.CoreEvents is null || eventSource.EventIds.All(automationVisibility.CoreEvents.Contains)))
+                    && admission.EmailSourceAccountIds.All(id => CredentialBacking().ReadTenantCredential(tenantId, id) is { Value.Purpose: AgentCore.Domain.Credentials.CredentialPurpose.EmailAccount }
+                        && (automationVisibility?.EmailAccounts is null || automationVisibility.EmailAccounts.Contains(id)))
                     && automationBacking.ReadTenantAutomation(r.TenantId, admission.Current.AutomationId) is { } ownedAdmission && ownedAdmission.Owner == admission.Current.Owner)
                 && (r.Operation.BackgroundStart is null || backgroundCreationReadable
                     && sessionBacking.ReadTenantSession(r.TenantId, r.SessionId) is { Snapshot.DurablyDeletedAt: null }

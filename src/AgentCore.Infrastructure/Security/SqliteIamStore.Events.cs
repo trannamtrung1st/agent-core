@@ -58,7 +58,9 @@ public sealed partial class SqliteIamStore : ITenantEventStore
         if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active || agent.PrincipalId != s.Owner.ExecutorPrincipalId)
             throw new AccessDeniedException("event_executor_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
-        await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, s, [value.EventId], new IamAuthorizer(this), ct);
+        await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, s, [value.EventId], new IamAuthorizer(this), ct, TenantEventAdmissionRules.EmailAccounts(value));
+        if (value.Core?.Event.Key == "email.message.received" && !await CanDeliverTenantEmail(db, value.TenantId, value.EventId, ct).ConfigureAwait(false))
+            throw new AccessDeniedException("email_event_source_changed");
         var source = await OwnedAutomations(db, value.TenantId).AsNoTracking().SingleOrDefaultAsync(a => a.AutomationId == s.AutomationId.ToString("D"), ct)
             ?? throw new AccessDeniedException("event_subscription_changed");
         _ = TenantEventAdmissionRules.Child(TriggerStoreMapping.ToRegistration(source), s);
@@ -178,11 +180,23 @@ public sealed partial class SqliteIamStore : ITenantEventStore
         var row = await db.CoreEvents.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(e => e.TenantId == tenant && e.EventId == eventId.ToString("D"), ct).ConfigureAwait(false);
         return row is null ? null : CoreFact(row);
     }
-    public async ValueTask<TenantCoreEventPage> ListTenantCoreEventsAsync(Guid tenant, Guid instance, string key, int page, int pageSize, CancellationToken ct = default, IReadOnlyList<Guid>? allowedIds = null)
+    public async ValueTask<TenantCoreEventPage> ListTenantCoreEventsAsync(Guid tenant, Guid instance, string key, int page, int pageSize, CancellationToken ct = default, IReadOnlyList<Guid>? allowedIds = null, IReadOnlyList<Guid>? emailAccounts = null)
     {
         if (!CoreEventCatalog.Keys.Contains(key)) throw new ArgumentException("Unknown built-in event source.");
         TenantWebhookRules.Page(page, pageSize); await using var db = await contexts.CreateDbContextAsync(ct); await using var tx = await db.Database.BeginTransactionAsync(ct);
         var query = db.CoreEvents.IgnoreQueryFilters().AsNoTracking().Where(e => e.TenantId == tenant && e.AgentInstanceId == instance.ToString("D") && e.DedupeKey.StartsWith(key + ":"));
+        {
+            var json = JsonSerializer.Serialize(emailAccounts?.Select(id => id.ToString("D")));
+            var readable = db.CoreEvents.FromSqlInterpolated($"""
+                SELECT * FROM CoreEvents WHERE json_extract(PayloadJson, '$.Key') <> 'email.message.received'
+                OR (EXISTS (SELECT 1 FROM TenantCredentials owner JOIN Credentials account ON account.CredentialId = owner.CredentialId
+                    WHERE owner.TenantId = CoreEvents.TenantId AND owner.DeletedAt IS NULL AND account.Purpose = 'EmailAccount'
+                    AND owner.CredentialId = json_extract(json_extract(CoreEvents.PayloadJson, '$.DataJson'), '$.accountId'))
+                    AND (json_type({json}) = 'null' OR EXISTS (SELECT 1 FROM json_each({json}) allowed
+                        WHERE allowed.value = json_extract(json_extract(CoreEvents.PayloadJson, '$.DataJson'), '$.accountId'))))
+                """).IgnoreQueryFilters();
+            query = query.Where(row => readable.Any(allowed => allowed.EventId == row.EventId && allowed.TenantId == tenant));
+        }
         if (allowedIds is not null) { var allowed = allowedIds.Select(id => id.ToString("D")).ToArray(); query = query.Where(e => allowed.Contains(e.EventId)); }
         var total = await query.CountAsync(ct); var rows = await query.OrderByDescending(e => e.ReceivedAtUtc).ThenBy(e => e.EventId).Skip(page * pageSize).Take(pageSize).ToArrayAsync(ct);
         await tx.CommitAsync(ct); return new(rows.Select(CoreFact).ToArray(), total, page, pageSize);

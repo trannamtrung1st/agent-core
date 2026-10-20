@@ -15,7 +15,7 @@ public sealed record TenantAutomationChange(bool Enabled, string Name, string In
     IReadOnlyList<TenantAutomationTriggerChange>? Events = null);
 
 public sealed partial class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null)
 {
     private readonly SemaphoreSlim dueGate = new(1, 1);
     private string? dueCursor;
@@ -136,11 +136,28 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
                 if (source?.Status != AgentCore.Domain.Events.WebhookEventStatus.Active) throw new AccessDeniedException("event_source_unavailable");
                 sourceRevision = source.Revision;
             }
+            if (eventBucket is not null && TenantEventAdmissionRules.EmailBucket(eventBucket.Bucket))
+            {
+                var eligible = new List<Guid>();
+                foreach (var entry in eventBucket.Bucket.Sources)
+                {
+                    if (emailWatches is null || !await emailWatches.CanDeliverTenantEmailEventAsync(tenant, entry.EventId, ct)) continue;
+                    try
+                    {
+                        await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, subscription, [entry.EventId], iam, ct,
+                            [AgentCore.Domain.Email.EmailEventReferences.AccountId(entry.DataJson)]);
+                        eligible.Add(entry.EventId);
+                    }
+                    catch (AccessDeniedException) { }
+                }
+                if (eligible.Count == 0) throw new AccessDeniedException("email_event_source_unavailable");
+                eventBucket = TenantEventAdmissionRules.Retain(eventBucket, eligible);
+            }
             eventSource = eventDelivery is not null ? TenantEventAdmissionRules.Freeze(eventDelivery, sourceRevision) : TenantEventAdmissionRules.Freeze(eventBucket!, sourceRevision);
-            await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, subscription, eventSource.EventIds, iam, ct);
+            await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, subscription, eventSource.EventIds, iam, ct, eventDelivery is not null ? TenantEventAdmissionRules.EmailAccounts(eventDelivery) : TenantEventAdmissionRules.EmailAccounts(eventBucket!));
         }
         var sourceKind = manual ? TriggerSourceKind.ManualInvocation : eventSource?.SourceKind ?? TriggerSourceKind.Schedule;
-        var admissionDecision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, resolved.Configuration.Definition, human?.PrincipalId, iam, ct, sourceKind, eventSource);
+        var admissionDecision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, resolved.Configuration.Definition, human?.PrincipalId, iam, ct, sourceKind, eventSource, eventDelivery is not null ? TenantEventAdmissionRules.EmailAccounts(eventDelivery) : eventBucket is not null ? TenantEventAdmissionRules.EmailAccounts(eventBucket) : []);
         var model = ExecutionModelPolicy.Resolve(models, resolved.Configuration.Definition, agent.Instance, current);
         if (!model.Accepted || model.Pin is null) throw new AccessDeniedException("automation_model_unavailable");
         TriggerOccurrence occurrence; Automation next;

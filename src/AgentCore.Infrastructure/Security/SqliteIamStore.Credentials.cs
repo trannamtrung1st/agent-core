@@ -60,7 +60,12 @@ public sealed partial class SqliteIamStore
             var row = await db.Credentials.SingleOrDefaultAsync(c => c.CredentialId == key, ct).ConfigureAwait(false);
             if (root is null || row is null || row.Revision != expectedRevision || row.SecretRevision != expectedSecretRevision) return false;
             if (await db.AgentCredentialBindings.AnyAsync(b => b.CredentialId == key, ct).ConfigureAwait(false)) throw new SecurityConflictException("credential_in_use");
-            db.Credentials.Remove(row); db.Entry(root).CurrentValues.SetValues(root with { DeletedAt = at }); return true;
+            // Mark the real owner tombstone before the incumbent Credential FK
+            // cascades its watch. The outer security/audit transaction keeps this
+            // invisible until the protected value and watch retire together.
+            db.Entry(root).CurrentValues.SetValues(root with { DeletedAt = at });
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            db.Credentials.Remove(row); return true;
         }, ct);
     }
     private async ValueTask<bool> WriteTenantResourceAsync(TenantSecurityState next, long expected, AuthorizationAudit audit,

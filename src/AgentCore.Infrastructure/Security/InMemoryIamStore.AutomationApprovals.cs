@@ -32,7 +32,7 @@ public sealed partial class InMemoryIamStore
             if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
             TenantAutomationAdmissionApprovalRules.Shape(request, agent);
             TenantAutomationRules.Admission(admission, agent, human?.PrincipalId, p);
-            var decision = TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct, p.Occurrence.SourceKind, p.EventSource).Result;
+            var decision = TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct, p.Occurrence.SourceKind, p.EventSource, p.EmailSourceAccountIds).Result;
             if (decision.Kind != request.Kind || decision.Permission != request.Permission) throw new SecurityConflictException("operation_authority_changed");
             if (human is not null) RequireAutomationHuman(state, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
             if (automationBacking.TenantBusy(current.AutomationId)) throw new SecurityConflictException("automation_in_use");

@@ -13,7 +13,7 @@ namespace AgentCore.Infrastructure.Credentials;
 
 public sealed partial class TenantConnectedAccountReader(TenantGoogleOAuthProvider google, EmailTransportOptions emailHost, GoogleDriveOptions driveHost,
     IHttpClientFactory clients, ICredentialProtector protector, IDriveOperationStore driveOperations, ISyntheticDriveStore driveFiles,
-    IIdGenerator ids, TimeProvider time, bool synthetic, ILoggerFactory logs, IDiagnosticIdSource diagnostics) : ITenantConnectedAccountReader, ITenantConnectedAccountTransportFactory
+    IIdGenerator ids, TimeProvider time, bool synthetic, ILoggerFactory logs, IDiagnosticIdSource diagnostics) : ITenantConnectedAccountReader, ITenantConnectedAccountTransportFactory, ITenantEmailChangeFeed
 {
     private readonly ConcurrentDictionary<(Guid Tenant, Guid Credential), SyntheticEmailProvider> mailboxes = new();
     private readonly SemaphoreSlim mailConnections = new(4);

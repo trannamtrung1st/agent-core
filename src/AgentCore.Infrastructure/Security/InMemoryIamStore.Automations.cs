@@ -99,7 +99,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
             var agent = FindTenantAgentAsync(before.Tenant.TenantId, current.Owner.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("resource_unavailable");
             var policy = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
             TenantAutomationRules.Admission(admission, agent, human?.PrincipalId);
-            TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId, admission.Occurrence.SourceKind, admission.EventSource).GetAwaiter().GetResult();
+            TenantAutomationRules.AdmissionAuthority(before, current, agent, policy, new IamAuthorizer(this), ct, human?.PrincipalId, admission.Occurrence.SourceKind, admission.EventSource, TenantEventAdmissionRules.EmailAccounts(admission)).GetAwaiter().GetResult();
             if (human is not null) RequireAutomationHuman(before, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
             ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.occurrence.admit", audit);
             if (automationBacking.TenantBusy(current.AutomationId)) return ValueTask.FromResult<TenantAutomationAdmissionResult?>(null);

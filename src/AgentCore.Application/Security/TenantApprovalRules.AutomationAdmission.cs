@@ -12,7 +12,7 @@ public static partial class TenantApprovalRules
     {
         var ids = new[] { operation, instance, p.TenantId, p.Current.AutomationId, p.RequestId, p.SessionId, p.EntryId, p.ActivationId, p.RunId, p.ResponseId };
         if (ids.Any(id => id == Guid.Empty) || ids.Distinct().Count() != ids.Length || revision < 1 || personaRevision < 1
-            || p.Permission is not ("automations.run" or "sessions.create" or "agent-runs.create" or "webhooks.read" or "core-events.read")
+            || p.Permission is not ("automations.run" or "sessions.create" or "agent-runs.create" or "webhooks.read" or "core-events.read" or "credentials.read" or "credentials.use" or "email.read")
             || p.Current.Owner != p.Next.Owner || p.Current.AutomationId != p.Next.AutomationId || p.Current.Owner.TenantId != p.TenantId
             || p.Current.Owner.AgentInstanceId != instance || p.Current.Status != AutomationStatus.Active
             || p.Occurrence.Owner != p.Current.Owner || p.Occurrence.AutomationId != p.Current.AutomationId

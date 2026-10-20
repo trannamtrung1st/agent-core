@@ -28,6 +28,7 @@ public sealed partial class SqliteIamStore
                 return row is null ? null : new TenantEventBucket(tenant, EventBucket(row)); },
             async (id, token) => (await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(a => a.TenantId == tenant && a.RequestId == id, token).ConfigureAwait(false))?.Domain(),
             async (id, token) => await db.Set<TenantApprovalDecision>().AsNoTracking().SingleOrDefaultAsync(d => d.TenantId == tenant && d.RequestId == id, token).ConfigureAwait(false),
-            async (id, token) => await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == tenant && g.RequestId == id, token).ConfigureAwait(false), ct).ConfigureAwait(false);
+            async (id, token) => await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == tenant && g.RequestId == id, token).ConfigureAwait(false), ct,
+            (id, token) => CanDeliverTenantEmail(db, tenant, id, token, retained: true)).ConfigureAwait(false);
     }
 }

@@ -11,6 +11,7 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class CoreEventRecord
 {
+    public string? EmailWatchEventId { get; set; }
     public string? SubscriptionsJson { get; set; }
     public Guid? TenantId { get; set; }
     public Guid? ExecutorPrincipalId { get; set; }
@@ -136,6 +137,7 @@ internal static class CoreEventPersistence
         if (e.Owner.TenantId is not null && subscriptions is null) throw new ArgumentException("Tenant Core production requires an atomic subscription snapshot.");
         if (e.Owner.TenantId is not null) e = e with { OccurredAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(e.OccurredAtUtc.ToUnixTimeMilliseconds()), VisitedAutomationIds = Array.AsReadOnly((e.VisitedAutomationIds ?? []).ToArray()) };
         db.CoreEvents.Add(new() { EventId = e.EventId.ToString("D"), DedupeKey = e.DedupeKey,
+            EmailWatchEventId = e.Owner.TenantId is not null && e.Key == "email.message.received" ? e.EventId.ToString("D") : null,
             SubscriptionsJson = e.Owner.TenantId is null ? null : JsonSerializer.Serialize(subscriptions, Json),
             TenantId = e.Owner.TenantId, ExecutorPrincipalId = e.Owner.ExecutorPrincipalId,
             AgentInstanceId = e.Owner.AgentInstanceId.ToString("D"), ProfileId = e.Owner.ProfileIdOrNull?.ToString("D"),

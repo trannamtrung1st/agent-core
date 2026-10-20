@@ -28,6 +28,9 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
     }
     private readonly ITriggerStore? triggers;
     private readonly Dictionary<Guid, EmailWatchNotification> notifications = [];
+    // Both facets share the incumbent state and receipt owners under CredentialGate.
+    internal Dictionary<Guid, EmailWatchState> TenantStates => states;
+    internal Dictionary<Guid, EmailWatchNotification> TenantNotifications => notifications;
     private Credential Account(Guid id) => EmailWatchTransitions.Require(credentials.GetAsync(id).GetAwaiter().GetResult());
     public ValueTask<EmailWatchState> GetAsync(Guid id, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) { Account(id); return ValueTask.FromResult(states.GetValueOrDefault(id) ?? new(id)); } }
@@ -46,7 +49,7 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             var result = new List<EmailWatchClaim>();
-            foreach (var s in states.Values.Where(s => s.Enabled && s.NextCheckAtUtc <= now && (s.LeaseId == null || s.LeaseExpiresAtUtc <= now)).OrderBy(s => s.NextCheckAtUtc).ThenBy(s => s.AccountId).Take(Math.Clamp(limit, 1, 8)).ToArray())
+            foreach (var s in states.Values.Where(s => s.TenantId is null && s.Enabled && s.NextCheckAtUtc <= now && (s.LeaseId == null || s.LeaseExpiresAtUtc <= now)).OrderBy(s => s.NextCheckAtUtc).ThenBy(s => s.AccountId).Take(Math.Clamp(limit, 1, 8)).ToArray())
             {
                 if (s.LeaseExpiresAtUtc > now) continue;
                 var c = credentials.GetAsync(s.AccountId).Result;
@@ -66,7 +69,7 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
-            if (!states.TryGetValue(claim.State.AccountId, out var s) || !EmailWatchTransitions.Valid(s, claim, credentials.GetAsync(s.AccountId).Result, now)) return ValueTask.FromResult(false);
+            if (claim.State.TenantId is not null || !states.TryGetValue(claim.State.AccountId, out var s) || s.TenantId is not null || !EmailWatchTransitions.Valid(s, claim, credentials.GetAsync(s.AccountId).Result, now)) return ValueTask.FromResult(false);
             var emitted = false;
             foreach (var n in proposed)
             {
@@ -79,12 +82,12 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
         }
     }
     public ValueTask RecordFailureAsync(EmailWatchClaim claim, SafeEmailWatchFailure failure, DateTimeOffset now, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) { if (states.TryGetValue(claim.State.AccountId, out var s) && s.LeaseId == claim.State.LeaseId && s.RuntimeRevision == claim.State.RuntimeRevision) states[s.AccountId] = EmailWatchTransitions.Failure(s, failure, now); } return ValueTask.CompletedTask; }
+    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) { if (claim.State.TenantId is null && states.TryGetValue(claim.State.AccountId, out var s) && s.TenantId is null && s.LeaseId == claim.State.LeaseId && s.RuntimeRevision == claim.State.RuntimeRevision) states[s.AccountId] = EmailWatchTransitions.Failure(s, failure, now); } return ValueTask.CompletedTask; }
     public ValueTask<bool> CanDeliverAsync(Guid eventId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
-            if (!notifications.TryGetValue(eventId, out var n) || !states.TryGetValue(n.AccountId, out var s)) return ValueTask.FromResult(false);
+            if (!notifications.TryGetValue(eventId, out var n) || n.Event.Owner.TenantId is not null || !states.TryGetValue(n.AccountId, out var s) || s.TenantId is not null) return ValueTask.FromResult(false);
             var c = credentials.GetAsync(n.AccountId).Result;
             return ValueTask.FromResult(s.Enabled && !s.Paused && s.Generation == n.Generation && c is not null && EmailWatchTransitions.Usable(c) && EmailWatchTransitions.Fingerprint(c) == n.AuthorizationFingerprint && BindingValid(n));
         }

@@ -54,15 +54,20 @@ public sealed partial class SqliteIamStore
             var row = await db.CoreEventBuckets.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(b => b.TenantId == tenant && b.BucketId == source.SourceId.ToString("D"), ct)
                 ?? throw new AccessDeniedException("event_source_unavailable"); var bucket = EventBucket(row);
             if (bucket.Flushed || (reserved ? bucket.ReservedOccurrenceId != initial.OccurrenceId : bucket.ReservedOccurrenceId is not null)) throw new SecurityConflictException("event_source_changed");
+            var email = TenantEventAdmissionRules.EmailBucket(bucket); var eligible = new List<Guid>();
             foreach (var entry in bucket.Sources)
             {
                 var delivery = await TenantEvent(db, tenant, source.SourceKind, entry.EventId, source.TriggerId, ct) ?? throw new AccessDeniedException("event_source_unavailable");
                 if (delivery.Status != EventMatchStatus.Coalesced || delivery.Subscription != bucket.Subscription) throw new SecurityConflictException("event_source_changed");
-                await RequireTenantEvent(db, delivery, ct); var key = delivery.Core?.Event.Key;
-                if (key is null) key = (await db.WebhookEvents.IgnoreQueryFilters().AsNoTracking().SingleAsync(w => w.TenantId == tenant && w.ResourceId == bucket.Subscription.ResourceId!.Value.ToString("D"), ct)).EventKey;
+                var key = delivery.Core?.Event.Key ?? (await db.WebhookEvents.IgnoreQueryFilters().AsNoTracking().SingleAsync(w => w.TenantId == tenant && w.ResourceId == bucket.Subscription.ResourceId!.Value.ToString("D"), ct)).EventKey;
                 if (JsonSerializer.Serialize(entry) != JsonSerializer.Serialize(TenantEventAdmissionRules.BucketSource(delivery, key))) throw new SecurityConflictException("event_source_changed");
+                if (reserved && email && !source.EventIds.Contains(entry.EventId)) continue;
+                try { await RequireTenantEvent(db, delivery, ct); eligible.Add(entry.EventId); }
+                catch (AccessDeniedException) when (email && !reserved) { }
             }
-            var value = new TenantEventBucket(tenant, bucket); frozen = TenantEventAdmissionRules.Freeze(value, revision);
+            var value = new TenantEventBucket(tenant, bucket);
+            if (email) value = TenantEventAdmissionRules.Retain(value, eligible);
+            frozen = TenantEventAdmissionRules.Freeze(value, revision);
             rebuilt = TenantEventAdmissionRules.Occurrence(current, value, initial.ModelPin!, initial.AdmittedAtUtc, revision);
         }
         if (JsonSerializer.Serialize(frozen) != JsonSerializer.Serialize(source) || !TenantAutomationAdmissionApprovalRules.SameOccurrence(rebuilt, initial)) throw new SecurityConflictException("event_source_changed");

@@ -1116,3 +1116,8 @@ The shared Chat file card now opens current source inspection and deliberate cop
 ### Tenant Core/Webhook event Automation checkpoint — 2026-10-21
 
 Canonical tenant event receipt snapshots, matching/coalescing, actual Core metadata production/causation, compound raw-read/admission consent, recovery, scoped Activity and native typed authoring are locally qualified as one module. [Focused qualification](reports/tenant-event-automation-verification-2026-10-21.md) records focused both-store/SQLite-host/browser evidence and remaining limits. This supersedes Core/Webhook subscription/admission-pending notes only. Email watchers, destination/report conversion, remaining voice/System/audit work, obsolete-authority/schema removal and final route-by-route proposal acceptance remain open. The original full goal stays active; no milestone or full proposal acceptance is claimed.
+
+
+### Tenant email monitoring checkpoint — 2026-10-21
+
+Canonical tenant account polling, atomic metadata/proof production, exact source read/use and Review, current eligible coalesced subsets, scoped human facts/Activity/approval counts, protected refresh, source retirement and shared native monitoring controls are locally qualified as one module. [Focused qualification](reports/tenant-email-watch-verification-2026-10-21.md) records both-store, actual SQLite application recreation, provider-fixture and browser evidence with its limits. This supersedes tenant-watcher-pending notes only. Destinations/reporting, remaining voice/System/audit, obsolete authority/schema removal and final proposal-wide route/security/design qualification remain open. The original full goal stays active; no milestone or full proposal acceptance is claimed.

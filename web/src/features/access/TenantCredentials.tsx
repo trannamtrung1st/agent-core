@@ -7,6 +7,8 @@ import { followAppLink } from '../../app/appLink';
 import { navigateToAppPath } from '../../app/appRoute';
 import { confirmAction } from '../../app/confirmAction';
 import { AdminCollectionToolbar } from '../admin/AdminCollectionToolbar';
+import { EmailMonitoringSection } from '../admin/EmailMonitoringSection';
+import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { CredentialConnectionTag } from '../admin/CredentialConnectionTag';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 import { AccessError, AccessLoading } from './AccessFeedback';
@@ -51,9 +53,11 @@ function CredentialInspector({ tenant, organization, id, onChanged, onClose }: {
   const item = saved?.credential ?? state.data?.credential; const manage = access.data?.permissions.includes('credentials.manage') ?? false;
   const reload = () => { setSaved(undefined); state.reload(); access.reload(); onChanged(); };
   const updated = (value: TenantCredential) => { setSaved(value); setEditor(undefined); onChanged(); if (new URLSearchParams(window.location.search).has('connection')) navigateToAppPath(tenantCredentialPath(tenant, id), true); };
-  const busy = command.busy || command.requiresReload || redirecting || connecting; const oauth = item && ['Gmail', 'Drive'].includes(credentialPurpose(item));
-  return <Drawer open title="Credential details" className="access-editor-drawer" size={640} styles={{ wrapper: { maxWidth: '100vw' } }} onClose={() => { if (!editor && !busy) onClose(); }}
-    keyboard={!editor && !busy} closable={!editor && !busy} maskClosable={!editor && !busy} footer={<Button disabled={!!editor || busy} onClick={onClose}>Close details</Button>}>
+  const [monitoringDirty, setMonitoringDirty] = useState(false); const [monitoringBusy, setMonitoringBusy] = useState(false);
+  const busy = monitoringBusy || command.busy || command.requiresReload || redirecting || connecting; const oauth = item && ['Gmail', 'Drive'].includes(credentialPurpose(item));
+  const guard = useAccessDraftGuard(monitoringDirty, busy || !!editor, onClose);
+  return <>{guard.holder}<Drawer open title="Credential details" className="access-editor-drawer" size={640} styles={{ wrapper: { maxWidth: '100vw' } }} onClose={() => { if (!editor && !busy) guard.close(); }}
+    keyboard={!editor && !busy} closable={!editor && !busy} maskClosable={!editor && !busy} footer={<Button disabled={!!editor || busy} onClick={guard.close}>Close details</Button>}>
     {state.error || access.error ? <AccessError error={state.error ?? access.error} retry={reload} /> : !item || !access.data ? <AccessLoading /> : <Flex vertical gap="var(--ac-space-section)" className="access-bounded-form">
       <Typography.Title level={4}>{item.displayName}</Typography.Title>
       <CallbackOutcome account={item} tenant={tenant} />
@@ -73,16 +77,17 @@ function CredentialInspector({ tenant, organization, id, onChanged, onClose }: {
       ]} />
       {item.emailAccount?.preset === 'Custom' && <Descriptions {...layout} column={1} size="small" items={(['imap', 'smtp'] as const).flatMap(protocol => [{ label: protocol.toUpperCase(), children: `${item.emailAccount![`${protocol}Endpoint`]?.host}:${item.emailAccount![`${protocol}Endpoint`]?.port} · ${item.emailAccount![`${protocol}Endpoint`]?.tlsMode === 'StartTls' ? 'Required STARTTLS' : 'Required implicit TLS'}` }, { label: `${protocol.toUpperCase()} username`, children: item.emailAccount![`${protocol}Username`] }])} />}
       <Typography.Paragraph type="secondary">Protected values cannot be read back. Connections, agent bindings and permissions are managed separately.</Typography.Paragraph>
-      <Flex wrap gap="var(--ac-space-compact)"><Button disabled={busy} onClick={reload}>Reload details</Button>{manage && <>
-        <Button disabled={busy} onClick={() => setEditor('edit')}>Edit credential</Button>
-        {!oauth && <Button disabled={busy} onClick={() => setEditor('replace')}>Replace protected value</Button>}
-        <Button danger disabled={busy || item.bindingCount > 0} title={item.bindingCount > 0 ? 'Remove its agent bindings before deleting this credential.' : undefined} onClick={() => confirmAction(modal, { title: `Delete ${item.displayName}?`, content: `In ${organization}, the protected value and its direct access grants will be removed. This cannot be undone.`, okText: 'Delete credential', danger: true,
+      <Flex wrap gap="var(--ac-space-compact)"><Button disabled={busy || monitoringDirty} onClick={reload}>Reload details</Button>{manage && <>
+        <Button disabled={busy || monitoringDirty} onClick={() => setEditor('edit')}>Edit credential</Button>
+        {!oauth && <Button disabled={busy || monitoringDirty} onClick={() => setEditor('replace')}>Replace protected value</Button>}
+        <Button danger disabled={busy || monitoringDirty || item.bindingCount > 0} title={item.bindingCount > 0 ? 'Remove its agent bindings before deleting this credential.' : undefined} onClick={() => confirmAction(modal, { title: `Delete ${item.displayName}?`, content: `In ${organization}, the protected value and its direct access grants will be removed. This cannot be undone.`, okText: 'Delete credential', danger: true,
           onOk: () => command.run(async signal => { const current = await freshCredentialAccess(tenant, id, signal); return identityRequest(credentialApi(tenant, id) + `?expectedRevision=${current.revision}&expectedCredentialRevision=${item.revision}`, { method: 'DELETE', signal }); }, () => { message.success('Credential deleted.'); onChanged(); onClose(); }) })}>Delete credential</Button>
       </>}</Flex>
-      {oauth && <TenantGoogleConnection tenant={tenant} account={item} manage={manage} busy={command.busy || redirecting || !!editor} onChanged={updated} onRedirect={() => setRedirecting(true)} onBusyChange={setConnecting} />}
+      {oauth && <TenantGoogleConnection tenant={tenant} account={item} manage={manage} busy={command.busy || redirecting || monitoringBusy || monitoringDirty || !!editor} onChanged={updated} onRedirect={() => setRedirecting(true)} onBusyChange={setConnecting} />}
+      {item.emailAccount && <EmailMonitoringSection tenant={tenant} account={item} parentBusy={command.busy || command.requiresReload || redirecting || connecting || !!editor} onDirtyChange={setMonitoringDirty} onBusyChange={setMonitoringBusy} />}
       {editor && <TenantCredentialEditor tenant={tenant} organization={organization} account={item} replace={editor === 'replace'} onClose={() => setEditor(undefined)} onSaved={updated} />}
     </Flex>}
-  </Drawer>;
+  </Drawer></>;
 }
 function TenantGoogleConnection({ tenant, account, manage, busy, onChanged, onRedirect, onBusyChange }: { tenant: string; account: SystemCredential; manage: boolean; busy: boolean; onChanged: (value: TenantCredential) => void; onRedirect: () => void; onBusyChange: (busy: boolean) => void }) {
   const setup = useIdentityQuery<OAuthSetup>(credentialApi(tenant, account.credentialId, '/oauth')); const command = useTenantCommand(); const { message, modal } = App.useApp();

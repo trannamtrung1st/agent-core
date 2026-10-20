@@ -235,9 +235,12 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   const rawPermission = eventSource === 'Built-in event · no human requester' ? 'core-events.read' : eventSource === 'Webhook event · no human requester' ? 'webhooks.read' : null;
   const requiredAdmissionFields = rawPermission ? [...admissionFields, 'admissionEventSource', 'admissionEventFilter', 'admissionEventDispatch', 'admissionEventData'] : admissionFields;
   const primaryAdmissionPermission = String(mutationField('admissionPrimaryPermission'));
+  const emailScope = rawPermission === 'core-events.read'
+    && mutationField('admissionScope') === 'automations.run; sessions.create; agent-runs.create; core-events.read; credentials.read; credentials.use; email.read'
+    && emailAdmissionData(mutationField('admissionEventData'));
   const validAdmission = ['Scheduled occurrence · no human requester', 'Explicit manual invocation', 'Built-in event · no human requester', 'Webhook event · no human requester'].includes(String(eventSource)) && data?.sessionId === null && data.runId === null && data.review.changes.length === requiredAdmissionFields.length
-    && ([...['automations.run', 'sessions.create', 'agent-runs.create'], ...(rawPermission && data.kind === 'review' ? [rawPermission] : [])]).includes(primaryAdmissionPermission)
-    && mutationField('admissionScope') === `automations.run; sessions.create; agent-runs.create${rawPermission ? `; ${rawPermission}` : ''}`
+    && ([...['automations.run', 'sessions.create', 'agent-runs.create'], ...(rawPermission && data.kind === 'review' ? [rawPermission, ...(emailScope ? ['credentials.read', 'credentials.use', 'email.read'] : [])] : [])]).includes(primaryAdmissionPermission)
+    && (emailScope || mutationField('admissionScope') === `automations.run; sessions.create; agent-runs.create${rawPermission ? `; ${rawPermission}` : ''}`)
     && requiredAdmissionFields.every(field => data.review.changes.filter(change => change.field === field && change.afterAvailable && typeof change.after === 'string' && change.after.trim().length > 0).length === 1);
   const invalidPreview = (automationAdmission && !validAdmission) || (accountAction && !account) || (reportSourceRead && !reportSource) || (completionRead && !completion) || (workspaceMutation && !mutation) || (artifactPublication && !publication) || (backgroundCreation && !validBackground) || (backgroundReport && !validReport);
   const blocked = !fresh || loading || !!acknowledged || expired || busy || command.requiresReload;
@@ -312,3 +315,17 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
   </Drawer>;
 }
 function value(content: string | number | boolean | null) { return <Typography.Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{typeof content === 'boolean' ? content ? 'Yes' : 'No' : content ?? 'Not set'}</Typography.Text>; }
+
+function emailAdmissionData(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const data: unknown = JSON.parse(value);
+    const sources = Array.isArray(data) ? data.map(entry => entry?.data) : [data];
+    return sources.length > 0 && sources.length <= 24 && sources.every(source => source && typeof source === 'object'
+      && Object.keys(source).sort().join(',') === 'accountId,accountRef,messageRef,provider'
+      && typeof source.accountId === 'string' && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(source.accountId)
+      && typeof source.accountRef === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(source.accountRef)
+      && typeof source.messageRef === 'string' && source.messageRef.length > 0 && source.messageRef.length <= 512 && !/[\u0000-\u001f\u007f-\u009f]/.test(source.messageRef)
+      && ['Gmail', 'Custom'].includes(source.provider));
+  } catch { return false; }
+}

@@ -46,6 +46,23 @@ public sealed class ImapSmtpEmailProviderTests
         Assert.True(gap.CursorGap); Assert.Empty(gap.MessageRefs);
     }
 
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Watch_rechecks_live_source_after_open_before_search_or_UID_fetch(bool missingUidNext)
+    {
+        await using var server = new FakeMailServer(smtp: false, omitUidNext: missingUidNext);
+        ValueTask Current(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (server.Commands.Any(c => c.StartsWith("EXAMINE", StringComparison.Ordinal)))
+                throw new AgentCore.Application.Security.AccessDeniedException("email_watch_source_changed");
+            return ValueTask.CompletedTask;
+        }
+        await Assert.ThrowsAsync<AgentCore.Application.Security.AccessDeniedException>(() => Provider(server, Context()).WatchAsync(
+            new(AgentCore.Domain.Email.EmailWatchCursorKind.ImapUid, UidValidity: 123, LastUid: 6), default, Current).AsTask());
+        Assert.Contains(server.Commands, c => c.StartsWith("EXAMINE", StringComparison.Ordinal));
+        Assert.DoesNotContain(server.Commands, c => c.Contains("SEARCH", StringComparison.Ordinal) || c.Contains("FETCH", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(false, EmailSendOutcome.Sent)]
     [InlineData(true, EmailSendOutcome.Indeterminate)]

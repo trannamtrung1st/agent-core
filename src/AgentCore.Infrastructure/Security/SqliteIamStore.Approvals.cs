@@ -421,6 +421,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         {
             var webhookJson = System.Text.Json.JsonSerializer.Serialize(visibility.WebhookSources?.Select(id => id.ToString("D")).ToArray());
             var coreJson = System.Text.Json.JsonSerializer.Serialize(visibility.CoreEvents?.Select(id => id.ToString("D")).ToArray());
+            var emailJson = System.Text.Json.JsonSerializer.Serialize(visibility.EmailAccounts?.Select(id => id.ToString("D")).ToArray());
             var sourceReadable = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
                 SELECT * FROM TenantApprovalRequests WHERE AutomationId IS NULL
                 OR json_extract(PayloadJson, '$.Operation.AutomationAdmission.EventSource') IS NULL
@@ -433,6 +434,19 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                         WHERE NOT EXISTS (SELECT 1 FROM json_each({coreJson}) allowed WHERE allowed.value = source.value))))
                 """);
             query = query.Where(r => sourceReadable.Any(owned => owned.RequestId == r.RequestId));
+            var emailReadable = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests request WHERE AutomationId IS NULL
+                OR NOT EXISTS (
+                    SELECT 1 FROM json_each(request.PayloadJson, '$.Operation.AutomationAdmission.EventSource.EventIds') source
+                    JOIN CoreEvents fact ON fact.TenantId = request.TenantId AND fact.EventId = source.value
+                    WHERE json_extract(fact.PayloadJson, '$.Key') = 'email.message.received'
+                    AND (NOT EXISTS (SELECT 1 FROM TenantCredentials owner JOIN Credentials account ON account.CredentialId = owner.CredentialId
+                        WHERE owner.TenantId = request.TenantId AND owner.DeletedAt IS NULL AND account.Purpose = 'EmailAccount'
+                        AND owner.CredentialId = json_extract(json_extract(fact.PayloadJson, '$.DataJson'), '$.accountId'))
+                        OR (json_type({emailJson}) <> 'null' AND NOT EXISTS (SELECT 1 FROM json_each({emailJson}) allowed
+                            WHERE allowed.value = json_extract(json_extract(fact.PayloadJson, '$.DataJson'), '$.accountId')))))
+                """);
+            query = query.Where(r => emailReadable.Any(owned => owned.RequestId == r.RequestId));
             var agentIds = visibility.Agents?.Select(id => id.ToString("D")).ToArray();
             var readIds = visibility.ReadAutomations?.Select(id => id.ToString("D")).ToArray();
             var runIds = visibility.RunAutomations?.Select(id => id.ToString("D")).ToArray();

@@ -96,10 +96,10 @@ public static class TenantAutomationRules
         }
     }
     public static async ValueTask AdmissionAuthority(TenantSecurityState state, Automation automation, TenantAgent agent, AgentDefinition definition,
-        IamAuthorizer iam, CancellationToken ct, Guid? requester = null, TriggerSourceKind? sourceKind = null, PreparedEventAdmissionSource? eventSource = null)
+        IamAuthorizer iam, CancellationToken ct, Guid? requester = null, TriggerSourceKind? sourceKind = null, PreparedEventAdmissionSource? eventSource = null, IReadOnlyList<Guid>? emailAccounts = null)
     {
         AdmissionSource(state, automation, agent, definition, requester, sourceKind);
-        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(state.Tenant.TenantId, automation.AutomationId).Concat(TenantAutomationAdmissionApprovalRules.SourceTargets(eventSource)))
+        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(state.Tenant.TenantId, automation.AutomationId).Concat(TenantAutomationAdmissionApprovalRules.SourceTargets(eventSource, emailAccounts)))
         {
             if (!(await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), scope, ct)).Allowed)
                 throw new AccessDeniedException("automation_executor_required");

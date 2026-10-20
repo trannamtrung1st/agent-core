@@ -265,12 +265,24 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         SandboxRuntimePersistence.Configure(modelBuilder);
         modelBuilder.Entity<EmailWatchRecord>(e =>
         {
+            e.ToTable("EmailWatches", t => t.HasCheckConstraint("CK_EmailWatches_TenantOwner",
+                "TenantId IS NULL OR COALESCE((json_valid(StateJson) AND lower(json_extract(StateJson, '$.TenantId')) = lower(TenantId) AND json_extract(StateJson, '$.AccountId') IS AccountId AND json_extract(StateJson, '$.Enabled') = Enabled AND json_extract(StateJson, '$.RuntimeRevision') = RuntimeRevision AND json_extract(StateJson, '$.ConfigurationRevision') >= 0 AND json_extract(StateJson, '$.Generation') >= 0 AND json_extract(StateJson, '$.IntervalSeconds') IN (60,300,900)),0)"));
             e.HasKey(r => r.AccountId);
+            e.HasQueryFilter(r => r.TenantId == null);
+            e.HasIndex(r => new { r.TenantId, r.Enabled, r.NextCheckAtUtc });
+            e.HasOne<AgentCore.Infrastructure.Security.TenantCredentialRecord>().WithMany().HasForeignKey(r => new { r.TenantId, r.AccountId })
+                .HasPrincipalKey(r => new { r.TenantId, r.CredentialId }).OnDelete(DeleteBehavior.Cascade);
             e.Property(r => r.RuntimeRevision).IsConcurrencyToken();
             e.HasIndex(r => new { r.Enabled, r.NextCheckAtUtc });
             e.HasOne<CredentialRecord>().WithMany().HasForeignKey(r => r.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
+        modelBuilder.Entity<EmailWatchEventRecord>().ToTable("EmailWatchEvents", t => t.HasCheckConstraint("CK_EmailWatchEvents_TenantOwner",
+            "(TenantId IS NULL AND AccountId IS NULL) OR COALESCE((TenantId IS NOT NULL AND AccountId IS NOT NULL AND json_valid(AuthorityJson) AND json_extract(AuthorityJson, '$.Event.EventId') IS EventId AND lower(json_extract(AuthorityJson, '$.Event.Owner.TenantId')) = lower(TenantId) AND json_extract(AuthorityJson, '$.AccountId') IS AccountId AND json_extract(AuthorityJson, '$.Generation') >= 1 AND json_type(AuthorityJson, '$.WatchLeaseId') IS 'text' AND json_extract(AuthorityJson, '$.WatchRuntimeRevision') >= 1 AND json_extract(AuthorityJson, '$.AccountRevision') >= 1),0)"));
         modelBuilder.Entity<EmailWatchEventRecord>().HasKey(r => r.EventId);
+        modelBuilder.Entity<EmailWatchEventRecord>().HasQueryFilter(r => r.TenantId == null);
+        modelBuilder.Entity<EmailWatchEventRecord>().HasIndex(r => new { r.TenantId, r.AccountId });
+        modelBuilder.Entity<EmailWatchEventRecord>().HasOne<AgentCore.Infrastructure.Security.TenantCredentialRecord>().WithMany()
+            .HasForeignKey(r => new { r.TenantId, r.AccountId }).HasPrincipalKey(r => new { r.TenantId, r.CredentialId }).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<EmailWatchEventRecord>().HasOne<CoreEventRecord>().WithMany().HasForeignKey(r => r.EventId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<AgentInstanceResourceRecord>(e => {
             e.ToTable("AgentInstanceResources"); e.HasKey(r => new { r.InstanceId, r.ResourceId });
@@ -516,6 +528,9 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         {
             entity.ToTable("CoreEvents", table => table.HasCheckConstraint("CK_CoreEvents_TenantOwner",
                 "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR COALESCE((TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL AND json_valid(PayloadJson) AND json_extract(PayloadJson, '$.EventId') IS EventId AND json_extract(PayloadJson, '$.DedupeKey') IS DedupeKey AND lower(json_extract(PayloadJson, '$.Owner.TenantId')) = lower(TenantId) AND lower(json_extract(PayloadJson, '$.Owner.ExecutorPrincipalId')) = lower(ExecutorPrincipalId) AND json_extract(PayloadJson, '$.Owner.AgentInstanceId') IS AgentInstanceId AND json_extract(PayloadJson, '$.Owner.profileId') IS NULL AND json_extract(PayloadJson, '$.Key') IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted','email.message.received') AND json_valid(json_extract(PayloadJson, '$.DataJson')) AND length(CAST(json_extract(PayloadJson, '$.DataJson') AS BLOB)) <= 8192),0)"));
+            entity.ToTable("CoreEvents", table => table.HasCheckConstraint("CK_CoreEvents_EmailSource",
+                "(EmailWatchEventId IS NULL AND (TenantId IS NULL OR json_extract(PayloadJson, '$.Key') <> 'email.message.received')) OR (TenantId IS NOT NULL AND EmailWatchEventId IS EventId AND json_extract(PayloadJson, '$.Key') = 'email.message.received')"));
+            entity.HasOne<EmailWatchEventRecord>().WithMany().HasForeignKey(r => r.EmailWatchEventId).OnDelete(DeleteBehavior.Restrict);
             entity.HasKey(r => r.EventId);
             entity.HasQueryFilter(r => r.TenantId == null);
             entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()

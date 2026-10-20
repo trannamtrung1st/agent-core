@@ -786,3 +786,20 @@ it.each(['Built-in event · no human requester', 'Webhook event · no human requ
   expect(within(dialog).getByText('{"note":"<script>literal event data</script>"}')).toBeVisible(); expect(dialog.querySelector('script')).toBeNull();
   expect(within(dialog).getByRole('button', { name: /^Approve$/ })).toBeEnabled();
 });
+
+it.each(['credentials.read', 'credentials.use', 'email.read'])('reviews exact email source admission with primary %s', async primary => {
+  const item = admissionRequest(); item.kind = 'review';
+  item.review.changes.find(c => c.field === 'admissionSource')!.after = 'Built-in event · no human requester';
+  item.review.changes.find(c => c.field === 'admissionPrimaryPermission')!.after = primary;
+  item.review.changes.find(c => c.field === 'admissionScope')!.after += '; core-events.read; credentials.read; credentials.use; email.read';
+  item.review.changes.push(...Object.entries({ admissionEventSource: 'One exact saved source', admissionEventFilter: 'true', admissionEventDispatch: 'Every matched receipt', admissionEventData: JSON.stringify({ accountId: 'aaaaaaaa-0000-0000-0000-000000000001', accountRef: 'saved-account', messageRef: '<literal reference>', provider: 'Gmail' }) }).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })));
+  view(item); const dialog = await screen.findByRole('dialog'); expect(within(dialog).getByRole('button', { name: /^Approve$/ })).toBeEnabled();
+});
+it('blocks a widened email admission scope with malformed original metadata', async () => {
+  const item = admissionRequest(); item.kind = 'review';
+  item.review.changes.find(c => c.field === 'admissionSource')!.after = 'Built-in event · no human requester';
+  item.review.changes.find(c => c.field === 'admissionPrimaryPermission')!.after = 'credentials.use';
+  item.review.changes.find(c => c.field === 'admissionScope')!.after += '; core-events.read; credentials.read; credentials.use; email.read';
+  item.review.changes.push(...Object.entries({ admissionEventSource: 'One exact saved source', admissionEventFilter: 'true', admissionEventDispatch: 'Every matched receipt', admissionEventData: '{"body":"not an email reference"}' }).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })));
+  view(item); const dialog = await screen.findByRole('dialog'); expect(within(dialog).getByRole('button', { name: /^Approve$/ })).toBeDisabled();
+});

@@ -32,7 +32,7 @@ public sealed partial class SqliteIamStore
         var policy = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct), agent.Instance.SettingsOverrides);
         TenantAutomationAdmissionApprovalRules.Shape(request, agent);
         TenantAutomationRules.Admission(admission, agent, human?.PrincipalId, p);
-        var decision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, p.Current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct, p.Occurrence.SourceKind, p.EventSource);
+        var decision = await TenantAutomationAdmissionApprovalRules.EvaluateAsync(state, p.Current, agent, policy, human?.PrincipalId, new IamAuthorizer(this), ct, p.Occurrence.SourceKind, p.EventSource, p.EmailSourceAccountIds);
         if (decision.Kind != request.Kind || decision.Permission != request.Permission) throw new SecurityConflictException("operation_authority_changed");
         if (human is not null) await RequireAutomationHuman(state, human.PrincipalId, agent, p.Current.AutomationId, "automations.run", false, ct);
         if (await TenantAutomationBusy(db, request.TenantId, p.Current.AutomationId, ct)) throw new SecurityConflictException("automation_in_use");

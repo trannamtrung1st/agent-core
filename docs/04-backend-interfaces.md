@@ -1765,3 +1765,9 @@ The ordinary approval inbox, reviewer identity, independent review, exact action
 
 
 [Focused qualification](reports/tenant-event-automation-verification-2026-10-21.md) records the completed local Core/Webhook event module and its remaining proposal boundaries.
+
+### Tenant-owned email monitoring source
+
+`ITenantEmailWatchStore` extends the incumbent watch/hidden-proof owners through the tenant IAM store. Human configure/check repeats the original login, current credential permissions, security revision, credential logical revision and watch configuration revision in the owning commit. Poll claims belong to the enabled tenant/account source; they do not retain the configuring person's login or fabricate an executing Agent. Cursor success derives current active bindings, actual executor identities, raw source permissions, Core trigger policy and complete receipt-time subscriptions inside the source commit.
+
+`ITenantEmailChangeFeed` exposes only bounded cursor/reference batches, source recheck and protected OAuth-maintenance callbacks. Infrastructure keeps Gmail/IMAP DTOs and secret handling. Baselines skip historical mail; gaps rebaseline explicitly. A completed scan advances the cursor and writes its metadata facts and hidden binding/lease/account proofs atomically. Runtime delivery and retained-read checks are distinct: watch-off fences unadmitted input, while admitted work retains current original-account/binding/raw-read/Review fences. These ports reuse Automation, occurrence, consent, Session and Run owners.

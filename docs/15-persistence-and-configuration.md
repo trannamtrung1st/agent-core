@@ -1374,3 +1374,15 @@ Source receipts, durable filter decisions/retries, coalescing sources, reserved 
 
 
 [Focused qualification](reports/tenant-event-automation-verification-2026-10-21.md) records the completed local Core/Webhook event module and its remaining proposal boundaries.
+
+### Tenant email watch ownership and atomic proof migration
+
+`20261021040000_TenantEmailWatchOwnership` extends the existing `EmailWatches` and `EmailWatchEvents` tables with tenant/account ownership. It preserves legacy rows behind the interim non-tenant filters and all incumbent guards; the frozen migration installs 75 guards after every table rebuild/rename. This is one conversion module, not completion of the final removal of legacy authority/schema.
+
+Canonical watch JSON binds the actual owned Email credential, configuration/generation/runtime revisions, logical authorization revision, bounded cursor, safe failure and lease state. A successful scan records its completed lease/runtime and whether a prior cursor existed. Baseline completion cannot emit historical references. Cursor advancement, pause release, closed Core metadata, frozen subscriptions and immutable hidden account/binding/lease proofs share one transaction. Source-primary account Review extends the existing closed Automation consent shape and retains literal original email evidence.
+
+The reciprocal `CoreEvents.EmailWatchEventId → EmailWatchEvents.EventId` foreign key is frozen as `DEFERRABLE INITIALLY DEFERRED`; EF's model has the same relationship but cannot express that SQLite timing. Core source insertion can precede hidden-proof insertion inside the outer transaction, but committing an unproved email source fails. The existing proof-to-Core foreign key remains in place. Foreign-key pragmas surround the transaction; triggers are restored after all renames. Downgrade refuses canonical watch/proof/email facts instead of discarding ownership. Legacy-only roundtrips retain their prior schema/guards.
+
+OAuth protected-token maintenance changes the secret revision without changing the logical account fingerprint. Logical profile/status/value changes, removal of a binding and Agent lifecycle changes remain current fences. Source polling uses the existing `Email` and `EmailMonitoring` host controls, bounded three-account concurrency, 60-second deadline, 90-second lease and 25-reference pages; one cursor commit refuses more than 1024 receipt/child-delivery targets as a whole with `email_watch_fanout_limit`.
+
+Deleting an unbound canonical credential first marks its existing tenant root deleted inside the outer security/audit transaction. The incumbent credential foreign key may then cascade its watch; the watch-delete guard permits that explicit tombstone path. Hidden source proofs and factual Core/occurrence records remain retained, while absent original credentials are excluded before human counts and fail pending/admitted source checks. An active owner cannot directly erase its watch to remove source history or reset its authority.

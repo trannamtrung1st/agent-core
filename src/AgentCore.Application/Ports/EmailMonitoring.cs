@@ -8,7 +8,10 @@ public sealed record EmailWatchClaim(EmailWatchState State, Credential Account);
 public sealed record EmailWatchBatch(IReadOnlyList<string> MessageRefs, EmailWatchCursor NextCursor,
     bool HasMore = false, bool CursorGap = false);
 public sealed record EmailWatchNotification(CoreEventOccurrence Event, Guid BindingId, long BindingRevision,
-    Guid AccountId, long Generation, string AuthorizationFingerprint);
+    Guid AccountId, long Generation, string AuthorizationFingerprint,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? WatchLeaseId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? WatchRuntimeRevision = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? AccountRevision = null);
 public sealed record SafeEmailWatchFailure(string Code, Guid? DiagnosticId, bool Permanent);
 public interface IEmailChangeFeed
 {

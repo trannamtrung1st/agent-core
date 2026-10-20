@@ -20,7 +20,7 @@ public sealed partial class InMemoryCoreEventStore
     internal void PutTenantBucket(CoreEventBucket bucket) => buckets[bucket.BucketId] = bucket with { Sources = Array.AsReadOnly(bucket.Sources.ToArray()) };
     // Caller holds the source/IAM/Automation locks and derives subscriptions from
     // the actual committed owner. Replays never attach later subscriptions.
-    internal void AppendTenant(CoreEventOccurrence e, IReadOnlyList<EventSubscriptionSnapshot> subscriptions)
+    internal CoreEventOccurrence ValidateTenantAppend(CoreEventOccurrence e, IReadOnlyList<EventSubscriptionSnapshot> subscriptions)
     {
         if (e.Owner.TenantId is null || e.Owner.ExecutorPrincipalId is null || e.TriggerDepth is < 0 or > 4
             || !CoreEventCatalog.Keys.Contains(e.Key) || subscriptions.Any(s => s.Owner != e.Owner || s.SourceKind != TriggerSourceKind.CoreEvent))
@@ -29,10 +29,16 @@ public sealed partial class InMemoryCoreEventStore
         if (receipts.TryGetValue(e.EventId, out var prior))
         {
             if (JsonSerializer.Serialize(prior.Event) != JsonSerializer.Serialize(e)) throw new SecurityConflictException("event_identity_conflict");
-            return;
+            return e;
         }
         if (receipts.Values.Any(r => r.Event.DedupeKey == e.DedupeKey)) throw new SecurityConflictException("event_identity_conflict");
         if (subscriptions.Select(s => s.TriggerId).Distinct().Count() != subscriptions.Count) throw new ArgumentException("Subscription identities must be distinct.");
+        return e;
+    }
+    internal void AppendTenant(CoreEventOccurrence e, IReadOnlyList<EventSubscriptionSnapshot> subscriptions)
+    {
+        e = ValidateTenantAppend(e, subscriptions);
+        if (receipts.ContainsKey(e.EventId)) return;
         var pending = subscriptions.Select(s => new CoreEventDelivery(e.EventId, s, EventMatchStatus.Pending)).ToArray();
         receipts.Add(e.EventId, new(e, AgentCore.Application.Triggers.TriggerScheduleCalculator.Truncate(e.OccurredAtUtc), true));
         foreach (var row in pending) deliveries.Add((e.EventId, row.Subscription.TriggerId), row);

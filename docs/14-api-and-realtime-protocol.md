@@ -1814,3 +1814,12 @@ The Automation editor includes advisory `canCoreEvents` and `canWebhookEvents` c
 
 
 [Focused qualification](reports/tenant-event-automation-verification-2026-10-21.md) records the completed local Core/Webhook event module and its remaining proposal boundaries.
+
+
+## Canonical tenant email monitoring conversion contract
+
+The canonical tenant monitoring routes use `/api/v2/tenants/{tenantId}/credentials/{credentialId}/monitoring`: GET a safe view, PUT `{expectedRevision,expectedCredentialRevision,expectedWatchRevision,enabled,intervalSeconds}`, and POST `/check` with the three exact revision witnesses. Authenticated current original-human authority, `credentials.read` and `email.read` are required for inspection; mutation also needs `credentials.manage`, with independent `credentials.use` for enabling or checking. The owning transaction repeats the original login, tenant/account ownership, current permissions and all witnesses. An unavailable account/host can retain an enabled-but-paused configuration; Check now requires an available enabled source and only queues a bounded scan. Repeated checks coalesce, and no native network call occurs in the handler.
+
+The canonical view includes accountId, enabled, intervalSeconds, configurationRevision, credentialRevision, securityRevision, status, hostAvailable, accountAvailable, canManage, canEnable, canCheck, checkPending, safe nullable errorCode/diagnosticId and the existing checked/success/event/next/gap UTC times. It exposes no cursor, lease, fingerprint, message content, secret or unfiltered subscriber count. Source polling uses its tenant-owned watch fence rather than retaining the configuring person's login or authority. The old owner monitoring route cannot read or mutate tenant watches. Focused runtime and native UI qualification is recorded in [tenant email monitoring verification](reports/tenant-email-watch-verification-2026-10-21.md); full proposal acceptance remains open.
+
+`canEnable` requires current management and account-use authority; a manager without use access can still turn an enabled source off. `canCheck` additionally requires an enabled, available source/host. These display hints never replace the owning commit checks.

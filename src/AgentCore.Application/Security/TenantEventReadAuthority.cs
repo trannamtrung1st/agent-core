@@ -17,7 +17,8 @@ public static class TenantEventReadRules
         Func<Guid, CancellationToken, ValueTask<TenantEventBucket?>> bucketReader,
         Func<Guid, CancellationToken, ValueTask<TenantApprovalRequest?>> requestReader,
         Func<Guid, CancellationToken, ValueTask<TenantApprovalDecision?>> decisionReader,
-        Func<Guid, CancellationToken, ValueTask<TenantOperationGrant?>> grantReader, CancellationToken ct)
+        Func<Guid, CancellationToken, ValueTask<TenantOperationGrant?>> grantReader, CancellationToken ct,
+        Func<Guid, CancellationToken, ValueTask<bool>>? emailReader = null)
     {
         if (!IsEventRoot(root)) return;
         if (occurrence.Owner != TriggerOwner.ForTenant(state.Tenant.TenantId, root.AgentInstanceId, root.Owner.ExecutorPrincipalId!.Value)
@@ -31,6 +32,7 @@ public static class TenantEventReadRules
         if (source.TenantId != state.Tenant.TenantId || source.TriggerId != occurrence.TriggerId || source.SourceKind != occurrence.SourceKind
             || root.Admission.TaskIntent?.EventSourceKind != source.SourceKind || source.SourceId != occurrence.SourceEventId || source.DedupeKey != occurrence.DedupeKey)
             throw new AccessDeniedException("event_source_unavailable");
+        var emailAccounts = new List<Guid>();
         PreparedEventAdmissionSource frozen;
         if (!source.IsBucket)
         {
@@ -39,6 +41,11 @@ public static class TenantEventReadRules
             if (delivery.Status != EventMatchStatus.Admitted || delivery.ReservedOccurrenceId != occurrence.OccurrenceId
                 || delivery.Subscription.Owner != occurrence.Owner || delivery.Subscription.AutomationId != occurrence.AutomationId)
                 throw new AccessDeniedException("event_source_unavailable");
+            if (delivery.Core?.Event.Key == "email.message.received")
+            {
+                if (emailReader is null || !await emailReader(delivery.EventId, ct).ConfigureAwait(false)) throw new AccessDeniedException("email_event_source_changed");
+                emailAccounts.AddRange(TenantEventAdmissionRules.EmailAccounts(delivery));
+            }
             frozen = TenantEventAdmissionRules.Freeze(delivery with { Status = EventMatchStatus.Matched, ReservedOccurrenceId = null }, source.ResourceRevision);
         }
         else
@@ -48,6 +55,10 @@ public static class TenantEventReadRules
             if (!bucket.Flushed || bucket.CompletionCode is not null || bucket.ReservedOccurrenceId != occurrence.OccurrenceId
                 || bucket.Subscription.Owner != occurrence.Owner || bucket.Subscription.AutomationId != occurrence.AutomationId)
                 throw new AccessDeniedException("event_source_unavailable");
+            if (TenantEventAdmissionRules.EmailBucket(bucket))
+            {
+                value = TenantEventAdmissionRules.Retain(value, source.EventIds); bucket = value.Bucket;
+            }
             foreach (var entry in bucket.Sources)
             {
                 var delivery = await deliveryReader(source.SourceKind, entry.EventId, source.TriggerId, ct).ConfigureAwait(false)
@@ -55,12 +66,17 @@ public static class TenantEventReadRules
                 if (delivery.Status != EventMatchStatus.Coalesced || delivery.Subscription != bucket.Subscription
                     || JsonSerializer.Serialize(entry) != JsonSerializer.Serialize(TenantEventAdmissionRules.BucketSource(delivery, entry.Key)))
                     throw new AccessDeniedException("event_source_unavailable");
+                if (delivery.Core?.Event.Key == "email.message.received")
+                {
+                    if (emailReader is null || !await emailReader(delivery.EventId, ct).ConfigureAwait(false)) throw new AccessDeniedException("email_event_source_changed");
+                    emailAccounts.AddRange(TenantEventAdmissionRules.EmailAccounts(delivery));
+                }
             }
             frozen = TenantEventAdmissionRules.Freeze(value with { Bucket = bucket with { Flushed = false, ReservedOccurrenceId = null } }, source.ResourceRevision);
         }
         if (JsonSerializer.Serialize(frozen) != JsonSerializer.Serialize(source)) throw new AccessDeniedException("event_source_changed");
         var review = false;
-        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.SourceTargets(source))
+        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.SourceTargets(source, emailAccounts))
         {
             if (!(await iam.CheckOwnedTenantAsync(state, root.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("event_source_read_required");
@@ -93,7 +109,7 @@ public static class TenantEventReadRules
 }
 
 public sealed class TenantEventReadAuthority(IIamStore security, ITenantRunStore runs, ITenantAutomationStore automations,
-    ITenantEventStore events, ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, IamAuthorizer iam)
+    ITenantEventStore events, ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, IamAuthorizer iam, ITenantEmailWatchStore watches)
 {
     public async ValueTask RequireAsync(AgentRun run, CancellationToken ct)
     {
@@ -108,7 +124,8 @@ public sealed class TenantEventReadAuthority(IIamStore security, ITenantRunStore
             (id, token) => events.FindTenantEventBucketAsync(tenant, id, token),
             (id, token) => approvals.FindApprovalAsync(tenant, id, token),
             (id, token) => effects.FindApprovalDecisionAsync(tenant, id, token),
-            (id, token) => approvals.FindOperationGrantAsync(tenant, id, token), ct).ConfigureAwait(false);
+            (id, token) => approvals.FindOperationGrantAsync(tenant, id, token), ct,
+            (id, token) => watches.CanReadRetainedTenantEmailEventAsync(tenant, id, token)).ConfigureAwait(false);
         if ((await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false))?.Tenant.Revision != state.Tenant.Revision)
             throw new SecurityConflictException("event_source_changed");
     }

@@ -14,7 +14,7 @@ public sealed record TenantEventProcessingResult(int Matched, int Coalesced, int
 // Resumes the existing receipt/delivery/bucket facts. Only the Automation owner
 // can atomically reserve consent or create execution; this worker has no grants.
 public sealed class TenantEventProcessor(ITenantEventStore events, IIamStore security, ITenantAutomationStore registrations,
-    ITenantWebhookStore webhooks, TenantAutomationService automations, TenantRunConfigurationResolver configurations,
+    ITenantWebhookStore webhooks, ITenantEmailWatchStore emailWatches, TenantAutomationService automations, TenantRunConfigurationResolver configurations,
     IamAuthorizer iam, IEventFilterEvaluator filters, TimeProvider time, ILogger<TenantEventProcessor>? logger = null)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -92,9 +92,14 @@ public sealed class TenantEventProcessor(ITenantEventStore events, IIamStore sec
         if (current.ExpiresAtUtc <= time.GetUtcNow()) throw new AccessDeniedException("automation_expired");
         var (agent, policy) = await configurations.CurrentPolicyAsync(source.TenantId, s.Owner.AgentInstanceId, ct);
         if (agent.PrincipalId != s.Owner.ExecutorPrincipalId || agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("event_executor_unavailable");
-        await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, s, [source.EventId], iam, ct);
+        await TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, s, [source.EventId], iam, ct, TenantEventAdmissionRules.EmailAccounts(source));
         if (!OccurrenceCompatibility.Allows(policy, s.SourceKind)) throw new AccessDeniedException("event_policy_unavailable");
-        if (source.Core is { } core) return CoreEventDispatcher.Project(core);
+        if (source.Core is { } core)
+        {
+            if (core.Event.Key == "email.message.received" && !await emailWatches.CanDeliverTenantEmailEventAsync(source.TenantId, source.EventId, ct))
+                throw new AccessDeniedException("email_event_source_unavailable");
+            return CoreEventDispatcher.Project(core);
+        }
         var receipt = source.Webhook ?? throw new AccessDeniedException("event_source_unavailable");
         var webhook = await webhooks.FindTenantWebhookAsync(source.TenantId, receipt.ResourceId, ct);
         if (webhook?.Status != WebhookEventStatus.Active || webhook.ResourceId != s.ResourceId) throw new AccessDeniedException("event_source_unavailable");

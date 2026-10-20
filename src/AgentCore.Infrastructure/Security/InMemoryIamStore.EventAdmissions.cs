@@ -41,15 +41,19 @@ public sealed partial class InMemoryIamStore
         {
             var bucket = sessionBacking.CoreEvents.TenantBucket(tenant, source.SourceId) ?? throw new AccessDeniedException("event_source_unavailable");
             if (bucket.Flushed || (reserved ? bucket.ReservedOccurrenceId != initial.OccurrenceId : bucket.ReservedOccurrenceId is not null)) throw new SecurityConflictException("event_source_changed");
+            var email = TenantEventAdmissionRules.EmailBucket(bucket); var eligible = new List<Guid>();
             foreach (var entry in bucket.Sources)
             {
                 var delivery = TenantEvent(tenant, source.SourceKind, entry.EventId, source.TriggerId) ?? throw new AccessDeniedException("event_source_unavailable");
                 if (delivery.Status != EventMatchStatus.Coalesced || delivery.Subscription != bucket.Subscription) throw new SecurityConflictException("event_source_changed");
-                RequireTenantEvent(delivery, ct);
                 var key = delivery.Core?.Event.Key ?? webhookBacking.TenantSource(tenant, bucket.Subscription.ResourceId!.Value)!.EventKey;
                 if (JsonSerializer.Serialize(entry) != JsonSerializer.Serialize(TenantEventAdmissionRules.BucketSource(delivery, key))) throw new SecurityConflictException("event_source_changed");
+                if (reserved && email && !source.EventIds.Contains(entry.EventId)) continue;
+                try { RequireTenantEvent(delivery, ct); eligible.Add(entry.EventId); }
+                catch (AccessDeniedException) when (email && !reserved) { }
             }
             var value = new TenantEventBucket(tenant, bucket);
+            if (email) value = TenantEventAdmissionRules.Retain(value, eligible);
             frozen = TenantEventAdmissionRules.Freeze(value, revision);
             rebuilt = TenantEventAdmissionRules.Occurrence(current, value, initial.ModelPin!, initial.AdmittedAtUtc, revision);
         }

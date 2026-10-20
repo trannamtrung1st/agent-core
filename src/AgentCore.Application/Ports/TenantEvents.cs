@@ -15,7 +15,7 @@ public sealed record TenantEventDelivery(Guid TenantId, EventSubscriptionSnapsho
     public DateTimeOffset OccurredAt => Core?.Event.OccurredAtUtc ?? Webhook!.OccurredAtUtc;
 }
 public sealed record TenantEventBucket(Guid TenantId, CoreEventBucket Bucket);
-public sealed record TenantEventReadVisibility(IReadOnlyList<Guid>? CoreEvents, IReadOnlyList<Guid>? Webhooks);
+public sealed record TenantEventReadVisibility(IReadOnlyList<Guid>? CoreEvents, IReadOnlyList<Guid>? Webhooks, IReadOnlyList<Guid>? EmailAccounts = null);
 public sealed record TenantEventActivity(TenantEventDelivery Delivery, TenantEventBucket? Bucket, TriggerOccurrence? Occurrence, bool BatchReadable);
 public sealed record TenantEventActivityPage(IReadOnlyList<TenantEventActivity> Items, int Total, int Page, int PageSize);
 public sealed record TenantCoreEventPage(IReadOnlyList<CoreEventReceipt> Items, int Total, int Page, int PageSize);
@@ -38,5 +38,5 @@ public interface ITenantEventStore
     ValueTask<TenantEventBucket?> FindTenantEventBucketAsync(Guid tenant, Guid bucket, CancellationToken ct = default);
     ValueTask<bool> TryFinishTenantEventBucketAsync(TenantEventBucket source, string code, CancellationToken ct = default);
     ValueTask<CoreEventReceipt?> FindTenantCoreEventAsync(Guid tenant, Guid eventId, CancellationToken ct = default);
-    ValueTask<TenantCoreEventPage> ListTenantCoreEventsAsync(Guid tenant, Guid instance, string key, int page, int pageSize, CancellationToken ct = default, IReadOnlyList<Guid>? allowedIds = null);
+    ValueTask<TenantCoreEventPage> ListTenantCoreEventsAsync(Guid tenant, Guid instance, string key, int page, int pageSize, CancellationToken ct = default, IReadOnlyList<Guid>? allowedIds = null, IReadOnlyList<Guid>? emailAccounts = null);
 }

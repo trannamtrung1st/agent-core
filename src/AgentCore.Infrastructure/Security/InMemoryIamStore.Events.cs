@@ -60,7 +60,9 @@ public sealed partial class InMemoryIamStore : ITenantEventStore
         if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active || agent.PrincipalId != s.Owner.ExecutorPrincipalId)
             throw new AccessDeniedException("event_executor_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
-        TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, s, [value.EventId], new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+        TenantEventAdmissionRules.RawReadAsync(state, agent.PrincipalId, s, [value.EventId], new IamAuthorizer(this), ct, TenantEventAdmissionRules.EmailAccounts(value)).GetAwaiter().GetResult();
+        if (value.Core?.Event.Key == "email.message.received" && !CanDeliverTenantEmail(value.TenantId, value.EventId))
+            throw new AccessDeniedException("email_event_source_changed");
         var automation = automationBacking.ReadTenantAutomation(value.TenantId, s.AutomationId) ?? throw new AccessDeniedException("event_subscription_changed");
         _ = TenantEventAdmissionRules.Child(automation, s);
         var policy = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
@@ -146,11 +148,13 @@ public sealed partial class InMemoryIamStore : ITenantEventStore
     }
     public ValueTask<CoreEventReceipt?> FindTenantCoreEventAsync(Guid tenant, Guid eventId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); return ValueTask.FromResult(WithTenantEvents(() => sessionBacking.CoreEvents.TenantReceipt(tenant, eventId))); }
-    public ValueTask<TenantCoreEventPage> ListTenantCoreEventsAsync(Guid tenant, Guid instance, string key, int page, int pageSize, CancellationToken ct = default, IReadOnlyList<Guid>? allowedIds = null)
+    public ValueTask<TenantCoreEventPage> ListTenantCoreEventsAsync(Guid tenant, Guid instance, string key, int page, int pageSize, CancellationToken ct = default, IReadOnlyList<Guid>? allowedIds = null, IReadOnlyList<Guid>? emailAccounts = null)
     {
         if (!CoreEventCatalog.Keys.Contains(key)) throw new ArgumentException("Unknown built-in event source.");
         TenantWebhookRules.Page(page, pageSize); ct.ThrowIfCancellationRequested(); return ValueTask.FromResult(WithTenantEvents(() => {
-            var rows = sessionBacking.CoreEvents.TenantReceipts(tenant, instance, key).Where(r => allowedIds is null || allowedIds.Contains(r.Event.EventId)).OrderByDescending(r => r.ReceivedAtUtc).ThenBy(r => r.Event.EventId.ToString("D"), StringComparer.Ordinal).ToArray();
+            var rows = sessionBacking.CoreEvents.TenantReceipts(tenant, instance, key).Where(r => allowedIds is null || allowedIds.Contains(r.Event.EventId))
+                .Where(r => r.Event.Key != "email.message.received" || CredentialBacking().ReadTenantCredential(tenant, AgentCore.Domain.Email.EmailEventReferences.AccountId(r.Event.DataJson)) is { Value.Purpose: AgentCore.Domain.Credentials.CredentialPurpose.EmailAccount }
+                    && (emailAccounts is null || emailAccounts.Contains(AgentCore.Domain.Email.EmailEventReferences.AccountId(r.Event.DataJson)))).OrderByDescending(r => r.ReceivedAtUtc).ThenBy(r => r.Event.EventId.ToString("D"), StringComparer.Ordinal).ToArray();
             return new TenantCoreEventPage(rows.Skip(page * pageSize).Take(pageSize).ToArray(), rows.Length, page, pageSize);
         }));
     }

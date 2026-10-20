@@ -20,7 +20,7 @@ public static class TenantEventAdmissionRules
             && Guid.TryParseExact(scope.ResourceId, "D", out id) && id != Guid.Empty && scope.ResourceId == id.ToString("D");
     }
     public static async ValueTask RawReadAsync(TenantSecurityState state, Guid executor, EventSubscriptionSnapshot source,
-        IReadOnlyList<Guid> eventIds, IamAuthorizer iam, CancellationToken ct)
+        IReadOnlyList<Guid> eventIds, IamAuthorizer iam, CancellationToken ct, IReadOnlyList<Guid>? emailAccounts = null)
     {
         if (state.Tenant.TenantId != source.Owner.TenantId || source.Owner.ExecutorPrincipalId != executor || state.Tenant.Status != IdentityStatus.Active
             || !state.SystemIdentities.Any(i => i.PrincipalId == executor && i.AgentInstanceId == source.Owner.AgentInstanceId && i.Kind == SystemIdentityKind.Agent && i.Status == IdentityStatus.Active))
@@ -33,6 +33,37 @@ public static class TenantEventAdmissionRules
         foreach (var scope in scopes)
             if (!(await iam.CheckOwnedTenantAsync(state, executor, PermissionCatalog.Get(key), scope, ct)).Allowed)
                 throw new AccessDeniedException("event_source_read_required");
+        foreach (var account in emailAccounts ?? []) await TenantEmailWatchRules.RequireExecutorAsync(state, executor, account, iam, ct).ConfigureAwait(false);
+    }
+
+    public static IReadOnlyList<Guid> EmailAccounts(TenantAutomationAdmission value) => value.EventSource is { } source
+        && value.Current.Triggers.SingleOrDefault(t => t.TriggerId == source.TriggerId)?.Configuration is CoreEventTrigger { CoreEventKey: "email.message.received" }
+        ? AgentCore.Domain.Email.EmailEventReferences.AccountIdsFromEvidence(value.Occurrence.EvidenceJson, source.IsBucket) : [];
+    public static IReadOnlyList<Guid> EmailAccounts(TenantEventDelivery delivery) => delivery.Core?.Event is { Key: "email.message.received" } fact
+        ? [AgentCore.Domain.Email.EmailEventReferences.AccountId(fact.DataJson)] : [];
+    public static IReadOnlyList<Guid> EmailAccounts(TenantEventBucket bucket) => bucket.Bucket.Sources.Where(s => s.Key == "email.message.received")
+        .Select(s => AgentCore.Domain.Email.EmailEventReferences.AccountId(s.DataJson)).Distinct().OrderBy(id => id.ToString("D"), StringComparer.Ordinal).ToArray();
+
+    // Only email input may lose individual members before admission. Once a
+    // source witness exists its ordered member IDs are immutable.
+    public static bool EmailBucket(CoreEventBucket bucket) => bucket.Sources.Count > 0 && bucket.Sources.All(s => s.Key == "email.message.received");
+    public static TenantEventBucket RetainedActivity(TenantEventBucket value, TriggerOccurrence occurrence)
+    {
+        if (!EmailBucket(value.Bucket)) return value;
+        using var evidence = JsonDocument.Parse(occurrence.EvidenceJson);
+        var source = evidence.RootElement.GetProperty("triggerContext").GetProperty("admissionSource").Deserialize<PreparedEventAdmissionSource>();
+        if (source is not { IsBucket: true } || source.SourceId != value.Bucket.BucketId || source.TriggerId != value.Bucket.Subscription.TriggerId
+            || source.TenantId != value.TenantId) throw new SecurityConflictException("event_activity_changed");
+        return Retain(value, source.EventIds);
+    }
+    public static TenantEventBucket Retain(TenantEventBucket value, IReadOnlyList<Guid> ids)
+    {
+        var bucket = value.Bucket;
+        var retained = bucket.Sources.Where(s => ids.Contains(s.EventId)).ToArray();
+        if (ids.Count == 0 || retained.Length != ids.Count || !retained.Select(s => s.EventId).SequenceEqual(ids)
+            || !EmailBucket(bucket) && retained.Length != bucket.Sources.Count)
+            throw new AccessDeniedException("event_source_changed");
+        return value with { Bucket = bucket with { Sources = retained } };
     }
 
     public static PreparedEventAdmissionSource Freeze(TenantEventDelivery delivery, long? resourceRevision = null)

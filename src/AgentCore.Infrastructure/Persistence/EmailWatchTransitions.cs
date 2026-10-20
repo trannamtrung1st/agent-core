@@ -54,7 +54,7 @@ internal static class EmailWatchTransitions
         var changed = s.Enabled != enabled;
         return s with { Enabled = enabled, IntervalSeconds = interval, ConfigurationRevision = s.ConfigurationRevision + 1,
             RuntimeRevision = s.RuntimeRevision + 1, Generation = s.Generation + (changed ? 1 : 0),
-            Cursor = changed ? null : s.Cursor, AuthorizationFingerprint = changed ? null : s.AuthorizationFingerprint,
+            Cursor = changed ? null : s.Cursor, AuthorizationFingerprint = changed ? null : s.AuthorizationFingerprint, AuthorizationRevision = changed ? null : s.AuthorizationRevision,
             LeaseId = null, LeaseExpiresAtUtc = null, RecoveryCheckRequested = false, Paused = changed ? false : s.Paused, LastErrorCode = changed ? null : s.LastErrorCode, LastDiagnosticId = changed ? null : s.LastDiagnosticId,
             LastGapAtUtc = enabled && changed && s.Generation > 0 ? now : s.LastGapAtUtc,
             NextCheckAtUtc = enabled ? changed ? now : now.AddSeconds(interval) : null };
@@ -63,7 +63,7 @@ internal static class EmailWatchTransitions
     {
         var fingerprint = Fingerprint(c); var changed = s.AuthorizationFingerprint is not null && s.AuthorizationFingerprint != fingerprint;
         return s with { RuntimeRevision = s.RuntimeRevision + 1, LeaseId = Guid.NewGuid(), LeaseExpiresAtUtc = now.AddSeconds(90),
-            Generation = s.Generation + (changed ? 1 : 0), Cursor = changed ? null : s.Cursor, AuthorizationFingerprint = fingerprint,
+            Generation = s.Generation + (changed ? 1 : 0), Cursor = changed ? null : s.Cursor, AuthorizationFingerprint = fingerprint, AuthorizationRevision = s.TenantId is null ? null : c.Revision,
             LastGapAtUtc = changed ? now : s.LastGapAtUtc };
     }
     internal static bool Valid(EmailWatchState s, EmailWatchClaim claim, Credential? c, DateTimeOffset now) =>

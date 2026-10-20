@@ -25,6 +25,7 @@ internal static class TenantOAuthRegistration
             p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase),
             p.GetRequiredService<ILoggerFactory>(), p.GetRequiredService<IDiagnosticIdSource>()));
         services.TryAddSingleton<ITenantConnectedAccountReader>(p => p.GetRequiredService<TenantConnectedAccountReader>());
+        services.TryAddSingleton<ITenantEmailChangeFeed>(p => p.GetRequiredService<TenantConnectedAccountReader>());
         services.TryAddSingleton<ITenantConnectedAccountTransportFactory>(p => p.GetRequiredService<TenantConnectedAccountReader>());
         services.TryAddSingleton<ITenantCredentialOAuthProvider>(p => p.GetRequiredService<TenantGoogleOAuthProvider>());
         services.TryAddSingleton<ITenantCredentialOAuthVerifier>(p => p.GetRequiredService<TenantGoogleOAuthProvider>());

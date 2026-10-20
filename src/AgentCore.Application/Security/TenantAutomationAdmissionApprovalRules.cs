@@ -18,23 +18,24 @@ public static class TenantAutomationAdmissionApprovalRules
     public static (string Permission, AccessScope Scope)[] Targets(Guid tenant, Guid automation) => Permissions.Select(key =>
         (key, key == "automations.run" ? TenantAutomationRules.Scope(tenant, automation) : AccessScope.ForTenant(tenant))).ToArray();
 
-    public static bool IsSourceRead(string permission) => permission is "webhooks.read" or "core-events.read";
-    public static (string Permission, AccessScope Scope)[] SourceTargets(PreparedEventAdmissionSource? source)
+    public static bool IsSourceRead(string permission) => permission is "webhooks.read" or "core-events.read" or "credentials.read" or "credentials.use" or "email.read";
+    public static (string Permission, AccessScope Scope)[] SourceTargets(PreparedEventAdmissionSource? source, IReadOnlyList<Guid>? emailAccounts = null)
     {
         if (source is null) return [];
-        return source.SourceKind == TriggerSourceKind.ApplicationEvent
-            ? [("webhooks.read", TenantWebhookRules.Scope(source.TenantId, source.ResourceId!.Value))]
+        var targets = source.SourceKind == TriggerSourceKind.ApplicationEvent
+            ? new[] { ("webhooks.read", TenantWebhookRules.Scope(source.TenantId, source.ResourceId!.Value)) }
             : source.EventIds.Select(id => ("core-events.read", TenantEventAdmissionRules.Scope(source.TenantId, id))).ToArray();
+        return targets.Concat((emailAccounts ?? []).Distinct().SelectMany(id => TenantEmailWatchRules.SourcePermissions.Select(key => (key, TenantCredentialRules.Scope(source.TenantId, id))))).ToArray();
     }
-    public static (string Permission, AccessScope Scope)[] Targets(PreparedAutomationAdmission source) => Targets(source.TenantId, source.Current.AutomationId).Concat(SourceTargets(source.EventSource)).ToArray();
+    public static (string Permission, AccessScope Scope)[] Targets(PreparedAutomationAdmission source) => Targets(source.TenantId, source.Current.AutomationId).Concat(SourceTargets(source.EventSource, source.EmailSourceAccountIds)).ToArray();
     public static (string Permission, AccessScope Scope)[] Targets(TenantApprovalRequest request) => Targets(request.Operation.AutomationAdmission ?? throw new ArgumentException("An exact occurrence source is required."));
 
     public static async ValueTask<TenantAutomationAdmissionDecision> EvaluateAsync(TenantSecurityState state, Automation value, TenantAgent agent,
-        AgentCore.Domain.Definitions.AgentDefinition definition, Guid? requester, IamAuthorizer iam, CancellationToken ct, TriggerSourceKind? sourceKind = null, PreparedEventAdmissionSource? eventSource = null)
+        AgentCore.Domain.Definitions.AgentDefinition definition, Guid? requester, IamAuthorizer iam, CancellationToken ct, TriggerSourceKind? sourceKind = null, PreparedEventAdmissionSource? eventSource = null, IReadOnlyList<Guid>? emailAccounts = null)
     {
         TenantAutomationRules.AdmissionSource(state, value, agent, definition, requester, sourceKind);
         var missing = new List<string>(); var reviews = new List<string>();
-        foreach (var (key, scope) in Targets(state.Tenant.TenantId, value.AutomationId).Concat(SourceTargets(eventSource)))
+        foreach (var (key, scope) in Targets(state.Tenant.TenantId, value.AutomationId).Concat(SourceTargets(eventSource, emailAccounts)))
         {
             var access = await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false);
             if (!access.Allowed)

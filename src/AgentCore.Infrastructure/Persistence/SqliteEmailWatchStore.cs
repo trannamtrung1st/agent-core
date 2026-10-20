@@ -9,8 +9,8 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> contexts) : IEmailWatchStore
 {
-    private static EmailWatchState Read(EmailWatchRecord r) => JsonSerializer.Deserialize<EmailWatchState>(r.StateJson)!;
-    private static void Write(EmailWatchRecord r, EmailWatchState s)
+    internal static EmailWatchState Read(EmailWatchRecord r) => JsonSerializer.Deserialize<EmailWatchState>(r.StateJson)!;
+    internal static void Write(EmailWatchRecord r, EmailWatchState s)
     { r.Enabled = s.Enabled; r.RuntimeRevision = s.RuntimeRevision; r.NextCheckAtUtc = Math.Max(s.NextCheckAtUtc?.ToUnixTimeMilliseconds() ?? long.MaxValue, s.LeaseExpiresAtUtc?.ToUnixTimeMilliseconds() ?? 0); r.StateJson = JsonSerializer.Serialize(s); }
     private static async Task<Credential> Account(AgentCoreDbContext db, Guid id, CancellationToken ct) => EmailWatchTransitions.Require(
         (await db.Credentials.Include(c => c.EmailAccount).SingleOrDefaultAsync(c => c.CredentialId == id.ToString("D"), ct)) is { } r ? SqliteCredentialStore.Map(r) : null);

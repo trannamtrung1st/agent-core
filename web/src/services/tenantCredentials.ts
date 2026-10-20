@@ -1,5 +1,5 @@
 import { identityRequest, tenantApi, type TenantContext } from './identity';
-import type { SystemCredential } from './adminApi';
+import type { EmailMonitoring, SystemCredential } from './adminApi';
 
 export type TenantCredential = { tenantId: string; credential: SystemCredential };
 export type CredentialAccess = { permissions: string[]; revision: number };
@@ -17,3 +17,8 @@ export function checkedAuthorizationUrl(value: string): string {
     || url.origin === 'https://accounts.google.com' && url.pathname === '/o/oauth2/v2/auth')) return url.href;
   throw new Error('Unexpected authorization destination. Reload the saved credential before connecting.');
 }
+
+export type TenantEmailMonitoring = Omit<EmailMonitoring, 'subscribedInstances'> & {
+  securityRevision: number; credentialRevision: number; canManage: boolean; canEnable: boolean; canCheck: boolean;
+};
+export const tenantEmailMonitoring = (tenant: string, id: string) => credentialApi(tenant, id, '/monitoring');

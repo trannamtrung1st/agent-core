@@ -137,18 +137,21 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
         finally { if (acquired) connections.Release(); }
     }
     // Uses the exact same TLS, pinned DNS, timeout and connection ceiling as reads.
-    internal async ValueTask<EmailWatchBatch> WatchAsync(AgentCore.Domain.Email.EmailWatchCursor? cursor, CancellationToken cancellationToken)
+    internal async ValueTask<EmailWatchBatch> WatchAsync(AgentCore.Domain.Email.EmailWatchCursor? cursor, CancellationToken cancellationToken, Func<CancellationToken, ValueTask>? recheck = null)
     {
         using var deadline = Deadline(cancellationToken); var ct = deadline.Token;
         await connections.WaitAsync(ct);
         try
         {
+            if (recheck is not null) await recheck(ct);
             using var client = new ImapClient(); await AuthenticateAsync(client, false, ct);
+            if (recheck is not null) await recheck(ct);
             var inbox = client.Inbox; await inbox.OpenAsync(FolderAccess.ReadOnly, ct);
             async Task<uint> Latest()
             {
                 if (inbox.UidNext is { } next) return next.Id - 1;
                 if (inbox.Count == 0) return 0;
+                if (recheck is not null) await recheck(ct);
                 var last = await inbox.FetchAsync(inbox.Count - 1, inbox.Count - 1, MessageSummaryItems.UniqueId, ct);
                 return last.Single().UniqueId.Id;
             }
@@ -163,6 +166,7 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
                 // Sequence fallback inspects UID identity only. A bounded scan must cover the
                 // committed UID; otherwise explicitly disclose the gap and baseline from now.
                 var first = Math.Max(0, inbox.Count - 500);
+                if (recheck is not null) await recheck(ct);
                 var recent = await inbox.FetchAsync(first, inbox.Count - 1, MessageSummaryItems.UniqueId, ct);
                 var uids = recent.Select(m => m.UniqueId.Id).Order().ToArray();
                 if (first > 0 && (uids.Length == 0 || uids[0] > cursor.LastUid)) return new([], Position(await Latest()), CursorGap: true);
@@ -174,6 +178,7 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
             if (ceiling <= cursor.LastUid) return new([], cursor);
             // Bound by UID range, not recent inbox search; sparse/deleted UIDs still advance.
             var end = (uint)Math.Min(ceiling, (ulong)cursor.LastUid + 500);
+            if (recheck is not null) await recheck(ct);
             var matches = await inbox.SearchAsync(SearchQuery.Uids(new UniqueIdRange(new UniqueId(cursor.LastUid + 1), new UniqueId(end))), ct);
             var ids = matches.OrderBy(u => u.Id).Take(25).ToArray();
             var lastUid = matches.Count > 25 ? ids[^1].Id : end;

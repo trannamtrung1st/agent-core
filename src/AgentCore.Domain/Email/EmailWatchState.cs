@@ -10,7 +10,19 @@ public sealed record EmailWatchState(Guid AccountId, bool Enabled = false, int I
     DateTimeOffset? LastCheckedAtUtc = null, DateTimeOffset? LastSuccessAtUtc = null,
     DateTimeOffset? LastEventAtUtc = null, DateTimeOffset? NextCheckAtUtc = null,
     DateTimeOffset? LastGapAtUtc = null, string? LastErrorCode = null, Guid? LastDiagnosticId = null,
-    int ConsecutiveFailures = 0, bool Paused = false, Guid? LeaseId = null, DateTimeOffset? LeaseExpiresAtUtc = null, bool RecoveryCheckRequested = false);
+    int ConsecutiveFailures = 0, bool Paused = false, Guid? LeaseId = null, DateTimeOffset? LeaseExpiresAtUtc = null, bool RecoveryCheckRequested = false)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? TenantId { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public long? AuthorizationRevision { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? LastCommitLeaseId { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public long? LastCommitRuntimeRevision { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public bool? LastCommitHadCursor { get; init; }
+}
 
 public static class EmailWatchAuthorization
 {

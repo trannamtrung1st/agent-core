@@ -21,7 +21,7 @@ public sealed class TenantEventActivityService(IIamStore security, ITenantEventS
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var parent = await automations.ReadAsync(tenant, automation, human, ct).ConfigureAwait(false);
         if (parent.Owner.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable");
-        var visibility = new TenantEventReadVisibility(await Ids("core-events.read", "event"), await Ids("webhooks.read", "webhook"));
+        var visibility = new TenantEventReadVisibility(await Ids("core-events.read", "event"), await Ids("webhooks.read", "webhook"), await TenantEmailWatchRules.VisibleAccountsAsync(state, human.PrincipalId, iam, ct).ConfigureAwait(false));
         var result = await events.ListTenantEventActivityAsync(tenant, instance, automation, visibility, page, pageSize, ct).ConfigureAwait(false);
         var items = new List<TenantEventActivityItem>();
         foreach (var row in result.Items)

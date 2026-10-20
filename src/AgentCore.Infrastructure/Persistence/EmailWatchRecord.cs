@@ -2,6 +2,7 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class EmailWatchRecord
 {
+    public Guid? TenantId { get; set; }
     public string AccountId { get; set; } = "";
     public bool Enabled { get; set; }
     public long NextCheckAtUtc { get; set; }
@@ -11,6 +12,8 @@ public sealed class EmailWatchRecord
 // Hidden authority receipt; never enters Event data or model evidence.
 public sealed class EmailWatchEventRecord
 {
+    public Guid? TenantId { get; set; }
+    public string? AccountId { get; set; }
     public string EventId { get; set; } = "";
     public string AuthorityJson { get; set; } = "";
 }
