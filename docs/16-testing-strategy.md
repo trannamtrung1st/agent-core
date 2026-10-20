@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Independent protected-task runtime qualification
+
+Exercise manual and scheduled roots through the existing coordinator, mailbox and exact-operation owners, including definitions without chat-child creation capability. Cover direct Workspace write/read/publication, Office binary creation/inspection/copy, Review, primary-only grants, rejection, missing source reads, permission loss and fresh SQLite host recovery of pending consent. Verify immutable root/task/occurrence linkage, actual manual invoker versus absent scheduled requester, original bytes, no inherited grant and no implicit report.
+
+Use native disposable Chromium against a bounded local fixture for Browser mutation/read consent and refusal, and a controlled loopback Sandbox SDK peer for execution, stored observations, stop/reset and uncertainty without replay. Email/Drive use Synthetic native owners, separate draft/send or read/mutation consent, exact provider facts and pending-consent host recreation. Check current nullable-account source guards, spoofed requester rejection, lossy-downgrade refusal and legacy migration down/up. Retain independently passing groups after fixture corrections; recheck affected final-source groups. This qualification is separate from frontend journeys, live-provider spending, full CI or milestone/proposal acceptance.
+
 ## Tenant schedule Automation qualification
 
 Exercise original-human CRUD/Run-now through the canonical HTTP routes, both stores, exact resource filtering before counts, stale witnesses, foreign Agent routes, missing executor permissions, required Review, disabled/cancelled registrations, policy suspension/restoration and archived executors. Execute successful manual and scheduled graphs through the existing composed tenant worker and Session mailbox to an actual `work.complete` outcome. Verify fresh roots, actual manual invoker versus no scheduled requester, absent profile, correct Session creator and occurrence links, and zero provider network calls.
@@ -64,6 +70,8 @@ The [completion-inbox verification](reports/tenant-completion-inbox-verification
 ## Tenant typed wait qualification
 
 The tenant wait boundary exercises actual Synthetic HTTP/model/tool/mailbox/coordinator paths for duration, background readiness, timeout, Stop, queued input, host recreation and exact child approval handoff. Both stores qualify current source read/policy changes, stale generations, exact checkpoint conditions and pre-admission deferral/recovery with active budget fields. Historical checkpoint/approval discrimination and incumbent wait limits remain separate focused contracts. See the [verification record](reports/tenant-typed-wait-verification-2026-10-20.md); this does not establish full proposal or milestone acceptance.
+
+Independent Schedule/manual wait qualification adds 30 Synthetic runtime cases across both stores/origins: duration/repeat, Stop, unrelated-target refusal, exact read-Review successor waits, current raw-read/manual-invoker revocation and SQLite recreation before/after signal sealing. The fixture observes the actual supervised generation release before advancing logical time and holds dispatch during retained-checkpoint inspection. Alongside 22 human runtime regressions, 38 contracts and 26 store cases, [116 focused cases pass](reports/tenant-independent-wait-verification-2026-10-20.md). No child/inbox conversion, live provider or frontend journey is inferred.
 
 ## Tenant Agent decommission qualification
 

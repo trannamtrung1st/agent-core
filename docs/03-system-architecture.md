@@ -1,5 +1,13 @@
 # System Architecture
 
+## Independent protected-task ownership
+
+Admitted Schedule/manual Automation tasks reuse the incumbent protected file, native Browser/Sandbox, connected-account consent, grant, effect and receipt owners. Current typed task intent and saved source lineage determine eligibility; a task is not required to impersonate a human chat child or declare `background.start`. Source reads and current executor/reviewer authority remain independent of any primary-only grant. Every schedule/manual root is joined back to its immutable accepted occurrence and exact frozen Automation intent before operation authorization. Approval successors keep that root and its actual original initiator, including an absent scheduled requester. No second executor or authority service is introduced.
+
+Independent completion remains private to its Background Session. Activity can inspect the initial/successor chain without manufacturing a parent report. Requester quotas apply only to actual humans, while tenant/executor/operation/root bounds remain mandatory. [Focused qualification](reports/tenant-independent-task-verification-2026-10-20.md) owns the tested scope. Automation admission Review, inbox/child controls, events/watchers/webhooks, destinations/report delivery and the tenant Automation authoring UI remain separate open work.
+
+Independent tasks may also use explicitly authorized typed duration waits through the same Run transaction, coordinator and mailbox. A suspension releases the provider and claim; a fresh generation resumes the same logical Run/attempt. Frozen task/accepted-occurrence identity and current actual requester/source authority remain mandatory. Wait eligibility supplies no child creation, completion-read or inbox authority. [Independent wait qualification](reports/tenant-independent-wait-verification-2026-10-20.md) covers both stores/origins, exact approval successors, Stop, authority loss and SQLite recreation.
+
 ## Tenant schedule Automation foundation
 
 Tenant Schedule Automations and their explicit human manual invocations reuse the existing Automation/trigger/occurrence, IAM transaction, Session/Run coordinator and single Runtime mailbox owners. A tagged trigger owner carries the actual tenant, Instance and executor, with no global profile. Schedule occurrences start independent roots without a human requester; manual invocations bind their actual current human invoker and do not imply Chat admission. The source registration author supplies provenance, never recurring authority. Atomic admission binds owned source, current configuration/model/budget and the fresh graph. The creator of an independent Background Session is its actual System executor, constrained by same-tenant Principal ownership.

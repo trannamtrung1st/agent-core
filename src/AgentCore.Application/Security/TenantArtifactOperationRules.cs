@@ -35,8 +35,8 @@ public static class TenantArtifactOperationRules
             throw new AccessDeniedException("permission_denied");
         var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(TenantArtifactToolContract.Permission));
         if (policy.Mode == OperationApprovalMode.Always || policy.Mode == OperationApprovalMode.WhenRequesterLacksPermission
-            && (run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is not { } human
-                || !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(TenantArtifactToolContract.Permission), target, ct).ConfigureAwait(false)).Allowed))
+            && run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } human
+            && !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(TenantArtifactToolContract.Permission), target, ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("review_required");
     }
     public static TenantOperationReceipt Match(TenantOperationReceipt receipt, AgentRun run, string call, string parametersHash)

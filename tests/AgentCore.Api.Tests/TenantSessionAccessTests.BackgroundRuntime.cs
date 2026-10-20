@@ -93,7 +93,7 @@ public sealed partial class TenantSessionAccessTests
             });
         }
     }
-    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null,bool reportReads=false)
+    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null,bool reportReads=false,bool independentTask=false)
     {
         await Login(owner,"owner@example.test","explicit-synthetic-test-password");
         var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();var api=$"/api/v2/tenants/{tenant}";
@@ -103,6 +103,7 @@ public sealed partial class TenantSessionAccessTests
         {
             var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Background exact file reader", expectedRevision = await Revision(owner, tenant) }));
             var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
+            if (independentTask) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode((await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var capabilities = fileCapabilities ?? new[] { ToolCatalog.BackgroundStart, ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
             candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
                 capabilities = new { mode = "Selected", resolvedCapabilities = capabilities }, projection = new { alwaysCapabilities = capabilities.Where(c => c != ToolCatalog.AttachmentsRead).ToArray() } });

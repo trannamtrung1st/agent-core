@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Independent Automation protected-operation consent
+
+The existing protected-operation tools and tenant Approval HTTP endpoints also serve admitted Schedule/manual Background tasks. Core supplies all tenant, executor, Session/Run, root and source facts. Scheduled requests have a genuinely null `originalInitiatorPrincipalId` and requester label; explicit manual requests retain the actual current invoker. Registration authors and human reviewers are never substituted for that requester. Exact action parameters, raw independent reads, current reviewer checks, grants, receipts and factual native outcomes retain their existing contracts.
+
+No new operation endpoint or authority-bearing model field is added. Approval successors remain in the same owned task and Session. Scope predicates still run before count/pagination and detail. Admitted Schedule/manual tasks and exact approval successors may use the existing `execution.wait` duration contract, with the same limits, checkpoint, cancellation and recovery semantics. Independent inbox/child controls remain withheld until their owning conversion is complete. [Independent wait evidence](reports/tenant-independent-wait-verification-2026-10-20.md) covers same-Run resumption, Stop, current authority and host recreation. Independent completion does not imply report delivery or recipient read access. [Independent-task evidence](reports/tenant-independent-task-verification-2026-10-20.md) separates runtime, storage, native-peer and UI evidence.
+
 ## Tenant schedule Automation HTTP foundation
 
 The authenticated `/api/v2/tenants/{tenantId}/agents/{instanceId}/automations` family supports GET bounded list, POST create, GET/PUT/DELETE `/{automationId}`, and POST `/{automationId}/run`. It uses the original live human session, current `agents.read`, and independent Automation operation permission; updates, cancellation and manual invocation also require exact Automation read access. Qualified `automation` resource scopes identify an owned registration. Filtering precedes ordering, count and pagination. A registration from another Agent cannot be reached through the route.

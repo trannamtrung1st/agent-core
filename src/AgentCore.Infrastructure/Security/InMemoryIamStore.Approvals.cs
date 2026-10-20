@@ -139,7 +139,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && (r.Status == TenantApprovalStatus.Pending || r.CreatedAt >= ApprovalNow - TenantApprovalLimits.Window)).ToArray();
             TenantApprovalLimits.Require(recent.Length, recent.Count(r => r.ExecutorPrincipalId == request.ExecutorPrincipalId),
                 recent.Count(r => r.OriginalInitiatorPrincipalId == request.OriginalInitiatorPrincipalId), recent.Count(r => r.Fingerprint == request.Fingerprint),
-                _approvals.Values.Count(r => r.TenantId == request.TenantId && r.RootActivationId == request.RootActivationId));
+                _approvals.Values.Count(r => r.TenantId == request.TenantId && r.RootActivationId == request.RootActivationId), request.OriginalInitiatorPrincipalId is not null);
             if (run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= ApprovalNow)
                 throw new SecurityConflictException("execution_claim_expired");
             ct.ThrowIfCancellationRequested();

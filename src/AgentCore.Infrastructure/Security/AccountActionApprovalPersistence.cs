@@ -10,7 +10,7 @@ internal static class AccountActionApprovalPersistence
         AND ((Permission IN ('email.draft','email.send','drive.write','drive.delete') AND ResourceType = 'credential' AND ResourceId IS CredentialId)
           OR (Permission = 'workspaces.write' AND ResourceType = 'workspace' AND ResourceId IS CASE
             WHEN substr(json_extract(json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson'),'$.path'),1,9) = '/working/' THEN 'working:' || SessionId ELSE 'home:' || InstanceId END))
-        AND OriginalInitiatorPrincipalId IS NOT NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
+        AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
         AND json_type(PayloadJson, '$.Operation.AccountAction') IS 'object'
         AND json_extract(PayloadJson, '$.Operation.AccountAction.SessionId') IS SessionId
         AND json_extract(PayloadJson, '$.Operation.AccountAction.Credential.CredentialId') IS CredentialId

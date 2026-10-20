@@ -68,8 +68,8 @@ public static class TenantWorkspaceEffectRules
                 throw new AccessDeniedException(key.EndsWith(".read", StringComparison.Ordinal) ? "executor_read_required" : "permission_denied");
             var policy = TenantOperationPolicyService.Effective(state, PermissionCatalog.Get(key));
             if (policy.Mode == OperationApprovalMode.Always || policy.Mode == OperationApprovalMode.WhenRequesterLacksPermission
-                && (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is not { } human
-                    || !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)) throw new AccessDeniedException("workspace_mutation_review_required");
+                && run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human
+                && !(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("workspace_mutation_review_required");
         }
     }
     public static TenantWorkspaceDispatch Fence(AgentRun run) => new(run.Owner.TenantId!.Value, run.AgentRunId, run.Owner, run.SessionId, run.SideEffect.ActionHash!, run.SideEffect.ExternalEffect!);

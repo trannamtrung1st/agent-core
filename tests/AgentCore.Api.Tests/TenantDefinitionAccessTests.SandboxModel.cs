@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Api.Tests;
 
@@ -87,7 +88,7 @@ public sealed partial class TenantDefinitionAccessTests
             await foreach (var item in inner.GenerateAsync(request, cancellationToken)) yield return item;
         }
     }
-    private sealed class SandboxModelFactory(string root, string endpoint) : AgentCoreApiFactory
+    private sealed class SandboxModelFactory(string root, string endpoint, TimeProvider? clock = null) : AgentCoreApiFactory
     {
         public SandboxModel Model { get; } = new();
         protected override bool EnableTenantRunExecution => true;
@@ -98,6 +99,7 @@ public sealed partial class TenantDefinitionAccessTests
         {
             base.ConfigureWebHost(builder);
             builder.ConfigureTestServices(services => {
+                if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock); }
                 services.AddSingleton<SetupVerification>();
                 services.Replace(ServiceDescriptor.Singleton<ITenantSandboxVerifier>(p => p.GetRequiredService<SetupVerification>()));
                 services.Replace(ServiceDescriptor.Singleton<ISandboxReadiness, SetupReady>());
@@ -117,8 +119,16 @@ public sealed partial class TenantDefinitionAccessTests
     [InlineData("reviewProcess")] [InlineData("reviewProcessReject")]
     public Task Tenant_background_native_Sandbox_preserves_command_read_control_and_uncertain_receipts(string choice) => SandboxModelFlow(choice, backgroundTask: true);
 
-    private async Task SandboxModelFlow(string choice, bool backgroundTask = false)
+    [Theory] [InlineData("scheduled", "approve")] [InlineData("manual", "approve")] [InlineData("scheduled", "uncertain")]
+    [InlineData("scheduled", "stop")] [InlineData("scheduled", "reset")] [InlineData("scheduled", "reviewProfiles")]
+    [InlineData("scheduled", "reviewProcess")] [InlineData("manual", "reviewProcessReject")]
+    public Task Independent_Automation_Sandbox_preserves_actual_command_observation_control_and_uncertain_receipts(string origin, string choice)
+        => SandboxModelFlow(choice, independentOrigin: origin);
+
+    private async Task SandboxModelFlow(string choice, bool backgroundTask = false, string? independentOrigin = null)
     {
+        backgroundTask |= independentOrigin is not null;
+        TimeProvider proofClock = independentOrigin is null ? TimeProvider.System : new FakeTimeProvider(DateTimeOffset.UtcNow);
         var root = Path.Combine(Path.GetTempPath(), "tenant-model-sandbox-" + Guid.NewGuid().ToString("N"));
         var control = choice is "stop" or "reset";
         SandboxReadKind? readKind = choice switch { "reviewProfiles" => SandboxReadKind.Profiles, "reviewStatus" => SandboxReadKind.Status,
@@ -143,7 +153,7 @@ public sealed partial class TenantDefinitionAccessTests
                     creates++; using var body = await JsonDocument.ParseAsync(http.Request.Body);
                     Assert.Equal("sha256:" + new string('a', 64), body.RootElement.GetProperty("image").GetProperty("uri").GetString());
                     metadata = body.RootElement.GetProperty("metadata").Deserialize<Dictionary<string,string>>()!;
-                    await http.Response.WriteAsJsonAsync(new { id = "model-owned", entrypoint = new[] { "/bin/sh" }, status = new { state = "Running" }, createdAt = DateTimeOffset.UtcNow, metadata });
+                    await http.Response.WriteAsJsonAsync(new { id = "model-owned", entrypoint = new[] { "/bin/sh" }, status = new { state = "Running" }, createdAt = proofClock.GetUtcNow(), metadata });
                 }
                 else if (path.StartsWith("/agent-core/mounts/", StringComparison.Ordinal))
                 {
@@ -154,10 +164,10 @@ public sealed partial class TenantDefinitionAccessTests
                 else if (path.Contains("/endpoints/")) await http.Response.WriteAsJsonAsync(new { endpoint = new Uri(peer.Urls.Single()).Authority });
                 else if (path == "/ping") await http.Response.WriteAsJsonAsync(new { status = "ok" });
                 else if (path == "/v1/sandboxes/model-owned" && http.Request.Method == "GET")
-                    await http.Response.WriteAsJsonAsync(new { id = "model-owned", entrypoint = new[] { "/bin/sh" }, status = new { state = "Running" }, createdAt = DateTimeOffset.UtcNow,
+                    await http.Response.WriteAsJsonAsync(new { id = "model-owned", entrypoint = new[] { "/bin/sh" }, status = new { state = "Running" }, createdAt = proofClock.GetUtcNow(),
                         metadata = metadata.Count > 0 ? metadata : new Dictionary<string,string> { ["agent-core-generation"] = lease.Generation.ToString("N"), ["agent-core-tenant"] = tenant.ToString("N"),
                             ["agent-core-session"] = lease.SessionId.ToString("N"), ["agent-core-executor"] = lease.ExecutorPrincipalId!.Value.ToString("N") } });
-                else if (path.EndsWith("/renew-expiration")) await http.Response.WriteAsJsonAsync(new { expiresAt = DateTimeOffset.UtcNow.AddMinutes(10) });
+                else if (path.EndsWith("/renew-expiration")) await http.Response.WriteAsJsonAsync(new { expiresAt = proofClock.GetUtcNow().AddMinutes(10) });
                 else if (http.Request.Method == "DELETE" && path == "/v1/sandboxes/model-owned") http.Response.StatusCode = 204;
                 else if (path == "/command")
                 {
@@ -182,7 +192,7 @@ public sealed partial class TenantDefinitionAccessTests
                 }
                 else http.Response.StatusCode = 404;
             });
-            await peer.StartAsync(); await using var factory = new SandboxModelFactory(root, peer.Urls.Single());
+            await peer.StartAsync(); await using var factory = new SandboxModelFactory(root, peer.Urls.Single(), independentOrigin is null ? null : proofClock);
             factory.Model.BackgroundTask = backgroundTask;
             using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
@@ -196,7 +206,8 @@ public sealed partial class TenantDefinitionAccessTests
             var definitions = factory.Services.GetRequiredService<TenantDefinitionService>();
             var draft = await definitions.CreateAsync(actor, tenant, "Model Sandbox command", await Revision(owner, tenant));
             draft = await definitions.UpdateAsync(actor, tenant, draft.DraftId, draft.Candidate with { SandboxPolicy = new(profileId, [profileId]),
-                Environment = new(Projection: backgroundTask ? new([ToolCatalog.BackgroundStart]) : null, Capabilities: new("Selected", (backgroundTask ? new[] { ToolCatalog.BackgroundStart } : []).Concat(control ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : choice == "inspect" || readKind is not null ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : new[] { ToolCatalog.SandboxExec }).ToArray())) }, await Revision(owner, tenant), draft.Revision);
+                TriggerPolicy = independentOrigin is null ? draft.Candidate.TriggerPolicy : (await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy,
+                Environment = new(Projection: backgroundTask && independentOrigin is null ? new([ToolCatalog.BackgroundStart]) : null, Capabilities: new("Selected", (backgroundTask && independentOrigin is null ? new[] { ToolCatalog.BackgroundStart } : []).Concat(control ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProcessStop, ToolCatalog.SandboxReset] : choice == "inspect" || readKind is not null ? [ToolCatalog.SandboxExec, ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus] : new[] { ToolCatalog.SandboxExec }).ToArray())) }, await Revision(owner, tenant), draft.Revision);
             await definitions.PublishAsync(actor, tenant, draft.DraftId, await Revision(owner, tenant), draft.Revision);
             var created = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = Guid.Parse(draft.DefinitionId), version = 1, expectedRevision = await Revision(owner, tenant) }));
             var instance = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); var executor = created.GetProperty("principalId").GetGuid();
@@ -210,7 +221,7 @@ public sealed partial class TenantDefinitionAccessTests
             var parentSession = session;
             if (backgroundTask)
             {
-                var backgroundRole = await access.SaveRoleAsync(actor, tenant, null, "Background native execution", ["sessions.create", "agent-runs.create", "sessions.read", "agent-runs.read"], await Revision(owner, tenant));
+                var backgroundRole = await access.SaveRoleAsync(actor, tenant, null, "Background native execution", (new[] { "sessions.create", "agent-runs.create", "sessions.read", "agent-runs.read" }).Concat(independentOrigin is null ? [] : new[] { "automations.run" }).ToArray(), await Revision(owner, tenant));
                 await access.AssignRoleAsync(actor, tenant, executor, backgroundRole.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             }
             if (choice == "inspect" || control || readKind is not null)
@@ -248,7 +259,7 @@ public sealed partial class TenantDefinitionAccessTests
                 var pinned = Assert.Single(run.Admission.Configuration!.Definition.ExecutionSandboxProfiles!);
                 var options = factory.Services.GetRequiredService<OpenSandboxOptions>();
                 var mounts = new CanonicalSandboxMountResolver(options).Resolve(instance, session, run.Admission.Configuration.Definition.StateIsolationPolicy?.HomeAccess ?? AgentCore.Domain.Definitions.HomeAccess.ReadWrite, create: true);
-                var at = DateTimeOffset.UtcNow;
+                var at = proofClock.GetUtcNow();
                 lease = new(session, instance, Guid.NewGuid(), 1, pinned, SandboxLeaseState.Provisioning, null, at, at.AddMinutes(10), MountAuthority: mounts.Authority,
                     AdmissionRunId: run.AgentRunId, AdmissionToolCallId: "seed-existing", TenantId: tenant, ExecutorPrincipalId: executor,
                     ProviderHostScope: factory.Services.GetRequiredService<ISandboxVerificationHost>().Scope);
@@ -283,9 +294,16 @@ public sealed partial class TenantDefinitionAccessTests
                     factory.Model.Arguments = choice == "stop" ? JsonSerializer.Serialize(new { operation = "stop_sandbox_process", executionId }) : "{\"operation\":\"reset_sandbox_environment\"}";
                 }
             };
-            var submitted = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = readKind is null ? "Run the exact sandbox command after Review" : "Inspect the exact stored Sandbox observation after Review", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
-            var runId = submitted.GetProperty("runId").GetGuid();
-            if (backgroundTask)
+            Guid runId;
+            if (independentOrigin is not null)
+                runId = await TenantCredentialAccessTests.AdmitIndependentTask(factory, owner, tenant, instance, "Perform the exact owned native Sandbox task.", (FakeTimeProvider)proofClock, independentOrigin);
+            else
+            {
+                var submitted = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = readKind is null ? "Run the exact sandbox command after Review" : "Inspect the exact stored Sandbox observation after Review", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }));
+                runId = submitted.GetProperty("runId").GetGuid();
+            }
+            var independentRoot = independentOrigin is null ? (AgentRun?)null : await runs.FindTenantRunAsync(tenant, runId);
+            if (backgroundTask && independentOrigin is null)
             {
                 var parentId = runId; using var childDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
                 while (true)
@@ -302,6 +320,11 @@ public sealed partial class TenantDefinitionAccessTests
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
                 while (true)
                 {
+                    if (independentOrigin is not null)
+                    {
+                        await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync(deadline.Token);
+                        await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8, deadline.Token);
+                    }
                     var current = (await runs.FindTenantRunAsync(tenant, runId))!;
                     if (current.Result?.ContinuationRunId is { } next) { runId = next; continue; }
                     if (done(current) || current.IsTerminal) return current;
@@ -400,7 +423,13 @@ public sealed partial class TenantDefinitionAccessTests
             }
             Assert.Single(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200), a => a.Action == "approvals.request");
             Assert.DoesNotContain(AgentRunToolCallCheckpoint.PendingCalls(messages!), c => c.Name == ToolCatalog.RequestAuthorization);
-            if (backgroundTask)
+            if (independentRoot is not null)
+            {
+                Assert.NotEqual(parentSession, completed.SessionId); Assert.Equal(independentRoot.ActivationId, completed.Admission.ExecutionContext!.RootActivationId);
+                Assert.Equal(independentOrigin == "scheduled" ? (Guid?)null : actor, completed.Admission.ExecutionContext.OriginalInitiatorPrincipalId);
+                Assert.Null(completed.Owner.ProfileIdOrNull); Assert.Null(await runs.FindTenantCompletionAsync(completed.Owner, completed.AgentRunId));
+            }
+            else if (backgroundTask)
             {
                 Assert.NotEqual(parentSession, completed.SessionId); Assert.Equal(session, completed.SessionId);
                 Assert.Equal(AgentRunOutputContract.BackgroundOutcome, completed.Admission.OutputContract);

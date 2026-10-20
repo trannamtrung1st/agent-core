@@ -6,7 +6,7 @@ internal static class AccountReadApprovalPersistence
     internal const string Shape = """
         Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64
         AND Permission = 'credentials.use' AND ResourceType = 'credential' AND CredentialId IS NOT NULL AND ResourceId IS CredentialId
-        AND OriginalInitiatorPrincipalId IS NOT NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
+        AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
         AND json_type(PayloadJson, '$.Operation.AccountRead') IS 'object'
         AND json_extract(PayloadJson, '$.Operation.AccountRead.SessionId') IS SessionId
         AND json_extract(PayloadJson, '$.Operation.AccountRead.Credential.CredentialId') IS CredentialId

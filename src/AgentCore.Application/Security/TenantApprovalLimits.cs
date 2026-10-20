@@ -11,10 +11,10 @@ public static class TenantApprovalLimits
     public const int Operation = 8;
     public const int Root = 32;
 
-    public static void Require(int tenant, int executor, int requester, int operation, int root)
+    public static void Require(int tenant, int executor, int requester, int operation, int root, bool hasHumanRequester = true)
     {
         if (root >= Root) throw new SecurityConflictException("approval_root_limit");
-        if (tenant >= Tenant || executor >= Executor || requester >= Requester || operation >= Operation)
+        if (tenant >= Tenant || executor >= Executor || hasHumanRequester && requester >= Requester || operation >= Operation)
             throw new SecurityConflictException("approval_rate_limited");
     }
 }

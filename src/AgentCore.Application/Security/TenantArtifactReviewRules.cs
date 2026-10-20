@@ -40,7 +40,6 @@ public static class TenantArtifactReviewRules
                 throw new AccessDeniedException("executor_read_required");
         if (request.Kind == ApprovalKind.Review && !(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, PermissionCatalog.Get("artifacts.create"), scope, ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("operation_authority_changed");
-        if (request.OriginalInitiatorPrincipalId is null) throw new AccessDeniedException("requester_unavailable");
     }
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct, bool ownedSources = false)
     {

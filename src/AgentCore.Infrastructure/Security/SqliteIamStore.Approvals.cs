@@ -474,7 +474,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 && (r.Status == (int)TenantApprovalStatus.Pending || r.CreatedAt >= cutoff), ct).ConfigureAwait(false);
             var rootCount = await db.Set<TenantApprovalRecord>().CountAsync(r => r.TenantId == request.TenantId
                 && r.RootActivationId == request.RootActivationId.ToString("D"), ct).ConfigureAwait(false);
-            TenantApprovalLimits.Require(counts?.Tenant ?? 0, counts?.Executor ?? 0, counts?.Requester ?? 0, operationCount, rootCount);
+            TenantApprovalLimits.Require(counts?.Tenant ?? 0, counts?.Executor ?? 0, counts?.Requester ?? 0, operationCount, rootCount, request.OriginalInitiatorPrincipalId is not null);
             if (run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= ApprovalNow) throw new SecurityConflictException("execution_claim_expired");
             if ((request.Operation.BackgroundReport is null && request.Operation.ReportSourceRead is null))
                 AgentRunStoreMapping.Apply(row, run.WaitForDurableApproval(expectedRunRevision, request.RequestId, generation, request.CreatedAt)); db.Add(TenantApprovalRecord.From(request)); result = request; return true;

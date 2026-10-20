@@ -20,9 +20,10 @@ public static class TenantWaitRules
             || snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason))
             throw new AccessDeniedException("wait_unavailable");
     }
-    public static bool Allows(AgentRun run) => run.Admission.ExecutionContext?.Origin is
-        (ExecutionOrigin.UserMessage or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation)
-        && run.Admission.OutputContract is (AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.BackgroundOutcome);
+    public static bool Allows(AgentRun run) => TenantTaskExecutionContract.IsIndependent(run)
+        || run.Admission.ExecutionContext is { OriginalInitiatorPrincipalId: not null,
+            Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation }
+            && run.Admission.OutputContract is (AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.BackgroundOutcome);
 
     public static void Require(AgentRun run, AgentDefinition current, AgentRunCommand.SuspendWait suspend)
     {

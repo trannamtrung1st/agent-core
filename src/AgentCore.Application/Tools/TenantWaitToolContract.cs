@@ -8,9 +8,7 @@ namespace AgentCore.Application.Tools;
 public static class TenantWaitToolContract
 {
     public static bool IsOffered(AgentDefinition definition, AgentContext? context) =>
-        context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
-        && execution.SessionId == context.OwnedSessionId && execution.Origin is
-            (ExecutionOrigin.UserMessage or ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation)
-        && context.OutputContract is (AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.BackgroundOutcome)
+        context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: not null }
+        && TenantTaskExecutionContract.Allows(context)
         && RolePermissions.AllowsTool(definition, ToolCatalog.ExecutionWait);
 }

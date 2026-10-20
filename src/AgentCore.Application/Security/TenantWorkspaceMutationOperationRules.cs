@@ -47,7 +47,6 @@ public static class TenantWorkspaceMutationOperationRules
             if (!(await iam.CheckOwnedTenantAsync(state, request.ExecutorPrincipalId, permission, scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException(key.EndsWith(".read", StringComparison.Ordinal) ? "executor_read_required" : "operation_authority_changed");
         }
-        if (request.OriginalInitiatorPrincipalId is null) throw new AccessDeniedException("requester_unavailable");
     }
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)
     {

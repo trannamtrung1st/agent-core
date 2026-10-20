@@ -29,6 +29,18 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     private readonly Dictionary<(Guid Run, Guid Generation), TaskCompletionSource<bool>> _dispatching = [];
     private bool _stopping;
 
+    // Deterministic fixture barrier: a durable wait is visible before its supervised
+    // generation has finished releasing the provider/runtime and capacity slot.
+    // Observe the existing lifetime; this does not dispatch or mutate execution.
+    internal Task WaitForGenerationReleaseAsync(Guid sessionId, Guid runId, Guid generation, CancellationToken ct)
+    {
+        Task stopped;
+        lock (_gate)
+            stopped = _live.TryGetValue(sessionId, out var live) && live.Run.AgentRunId == runId && live.Run.Claim?.Generation == generation
+                ? live.Stopped.Task : Task.CompletedTask;
+        return stopped.WaitAsync(ct);
+    }
+
     public ValueTask<bool> AdmitCompletionAsync(BackgroundCompletionCandidate source, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
     public ValueTask<bool> RepairPendingInputsAsync(Guid sessionId, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
     public async ValueTask<bool> DispatchAsync(AgentRun run, CancellationToken cancellationToken = default)

@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Independent scheduled account consent
+
+`20261020190000_TenantIndependentAccountConsent` rebuilds only the incumbent approval table constraint and freezes/restores all 41 existing guards, then adds two strict independent-account source guards. The resulting 43 guards retain prior receipt/source ownership. Account-read/action consent may have no human initiator only for the actual independently admitted Schedule root or its exact same-task approval successors. The existing approval/receipt owner and payload remain authoritative. SQLite account shape constraints permit the absent requester; strict source guards bind it to the same owned Session/Run, a scheduled root and its immutable accepted occurrence. Human-attributed requests retain their actual original initiator. Permission, source, reviewer and grant checks remain separate and current. The migration must preserve all incumbent consent guards and refuse downgrade while retained no-human account requests would be lost or made invalid.
+
 ## Tagged tenant Automation ownership
 
 `20261020180000_TenantAutonomousAutomation` extends the existing `Automations` and `TriggerOccurrences` rows with nullable tenant/executor identity and nullable legacy profile. Checks require either the legacy profile variant or a concrete tenant/Instance/executor variant; the latter has no profile. Composite ownership foreign keys bind canonical rows to the actual SystemIdentity. Canonical queries use explicit ownership; legacy trigger queries filter out tenant rows. Tenant due scans use a bounded stable ID cursor, so a blocked prefix does not permanently hide later jobs. A technical schedule expiry/completion advances only exact registration state, without a Session or Run.

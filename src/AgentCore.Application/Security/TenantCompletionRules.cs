@@ -14,7 +14,7 @@ public static class TenantCompletionRules
 {
     public static void Require(AgentRun parent, AgentDefinition current, string tool)
     {
-        if (!TenantWaitRules.Allows(parent) || !TenantCompletionToolContract.IsTool(tool)
+        if (!TenantWaitRules.Allows(parent) || TenantTaskExecutionContract.IsIndependent(parent) || !TenantCompletionToolContract.IsTool(tool)
             || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, tool) || !RolePermissions.AllowsTool(current, tool))
             throw new AccessDeniedException("completion_unavailable");
     }

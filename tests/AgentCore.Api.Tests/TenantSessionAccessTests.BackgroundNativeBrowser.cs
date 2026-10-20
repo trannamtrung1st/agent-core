@@ -22,13 +22,14 @@ public sealed partial class TenantSessionAccessTests
     {
         public string Url { get; set; } = "";
         public bool ReadReview { get; init; }
+        public bool Independent { get; init; }
         public bool Capture { get; init; }
         public string? Transfer { get; init; }
         public Func<Task<Guid>>? SeedTransfer { get; set; }
         public Func<Task>? VerifyTransfer { get; set; }
         public override async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
-            if (Origin(request) != ExecutionOrigin.ImmediateBackground)
+            if (!Independent && Origin(request) != ExecutionOrigin.ImmediateBackground)
             { await foreach (var e in base.GenerateAsync(request, ct)) yield return e; yield break; }
             Requests.Enqueue(request);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
