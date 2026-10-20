@@ -1,3 +1,4 @@
+import { scheduleTimingLabel, AutomationScheduleFields, defaultAutomationTiming as defaultTiming } from "./AutomationScheduleFields";
 import { showAdminFailure } from './adminFailure';
 import { followAppLink } from "../../app/appLink";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
@@ -9,8 +10,7 @@ import { AdminSessionPicker } from "./AdminSessionPicker";
 import { AutomationDestination, ConversationDestination } from "../chat/AutomationDestination";
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useId, useRef, useState, type Key } from "react";
-import { Alert, App, Button, Checkbox, Collapse, DatePicker, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
-import dayjs from "dayjs";
+import { Alert, App, Button, Checkbox, Collapse, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { listModels, type ModelDescriptor } from "../../services/api";
 import { instanceContinuityRequest as request, type Automation, type AutomationDraft, type AutomationReview, type ScheduleTiming, listEventCatalog, eventSourceKey, type AdminWebhookEvent } from "../../services/adminApi";
@@ -26,9 +26,7 @@ const webhookExample = { schemaVersion: 1, type: "webhook.example", source: { ki
 const activeWork = ["Queued", "Running", "WaitingForApproval", "WaitingToRetry", "WaitingForSignal"];
 const terminal = ["Completed", "Cancelled", "Expired"];
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not scheduled";
-const defaultTiming = (): ScheduleTiming => ({ kind: "daily", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", interval: 1, localTime: "09:00" });
-const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-const supportedTimeZones = [...new Set([localZone, "UTC", ...Intl.supportedValuesOf("timeZone")])].sort();
+
 const blank = (): AutomationDraft => ({ executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, expectedRevision: 0, enabled: false, name: "", instructions: "", modelKey: null, reasoningEffort: null,
   triggers: [{ triggerId: crypto.randomUUID(), enabled: true, revision: 1, kind: "schedule", schedule: defaultTiming() }] });
 
@@ -172,9 +170,6 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const tableVersion = useAutomationSelection(savedSelection ?? selection, "automation", review?.items.map(item => item.automationId) ?? [], setSearch, setExpanded);
   const isSchedule = draft.triggers[0]?.kind === "schedule";
   const timing = draft.triggers[0]?.kind === "schedule" ? draft.triggers[0].schedule : defaultTiming();
-  const viewerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const previewTime = (value?: string | null) => value && Number.isFinite(Date.parse(value))
-    ? `${new Date(value).toLocaleString()} (${viewerZone})` : null;
   const policy = review?.policy;
   const coreAllowed = policy?.allowCoreEvents === true;
   const eventsAllowed = policy?.allowEvents === true;
@@ -317,46 +312,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
           <Button size="small" style={{ alignSelf: "flex-start" }} onClick={e => { managingTrigger.current = null; eventOpener.current = e.currentTarget; setViewingSource(null); setManagingEvents(true); }}>New webhook Event</Button>
         </> : <>
         {!schedulesAllowed ? <Alert showIcon type="warning" title="This Definition does not permit Schedule Automations." /> : null}
-        <div className="automation-timing-fields">
-          <Form.Item label="Timing"><Select aria-label="Schedule timing" value={timing.kind} disabled={busy}
-            options={[{ value: "oneShot", label: "Once",  }, { value: "daily", label: "Daily",  }, { value: "weekly", label: "Weekly",  }, { value: "fixedInterval", label: "Fixed interval",  }]}
-            onChange={kind => setTiming({ kind, timeZone: timing.timeZone, interval: kind === "fixedInterval" ? 3600 : 1, localTime: "09:00", weekdays: kind === "weekly" ? [1] : null })} /></Form.Item>
-          {timing.kind === "oneShot" ? <Form.Item className="automation-timing-wide" label="Run at" extra={`Times shown in ${viewerZone}. Saved in UTC.`}>
-            <DatePicker aria-label="Schedule run at" classNames={{ popup: { root: "automation-date-picker-popup" } }} showTime={{ format: "HH:mm" }} format="YYYY-MM-DD HH:mm"
-              value={timing.atUtc ? dayjs(timing.atUtc) : null} disabled={busy}
-              onChange={value => setTiming({ atUtc: value?.toISOString() ?? null })} />
-          </Form.Item> :
-            <Form.Item label={timing.kind === "fixedInterval" ? "Interval (seconds)" : timing.kind === "daily" ? "Every (days)" : "Every (weeks)"}>
-              <InputNumber aria-label={timing.kind === "fixedInterval" ? "Schedule interval (seconds)" : timing.kind === "daily" ? "Schedule every (days)" : "Schedule every (weeks)"} min={timing.kind === "fixedInterval" ? 60 : 1} max={maximum} precision={0} value={timing.interval} disabled={busy} onChange={value => setTiming({ interval: value ?? 0 })} /></Form.Item>}
-          {timing.kind === "daily" || timing.kind === "weekly" ? <><Form.Item label="Local time"><Input aria-label="Schedule local time" type="time" value={timing.localTime ?? "09:00"} disabled={busy} onChange={e => setTiming({ localTime: e.target.value })} /></Form.Item>
-            <Form.Item className="automation-timing-zone" label="Time zone" extra="Runs at the selected local time. Daylight saving changes follow this zone; missing times move forward and repeated times run once."><Select aria-label="Schedule time zone" showSearch optionFilterProp="label" value={timing.timeZone} disabled={busy} options={[...new Set([timing.timeZone, ...supportedTimeZones])].filter((value): value is string => !!value).sort().map(value => ({ value, label: value }))} onChange={timeZone => setTiming({ timeZone })} /></Form.Item></> : null}
-        </div>
-        {timing.kind === "weekly" ? <Form.Item label="Weekdays"><Select mode="multiple" aria-label="Schedule weekdays" value={timing.weekdays ?? []} disabled={busy}
-          options={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((label, value) => ({ label, value }))} onChange={weekdays => setTiming({ weekdays })} /></Form.Item> : null}
-        {timing.kind !== "oneShot" ? <>
-          {policy?.allowIndefiniteRecurrence === false ? <Alert type="info" showIcon title="This Definition requires an end date or occurrence limit." /> : null}
-          <div className="automation-limit-fields">
-            <Form.Item label={timing.kind === "fixedInterval" ? "End at" : "End date"}
-              extra={timing.kind === "fixedInterval" ? `Times shown in ${viewerZone}. Saved in UTC.` : undefined}>
-              <DatePicker aria-label={timing.kind === "fixedInterval" ? "Schedule end at" : "Schedule end date"} classNames={{ popup: { root: "automation-date-picker-popup" } }}
-                showTime={timing.kind === "fixedInterval" ? { format: "HH:mm" } : false}
-                format={timing.kind === "fixedInterval" ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD"}
-                value={timing.kind === "fixedInterval" ? timing.endAtUtc ? dayjs(timing.endAtUtc) : null : timing.endDate ? dayjs(timing.endDate) : null}
-                disabled={busy} onChange={value => setTiming(timing.kind === "fixedInterval"
-                  ? { endAtUtc: value?.toISOString() ?? null } : { endDate: value?.format("YYYY-MM-DD") ?? null })} />
-            </Form.Item>
-            <Form.Item label="Maximum occurrences">
-              <InputNumber aria-label="Schedule maximum occurrences" min={1} precision={0} value={timing.maxOccurrences} disabled={busy} onInput={text => setTiming({ maxOccurrences: text.trim() ? Number(text) : null })} onChange={value => setTiming({ maxOccurrences: value })} />
-            </Form.Item>
-          </div>
-          <Typography.Text type="secondary">Leave both bounds empty only if the Definition permits ongoing recurrence.</Typography.Text>
-        </> : null}
-        {timing.kind === "oneShot" && previewTime(timing.atUtc) ? <Typography.Paragraph style={{ margin: 0 }} type="secondary" role="status">
-          Runs on {previewTime(timing.atUtc)}.
-        </Typography.Paragraph> : null}
-        {timing.kind === "fixedInterval" && previewTime(timing.endAtUtc) ? <Typography.Paragraph style={{ margin: 0 }} type="secondary" role="status">
-          Stops on {previewTime(timing.endAtUtc)}.
-        </Typography.Paragraph> : null}
+        <AutomationScheduleFields timing={timing} setTiming={setTiming} disabled={busy} policy={policy} />
         </>}
         </Flex>
         <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="Execution">
@@ -468,12 +424,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     </AgentConfigurationPanel>;
 }
 
-export function scheduleTimingLabel(timing: ScheduleTiming) {
-  if (timing.kind === "oneShot") return `Once · ${date(timing.atUtc ?? null)}`;
-  if (timing.kind === "fixedInterval") return `Every ${timing.interval} seconds`;
-  const days = timing.weekdays?.map(day => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
-  return `Every ${timing.interval} ${timing.kind === "daily" ? "day" : "week"}${timing.interval === 1 ? "" : "s"}${days ? ` · ${days}` : ""} · ${timing.localTime} · ${timing.timeZone}`;
-}
+export { scheduleTimingLabel } from "./AutomationScheduleFields";
 
 function automationWhen(item: Automation, sources: AdminWebhookEvent[]) {
   return item.triggers.map(t => t.kind === "schedule" ? scheduleTimingLabel(t.schedule) : t.source?.kind === "builtin" ? `Built-in · ${t.source.key}`

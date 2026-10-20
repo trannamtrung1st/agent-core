@@ -536,6 +536,18 @@
         ],
         "verificationReport": "docs/reports/tenant-input-interruption-verification-2026-10-21.md",
         "observed": "Synthetic MCP row Steer and Ctrl+Enter at 1440/390px; original Interrupted prefix retained; independent queued draft consumed once afterward; no horizontal overflow; final mobile actions are at least 44px with an 8px row gap."
+      },
+      "tenantAutomationManagementRefresh": {
+        "date": "2026-10-21",
+        "scope": "Bounded canonical tenant Schedule management merge. Existing tokens, components, themes and historical source hashes retained.",
+        "sources": [
+          "web/src/features/access/TenantAgentAutomations.tsx",
+          "web/src/features/admin/AutomationScheduleFields.tsx",
+          "web/src/services/tenantAutomations.ts",
+          "docs/13-frontend-implementation-spec.md"
+        ],
+        "verificationReport": "docs/reports/tenant-automation-ui-verification-2026-10-21.md",
+        "observed": "Synthetic MCP and isolated E2E desktop/narrow save, enable, manual completion, registration cancellation and retained Activity; current scoped reader/revocation; shared 16px inset/section gaps, zero duplicated Form.Item margins, 40px mobile actions and full-width narrow Drawer."
       }
     }
   },

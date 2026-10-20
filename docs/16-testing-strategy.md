@@ -1413,3 +1413,8 @@ The human-copy UI selection exercises exact current access hints, confirmation/c
 ## Tenant interruption qualification
 
 Focused cases exercise exact HTTP and MessagePack interruption with both stores, file-only replacement, replay while a later Run is live, continued background and independent scheduled/manual sources, current authority/frame/source refusal, full queue capacity, SQLite application-host recreation, caller disconnect and output arriving during commit/refusal. Assertions include fresh actual-human roots, exact durable interrupted prefix, no late source output, no duplicate admission/audit/effect and zero outbound provider HTTP. Frontend checks exercise queued-row and keyboard Steer at desktop/narrow sizes plus Chat-only users without cancellation authority; Queue and explicit Stop regressions remain independently verified. Voice interruption and full proposal acceptance remain separate. [Commands and observed results](reports/tenant-input-interruption-verification-2026-10-21.md).
+
+
+## Tenant Automation management qualification
+
+Focused editor qualification covers both-store filtered counts/paging, independently scoped hints, foreign routes, revocation and archived state; actual Schedule/manual execution retains its independent backend coverage. Frontend cases exercise retained bounds/witnesses, stale reload, unknown outcomes, malformed saved acknowledgement, read-only/revoked detail, current timing eligibility and factual Run links after cancellation. Shared schedule extraction retains the legacy editor suite. Synthetic MCP and isolated E2E exercise desktop/narrow create/edit/enable/manual-run/completion/cancel/Activity and reader revocation. [Commands and evidence](reports/tenant-automation-ui-verification-2026-10-21.md).

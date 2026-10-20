@@ -13,6 +13,14 @@ public static class TenantAutomationEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations").RequireAuthorization();
+        group.MapGet("/editor", (Guid instanceId, int? page, int? pageSize, HttpContext http, TenantAutomationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(Editor(await service.EditorAsync(actor.TenantId, instanceId, Human(http, actor.AccountId, actor.PrincipalId), page: page ?? 0, pageSize: pageSize ?? 10, ct: ct)));
+        }));
+        group.MapGet("/{automationId:guid}/editor", (Guid instanceId, Guid automationId, HttpContext http, TenantAutomationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(Editor(await service.EditorAsync(actor.TenantId, instanceId, Human(http, actor.AccountId, actor.PrincipalId), automationId, ct: ct)));
+        }));
         group.MapGet("", (Guid instanceId, int? page, int? pageSize, HttpContext http, TenantAutomationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
             var actor = IdentityHttp.TenantContext(http); var result = await service.ListAsync(actor.TenantId, instanceId, Human(http, actor.AccountId, actor.PrincipalId), page ?? 0, pageSize ?? 30, ct);
             return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize });
@@ -44,6 +52,8 @@ public static class TenantAutomationEndpoints
     private static HumanSessionReference Human(HttpContext http, Guid account, Guid principal) => new(account, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), principal);
     private static TenantAutomationChange Change(SaveRequest value) => new(value.Enabled, value.Name, value.Instructions, AdminAutomationEndpoints.Parse(value.Schedule), value.ModelKey, value.ReasoningEffort, value.RequiresTools, value.RequiresVision);
     private static void Route(Automation value, Guid instance) { if (value.Owner.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable"); }
+    private static object Editor(TenantAutomationEditor view) => new { agent = new { view.Agent.PrincipalId, view.Agent.SystemIdentityId, instance = AgentCore.Api.Mapping.AdminHttpMapping.ToAgentInstance(view.Agent.Instance) }, view.Policy, view.Total, view.Page, view.PageSize, view.SecurityRevision, view.CanCreate, view.CanSchedule,
+        items = view.Items.Select(i => new { automation = Safe(i.Automation), i.CanUpdate, i.CanCancel, i.CanRun }) };
     private static object Safe(Automation value) => new {
         value.AutomationId, agentInstanceId = value.Owner.AgentInstanceId, value.Name, value.Instructions, status = value.Status.ToString().ToLowerInvariant(),
         value.Revision, value.TriggerRevision, value.NextOccurrenceAtUtc, value.OccurrenceCount, value.ExpiresAtUtc, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort,

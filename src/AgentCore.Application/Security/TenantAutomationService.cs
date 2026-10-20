@@ -12,7 +12,7 @@ namespace AgentCore.Application.Security;
 public sealed record TenantAutomationChange(bool Enabled, string Name, string Instructions, TriggerSchedule Schedule,
     string? ModelKey = null, string? ReasoningEffort = null, bool RequiresTools = true, bool RequiresVision = false);
 
-public sealed class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
+public sealed partial class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
     TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, IModelCatalog models, IIdGenerator ids, TimeProvider time)
 {
     private readonly SemaphoreSlim dueGate = new(1, 1);
