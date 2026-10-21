@@ -7,9 +7,10 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore : ITenantRuntimeInputStore
 {
-    public ValueTask<TenantHumanInputCommit> SaveTenantRuntimeInputAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot,
+    public async ValueTask<TenantHumanInputCommit> SaveTenantRuntimeInputAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot,
         long expectedRevision, TenantHumanInput input, Guid auditId, CancellationToken ct = default)
     {
+        await using var speechOperation = input.Admission.Speech is { } speech ? await speech.Lease.EnterAsync(requireActive: true, ct).ConfigureAwait(false) : null;
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (attachmentBacking?.TenantGate ?? _gate)
         {
             RequireHumanSession(input.Owner.TenantId, input.Human);
@@ -22,14 +23,14 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeInputStore
             var admission = input.Admission with { ExpectedSessionRevision = snapshot.Revision };
             var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
             var audit = new AuthorizationAudit(auditId, input.Owner.TenantId, input.Human.PrincipalId, "agent-runs.admit", admission.Run.AgentRunId.ToString("D"), "allowed", "human_message_admitted", (clock ?? TimeProvider.System).GetUtcNow());
-            var result = CommitTenantHumanRun(next, state.Tenant.Revision, admission, input.Human, audit, ct, frame, snapshot, expectedRevision).Result
+            var result = CommitTenantHumanRun(next, state.Tenant.Revision, admission, input.Human, audit, ct, frame, snapshot, expectedRevision, speechOperation).Result
                 ?? throw new SecurityConflictException("stale_revision");
             var visible = result.Created ? snapshot with { Revision = result.SessionRevision, LastEntrySequence = admission.Input.Sequence,
                 LastUserActivityAt = snapshot.LastUserActivityAt > admission.Input.CreatedAt ? snapshot.LastUserActivityAt : admission.Input.CreatedAt, UpdatedAt = admission.Input.CreatedAt > snapshot.UpdatedAt ? admission.Input.CreatedAt : snapshot.UpdatedAt }
                 : sessionBacking.LoadTenantRuntime(frame, (clock ?? TimeProvider.System).GetUtcNow())!;
             var stopped = result.Interrupted;
             if (stopped is not null) visible = TenantInputInterruptionRules.Interrupt(visible, stopped, stopped.UpdatedAtUtc);
-            return ValueTask.FromResult(new TenantHumanInputCommit(result, visible, result.Created ? next.Tenant.Revision : state.Tenant.Revision, stopped));
+            return new TenantHumanInputCommit(result, visible, result.Created ? next.Tenant.Revision : state.Tenant.Revision, stopped);
         }
     }
 }

@@ -238,3 +238,7 @@ Before report creation and protected output, prove the exact accepted occurrence
 ## Speech ingress fault identity
 
 The normalized `AudioIngressFaultReceived` carries the captured speech epoch and server-issued input stream ID alongside its safe code/message. Session Runtime discards a fault after mute, mode/stream retirement or epoch replacement before applying recovery. A fault queued behind mute must not disable muted Voice or reopen its retired provider. These fields are internal transport provenance, never caller-selected execution authority or provider DTOs; PCM remains outside the domain mailbox and persistence.
+
+## Canonical tenant voice transport signals
+
+`TenantVoiceRuntimeBinding` pins the actual attachment root lease to one immutable Run-frame Runtime. Only normalized speech enters its mailbox. Its typed turn/interruption/unavailable signals queue supervised work outside that mailbox; none is a wire event or an execution grant. Raw PCM and input continuity stay in `SpeechRecognitionIngress`. A committed recognized turn publishes `transcript.final` with the exact durable entry ID/sequence after original-human admission. Ephemeral partial/discard/error/state events and PCM are delivered only under the actual current recipient/attachment checks, without replay. Pending activation and mode retirement do not create a Run or cancel accepted work.

@@ -8,6 +8,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
+public sealed record TenantHumanInputReceipt(TenantRunReceipt Run, long EntrySequence);
 public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Guid ResponseId, Guid ActivationId, Guid RootActivationId, long SessionRevision, long SecurityRevision);
 public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null, bool CanCancel = false);
 
@@ -21,6 +22,22 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
     public async ValueTask<TenantRunReceipt> SubmitMessageAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default,
         TenantInputInterruption? interruption = null)
+        => (await SubmitInputAsync(tenant, sessionId, initiator, messageId, text, attachmentIds, expectedSecurityRevision, expectedSessionRevision, ct, interruption, null).ConfigureAwait(false)).Run;
+
+    public async ValueTask<TenantHumanInputReceipt> SubmitSpeechAsync(TenantVoiceLease lease, Guid streamId, Guid utteranceId, string text, CancellationToken ct = default)
+    {
+        if (!lease.InputActive || streamId != lease.StreamId || utteranceId == Guid.Empty) throw new AccessDeniedException("voice_lease_unavailable");
+        for (var attempt = 0; ; attempt++)
+        {
+            var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, lease.Owner.TenantId, lease.Human, ct).ConfigureAwait(false);
+            var saved = await sessions.FindTenantSessionAsync(lease.Owner.TenantId, lease.Owner.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+            try { return await SubmitInputAsync(lease.Owner.TenantId, lease.Owner.SessionId, lease.Human, utteranceId, text, [], state.Tenant.Revision, saved.Snapshot.Revision, ct, null, new(lease, streamId, utteranceId)).ConfigureAwait(false); }
+            catch (SecurityConflictException ex) when (ex.ReasonCode == "stale_revision" && attempt < 2 && lease.InputActive && streamId == lease.StreamId) { }
+        }
+    }
+    private async ValueTask<TenantHumanInputReceipt> SubmitInputAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
+        Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision,
+        CancellationToken ct, TenantInputInterruption? interruption, TenantSpeechAdmission? speech)
     {
         var requested = attachmentIds.ToArray();
         if (requested.Length > AttachmentLimits.MaxPerMessage || requested.Any(id => id == Guid.Empty) || requested.Distinct().Count() != requested.Length)
@@ -43,10 +60,13 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
             await TenantAttachmentBindingRules.PermissionsAsync(state, initiator.PrincipalId, sessionId, [item], authorizer, ct).ConfigureAwait(false);
             sources.Add(item);
         }
+        if (speech is not null && (!speech.Lease.InputActive || speech.StreamId != speech.Lease.StreamId || speech.Lease.Owner != session.Owner || speech.Lease.Human != initiator
+            || speech.UtteranceId != messageId || session.Snapshot.Mode != SessionMode.Voice || requested.Length != 0))
+            throw new AccessDeniedException("voice_lease_unavailable");
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
         var activationId = ids.NewId(); var runId = ids.NewId(); var entryId = ids.NewId(); var responseId = ids.NewId();
         var input = new ConversationEntry(entryId, session.Snapshot.DurableLastEntrySequence + 1, messageId, ConversationRole.User,
-            text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, now,
+            text, null, EntryStatus.Completed, speech is null ? SessionMode.Text : SessionMode.Voice, 0, text.Length, now,
             Attachments: sources.Count == 0 ? null : sources.Select(a => new ConversationAttachmentRef(a.AttachmentId, a.DisplayName, a.ContentType)).ToArray());
         var activation = Activation.Start(activationId, sessionId, ActivationKind.UserTurn, [entryId], messageId, null, null, null,
             $"human:{initiator.PrincipalId:D}:{messageId:D}", now, TenantInputInterruptionRules.Evidence(interruption));
@@ -59,12 +79,12 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
                 ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, false), resolved.Configuration, executionContext: context),
             new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
-        var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption);
+        var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption, speech);
         var prepared = new TenantHumanInput(session.Owner, initiator, state.Tenant.Revision, TenantAttachmentBindingRules.Freeze(admission));
         await TenantHumanInputRules.RequireAsync(prepared, session, agent, state, authorizer, live: inputs is not null, ct).ConfigureAwait(false);
         var committed = inputs is not null ? await inputs.SubmitAsync(prepared, ct).ConfigureAwait(false)
             : await TenantHumanInputRules.CommitQuiescentAsync(prepared, security, runs, sessions, ids, time, ct).ConfigureAwait(false);
-        return TenantHumanInputRules.Receipt(committed);
+        return new(TenantHumanInputRules.Receipt(committed), committed.Admission.EntrySequence);
     }
     // A cached transport acknowledgement is a fact about earlier admission, never a file-read token.
     public async ValueTask RequireMessageInterruptionAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,

@@ -45,7 +45,7 @@ public sealed partial class TenantSessionAccessTests
             var response = await reader.GetAsync(path + $"?page=0&pageSize=1&principalId={principal}"); Assert.True(response.Headers.CacheControl?.NoStore);
             var page = await Json(response); Assert.Equal(1, page.GetProperty("total").GetInt32()); Assert.True(page.GetProperty("canCreateSessions").GetBoolean());
             var selected = Assert.Single(page.GetProperty("items").EnumerateArray()); Assert.Equal(instance, selected.GetProperty("instanceId").GetGuid());
-            Assert.False(selected.GetProperty("voiceAvailable").GetBoolean());
+            Assert.Equal(System.Text.Json.JsonValueKind.True, selected.GetProperty("voiceAvailable").ValueKind);
             foreach (var field in new[] { "tone", "settingsOverrides", "executionBudgets", "principalId", "systemIdentityId", "ownerCapability", "definition", "permissions" }) Assert.False(selected.TryGetProperty(field, out _));
             Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync(api + $"/agents/{instance}")).StatusCode);
             Assert.Equal(0, (await Json(await reader.GetAsync(api + "/agents"))).GetProperty("total").GetInt32());

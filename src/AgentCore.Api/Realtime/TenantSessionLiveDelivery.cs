@@ -3,6 +3,7 @@ using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Conversation;
 using Microsoft.AspNetCore.SignalR;
@@ -11,7 +12,7 @@ namespace AgentCore.Api.Realtime;
 
 // Recipient transport state only. Mutable conversation state remains in the owning Runtime mailbox.
 public sealed partial class TenantSessionLiveDelivery(TenantConversationService access, ITenantRunStore runs,
-    IHubContext<SessionHub> hubs, IIdGenerator ids, TimeProvider time, ILogger<TenantSessionLiveDelivery> logger)
+    IHubContext<SessionHub> hubs, IIdGenerator ids, TimeProvider time, ILogger<TenantSessionLiveDelivery> logger, VoiceAvailability? speech = null)
 {
     private sealed class Connection
     {
@@ -23,11 +24,17 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     private sealed class Subscription(Guid tenant, Guid session, TenantSessionInitiator human, Guid attachment)
     {
         public sealed record Delivered(Guid EntryId, long EntrySequence, int PublishedEnd, int ReceivedEnd)
-        { public ConcurrentDictionary<string, TenantDeliveredBlock> Blocks { get; } = new(); }
+        {
+            public long Samples { get; init; }
+            public int SpeechEnd { get; init; }
+            public int ProjectionEnd { get; init; }
+            public ConcurrentDictionary<string, TenantDeliveredBlock> Blocks { get; } = new(); }
         public Guid Tenant { get; } = tenant;
         public Guid Session { get; } = session;
         public TenantSessionInitiator Human { get; } = human;
         public Guid Attachment { get; } = attachment;
+        public TenantVoiceLease? Voice;
+        public Func<Task>? StopVoice;
         public long Sequence;
         public long LastCommand;
         public Dictionary<Guid, CommandRecord> Dedupe { get; } = [];
@@ -56,15 +63,18 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     private readonly ConcurrentDictionary<string, Connection> _connections = new();
     private readonly ConcurrentDictionary<(Guid Tenant, Guid Session), Source> _sources = new();
 
-    public sealed class Source(TenantSessionLiveDelivery delivery, AgentRun run) : ISessionOutput
+    public sealed class Source(TenantSessionLiveDelivery delivery, AgentRun run, TenantVoiceLease? voice = null) : ISessionOutput, ISessionAudioOutput
     {
         internal SemaphoreSlim Gate { get; } = new(1, 1);
         internal AgentRun Run { get; } = run;
+        internal TenantVoiceLease? Voice { get; } = voice;
         internal ResponseStartedOutput? Started;
         internal string Prefix = "";
         internal bool Resync;
         internal bool Terminal;
+        internal StateChangedOutput? State;
         public ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default) => delivery.PublishAsync(this, output, cancellationToken);
+        public ValueTask PublishAsync(ResponseAudio audio, CancellationToken cancellationToken = default) => delivery.PublishAudioAsync(this, audio, cancellationToken);
         public void Activate()
         {
             if (!delivery._sources.TryAdd((Run.Owner.TenantId!.Value, Run.SessionId), this))
@@ -77,15 +87,16 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             finally { Gate.Release(); }
         }
     }
-    public Source CreateSource(AgentRun run) => new(this, run);
+    public Source CreateSource(AgentRun run, TenantVoiceLease? voice = null) => new(this, run, voice);
     public void Detach(string connection)
     {
-        if (_connections.TryRemove(connection, out var state)) state.Closed = true;
+        if (_connections.TryRemove(connection, out var state)) { state.Closed = true; if (state.Current is { } sub) RetireVoice(sub); }
     }
 
     public async Task AttachAsync(string connectionId, Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct)
     {
         var connection = _connections.GetOrAdd(connectionId, _ => new());
+        if (connection.Current?.StopVoice is { } oldVoice) await oldVoice().ConfigureAwait(false);
         while (true)
         {
             _sources.TryGetValue((tenant, session), out var source);
@@ -103,7 +114,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     var recipient = await access.AuthorizeRecipientAsync(tenant, session, human, ct).ConfigureAwait(false);
                     if (recipient.SecurityRevision != history.SecurityRevision || recipient.SessionRevision != history.SessionRevision)
                         throw new SecurityConflictException("stale_revision");
-                    if (recipient.Mode != SessionMode.Text) throw new AccessDeniedException("tenant_voice_transport_unavailable");
+
                     var subscription = new Subscription(tenant, session, human, ids.NewId());
                     connection.Current = subscription;
                     if (_sources.GetValueOrDefault((tenant, session)) != source) { connection.Current = null; continue; }
@@ -121,19 +132,20 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                                 source.Run.ResponseId, EntryStatus.Streaming, 0, 0, SessionMode.Text, source.Run.UpdatedAtUtc, []));
                     }
                     var active = streaming ? source!.Run.ResponseId : null;
-                    var ready = new SessionReadyProjection(SessionMode.Text, null, recipient.Status, recipient.Agent, null, null,
-                        new(false, false, false, false), new(false, false, false, false, false, []), "none",
+                    var ready = new SessionReadyProjection(recipient.Mode, null, recipient.Status, recipient.Agent, null, recipient.Agent.VoiceAvailable ? CanonicalAudio.Format : null,
+                        speech?.EffectivePlan.RecognitionCapabilities ?? new(false, false, false, false),
+                        speech?.EffectivePlan.SynthesisCapabilities ?? new(false, false, false, false, false, []), "semantic",
                         entries.Count == 0 ? 0 : entries.Max(e => e.Sequence), entries.OrderBy(e => e.Sequence).ToArray(), active, "none", "none",
                         recipient.LifecycleStatus, ModelSelection: recipient.Model, AgentRunId: active is null ? null : source!.Run.AgentRunId,
                         OutputActivity: active is null ? "Idle" : "Generating", HasOlderHistory: history.HasOlder, HistoryBeforeSequence: history.NextBefore);
+                    ready = ready with { InputTransport = speech?.EffectivePlan.InputTransport ?? "none", OutputTransport = speech?.EffectivePlan.OutputTransport ?? "none" };
                     var output = new SessionOutput(Context(session), active, new ReadyOutput(ready));
                     var mapped = SessionEventMapper.Map(output, subscription.Attachment, ++subscription.Sequence);
                     mapped.Payload["tenantId"] = tenant.ToString("D"); mapped.Payload["securityRevision"] = recipient.SecurityRevision;
                     mapped.Payload["sessionRevision"] = recipient.SessionRevision;
                     if (connection.Closed) throw new AccessDeniedException("tenant_connection_unavailable");
                     await hubs.Clients.Client(connectionId).SendAsync("SessionEvent", mapped, ct).ConfigureAwait(false);
-                    foreach (var entry in entries.Where(e => e.Role == ConversationRole.Assistant && e.DeliveryMode == SessionMode.Text
-                        && e.ResponseId is not null && e.Status is EntryStatus.Streaming or EntryStatus.Completed))
+                    foreach (var entry in entries.Where(e => e.Role == ConversationRole.Assistant && e.ResponseId is not null && e.Status is EntryStatus.Streaming or EntryStatus.Completed))
                     {
                         subscription.ObserveDelivery(entry.ResponseId!.Value, entry.EntryId, entry.Sequence, entry.Text.Length);
                         foreach (var block in entry.Blocks) subscription.ObserveBlock(entry.ResponseId.Value, block.BlockId, block.Kind, block.ArtifactId);
@@ -167,6 +179,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             if (current.Status == AgentRunStatus.Cancelled && safe is not (ResponseCompletedOutput { InterruptReason: not null } or ResponseInterruptedOutput or StateChangedOutput)) return;
             switch (safe)
             {
+                case StateChangedOutput changed: source.State = changed; break;
                 case ResponseStartedOutput started: source.Started = started; source.Prefix = ""; source.Resync = false; source.Terminal = false; break;
                 case TextDeltaOutput delta when delta.TextStart == source.Prefix.Length: source.Prefix += delta.Text; break;
                 case TextDeltaOutput: source.Resync = true; break;
@@ -191,7 +204,10 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             var subscription = state.Current;
             if (state.Closed || subscription is null || subscription.Tenant != source.Run.Owner.TenantId || subscription.Session != source.Run.SessionId) return;
             var recipient = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, bounded.Token).ConfigureAwait(false);
-            if (recipient.Mode != SessionMode.Text) { state.Current = null; return; }
+            var ownsVoice = source.Voice is { Active: true } voice && ReferenceEquals(subscription.Voice, voice);
+            if (VoiceOnly(output.Payload) && !ownsVoice) return;
+            if (output.Payload is StateChangedOutput changed) output = output with { Payload = changed with {
+                Muted = ownsVoice && !source.Voice!.InputActive, StreamId = ownsVoice ? source.Voice!.StreamId : null } };
             if (output.Payload is BlockUpsertOutput { Kind: "artifact" } block)
             {
                 var allowed = await access.CanReadArtifactReferenceAsync(subscription.Tenant, subscription.Session, subscription.Human, block.ArtifactId, bounded.Token).ConfigureAwait(false);
@@ -210,20 +226,26 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                 if (output.Payload is TextDeltaOutput delta && subscription.Delivery.TryGetValue(delivered, out var bound) && bound.PublishedEnd == delta.TextStart)
                     subscription.Delivery.AddOrUpdate(delivered, bound with { PublishedEnd = delta.TextStart + delta.Text.Length },
                         (_, old) => old with { PublishedEnd = Math.Max(old.PublishedEnd, delta.TextStart + delta.Text.Length) });
+                if (output.Payload is SpeechProjectionOutput projection && subscription.Delivery.TryGetValue(delivered, out var speechBound))
+                    subscription.Delivery[delivered] = speechBound with { ProjectionEnd = Math.Max(speechBound.ProjectionEnd, projection.Text.Length) };
+                if (output.Payload is SpeechOutputSegmentOutput segment && subscription.Delivery.TryGetValue(delivered, out var segmentBound))
+                    subscription.Delivery[delivered] = segmentBound with { SpeechEnd = Math.Max(segmentBound.SpeechEnd, segment.TextStart + segment.Text.Length) };
                 if (output.Payload is BlockUpsertOutput publishedBlock) subscription.ObserveBlock(delivered, publishedBlock.BlockId, publishedBlock.Kind, publishedBlock.ArtifactId);
             }
         }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException or OperationCanceledException)
-        { if (entered) state.Current = null; }
+        { if (entered) { if (state.Current is { } failed) RetireVoice(failed); state.Current = null; } }
         catch (Exception ex)
         {
-            if (entered) state.Current = null;
+            if (entered) { if (state.Current is { } failed) RetireVoice(failed); state.Current = null; }
             DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant recipient delivery unavailable.");
         }
         finally { if (entered) state.Gate.Release(); }
     }
     private static OutputPayload? Safe(OutputPayload payload) => payload switch
     {
+        SpeechProjectionOutput or SpeechOutputSegmentOutput or SpeechOutputCompletedOutput or PlaybackStopOutput or PlaybackGainOutput
+            or TranscriptPartialOutput or TranscriptDiscardedOutput => payload,
         ResponseStartedOutput or TextDeltaOutput or TextCompletedOutput or ResponseInterruptedOutput or StateChangedOutput or DurableApprovalPendingOutput => payload,
         BlockUpsertOutput { Kind: "markdown", AttachmentId: null, ArtifactId: null } => payload,
         BlockUpsertOutput { Kind: "artifact", AttachmentId: null, ArtifactId: not null } => payload,
@@ -231,5 +253,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
         ResponseCompletedOutput completed => completed with { MemoryReceipts = null, EffectReceipts = null },
         _ => null // Rich resource, approval, provider and voice payloads require their own recipient-aware conversion.
     };
+    private static bool VoiceOnly(OutputPayload payload) => payload is SpeechProjectionOutput or SpeechOutputSegmentOutput or SpeechOutputCompletedOutput
+        or PlaybackStopOutput or PlaybackGainOutput or TranscriptPartialOutput or TranscriptDiscardedOutput;
     private EventContext Context(Guid session) => new(ids.NewId(), session, ids.NewId(), time.GetUtcNow(), ids.NewId(), null);
 }

@@ -89,3 +89,22 @@ it('keeps the queued draft and files when independent interruption permission is
   expect(useSessionStore.getState()).toMatchObject({ sessionId: 'session-one', connection: 'ready', pendingSendQueue: [{ text: item.text, dispatching: false, error: 'This interruption is unavailable.' }] });
   expect(useSessionStore.getState().pendingSendQueue[0].eventId).not.toBe(item.eventId);
 });
+
+
+it('binds client transcript evidence to the captured tenant input stream before a queued send', async () => {
+  const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke } as never);
+  useSessionStore.setState({ mode: 'voice', sttTransport: 'clientTranscript', streamId: 'stream-one' });
+  hooks.sendSpeechEvidence({ kind: 'final', utteranceId: 'utterance-one', text: 'A spoken objective', confidence: 0.9 });
+  useSessionStore.setState({ streamId: 'stream-two' });
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('SpeechEvidence', expect.objectContaining({
+    payload: { streamId: 'stream-one', kind: 'final', utteranceId: 'utterance-one', text: 'A spoken objective', confidence: 0.9 }
+  })));
+});
+
+it('reports speech coordinates independently of longer rendered display text', async () => {
+  const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke } as never);
+  useSessionStore.setState({ entries: [{ entryId: 'entry-one', sequence: 1, role: 'assistant', responseId: 'response-one',
+    sourceEventId: null, deliveryMode: 'voice', createdAt: '2026-10-21T00:00:00Z', text: 'A much longer visual explanation and a table.', speechText: 'A brief reply.', status: 'streaming', heardTextEndExclusive: 0, receivedTextEndExclusive: 0 }] });
+  await hooks.sendPlayback('PlaybackProgress', 'playback.progress', 'response-one', 480);
+  expect(invoke).toHaveBeenCalledWith('PlaybackProgress', expect.objectContaining({ payload: { consumedSamples: 480, textEndExclusive: 14 } }));
+});

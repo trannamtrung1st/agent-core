@@ -15,7 +15,7 @@ public sealed record TenantConversationView(TenantSessionRoot Owner, string Titl
     PublicAgentDescriptor Agent, SessionModelSelection? Model);
 
 public sealed class TenantConversationService(IIamStore security, ITenantSessionStore sessions, ITenantConversationStore content,
-    IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null, TenantAttachmentService? attachmentAccess = null)
+    IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null, TenantAttachmentService? attachmentAccess = null, VoiceAvailability? voice = null)
 {
     public async ValueTask<bool> CanReadArtifactReferenceAsync(Guid tenant, Guid session, TenantSessionInitiator human, string? reference, CancellationToken ct = default)
     {
@@ -37,7 +37,7 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
         var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         return new(saved.Owner, saved.Snapshot.Revision, state.Tenant.Revision, saved.Snapshot.Mode, saved.Snapshot.Status,
-            saved.Snapshot.LifecycleStatus, PublicHistory.FromSnapshot(saved.Snapshot, voiceAvailable: false), saved.Snapshot.ModelSelection);
+            saved.Snapshot.LifecycleStatus, PublicHistory.FromSnapshot(saved.Snapshot, voiceAvailable: voice?.IsAvailable(saved.Snapshot.Definition, AgentCore.Application.Speech.SpeechLocale.Resolve(saved.Snapshot).Effective) == true), saved.Snapshot.ModelSelection);
     }
     public async ValueTask<TenantConversationView> ReadViewAsync(Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct = default)
     {
@@ -47,7 +47,7 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
         if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         var s = saved.Snapshot;
         return new(saved.Owner, s.Title, s.Revision, state.Tenant.Revision, s.Mode, s.Status, s.LifecycleStatus, s.CreatedAt, s.UpdatedAt,
-            PublicHistory.FromSnapshot(s, voiceAvailable: false), s.ModelSelection);
+            PublicHistory.FromSnapshot(s, voiceAvailable: voice?.IsAvailable(s.Definition, AgentCore.Application.Speech.SpeechLocale.Resolve(s).Effective) == true), s.ModelSelection);
     }
     public async ValueTask<TenantConversationHistory> ReadAsync(Guid tenant, Guid session, TenantSessionInitiator human,
         long? after = null, long? before = null, int limit = 50, CancellationToken ct = default)

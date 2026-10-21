@@ -88,6 +88,7 @@ public sealed partial class SqliteIamStore
         TenantHumanInput? liveInput = null, TenantRuntimeFrame? frame = null, SessionSnapshot? liveSnapshot = null, long runtimeExpectedRevision = 0)
     {
         admission = TenantAttachmentBindingRules.Freeze(admission); var run = admission.Run;
+        await using var speechOperation = admission.Speech is { } speech ? await speech.Lease.EnterAsync(requireActive: true, ct).ConfigureAwait(false) : null;
         if (run.Owner.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != initiator.PrincipalId
             || audit.Action != "agent-runs.admit" || audit.Target != run.AgentRunId.ToString("D")) throw new ArgumentException("Invalid Run admission transaction.");
         TenantRunAdmissionResult? result = null;
@@ -102,6 +103,7 @@ public sealed partial class SqliteIamStore
             TenantSessionRules.RequireExecutor((await ReadTenantAsync(db, next.Tenant.TenantId, ct).ConfigureAwait(false))!, agent);
             var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
             var current = SqliteMemoryStore.ToSnapshot(row, []);
+            TenantVoiceRules.Speech(admission, initiator, root.Domain(), current.Mode, speechOperation);
             if (frame is not null)
             {
                 var (actualRoot, _) = await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
@@ -126,7 +128,7 @@ public sealed partial class SqliteIamStore
                 var savedInput = await db.Entries.AsNoTracking().SingleAsync(e => e.EntryId == inputId && e.SessionId == root.SessionId, ct).ConfigureAwait(false);
                 if (!TenantRunRules.SameMessage(saved, SqliteMemoryStore.ToEntry(savedInput), admission))
                     throw new SecurityConflictException("message_id_conflict");
-                result = new(false, saved, Guid.Parse(inputId), current.Revision); return false;
+                result = new(false, saved, Guid.Parse(inputId), current.Revision) { EntrySequence = savedInput.EntrySequence }; return false;
             }
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status == (int)AgentRunStatus.Running && (frame == null || r.AgentRunId != frame.RunId.ToString("D")), ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
             AgentRunRecord? interruptedRow = null; AgentRun? interrupted = null;
@@ -179,7 +181,7 @@ public sealed partial class SqliteIamStore
                 }
                 db.Add(TenantInputInterruptionRules.Audit(admission, initiator, interrupted.UpdatedAtUtc));
             }
-            result = new(true, run, admission.Input.EntryId, value.Revision, interrupted); return true;
+            result = new(true, run, admission.Input.EntryId, value.Revision, interrupted) { EntrySequence = admission.Input.Sequence }; return true;
         }, ct).ConfigureAwait(false);
         return written || result is { Created: false } ? result : null;
     }

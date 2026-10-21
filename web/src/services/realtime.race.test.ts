@@ -20,6 +20,38 @@ function pcmFrame(samples = 480): Uint8Array {
 }
 
 describe("realtime race handling", () => {
+  it("holds prepared media when SetMode acknowledges before any pending or applied mode event", async () => {
+    let prepared = false, streaming = false;
+    vi.spyOn(capture, "preflight").mockImplementation(async () => { prepared = true; });
+    vi.spyOn(capture, "isPrepared").mockImplementation(() => prepared);
+    vi.spyOn(capture, "isStreaming").mockImplementation(() => streaming);
+    const release = vi.spyOn(capture, "release").mockImplementation(() => { prepared = false; streaming = false; });
+    const start = vi.spyOn(capture, "start").mockImplementation(async () => { streaming = true; });
+    const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", status: "attached",
+      mode: "text", voiceAvailable: true, sttTransport: "serverAudio", ttsTransport: "serverAudio" });
+    await requestVoice();
+    expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "voice" } }));
+    expect(prepared).toBe(true); expect(streaming).toBe(false); expect(release).not.toHaveBeenCalled();
+    hooks.handleEvent({ protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "applied", sequence: 1,
+      timestamp: "2026-10-21T00:00:00Z", correlationId: "c1", causationId: null, responseId: null, type: "session.state.changed",
+      payload: { status: "attached", mode: "voice", pendingMode: null, streamId: "stream-one", muted: false } });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce()); expect(prepared).toBe(true);
+  });
+
+  it("does not apply a prepared Voice intent to a replacement attachment", async () => {
+    let resolve!: () => void;
+    vi.spyOn(capture, "preflight").mockImplementation(() => new Promise<void>(done => { resolve = done; }));
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", status: "attached",
+      mode: "text", voiceAvailable: true, sttTransport: "serverAudio", ttsTransport: "serverAudio" });
+    const pending = requestVoice(); await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
+    useSessionStore.setState({ attachmentId: "a2" }); resolve(); await pending;
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
+  });
+
   it("drains an accepted request ack before a terminal Session closes its transport", async () => {
     let accept: (ack: { accepted: boolean }) => void = () => undefined;
     const invoke = vi.fn().mockImplementation(() => new Promise<{ accepted: boolean }>(resolve => { accept = resolve; }));

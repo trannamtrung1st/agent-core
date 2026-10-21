@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 
@@ -10,7 +11,7 @@ public static class TenantDeliveryReceiptRules
     {
         if (proof.Owner != owner || proof.EntryId == Guid.Empty || proof.ResponseId == Guid.Empty || proof.EntrySequence < 1
             || entry.EntryId != proof.EntryId || entry.Sequence != proof.EntrySequence || entry.ResponseId != proof.ResponseId
-            || entry.Role != ConversationRole.Assistant || entry.DeliveryMode != SessionMode.Text
+            || entry.Role != ConversationRole.Assistant
             || entry.Status is EntryStatus.Interrupted or EntryStatus.Failed)
             throw new AccessDeniedException("receipt_unavailable");
         var length = (entry.Envelope?.DisplayText ?? entry.Text).Length;
@@ -28,13 +29,28 @@ public static class TenantDeliveryReceiptRules
                 || block.Kind != ResponseBlockKind.ArtifactReference && (evidence.ArtifactId is not null || block.ArtifactId is not null))
                 throw new AccessDeniedException("receipt_unavailable");
         }
+        var heard = entry.HeardTextEndExclusive;
+        if (proof.Heard is { } speech)
+        {
+            var coordinate = entry.Envelope is { SpeechMode: ResponseSpeechMode.None } ? 0
+                : SpokenOutput.ForPlayback(entry.Envelope?.SpeechText, entry.Envelope?.DisplayText ?? entry.Text).Length;
+            if (entry.DeliveryMode != SessionMode.Voice || speech.Lease.Owner != owner || speech.Lease.Human != proof.Human
+                || speech.TextEndExclusive < 0 || speech.TextEndExclusive > coordinate)
+                throw new AccessDeniedException("receipt_out_of_bounds");
+            heard = Math.Max(heard, speech.TextEndExclusive);
+        }
         var envelope = entry.Envelope;
         if (blocks.Any(b => !envelope!.Blocks.Single(saved => saved.BlockId == b.BlockId).DisplayDelivered))
         {
             var ids = blocks.Select(b => b.BlockId).ToHashSet(StringComparer.Ordinal);
             envelope = envelope! with { Blocks = envelope.Blocks.Select(b => ids.Contains(b.BlockId) ? b with { DisplayDelivered = true } : b).ToArray() };
         }
-        return entry with { ReceivedTextEndExclusive = Math.Max(entry.ReceivedTextEndExclusive, proof.ReceivedEnd), Envelope = envelope };
+        return entry with { HeardTextEndExclusive = heard, ReceivedTextEndExclusive = Math.Max(entry.ReceivedTextEndExclusive, proof.ReceivedEnd), Envelope = envelope };
+    }
+    public static void RequireVoiceOperation(TenantDeliveryReceipt proof, TenantVoiceLease.Operation? operation)
+    {
+        if (proof.Heard is { } heard && (heard.Lease.Owner != proof.Owner || heard.Lease.Human != proof.Human
+            || operation?.IsHeldActiveBy(heard.Lease) != true)) throw new AccessDeniedException("voice_lease_unavailable");
     }
     public static async ValueTask RequireBlocksAsync(TenantDeliveryReceipt proof, TenantSecurityState state, IamAuthorizer iam,
         Func<Guid, CancellationToken, ValueTask<bool>> owns, CancellationToken ct)
@@ -59,7 +75,7 @@ public static class TenantDeliveryReceiptRules
                 blocks = blocks.Concat(saved.Blocks.Where(b => b.DisplayDelivered && !blocks.Any(currentBlock => currentBlock.BlockId == b.BlockId))).ToArray();
             if (!blocks.SequenceEqual(envelope.Blocks)) envelope = envelope with { Blocks = blocks };
         }
-        return current with { ReceivedTextEndExclusive = Math.Max(current.ReceivedTextEndExclusive, prior.ReceivedTextEndExclusive),
+        return current with { HeardTextEndExclusive = Math.Max(current.HeardTextEndExclusive, prior.HeardTextEndExclusive), ReceivedTextEndExclusive = Math.Max(current.ReceivedTextEndExclusive, prior.ReceivedTextEndExclusive),
             Text = longer ? prior.Text : current.Text, Envelope = envelope };
     }
 }

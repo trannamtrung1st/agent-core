@@ -12,11 +12,14 @@ namespace AgentCore.Api.Realtime;
 public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITenantRuntimeStore storage, ITenantRunStore runs,
     TenantRunExecutionAuthority authority, TenantToolAuthorization tools, SessionHost capacity, IIdGenerator ids, TimeProvider time,
     ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations, TenantRunCancellationService cancellations,
-    TenantSessionLiveDelivery delivery, IIamStore inputSecurity, ITenantSessionStore inputSessions) : ITenantRunDispatcher, IAsyncDisposable
+    TenantSessionLiveDelivery delivery, IIamStore inputSecurity, ITenantSessionStore inputSessions,
+    TenantVoiceService? voiceService = null, VoiceAvailability? voiceAvailability = null,
+    InteractionPolicy? voicePolicy = null, Func<TenantRunService>? voiceCommands = null) : ITenantRunDispatcher, IAsyncDisposable
 {
-    private sealed class Live(AgentRun run, SessionRuntime runtime, TenantSessionLiveDelivery.Source output)
+    private sealed class Live(AgentRun run, SessionRuntime runtime, TenantSessionLiveDelivery.Source output, bool ownsCapacity)
     {
         public AgentRun Run { get; } = run;
+        public bool OwnsCapacity = ownsCapacity;
         public SessionRuntime Runtime { get; } = runtime;
         public TenantSessionLiveDelivery.Source Output { get; } = output;
         public CancellationTokenSource Lifetime { get; } = new();
@@ -92,7 +95,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, claim.Generation);
         var snapshot = await storage.LoadTenantRuntimeAsync(frame, cancellationToken).ConfigureAwait(false);
         if (snapshot is null) return false;
-        Live? admitted = null; var refused = false;
+        Live? admitted = null; var refused = false; var ownsCapacity = false;
         lock (_gate)
         {
             if (_stopping) return false;
@@ -102,16 +105,20 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
                 if (raced.Run.AgentRunId == run.AgentRunId && raced.Run.Claim!.Generation == claim.Generation) existing = raced;
                 else { collision = raced; refused = true; }
             }
-            else if (!capacity.TryReserveTenantRuntime()) refused = true;
+            else if (!TryReserveVoiceOrRunCapacity(run.SessionId, out ownsCapacity)) refused = true;
             else
             {
                 try
                 {
-                    var output = delivery.CreateSource(run);
-                    admitted = new(run, factory.CreateTenant(snapshot, output, frame, storage, runs, authority, tools), output);
+                    var voiceLease = _voices.GetValueOrDefault(run.SessionId)?.Lease;
+                    if (voiceLease?.Active != true) voiceLease = null;
+                    var output = delivery.CreateSource(run, voiceLease);
+                    admitted = new(run, factory.CreateTenant(snapshot, output, frame, storage, runs, authority, tools,
+                        voiceLease is not null && _voices.GetValueOrDefault(run.SessionId) is { } voice
+                            ? new(voiceLease, signal => QueueVoice(voice, new VoiceSignal(signal))) : null), output, ownsCapacity);
                     _live.Add(run.SessionId, admitted);
                 }
-                catch { capacity.ReleaseTenantRuntime(); throw; }
+                catch { if (ownsCapacity) capacity.ReleaseTenantRuntime(); throw; }
             }
         }
         if (existing is not null) return await existing.Accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -141,7 +148,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
                 }
                 live.Accepted.TrySetResult(true); return true;
             }
-            var accepted = await live.Runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true, dispatch.Token).ConfigureAwait(false);
+            var accepted = await live.Runtime.DispatchAgentRunAsync(run.AgentRunId, headless: live.Output.Voice?.Active != true, dispatch.Token).ConfigureAwait(false);
             live.Accepted.TrySetResult(accepted); return accepted;
         }
         catch { live.Accepted.TrySetResult(false); throw; }
@@ -196,16 +203,25 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
             finally
             {
                 await live.Output.CloseAsync().ConfigureAwait(false);
-                lock (_gate) { if (_live.GetValueOrDefault(sessionId) == live) _live.Remove(sessionId); }
-                capacity.ReleaseTenantRuntime(); live.OperationStop.Dispose(); live.Lifetime.Dispose();
+                var release = false;
+                lock (_gate)
+                {
+                    if (_live.GetValueOrDefault(sessionId) == live) _live.Remove(sessionId);
+                    if (live.OwnsCapacity && _voices.GetValueOrDefault(sessionId) is { Lease.Retiring: false } voice)
+                    { voice.OwnsCapacity = true; live.OwnsCapacity = false; }
+                    release = live.OwnsCapacity; live.OwnsCapacity = false;
+                }
+                if (release) capacity.ReleaseTenantRuntime(); live.OperationStop.Dispose(); live.Lifetime.Dispose();
                 live.Stopped.TrySetResult();
             }
         }
     }
     public async ValueTask DisposeAsync()
     {
-        Live[] pending; lock (_gate) { _stopping = true; pending = _live.Values.ToArray(); }
+        Live[] pending; TenantVoiceLease[] speech; lock (_gate) { _stopping = true; pending = _live.Values.ToArray(); speech = _voices.Values.Select(v => v.Lease).ToArray(); }
+        var speechCleanup = Task.WhenAll(speech.Select(l => RetireVoiceAsync(l).AsTask()));
         foreach (var live in pending) StopTokens(live);
         await Task.WhenAll(pending.Select(l => l.Stopped.Task)).ConfigureAwait(false);
+        await speechCleanup.ConfigureAwait(false);
     }
 }

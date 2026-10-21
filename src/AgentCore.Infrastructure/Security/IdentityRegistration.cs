@@ -158,6 +158,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantEmailMonitoringService>();
         services.TryAddSingleton<TenantAutomationAdmissionTarget>();
         services.TryAddSingleton<TenantSessionService>();
+        services.TryAddSingleton<ITenantVoiceModeStore>(p => (ITenantVoiceModeStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantVoiceService>();
         services.TryAddSingleton<TenantSessionForegroundService>();
         services.TryAddSingleton<TenantActivityService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();

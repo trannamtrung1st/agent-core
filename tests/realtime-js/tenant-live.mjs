@@ -21,7 +21,7 @@ class Human {
     const agent=await this.json(prefix+'/agents',{templateId:'examiner',version:1,expectedRevision:await this.revision(tenant)});
     const directory=await this.json(prefix+'/chat/agents?page=0&pageSize=100');
     const selected=directory.items.find(item=>item.instanceId===agent.instance.instanceId);
-    assert.ok(selected);assert.equal(selected.voiceAvailable,false);assert.equal(directory.canCreateSessions,true);
+    assert.ok(selected);assert.equal(typeof selected.voiceAvailable,'boolean');assert.equal(directory.canCreateSessions,true);
     assert.ok(!JSON.stringify(selected).match(/ownerCapability|systemIdentityId|principalId|settingsOverrides|executionBudgets|harnessManagement|tone/i));
     return (await this.json(prefix+'/sessions',{agentInstanceId:selected.instanceId,expectedRevision:directory.securityRevision,expectedInstanceRevision:selected.revision})).sessionId;
   }

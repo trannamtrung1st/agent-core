@@ -15,7 +15,7 @@ public sealed partial class SessionRuntime
 {
     private ControllerSnapshot SnapshotController() =>
         new(
-            _snapshot.Status,
+            _tenantVoiceBinding is not null && HasTenantSpeechInput ? SessionStatus.Attached : _snapshot.Status,
             _snapshot.Mode,
             _input,
             _outputActivity,
@@ -453,7 +453,7 @@ public sealed partial class SessionRuntime
 
     private async Task HandleSpeechAsync(SpeechEvidenceReceived input, CancellationToken cancellationToken)
     {
-        if (_snapshot.Status != SessionStatus.Attached || _snapshot.Mode != SessionMode.Voice || _muted)
+        if ((_runtimeOwner is null ? _snapshot.Status != SessionStatus.Attached : !HasTenantSpeechInput) || _snapshot.Mode != SessionMode.Voice || _muted)
         {
             return;
         }
@@ -518,7 +518,7 @@ public sealed partial class SessionRuntime
         {
             SpeechTelemetry.RecordError(failed.Failure.Code.ToString());
         }
-        if (input.Evidence is SpeechStarted && _utteranceStarted is not null)
+        if (_runtimeOwner is null && input.Evidence is SpeechStarted && _utteranceStarted is not null)
         {
             ScheduleMaxUtteranceTimer(input.Evidence.UtteranceId);
         }
@@ -812,7 +812,8 @@ public sealed partial class SessionRuntime
 
         if (evaluation.Decision is InteractionDecision.Interrupt && _activeResponseId is { } live)
         {
-            await SupersedeAsync(context, live, cancellationToken, "userBargeIn").ConfigureAwait(false);
+            if (_runtimeOwner is not null) ProposeTenantVoiceInterruption();
+            else await SupersedeAsync(context, live, cancellationToken, "userBargeIn").ConfigureAwait(false);
         }
 
         if (evaluation.Decision is InteractionDecision.Continue or InteractionDecision.Ignore)
@@ -840,6 +841,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (_runtimeOwner is not null) { ProposeTenantVoiceTurn(text); return; }
         var utteranceId = _activeUtteranceId ?? context.EventId;
         _committedUtteranceId = _activeUtteranceId;
         InvalidateMaxUtteranceTimer();

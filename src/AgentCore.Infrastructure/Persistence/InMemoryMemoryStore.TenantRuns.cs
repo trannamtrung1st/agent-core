@@ -105,7 +105,7 @@ public sealed partial class InMemoryMemoryStore
             {
                 var saved = AgentRuns.Runs[existingId]; var input = _entries[run.SessionId].Single(e => e.EntryId == saved.Admission.Activation.SourceEntryIds.Single());
                 if (!TenantRunRules.SameMessage(saved, input, admission)) throw new SecurityConflictException("message_id_conflict");
-                return new(false, saved, input.EntryId, session.Snapshot.Revision);
+                return new(false, saved, input.EntryId, session.Snapshot.Revision) { EntrySequence = input.Sequence };
             }
             if (AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Status == AgentRunStatus.Running && (frame is null || r.AgentRunId != frame.RunId))) throw new SecurityConflictException("session_in_use");
             AgentRun? interrupted = null;
@@ -122,7 +122,7 @@ public sealed partial class InMemoryMemoryStore
             Store(next); AgentRuns.Runs.Add(run.AgentRunId, run); AgentRuns.Activations.Add(run.ActivationId, activation);
             AgentRuns.ByAdmission.Add(key, run.AgentRunId); AgentRuns.BySourceEntry.Add((run.SessionId, admission.Input.EntryId), run.ActivationId);
             if (interrupted is not null) AgentRuns.Runs[interrupted.AgentRunId] = interrupted;
-            return new(true, run, admission.Input.EntryId, next.Revision, interrupted);
+            return new(true, run, admission.Input.EntryId, next.Revision, interrupted) { EntrySequence = admission.Input.Sequence };
         }
     }
 }

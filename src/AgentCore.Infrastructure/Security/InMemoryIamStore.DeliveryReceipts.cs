@@ -13,10 +13,12 @@ public sealed partial class InMemoryIamStore : ITenantDeliveryReceiptStore
         TenantDeliveryReceiptRules.RequireBlocksAsync(proof, _tenants[proof.Owner.TenantId], new IamAuthorizer(this), async (id, token) =>
             artifactBacking is not null && await artifactBacking.FindTenantAsync(proof.Owner.TenantId, proof.Owner.SessionId, id, token).ConfigureAwait(false) is not null, CancellationToken.None).GetAwaiter().GetResult();
     }
-    public ValueTask SaveTenantRuntimeReceiptAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
+    public async ValueTask SaveTenantRuntimeReceiptAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
         TenantDeliveryReceipt proof, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+        await using var operation = proof.Heard is { } heard ? await heard.Lease.EnterAsync(true, ct).ConfigureAwait(false) : null;
+        TenantDeliveryReceiptRules.RequireVoiceOperation(proof, operation);
         lock (_gate) lock (sessionBacking.AdmissionGate)
         {
             RequireReceiptHuman(proof); RequireRuntimeOwner(frame.Owner);
@@ -27,16 +29,18 @@ public sealed partial class InMemoryIamStore : ITenantDeliveryReceiptStore
                 || TenantDeliveryReceiptRules.Apply(proof, saved.Owner, entry) != entry)
                 throw new AccessDeniedException("receipt_unavailable");
             SaveTenantRuntimeState(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow());
-            return ValueTask.CompletedTask;
+            return;
         }
     }
-    public ValueTask<long> SaveTenantQuiescentReceiptAsync(TenantDeliveryReceipt proof, CancellationToken ct = default)
+    public async ValueTask<long> SaveTenantQuiescentReceiptAsync(TenantDeliveryReceipt proof, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+        await using var operation = proof.Heard is { } heard ? await heard.Lease.EnterAsync(true, ct).ConfigureAwait(false) : null;
+        TenantDeliveryReceiptRules.RequireVoiceOperation(proof, operation);
         lock (_gate) lock (sessionBacking.AdmissionGate)
         {
             RequireReceiptHuman(proof);
-            return ValueTask.FromResult(sessionBacking.SaveTenantQuiescentReceipt(proof));
+            return sessionBacking.SaveTenantQuiescentReceipt(proof);
         }
     }
 }

@@ -277,7 +277,7 @@ async function invoke(
     void recoverFromSequenceGap('explicit');
   } else if (chatTenantId && result.error?.category === 'Authorization'
     && !(method === 'SendText' && ['attachment_unavailable', 'interruption_unavailable'].includes(result.error.code ?? ''))
-    && !['receipt_unavailable', 'receipt_out_of_bounds', 'UnknownResponse', 'tenant_runtime_unavailable'].includes(result.error.code ?? '')) {
+    && !['receipt_unavailable', 'receipt_out_of_bounds', 'UnknownResponse', 'tenant_runtime_unavailable', 'voice_attachment_in_use', 'voice_lease_unavailable'].includes(result.error.code ?? '')) {
     // A queued receipt can lose to Stop's interrupted-row commit. That refusal (and an
     // unknown response target) says nothing about this human's access to the conversation.
     retireUnavailableTenantChat();
@@ -426,7 +426,8 @@ function sendSpeechEvidence(evidence: ClientSpeechEvidence): void {
 
   const payload: Record<string, unknown> = {
     kind: evidence.kind,
-    utteranceId: evidence.utteranceId
+    utteranceId: evidence.utteranceId,
+    ...(chatTenantId ? { streamId: snapshot.streamId } : {})
   };
   if (evidence.revision != null) {
     payload.revision = evidence.revision;
@@ -1437,7 +1438,7 @@ async function sendPlayback(method: string, type: string, responseId: string, co
       type,
       {
         consumedSamples: consumed,
-        textEndExclusive: textEndExclusive ?? renderedTextOffset(responseId)
+        textEndExclusive: textEndExclusive ?? useSessionStore.getState().entries.find(entry => entry.responseId === responseId)?.speechText?.length ?? renderedTextOffset(responseId)
       },
       sequence,
       responseId
@@ -1504,7 +1505,7 @@ function publishCaptureLive(): void {
     return;
   }
 
-  const live = capture.isPrepared() && (capture.isStreaming() || state.muted || state.mode === "voice");
+  const live = capture.isPrepared() && !state.muted && capture.isStreaming();
   if (state.captureLive !== live) {
     useSessionStore.setState({ captureLive: live });
   }
@@ -1577,6 +1578,13 @@ function syncCapture(): void {
     if (state.sttTransport === "clientTranscript") {
       ensureSpeechAdapters();
       const life = ensureTranscriptLife();
+      if (captureStreamId !== state.streamId) {
+        captureStreamId = state.streamId;
+        if (life.isListening()) {
+          void life.disconnect().then(syncCapture);
+          return;
+        }
+      }
       if (clientTranscriptHeldForAgent || life.isSuspendedForAgentOutput()) {
         publishCaptureLive();
         return;
@@ -1719,6 +1727,8 @@ export const realtimeTestHooks =
           connection = hub;
         },
         handleAudioOutput,
+        sendPlayback,
+        sendSpeechEvidence,
         handleEvent,
         syncCapture,
         attachAfterReconnect,
@@ -2148,8 +2158,13 @@ export async function startConversation(): Promise<boolean> {
     return startRequest;
   }
 
+  const tenantAtStart = chatTenantId;
   startRequest = (async () => {
     try {
+      // Discovery can make the picker visible before bootstrap finishes applying its route.
+      // Finish that route first so it cannot replace the connection a Voice click is creating.
+      if (bootstrapTask) await bootstrapTask;
+      if (tenantAtStart !== chatTenantId || !chatSurfaceVisible) return false;
       const snapshot = useSessionStore.getState();
       if (isReadonlySession(snapshot)) {
         return false;
@@ -3810,6 +3825,14 @@ export async function requestVoice(): Promise<void> {
         }
       }
 
+      const target = useSessionStore.getState();
+      const targetConnection = connection;
+      const targetEpoch = connectionEpoch;
+      const isCurrent = () => epoch === voiceEpoch && connection === targetConnection && connectionEpoch === targetEpoch
+        && useSessionStore.getState().sessionId === target.sessionId && useSessionStore.getState().attachmentId === target.attachmentId;
+      // The initial ready snapshot clears preflight. Hold prepared media again until mode applies,
+      // including when SetMode ACK arrives before the server's pending-mode event.
+      useSessionStore.setState({ preflightReady: true });
       try {
         const current = useSessionStore.getState();
         const microphone = current.sttTransport !== "clientTranscript";
@@ -3830,17 +3853,18 @@ export async function requestVoice(): Promise<void> {
         });
         return;
       }
-      if (epoch !== voiceEpoch) {
+      if (!isCurrent()) {
         capture.release();
         useSessionStore.setState({ preflightReady: false });
         return;
       }
 
       try {
-        const ack = await dispatchHubCommand((sequence) =>
-          invoke("SetMode", "session.mode.set", { mode: "voice" }, sequence)
-        );
-        if (epoch !== voiceEpoch) {
+        const ack = await dispatchHubCommand(async (sequence) => {
+          if (!isCurrent()) return { accepted: false };
+          return invoke("SetMode", "session.mode.set", { mode: "voice" }, sequence);
+        });
+        if (!isCurrent()) {
           return;
         }
 

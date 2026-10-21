@@ -182,6 +182,9 @@ public sealed class SpeechEndedPayload
 [MessagePackObject]
 public sealed class ClientSpeechEvidencePayload
 {
+    [Key("streamId")]
+    public string? StreamId { get; set; }
+
     [Key("kind")]
     public string Kind { get; set; } = "";
 

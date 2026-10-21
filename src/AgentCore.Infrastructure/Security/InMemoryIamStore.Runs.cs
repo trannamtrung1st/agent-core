@@ -47,12 +47,15 @@ public sealed partial class InMemoryIamStore
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(sessionBacking.ReadTenantRun(tenantId, runId)); }
     public ValueTask<IReadOnlyList<Guid>> ListTenantRunIdsAsync(Guid tenantId, Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(sessionBacking.TenantRunIds(tenantId, sessionId)); }
-    public ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default) =>
-        CommitTenantHumanRun(next, expectedSecurityRevision, admission, initiator, audit, ct);
+    public async ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default)
+    {
+        await using var speechOperation = admission.Speech is { } speech ? await speech.Lease.EnterAsync(requireActive: true, ct).ConfigureAwait(false) : null;
+        return await CommitTenantHumanRun(next, expectedSecurityRevision, admission, initiator, audit, ct, speechOperation: speechOperation).ConfigureAwait(false);
+    }
     private ValueTask<TenantRunAdmissionResult?> CommitTenantHumanRun(TenantSecurityState next, long expectedSecurityRevision,
         TenantHumanRunAdmission admission, TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct,
-        TenantRuntimeFrame? frame = null, SessionSnapshot? liveSnapshot = null, long runtimeExpectedRevision = 0)
+        TenantRuntimeFrame? frame = null, SessionSnapshot? liveSnapshot = null, long runtimeExpectedRevision = 0, TenantVoiceLease.Operation? speechOperation = null)
     {
         ct.ThrowIfCancellationRequested(); admission = TenantAttachmentBindingRules.Freeze(admission); next = IamStateRules.Freeze(next); var run = admission.Run;
         if (run.Owner.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expectedSecurityRevision + 1)
@@ -67,6 +70,8 @@ public sealed partial class InMemoryIamStore
             if (agent is null || agent.Instance.Revision != admission.ExpectedInstanceRevision) return ValueTask.FromResult<TenantRunAdmissionResult?>(null);
             if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
             TenantSessionRules.RequireExecutor(before, agent); ct.ThrowIfCancellationRequested();
+            var speechSession = sessionBacking.ReadTenantSession(next.Tenant.TenantId, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
+            TenantVoiceRules.Speech(admission, initiator, speechSession.Owner, speechSession.Snapshot.Mode, speechOperation);
             TenantInputInterruptionRules.Shape(admission);
             TenantInputInterruptionRules.PermissionsAsync(before, initiator.PrincipalId, admission.Interruption, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             var sources = admission.Attachments ?? [];

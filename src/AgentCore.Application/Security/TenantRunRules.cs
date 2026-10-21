@@ -50,7 +50,7 @@ public static class TenantRunRules
         saved.Owner == proposed.Run.Owner && saved.SessionId == proposed.Run.SessionId
         && saved.Admission.ExecutionContext?.Origin == ExecutionOrigin.UserMessage
         && saved.Admission.ExecutionContext?.OriginalInitiatorPrincipalId == proposed.Run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId
-        && savedInput.SourceEventId == proposed.Input.SourceEventId && savedInput.Text == proposed.Input.Text
+        && savedInput.SourceEventId == proposed.Input.SourceEventId && savedInput.Text == proposed.Input.Text && savedInput.DeliveryMode == proposed.Input.DeliveryMode
         && saved.Admission.Activation.EvidenceJson == proposed.Run.Admission.Activation.EvidenceJson
         && (savedInput.Attachments ?? []).SequenceEqual(proposed.Input.Attachments ?? []);
 }

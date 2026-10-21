@@ -110,6 +110,7 @@ builder.Services.AddHostedService<TriggerSchedulerHostedService>();
 builder.Services.AddHostedService<EmailWatchHostedService>();
 builder.Services.AddHostedService<BackgroundOccurrenceIntakeHostedService>();
 builder.Services.AddSingleton<IAgentRunDispatcher, AgentRunDispatcher>();
+builder.Services.AddSingleton<Func<TenantRunService>>(p => () => p.GetRequiredService<TenantRunService>());
 builder.Services.AddSingleton<ITenantRunDispatcher, TenantSessionRuntimeHost>();
 builder.Services.AddSingleton<TenantSessionLiveDelivery>();
 builder.Services.AddSingleton<ITenantRunControl>(p => (ITenantRunControl)p.GetRequiredService<ITenantRunDispatcher>());

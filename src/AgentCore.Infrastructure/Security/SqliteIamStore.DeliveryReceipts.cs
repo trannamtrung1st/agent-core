@@ -19,6 +19,8 @@ public sealed partial class SqliteIamStore : ITenantDeliveryReceiptStore
     public async ValueTask SaveTenantRuntimeReceiptAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
         TenantDeliveryReceipt proof, CancellationToken ct = default)
     {
+        await using var operation = proof.Heard is { } heard ? await heard.Lease.EnterAsync(true, ct).ConfigureAwait(false) : null;
+        TenantDeliveryReceiptRules.RequireVoiceOperation(proof, operation);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         await RequireReceiptHumanAsync(db, proof, ct).ConfigureAwait(false);
@@ -30,6 +32,8 @@ public sealed partial class SqliteIamStore : ITenantDeliveryReceiptStore
     }
     public async ValueTask<long> SaveTenantQuiescentReceiptAsync(TenantDeliveryReceipt proof, CancellationToken ct = default)
     {
+        await using var operation = proof.Heard is { } heard ? await heard.Lease.EnterAsync(true, ct).ConfigureAwait(false) : null;
+        TenantDeliveryReceiptRules.RequireVoiceOperation(proof, operation);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         await RequireReceiptHumanAsync(db, proof, ct).ConfigureAwait(false);
@@ -40,7 +44,7 @@ public sealed partial class SqliteIamStore : ITenantDeliveryReceiptStore
             ?? throw new AccessDeniedException("receipt_unavailable");
         var entry = SqliteMemoryStore.ToEntry(row); var updated = TenantDeliveryReceiptRules.Apply(proof, root.Domain(), entry);
         if (updated == entry) return session.Revision;
-        row.ReceivedTextEndExclusive = updated.ReceivedTextEndExclusive; row.EnvelopeJson = updated.Envelope is null ? null : ResponseEnvelopeJson.Serialize(updated.Envelope); session.Revision = checked(session.Revision + 1);
+        row.HeardTextEndExclusive = updated.HeardTextEndExclusive; row.ReceivedTextEndExclusive = updated.ReceivedTextEndExclusive; row.EnvelopeJson = updated.Envelope is null ? null : ResponseEnvelopeJson.Serialize(updated.Envelope); session.Revision = checked(session.Revision + 1);
         await CommitReceiptAsync(db, tx, ct).ConfigureAwait(false); return session.Revision;
     }
     private static async Task CommitReceiptAsync(AgentCoreDbContext db, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx, CancellationToken ct)

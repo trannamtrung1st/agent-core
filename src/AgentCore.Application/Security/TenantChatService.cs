@@ -13,7 +13,7 @@ public sealed record TenantChatAgentPage(IReadOnlyList<TenantChatAgent> Items, i
 
 // Public communication discovery is independent of administrative Instance/configuration reads.
 public sealed class TenantChatService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
-    IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer)
+    IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer, VoiceAvailability? voice = null)
 {
     public async ValueTask RequireMemberAsync(Guid tenant, TenantSessionInitiator human, CancellationToken ct = default) =>
         _ = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -55,7 +55,7 @@ public sealed class TenantChatService(IIamStore security, ITenantAgentStore agen
             if (baseline is null) throw new AccessDeniedException("definition_unavailable");
             var resolved = InstanceSettingsResolver.Resolve(baseline, instance.SettingsOverrides);
             visible.Add(new(instance.InstanceId, instance.Revision, instance.DefinitionId, instance.ActiveVersion,
-                instance.Persona.Name, instance.Persona.Role, instance.Persona.Description, false, resolved.ConversationPolicy.Language));
+                instance.Persona.Name, instance.Persona.Role, instance.Persona.Description, voice?.IsAvailable(resolved, AgentCore.Application.Speech.SpeechLocale.Resolve(sessionOverride: null, agentDefault: resolved.ConversationPolicy.Language).Effective) == true, resolved.ConversationPolicy.Language));
         }
         var canCreate = true;
         foreach (var permission in new[] { "sessions.create", "sessions.read" })

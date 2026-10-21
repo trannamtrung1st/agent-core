@@ -1029,18 +1029,22 @@ public sealed class SessionRuntimeFactory(
 
     public SessionRuntime CreateTenant(SessionSnapshot snapshot, ISessionOutput output, TenantRuntimeFrame frame,
         ITenantRuntimeStore runtimeStorage, ITenantRunStore tenantRuns, AgentCore.Application.Security.TenantRunExecutionAuthority authority,
-        AgentCore.Application.Security.TenantToolAuthorization tenantTools)
+        AgentCore.Application.Security.TenantToolAuthorization tenantTools, TenantVoiceRuntimeBinding? tenantVoice = null)
     {
         if (snapshot.SessionId != frame.SessionId || snapshot.AgentInstanceId != frame.Owner.AgentInstanceId || snapshot.ProfileId is not null)
             throw new AgentCore.Application.Security.AccessDeniedException("tenant_runtime_scope_mismatch");
         return new(snapshot, languageModel, brain, new AgentCore.Application.Security.TenantRuntimeMemoryStore(runtimeStorage, frame, ids), output, ids, time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!), new AgentCore.Application.Security.TenantAgentRunStore(runtimeStorage, tenantRuns, ids, frame, authority),
-            classifier, policy: policy, tools: new SessionToolExecutor(configurationGate: tools.ConfigurationGate, tenantAuthorization: tenantTools),
+            classifier, recognition: voice.EffectivePlan.RecognitionCapabilities ?? recognizer?.Capabilities,
+            synthesizer: tenantVoice is null ? null : synthesizer, voice: tenantVoice is null ? null : voice,
+            policy: policy, tools: new SessionToolExecutor(configurationGate: tools.ConfigurationGate, tenantAuthorization: tenantTools),
             modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: tenantArtifacts?.Bind(frame) ?? new TenantUnavailableArtifacts(),
             runAuthority: authority, runtimeOwner: frame.Owner,
             tenantContinuations: tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."),
-            tenantAttachments: tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."));
+            tenantAttachments: tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."), tenantVoice: tenantVoice);
     }
+    public ValueTask<ISpeechRecognitionSession> OpenTenantRecognitionAsync(RecognitionOptions options, CancellationToken ct)
+        => (recognizer ?? throw AgentCoreErrors.VoiceUnavailable()).OpenAsync(options, ct);
     private sealed class TenantUnavailableArtifacts : IArtifactReferenceAuthorizer
     { public bool IsAuthorized(Guid sessionId, string artifactId) => false; }
 

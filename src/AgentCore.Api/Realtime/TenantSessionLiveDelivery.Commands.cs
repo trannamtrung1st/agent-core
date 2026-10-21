@@ -134,8 +134,10 @@ public sealed partial class TenantSessionLiveDelivery
             // Never hold the publication gate while a command waits on the Runtime mailbox: cancellation
             // itself publishes its interruption through that gate before acknowledging its durable commit.
             try { ack = await action(subscription, target, ct).ConfigureAwait(false); }
-            catch (AccessDeniedException ex) { ack = Reject(command.EventId, ex.ReasonCode, AuthorizationMessage(ex.ReasonCode), "Authorization"); }
-            catch (SecurityConflictException ex) { ack = Reject(command.EventId, ex.ReasonCode, ConflictMessage(ex.ReasonCode)); }
+            catch (AccessDeniedException ex) { await RetireVoiceIfAccessLostAsync(subscription, ct).ConfigureAwait(false); ack = Reject(command.EventId, ex.ReasonCode, AuthorizationMessage(ex.ReasonCode), "Authorization"); }
+            catch (SecurityConflictException ex) { await RetireVoiceIfAccessLostAsync(subscription, ct).ConfigureAwait(false); ack = Reject(command.EventId, ex.ReasonCode, ConflictMessage(ex.ReasonCode)); }
+            catch (AgentCoreException ex) when (ex.Code == "VoiceUnavailable")
+            { ack = Reject(command.EventId, ex.Code, "Voice is unavailable for this conversation. Continue in text.", "Speech"); }
             catch (AgentCoreException ex) when (ex.Code is "ValidationError" or "Conflict" or "NotFound")
             { ack = Reject(command.EventId, ex.ValidationCode ?? ex.Code, "The command could not be admitted.", ex.Code == "ValidationError" ? "Validation" : "Session"); }
             subscription.LastCommand = command.Sequence;
@@ -143,8 +145,8 @@ public sealed partial class TenantSessionLiveDelivery
             while (subscription.DedupeOrder.Count > 128) subscription.Dedupe.Remove(subscription.DedupeOrder.Dequeue());
             return ack;
         }
-        catch (AccessDeniedException ex) { return Reject(command.EventId, ex.ReasonCode, AuthorizationMessage(ex.ReasonCode), "Authorization"); }
-        catch (SecurityConflictException ex) { return Reject(command.EventId, ex.ReasonCode, ConflictMessage(ex.ReasonCode)); }
+        catch (AccessDeniedException ex) { if (connection.Current is { } failed) RetireVoice(failed); return Reject(command.EventId, ex.ReasonCode, AuthorizationMessage(ex.ReasonCode), "Authorization"); }
+        catch (SecurityConflictException ex) { await RetireVoiceIfAccessLostAsync(connection.Current, ct).ConfigureAwait(false); return Reject(command.EventId, ex.ReasonCode, ConflictMessage(ex.ReasonCode)); }
         finally { connection.Commands.Release(); }
     }
     private static string AuthorizationMessage(string reason) => reason switch {

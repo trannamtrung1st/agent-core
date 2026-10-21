@@ -9,8 +9,10 @@ using Microsoft.AspNetCore.SignalR;
 namespace AgentCore.Api.Realtime;
 
 public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenants, IdentityService identity, IdentityHttpOptions policy, TimeProvider time,
-    TenantRunService runs, IamAuthorizer authorizer, ITenantDeliveryReceiptControl receipts) : Hub
+    TenantRunService runs, IamAuthorizer authorizer, ITenantDeliveryReceiptControl receipts, ITenantRunDispatcher tenantDispatcher) : Hub
+
 {
+    private TenantSessionRuntimeHost TenantRuntime => (TenantSessionRuntimeHost)tenantDispatcher;
     [Authorize]
     public async Task<CommandAck> AttachTenant(ClientCommand<TenantAttachPayload> command)
     {
@@ -34,18 +36,19 @@ public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenan
             var user = await identity.ResolveUserAsync(account, tenant, bounded.Token).ConfigureAwait(false) ?? throw new AccessDeniedException("not_member");
             // A connection cannot remain in both authority registries after switching to tenant transport.
             await host.DetachAsync(Context.ConnectionId).ConfigureAwait(false);
+            await TenantRuntime.ResetOrphanVoiceAsync(tenant, Guid.Parse(command.SessionId), new(account, authentication, user.PrincipalId), bounded.Token).ConfigureAwait(false);
             await tenants.AttachAsync(Context.ConnectionId, tenant, Guid.Parse(command.SessionId), new(account, authentication, user.PrincipalId), bounded.Token).ConfigureAwait(false);
             return validation;
         }
-        catch (AccessDeniedException ex) { tenants.Detach(Context.ConnectionId); return Denied(command.EventId, ex.ReasonCode); }
-        catch (SecurityConflictException ex) { tenants.Detach(Context.ConnectionId); return Denied(command.EventId, ex.ReasonCode); }
-        catch (OperationCanceledException) { tenants.Detach(Context.ConnectionId); return Denied(command.EventId, "tenant_connection_unavailable"); }
+        catch (AccessDeniedException ex) { await tenants.DetachAsync(Context.ConnectionId).ConfigureAwait(false); return Denied(command.EventId, ex.ReasonCode); }
+        catch (SecurityConflictException ex) { await tenants.DetachAsync(Context.ConnectionId).ConfigureAwait(false); return Denied(command.EventId, ex.ReasonCode); }
+        catch (OperationCanceledException) { await tenants.DetachAsync(Context.ConnectionId).ConfigureAwait(false); return Denied(command.EventId, "tenant_connection_unavailable"); }
     }
     private static CommandAck Denied(string eventId, string reason) => new() { EventId = eventId, Accepted = false,
         Error = new() { Category = "Authorization", Code = reason, Message = "Tenant subscription is unavailable.", Fatal = false } };
-    public Task<CommandAck> Attach(ClientCommand<AttachPayload> command)
+    public async Task<CommandAck> Attach(ClientCommand<AttachPayload> command)
     {
-        tenants.Detach(Context.ConnectionId);
+        await tenants.DetachAsync(Context.ConnectionId).ConfigureAwait(false);
         command.Payload ??= new AttachPayload();
         if (string.IsNullOrEmpty(command.Payload.OwnerCapability))
         {
@@ -54,7 +57,7 @@ public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenan
                 .ToString();
         }
 
-        return Complete(host.AttachAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+        return await Complete(host.AttachAsync(Context.ConnectionId, command, Context.ConnectionAborted)).ConfigureAwait(false);
     }
 
     public Task<CommandAck> SendText(ClientCommand<UserTextPayload> command) =>
@@ -77,39 +80,57 @@ public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenan
     }
 
     public Task<CommandAck> SetMode(ClientCommand<SetModePayload> command) =>
-        Complete(host.SetModeAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.SetVoiceModeAsync(Context.ConnectionId, command, TenantRuntime, Context.ConnectionAborted)
+            : host.SetModeAsync(Context.ConnectionId, command, Context.ConnectionAborted));
 
     public Task<CommandAck> EndSession(ClientCommand<EndPayload> command) =>
         Complete(host.EndAsync(Context.ConnectionId, command, Context.ConnectionAborted));
 
     public Task<CommandAck> SpeechStarted(ClientCommand<SpeechStartedPayload> command) =>
-        Complete(host.AdmitSpeechStartedAsync(Context.ConnectionId, command));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoiceBoundaryAsync(Context.ConnectionId, command, TenantRuntime, true, Context.ConnectionAborted)
+            : host.AdmitSpeechStartedAsync(Context.ConnectionId, command));
 
     public Task<CommandAck> SpeechEnded(ClientCommand<SpeechEndedPayload> command) =>
-        Complete(host.AdmitSpeechEndedAsync(Context.ConnectionId, command));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoiceBoundaryAsync(Context.ConnectionId, command, TenantRuntime, false, Context.ConnectionAborted)
+            : host.AdmitSpeechEndedAsync(Context.ConnectionId, command));
 
     public Task<CommandAck> SpeechEvidence(ClientCommand<ClientSpeechEvidencePayload> command) =>
-        Complete(host.AdmitSpeechEvidenceAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoiceEvidenceAsync(Context.ConnectionId, command, TenantRuntime, Context.ConnectionAborted)
+            : host.AdmitSpeechEvidenceAsync(Context.ConnectionId, command, Context.ConnectionAborted));
 
     public async Task SendAudio(InputAudioDto dto)
     {
-        if (await host.AdmitAudioAsync(Context.ConnectionId, dto).ConfigureAwait(false))
+        if (await (tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoiceAudioAsync(Context.ConnectionId, dto, TenantRuntime, Context.ConnectionAborted)
+            : host.AdmitAudioAsync(Context.ConnectionId, dto)).ConfigureAwait(false))
         {
             Context.Abort();
         }
     }
 
     public Task<CommandAck> PlaybackStarted(ClientCommand<PlaybackPayload> command) =>
-        Complete(host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.started"));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoicePlaybackAsync(Context.ConnectionId, command, TenantRuntime, "started", Context.ConnectionAborted)
+            : host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.started"));
 
     public Task<CommandAck> PlaybackProgress(ClientCommand<PlaybackPayload> command) =>
-        Complete(host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.progress"));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoicePlaybackAsync(Context.ConnectionId, command, TenantRuntime, "progress", Context.ConnectionAborted)
+            : host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.progress"));
 
     public Task<CommandAck> PlaybackCompleted(ClientCommand<PlaybackPayload> command) =>
-        Complete(host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.completed"));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoicePlaybackAsync(Context.ConnectionId, command, TenantRuntime, "completed", Context.ConnectionAborted)
+            : host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.completed"));
 
     public Task<CommandAck> PlaybackStopped(ClientCommand<PlaybackPayload> command) =>
-        Complete(host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.stopped"));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.VoicePlaybackAsync(Context.ConnectionId, command, TenantRuntime, "stopped", Context.ConnectionAborted)
+            : host.AcceptPlaybackAsync(Context.ConnectionId, command, "playback.stopped"));
 
     public Task<CommandAck> ResponseReceived(ClientCommand<ResponseReceiptPayload> command) =>
         Complete(tenants.IsTenantConnection(Context.ConnectionId)
@@ -117,11 +138,13 @@ public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenan
             : host.AcceptReceiptAsync(Context.ConnectionId, command));
 
     public Task<CommandAck> SetMuted(ClientCommand<MutePayload> command) =>
-        Complete(host.AcceptMuteAsync(Context.ConnectionId, command));
+        Complete(tenants.IsTenantConnection(Context.ConnectionId)
+            ? tenants.MuteVoiceAsync(Context.ConnectionId, command, TenantRuntime, Context.ConnectionAborted)
+            : host.AcceptMuteAsync(Context.ConnectionId, command));
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        tenants.Detach(Context.ConnectionId);
+        await tenants.DetachAsync(Context.ConnectionId).ConfigureAwait(false);
         await host.DetachAsync(Context.ConnectionId).ConfigureAwait(false);
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
     }

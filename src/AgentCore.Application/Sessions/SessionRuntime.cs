@@ -215,12 +215,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IAgentRunAuthority? runAuthority = null,
         ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
         AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
-        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null)
+        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
         _runtimeOwner = runtimeOwner;
         _tenantContinuations = tenantContinuations;
+        _tenantVoiceBinding = tenantVoice;
+        if (tenantVoice is not null && (runtimeOwner is null || !OwnsTenantVoice(tenantVoice.Lease))) throw new AccessDeniedException("voice_lease_unavailable");
         if (runtimeOwner is { } tenantOwner)
         {
             AgentCore.Application.Security.TenantRuntimeRules.RequireOwner(tenantOwner);
@@ -256,6 +258,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             binding.BindSession(snapshot.SessionId, snapshot.AgentInstanceId);
         }
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
+        if (tenantVoice is not null)
+        {
+            _muted = !tenantVoice.Lease.InputActive; _tenantSpeechStream = tenantVoice.Lease.StreamId;
+            _streamId = _muted ? null : tenantVoice.Lease.StreamId;
+        }
         _recognition = recognition
             ?? _voice.EffectivePlan.RecognitionCapabilities
             ?? recognizer?.Capabilities
@@ -652,6 +659,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         int textEndExclusive,
         CancellationToken cancellationToken = default)
     {
+        if (_runtimeOwner?.TenantId is not null) throw new AccessDeniedException("voice_lease_required");
         var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
@@ -1178,6 +1186,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case ResponseReceiptReceived receipt:
                     await HandleReceiptAsync(receipt, cancellationToken).ConfigureAwait(false);
                     break;
+                case TenantSpeechReceived speech:
+                    await HandleTenantSpeechAsync(speech, cancellationToken).ConfigureAwait(false);
+                    break;
+                case TenantVoiceInputChanged voiceInput:
+                    HandleTenantVoiceInputChanged(voiceInput);
+                    break;
+                case TenantVoiceRetired voiceRetired:
+                    await HandleTenantVoiceRetiredAsync(voiceRetired, cancellationToken).ConfigureAwait(false);
+                    break;
+                case TenantPlaybackReceived tenantPlayback:
+                    await HandleTenantPlaybackAsync(tenantPlayback, cancellationToken).ConfigureAwait(false);
+                    break;
                 case TenantReceiptReceived tenantReceipt:
                     await HandleTenantReceiptAsync(tenantReceipt, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1391,6 +1411,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             case AgentRunControlReceived control:
                 control.Completed.TrySetException(AgentCoreErrors.Conflict("Session mailbox is unavailable."));
                 break;
+            case TenantSpeechReceived speech:
+                speech.Completed.TrySetResult(false);
+                break;
+            case TenantVoiceInputChanged voiceInput:
+                voiceInput.Completed.TrySetResult(false);
+                break;
+            case TenantVoiceRetired voiceRetired:
+                voiceRetired.Completed.TrySetResult(false);
+                break;
             case TenantInputReceived tenantInput:
                 tenantInput.Completed.TrySetResult(null);
                 break;
@@ -1447,6 +1476,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case ResponseReceiptReceived receipt:
                 receipt.Admitted.TrySetResult(value);
+                break;
+            case TenantPlaybackReceived tenantPlayback:
+                tenantPlayback.Completed.TrySetResult(value);
                 break;
             case TenantReceiptReceived tenantReceipt:
                 tenantReceipt.Completed.TrySetResult(value);

@@ -5,8 +5,9 @@ namespace AgentCore.Application.Ports;
 
 public sealed record TenantInputInterruption(Guid RunId, long Revision);
 public sealed record TenantHumanRunAdmission(AgentRun Run, ConversationEntry Input, long ExpectedSessionRevision, long ExpectedInstanceRevision, IReadOnlyList<AttachmentRecord>? Attachments = null,
-    TenantInputInterruption? Interruption = null);
-public sealed record TenantRunAdmissionResult(bool Created, AgentRun Run, Guid EntryId, long SessionRevision, AgentRun? Interrupted = null);
+    TenantInputInterruption? Interruption = null, TenantSpeechAdmission? Speech = null);
+public sealed record TenantRunAdmissionResult(bool Created, AgentRun Run, Guid EntryId, long SessionRevision, AgentRun? Interrupted = null)
+{ public long EntrySequence { get; init; } }
 
 // Existing entry/Activation/Run rows, owning Session, security revision and audit commit atomically.
 // Trusted internal data only; public use-case results project safe metadata.

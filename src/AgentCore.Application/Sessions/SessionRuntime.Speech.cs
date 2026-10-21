@@ -156,6 +156,7 @@ public sealed partial class SessionRuntime
 
     private async Task FailVoiceAsync(EventContext context, CancellationToken cancellationToken)
     {
+        if (_tenantVoiceBinding is { } binding) { SignalTenantVoice(new TenantVoiceUnavailable(binding.Lease)); return; }
         if (_snapshot.Mode == SessionMode.Voice && _activeResponseId is { } response)
             await SupersedeAsync(context, response, cancellationToken, "modeChange").ConfigureAwait(false);
         AbandonLiveSpeech(rotateEpoch: true);
