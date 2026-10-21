@@ -108,12 +108,6 @@ public sealed class ProfileRecord
     public long UpdatedAtUtc { get; set; }
 }
 
-public sealed class OwnerCapabilityRecord
-{
-    public string TokenHash { get; set; } = "";
-    public long CreatedAtUtc { get; set; }
-}
-
 public sealed class AgentDefinitionDraftRecord
 {
     public string DraftId { get; set; } = "";
@@ -196,7 +190,6 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<SnapshotRecord> Snapshots => Set<SnapshotRecord>();
     public DbSet<EntryRecord> Entries => Set<EntryRecord>();
     public DbSet<ProfileRecord> Profiles => Set<ProfileRecord>();
-    public DbSet<OwnerCapabilityRecord> OwnerCapabilities => Set<OwnerCapabilityRecord>();
     public DbSet<AttachmentRecordRow> Attachments => Set<AttachmentRecordRow>();
     public DbSet<MessageAttachmentRow> MessageAttachments => Set<MessageAttachmentRow>();
     public DbSet<ArtifactRecordRow> Artifacts => Set<ArtifactRecordRow>();
@@ -421,12 +414,6 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         {
             entity.ToTable("UserProfiles");
             entity.HasKey(row => row.ProfileId);
-        });
-        modelBuilder.Entity<OwnerCapabilityRecord>(entity =>
-        {
-            entity.ToTable("OwnerCapabilities");
-            entity.HasKey(row => row.TokenHash);
-            entity.Property(row => row.TokenHash).HasMaxLength(64);
         });
         modelBuilder.Entity<AttachmentRecordRow>(entity =>
         {

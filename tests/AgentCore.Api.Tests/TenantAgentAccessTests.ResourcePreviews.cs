@@ -54,7 +54,7 @@ public sealed partial class TenantAgentAccessTests
         var options = await Json(await owner.GetAsync($"/api/v2/tenants/{file.Tenant}/file-preview/options"));
         Assert.Equal(2, options.GetProperty("spreadsheet").GetProperty("rowsPerWindow").GetInt32());
         using var anonymous = ResourceClient(factory);
-        TestOwnerCapability.Apply(anonymous, factory.Services); // A legacy owner header cannot authenticate canonical routes.
+        RetiredOwnerHeader.Apply(anonymous); // A legacy owner header cannot authenticate canonical routes.
         foreach (var suffix in new[] { "/editor", "/content", "/office-preview" }) Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(file.File + suffix)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"/api/v2/tenants/{file.Tenant}/file-preview/options")).StatusCode);
         var foreign = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Foreign preview organization", slug = "foreign-preview" }))).GetProperty("tenantId").GetGuid();

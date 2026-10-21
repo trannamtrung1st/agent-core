@@ -99,7 +99,7 @@ public sealed partial class TenantSessionAccessTests
             else Assert.Equal(System.Text.Json.JsonValueKind.Null, view.GetProperty("observation").GetProperty("openPages").ValueKind);
             Assert.Equal(revision, await Revision(owner, tenant));
             Assert.DoesNotContain("profileRoot", view.GetRawText()); Assert.DoesNotContain("tenantOwner", view.GetRawText());
-            using var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false }); using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+            using var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false }); using var legacy = RetiredOwnerHeader.CreateClient(factory);
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
             var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Browser Beta", slug = "browser-beta" }))).GetProperty("tenantId").GetGuid();

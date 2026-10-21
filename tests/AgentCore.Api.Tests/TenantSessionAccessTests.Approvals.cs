@@ -30,7 +30,7 @@ public sealed partial class TenantSessionAccessTests
         Assert.Equal(request.Operation.ActionHash, view.GetProperty("preparedAction").GetProperty("actionHash").GetString());
         Assert.False(view.TryGetProperty("canonicalActionJson", out _)); Assert.False(view.TryGetProperty("grantId", out _));
         var list = await Json(await reviewer.GetAsync(api + "/approvals")); Assert.Single(list.GetProperty("items").EnumerateArray());
-        using var anonymous = Client(factory); using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var anonymous = Client(factory); using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(route)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(route)).StatusCode);
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other Approvals", slug = "other-approvals" }))).GetProperty("tenantId").GetGuid();

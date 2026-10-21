@@ -6,7 +6,7 @@ namespace AgentCore.Api.Realtime;
 public sealed class TenantRuntimeCapacity(IOptions<AgentCoreOptions> options)
 {
     private readonly object gate = new();
-    private readonly int limit = Math.Max(1, options.Value.MaxActiveSessions);
+    private readonly AgentCoreOptions limits = options.Value;
     private int reserved;
     private bool admitting = true;
 
@@ -14,7 +14,7 @@ public sealed class TenantRuntimeCapacity(IOptions<AgentCoreOptions> options)
     {
         lock (gate)
         {
-            if (!admitting || reserved >= limit) return false;
+            if (!admitting || reserved >= Math.Max(1, limits.MaxActiveSessions)) return false;
             reserved++; return true;
         }
     }

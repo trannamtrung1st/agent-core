@@ -42,7 +42,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.OK, (await Resource(new { resourceId, expectedResourceRevision = 1, logicalPath = "notes/renamed.txt", kind = 2, mediaType = "text/plain" })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Resource(new { logicalPath = "forged.txt", kind = 2, mediaType = "text/plain", contentSha256 = resource.GetProperty("contentSha256").GetString() })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Resource(new { logicalPath = "../escape.txt", kind = 2, mediaType = "text/plain", content = bytes })).StatusCode);
-        TestOwnerCapability.Apply(owner, factory.Services);
+        RetiredOwnerHeader.Apply(owner);
         var legacy = $"/api/v2/admin/agent-instances/{id}";
         Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"{legacy}/skills/{Uri.EscapeDataString(localKey!)}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"{legacy}/resources/{Uri.EscapeDataString(resourceKey)}/content")).StatusCode);

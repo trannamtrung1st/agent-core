@@ -1,5 +1,10 @@
 # Testing Strategy
 
+## Owner credential retirement qualification
+
+The [retirement report](reports/owner-credential-retirement-verification-2026-10-21.md) records 45 persistence/IAM and 27 distinct API/runtime passing cases. Negative clients use a fixed obsolete header and cannot acquire credentials. Tests cover exact single-table retirement, rollback without secret restoration, current model consistency, nondestructive startup refusal, explicit migration plus actual Account/tenant/conversation host recreation, all retired HTTP routes and actual Hub protocols. A current-limit regression exercises lowering/raising capacity with occupied slots. Eleven obsolete owner-only State/Runtime test declarations are inventoried; equivalent canonical behavior remains an explicit parity requirement. No test is skipped to obtain acceptance, and full proposal/milestone acceptance remains open.
+
+
 ## Canonical runtime registry and hosted execution qualification
 
 The [registry cutover](reports/runtime-registry-cutover-verification-2026-10-21.md) adds actual DI/assembly, bounded capacity, repeated shutdown and noncooperative late-output scenarios for both stores. Focused regressions exercise canonical approvals, actual wire/Voice, Automation/event/watch and cleanup recovery after old owner execution workers are removed. Native desktop/narrow journeys verify Voice, exact Activity-to-Chat continuation and the obsolete-token purge. This is focused local module qualification; remaining internal/schema/parity and exhaustive proposal acceptance stay open. Optional CI and physical/live-vendor behavior remain unrun.

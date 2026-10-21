@@ -27,9 +27,7 @@ public sealed partial class TenantSessionAccessTests
                 : new NativeTenantMemoryFactory(root, new ScriptedLanguageModel());
             HttpClient NewClient() => factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             using var anonymous = NewClient(); using var oldToken = NewClient(); using var human = NewClient();
-            var token = await factory.Services.GetRequiredService<IOwnerCapabilityService>().IssueAsync();
-            Assert.True(await factory.Services.GetRequiredService<IOwnerCapabilityService>().ValidateAsync(token.Token));
-            oldToken.DefaultRequestHeaders.Add("X-AgentCore-Owner-Capability", token.Token);
+            oldToken.DefaultRequestHeaders.Add("X-AgentCore-Owner-Capability", RetiredOwnerHeader.Token);
             await Login(human, "owner@example.test", "explicit-synthetic-test-password");
 
             var endpoints = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToArray();

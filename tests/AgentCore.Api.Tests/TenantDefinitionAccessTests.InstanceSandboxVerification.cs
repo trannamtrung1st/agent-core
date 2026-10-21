@@ -55,7 +55,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal("NeedsVerification", stale.GetProperty("status").GetString()); Assert.Equal(System.Text.Json.JsonValueKind.Null, stale.GetProperty("observation").ValueKind);
         Assert.Equal(3, stale.GetProperty("currentInstanceRevision").GetInt64());
         using var anonymous = factory.CreateClient(); Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path + $"/verification?profileId={profileId}")).StatusCode);
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory); Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path + $"/verification?profileId={profileId}")).StatusCode);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory); Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path + $"/verification?profileId={profileId}")).StatusCode);
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other verification", slug = "other-verification" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/agents/{id}/sandbox/verification/{attemptId}?profileId={profileId}")).StatusCode);
     }

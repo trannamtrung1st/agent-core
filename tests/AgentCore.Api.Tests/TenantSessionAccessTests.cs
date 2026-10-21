@@ -33,7 +33,7 @@ public sealed partial class TenantSessionAccessTests
         foreach (var field in new[] { "definition", "profileId", "ownerCapability", "agentInstructions", "entries", "summary" }) Assert.False(created.TryGetProperty(field, out _));
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync(root + $"/{id}")).StatusCode);
         Assert.Equal(1, (await Json(await owner.GetAsync(root))).GetProperty("total").GetInt32());
-        using var anonymous = Client(factory); using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var anonymous = Client(factory); using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(root + $"/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(root + $"/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync($"/api/v2/host/sessions/{id}")).StatusCode);

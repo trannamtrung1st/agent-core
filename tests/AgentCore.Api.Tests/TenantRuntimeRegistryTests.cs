@@ -54,4 +54,18 @@ public sealed class TenantRuntimeRegistryTests
         await runtime.DisposeAsync();
         Assert.False(capacity.TryReserveTenantRuntime());
     }
+    [Fact]
+    public void Updated_capacity_limits_constrain_new_reservations_without_revoking_existing_slots()
+    {
+        var limits = new AgentCoreOptions { MaxActiveSessions = 3 };
+        var capacity = new TenantRuntimeCapacity(Options.Create(limits));
+        Assert.True(capacity.TryReserveTenantRuntime()); Assert.True(capacity.TryReserveTenantRuntime());
+        limits.MaxActiveSessions = 1;
+        Assert.False(capacity.TryReserveTenantRuntime());
+        capacity.ReleaseTenantRuntime(); Assert.False(capacity.TryReserveTenantRuntime());
+        capacity.ReleaseTenantRuntime(); Assert.True(capacity.TryReserveTenantRuntime());
+        limits.MaxActiveSessions = 2; Assert.True(capacity.TryReserveTenantRuntime());
+        Assert.False(capacity.TryReserveTenantRuntime());
+    }
+
 }

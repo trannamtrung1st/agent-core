@@ -105,16 +105,6 @@ public sealed class TenantAttachPayload
 }
 
 [MessagePackObject]
-public sealed class AttachPayload
-{
-    [Key("lastServerSequence")]
-    public long? LastServerSequence { get; set; }
-
-    [Key("ownerCapability")]
-    public string? OwnerCapability { get; set; }
-}
-
-[MessagePackObject]
 public sealed class UserTextPayload
 {
     [Key("interruptedRunId")]

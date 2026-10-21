@@ -30,7 +30,7 @@ public sealed partial class TenantSessionAccessTests
             using var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PutAsJsonAsync(path, new { })).StatusCode);
-            using var ownerToken = TestOwnerCapability.CreateOwnerClient(factory);
+            using var ownerToken = RetiredOwnerHeader.CreateClient(factory);
             Assert.Equal(HttpStatusCode.Unauthorized, (await ownerToken.GetAsync(path)).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await ownerToken.GetAsync("/api/v2/admin/browser/privacy")).StatusCode);
             using var actor = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });

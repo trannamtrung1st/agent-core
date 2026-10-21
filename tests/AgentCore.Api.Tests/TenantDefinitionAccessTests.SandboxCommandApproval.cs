@@ -89,7 +89,7 @@ public sealed partial class TenantDefinitionAccessTests
             Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(switchPath, new { change.ExpectedRevision, change.ExpectedSessionRevision, change.ExpectedGeneration, change.ExpectedLeaseRevision, change.ProfileId, change.ExpectedProfileRevision, change.ExpectedInstanceRevision })).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(switchPath, new { change.ExpectedRevision, change.ExpectedSessionRevision, change.ExpectedGeneration, change.ExpectedLeaseRevision, expectedExecutionId = (Guid?)null, change.ProfileId, change.ExpectedProfileRevision, change.ExpectedInstanceRevision, command = "must not execute" })).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(switchPath, change)).StatusCode);
-            using var selectionLegacy = TestOwnerCapability.CreateOwnerClient(factory);
+            using var selectionLegacy = RetiredOwnerHeader.CreateClient(factory);
             Assert.Equal(HttpStatusCode.Unauthorized, (await selectionLegacy.PostAsJsonAsync(switchPath, change)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox/profile", change)).StatusCode);
             var csrf = owner.DefaultRequestHeaders.GetValues(AgentCore.Api.Security.IdentityHttp.CsrfHeader).ToArray(); owner.DefaultRequestHeaders.Remove(AgentCore.Api.Security.IdentityHttp.CsrfHeader);
@@ -119,7 +119,7 @@ public sealed partial class TenantDefinitionAccessTests
             Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(stopPath, stop with { ExpectedExecutionRevision = 99 })).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(stopPath, new { stop.ExpectedRevision, stop.ExpectedSessionRevision, stop.ExpectedGeneration, stop.ExpectedLeaseRevision, stop.ExpectedExecutionRevision, providerId = "forged" })).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(stopPath, stop)).StatusCode);
-            using var oldOwner = TestOwnerCapability.CreateOwnerClient(factory);
+            using var oldOwner = RetiredOwnerHeader.CreateClient(factory);
             Assert.Equal(HttpStatusCode.Unauthorized, (await oldOwner.PostAsJsonAsync(stopPath, stop)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox/executions/{execution.Id}/stop", stop)).StatusCode);
             var csrf = owner.DefaultRequestHeaders.GetValues(AgentCore.Api.Security.IdentityHttp.CsrfHeader).ToArray();
@@ -146,7 +146,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(sandboxPath + "/reset", new { reset.ExpectedRevision, reset.ExpectedSessionRevision, reset.ExpectedGeneration, reset.ExpectedLeaseRevision })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(sandboxPath + "/reset", new { reset.ExpectedRevision, reset.ExpectedSessionRevision, reset.ExpectedGeneration, reset.ExpectedLeaseRevision, expectedExecutionId = (Guid?)null, command = "must not execute" })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(sandboxPath + "/reset", reset)).StatusCode);
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.PostAsJsonAsync(sandboxPath + "/reset", reset)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}/sandbox/reset", reset)).StatusCode);
         var accepted = await owner.PostAsJsonAsync(sandboxPath + "/reset", reset); Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);

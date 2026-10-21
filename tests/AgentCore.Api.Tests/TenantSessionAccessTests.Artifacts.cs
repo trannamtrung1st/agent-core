@@ -79,7 +79,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/sessions/{session}/artifacts/{id}/content")).StatusCode);
             using var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(url + $"/{id}/content")).StatusCode);
-            using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+            using var legacy = RetiredOwnerHeader.CreateClient(factory);
             Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(url + $"/{id}/content")).StatusCode);
             var identity = factory.Services.GetRequiredService<IdentityService>(); var access = factory.Services.GetRequiredService<TenantAccessService>();
             var account = await identity.RegisterAsync("artifact-reader@example.test", "Artifact Reader", "strong-artifact-password");

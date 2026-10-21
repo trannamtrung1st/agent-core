@@ -135,7 +135,7 @@ public sealed class EmailMonitoringReliabilityTests
             }
             Host = sqlite ? new ExperienceHost(Path.Combine(Path.GetTempPath(), $"email-reliability-{Guid.NewGuid():N}.db"), clock: Clock, configure: Configure)
                 : new AgentCoreApiFactory().WithWebHostBuilder(b => b.ConfigureTestServices(Configure));
-            client = TestOwnerCapability.CreateOwnerClient(Host);
+            client = Host.CreateClient();
         }
         public EmailMonitoringService Monitor => Host.Services.GetRequiredService<EmailMonitoringService>();
         public IEmailWatchStore Watches => Host.Services.GetRequiredService<IEmailWatchStore>();

@@ -27,7 +27,7 @@ public sealed partial class TenantSessionAccessTests
         Assert.Equal(1, controls.GetProperty("instanceRevision").GetInt64());
         Assert.Empty(controls.GetProperty("profiles").EnumerateArray());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(path + $"/executions/{Guid.NewGuid()}")).StatusCode);
-        using var anonymous = Client(factory); using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var anonymous = Client(factory); using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path + "/controls")).StatusCode);

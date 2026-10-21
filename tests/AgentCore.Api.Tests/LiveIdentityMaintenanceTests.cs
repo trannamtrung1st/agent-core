@@ -50,7 +50,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
             ["Providers:LanguageModels:primary-llm:StructuredOutput"] = "false", ["Providers:LanguageModels:primary-llm:ReasoningEffort"] = null
         }));
         var s = host.Services;
-        var client = TestOwnerCapability.CreateOwnerClient(host);
+        var client = host.CreateClient();
         Assert.Contains("Real", await client.GetStringAsync("/health"));
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var id = instance.InstanceId;

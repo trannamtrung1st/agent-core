@@ -189,13 +189,6 @@ public sealed record HistoryPageResponse(
     bool HasOlder = false,
     long? NextBefore = null);
 
-public static class OwnerCapabilityHeaders
-{
-    public const string Name = "X-AgentCore-Owner-Capability";
-}
-
-public sealed record OwnerCapabilityResponse(string Token, string IssuedAt);
-
 public sealed record RenameSessionRequest(string Title);
 
 public sealed record DurableDeleteSessionRequest(long ExpectedRevision);

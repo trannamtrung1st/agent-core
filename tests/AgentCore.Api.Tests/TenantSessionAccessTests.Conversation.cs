@@ -49,7 +49,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(route)).StatusCode);
             var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "History Beta", slug = "history-beta" }))).GetProperty("tenantId").GetGuid();
             Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/sessions/{session}/messages")).StatusCode);
-            using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+            using var legacy = RetiredOwnerHeader.CreateClient(factory);
             Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync($"/api/v1/sessions/{session}/messages")).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(route)).StatusCode);
             Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/v2/auth/logout", null)).StatusCode);

@@ -24,7 +24,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Contains(itemAccess.GetProperty("permissions").EnumerateArray(), p => p.GetString() == "credentials.manage"); Safe(itemAccess);
         using var anonymous = Client(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync($"/api/v2/admin/credentials/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync("/api/v2/admin/credentials")).StatusCode);

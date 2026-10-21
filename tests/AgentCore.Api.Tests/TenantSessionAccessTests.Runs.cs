@@ -47,7 +47,7 @@ public sealed partial class TenantSessionAccessTests
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Beta Runs", slug = "beta-runs" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/agent-runs/{runId}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/sessions/{id}/messages", new { messageId = Guid.NewGuid(), text = "Foreign", expectedRevision = await Revision(owner, beta), expectedSessionRevision = 2 })).StatusCode);
-        using var anonymous = Client(factory); using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var anonymous = Client(factory); using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(api + $"/agent-runs/{runId}")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(api + $"/agent-runs/{runId}")).StatusCode);
         var stored = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!;

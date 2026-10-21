@@ -37,7 +37,7 @@ public sealed partial class TenantSessionAccessTests
         var separate = await Json(await owner.GetAsync($"/api/v2/tenants/{beta}/operation-policies/agents.update"));
         Assert.Equal(0, separate.GetProperty("policyRevision").GetInt64());
         Assert.Equal("whenRequesterLacksPermission", separate.GetProperty("effective").GetProperty("mode").GetString());
-        using var anonymous = Client(factory); using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var anonymous = Client(factory); using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
         var audit = await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200);

@@ -17,8 +17,7 @@ public sealed class IdentityAndTenantAccessTests
         await using var factory = new AgentCoreApiFactory();
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
         Assert.Equal(HttpStatusCode.Unauthorized, (await owner.GetAsync("/api/v2/account/me")).StatusCode);
-        var oldCapability = await factory.Services.GetRequiredService<IOwnerCapabilityService>().IssueAsync();
-        owner.DefaultRequestHeaders.Add("X-AgentCore-Owner-Capability", oldCapability.Token);
+        owner.DefaultRequestHeaders.Add("X-AgentCore-Owner-Capability", RetiredOwnerHeader.Token);
         Assert.Equal(HttpStatusCode.Unauthorized, (await owner.GetAsync("/api/v2/account/tenants")).StatusCode);
         var missingCsrf = await owner.PostAsJsonAsync("/api/v2/auth/login", new { login = "owner@example.test", password = "explicit-synthetic-test-password" });
         Assert.Equal(HttpStatusCode.BadRequest, missingCsrf.StatusCode);

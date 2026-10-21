@@ -2423,20 +2423,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("MessageAttachments", (string)null);
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.OwnerCapabilityRecord", b =>
-                {
-                    b.Property<string>("TokenHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("TokenHash");
-
-                    b.ToTable("OwnerCapabilities", (string)null);
-                });
-
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ProfileRecord", b =>
                 {
                     b.Property<string>("ProfileId")

@@ -21,7 +21,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal("NeedsVerification", p.GetProperty("availability").GetString());
         Assert.Equal(1, p.GetProperty("revision").GetInt64()); Assert.True(created.GetProperty("canManage").GetBoolean());
         using var anonymous = Client(factory); Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync($"/api/v2/admin/sandbox-profiles/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync("/api/v2/admin/sandboxes")).StatusCode);

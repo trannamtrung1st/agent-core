@@ -52,7 +52,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(1d, view.GetProperty("section").GetProperty("effective").GetProperty("cpu").GetDouble());
         Assert.Equal(1, factory.Services.GetRequiredService<SetupVerification>().Calls); // Saving/resetting never verifies or runs a script again.
         using var anonymous = factory.CreateClient(); Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path + "/sandbox")).StatusCode);
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory); Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path + "/sandbox")).StatusCode);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory); Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path + "/sandbox")).StatusCode);
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other setup", slug = "other-setup" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/agents/{id}/sandbox")).StatusCode);
     }

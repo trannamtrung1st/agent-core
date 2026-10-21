@@ -81,7 +81,7 @@ public sealed partial class TenantCredentialAccessTests
         var id = (await Json(await owner.PostAsJsonAsync(root, new TenantCredentialCreateRequest("OAuth", "Token", "GoogleDriveAccount", await Revision(owner, tenant)))))
             .GetProperty("credential").GetProperty("credentialId").GetGuid();
         var path = root + $"/{id}/oauth";
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.PostAsJsonAsync(path + "/start", new TenantCredentialOAuthRequest(1, 1))).StatusCode);
         owner.DefaultRequestHeaders.Remove("X-AgentCore-CSRF");
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(path + "/start", new TenantCredentialOAuthRequest(1, 1))).StatusCode);

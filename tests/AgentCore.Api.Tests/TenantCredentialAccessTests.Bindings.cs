@@ -35,7 +35,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(2, (await Json(await owner.GetAsync(root + $"/agents/{id}"))).GetProperty("instance").GetProperty("revision").GetInt64());
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(path, new TenantBindCredentialRequest(credential, "duplicate", await Revision(owner, tenant), 2, 1))).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await owner.DeleteAsync(root + $"/credentials/{credential}?expectedRevision={await Revision(owner, tenant)}&expectedCredentialRevision=1")).StatusCode);
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync($"/api/v2/admin/agent-instances/{id}/credential-bindings")).StatusCode);
         var malformed = await owner.PostAsync(path, new StringContent("{\"credentialId\":\"http-private-sentinel\"}", System.Text.Encoding.UTF8, "application/json"));

@@ -34,15 +34,13 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> factory = sqlite
                 ? new NativeTenantSqliteFactory(root, new ScriptedLanguageModel()) : new NativeTenantMemoryFactory(root, new ScriptedLanguageModel());
             factory.UseKestrel(0); using var ready = factory.CreateClient();
-            var capabilities = factory.Services.GetRequiredService<IOwnerCapabilityService>();
-            var old = await capabilities.IssueAsync(); Assert.True(await capabilities.ValidateAsync(old.Token));
             var repo = new DirectoryInfo(AppContext.BaseDirectory);
             while (repo is not null && !File.Exists(Path.Combine(repo.FullName, "AgentCore.sln"))) repo = repo.Parent;
             Assert.NotNull(repo);
             var start = new ProcessStartInfo("node", "tenant-hub-cutover.mjs") { WorkingDirectory = Path.Combine(repo.FullName, "tests", "realtime-js"),
                 UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
             start.Environment["BASE_URL"] = ready.BaseAddress!.ToString().TrimEnd('/'); start.Environment["HUB_PROTOCOL"] = protocol;
-            start.Environment["OLD_OWNER_TOKEN"] = old.Token;
+            start.Environment["OLD_OWNER_TOKEN"] = RetiredOwnerHeader.Token;
             using var process = Process.Start(start)!; var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(90));
             try { await process.WaitForExitAsync(deadline.Token); }

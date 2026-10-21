@@ -46,7 +46,7 @@ public sealed partial class TenantSessionAccessTests
         Assert.Equal(receipt.GetProperty("activationId").GetGuid(), run.Admission.ExecutionContext.RootActivationId);
         Assert.False(string.IsNullOrWhiteSpace(run.Result!.Text)); Assert.NotNull(run.Result.OutcomeEntryId);
         Assert.DoesNotContain(await factory.Services.GetRequiredService<IAgentRunStore>().ListRunnableAsync(DateTimeOffset.UtcNow, 100), r => r.AgentRunId == runId);
-        using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
+        using var legacy = RetiredOwnerHeader.CreateClient(factory);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync($"/api/v2/host/sessions/{id}")).StatusCode);
     }
 

@@ -1,5 +1,14 @@
 # Persistence and Configuration
 
+## Owner credential store retirement
+
+The active DbContext, current model snapshot and registered stores contain no OwnerCapability entity/store. Migration `20261021102840_RetireOwnerCapabilityStore` drops only `OwnerCapabilities`; no Account, tenant, role, Run, conversation, receipt, resource or credential table is rewritten. Its historical Down recreates an empty table and cannot recover dropped credentials. No runtime issuer/validator is restored by that DDL.
+
+The explicit startup baseline rule remains unchanged: incomplete/untracked/unknown schemas are refused without adopting or mutating their data. There is no automatic old-model conversion or reset. Qualification stages the preceding **canonical** schema in a generated disposable database, proves startup refusal leaves its obsolete hash intact, explicitly applies the reviewed migration offline, then recreates the actual host and verifies current Account, tenant principal and completed conversation facts survive. Fresh canonical startup, downgrade/upgrade, model consistency and foreign keys are also checked. This does not certify installed legacy-data conversion. Historical migration target models remain inert history; the current model has no old token entity. [Exact scope](reports/owner-credential-retirement-verification-2026-10-21.md).
+
+`TenantRuntimeCapacity` reads `AgentCoreOptions.MaxActiveSessions` when admitting each new reservation. Lowering the limit blocks new slots until existing reservations drain; it does not revoke their lifetimes. Raising it permits new reservations up to the new bound. This preserves the existing mutable options behavior rather than freezing a constructor-time copy.
+
+
 ## Independent child control consent and lineage
 
 `20261020200000_TenantIndependentChildControls` extends the existing creation, completion-read, report-source-read and report-creation consent shapes to a genuinely absent scheduled requester. Its frozen approval-table rebuild preserves the 43 incumbent guards, relaxing only the old human-only read-shape clauses and replacing the two account-only no-human guards with two bounded task-lineage guards. The guard count remains 43. No new task, inbox or effect table is introduced; old migrations remain unchanged.

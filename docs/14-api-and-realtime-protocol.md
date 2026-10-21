@@ -1,5 +1,10 @@
 # HTTP API and Realtime Protocol
 
+## Owner credential contract retirement
+
+Contracts no longer defines `OwnerCapabilityHeaders`, `OwnerCapabilityResponse` or the unscoped `AttachPayload`/`ownerCapability` field. No issuance/validation/store API remains. Canonical `TenantAttachPayload` and authenticated tenant HTTP/Hub commands retain their existing current-user checks. Old headers and RPC payloads are adversarial inputs only; they never select an identity or restore a route. HTTP route inventory and actual JSON/MessagePack refusal are requalified after removal. [Evidence](reports/owner-credential-retirement-verification-2026-10-21.md).
+
+
 ## Browser core transport cutover checkpoint
 
 The core browser client now uses only authenticated tenant HTTP and `AttachTenant`. Owner-capability acquisition/storage/headers/refresh, old Attach/live approval/Hub End invocation, owner upload/staging and implicit Activity SDK transports are removed. Tenant text/Stop/Steer retain fresh witnesses, command sequencing, attachment/connection fences and explicit replay identity. End is the canonical HTTP completion command. Late stale cancellation acknowledgement for a response superseded locally is ignored without reconnecting the newer response; server authority is unchanged.

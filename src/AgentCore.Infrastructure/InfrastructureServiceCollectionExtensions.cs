@@ -196,7 +196,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<ICoreEventStore, SqliteCoreEventStore>();
             services.AddSingleton<IExternalEventStore>(provider => new SqliteExternalEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
-            services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
+
             services.TryAddSingleton<SqliteAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<TimeProvider>(),
@@ -236,7 +236,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<ICredentialStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IExternalEventStore, InMemoryExternalEventStore>();
-            services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
+
             services.TryAddSingleton<InMemoryAttachmentStore>(provider => new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()).BindTenantAuthority(provider.GetRequiredService<InMemoryMemoryStore>()));
             services.TryAddSingleton<IAttachmentStore>(p => p.GetRequiredService<InMemoryAttachmentStore>());
             services.TryAddSingleton<InMemoryDefinitionResourceContentStore>();
@@ -444,7 +444,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<ITriggerInstancePolicyReconciliationService>()));
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
-        services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
+
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services, profile);
         AgentCore.Infrastructure.Drive.DriveRegistration.AddDrive(services, profile);

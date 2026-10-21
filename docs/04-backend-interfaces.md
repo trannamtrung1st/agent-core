@@ -1,5 +1,10 @@
 # Backend Interfaces
 
+## Owner credential ports retired
+
+`IOwnerCapabilityService`, `IOwnerCapabilityStore`, `IssuedOwnerCapability` and their implementations are removed. No issuer, validator or store is registered. Public owner header/response DTOs and the old `AttachPayload` are removed from Contracts. Account cookie/server-session authentication and exact tenant admission remain the supported boundary. The only old-header test fixture is a fixed adversarial value; it has no authority or issuance path. Earlier owner-capability descriptions in this document are historical implementation records, not current interfaces. [Measured retirement](reports/owner-credential-retirement-verification-2026-10-21.md).
+
+
 ## Runtime registry cutover checkpoint
 
 The registered dispatcher is `ITenantRunDispatcher` backed by the singleton `TenantSessionRuntimeHost`; input, foreground, cancellation and receipt controls resolve to that same object. The old unowned `IAgentRunDispatcher` registration, `IEnvironmentEventIngress`, live occurrence directory/mailbox, hosted state reader and profile live-update adapter are removed. Shared claimed-Run coordination still receives explicit tenant persistence and dispatcher bindings. No replacement empty authority adapter is registered.
