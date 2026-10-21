@@ -88,8 +88,12 @@ public static class TenantExperienceRules
         return value with { Attempts = value.Attempts.ToArray(), Decisions = value.Decisions.ToArray(), Outcomes = value.Outcomes.ToArray(), Corrections = value.Corrections.ToArray(),
             Unresolved = value.Unresolved.ToArray(), Difficulties = value.Difficulties.ToArray(), Lessons = value.Lessons.ToArray() };
     }
-    public static bool HasPrivateEvidence(AgentRun run) => AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantProfileSource is not null
-        || TenantMemoryOperationReferences.Read(run.Checkpoint).Count > 0 || TenantExperienceReferences.Facts(run.Checkpoint).Count > 0;
+    // Fact references carry no owner. Stores resolve their actual rows under the same
+    // source-validation transaction before classifying Instance-only evidence.
+    public static bool HasPrivateEvidence(AgentRun run, bool privateExperienceFacts = true) => AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantProfileSource is not null
+        || TenantMemoryOperationReferences.Read(run.Checkpoint).Count > 0
+        || TenantExperienceReferences.Sources(run.Checkpoint).Any(i => i.Witness.PrivateUserPrincipalId is not null)
+        || privateExperienceFacts && TenantExperienceReferences.Facts(run.Checkpoint).Count > 0;
     public static bool Substantive(AgentRun run) => run.IsTerminal && run.Checkpoint?.StepCount > 0 && run.Result?.OutcomeKind is not (AgentRunOutcomeKind.NoAction or AgentRunOutcomeKind.Continued)
         && (!AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages) || messages!.Any(m => m.Role == ModelRole.Tool
             && m.Name is { } tool && !TenantExperienceToolContract.IsTool(tool) && tool is not (ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet or ToolCatalog.WorkComplete or ToolCatalog.RequestAuthorization)));

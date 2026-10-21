@@ -26,10 +26,11 @@ public sealed partial class InMemoryIamStore : ITenantExperienceReviewStore
         }
         else
         {
-            var privateSource = TenantExperienceRules.HasPrivateEvidence(run!);
+            RequireTenantOutputSources(run!, ct);
+            var privateSource = HasPrivateExperienceEvidence(run!);
             if (privateSource && TenantRunProfileRules.User(run!, TenantCoreRoot(run!), state)?.PrincipalId != human.PrincipalId)
                 throw new AccessDeniedException("experience_source_unavailable");
-            RequireTenantOutputSources(run!, ct); projected = TenantExperienceSourceProjection.RunEvidence(run!, privateSource ? human.PrincipalId : null);
+            projected = TenantExperienceSourceProjection.RunEvidence(run!, privateSource ? human.PrincipalId : null);
         }
         return new(tenant, instance, agent.PrincipalId, human.PrincipalId, projected.Witness, projected.Title, state.Tenant.Revision, agent.Instance.Revision);
     }

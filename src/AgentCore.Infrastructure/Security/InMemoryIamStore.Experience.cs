@@ -41,11 +41,13 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
                 throw new AccessDeniedException("experience_source_unavailable");
             var raw = new TenantExperienceSourceWitness(kind, id, source.SessionId, 0, source.Revision, 0, 0, id, source.Revision, new string('a', 64));
             TenantExperienceRules.RawAsync(reader, raw, false, iam, ct, human).AsTask().GetAwaiter().GetResult();
-            var root = TenantCoreRoot(source); var privateSource = TenantExperienceRules.HasPrivateEvidence(source);
-            if (privateSource && TenantRunProfileRules.User(source, root, reader.Security)?.PrincipalId != reader.User?.PrincipalId)
+            RequireTenantOutputSources(source, ct);
+            var root = TenantCoreRoot(source); var privateSource = HasPrivateExperienceEvidence(source);
+            var privateUser = privateSource ? TenantRunProfileRules.User(source, root, reader.Security)?.PrincipalId : null;
+            if (privateSource && (privateUser is null || privateUser != reader.User?.PrincipalId))
                 throw new AccessDeniedException("experience_source_unavailable");
             if (human is { } viewer && privateSource && reader.User?.PrincipalId != viewer) throw new AccessDeniedException("approval_unavailable");
-            RequireTenantOutputSources(source, ct); result = TenantExperienceSourceProjection.Run(reader, settings, source, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
+            result = TenantExperienceSourceProjection.Run(reader, settings, source, privateUser, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
         }
         else throw new AccessDeniedException("experience_source_unavailable");
         return result;
@@ -120,5 +122,11 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
         var key = (value.TenantId, value.AgentInstanceId, value.OwnerKey);
         if (!tenantExperienceIndex.TryGetValue(key, out var ids)) tenantExperienceIndex[key] = ids = [];
         ids.Add(value.ExperienceId);
+    }
+    private bool HasPrivateExperienceEvidence(AgentRun run)
+    {
+        var facts = TenantExperienceReferences.Facts(run.Checkpoint);
+        var rows = facts.Select(i => tenantExperiences.GetValueOrDefault((i.TenantId, i.ExperienceId)) ?? throw new AccessDeniedException("experience_source_changed")).ToArray();
+        return TenantExperienceRules.HasPrivateEvidence(run, rows.Any(i => i.UserPrincipalId is not null));
     }
 }

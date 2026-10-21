@@ -40,10 +40,10 @@ public static class TenantExperienceSourceProjection
         if (expected is not null && source != expected) throw new AccessDeniedException("experience_source_changed");
         return (source, evidence, title);
     }
-    public static TenantExperienceSourceObservation Run(TenantMemoryReader reader, TenantIsolationMetadata settings, AgentRun source, TenantExperienceSourceWitness? expected = null)
+    public static TenantExperienceSourceObservation Run(TenantMemoryReader reader, TenantIsolationMetadata settings, AgentRun source, Guid? privateUser, TenantExperienceSourceWitness? expected = null)
     {
         if (source.AgentRunId == reader.Run.AgentRunId) throw new AccessDeniedException("experience_source_unavailable");
-        var projected = RunEvidence(source, TenantExperienceRules.HasPrivateEvidence(source) ? reader.User?.PrincipalId : null, expected);
+        var projected = RunEvidence(source, privateUser, expected);
         return new(reader, settings, projected.Witness, projected.EvidenceJson, projected.Title);
     }
     public static (TenantExperienceSourceWitness Witness, string EvidenceJson, string Title) RunEvidence(

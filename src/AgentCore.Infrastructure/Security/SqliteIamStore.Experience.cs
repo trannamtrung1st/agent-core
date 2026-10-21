@@ -40,11 +40,12 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
         if (!await db.Sessions.AnyAsync(s => s.SessionId == metadata.SessionId && s.DurablyDeletedAtUtc == null, ct).ConfigureAwait(false)) throw new AccessDeniedException("experience_source_unavailable");
         await TenantExperienceRules.RawAsync(reader, new(kind, id, Guid.Parse(metadata.SessionId), 0, metadata.Revision, 0, 0, id, metadata.Revision, new string('a', 64)), false, iam, ct, human).ConfigureAwait(false);
         var row = await OwnedRuns(db, reader.Security.Tenant.TenantId).AsNoTracking().SingleAsync(r => r.AgentRunId == id.ToString("D"), ct).ConfigureAwait(false); var sourceRun = AgentRunStoreMapping.ToDomain(row);
-        var root = await TenantCoreEventProduction.RootAsync(db, sourceRun, ct).ConfigureAwait(false); var privateSource = TenantExperienceRules.HasPrivateEvidence(sourceRun);
-        if (privateSource && TenantRunProfileRules.User(sourceRun, root, reader.Security)?.PrincipalId != reader.User?.PrincipalId || human is { } viewer && privateSource && reader.User?.PrincipalId != viewer)
-            throw new AccessDeniedException(human is null ? "experience_source_unavailable" : "approval_unavailable");
         await RequireTenantOutputSources(db, sourceRun, ct).ConfigureAwait(false);
-        return TenantExperienceSourceProjection.Run(reader, settings, sourceRun, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
+        var root = await TenantCoreEventProduction.RootAsync(db, sourceRun, ct).ConfigureAwait(false); var privateSource = await HasPrivateExperienceEvidence(db, sourceRun, ct).ConfigureAwait(false);
+        var privateUser = privateSource ? TenantRunProfileRules.User(sourceRun, root, reader.Security)?.PrincipalId : null;
+        if (privateSource && (privateUser is null || privateUser != reader.User?.PrincipalId) || human is { } viewer && privateSource && reader.User?.PrincipalId != viewer)
+            throw new AccessDeniedException(human is null ? "experience_source_unavailable" : "approval_unavailable");
+        return TenantExperienceSourceProjection.Run(reader, settings, sourceRun, privateUser, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
     }
     public async ValueTask<TenantExperienceSourceObservation> ObserveTenantExperienceSourceAsync(TenantRunReference reference, Guid? generation,
         ExperienceSourceKind kind, Guid id, TenantExperienceSourceWitness? expected = null, Guid? inspectionHuman = null, CancellationToken ct = default)
@@ -102,5 +103,14 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
                 .Where(i => string.IsNullOrWhiteSpace(query) || i.Score > 0).OrderByDescending(i => i.Score).ThenByDescending(i => i.Item.UpdatedAt).ThenBy(i => i.Item.ExperienceId).Take(Math.Clamp(limit, 1, 11)).Select(i => i.Item).ToArray();
         }
         return new(reader, settings, items, reader.Security.Tenant.Revision, allowed);
+    }
+    private static async Task<bool> HasPrivateExperienceEvidence(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
+    {
+        var ids = TenantExperienceReferences.Facts(run.Checkpoint).Select(i => i.ExperienceId).Distinct().ToArray();
+        if (ids.Length == 0) return TenantExperienceRules.HasPrivateEvidence(run, false);
+        var rows = await db.Set<TenantExperienceRecord>().AsNoTracking().Where(i => i.TenantId == run.Owner.TenantId && ids.Contains(i.ExperienceId))
+            .Select(i => new { i.ExperienceId, i.UserPrincipalId }).ToArrayAsync(ct).ConfigureAwait(false);
+        if (rows.Length != ids.Length) throw new AccessDeniedException("experience_source_changed");
+        return TenantExperienceRules.HasPrivateEvidence(run, rows.Any(i => i.UserPrincipalId is not null));
     }
 }

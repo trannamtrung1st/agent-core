@@ -42,7 +42,7 @@ public sealed partial class TenantAgentAccessTests
     }
     private static MemoryProposal Learn(string value = "PRIVATE_CUSTOMER_EVIDENCE", MemoryProposalOperation operation = MemoryProposalOperation.Upsert,
         string subject = "Evidence workflow") => new(operation, MemoryKind.Preference, subject, value, MemoryScopeHint.User, MemoryProposalSource.UserExplicit);
-    private static async Task<(Guid Tenant, Guid Agent)> OwnedMemoryAgent(HttpClient owner, Guid? existingTenant = null, bool enabled = true)
+    private static async Task<(Guid Tenant, Guid Agent)> OwnedMemoryAgent(HttpClient owner, Guid? existingTenant = null, bool enabled = true, bool automation = false)
     {
         Guid tenant;
         if (existingTenant is { } selected) tenant = selected;
@@ -51,6 +51,7 @@ public sealed partial class TenantAgentAccessTests
         var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Owned learned memory", expectedRevision = await Revision(owner, tenant) }));
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
         candidate["memoryPolicy"] = JsonSerializer.SerializeToNode(new MemoryPolicy(enabled, enabled, enabled, enabled, enabled), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if (automation) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(new TriggerPolicy(true, true, true, false, false, false, 20, 30, 1, ["schedule"]), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         candidate["stateIsolationPolicy"] = JsonSerializer.SerializeToNode(new StateIsolationPolicy(AgentStateVisibility: AgentStateVisibility.InstanceSummary,
             MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary), new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
         candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(), capabilities = new { mode = "Selected", resolvedCapabilities = new[] { "agent.state.inspect" } },

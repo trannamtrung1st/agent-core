@@ -35,10 +35,12 @@ public sealed partial class SqliteIamStore : ITenantExperienceReviewStore
         }
         else
         {
-            var run = AgentRunStoreMapping.ToDomain(sourceRun!); var privateSource = TenantExperienceRules.HasPrivateEvidence(run);
+            var run = AgentRunStoreMapping.ToDomain(sourceRun!);
+            await RequireTenantOutputSources(db, run, ct).ConfigureAwait(false);
+            var privateSource = await HasPrivateExperienceEvidence(db, run, ct).ConfigureAwait(false);
             if (privateSource && TenantRunProfileRules.User(run, await TenantCoreEventProduction.RootAsync(db, run, ct).ConfigureAwait(false), state)?.PrincipalId != human.PrincipalId)
                 throw new AccessDeniedException("experience_source_unavailable");
-            await RequireTenantOutputSources(db, run, ct).ConfigureAwait(false); projected = TenantExperienceSourceProjection.RunEvidence(run, privateSource ? human.PrincipalId : null);
+            projected = TenantExperienceSourceProjection.RunEvidence(run, privateSource ? human.PrincipalId : null);
         }
         return new(tenant, instance, agent.PrincipalId, human.PrincipalId, projected.Witness, projected.Title, state.Tenant.Revision, agent.Instance.Revision);
     }
