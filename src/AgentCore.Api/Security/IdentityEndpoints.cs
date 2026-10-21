@@ -11,9 +11,7 @@ public static class IdentityEndpoints
     public sealed record LoginRequest(string Login, string Password);
     public sealed record InvitationProof(Guid TenantId, Guid InvitationId, string Token);
     public sealed record RegistrationRequest(string Login, string DisplayName, string Password, InvitationProof Invitation);
-    public sealed record AccountStatusRequest(IdentityStatus Status);
     public sealed record PasswordChangeRequest(string CurrentPassword, string NewPassword);
-    public sealed record CreateTenantRequest(string Name, string Slug);
 
     public static void Map(WebApplication app)
     {
@@ -90,25 +88,7 @@ public static class IdentityEndpoints
             return Results.Json(new { user.TenantId, user.UserId, user.PrincipalId });
         }));
 
-        app.MapPut("/api/v2/system/accounts/{accountId:guid}/status", (Guid accountId, AccountStatusRequest request, HttpContext http,
-            IIamStore store, AccountAdministrationService administration, CancellationToken ct) => IdentityHttp.Respond(async () =>
-        {
-            var actorAccount = IdentityHttp.AccountId(http.User)!.Value;
-            var system = await store.ReadSystemAsync(ct).ConfigureAwait(false);
-            var actor = system.Principals.SingleOrDefault(p => p.AccountId == actorAccount && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active)
-                ?? throw new AccessDeniedException("permission_denied");
-            await administration.SetStatusAsync(actor.PrincipalId, accountId, request.Status, ct).ConfigureAwait(false);
-            return Results.NoContent();
-        })).RequireAuthorization();
-        app.MapPost("/api/v2/system/tenants", (CreateTenantRequest request, HttpContext http, IIamStore store, TenantAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
-        {
-            var accountId = IdentityHttp.AccountId(http.User)!.Value;
-            var system = await store.ReadSystemAsync(ct).ConfigureAwait(false);
-            var principal = system.Principals.SingleOrDefault(p => p.AccountId == accountId && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active)
-                ?? throw new AccessDeniedException("permission_denied");
-            var tenant = await access.CreateTenantAsync(principal.PrincipalId, accountId, request.Name, request.Slug, ct).ConfigureAwait(false);
-            return Results.Json(tenant.Tenant, statusCode: 201);
-        })).RequireAuthorization();
+
     }
 
     private static object SafeAccount(Account account) => new { account.AccountId, account.LoginKey, account.DisplayName };

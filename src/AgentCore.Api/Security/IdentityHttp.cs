@@ -105,7 +105,7 @@ public static class IdentityHttp
                 catch (AntiforgeryValidationException)
                 { await FailureAsync(http.Response, 400, "invalid_csrf").ConfigureAwait(false); return; }
             }
-            if (http.Request.RouteValues.TryGetValue("tenantId", out var raw))
+            if (http.Request.Path.StartsWithSegments("/api/v2/tenants") && http.Request.RouteValues.TryGetValue("tenantId", out var raw))
             {
                 if (AccountId(http.User) is not { } accountId || !Guid.TryParse(Convert.ToString(raw), out var tenantId))
                 { await FailureAsync(http.Response, 401, "not_authenticated").ConfigureAwait(false); return; }

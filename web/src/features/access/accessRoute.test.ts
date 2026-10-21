@@ -69,3 +69,9 @@ it('keeps Platform audit outside organization routing and rejects extra segments
   expect(canonicalAppUrl('/system/audit')).toBe('/system/audit');
   expect(parseAccessRoute('/system/audit/foreign')?.view).toBe('not-found');
 });
+
+it.each(['accounts','organizations'])('pins System %s independently of membership and rejects extra paths', page => {
+  expect(parseAccessRoute('/system/'+page)).toEqual({area:'access',view:'system',page});
+  expect(canonicalAppUrl('/system/'+page)).toBe('/system/'+page);
+  expect(parseAccessRoute('/system/'+page+'/extra')?.view).toBe('not-found');
+});

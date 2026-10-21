@@ -2,7 +2,7 @@ import { ApiOutlined, AppstoreOutlined, AudioOutlined, BranchesOutlined, CloudUp
 const icons: Record<string, typeof UserOutlined> = {
   organizations: AppstoreOutlined, members: UserOutlined, roles: SafetyOutlined, access: KeyOutlined, audit: HistoryOutlined,
   instances: RobotOutlined, definitions: AppstoreOutlined, credentials: KeyOutlined, events: ThunderboltOutlined,
-  'system-audit': HistoryOutlined, 'browser-privacy': SafetyOutlined, sandboxes: CodeOutlined, overview: InfoCircleOutlined, profile: UserOutlined, version: BranchesOutlined,
+  'system-organizations': AppstoreOutlined, 'system-accounts': UserOutlined, 'system-audit': HistoryOutlined, 'browser-privacy': SafetyOutlined, sandboxes: CodeOutlined, overview: InfoCircleOutlined, profile: UserOutlined, version: BranchesOutlined,
   instructions: FileTextOutlined, conversation: MessageOutlined, behavior: ControlOutlined, initiative: ThunderboltOutlined,
   voice: AudioOutlined, models: RobotOutlined, providers: ApiOutlined, execution: FieldTimeOutlined,
   skills: ToolOutlined, resources: FolderOutlined, workspace: CodeOutlined, capabilities: SafetyOutlined,

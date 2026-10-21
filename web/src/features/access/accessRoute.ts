@@ -3,15 +3,15 @@ export type AccessPage = 'governance' | 'access' | 'members' | 'roles' | 'audit'
 export type TenantInstancePage = 'profile' | 'version' | 'skills' | 'resources' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'sandbox' | 'workspace' | 'access' | 'connections' | 'lifecycle' | 'activity-sessions' | 'activity-runs' | 'automations';
 export type AccessRoute = { area: 'access' } & (
   | { view: 'sign-in' }
-  | { view: 'system'; page: 'browser-privacy' | 'audit' }
+  | { view: 'system'; page: 'browser-privacy' | 'audit' | 'organizations' | 'accounts' }
   | { view: 'account'; page: 'organizations' | 'profile' }
   | { view: 'tenant'; tenantId: string; page: AccessPage; definitionId?: string; draftId?: string; draftPage?: DraftPage; requestId?: string; instanceId?: string; instancePage?: TenantInstancePage }
   | { view: 'invitation'; invitationId: string }
   | { view: 'not-found' });
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 export function parseAccessRoute(path: string): AccessRoute | null {
-  const system = /^\/system\/(browser-privacy|audit)\/?$/i.exec(path);
-  if (system) return { area: 'access', view: 'system', page: system[1].toLowerCase() as 'browser-privacy' | 'audit' };
+  const system = /^\/system\/(browser-privacy|audit|organizations|accounts)\/?$/i.exec(path);
+  if (system) return { area: 'access', view: 'system', page: system[1].toLowerCase() as 'browser-privacy' | 'audit' | 'organizations' | 'accounts' };
   if (path === '/sign-in') return { area: 'access', view: 'sign-in' };
   if (path === '/account' || path === '/account/organizations') return { area: 'access', view: 'account', page: 'organizations' };
   if (path === '/account/profile') return { area: 'access', view: 'account', page: 'profile' };
