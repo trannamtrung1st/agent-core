@@ -14,7 +14,8 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations, TenantRunCancellationService cancellations,
     TenantSessionLiveDelivery delivery, IIamStore inputSecurity, ITenantSessionStore inputSessions,
     TenantVoiceService? voiceService = null, VoiceAvailability? voiceAvailability = null,
-    InteractionPolicy? voicePolicy = null, Func<TenantRunService>? voiceCommands = null) : ITenantRunDispatcher, IAsyncDisposable
+    InteractionPolicy? voicePolicy = null, Func<TenantRunService>? voiceCommands = null,
+    Func<TenantRequestIsolationService>? requestIsolation = null, ITenantRequestIsolationStore? requestIsolationStore = null) : ITenantRunDispatcher, IAsyncDisposable
 {
     private sealed class Live(AgentRun run, SessionRuntime runtime, TenantSessionLiveDelivery.Source output, bool ownsCapacity)
     {
@@ -29,8 +30,16 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     }
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Live> _live = [];
-    private readonly Dictionary<(Guid Run, Guid Generation), TaskCompletionSource<bool>> _dispatching = [];
+    private sealed class PendingDispatch(Guid session)
+    {
+        public Guid Session { get; } = session;
+        public bool RequestSettled;
+        public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+    private readonly Dictionary<(Guid Run, Guid Generation), PendingDispatch> _dispatching = [];
     private bool _stopping;
+    // Deterministic fixture barrier around the existing claim/snapshot registration race.
+    internal Func<Guid, Task>? BeforeDispatchRegistration { get; set; }
 
     // Deterministic fixture barrier: a durable wait is visible before its supervised
     // generation has finished releasing the provider/runtime and capacity slot.
@@ -49,23 +58,23 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     public async ValueTask<bool> DispatchAsync(AgentRun run, CancellationToken cancellationToken = default)
     {
         if (run.Owner.TenantId is null || run.Status != AgentRunStatus.Running || run.Claim is null) return false;
-        var key = (run.AgentRunId, run.Claim.Generation); TaskCompletionSource<bool> attempt; var owner = false;
+        var key = (run.AgentRunId, run.Claim.Generation); PendingDispatch attempt; var owner = false;
         lock (_gate)
         {
             if (_stopping) return false;
             if (!_dispatching.TryGetValue(key, out attempt!))
-            { attempt = new(TaskCreationOptions.RunContinuationsAsynchronously); _dispatching.Add(key, attempt); owner = true; }
+            { attempt = new(run.SessionId); _dispatching.Add(key, attempt); owner = true; }
         }
-        if (!owner) return await attempt.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (!owner) return await attempt.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var accepted = await DispatchClaimAsync(run, cancellationToken).ConfigureAwait(false);
-            attempt.TrySetResult(accepted); return accepted;
+            var accepted = await DispatchClaimAsync(run, attempt, cancellationToken).ConfigureAwait(false);
+            attempt.Completion.TrySetResult(accepted); return accepted;
         }
-        catch { attempt.TrySetResult(false); throw; }
+        catch { attempt.Completion.TrySetResult(false); throw; }
         finally { lock (_gate) { if (_dispatching.GetValueOrDefault(key) == attempt) _dispatching.Remove(key); } }
     }
-    private async ValueTask<bool> DispatchClaimAsync(AgentRun proposed, CancellationToken cancellationToken)
+    private async ValueTask<bool> DispatchClaimAsync(AgentRun proposed, PendingDispatch attempt, CancellationToken cancellationToken)
     {
         var run = await runs.FindTenantRunAsync(proposed.Owner.TenantId!.Value, proposed.AgentRunId, cancellationToken).ConfigureAwait(false);
         if (run is not { Status: AgentRunStatus.Running, Claim: { } claim } || claim.Generation != proposed.Claim!.Generation) return false;
@@ -95,11 +104,12 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         var frame = new TenantRuntimeFrame(run.Owner, run.SessionId, run.AgentRunId, claim.Generation);
         var snapshot = await storage.LoadTenantRuntimeAsync(frame, cancellationToken).ConfigureAwait(false);
         if (snapshot is null) return false;
+        if (BeforeDispatchRegistration is { } beforeRegistration) await beforeRegistration(run.SessionId).WaitAsync(cancellationToken).ConfigureAwait(false);
         Live? admitted = null; var refused = false; var ownsCapacity = false;
         lock (_gate)
         {
             if (_stopping) return false;
-            if (_cancelling.Contains((run.Owner.TenantId!.Value, run.AgentRunId)) || _quiescentWrites.Contains(run.SessionId) || sessionWriteEpoch != _sessionWriteEpoch) refused = true;
+            if (attempt.RequestSettled || _cancelling.Contains((run.Owner.TenantId!.Value, run.AgentRunId)) || _quiescentWrites.Contains(run.SessionId) || sessionWriteEpoch != _sessionWriteEpoch) refused = true;
             else if (_live.TryGetValue(run.SessionId, out var raced))
             {
                 if (raced.Run.AgentRunId == run.AgentRunId && raced.Run.Claim!.Generation == claim.Generation) existing = raced;
@@ -212,6 +222,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
                     release = live.OwnsCapacity; live.OwnsCapacity = false;
                 }
                 if (release) capacity.ReleaseTenantRuntime(); live.OperationStop.Dispose(); live.Lifetime.Dispose();
+                await SettleReleasedRequestAsync(live).ConfigureAwait(false);
                 live.Stopped.TrySetResult();
             }
         }

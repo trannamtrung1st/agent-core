@@ -102,6 +102,8 @@ builder.Services.AddSingleton<AgentDefinitionResourceService>();
 builder.Services.AddSingleton<TenantRuntimeCapacity>();
 builder.Services.AddSingleton<TenantSessionRuntimeHost>();
 builder.Services.AddSingleton<ITenantHostedRuntimeStateReader>(p => p.GetRequiredService<TenantSessionRuntimeHost>());
+builder.Services.AddSingleton<ITenantRequestIsolationControl>(p => p.GetRequiredService<TenantSessionRuntimeHost>());
+builder.Services.AddHostedService<TenantRequestIsolationHostedService>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<WorkspaceCleanupHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();

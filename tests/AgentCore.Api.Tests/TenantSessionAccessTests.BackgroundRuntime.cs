@@ -71,13 +71,15 @@ public sealed partial class TenantSessionAccessTests
             { if(exception is not null) model.Failures.Enqueue(exception.ToString()); }
         }
     }
-    private sealed class TenantBackgroundMemoryFactory(string root, TenantBackgroundModel model) : AgentCoreApiFactory
+    private sealed class TenantBackgroundMemoryFactory(string root, TenantBackgroundModel model, bool holdCompletion = false) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => true;
         protected override IReadOnlyDictionary<string,string?> ExtraConfiguration => new Dictionary<string,string?> {
             ["Persistence:WorkspaceRoot"]=Path.Combine(root,"workspaces"), ["Browser:Enabled"]="false",["OpenSandbox:Enabled"]="false" };
         protected override void ConfigureWebHost(IWebHostBuilder builder)
-        { base.ConfigureWebHost(builder); builder.ConfigureTestServices(services => {services.Replace(ServiceDescriptor.Singleton<ILanguageModel>(model));services.AddSingleton<ILoggerProvider>(new BackgroundFailureLogs(model));}); }
+        { base.ConfigureWebHost(builder); builder.ConfigureTestServices(services => {services.Replace(ServiceDescriptor.Singleton<ILanguageModel>(model));services.AddSingleton<ILoggerProvider>(new BackgroundFailureLogs(model));
+            if (holdCompletion) services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new TenantRunExecution(p.GetRequiredService<ITenantRuntimeStore>(), p.GetRequiredService<ITenantRunStore>(), p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>())));
+        }); }
     }
     private sealed class TenantBackgroundSqliteFactory(string root, TenantBackgroundModel model, bool holdCompletion = false) : DurableSqliteHostFactory(Path.Combine(root,"store.db"),languageModel:model)
     {
@@ -93,16 +95,20 @@ public sealed partial class TenantSessionAccessTests
             });
         }
     }
-    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null,bool reportReads=false,bool independentTask=false)
+    private static async Task<(Guid Tenant,Guid Session,Guid Source)> StartTenantBackground(WebApplicationFactory<Program> factory,HttpClient owner,bool createAuthority=true,bool submit=true,bool attachmentCapability=false,IReadOnlyList<string>? fileCapabilities=null,bool reportReads=false,bool independentTask=false,bool requestIsolated=false)
     {
         await Login(owner,"owner@example.test","explicit-synthetic-test-password");
         var tenant=(await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();var api=$"/api/v2/tenants/{tenant}";
         var human=(await Json(await owner.GetAsync(api+"/access/me"))).GetProperty("principalId").GetGuid();
         JsonElement agent;
-        if (attachmentCapability || fileCapabilities is not null)
+        if (attachmentCapability || fileCapabilities is not null || requestIsolated)
         {
             var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Background exact file reader", expectedRevision = await Revision(owner, tenant) }));
             var candidate = System.Text.Json.Nodes.JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
+            if (requestIsolated)
+            {
+                candidate["voice"]!["enabled"] = false;
+            }
             if (independentTask) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode((await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant", 32))!.TriggerPolicy, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var capabilities = fileCapabilities ?? new[] { ToolCatalog.BackgroundStart, ToolCatalog.AttachmentsRead, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList };
             candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(),
@@ -115,10 +121,20 @@ public sealed partial class TenantSessionAccessTests
         }
         else agent=await Json(await owner.PostAsJsonAsync(api+"/agents",new{templateId="general-assistant",version=32,expectedRevision=await Revision(owner,tenant)}));
         var instance=agent.GetProperty("instance").GetProperty("instanceId").GetGuid();var executor=agent.GetProperty("principalId").GetGuid();
+        var instanceRevision = 1;
+        if (requestIsolated)
+        {
+            var isolation = api + $"/agents/{instance}/state-isolation";
+            var preview = await Json(await owner.PostAsync(isolation + "/presets/Stateless", null));
+            Assert.Equal(System.Net.HttpStatusCode.OK, (await owner.PostAsJsonAsync(isolation + "/apply", new {
+                expectedRevision = preview.GetProperty("securityRevision").GetInt64(), expected = preview.GetProperty("plan").GetProperty("expected"),
+                draft = preview.GetProperty("plan").GetProperty("draft"), fingerprint = preview.GetProperty("plan").GetProperty("fingerprint").GetString() })).StatusCode);
+            instanceRevision++;
+        }
         if(createAuthority){var access=factory.Services.GetRequiredService<TenantAccessService>();var role=await access.SaveRoleAsync(human,tenant,null,"Background executor",["sessions.create","agent-runs.create"],await Revision(owner,tenant));
         await access.AssignRoleAsync(human,tenant,executor,role.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant));}
         if(reportReads) { var access=factory.Services.GetRequiredService<TenantAccessService>(); var readRole=await access.SaveRoleAsync(human,tenant,null,"Independent completion source reader",["sessions.read","agent-runs.read"],await Revision(owner,tenant)); await access.AssignRoleAsync(human,tenant,executor,readRole.RoleId,AgentCore.Domain.Security.AccessScope.ForTenant(tenant),await Revision(owner,tenant)); }
-        var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new{agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=1}))).GetProperty("sessionId").GetGuid();
+        var session=(await Json(await owner.PostAsJsonAsync(api+"/sessions",new{agentInstanceId=instance,expectedRevision=await Revision(owner,tenant),expectedInstanceRevision=instanceRevision}))).GetProperty("sessionId").GetGuid();
         if(!submit)return(tenant,session,Guid.Empty);
         var result=await Json(await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new{messageId=Guid.NewGuid(),text="Start the exact owned background check",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1}));
         return(tenant,session,result.GetProperty("runId").GetGuid());

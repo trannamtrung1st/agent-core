@@ -30,6 +30,9 @@ public sealed partial class SessionRuntime
 
     private async Task TryFinalizeRequestIsolationAsync(EventContext context, CancellationToken ct)
     {
+        // Tenant settlement belongs to the same host's quiescent reservation after this
+        // generation releases. A completed Run must never regain an active write lease.
+        if (_runtimeOwner is not null) return;
         if (!RequestIsolation.Required(_snapshot.Definition) || _snapshot.DurableLastEntrySequence == 0
             || LifecycleTransition.IsTerminal(_snapshot) || _snapshot.Status == SessionStatus.Paused
             || _activeResponseId is not null && !_responseTerminal || _agentRunAdmissionPending || HasPendingUserBatch()) return;

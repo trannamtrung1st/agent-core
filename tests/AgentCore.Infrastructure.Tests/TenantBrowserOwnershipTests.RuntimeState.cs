@@ -6,6 +6,33 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantBrowserOwnershipTests
 {
     [Fact]
+    public async Task Tenant_request_retirement_cold_probe_never_binds_or_claims_a_namespace()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tenant-request-cold-" + Guid.NewGuid().ToString("N")); var browser = Native(root); var owner = Owner();
+        Assert.Equal("already_closed", await browser.RetireTenantIfBoundAsync(owner, _ => ValueTask.FromResult(false)));
+        Assert.False(Directory.Exists(root)); browser.BindSession(owner.SessionId, owner.AgentInstanceId);
+        await Assert.ThrowsAsync<AccessDeniedException>(() => browser.RetireTenantIfBoundAsync(owner, _ => ValueTask.FromResult(true)).AsTask());
+        await browser.StopAsync(CancellationToken.None);
+    }
+
+    [TenantChromiumTheory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_request_retirement_rechecks_exact_proof_and_preserves_a_sibling_view(bool persistent)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tenant-request-retirement-" + Guid.NewGuid().ToString("N")); var browser = Native(root);
+        await browser.StartAsync(CancellationToken.None);
+        try
+        {
+            var first = Owner(); var second = first with { SessionId = Guid.NewGuid() };
+            var a = await RetirementPage(browser, first, persistent); var b = await RetirementPage(browser, second, persistent);
+            Assert.Equal("active", await browser.RetireTenantIfBoundAsync(first, _ => ValueTask.FromResult(false))); Assert.False(a.IsClosed); Assert.False(b.IsClosed);
+            await Assert.ThrowsAsync<AccessDeniedException>(() => browser.RetireTenantIfBoundAsync(first with { TenantId = Guid.NewGuid() }, _ => ValueTask.FromResult(true)).AsTask());
+            Assert.Equal("closed", await browser.RetireTenantIfBoundAsync(first, _ => ValueTask.FromResult(true))); Assert.True(a.IsClosed); Assert.False(b.IsClosed);
+            Assert.Equal("already_closed", await browser.RetireTenantIfBoundAsync(first, _ => ValueTask.FromResult(true)));
+        }
+        finally { await browser.StopAsync(CancellationToken.None); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task Tenant_runtime_browser_cold_binding_preserves_unknown_sharing_and_disabled_owner_fences()
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-browser-state-cold-" + Guid.NewGuid().ToString("N"));

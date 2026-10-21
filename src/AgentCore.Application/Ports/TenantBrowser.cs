@@ -45,6 +45,7 @@ public interface ITenantBrowserCommandTarget
 public sealed record TenantBrowserRetirementPage(IReadOnlyList<TenantBrowserOwner> Items, Guid? NextCursor);
 public interface ITenantBrowserRetirement
 {
+    ValueTask<string> RetireTenantIfBoundAsync(TenantBrowserOwner owner, Func<CancellationToken, ValueTask<bool>> stillRetired, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantBrowserRetirementPage> ListTenantRetirementCandidatesAsync(Guid? afterSession, int limit, CancellationToken ct = default);
     // Recheck canonical lifecycle under native gates. An already started close can finish only its original context.
     ValueTask<string> RetireTenantAsync(TenantBrowserOwner owner, Func<CancellationToken, ValueTask<bool>> stillRetired, CancellationToken ct = default);

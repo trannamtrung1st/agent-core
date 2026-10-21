@@ -24,6 +24,9 @@ public sealed partial class SqliteIamStore
     {
         var target = await RequireAutomationConversation(db, state, admission.Current, human, consent?.Conversation, ct);
         if (target is null) return;
+        var previousRuns = (await OwnedRuns(db, target.Owner.TenantId).AsNoTracking().Where(r => r.SessionId == target.Owner.SessionId.ToString("D"))
+            .ToArrayAsync(ct).ConfigureAwait(false)).Select(AgentRunStoreMapping.ToDomain).ToArray();
+        TenantRequestIsolationRules.AutomationRoot(target.Snapshot, admission.Run, previousRuns);
         if (target.Owner != admission.SessionOwner || target.Snapshot.Revision != admission.ExpectedSessionRevision
             || JsonSerializer.Serialize(target.Snapshot) != JsonSerializer.Serialize(admission.Session)) throw new SecurityConflictException("operation_witness_changed");
         if (!preparing && (target.Snapshot.PendingAgentInputIds.Count > 0 || await db.AgentRuns.AnyAsync(r => r.SessionId == target.Owner.SessionId.ToString("D")

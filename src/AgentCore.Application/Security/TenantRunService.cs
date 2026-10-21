@@ -13,7 +13,8 @@ public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Gu
 public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null, bool CanCancel = false);
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null,
+    ITenantRequestIsolationStore? requestIsolation = null)
 {
     public async ValueTask<TenantRunReceipt> SubmitTextAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
@@ -46,8 +47,24 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", session.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
-        if (state.Tenant.Revision != expectedSecurityRevision || session.Snapshot.Revision != expectedSessionRevision) throw new SecurityConflictException("stale_revision");
         if (text is null || messageId == Guid.Empty || string.IsNullOrWhiteSpace(text) && requested.Length == 0 || text.Length > 8000) throw AgentCoreErrors.Validation("A message ID and text up to 8000 characters or an attachment are required.");
+        var replay = await runs.FindTenantAcceptedHumanInputAsync(session.Owner, initiator.PrincipalId, messageId, text, requested, interruption, speech is null ? SessionMode.Text : SessionMode.Voice, ct).ConfigureAwait(false);
+        if (replay is not null)
+        {
+            await RequireMessageInterruptionAsync(tenant, sessionId, initiator, interruption, ct).ConfigureAwait(false);
+            await RequireMessageAttachmentsAsync(tenant, sessionId, initiator, requested, ct).ConfigureAwait(false);
+            var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
+            await Require(current, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false);
+            await Require(current, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", session.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
+            if (current.Tenant.Revision != state.Tenant.Revision || (await sessions.FindTenantSessionAsync(tenant, sessionId, ct).ConfigureAwait(false))?.Owner != session.Owner)
+                throw new SecurityConflictException("stale_revision");
+            if ((await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false)).Tenant.Revision != state.Tenant.Revision)
+                throw new SecurityConflictException("stale_revision");
+            return new(new(false, replay.Run.AgentRunId, replay.EntryId, replay.Run.ResponseId!.Value, replay.Run.ActivationId,
+                replay.Run.Admission.Activation.RootActivationId, replay.SessionRevision, current.Tenant.Revision), replay.EntrySequence);
+        }
+        if (requestIsolation is not null && await requestIsolation.HasTenantRequestBoundaryAsync(session.Owner, ct).ConfigureAwait(false)) throw RequestIsolation.FreshSessionRequired();
+        if (state.Tenant.Revision != expectedSecurityRevision || session.Snapshot.Revision != expectedSessionRevision) throw new SecurityConflictException("stale_revision");
         var (agent, resolved) = await configurations.ResolveAsync(tenant, session.Owner.AgentInstanceId, ct).ConfigureAwait(false);
         if (agent.PrincipalId != session.Owner.ExecutorPrincipalId) throw new AccessDeniedException("executor_unavailable");
         if (agent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");

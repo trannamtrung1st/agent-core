@@ -130,6 +130,8 @@ public sealed partial class SqliteIamStore
                     throw new SecurityConflictException("message_id_conflict");
                 result = new(false, saved, Guid.Parse(inputId), current.Revision) { EntrySequence = savedInput.EntrySequence }; return false;
             }
+            var previousRuns = (await OwnedRuns(db, root.TenantId).AsNoTracking().Where(r => r.SessionId == root.SessionId).ToArrayAsync(ct).ConfigureAwait(false)).Select(AgentRunStoreMapping.ToDomain).ToArray();
+            TenantRequestIsolationRules.NewRoot(current, run, previousRuns);
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status == (int)AgentRunStatus.Running && (frame == null || r.AgentRunId != frame.RunId.ToString("D")), ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
             AgentRunRecord? interruptedRow = null; AgentRun? interrupted = null;
             if (admission.Interruption is { } interruption)

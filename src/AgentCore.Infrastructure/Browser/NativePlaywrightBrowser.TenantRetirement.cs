@@ -34,6 +34,19 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserRetirement
         foreach (var item in _tenantRetirements.Where(p => ReferenceEquals(p.Value.Context, context))) _tenantRetirements.TryRemove(item);
     }
 
+    public ValueTask<string> RetireTenantIfBoundAsync(TenantBrowserOwner owner, Func<CancellationToken, ValueTask<bool>> stillRetired, CancellationToken ct = default)
+    {
+        owner.Validate(); ct.ThrowIfCancellationRequested();
+        lock (_bindingGate)
+        {
+            if (_tenantAgents.TryGetValue(owner.AgentInstanceId, out var actual) && actual != owner.Agent
+                || _sessionOwners.TryGetValue(owner.SessionId, out _) && !_tenantSessions.ContainsKey(owner.SessionId))
+                throw new AccessDeniedException("browser_owner_mismatch");
+            if (!_tenantSessions.ContainsKey(owner.SessionId)) return ValueTask.FromResult("already_closed");
+        }
+        return RetireTenantAsync(owner, stillRetired, ct);
+    }
+
     public async ValueTask<string> RetireTenantAsync(TenantBrowserOwner owner, Func<CancellationToken, ValueTask<bool>> stillRetired, CancellationToken ct = default)
     {
         owner.Validate(); ct.ThrowIfCancellationRequested();

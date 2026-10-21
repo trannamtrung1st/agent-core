@@ -1,6 +1,16 @@
 # Testing Strategy
 
+Canonical one-request Sessions now have [focused ingress, child-accounting, retirement and recovery qualification](reports/tenant-request-isolation-verification-2026-10-21.md). Used strict Sessions reject another human or Existing-Session Automation root, retain exact accepted-input retries, wait for child/accounting/native settlement and publish their terminal state through the same tenant host. Actual SQLite restart, MessagePack and desktop/narrow Chat recovery are exercised. Working-file retention cleanup, broader live context/learning parity, rich input, remaining internal consolidation and the exhaustive proposal audit stay open; the original goal remains active.
+
 Canonical Runtime State now has [focused HTTP, model, native Browser and UI qualification](reports/tenant-runtime-state-verification-2026-10-21.md): independently readable tenant-owned counts, bounded partial observations, original-login/current-Run fences, admitted visibility ceilings and explicit freshness recovery. The separate [coordinated isolation editor](reports/tenant-isolation-configuration-verification-2026-10-21.md) retains its atomic three-owner metadata contract. Broader context/isolation effects, rich input, learning/maintenance parity, remaining internal consolidation and exhaustive proposal qualification stay open; the original goal remains active.
+
+## Canonical one-request Session qualification
+
+`TenantAgentAccessTests.RequestIsolation` exercises normal admission, exact old-witness retries before/after terminal state, changed body/mode refusal, strict Run pins after policy relaxation, ownership/CAS and unconfirmed lease fences, concurrent settlement and actual SQLite host recreation. An injected clock triggers the new host's scheduled recovery without recreating a Run claim. A deterministic dispatch barrier holds an unrelated claimed snapshot while a no-op scan runs, then verifies that the original claim completes rather than waiting for lease expiry.
+
+`TenantSessionAccessTests.RequestIsolation` ports the retired request/child-accounting behavior through canonical real Runtime paths on both stores: parent-first and child-first completion, reporting and non-reporting work, quiet NoAction accounting, preserved history and no additional model call for report/finalization. Actual JavaScript MessagePack verifies terminal state, ordinary typed fresh-Session denial, exact transport retry and reconnect. Native opt-in Chromium checks cold non-allocation, proof recheck and sibling-safe view retirement. Existing-Session Automation cases independently refuse a used request-boundary target without another Run or approval.
+
+The native Synthetic browser journey in `web/playwright.tenant-request-isolation.config.ts` sends through the visible composer, observes automatic read-only completion, reloads retained history and starts a separate request with New chat at desktop/narrow widths. See [commands, exact results and limits](reports/tenant-request-isolation-verification-2026-10-21.md). This successor qualifies the retired child-settlement declaration; it does not substitute for the other retired profile/learned-memory, refresh-context or full Definition inheritance scenarios.
 
 ## Canonical Runtime observation qualification
 

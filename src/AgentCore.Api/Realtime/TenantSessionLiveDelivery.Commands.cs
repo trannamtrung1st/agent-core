@@ -137,6 +137,8 @@ public sealed partial class TenantSessionLiveDelivery
             catch (SecurityConflictException ex) { await RetireVoiceIfAccessLostAsync(subscription, ct).ConfigureAwait(false); ack = Reject(command.EventId, ex.ReasonCode, ConflictMessage(ex.ReasonCode)); }
             catch (AgentCoreException ex) when (ex.Code == "VoiceUnavailable")
             { ack = Reject(command.EventId, ex.Code, "Voice is unavailable for this conversation. Continue in text.", "Speech"); }
+            catch (AgentCoreException ex) when (ex.Code == "fresh_session_required")
+            { ack = Reject(command.EventId, ex.Code, "Create a new Session for the next request.", "Session"); }
             catch (AgentCoreException ex) when (ex.Code is "ValidationError" or "Conflict" or "NotFound")
             { ack = Reject(command.EventId, ex.ValidationCode ?? ex.Code, "The command could not be admitted.", ex.Code == "ValidationError" ? "Validation" : "Session"); }
             subscription.LastCommand = command.Sequence;

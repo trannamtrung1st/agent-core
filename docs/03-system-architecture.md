@@ -807,6 +807,8 @@ The optional `agent.state.inspect` tool requires the frozen Definition grant, cu
 
 An already-used request-isolated Session retains its fresh-request boundary if the Instance later relaxes conversation scope. The new authored policy can govern a fresh Session; it cannot admit a second independent request into the old strict Session while child work is settling.
 
+Canonical tenant request settlement runs only after the existing host releases its Run generation and under that host's quiescent Session reservation. The owning store rechecks the immutable Session and all admitted Run policies, no pending input or nonterminal/uncertain work, child completion accounting and exact resource ownership before completing the Session. It never revives a retired Run claim, manufactures another response or writes concurrently with the mailbox. Deferred native retirement and bounded recovery use these same predicates; an unavailable or uncertain resource cannot be treated as confirmed cleanup. Independent human/Automation input into a used strict Session is refused before admission, while exact accepted-input replay and trusted causal continuations retain their existing source checks.
+
 Stored profile Evidence can be omitted independently of explicit Session speech locale. Initial and between-call continuity projection intersects live restrictions with admitted policy; revoked Profile/Experience/Continuity sections are removed, and narrowed Memory scopes are refreshed through their existing reader. This preserves ordinary within-Session transcript history and does not erase historical learned data.
 
 ## Tenant Artifact reference delivery

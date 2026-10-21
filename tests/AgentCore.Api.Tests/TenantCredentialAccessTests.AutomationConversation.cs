@@ -54,6 +54,7 @@ public sealed partial class TenantCredentialAccessTests
             foreach (var mode in new[] { "manual", "scheduled", "chat-review", "read-review", "run-review", "grant", "reject", "stale-target", "no-reviewer", "missing-chat", "missing-read", "archived", "foreign", "invalid-report", "busy", "frozen-target", "cancel-registration", "revoke-before-output", "policy-before-output", "conversation-model", "conflicting-model" }) cases.Add(sqlite, mode);
             cases.Add(true, "restart-pending"); cases.Add(true, "restart-approved"); cases.Add(true, "database-guards"); cases.Add(false, "synthetic-default");
             cases.Add(false, "scoped-inbox"); cases.Add(true, "scoped-inbox");
+            cases.Add(false, "request-boundary"); cases.Add(true, "request-boundary");
             return cases;
         }
     }
@@ -116,6 +117,19 @@ public sealed partial class TenantCredentialAccessTests
         if (mode == "conflicting-model") { Assert.Equal(HttpStatusCode.Forbidden, created.StatusCode); return; }
         Assert.True(created.StatusCode == HttpStatusCode.Created, await created.Content.ReadAsStringAsync()); var saved = await Json(created); var automation = saved.GetProperty("automationId").GetGuid();
         Assert.Equal("existingSession", saved.GetProperty("executionTarget").GetString()); Assert.Equal("none", saved.GetProperty("completionDelivery").GetString());
+        if (mode == "request-boundary")
+        {
+            var isolation = api + $"/agents/{instance}/state-isolation";
+            var preview = await Json(await owner.PostAsync(isolation + "/presets/Stateless", null));
+            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(isolation + "/apply", new {
+                expectedRevision = preview.GetProperty("securityRevision").GetInt64(), expected = preview.GetProperty("plan").GetProperty("expected"),
+                draft = preview.GetProperty("plan").GetProperty("draft"), fingerprint = preview.GetProperty("plan").GetProperty("fingerprint").GetString() })).StatusCode);
+            var response = await owner.PostAsJsonAsync(route + $"/{automation}/run", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 2, expectedAutomationRevision = 1 });
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode); Assert.Contains("automation_conversation_unavailable", await response.Content.ReadAsStringAsync());
+            Assert.Single((await runs.ListTenantSessionRunsAsync(tenant, destination, null, 0, 100)).Items);
+            Assert.Empty((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(PageSize: 100))).Items);
+            return;
+        }
         async Task Reduce(string permission)
         {
             await access.RevokeAssignmentAsync(human, tenant, assignment.AssignmentId, await Revision(owner, tenant));

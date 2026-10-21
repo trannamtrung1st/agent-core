@@ -22,6 +22,8 @@ public sealed partial class InMemoryIamStore
     {
         var target = RequireAutomationConversation(state, admission.Current, human, consent?.Conversation, ct);
         if (target is null) return;
+        TenantRequestIsolationRules.AutomationRoot(target.Snapshot, admission.Run, sessionBacking.AgentRuns.Runs.Values
+            .Where(r => r.Owner == admission.Run.Owner && r.SessionId == target.Owner.SessionId).ToArray());
         if (target.Owner != admission.SessionOwner || target.Snapshot.Revision != admission.ExpectedSessionRevision
             || JsonSerializer.Serialize(target.Snapshot) != JsonSerializer.Serialize(admission.Session)) throw new SecurityConflictException("operation_witness_changed");
         if (!preparing && (target.Snapshot.PendingAgentInputIds.Count > 0

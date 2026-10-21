@@ -107,6 +107,7 @@ public sealed partial class InMemoryMemoryStore
                 if (!TenantRunRules.SameMessage(saved, input, admission)) throw new SecurityConflictException("message_id_conflict");
                 return new(false, saved, input.EntryId, session.Snapshot.Revision) { EntrySequence = input.Sequence };
             }
+            TenantRequestIsolationRules.NewRoot(session.Snapshot, run, AgentRuns.Runs.Values.Where(r => r.Owner == run.Owner && r.SessionId == run.SessionId).ToArray());
             if (AgentRuns.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Status == AgentRunStatus.Running && (frame is null || r.AgentRunId != frame.RunId))) throw new SecurityConflictException("session_in_use");
             AgentRun? interrupted = null;
             if (admission.Interruption is { } interruption)
