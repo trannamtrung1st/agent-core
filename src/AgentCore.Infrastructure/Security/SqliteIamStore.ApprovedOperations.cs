@@ -119,6 +119,17 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             await TenantCredentialReadOperationRules.ReviewerAsync(before, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ContinuityRead is not null)
+        {
+            try
+            {
+                var observed = await RequireContinuityOperation(db, request, run, ct).ConfigureAwait(false);
+                await TenantContinuityReadRules.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+        }
         TenantMemoryOperationObservation? memoryEffect = null;
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.MemoryOperation is not null)
         {

@@ -61,7 +61,7 @@ public static class TenantReportReadRules
     }
 }
 
-public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITenantRunStore runs, IIamStore security, IamAuthorizer iam, TenantReportSourceReadService? sourceReads = null, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null)
+public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITenantRunStore runs, IIamStore security, IamAuthorizer iam, TenantReportSourceReadService? sourceReads = null, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null, TenantContinuityReadService? continuitySources = null)
 {
     public async ValueTask RequireAsync(AgentRun report, CancellationToken ct)
     {
@@ -78,6 +78,11 @@ public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITena
         {
             if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
             await memories.RequireAsync(source.Child, learned, ct).ConfigureAwait(false);
+        }
+        if (TenantHistoricalReferences.Read(source.Child.Checkpoint) is { Count: > 0 } historical)
+        {
+            if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");
+            await continuitySources.RequireAsync(source.Child, historical, null, ct).ConfigureAwait(false);
         }
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         if (sourceReads is not null)

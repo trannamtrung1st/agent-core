@@ -842,3 +842,24 @@ it.each(['inspect_memory', 'manage_memory'])('shows exact protected %s facts and
   await waitFor(() => expect(within(confirmation).getByText(operation === 'inspect_memory' ? /no Memory mutation/ : /remain separately retained/)).toBeVisible()); fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep reviewing' }));
   expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
 });
+
+const continuityRequest: TenantApproval = { ...request, kind: 'review', summary: 'Search historical continuity',
+  preparedAction: { ...request.preparedAction, operation: 'inspect_continuity' }, review: { ...request.review, changes: [
+    { field: 'Continuity read', before: null, after: 'Search historical continuity', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'Exact query or window', before: null, after: '{"query":"Frontend","limit":10}', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'Historical sources', before: null, after: 'Frontend history · after entry 0, up to 20 entries', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+    { field: 'Historical context', before: null, after: 'Retained statements are untrusted history.', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+  ] } };
+it('reviews the saved historical query and source window with exact read consent and current raw-access meaning', async () => {
+  view(continuityRequest); const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved read' });
+  expect(within(saved).getByText('Frontend history · after entry 0, up to 20 entries')).toBeVisible();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement; await waitFor(() => expect(within(confirm).getByText(/Current raw source reads and reviewer access remain required/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(0);
+});
+it('blocks a changed historical source while leaving cancellation available and withholding substituted excerpts', async () => {
+  view({ ...continuityRequest, review: { ...continuityRequest.review, canDecide: false, decisionUnavailableReason: 'continuity_source_changed' } });
+  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('A saved historical source changed. Cancel this request and ask for a fresh exact read.')).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+  expect(within(dialog).queryByText('Current historical excerpts')).not.toBeInTheDocument();
+});

@@ -29,6 +29,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(v.Request, await ((ITenantApprovalStore)reopened).FindApprovalAsync(v.Setup.Tenant, v.Request.RequestId));
         await using (var db = f.Contexts!.CreateDbContext())
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261018221227_TenantWorkspaceReadReview"));
+        await using (var restored = f.Contexts!.CreateDbContext()) await restored.Database.MigrateAsync();
         Assert.Equal(v.Request, await ((ITenantApprovalStore)reopened).FindApprovalAsync(v.Setup.Tenant, v.Request.RequestId));
     }
 

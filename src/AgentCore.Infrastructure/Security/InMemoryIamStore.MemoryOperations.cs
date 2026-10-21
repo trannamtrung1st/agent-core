@@ -79,9 +79,11 @@ public sealed partial class InMemoryIamStore
             && r.RootActivationId == reader.Run.Admission.Activation.RootActivationId && r.Outcome == TenantOperationOutcome.Completed && r.RequestId is not null))
         {
             var request = _approvals.GetValueOrDefault(receipt.RequestId!.Value);
-            if (request?.Operation.MemoryOperation is not { } value || !TenantMemoryToolContract.ReadOnly(value.ToolName)
+            var value = request?.Operation.MemoryOperation ?? request?.Operation.ContinuityRead?.Memory;
+            if (value is null || !TenantMemoryToolContract.ReadOnly(value.ToolName)
                 || !TenantMemoryOperationRules.Sources(value).Any(s => s.MemoryId == item.MemoryId && s.ContentHash == item.ContentHash)
-                || _approvalDecisions.GetValueOrDefault(request.RequestId) is not { Status: TenantApprovalStatus.Approved } decision) continue;
+                || request!.Operation.ContinuityRead is { } continuity && !ContinuitySourceOwnersAvailable(reader, continuity)
+                || _approvalDecisions.GetValueOrDefault(request!.RequestId) is not { Status: TenantApprovalStatus.Approved } decision) continue;
             var references = TenantMemoryOperationRules.Sources(value).Select(s => learnedMemories.GetValueOrDefault((request.TenantId, s.MemoryId))?.Reference()).ToArray();
             if (references.Any(s => s is null)) continue;
             try { ValidateAgentActor(reader.Security, decision.HumanPrincipalId); TenantMemoryReadConsent.RequireAsync(request, reader, references.Select(s => s!).ToArray(), decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult(); return true; }

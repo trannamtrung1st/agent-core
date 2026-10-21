@@ -57,7 +57,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using (var db = f.Contexts!.CreateDbContext())
         {
             var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); var own = Array.FindIndex(migrations, m => m.EndsWith("TenantAttachmentOwnership", StringComparison.Ordinal)); Assert.True(own > 0);
-            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[own - 1])); Assert.False(db.Database.HasPendingModelChanges());
+            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[own - 1])); await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         }
         var reopened = new SqliteAttachmentStore(f.Contexts!, f.Clock, Path.Combine(f.Root, "attachments"));
         Assert.Equal(original, await reopened.FindTenantAsync(s.Tenant, s.Run.SessionId, id)); Assert.NotEmpty(await reopened.ReadTenantContentAsync(s.Tenant, s.Run.SessionId, id));

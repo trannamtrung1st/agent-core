@@ -24,7 +24,7 @@ public static class TenantApprovalSnapshotRules
         }
         if (string.IsNullOrWhiteSpace(s.AgentName) || s.AgentName.Length > 256)
             throw new ArgumentException("Invalid approval display identity.");
-        if (request.Operation.MemoryOperation is not null || request.Operation.AutomationAdmission is not null || request.Operation.ReportSourceRead is not null || request.Operation.CompletionRead is not null || (request.Operation.BackgroundStart is not null || request.Operation.BackgroundReport is not null) || request.Operation.AttachmentRead is not null || request.Operation.WorkspaceMutation is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactPublication is not null || request.Operation.ArtifactVerification is not null)
+        if (request.Operation.ContinuityRead is not null || request.Operation.MemoryOperation is not null || request.Operation.AutomationAdmission is not null || request.Operation.ReportSourceRead is not null || request.Operation.CompletionRead is not null || (request.Operation.BackgroundStart is not null || request.Operation.BackgroundReport is not null) || request.Operation.AttachmentRead is not null || request.Operation.WorkspaceMutation is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactPublication is not null || request.Operation.ArtifactVerification is not null)
         {
             if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null
                 || s.Sandbox is not null || s.SandboxControl is not null || s.SandboxRead is not null || s.Browser is not null || s.CredentialRead is not null)

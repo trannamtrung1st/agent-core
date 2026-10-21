@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
-    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunProfileService? profileSources = null, TenantMemoryService? memorySources = null) : IAgentRunAuthority, ITenantRunContext
+    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunProfileService? profileSources = null, TenantMemoryService? memorySources = null, TenantContinuityReadService? continuitySources = null) : IAgentRunAuthority, ITenantRunContext
 {
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, reason == "account_metadata_unavailable" ? "credentials.read" : "credentials.use", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
@@ -85,6 +85,11 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                     {
                         if (memorySources is null) throw new AccessDeniedException("memory_context_unavailable");
                         await memorySources.RequireAsync(after.Run, learned, cancellationToken).ConfigureAwait(false);
+                    }
+                    if (TenantHistoricalReferences.Read(after.Run.Checkpoint) is { Count: > 0 } historical)
+                    {
+                        if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");
+                        await continuitySources.RequireAsync(after.Run, historical, null, cancellationToken).ConfigureAwait(false);
                     }
                     return current.Definition;
                 }

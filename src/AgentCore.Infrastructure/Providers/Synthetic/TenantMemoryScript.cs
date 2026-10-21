@@ -20,13 +20,13 @@ internal static class TenantMemoryScript
         if (authorization is { } denied && denied.TryGetProperty("outcome", out var outcome) && outcome.GetString() != "completed")
             return Finish("The saved Memory operation was not applied. It will not be repeated.");
         var search = Payload(results.LastOrDefault(m => m.Name == ToolCatalog.ContinuitySearch));
-        if (authorization is { } reviewed && reviewed.TryGetProperty("memoryObservation", out var observation) && observation.ValueKind == JsonValueKind.Object) search = observation;
+        if (authorization is { } reviewed && (reviewed.TryGetProperty("continuityObservation", out var observation) || reviewed.TryGetProperty("memoryObservation", out observation)) && observation.ValueKind == JsonValueKind.Object) search = observation;
         var searchArgs = new { query = "Frontend", limit = 10 };
         if (search is null) return Call(ToolCatalog.ContinuitySearch, searchArgs);
         if (!search.Value.TryGetProperty("items", out var items))
             return search.Value.TryGetProperty("decision", out var decision) && decision.GetString() == "requiresApproval"
                 ? Consent(true, ToolCatalog.ContinuitySearch, searchArgs) : Finish("Memory inspection was unavailable. No change was made.");
-        var selected = items.EnumerateArray().Where(i => i.GetProperty("provenance").GetProperty("scope").GetString() == "identityUser").Take(2).ToArray();
+        var selected = items.EnumerateArray().Where(i => i.GetProperty("kind").GetString() == "Memory" && i.GetProperty("provenance").GetProperty("scope").GetString() == "identityUser").Take(2).ToArray();
         if (prompt.EndsWith("forget", StringComparison.Ordinal)) return selected.Length == 0 ? Finish("No matching retained Memory requires forgetting.")
             : Consent(false, ToolCatalog.MemoryForget, new { memoryId = selected[0].GetProperty("id").GetGuid() });
         if (selected.Length != 2) return Finish("No safely redundant owned Memories require consolidation.");
@@ -40,7 +40,7 @@ internal static class TenantMemoryScript
             kind = "Preference", subject = "Frontend examples", content = "Prefer TypeScript for frontend examples." });
     }
     private static IReadOnlyList<ModelGenerationEvent> Consent(bool read, string tool, object arguments) => Call(ToolCatalog.RequestAuthorization,
-        new { operation = read ? "inspect_memory" : "manage_memory", memory = new { tool, arguments } });
+        read ? new { operation = "inspect_continuity", continuity = new { tool, arguments } } : (object)new { operation = "manage_memory", memory = new { tool, arguments } });
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) => [new ModelToolCallEvent(new("tenant-memory-" + name + "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(arguments))))[..8], name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];
     private static IReadOnlyList<ModelGenerationEvent> Finish(string text) => [new ModelTextDelta(text), new ModelCompleted(ModelStopReason.Completed)];
 }

@@ -41,6 +41,10 @@ public static class TenantMemoryReadConsent
     public static async ValueTask RequireAsync(TenantApprovalRequest request, TenantMemoryReader reader, IReadOnlyList<AgentCore.Domain.Memory.TenantMemoryReference> sources,
         Guid human, IamAuthorizer iam, CancellationToken ct)
     {
+        if (request.Operation.ContinuityRead is { Memory: not null })
+        {
+            await TenantContinuityReadRules.ConsentAsync(request, reader, sources, human, iam, ct).ConfigureAwait(false); return;
+        }
         if (request.Kind != ApprovalKind.Review || request.Status != TenantApprovalStatus.Approved || request.Operation.MemoryOperation is not { } memory
             || !AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(memory.ToolName) || memory.SessionId != reader.Run.SessionId || memory.UserPrincipalId != reader.User?.PrincipalId || sources.Any(s => !TenantMemoryRules.Owns(reader, s))
             || request.TenantId != reader.Security.Tenant.TenantId || request.ExecutorPrincipalId != reader.Agent.PrincipalId

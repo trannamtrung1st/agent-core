@@ -36,6 +36,7 @@ public sealed partial class TenantOperationAuthorizationTests
         {
             var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); var index = Array.FindIndex(migrations, id => id.EndsWith("TenantResourceReadReview", StringComparison.Ordinal)); Assert.True(index > 0);
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[index - 1]));
+            await db.Database.MigrateAsync();
             Assert.False(db.Database.HasPendingModelChanges());
         }
         Assert.Equal(v.Request, await ((ITenantApprovalStore)reopened).FindApprovalAsync(s.Tenant, v.Request.RequestId));

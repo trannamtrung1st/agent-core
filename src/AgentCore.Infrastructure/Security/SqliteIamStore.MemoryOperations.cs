@@ -98,13 +98,15 @@ public sealed partial class SqliteIamStore
             join d in db.Set<TenantApprovalDecision>().AsNoTracking() on a.RequestId equals d.RequestId
             where r.TenantId == reader.Run.Owner.TenantId && a.TenantId == r.TenantId && d.TenantId == r.TenantId
                 && r.SessionId == reader.Run.SessionId.ToString("D") && r.RootActivationId == reader.Run.Admission.Activation.RootActivationId.ToString("D")
-                && r.Outcome == (int)TenantOperationOutcome.Completed && r.ReasonCode == TenantMemoryOperationRules.Completed
+                && r.Outcome == (int)TenantOperationOutcome.Completed && (r.ReasonCode == TenantMemoryOperationRules.Completed || r.ReasonCode == TenantContinuityRules.Completed)
             select new { a.PayloadJson, d.HumanPrincipalId }).ToArrayAsync(ct).ConfigureAwait(false);
         foreach (var row in requests)
         {
             var request = System.Text.Json.JsonSerializer.Deserialize<TenantApprovalRequest>(row.PayloadJson)!;
-            if (request.Operation.MemoryOperation is not { } value || !TenantMemoryToolContract.ReadOnly(value.ToolName)
+            var value = request.Operation.MemoryOperation ?? request.Operation.ContinuityRead?.Memory;
+            if (value is null || !TenantMemoryToolContract.ReadOnly(value.ToolName)
                 || !TenantMemoryOperationRules.Sources(value).Any(s => s.MemoryId == item.MemoryId && s.ContentHash == item.ContentHash)) continue;
+            if (request.Operation.ContinuityRead is { } continuity && !await ContinuitySourceOwnersAvailable(db, reader, continuity, ct).ConfigureAwait(false)) continue;
             var ids = TenantMemoryOperationRules.Sources(value).Select(s => s.MemoryId).ToArray();
             var references = await db.Set<TenantLearnedMemoryRecord>().AsNoTracking().Where(i => i.TenantId == request.TenantId && ids.Contains(i.MemoryId))
                 .Select(i => new TenantMemoryReference(i.TenantId, i.MemoryId, (MemoryScope)i.Scope, i.UserPrincipalId, i.AccountId, i.UserId,

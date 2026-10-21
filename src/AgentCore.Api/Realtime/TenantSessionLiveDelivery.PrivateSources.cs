@@ -9,12 +9,15 @@ public sealed partial class TenantSessionLiveDelivery
     {
         var state = AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint);
         var learnedSources = AgentCore.Application.Security.TenantMemoryOperationReferences.Read(run.Checkpoint);
-        if (state.TenantProfileSource is null && learnedSources is not { Count: > 0 }) return true;
+        var historical = AgentCore.Application.Security.TenantHistoricalReferences.Read(run.Checkpoint);
+        if (state.TenantProfileSource is null && learnedSources is not { Count: > 0 } && historical is not { Count: > 0 }) return true;
         if (state.TenantProfileSource is not null && profiles is null || learnedSources is { Count: > 0 } && memories is null) return false;
+        if (historical.Count > 0 && continuitySources is null) return false;
         try
         {
             if (state.TenantProfileSource is { } source) await profiles!.RequireAsync(run, source, ct).ConfigureAwait(false);
             if (learnedSources is { Count: > 0 } learned) await memories!.RequireAsync(run, learned, ct).ConfigureAwait(false);
+            if (historical.Count > 0) await continuitySources!.RequireAsync(run, historical, null, ct).ConfigureAwait(false);
             return true;
         }
         catch (Exception error) when (error is AgentCore.Application.Security.AccessDeniedException or AgentCore.Application.Security.SecurityConflictException) { return false; }

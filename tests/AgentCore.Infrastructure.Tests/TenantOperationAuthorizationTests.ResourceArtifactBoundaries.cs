@@ -107,7 +107,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using (var db = f.Contexts!.CreateDbContext())
         {
             var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); var own = Array.FindIndex(migrations, m => m.EndsWith("TenantArtifactResourceSourceReview", StringComparison.Ordinal)); Assert.True(own > 0);
-            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[own - 1])); Assert.False(db.Database.HasPendingModelChanges());
+            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[own - 1])); await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         }
         var reopened = new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: f.Clock);
         Assert.Equal(v.Request, await ((ITenantApprovalStore)reopened).FindApprovalAsync(v.Setup.Tenant, v.Request.RequestId));

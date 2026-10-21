@@ -2769,6 +2769,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var attachmentSources = AgentCore.Application.Security.TenantAttachmentContextRules.Merge(executionState.TenantAttachmentSources, request.TenantAttachmentSources);
         var profileSource = executionState.TenantProfileSource;
         var memorySources = TenantMemoryOperationReferences.Read(checkpoint);
+        var historicalSources = TenantHistoricalReferences.Read(checkpoint);
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
         var failedAttempts = (executionState.FailedAttempts ?? []).ToList();
@@ -2831,6 +2832,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ToolLoopExecutionState State()
         {
             memorySources = TenantMemoryService.Merge(memorySources, TenantMemoryOperationReferences.Read(messages));
+            historicalSources = TenantHistoricalReferences.Merge(historicalSources, TenantHistoricalReferences.Read(messages));
             return new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
             finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
             attachmentSources.Count == 0 ? null : attachmentSources, profileSource, memorySources.Count == 0 ? null : memorySources);
@@ -6494,12 +6496,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
                     && input.Error is AgentCore.Application.Security.AccessDeniedException denied
-                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)
+                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal)
                         || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)))
                 {
                     await RefuseProtectedOutputAsync(input.Context, cancellationToken,
                         AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun),
-                        profile: denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal), memory: denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)).ConfigureAwait(false);
+                        profile: denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal), memory: denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal), continuity: denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal)).ConfigureAwait(false);
                     job.Ended?.TrySetResult(false); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;

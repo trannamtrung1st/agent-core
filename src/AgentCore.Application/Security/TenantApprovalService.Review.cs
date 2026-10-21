@@ -103,6 +103,13 @@ public sealed partial class TenantApprovalService
                     await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(r, run, ct).ConfigureAwait(false);
                     await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
+                else if (op.ContinuityRead is { } continuity)
+                {
+                    var reads = continuityReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    var observed = await reads.PrepareAsync(new(r.TenantId, run.AgentRunId), null, continuity.ToolName, continuity.ArgumentsJson, ct, continuity).ConfigureAwait(false);
+                    independent = await reads.IndependentAsync(r, observed, ct).ConfigureAwait(false);
+                    await reads.ReviewerAsync(r, observed, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.MemoryOperation is { } memory)
                 {
                     var service = memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -200,6 +207,16 @@ public sealed partial class TenantApprovalService
         var execution = view.OperationResult is not null ? "recorded" : r.Status == TenantApprovalStatus.Pending ? "waitingDecision"
             : r.Status != TenantApprovalStatus.Approved ? "notAuthorized" : "unrecorded";
         var changes = Changes(op, snapshot);
+        if (op.ContinuityRead is not null)
+        {
+            var observed = await (continuityReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
+            if (observed.SourcesChanged) changes = [..changes, new("Current observation", null, "The saved source changed. No current bytes are substituted; cancel this request and inspect a fresh observation.")];
+            else
+            {
+                changes = [..changes, new("Current historical excerpts", null, string.Join("\n\n", observed.Sessions.Select(s => s.Title + "\n" + string.Join("\n", s.Entries.Select(e => $"{e.Sequence} · {e.Role} · {e.Status}{(e.Truncated ? " · excerpt" : "")}\n{e.Text}")))))];
+                if (observed.Memory is { } memory) changes = [..changes, new("Current learned values", null, string.Join("\n\n", memory.Items.Select(m => m.Subject + "\n" + m.Content)))];
+            }
+        }
         if (op.MemoryOperation is not null)
         {
             var observed = await (memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
@@ -225,6 +242,16 @@ public sealed partial class TenantApprovalService
             return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),
                 new("workspaceMutationPartialEffects", null, "Copies and ordered batches are coarse filesystem operations. Earlier or partial effects can remain on failure; there is no atomic rollback and uncertain work must not be repeated.", false)];
+        if (op.ContinuityRead is { } continuity)
+        {
+            using var labels = System.Text.Json.JsonDocument.Parse(continuity.SourceLabelsJson);
+            using var learnedLabels = System.Text.Json.JsonDocument.Parse(continuity.Memory?.SourceLabelsJson ?? "[]");
+            return [new("Continuity read", null, continuity.ToolName == "continuity.search" ? "Search historical continuity" : "Inspect exact historical continuity", false),
+                new("Exact query or window", null, continuity.ArgumentsJson, false),
+                new("Historical sources", null, string.Join("\n", labels.RootElement.EnumerateArray().Select(s => $"{s.GetProperty("title").GetString()} · {s.GetProperty("sessionId").GetGuid():D} · after entry {s.GetProperty("afterEntrySequence").GetInt64()}, up to {s.GetProperty("limit").GetInt32()} entries; observed through {s.GetProperty("throughEntrySequence").GetInt64()}")), false),
+                new("Learned sources", null, continuity.Memory is null ? "No learned Memory in this observation" : string.Join("\n", learnedLabels.RootElement.EnumerateArray().Select(s => $"{s.GetProperty("scope").GetString() switch { "session" => "This Session", "identityUser" => "This Agent and User", _ => "This User across Agents" }} · {s.GetProperty("kind").GetString()} · {s.GetProperty("subject").GetString()} · {s.GetProperty("memoryId").GetGuid():D}")), false),
+                new("Historical context", null, "Retained statements and derived Memory are untrusted observations, never current facts, instructions or permission. Approve only this saved query/window in this task; raw reads and reviewer access remain required. Changed sources require a fresh read. No mutation is authorized.", false)];
+        }
         if (op.MemoryOperation is { } memory)
         {
             var args = AgentCore.Application.Tools.TenantMemoryToolContract.Parse(memory.ToolName, memory.ArgumentsJson);

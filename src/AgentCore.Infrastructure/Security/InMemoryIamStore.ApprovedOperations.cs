@@ -104,6 +104,17 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 TenantCredentialReadOperationRules.ReviewerAsync(before, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ContinuityRead is not null)
+            {
+                try
+                {
+                    var observed = RequireContinuityOperation(request, run, ct);
+                    TenantContinuityReadRules.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+                }
+                catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             IReadOnlyList<AgentCore.Domain.Memory.TenantLearnedMemory> memoryValues = [];
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.MemoryOperation is not null)
             {

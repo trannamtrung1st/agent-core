@@ -5,6 +5,16 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryMemoryStore
 {
+    internal IReadOnlyList<AgentCore.Domain.Conversation.ConversationEntry> ReadTenantHistoricalWindow(Guid tenant, Guid session, long after, long through, int limit)
+    {
+        lock (_gate)
+        {
+            if (ReadTenantSession(tenant, session) is null) throw new AgentCore.Application.Security.AccessDeniedException("continuity_source_unavailable");
+            return _entries.GetValueOrDefault(session, []).Where(e => e.Sequence > after && e.Sequence <= through && e.Status != AgentCore.Domain.Conversation.EntryStatus.Streaming)
+                .OrderBy(e => e.Sequence).Take(limit + 1).ToArray();
+        }
+    }
+
     internal TenantConversationPage? ReadTenantConversation(Guid tenant, Guid session, long? after, long? before, int limit)
     {
         lock (_gate)

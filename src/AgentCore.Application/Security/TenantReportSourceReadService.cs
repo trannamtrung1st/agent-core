@@ -6,7 +6,7 @@ namespace AgentCore.Application.Security;
 
 // Stateless proof checks. Requests, decisions, receipts and scheduling remain with their incumbent owners.
 public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, ITenantRunStore runs, IIamStore security,
-    ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantRunConfigurationResolver configurations, IamAuthorizer iam, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null)
+    ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantRunConfigurationResolver configurations, IamAuthorizer iam, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null, TenantContinuityReadService? continuitySources = null)
 {
     private async ValueTask RequirePrivateSourcesAsync(AgentRun child, CancellationToken ct)
     {
@@ -20,6 +20,11 @@ public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, I
         {
             if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
             await memories.RequireAsync(child, learned, ct).ConfigureAwait(false);
+        }
+        if (TenantHistoricalReferences.Read(child.Checkpoint) is { Count: > 0 } historical)
+        {
+            if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");
+            await continuitySources.RequireAsync(child, historical, null, ct).ConfigureAwait(false);
         }
     }
     public async ValueTask<(TenantBackgroundCompletion Source, TenantSecurityState State, TenantAgent Agent)> ResolveAsync(TenantBackgroundCompletion source, CancellationToken ct)

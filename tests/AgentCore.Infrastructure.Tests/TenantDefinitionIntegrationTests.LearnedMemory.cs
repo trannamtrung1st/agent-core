@@ -20,7 +20,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     private sealed record MemoryTurn(AgentRun Run, TenantRuntimeFrame Frame, SessionSnapshot Before, SessionSnapshot Proposed);
     private static MemoryProposal Learned(string body = "Use typed durable evidence", MemoryScopeHint scope = MemoryScopeHint.User,
         MemoryKind kind = MemoryKind.Preference, MemoryProposalOperation operation = MemoryProposalOperation.Upsert) => new(operation, kind, "Evidence workflow", body, scope, MemoryProposalSource.UserExplicit);
-    private static async Task<MemorySetup> MemoryOwner(Fixture f, bool read = true, bool manage = true, bool operations = false)
+    private static async Task<MemorySetup> MemoryOwner(Fixture f, bool read = true, bool manage = true, bool operations = false, bool memoryEnabled = true)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
@@ -28,7 +28,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var draft = await f.Service.CreateAsync(human.PrincipalId, owner.TenantId, "Owned learned-memory policy", await Revision());
         draft = await f.Service.UpdateAsync(human.PrincipalId, owner.TenantId, draft.DraftId,
-            draft.Candidate with { MemoryPolicy = new(true, true, true, true, true) }, await Revision(), draft.Revision);
+            draft.Candidate with { MemoryPolicy = new(memoryEnabled, memoryEnabled, memoryEnabled, memoryEnabled, memoryEnabled) }, await Revision(), draft.Revision);
         var publication = await f.Service.PublishAsync(human.PrincipalId, owner.TenantId, draft.DraftId, await Revision(), draft.Revision);
         var builtIns = new SessionNoBuiltinFallback(); var agents = new TenantAgentService(f.Iam, (ITenantAgentStore)f.Iam, builtIns, f.Authorizer, f.Ids, TimeProvider.System, ownedDefinitions: f.Definitions);
         var agent = await agents.CreateFromPublicationAsync(human.PrincipalId, owner.TenantId, Guid.Parse(publication.DefinitionId), 1, await Revision());

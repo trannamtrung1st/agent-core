@@ -62,10 +62,10 @@ public sealed partial class TenantAgentAccessTests
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }));
         return (tenant, agent.GetProperty("instance").GetProperty("instanceId").GetGuid());
     }
-    private static async Task MemoryExecutor(HttpClient owner, Guid tenant, Guid instance, bool read = true, bool manage = true)
+    private static async Task MemoryExecutor(HttpClient owner, Guid tenant, Guid instance, bool read = true, bool manage = true, bool operations = false)
     {
         var api = $"/api/v2/tenants/{tenant}"; var actor = (await Json(await owner.GetAsync(api + $"/agents/{instance}"))).GetProperty("principalId").GetGuid();
-        var permissions = new List<string> { "agents.chat", "sessions.read", "agent-runs.read" }; if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
+        var permissions = new List<string> { "agents.chat", "sessions.read", "agent-runs.read" }; if (operations) permissions.Add("agents.read"); if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
         var role = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Memory executor " + instance.ToString("N"), permissions, expectedRevision = await Revision(owner, tenant) }));
         await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = actor, roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
     }

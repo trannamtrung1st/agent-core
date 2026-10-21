@@ -24,7 +24,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.MemoryOperation is { } memory ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ContinuityRead is { } continuity ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.ContinuityRead.SessionId') = {continuity.SessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.ContinuityRead.ToolName') = {continuity.ToolName}
+            AND json_extract(PayloadJson, '$.Operation.ContinuityRead.ArgumentsJson') = {continuity.ArgumentsJson}
+            """) : operation.MemoryOperation is { } memory ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.MemoryOperation.SessionId') = {memory.SessionId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.MemoryOperation.ToolName') = {memory.ToolName}
@@ -138,7 +143,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests
             WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
             """);
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -182,8 +187,33 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var memoryHuman = memoryVisibility?.HumanPrincipalId.ToString("D");
         var memoryAgentsJson = System.Text.Json.JsonSerializer.Serialize(memoryVisibility?.Agents?.Select(id => id.ToString("D")).ToArray());
         var memorySessionsJson = System.Text.Json.JsonSerializer.Serialize(memoryVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
+        var continuityVisible = continuityVisibility is not null;
+        var continuityHuman = continuityVisibility?.HumanPrincipalId.ToString("D");
+        var continuityAgents = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.Agents?.Select(id => id.ToString("D")).ToArray());
+        var continuityChat = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.ChatAgents?.Select(id => id.ToString("D")).ToArray());
+        var continuitySessions = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
+        var continuityMemory = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.MemoryAgents?.Select(id => id.ToString("D")).ToArray());
         var source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE
+            (json_type(PayloadJson, '$.Operation.ContinuityRead') IS NOT 'object' OR ({continuityVisible}
+                AND ({continuityAgents} = 'null' OR InstanceId IN (SELECT value FROM json_each({continuityAgents})))
+                AND ({continuityChat} = 'null' OR InstanceId IN (SELECT value FROM json_each({continuityChat})))
+                AND ({continuitySessions} = 'null' OR (SessionId IN (SELECT value FROM json_each({continuitySessions}))
+                    AND json_extract(PayloadJson, '$.Operation.ContinuityRead.RootSessionId') IN (SELECT value FROM json_each({continuitySessions}))))
+                AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.ContinuityRead.SessionsJson')) source
+                    WHERE NOT EXISTS (SELECT 1 FROM TenantSessions owner JOIN Sessions saved ON owner.SessionId = saved.SessionId
+                        WHERE owner.TenantId = TenantApprovalRequests.TenantId AND owner.AgentInstanceId = TenantApprovalRequests.InstanceId
+                            AND owner.SessionId = json_extract(source.value, '$.SessionId') AND saved.DurablyDeletedAtUtc IS NULL
+                            AND ({continuitySessions} = 'null' OR owner.SessionId IN (SELECT value FROM json_each({continuitySessions})))))
+                AND (json_type(PayloadJson, '$.Operation.ContinuityRead.Memory') IS NOT 'object' OR (
+                    (json_extract(PayloadJson, '$.Operation.ContinuityRead.Memory.UserPrincipalId') IS NULL OR json_extract(PayloadJson, '$.Operation.ContinuityRead.Memory.UserPrincipalId') = {continuityHuman})
+                    AND ({continuityMemory} = 'null' OR InstanceId IN (SELECT value FROM json_each({continuityMemory})))
+                    AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.ContinuityRead.Memory.SourcesJson')) source
+                        WHERE NOT EXISTS (SELECT 1 FROM TenantLearnedMemories fact WHERE fact.TenantId = TenantApprovalRequests.TenantId AND lower(fact.MemoryId) = json_extract(source.value, '$.MemoryId')
+                            AND ({continuityMemory} = 'null' OR fact.AgentInstanceId IN (SELECT value FROM json_each({continuityMemory})))
+                            AND ({continuityAgents} = 'null' OR fact.AgentInstanceId IN (SELECT value FROM json_each({continuityAgents})))
+                            AND (fact.Scope <> 0 OR {continuitySessions} = 'null' OR fact.SessionId IN (SELECT value FROM json_each({continuitySessions})))))))))
+            AND
             (json_type(PayloadJson, '$.Operation.MemoryOperation') IS NOT 'object' OR ({memoryVisible}
                 AND (json_extract(PayloadJson, '$.Operation.MemoryOperation.UserPrincipalId') IS NULL OR json_extract(PayloadJson, '$.Operation.MemoryOperation.UserPrincipalId') = {memoryHuman})
                 AND ({memoryAgentsJson} = 'null' OR InstanceId IN (SELECT value FROM json_each({memoryAgentsJson})))
@@ -518,6 +548,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.BackgroundStart is not null) await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.ContinuityRead is not null) _ = await RequireContinuityOperation(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.MemoryOperation is not null) _ = await RequireMemoryOperation(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.WorkspaceRead is not null) await RequireWorkspaceReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.WorkspaceMutation is not null) await RequireWorkspaceMutationOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -624,6 +655,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 await RequireWorkspaceMutationOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.ContinuityRead is not null)
+            {
+                var continuity = await RequireContinuityOperation(db, request, run, ct).ConfigureAwait(false);
+                await TenantContinuityReadRules.ReviewerAsync(request, continuity, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.MemoryOperation is not null)
             {

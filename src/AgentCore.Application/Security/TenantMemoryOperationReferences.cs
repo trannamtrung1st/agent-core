@@ -18,6 +18,7 @@ public static class TenantMemoryOperationReferences
         {
             using var json = JsonDocument.Parse(message.Text); var root = json.RootElement;
             if (message.Name == ToolCatalog.RequestAuthorization && root.TryGetProperty("memoryObservation", out var body) && body.ValueKind == JsonValueKind.Object) root = body;
+            if (message.Name == ToolCatalog.RequestAuthorization && root.TryGetProperty("continuityObservation", out var continuity) && continuity.ValueKind == JsonValueKind.Object) root = continuity;
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("tenantMemoryRead", out var marker) || marker.ValueKind != JsonValueKind.True) continue;
             var values = root.GetProperty("memorySources").Deserialize<TenantMemorySource[]>() ?? throw new AccessDeniedException("memory_source_unavailable");
             if (values.Length > 11 || values.Any(s => s.TenantId == Guid.Empty || s.MemoryId == Guid.Empty || !TenantMemoryOperationRules.ValidHash(s.ContentHash))) throw new AccessDeniedException("memory_source_unavailable");
