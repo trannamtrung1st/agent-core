@@ -14,7 +14,7 @@ public sealed partial class SqliteIamStore
         var key = instance.ToString("D"); var row = await OwnedAgents(db, tenant).SingleOrDefaultAsync(a => a.Instance.InstanceId == key, ct).ConfigureAwait(false);
         if (row is null) return new HashSet<AccessScope>();
         var snapshot = new TenantAgentConfigurationSnapshot(Owned(row), await SqliteAgentInstanceStore.ReadSkillsAsync(db, instance, ct).ConfigureAwait(false),
-            await SqliteAgentInstanceStore.ReadResourcesAsync(db, instance, ct).ConfigureAwait(false));
+            await SqliteAgentInstanceStore.ReadResourcesAsync(db, instance, ct).ConfigureAwait(false), await ReadIsolationMetadataAsync(db, key, ct).ConfigureAwait(false));
         if (change is not null) snapshot = TenantAgentChildScopes.After(snapshot, change);
         var owner = snapshot.Agent.Instance; AgentDefinition? definition;
         IReadOnlyList<AgentDefinitionPublicationResource> resources;

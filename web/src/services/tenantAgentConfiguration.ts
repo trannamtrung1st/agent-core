@@ -28,3 +28,6 @@ export type TenantSkillDetail = Pick<TenantAgentEditor, 'agent' | 'securityRevis
 export type TenantResourceItem = { resource: InstanceResource; canManage: boolean; canDelete: boolean; canCopy: boolean };
 export type TenantResourceEditor = Pick<TenantAgentEditor, 'agent' | 'securityRevision'> & { items: TenantResourceItem[]; total: number; page: number; pageSize: number; canCreate: boolean; allReadable: boolean };
 export type TenantResourceDetail = Pick<TenantAgentEditor, 'agent' | 'securityRevision'> & { item: TenantResourceItem };
+
+export type TenantIsolationView = Pick<TenantAgentEditor, 'agent' | 'securityRevision' | 'canUpdate'> & { configuration: import('./stateIsolation').IsolationView };
+export type TenantIsolationPlan = { plan: import('./stateIsolation').IsolationPlan; securityRevision: number };

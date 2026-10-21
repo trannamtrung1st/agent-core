@@ -19,7 +19,8 @@ public static class TenantAgentConfigurationRules
             || change.ActiveVersion is not null && (change.ActiveVersion < 1 || change.DefinitionSkills is null || change.AutomationPolicyChanges is null)
             || change.ActiveVersion is null && (change.DefinitionSkills is not null || change.ExpectedPublicationRevision is not null)
             || change.SetSettingsOverrides && change.AutomationPolicyChanges is null
-            || !change.SetSettingsOverrides && change.SettingsOverrides is not null
+            || !change.SetSettingsOverrides && (change.SettingsOverrides is not null || change.Isolation is not null)
+            || change.Isolation is { } isolation && (isolation.Expected.Instance != change.ExpectedInstanceRevision || isolation.Expected.Experience < 0 || isolation.Expected.Maintenance < 0)
             || !change.SetExecutionBudgets && change.ExecutionBudgets is not null
             || !change.SetUnattendedModel && (change.UnattendedModelCatalogKey is not null || change.UnattendedReasoningEffort is not null)
             || change.ActiveVersion is null && !change.SetSettingsOverrides && change.AutomationPolicyChanges is not null)

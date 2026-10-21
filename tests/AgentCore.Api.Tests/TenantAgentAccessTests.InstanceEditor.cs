@@ -18,6 +18,11 @@ public sealed partial class TenantAgentAccessTests
         var id = created.GetProperty("instance").GetProperty("instanceId").GetGuid(); root += $"/{id}";
         var editor = await Json(await owner.GetAsync(root + "/editor"));
         Assert.True(editor.GetProperty("canUpdate").GetBoolean());
+        var sections = editor.GetProperty("settings").EnumerateArray().ToArray();
+        Assert.DoesNotContain(sections, item => item.GetProperty("section").GetString() is "stateIsolationPolicy" or "memoryPolicy");
+        var voice = sections.Single(item => item.GetProperty("section").GetString() == "voice");
+        Assert.False(voice.GetProperty("effective").TryGetProperty("enabled", out _));
+        Assert.True(voice.GetProperty("effective").TryGetProperty("voiceId", out _));
         var instance = editor.GetProperty("agent").GetProperty("instance");
         var persona = await owner.PutAsJsonAsync(root + "/persona", new { persona = new { name = "Scoped editor", role = "Guide", description = "A configuration test", tone = "Calm" }, expectedRevision = editor.GetProperty("securityRevision").GetInt64(), expectedInstanceRevision = instance.GetProperty("revision").GetInt64(), expectedPersonaRevision = instance.GetProperty("personaRevision").GetInt64() });
         Assert.Equal(HttpStatusCode.OK, persona.StatusCode);

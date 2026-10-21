@@ -18,7 +18,8 @@ public sealed partial class SqliteIamStore
         var row = await OwnedAgents(db, tenantId).SingleOrDefaultAsync(x => x.Instance.InstanceId == key, ct).ConfigureAwait(false);
         if (row is null) return null;
         return new(Owned(row), await SqliteAgentInstanceStore.ReadSkillsAsync(db, instanceId, ct).ConfigureAwait(false),
-            await SqliteAgentInstanceStore.ReadResourcesAsync(db, instanceId, ct).ConfigureAwait(false));
+            await SqliteAgentInstanceStore.ReadResourcesAsync(db, instanceId, ct).ConfigureAwait(false),
+            await ReadIsolationMetadataAsync(db, key, ct).ConfigureAwait(false));
     }
 
     public async ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long expectedSecurityRevision,
@@ -57,6 +58,22 @@ public sealed partial class SqliteIamStore
                 throw new SecurityConflictException("resource_changed");
             change = change with { DefinitionSkills = source.Payload.SkillList };
         }
+        if (change.Isolation is { } mutation)
+        {
+            var learned = await db.ExperienceSettings.SingleOrDefaultAsync(r => r.AgentInstanceId == key, ct).ConfigureAwait(false);
+            var maintenance = await db.IdentityMaintenanceSettings.SingleOrDefaultAsync(r => r.AgentInstanceId == key, ct).ConfigureAwait(false);
+            if ((learned?.Revision ?? 0) != mutation.Expected.Experience || (maintenance?.Revision ?? 0) != mutation.Expected.Maintenance) return null;
+            if ((learned?.Enabled ?? false) != mutation.ExperienceEnabled)
+            {
+                if (learned is null) { learned = new() { AgentInstanceId = key }; db.ExperienceSettings.Add(learned); }
+                learned.Enabled = mutation.ExperienceEnabled; learned.Revision++;
+            }
+            if ((maintenance?.AllowAgentConsolidation ?? false) != mutation.AllowMaintenance)
+            {
+                if (maintenance is null) { maintenance = new() { AgentInstanceId = key }; db.IdentityMaintenanceSettings.Add(maintenance); }
+                maintenance.AllowAgentConsolidation = mutation.AllowMaintenance; maintenance.Revision++;
+            }
+        }
         row.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         if (change.Resource?.Resource is { } binding)
         {
@@ -86,4 +103,11 @@ public sealed partial class SqliteIamStore
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
         return new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, SqliteAgentInstanceStore.Map(row));
     }
+    private static async ValueTask<TenantIsolationMetadata> ReadIsolationMetadataAsync(AgentCoreDbContext db, string key, CancellationToken ct)
+    {
+        var learned = await db.ExperienceSettings.AsNoTracking().SingleOrDefaultAsync(r => r.AgentInstanceId == key, ct).ConfigureAwait(false);
+        var maintenance = await db.IdentityMaintenanceSettings.AsNoTracking().SingleOrDefaultAsync(r => r.AgentInstanceId == key, ct).ConfigureAwait(false);
+        return new(learned?.Revision ?? 0, learned?.Enabled ?? false, maintenance?.Revision ?? 0, maintenance?.AllowAgentConsolidation ?? false);
+    }
+
 }

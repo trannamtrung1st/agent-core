@@ -1,5 +1,7 @@
 # Testing Strategy
 
+Canonical coordinated State & Isolation now has [focused metadata, authority and UI qualification](reports/tenant-isolation-configuration-verification-2026-10-21.md): one tenant-authorized preview/commit across Instance, Experience and maintenance settings, exact three-owner/security CAS, current original-login fences, sparse reset and retained-draft/read recovery. Generic Settings keeps independent Voice fields and links to the single coordinated editor. Runtime observation, broader runtime/learning/maintenance parity, remaining internal consolidation and exhaustive proposal qualification stay open; the original goal remains active.
+
 ## Owner credential retirement qualification
 
 The [retirement report](reports/owner-credential-retirement-verification-2026-10-21.md) records 45 persistence/IAM and 27 distinct API/runtime passing cases. Negative clients use a fixed obsolete header and cannot acquire credentials. Tests cover exact single-table retirement, rollback without secret restoration, current model consistency, nondestructive startup refusal, explicit migration plus actual Account/tenant/conversation host recreation, all retired HTTP routes and actual Hub protocols. A current-limit regression exercises lowering/raising capacity with occupied slots. Eleven obsolete owner-only State/Runtime test declarations are inventoried; equivalent canonical behavior remains an explicit parity requirement. No test is skipped to obtain acceptance, and full proposal/milestone acceptance remains open.

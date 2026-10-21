@@ -29,6 +29,19 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
     public ValueTask<TenantAgentSettings> ReadSettingsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSettingsAsync(human.PrincipalId, tenant, instance, token), ct);
 
+    public ValueTask<TenantAgentIsolationState> ReadIsolationAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadIsolationAsync(human.PrincipalId, tenant, instance, token), ct);
+
+    public ValueTask<TenantAgentIsolationPlan> PreviewIsolationAsync(Guid tenant, Guid instance, TenantSessionInitiator human,
+        IsolationDraft? draft, string? preset = null, CancellationToken ct = default) =>
+        Fenced<TenantAgentIsolationPlan>(tenant, instance, human, async (state, agent, token) =>
+        {
+            var result = await configuration.PreviewIsolationAsync(human.PrincipalId, tenant, instance, draft, preset, token).ConfigureAwait(false);
+            if (result.SecurityRevision != state.Tenant.Revision || result.Plan.Expected.Instance != agent!.Instance.Revision)
+                throw new SecurityConflictException("stale_revision");
+            return result;
+        }, ct);
+
     public ValueTask<TenantAgentSandboxSetup> ReadSandboxAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSandboxAsync(human.PrincipalId, tenant, instance, token), ct);
 
@@ -96,8 +109,15 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
             var canUpdate = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.update"), Scope(tenant, instance), token).ConfigureAwait(false)).Allowed;
             if (settings.SecurityRevision != state.Tenant.Revision || settings.Items.Any(item => item.InstanceRevision != agent!.Instance.Revision))
                 throw new SecurityConflictException("stale_revision");
-            // Sandbox uses its separate scoped setup read and dedicated editor; generic Settings never projects its protected profile choices.
-            return new(agent!, settings.Items.Where(item => item.Section != "sandboxPolicy").ToArray(), state.Tenant.Revision, canUpdate, ["sandboxPolicy"]);
+            // Dedicated editors own protected Sandbox setup and all coordinated State/Memory/Voice enablement fields.
+            var independent = settings.Items.Where(item => item.Section is not ("sandboxPolicy" or "stateIsolationPolicy" or "memoryPolicy"))
+                .Select(item => item.Section != "voice" ? item : item with {
+                    Overrides = item.Overrides.Where(p => p.Key != "enabled").ToDictionary(),
+                    Effective = item.Effective.Where(p => p.Key != "enabled").ToDictionary(),
+                    Sources = item.Sources.Where(p => p.Key != "enabled").ToDictionary(),
+                    DefinitionDefaults = item.DefinitionDefaults.Where(p => p.Key != "enabled").ToDictionary(),
+                    Constraints = item.Constraints.Where(p => p.Key != "enabled").ToDictionary() }).ToArray();
+            return new(agent!, independent, state.Tenant.Revision, canUpdate, ["sandboxPolicy", "stateIsolationPolicy", "memoryPolicy", "voice.enabled"]);
         }, ct);
 
     private async ValueTask<T> Fenced<T>(Guid tenant, Guid? instance, TenantSessionInitiator human,

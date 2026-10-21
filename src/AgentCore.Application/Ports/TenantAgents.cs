@@ -5,7 +5,7 @@ namespace AgentCore.Application.Ports;
 
 public sealed record TenantAgent(Guid TenantId, Guid SystemIdentityId, Guid PrincipalId, AgentInstance Instance);
 public sealed record TenantAgentPage(IReadOnlyList<TenantAgent> Items, int Total, int Page, int PageSize);
-public sealed record TenantAgentConfigurationSnapshot(TenantAgent Agent, InstanceSkillSnapshot Skills, InstanceResourceSnapshot Resources);
+public sealed record TenantAgentConfigurationSnapshot(TenantAgent Agent, InstanceSkillSnapshot Skills, InstanceResourceSnapshot Resources, TenantIsolationMetadata Isolation);
 public sealed record TenantAgentConfigurationChange(Guid InstanceId, long ExpectedInstanceRevision,
     AgentIdentity? Persona = null, long? ExpectedPersonaRevision = null, int? ActiveVersion = null,
     long? ExpectedPublicationRevision = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,
@@ -14,7 +14,10 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
     bool SetUnattendedModel = false, string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null,
-    HumanSessionReference? Initiator = null);
+    HumanSessionReference? Initiator = null, TenantIsolationMutation? Isolation = null);
+
+public sealed record TenantIsolationMetadata(long ExperienceRevision, bool ExperienceEnabled, long MaintenanceRevision, bool AllowMaintenance);
+public sealed record TenantIsolationMutation(IsolationOwnerRevisions Expected, bool ExperienceEnabled, bool AllowMaintenance);
 
 // Specialized transaction boundary: the existing Instance, its identity, security revision and audit
 // are committed together. Reads filter authoritative identity ownership before ordering/pagination.

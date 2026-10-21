@@ -10,11 +10,11 @@ public sealed partial class InMemoryIamStore
     public ValueTask<TenantAgentConfigurationSnapshot?> ReadTenantAgentConfigurationAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        lock (_gate) lock (instances.CredentialGate)
+        lock (_gate) lock (instances.CredentialGate) lock (isolationBacking.IsolationGate)
         {
             var agent = FindTenantAgentAsync(tenantId, instanceId, ct).Result;
             return ValueTask.FromResult(agent is null ? null : new TenantAgentConfigurationSnapshot(agent,
-                instances.ReadTenantSkillsAsync(instanceId, ct).Result, instances.ReadTenantResourcesAsync(instanceId, ct).Result));
+                instances.ReadTenantSkillsAsync(instanceId, ct).Result, instances.ReadTenantResourcesAsync(instanceId, ct).Result, Isolation(instanceId)));
         }
     }
 
@@ -23,13 +23,16 @@ public sealed partial class InMemoryIamStore
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, AgentInstanceLifecycle.Active, audit);
-        lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
+        lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (isolationBacking.IsolationGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
             ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var current = FindTenantAgentAsync(next.Tenant.TenantId, change.InstanceId, ct).Result;
             if (current is null || current.Instance.Revision != change.ExpectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
+            if (change.Isolation is { } isolation && Isolation(change.InstanceId) is var expectedMetadata
+                && (expectedMetadata.ExperienceRevision != isolation.Expected.Experience || expectedMetadata.MaintenanceRevision != isolation.Expected.Maintenance))
+                return ValueTask.FromResult<TenantAgent?>(null);
             _ = TenantAgentConfigurationRules.Apply(current.Instance, change, at);
             if (next.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId)))
             {
@@ -66,10 +69,24 @@ public sealed partial class InMemoryIamStore
                 SetExecutionBudgets: change.SetExecutionBudgets, ExecutionBudgets: change.ExecutionBudgets,
                 SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey,
                 UnattendedReasoningEffort: change.UnattendedReasoningEffort, HarnessManagement: change.HarnessManagement), at, ct).Result;
+            if (change.Isolation is { } mutation)
+            {
+                var metadata = Isolation(change.InstanceId);
+                if (metadata.ExperienceEnabled != mutation.ExperienceEnabled)
+                    isolationBacking.ConfigureAsync(change.InstanceId, metadata.ExperienceRevision, mutation.ExperienceEnabled).GetAwaiter().GetResult();
+                if (metadata.AllowMaintenance != mutation.AllowMaintenance)
+                    isolationBacking.ConfigureMaintenanceAsync(change.InstanceId, metadata.MaintenanceRevision, mutation.AllowMaintenance).GetAwaiter().GetResult();
+            }
             foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(current.Instance, updated,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(next.Tenant.TenantId, updated.InstanceId, current.PrincipalId))) AppendTenantCore(fact);
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
             return ValueTask.FromResult<TenantAgent?>(current with { Instance = updated });
         }
+    }
+    private TenantIsolationMetadata Isolation(Guid id)
+    {
+        var learned = isolationBacking.SettingsAsync(id).Result;
+        var maintenance = isolationBacking.MaintenanceSettingsAsync(id).Result;
+        return new(learned.Revision, learned.Enabled, maintenance.Revision, maintenance.AllowAgentConsolidation);
     }
 }

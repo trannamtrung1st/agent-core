@@ -62,7 +62,8 @@ function TenantAgentSettings({ context, id }: { context: TenantContext; id: stri
     <Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link>
     {view && <TenantAgentHeading view={view} />}
     <Typography.Paragraph type="secondary">Settings define behavior and capability eligibility. The agent’s own roles and approval policy still control execution.</Typography.Paragraph>
+    <Typography.Link href={tenantAgentPath(tenant, id, 'state-isolation')} onClick={followAppLink}>State, Memory and Voice enablement share the coordinated State & Isolation editor</Typography.Link>
     <InstanceSettingsSection confirmationContext={view ? `Agent: ${view.agent.instance.persona.name}. Organization: ${context.tenant.name}.` : undefined} instanceId={id} archived={!view?.canUpdate || view.agent.instance.lifecycle !== 'Active'} transport={transport} onUpdated={() => {}} onDirtyChange={setDirty} onBusyChange={setBusy} />
-    {!!view?.unavailableSettings.length && <Alert type="info" showIcon title="Sandbox has a separate settings page" description={<Typography.Link href={tenantAgentPath(tenant, id, 'sandbox')} onClick={followAppLink}>Open Sandbox configuration and saved setup verification. Independent Sandbox and profile access is required.</Typography.Link>} />}
+    {view?.unavailableSettings.includes('sandboxPolicy') && <Alert type="info" showIcon title="Sandbox has a separate settings page" description={<Typography.Link href={tenantAgentPath(tenant, id, 'sandbox')} onClick={followAppLink}>Open Sandbox configuration and saved setup verification. Independent Sandbox and profile access is required.</Typography.Link>} />}
   </Flex>;
 }

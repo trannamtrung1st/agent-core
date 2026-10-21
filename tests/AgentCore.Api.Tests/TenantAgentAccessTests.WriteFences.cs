@@ -7,7 +7,7 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantAgentAccessTests
 {
     public static IEnumerable<object[]> AgentHumanWriteCases =>
-        from operation in new[] { "create", "publication-create", "lifecycle", "persona", "version", "settings", "budgets", "model", "management", "freeze", "skill", "upload", "copy", "resource-choice", "resource-delete" }
+        from operation in new[] { "create", "publication-create", "lifecycle", "persona", "version", "settings", "isolation", "budgets", "model", "management", "freeze", "skill", "upload", "copy", "resource-choice", "resource-delete" }
         from relogin in new[] { false, true }
         select new object[] { operation, relogin };
 
@@ -47,6 +47,10 @@ public sealed partial class TenantAgentAccessTests
             case "persona": path += "/persona"; body["expectedPersonaRevision"] = instance.GetProperty("personaRevision").GetInt64(); body["persona"] = new { name = "Protected update", role = "Guide", description = "Original human write", tone = "Calm" }; break;
             case "version": path += "/active-version"; body["version"] = 1; break;
             case "settings": path += "/settings/conversationPolicy"; method = HttpMethod.Patch; body["set"] = new { language = "fr-FR" }; body["clear"] = Array.Empty<string>(); break;
+            case "isolation":
+                var isolation = await Json(await owner.PostAsync(root + "/state-isolation/presets/Stateless", null));
+                path += "/state-isolation/apply"; method = HttpMethod.Post; body["expected"] = isolation.GetProperty("plan").GetProperty("expected");
+                body["draft"] = isolation.GetProperty("plan").GetProperty("draft"); body["fingerprint"] = isolation.GetProperty("plan").GetProperty("fingerprint").GetString(); break;
             case "budgets": path += "/execution-budgets"; body["budgets"] = null; break;
             case "model": path += "/unattended-model"; body["catalogKey"] = null; body["reasoningEffort"] = null; break;
             case "management": path += "/self-management"; body["overrides"] = new { mode = new { value = "Assisted" }, scopes = new { value = new[] { "Settings" } } }; break;

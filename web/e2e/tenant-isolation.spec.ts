@@ -1,0 +1,61 @@
+import { test, expect, request as requests, type APIRequestContext } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
+async function call<T>(api: APIRequestContext, route: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+  const csrf = await (await api.get('/api/v2/auth/csrf')).json();
+  const result = await api.fetch(route, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  expect(result.ok(), `${method} ${route}: ${result.status()} ${await result.text()}`).toBeTruthy(); return result.status() === 204 ? undefined as T : result.json();
+}
+test('coordinated isolation saves atomically, retains stale drafts and recovers a lost reply across desktop and narrow sizes', async ({ page }) => {
+  const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL });
+  const errors: string[] = [], obsolete: string[] = [], unexpectedConsole: string[] = [], unexpectedFailures: string[] = []; let applies = 0;
+  page.on('console', message => { if (message.type() === 'error' && !/Failed to load resource: the server responded with a status of 409|Failed to load resource: net::ERR_FAILED/.test(message.text())) unexpectedConsole.push(message.text()); });
+  page.on('requestfailed', request => { if (!(request.method() === 'GET' && request.failure()?.errorText === 'net::ERR_ABORTED') && !new URL(request.url()).pathname.endsWith('/state-isolation/apply')) unexpectedFailures.push(`${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText}`); });
+  page.on('pageerror', error => errors.push(error.message)); page.on('request', request => { const p = new URL(request.url()).pathname; if (p.endsWith('/state-isolation/apply')) applies++; if (/^\/api\/v[12]\/(owner-capability|agent-instances|admin)(\/|$)/.test(p)) obsolete.push(p); });
+  const captures = process.env.TENANT_ISOLATION_CAPTURE_ROOT ?? path.resolve('../.impeccable/review/tenant-isolation'); fs.mkdirSync(captures, { recursive: true });
+  try {
+    await call(api, '/api/v2/auth/login', { login, password }); const nonce = crypto.randomUUID().slice(0, 8);
+    const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Isolation ${nonce}`, slug: `isolation-${nonce}` })).tenantId;
+    const prefix = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, prefix + '/access/me')).revision;
+    const created = await call<{ instance: { instanceId: string } }>(api, prefix + '/agents', { templateId: 'examiner', version: 1, expectedRevision: await revision() });
+    const id = created.instance.instanceId, root = prefix + `/agents/${id}/state-isolation`;
+    await page.setViewportSize({ width: 1440, height: 1100 }); await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+    await page.goto(`/t/${tenant}/admin/agents/${id}/state-isolation`);
+    await page.getByRole('combobox', { name: 'Preset draft', exact: true }).click(); await page.getByTitle('Stateless', { exact: true }).click();
+    await expect(page.getByLabel('Configuration preview')).toBeVisible(); await expect(page.getByRole('switch', { name: 'Voice enabled', exact: true })).not.toBeChecked(); await expect(page.getByRole('switch', { name: 'Allow Experience recording', exact: true })).not.toBeChecked();
+    await expect(page.locator('.ant-select-dropdown:visible')).toHaveCount(0);
+    await page.screenshot({ path: path.join(captures, 'desktop.png'), fullPage: true, animations: 'disabled' });
+    await page.getByRole('button', { name: 'Save coordinated configuration', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(captures, 'desktop-preview.png'), fullPage: true, animations: 'disabled' });
+    await page.getByRole('button', { name: 'Save coordinated configuration', exact: true }).click(); await expect(page.getByText('Configuration saved', { exact: true })).toBeVisible();
+    type Saved = { securityRevision: number; agent: { instance: { revision: number; personaRevision: number } }; configuration: { experienceEnabled: boolean; allowMaintenance: boolean; settings: { section: string; effective: Record<string, unknown> }[] } };
+    let saved = await call<Saved>(api, root); expect(saved.configuration.settings.find(s => s.section === 'stateIsolationPolicy')!.effective.conversationContextScope).toBe('CurrentRequest'); expect(applies).toBe(1);
+    await page.setViewportSize({ width: 390, height: 844 }); await page.getByRole('switch', { name: 'Experience enabled', exact: true }).click(); await page.getByRole('button', { name: 'Preview changes', exact: true }).click(); await expect(page.getByLabel('Configuration preview')).toBeVisible();
+    await call(api, prefix + `/agents/${id}/persona`, { expectedRevision: saved.securityRevision, expectedInstanceRevision: saved.agent.instance.revision, expectedPersonaRevision: saved.agent.instance.personaRevision, persona: { name: 'Concurrent saved persona', role: 'Guide', description: 'Retain the independent isolation draft', tone: 'Clear' } }, 'PUT');
+    await page.getByRole('button', { name: 'Save coordinated configuration', exact: true }).click(); await expect(page.getByText(/Access has changed since/)).toBeVisible(); await expect(page.getByRole('switch', { name: 'Experience enabled', exact: true })).toBeChecked();
+    await page.screenshot({ path: path.join(captures, 'stale-390.png'), fullPage: true, animations: 'disabled' });
+    await page.getByRole('button', { name: 'Reload configuration', exact: true }).click(); await expect(page.getByRole('button', { name: 'Preview changes', exact: true })).toBeEnabled(); await expect(page.getByRole('switch', { name: 'Experience enabled', exact: true })).toBeChecked(); expect(applies).toBe(2);
+    await page.getByRole('button', { name: 'Preview changes', exact: true }).click(); await expect(page.getByLabel('Configuration preview')).toBeVisible(); await page.getByRole('button', { name: 'Save coordinated configuration', exact: true }).click(); await expect(page.getByText('Configuration saved', { exact: true })).toBeVisible();
+    saved = await call<Saved>(api, root); expect(saved.configuration.experienceEnabled).toBe(true);
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.getByRole('switch', { name: 'Allow identity maintenance', exact: true }).click(); await page.getByRole('button', { name: 'Preview changes', exact: true }).click(); await expect(page.getByLabel('Configuration preview')).toBeVisible();
+    await page.getByRole('button', { name: 'Save coordinated configuration', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(captures, 'mobile-preview.png'), fullPage: true, animations: 'disabled' });
+    await page.route('**/state-isolation/apply', async route => { const result = await route.fetch(); expect(result.ok()).toBe(true); await route.abort('failed'); }, { times: 1 });
+    await page.getByRole('button', { name: 'Save coordinated configuration', exact: true }).click(); await expect(page.getByText('Read current configuration before continuing', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reload configuration', exact: true })).toBeEnabled(); await page.getByRole('button', { name: 'Reload configuration', exact: true }).click(); await expect(page.getByRole('button', { name: 'Preview changes', exact: true })).toBeEnabled();
+    expect((await call<Saved>(api, root)).configuration.allowMaintenance).toBe(true); expect(applies).toBe(4); await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); await page.screenshot({ path: path.join(captures, 'mobile-actions.png'), fullPage: true, animations: 'disabled' });
+    await page.getByRole('heading', { name: 'State & Isolation', exact: true }).first().scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(captures, 'mobile.png'), fullPage: true, animations: 'disabled' });
+    await page.goto(`/t/${tenant}/admin/agents/${id}/settings`);
+    await expect(page.getByRole('link', { name: 'State, Memory and Voice enablement share the coordinated State & Isolation editor', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Memory policy', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'State & Isolation', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Voice', exact: true }).click();
+    await expect(page.getByLabel('Voice ID', { exact: true })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Enabled', exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]); expect(obsolete).toEqual([]); expect(unexpectedConsole).toEqual([]); expect(unexpectedFailures).toEqual([]);
+  } finally { await api.dispose(); }
+});

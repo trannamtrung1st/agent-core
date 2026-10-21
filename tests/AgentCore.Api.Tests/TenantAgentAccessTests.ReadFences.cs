@@ -4,6 +4,8 @@ using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 using Microsoft.AspNetCore.Hosting;
+using AgentCore.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,7 +16,7 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantAgentAccessTests
 {
     public static IEnumerable<object[]> AgentReadLogoutCases =>
-        from read in new[] { "settings", "execution-budgets", "self-management", "effective-config", "skills", "resources", "skills/editor", "resources/editor", "skills/builtin:configuration-assistance.v1/editor", "editor", "configuration-controls", "versions", "active-version/preview?version=1", "agent", "inventory", "templates" }
+        from read in new[] { "state-isolation", "settings", "execution-budgets", "self-management", "effective-config", "skills", "resources", "skills/editor", "resources/editor", "skills/builtin:configuration-assistance.v1/editor", "editor", "configuration-controls", "versions", "active-version/preview?version=1", "agent", "inventory", "templates" }
         from signInAgain in new[] { false, true }
         select new object[] { read, signInAgain };
 
@@ -93,7 +95,7 @@ public sealed partial class TenantAgentAccessTests
         if (change != "logout") Assert.Equal(bytes, await owner.GetByteArrayAsync(path));
     }
 
-    private sealed class AgentReadFenceFactory(IReadOnlyDictionary<string, string?>? settings = null) : AgentCoreApiFactory
+    private sealed class AgentReadFenceFactory(IReadOnlyDictionary<string, string?>? settings = null, string? sqliteRoot = null) : AgentCoreApiFactory
     {
         protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => settings ?? new Dictionary<string, string?>();
         public Func<Task>? AfterCapture;
@@ -108,6 +110,13 @@ public sealed partial class TenantAgentAccessTests
             base.ConfigureWebHost(builder);
             builder.ConfigureTestServices(services =>
             {
+                if (sqliteRoot is not null)
+                {
+                    Directory.CreateDirectory(sqliteRoot);
+                    var connection = $"Data Source={Path.Combine(sqliteRoot, "state.db")};Foreign Keys=True;Default Timeout=10";
+                    services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(connection));
+                    TestSqliteIdentity.Configure(services, connection, Path.Combine(sqliteRoot, "keys"));
+                }
                 var descriptor = services.Single(d => d.ServiceType == typeof(IBuiltInAgentDefinitionStore));
                 services.Replace(ServiceDescriptor.Singleton<IBuiltInAgentDefinitionStore>(provider => new AgentReadDefinitions(
                     Resolve<IBuiltInAgentDefinitionStore>(descriptor, provider), this)));
@@ -121,8 +130,10 @@ public sealed partial class TenantAgentAccessTests
         private static T Resolve<T>(ServiceDescriptor descriptor, IServiceProvider provider) =>
             (T)(descriptor.ImplementationInstance ?? descriptor.ImplementationFactory?.Invoke(provider) ?? ActivatorUtilities.CreateInstance(provider, descriptor.ImplementationType!));
     }
-    private sealed class AgentReadContent(IDefinitionResourceContentStore inner, AgentReadFenceFactory factory) : IDefinitionResourceContentStore
+    private sealed class AgentReadContent(IDefinitionResourceContentStore inner, AgentReadFenceFactory factory) : IDefinitionResourceContentStore, ITenantResourceSourceContentStore
     {
+        public ValueTask<byte[]?> ReadVerifiedResourceSourceAsync(string hash, long expectedByteSize, CancellationToken ct = default) =>
+            ((ITenantResourceSourceContentStore)inner).ReadVerifiedResourceSourceAsync(hash, expectedByteSize, ct);
         public ValueTask StoreVerifiedAsync(string hash, byte[] content, CancellationToken ct = default) => inner.StoreVerifiedAsync(hash, content, ct);
         public async ValueTask<byte[]?> ReadAsync(string hash, CancellationToken ct = default)
         { factory.ContentReads++; var bytes = await inner.ReadAsync(hash, ct); await factory.Captured("bytes"); return bytes; }
