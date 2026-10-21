@@ -6,13 +6,20 @@ namespace AgentCore.Application.Security;
 
 // Stateless proof checks. Requests, decisions, receipts and scheduling remain with their incumbent owners.
 public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, ITenantRunStore runs, IIamStore security,
-    ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantRunConfigurationResolver configurations, IamAuthorizer iam)
+    ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantRunConfigurationResolver configurations, IamAuthorizer iam, TenantRunProfileService? profiles = null)
 {
+    private async ValueTask RequireProfileAsync(AgentRun child, CancellationToken ct)
+    {
+        if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(child.Checkpoint).TenantProfileSource is not { } source) return;
+        if (profiles is null) throw new AccessDeniedException("profile_context_unavailable");
+        await profiles.RequireAsync(child, source, ct).ConfigureAwait(false);
+    }
     public async ValueTask<(TenantBackgroundCompletion Source, TenantSecurityState State, TenantAgent Agent)> ResolveAsync(TenantBackgroundCompletion source, CancellationToken ct)
     {
         source = await runtime.ReadTenantBackgroundCompletionAsync(source.Child.Owner, source.Child.AgentRunId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("completion_unavailable");
         TenantBackgroundCompletionFactory.RequireParent(source);
+        await RequireProfileAsync(source.Child, ct).ConfigureAwait(false);
         var current = await configurations.ResolveAsync(source.Child.Owner.TenantId!.Value, source.Child.AgentInstanceId, ct).ConfigureAwait(false);
         var state = await security.ReadTenantAsync(source.Child.Owner.TenantId.Value, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         TenantSessionRules.RequireExecutor(state, current.Agent);
@@ -40,6 +47,7 @@ public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, I
         var source = await runtime.ReadTenantBackgroundCompletionAsync(AgentRunOwner.ForTenant(request.TenantId, request.Operation.InstanceId, request.ExecutorPrincipalId), request.RunId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("approval_unavailable");
         TenantReportSourceReadRules.Source(request, source.Child);
+        await RequireProfileAsync(source.Child, ct).ConfigureAwait(false);
         if (source.Parent is null || request.Operation.ReportSourceRead != TenantReportSourceReadRules.Witness(source)) throw new AccessDeniedException("approval_unavailable");
     }
     public async ValueTask<TenantApprovalRequest?> PriorAsync(TenantBackgroundCompletion source, CancellationToken ct) =>
@@ -48,6 +56,7 @@ public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, I
     public async ValueTask RequireAuthorizedAsync(TenantBackgroundCompletion source, TenantSecurityState state, CancellationToken ct)
     {
         TenantBackgroundCompletionFactory.RequireParent(source);
+        await RequireProfileAsync(source.Child, ct).ConfigureAwait(false);
         await TenantReportReadRules.RequireRawAsync(state, source, iam, ct).ConfigureAwait(false);
         var prior = await PriorAsync(source, ct).ConfigureAwait(false);
         if (prior is null)

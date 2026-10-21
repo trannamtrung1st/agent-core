@@ -13,6 +13,7 @@ public sealed partial class InMemoryIamStore
     {
         var source = CompletionSource(AgentRunOwner.ForTenant(request.TenantId, request.Operation.InstanceId, request.ExecutorPrincipalId), request.RunId)
             ?? throw new AccessDeniedException("completion_unavailable");
+        RequireStoredProfileSource(source.Child, CancellationToken.None);
         var state = _tenants[request.TenantId]; var iam = new IamAuthorizer(this);
         var agent = FindTenantAgentAsync(request.TenantId, request.Operation.InstanceId).Result ?? throw new AccessDeniedException("executor_unavailable");
         TenantSessionRules.RequireExecutor(state, agent);
@@ -25,6 +26,7 @@ public sealed partial class InMemoryIamStore
     }
     private void RequireTenantReportRead(TenantSecurityState state, TenantBackgroundCompletion source, CancellationToken ct)
     {
+        RequireStoredProfileSource(source.Child, ct);
         TenantBackgroundCompletionFactory.RequireParent(source);
         var iam = new IamAuthorizer(this);
         TenantReportReadRules.RequireRawAsync(state, source, iam, ct).AsTask().GetAwaiter().GetResult();

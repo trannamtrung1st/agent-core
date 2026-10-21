@@ -85,6 +85,7 @@ public sealed partial class InMemoryIamStore
     }
     private void RequireTenantOutputSources(AgentRun parent, CancellationToken ct)
     {
+        RequireStoredProfileSource(parent, ct);
         RequireTenantEventRead(parent, ct);
         RequireCredentialReadSources(parent, ct);
         RequireAccountReadSources(parent, ct);

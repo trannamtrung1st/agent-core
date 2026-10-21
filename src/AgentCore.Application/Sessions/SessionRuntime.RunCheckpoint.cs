@@ -75,6 +75,7 @@ public sealed partial class SessionRuntime
                 new(run.ActiveSkillKeys, run.SkillLoadCount), protocolRepairReason: protocolRepairReason, executionState: executionState))
             throw AgentCoreErrors.Validation("AgentRun checkpoint capacity reached.");
         await RequireTenantAttachmentSourcesAsync(run, executionState?.TenantAttachmentSources, ct).ConfigureAwait(false);
+        if (_tenantProfiles is not null) await _tenantProfiles.RequireAsync(run, executionState?.TenantProfileSource, ct).ConfigureAwait(false);
         if (_runtimeOwner is not null)
             await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment binding is required."))
                 .RequireReadResultsAsync(run, messages, ct).ConfigureAwait(false);

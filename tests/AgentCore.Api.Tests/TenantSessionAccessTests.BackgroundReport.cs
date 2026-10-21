@@ -27,7 +27,9 @@ public sealed partial class TenantSessionAccessTests
     public Task Tenant_background_report_source_read_consent_precedes_separate_creation_consent(bool sqlite, string decision) => BackgroundReportFlow(sqlite, "source-" + decision);
     [Fact(Timeout = 120000)]
     public Task Tenant_background_report_source_read_consent_survives_actual_SQLite_host_recreation() => BackgroundReportFlow(true, "source-review", readRestart: true);
-    private async Task BackgroundReportFlow(bool sqlite, string mode, bool restart = false, bool readRestart = false)
+    [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
+    public Task Tenant_Run_Profile_changed_child_source_cannot_be_approved_or_consumed_for_a_report(bool sqlite) => BackgroundReportFlow(sqlite, "source-review", profileBoundary: true);
+    private async Task BackgroundReportFlow(bool sqlite, string mode, bool restart = false, bool readRestart = false, bool profileBoundary = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-report-approval-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         WebApplicationFactory<Program>? reopened = null; HttpClient? reopenedOwner = null;
@@ -41,6 +43,7 @@ public sealed partial class TenantSessionAccessTests
             var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             var parent = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!; var access = factory.Services.GetRequiredService<TenantAccessService>();
             var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
+            if (profileBoundary) { await SetRequesterProfile(owner, tenant, "PENDING_REPORT_PROFILE"); await GrantProfileReads(factory, owner, tenant, parent.Owner.AgentInstanceId); }
             var role = await access.SaveRoleAsync(human, tenant, null, "Exact reporting executor", mode is "grant" or "source-grant" ? ["sessions.create"] : ["sessions.create", "agent-runs.create"], await Revision(owner, tenant));
             var assignment = await access.AssignRoleAsync(human, tenant, parent.Owner.ExecutorPrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
             if (mode is not ("grant" or "source-grant")) Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/agent-runs.create", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
@@ -74,6 +77,18 @@ public sealed partial class TenantSessionAccessTests
                     Assert.Equal(read.Operation, (await approvals.FindApprovalAsync(tenant, read.RequestId))!.Operation);
                 }
                 var readDetail = await Json(await owner.GetAsync(api + $"/approvals/{read.RequestId}"));
+                if (profileBoundary)
+                {
+                    Assert.NotNull(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(child.Checkpoint).TenantProfileSource);
+                    await SetRequesterProfile(owner, tenant, "CHANGED_PENDING_REPORT_PROFILE");
+                    var refused = await owner.PostAsJsonAsync(api + $"/approvals/{read.RequestId}/decision", new { decision = "approve", actionHash = read.Operation.ActionHash,
+                        expectedRevision = await Revision(owner, tenant), expectedRequestRevision = read.Revision });
+                    Assert.True(refused.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync());
+                    Assert.Equal(TenantApprovalStatus.Pending, (await approvals.FindApprovalAsync(tenant, read.RequestId))!.Status);
+                    Assert.Null(await factory.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, read.Operation.OperationId));
+                    Assert.DoesNotContain((await runs.ListTenantSessionRunsAsync(tenant, setup.Session, null, 0, 100)).Items, r => r.Admission.OutputContract == AgentRunOutputContract.CompletionReport);
+                    return;
+                }
                 Assert.Equal("inspect_background_report_source", readDetail.GetProperty("preparedAction").GetProperty("operation").GetString());
                 Assert.Equal(setup.Session, readDetail.GetProperty("destinationSessionId").GetGuid()); Assert.True(readDetail.GetProperty("review").GetProperty("canDecide").GetBoolean(), readDetail.GetRawText());
                 var parentApprovals = await Json(await owner.GetAsync(api + $"/sessions/{setup.Session}/approvals?pageSize=100"));

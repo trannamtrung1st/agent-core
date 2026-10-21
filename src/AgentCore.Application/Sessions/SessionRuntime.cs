@@ -215,7 +215,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IAgentRunAuthority? runAuthority = null,
         ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
         AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
-        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null)
+        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -247,6 +247,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _attachments = attachments;
         _processor = processor;
         _tenantAttachments = tenantAttachments;
+        _tenantProfiles = tenantProfiles;
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
         _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
@@ -2527,10 +2528,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 if (capturedRun is not null) capturedSnapshot = AgentCore.Application.Security.TenantAutomationConversationRules.Projection(capturedSnapshot, capturedRun);
                 var resolved = capturedRun is null ? await _tools.ResolveRunConfigurationAsync(capturedSnapshot, evaluationToken).ConfigureAwait(false) : null;
-                if (_runtimeOwner is not null && (capturedRun is null || await _runAuthority!.CurrentDefinitionAsync(capturedRun, evaluationToken).ConfigureAwait(false) is null))
-                    throw AgentCoreErrors.Forbidden("Tenant execution authority is unavailable.");
                 var executionDefinition = boundDefinition ?? resolved!.Configuration.Definition;
-                executionDefinition = await _tools.RestrictExecutionDefinitionAsync(executionDefinition, capturedSnapshot.AgentInstanceId, evaluationToken);
+                executionDefinition = await ProjectionDefinitionAsync(executionDefinition, capturedRun, capturedSnapshot.AgentInstanceId, evaluationToken).ConfigureAwait(false);
                 var persona = boundPersona ?? resolved!.Persona;
                 var selection = capturedSnapshot.ModelSelection;
                 if (capturedRun is not null) selection = new(capturedRun.PinnedModel.CatalogKey, capturedRun.PinnedModel.ProviderAlias, capturedRun.PinnedModel.ModelId, ModelSelectionSource.Host, capturedRun.PinnedModel.ReasoningEffort);
@@ -2766,6 +2765,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 .RehydrateReadImagesAsync(attachmentRun, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
         var executionState = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint);
         var attachmentSources = AgentCore.Application.Security.TenantAttachmentContextRules.Merge(executionState.TenantAttachmentSources, request.TenantAttachmentSources);
+        var profileSource = executionState.TenantProfileSource;
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
         var failedAttempts = (executionState.FailedAttempts ?? []).ToList();
@@ -2827,7 +2827,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var cleanupStartedAtMessage = executionState.CleanupStartedAtMessage;
         ToolLoopExecutionState State() => new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
             finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
-            attachmentSources.Count == 0 ? null : attachmentSources);
+            attachmentSources.Count == 0 ? null : attachmentSources, profileSource);
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
         var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;
@@ -2909,9 +2909,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 repairingTerminal = false;
 
                 BrowserSnapshotCompaction.Compact(messages);
-                if (_runtimeOwner is not null && (_boundAgentRun is not { } tenantRun || await _runAuthority!.CurrentDefinitionAsync(tenantRun, generateToken).ConfigureAwait(false) is null))
-                    throw AgentCoreErrors.Forbidden("Tenant execution authority is unavailable.");
-                var restrictedDefinition = await _tools.RestrictExecutionDefinitionAsync(ExecutionDefinition, _snapshot.AgentInstanceId, generateToken);
+                var restrictedDefinition = await ProjectionDefinitionAsync(ExecutionDefinition, _boundAgentRun, _snapshot.AgentInstanceId, generateToken).ConfigureAwait(false);
                 var projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
                 projectionContext = projectionContext with { Definition = restrictedDefinition };
                 authorizedTools = _tools.ProjectTools(restrictedDefinition, projectionContext);
@@ -2925,19 +2923,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 else if (checkpointCapacityReached) sections = sections.Upsert(ContextSection.Core(IsInitialBackgroundRun ? CoreProcedure.BackgroundCheckpointCapacity : CoreProcedure.CheckpointCapacity));
                 else if (terminalBrowserContinuation) sections = sections.Upsert(ContextSection.Core(terminalBrowserProcedure));
                 else if (pageBlocked) sections = sections.Upsert(ContextSection.Core(CoreProcedure.ChallengedBrowser));
-                var executionFacts = RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, messages);
-                if (restrictedDefinition.StateIsolationPolicy is { } access)
-                    executionFacts += "\nEffective restrictive access: " + JsonSerializer.Serialize(new { access.HomeAccess, access.ExperienceRecord,
-                        access.ExperienceRecall, access.ProfileEvidence, access.CrossSessionContinuity, restrictedDefinition.MemoryPolicy });
+                string? runtimeFacts = null;
+                string CurrentFacts(AgentDefinition definition)
+                {
+                    var facts = RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, messages);
+                    if (definition.StateIsolationPolicy is { } access)
+                        facts += "\nEffective restrictive access: " + JsonSerializer.Serialize(new { access.HomeAccess, access.ExperienceRecord,
+                            access.ExperienceRecall, access.ProfileEvidence, access.CrossSessionContinuity, definition.MemoryPolicy });
+                    return facts + runtimeFacts;
+                }
                 if (authorizedTools?.Any(t => t.Name == ToolCatalog.AgentStateInspect) == true)
                 {
                     sections = sections.Upsert(ContextSection.Core(CoreProcedure.StateObservation));
                     if (await _tools.RuntimeStateFactsAsync(SessionId, executionRun?.AgentRunId, executionRun?.Claim?.Generation, generateToken) is { } observation)
-                        executionFacts += "\nTrusted runtime observation: " + SessionToolExecutor.RenderRuntimeStateFacts(observation);
+                        runtimeFacts = "\nTrusted runtime observation: " + SessionToolExecutor.RenderRuntimeStateFacts(observation);
                 }
                 else sections = sections.Remove(ContextSectionId.CoreStateObservation);
                 sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionFacts, ContextSourceKind.AgentRun,
-                    executionFacts, executionRun?.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture), semantics: ContextSemantics.TrustedFact));
+                    CurrentFacts(restrictedDefinition), executionRun?.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture), semantics: ContextSemantics.TrustedFact));
                 if (previousFacts is not null) sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.PreviousExecution, ContextSourceKind.AgentRun, previousFacts, semantics: ContextSemantics.TrustedFact));
                 if (invalidCalls.HasBlockedStrategies) sections = sections.Upsert(ContextSection.Core(CoreProcedure.InvalidStrategies));
                 if (evidence.DialogPending) sections = sections.Upsert(ContextSection.Core(CoreProcedure.Dialog));
@@ -3006,6 +3009,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     working = working with { Context = working.Context!.Upsert(semanticRecovery) };
                 working = working with { Context = PromptContextBuilder.WithRequesterContext(working.Context!, _boundAgentRun?.Admission.ExecutionContext,
                     await RequesterContextAsync(_boundAgentRun, generateToken).ConfigureAwait(false)) };
+                TenantRunProfileObservation? profileObservation = null;
+                if (_runtimeOwner is not null)
+                {
+                    // Metadata/native collection may itself await a live restriction. Refresh at
+                    // the final context boundary, preserving Core authority and tool Evidence.
+                    var currentProjection = await ProjectionDefinitionAsync(ExecutionDefinition, _boundAgentRun, _snapshot.AgentInstanceId, generateToken).ConfigureAwait(false);
+                    var context = await RestrictContinuityContextAsync(working.Context!, currentProjection, generateToken).ConfigureAwait(false);
+                    context = context.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionFacts, ContextSourceKind.AgentRun,
+                        CurrentFacts(currentProjection), executionRun?.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture), semantics: ContextSemantics.TrustedFact));
+                    profileObservation = await (_tenantProfiles ?? throw new InvalidOperationException("Tenant Profile binding is required.")).ReadAsync(_boundAgentRun!, generateToken).ConfigureAwait(false);
+                    if (profileObservation is not null && (profileObservation.Profile.Preferences.Count > 0 || profileSource is not null)) profileSource = profileObservation.Source;
+                    working = working with { Context = TenantRunProfileRules.Project(context, profileObservation) };
+                }
                 if (!resumingBatch && _runtimeOwner is not null && _boundAgentRun is { } browserRun
                     && TenantBrowserArtifactRules.HasCapture(messages))
                     messages = await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
@@ -3013,6 +3029,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
+                if (profileSource is not null)
+                    await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                        overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
                     ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
                         ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
@@ -3033,6 +3052,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         await RequireProviderRunAuthorityAsync(cause, request.ResponseId, token).ConfigureAwait(false);
                         await RequireTenantAttachmentSourcesAsync(_boundAgentRun, attachmentSources, token).ConfigureAwait(false);
+                        if (_tenantProfiles is not null && _boundAgentRun is { } profileRun)
+                            await _tenantProfiles.RequireProjectionAsync(profileRun, profileObservation, token).ConfigureAwait(false);
                     }
                     if (_runtimeOwner is not null && _boundAgentRun is { } imageRun && TenantBrowserArtifactRules.HasCapture(messages))
                         await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
@@ -6453,11 +6474,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
                     && input.Error is AgentCore.Application.Security.AccessDeniedException denied
-                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal)
+                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)
                         || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)))
                 {
                     await RefuseProtectedOutputAsync(input.Context, cancellationToken,
-                        AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)).ConfigureAwait(false);
+                        AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun),
+                        profile: denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)).ConfigureAwait(false);
                     job.Ended?.TrySetResult(false); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;

@@ -25,13 +25,14 @@ public sealed partial class TenantCredentialAccessTests
     {
         public ModelCapabilities Capabilities => new(true, true, true);
         public int Calls;
+        public System.Collections.Concurrent.ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public bool HoldAutomation;
         public bool UseDefault;
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
-            await Task.Yield(); ct.ThrowIfCancellationRequested(); var call = Interlocked.Increment(ref Calls);
+            Requests.Enqueue(request); await Task.Yield(); ct.ThrowIfCancellationRequested(); var call = Interlocked.Increment(ref Calls);
             if (request.Context?.Sections.Any(s => s.Id == AgentCore.Application.Context.ContextSectionId.RunTask) == true)
                 Assert.DoesNotContain(request.Context.Sections, s => s.Id == AgentCore.Application.Context.ContextSectionId.CoreBackground);
             if (UseDefault)
@@ -80,9 +81,16 @@ public sealed partial class TenantCredentialAccessTests
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
         // Existing execution needs no Agent Session-create authority.
-        string[] permissions = ["automations.run", "agent-runs.create", "sessions.read", "agent-runs.read", "agents.chat"];
+        var profileBoundary = mode is "manual" or "scheduled";
+        string[] permissions = ["automations.run", "agent-runs.create", "sessions.read", "agent-runs.read", "agents.chat", ..profileBoundary ? new[] { "memory.read" } : Array.Empty<string>()];
         var role = await access.SaveRoleAsync(human, tenant, null, "Existing conversation executor", permissions, await Revision(owner, tenant));
         var assignment = await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
+        if (profileBoundary)
+        {
+            var profile = await Json(await owner.GetAsync(api + "/me/profile"));
+            Assert.Equal(HttpStatusCode.OK, (await owner.PatchAsJsonAsync(api + "/me/profile", new { expectedRevision = await Revision(owner, tenant),
+                expectedProfileRevision = profile.GetProperty("profile").GetProperty("revision").GetInt64(), values = new { preferredName = "PRIVATE_AUTOMATION_CREATOR_PROFILE" } })).StatusCode);
+        }
         var explicitModel = mode is "conversation-model" or "conflicting-model";
         var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", modelKey = explicitModel ? "scripted-beta" : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
@@ -95,6 +103,12 @@ public sealed partial class TenantCredentialAccessTests
         }
         var input = await owner.PostAsJsonAsync(api + $"/sessions/{destination}/messages", new { messageId = Guid.NewGuid(), text = "Retain this actual human conversation history.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
         Assert.True(input.IsSuccessStatusCode, await input.Content.ReadAsStringAsync()); var first = await Execute((await Json(input)).GetProperty("runId").GetGuid());
+        if (profileBoundary)
+        {
+            Assert.NotNull(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(first.Checkpoint).TenantProfileSource);
+            Assert.Contains(Assert.Single(model.Requests).Context!.Sections, s => s.Id == AgentCore.Application.Context.ContextSectionId.Profile
+                && s.Message.Text.Contains("PRIVATE_AUTOMATION_CREATOR_PROFILE", StringComparison.Ordinal));
+        }
         var before = (await sessions.FindTenantSessionAsync(tenant, destination))!;
         Assert.Equal(human, before.Owner.CreatedByPrincipalId); Assert.Equal(SessionOriginKind.UserChat, before.Snapshot.Origin.Kind);
         var consent = recovery || mode is "chat-review" or "read-review" or "run-review" or "reject" or "stale-target" or "database-guards" or "scoped-inbox";
@@ -194,6 +208,11 @@ public sealed partial class TenantCredentialAccessTests
                 Assert.Equal(19, (await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson = json_set(PayloadJson, '$.Operation.AutomationAdmission.Conversation.InputBoundarySequence', 999) WHERE RequestId = {request.RequestId}"))).SqliteErrorCode);
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261021050000_TenantAutomationCompletionDestination"));
                 Assert.Contains("20261021060000_TenantAutomationConversation", await db.Database.GetAppliedMigrationsAsync());
+                // EF commits each completed migration before an older populated guard refuses.
+                // Restore any empty successor schemas removed by this disposable downgrade probe.
+                await db.GetService<IMigrator>().MigrateAsync();
+                Assert.Contains("20261021144350_TenantUserProfiles", await db.Database.GetAppliedMigrationsAsync());
+                Assert.False(db.Database.HasPendingModelChanges());
             }
             if (recovery)
             {
@@ -250,6 +269,12 @@ public sealed partial class TenantCredentialAccessTests
             Assert.DoesNotContain(retained.Where(row => row.GetProperty("sequence").GetInt64() > before.Snapshot.DurableLastEntrySequence), row => row.GetProperty("status").GetString() == "completed"); return;
         }
         var completed = await Execute(run.AgentRunId); Assert.Equal(model.UseDefault ? "Hello!" : "An exact conversation task completed.", completed.Result!.Text); Assert.Equal(2, model.Calls);
+        if (profileBoundary)
+        {
+            Assert.Null(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(completed.Checkpoint).TenantProfileSource);
+            Assert.DoesNotContain(model.Requests.Last().Context!.Sections, s => s.Id == AgentCore.Application.Context.ContextSectionId.Profile);
+            Assert.DoesNotContain("PRIVATE_AUTOMATION_CREATOR_PROFILE", string.Join('\n', model.Requests.Last().Messages.Select(m => m.Text)));
+        }
         var history = (await Json(await owner.GetAsync(api + $"/sessions/{destination}/messages"))).GetProperty("items").EnumerateArray().ToArray();
         Assert.Equal(3, history.Length); Assert.Equal("Retain this actual human conversation history.", history[0].GetProperty("text").GetString());
         Assert.Equal(2, history.Count(e => e.GetProperty("role").GetString()!.Equals("assistant", StringComparison.OrdinalIgnoreCase)));

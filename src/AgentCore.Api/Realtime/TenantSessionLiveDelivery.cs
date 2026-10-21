@@ -12,7 +12,7 @@ namespace AgentCore.Api.Realtime;
 
 // Recipient transport state only. Mutable conversation state remains in the owning Runtime mailbox.
 public sealed partial class TenantSessionLiveDelivery(TenantConversationService access, ITenantRunStore runs,
-    IHubContext<SessionHub> hubs, IIdGenerator ids, TimeProvider time, ILogger<TenantSessionLiveDelivery> logger, VoiceAvailability? speech = null)
+    IHubContext<SessionHub> hubs, IIdGenerator ids, TimeProvider time, ILogger<TenantSessionLiveDelivery> logger, VoiceAvailability? speech = null, TenantRunProfileService? profiles = null)
 {
     private sealed class Connection
     {
@@ -127,7 +127,8 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     var entries = history.Items.ToList();
                     var streaming = source is { Started: not null, Terminal: false, Resync: false }
                         && run is { Status: AgentRunStatus.Running, CancellationRequested: false, Claim: { } claim }
-                        && claim.Generation == source.Run.Claim!.Generation && claim.LeaseExpiresAtUtc > time.GetUtcNow();
+                        && claim.Generation == source.Run.Claim!.Generation && claim.LeaseExpiresAtUtc > time.GetUtcNow()
+                        && await CanReleaseProfileAsync(run, ct).ConfigureAwait(false);
                     if (streaming && source is { Started: { } started })
                     {
                         var entry = entries.FindIndex(e => e.EntryId == started.EntryId);
@@ -210,6 +211,11 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             var subscription = state.Current;
             if (state.Closed || subscription is null || subscription.Tenant != source.Run.Owner.TenantId || subscription.Session != source.Run.SessionId) return;
             var recipient = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, bounded.Token).ConfigureAwait(false);
+            if (output.ResponseId is not null && output.Payload is not (StateChangedOutput or ErrorOutput))
+            {
+                var current = await runs.FindTenantRunAsync(subscription.Tenant, source.Run.AgentRunId, bounded.Token).ConfigureAwait(false);
+                if (current is null || !await CanReleaseProfileAsync(current, bounded.Token).ConfigureAwait(false)) return;
+            }
             var ownsVoice = source.Voice is { Active: true } voice && ReferenceEquals(subscription.Voice, voice);
             if (VoiceOnly(output.Payload) && !ownsVoice) return;
             if (output.Payload is StateChangedOutput changed) output = output with { Payload = changed with {

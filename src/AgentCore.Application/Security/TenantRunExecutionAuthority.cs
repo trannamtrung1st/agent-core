@@ -8,11 +8,15 @@ namespace AgentCore.Application.Security;
 public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
-    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null) : IAgentRunAuthority, ITenantRunContext
+    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunProfileService? profileSources = null) : IAgentRunAuthority, ITenantRunContext
 {
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, reason == "account_metadata_unavailable" ? "credentials.read" : "credentials.use", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
-    public async ValueTask<AgentDefinition?> CurrentDefinitionAsync(AgentRun run, CancellationToken cancellationToken = default)
+    public ValueTask<AgentDefinition?> CurrentDefinitionAsync(AgentRun run, CancellationToken cancellationToken = default) => CurrentDefinitionCoreAsync(run, true, cancellationToken);
+    public ValueTask<AgentDefinition?> CurrentProjectionDefinitionAsync(AgentRun run, CancellationToken ct = default) => CurrentDefinitionCoreAsync(run, false, ct);
+    public ValueTask RecordProfileOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
+        operations.RecordFailureAsync(reference, "memory.read", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
+    private async ValueTask<AgentDefinition?> CurrentDefinitionCoreAsync(AgentRun run, bool checkProfile, CancellationToken cancellationToken)
     {
         try
         {
@@ -70,6 +74,11 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                         || AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryRead(after.Run.Checkpoint, out var attachmentMessages)
                             && attachmentMessages!.Any(TenantAttachmentRuntimeContextService.HasReadObservation))
                         throw new AccessDeniedException("attachment_context_unavailable");
+                    if (checkProfile && AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(after.Run.Checkpoint).TenantProfileSource is { } profile)
+                    {
+                        if (profileSources is null) throw new AccessDeniedException("profile_context_unavailable");
+                        await profileSources.RequireAsync(after.Run, profile, cancellationToken).ConfigureAwait(false);
+                    }
                     return current.Definition;
                 }
             }

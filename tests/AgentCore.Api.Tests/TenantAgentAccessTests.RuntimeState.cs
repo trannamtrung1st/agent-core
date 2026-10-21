@@ -107,19 +107,21 @@ public sealed partial class TenantAgentAccessTests
     {
         public int Calls; public TenantBrowserAgentOwner? Owner; public IReadOnlyList<Guid>? ReadableSessions;
         public Func<Task>? AfterRead; public Task<ResourceStateObservation>? Pending;
+        public Func<int, Task>? BeforeRead; public bool CountPages;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ValueTask<ResourceStateObservation> ObserveTenantSessionAsync(TenantBrowserOwner owner, CancellationToken ct = default) => throw new NotSupportedException();
         public async ValueTask<ResourceStateObservation> ObserveTenantAgentAsync(TenantBrowserAgentOwner owner, IReadOnlyList<Guid>? readableSessions, CancellationToken ct = default)
         {
             Calls++; Owner = owner; ReadableSessions = readableSessions; Started.TrySetResult();
+            if (BeforeRead is { } before) await before(Calls);
             if (AfterRead is { } callback) { AfterRead = null; await callback(); }
-            return Pending is { } pending ? await pending : new("browser", "available", "isolated", DateTimeOffset.UtcNow, LiveContexts: 0, OpenPages: 0);
+            return Pending is { } pending ? await pending : new("browser", "available", "isolated", DateTimeOffset.UtcNow, LiveContexts: 0, OpenPages: CountPages ? Calls : 0);
         }
     }
-    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, RuntimeObservationModel? model = null) : AgentCoreApiFactory
+    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, ILanguageModel? model = null, string? root = null) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => model is not null;
-        public RuntimeBrowserProbe Browser { get; } = new(); private string Root { get; } = Path.Combine(Path.GetTempPath(), "tenant-runtime-state-" + Guid.NewGuid().ToString("N"));
+        public RuntimeBrowserProbe Browser { get; } = new(); public string Root { get; } = root ?? Path.Combine(Path.GetTempPath(), "tenant-runtime-state-" + Guid.NewGuid().ToString("N"));
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);

@@ -14,6 +14,7 @@ public sealed partial class SqliteIamStore
     {
         var source = await CompletionSource(db, AgentRunOwner.ForTenant(request.TenantId, request.Operation.InstanceId, request.ExecutorPrincipalId), request.RunId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("completion_unavailable");
+        await RequireStoredProfileSource(db, source.Child, ct).ConfigureAwait(false);
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!; var iam = new IamAuthorizer(this);
         var row = await OwnedAgents(db, request.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == request.Operation.InstanceId.ToString("D"), ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("executor_unavailable");
@@ -27,6 +28,7 @@ public sealed partial class SqliteIamStore
     }
     private async ValueTask RequireTenantReportRead(AgentCoreDbContext db, TenantSecurityState state, TenantBackgroundCompletion source, CancellationToken ct)
     {
+        await RequireStoredProfileSource(db, source.Child, ct).ConfigureAwait(false);
         TenantBackgroundCompletionFactory.RequireParent(source);
         var iam = new IamAuthorizer(this);
         await TenantReportReadRules.RequireRawAsync(state, source, iam, ct).ConfigureAwait(false);

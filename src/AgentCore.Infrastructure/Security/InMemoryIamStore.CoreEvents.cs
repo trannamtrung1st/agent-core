@@ -32,6 +32,8 @@ public sealed partial class InMemoryIamStore
         var previous = sessionBacking.ReadTenantSession(frame.Owner.TenantId!.Value, frame.SessionId)
             ?? throw new AccessDeniedException("session_unavailable");
         var producer = sessionBacking.ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
+        if (TenantRuntimeRules.PublishesResponse(producer, snapshot, id => sessionBacking.FindEntry(frame.SessionId, id)))
+            RequireStoredProfileSource(producer, CancellationToken.None);
         if (TenantAutomationConversationRules.IsConversationRoot(producer)
             && TenantRuntimeRules.PublishesResponse(producer, snapshot, id => sessionBacking.FindEntry(frame.SessionId, id)))
             RequireTenantEventRead(producer, CancellationToken.None);

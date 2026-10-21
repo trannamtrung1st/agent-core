@@ -58,6 +58,13 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 if (TenantInputBlocked(run))
                     throw AgentCoreErrors.Conflict("Session already owns an active execution.");
             }
+            if (command is AgentRunCommand.Checkpoint profileCheckpoint)
+            {
+                var proposedProfile = AgentRunToolCallCheckpoint.ReadExecutionState(profileCheckpoint.Value).TenantProfileSource;
+                if (AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantProfileSource is not null && proposedProfile is null)
+                    throw new AccessDeniedException("profile_source_unavailable");
+                if (proposedProfile is not null) RequireProfileSource(run, proposedProfile, ct);
+            }
             if (command is AgentRunCommand.Complete) RequireTenantEventRead(run, ct);
             if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })
             {

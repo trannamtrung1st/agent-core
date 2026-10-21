@@ -1023,7 +1023,8 @@ public sealed class SessionRuntimeFactory(
     ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null,
     AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
     AgentCore.Application.Security.TenantArtifactReferenceService? tenantArtifacts = null,
-    AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null)
+    AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null,
+    AgentCore.Application.Security.TenantRunProfileService? tenantProfiles = null)
 {
     private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
 
@@ -1041,7 +1042,8 @@ public sealed class SessionRuntimeFactory(
             modelResolver: models, catalog: catalog, diagnostics: diagnostics, artifacts: tenantArtifacts?.Bind(frame) ?? new TenantUnavailableArtifacts(),
             runAuthority: authority, runtimeOwner: frame.Owner,
             tenantContinuations: tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."),
-            tenantAttachments: tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."), tenantVoice: tenantVoice);
+            tenantAttachments: tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."), tenantVoice: tenantVoice,
+            tenantProfiles: tenantProfiles ?? throw new InvalidOperationException("Tenant Profile context binding is required."));
     }
     public ValueTask<ISpeechRecognitionSession> OpenTenantRecognitionAsync(RecognitionOptions options, CancellationToken ct)
         => (recognizer ?? throw AgentCoreErrors.VoiceUnavailable()).OpenAsync(options, ct);
