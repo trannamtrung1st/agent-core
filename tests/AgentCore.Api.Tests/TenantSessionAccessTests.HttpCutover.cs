@@ -40,8 +40,14 @@ public sealed partial class TenantSessionAccessTests
             var retained = manifest.RootElement.GetProperty("retained").EnumerateArray()
                 .Select(item => (method: item.GetProperty("method").GetString()!, route: item.GetProperty("route").GetString()!)).ToHashSet();
             Assert.Equal(232, retained.Count);
-            Assert.True(retained.SetEquals(actual.Where(item => item.route.StartsWith("/api/", StringComparison.Ordinal))),
-                "All canonical method/path pairs must survive removal of the obsolete HTTP surface.");
+            var added = manifest.RootElement.GetProperty("addedCanonical").EnumerateArray()
+                .Select(item => (method: item.GetProperty("method").GetString()!, route: item.GetProperty("route").GetString()!)).ToHashSet();
+            Assert.Equal(7, added.Count); Assert.DoesNotContain(added, retained.Contains);
+            var supported = retained.Union(added).ToHashSet();
+            var mapped = actual.Where(item => item.route.StartsWith("/api/", StringComparison.Ordinal)).ToHashSet();
+            Assert.True(supported.SetEquals(mapped), "Canonical route inventory differs. Missing: "
+                + string.Join(", ", supported.Except(mapped).OrderBy(p => p.route).ThenBy(p => p.method))
+                + ". Unexpected: " + string.Join(", ", mapped.Except(supported).OrderBy(p => p.route).ThenBy(p => p.method)));
             var payload = Guid.NewGuid().ToString("D");
             foreach (var item in retired)
             {

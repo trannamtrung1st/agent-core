@@ -3876,6 +3876,40 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("TenantSessions", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantUserProfileRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreferencesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "PrincipalId");
+
+                    b.HasIndex("TenantId", "PrincipalId", "AccountId");
+
+                    b.ToTable("TenantUserProfiles", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TenantUserProfiles_Preferences", "length(CAST(PreferencesJson AS BLOB)) <= 4096 AND CASE WHEN json_valid(PreferencesJson) THEN json_type(PreferencesJson) = 'object' ELSE 0 END");
+
+                            t.HasCheckConstraint("CK_TenantUserProfiles_Revision", "Revision > 0 AND UpdatedAtUtc >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AgentCore.Domain.Security.ApprovalProcessedSignal", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Security.TenantApprovalRecord", null)
@@ -4755,6 +4789,16 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "AgentInstanceId", "ExecutorPrincipalId")
                         .HasPrincipalKey("TenantId", "AgentInstanceId", "PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantUserProfileRecord", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.TenantUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PrincipalId", "AccountId")
+                        .HasPrincipalKey("TenantId", "PrincipalId", "AccountId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -45,6 +45,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<ISystemBrowserPrivacyStore>(p => (ISystemBrowserPrivacyStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<SystemBrowserPrivacyService>();
         services.TryAddSingleton<TenantAccessService>();
+        services.TryAddSingleton<ITenantUserProfileStore>(p => (ITenantUserProfileStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantUserProfileService>();
         services.TryAddSingleton<ITenantAgentStore>(provider => (ITenantAgentStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAgentService>();
         services.TryAddSingleton<ITenantAgentDecommissionStore>(p => (ITenantAgentDecommissionStore)p.GetRequiredService<IIamStore>());

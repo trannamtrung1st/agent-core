@@ -170,6 +170,23 @@ public sealed class CanonicalSchemaRefusalTests
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
             await using (var db = await factory.CreateDbContextAsync())
             {
+                // This disposable corruption fixture must retain all production guard DDL.
+                // SQLite validates trigger references during DROP COLUMN, so restore the exact
+                // captured guards after deliberately changing the two column shapes.
+                var guards = new List<(string Name, string Sql)>();
+                await db.Database.OpenConnectionAsync();
+                await using (var read = db.Database.GetDbConnection().CreateCommand())
+                {
+                    read.CommandText = "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name";
+                    await using var reader = await read.ExecuteReaderAsync();
+                    while (await reader.ReadAsync()) guards.Add((reader.GetString(0), reader.GetString(1)));
+                }
+                foreach (var guard in guards)
+                {
+                    await using var drop = db.Database.GetDbConnection().CreateCommand();
+                    drop.CommandText = "DROP TRIGGER \"" + guard.Name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+                    await drop.ExecuteNonQueryAsync();
+                }
                 await db.Database.ExecuteSqlRawAsync(
                     """
                     ALTER TABLE "AgentInstances" DROP COLUMN "PersonaRevision";
@@ -177,6 +194,18 @@ public sealed class CanonicalSchemaRefusalTests
                     ALTER TABLE "AgentInstances" ADD COLUMN "PersonaRevision" INTEGER NULL;
                     ALTER TABLE "AgentInstances" ADD COLUMN "Revision" INTEGER NULL;
                     """);
+                foreach (var guard in guards)
+                {
+                    await using var restore = db.Database.GetDbConnection().CreateCommand();
+                    restore.CommandText = guard.Sql;
+                    await restore.ExecuteNonQueryAsync();
+                }
+                await using var verifyGuards = db.Database.GetDbConnection().CreateCommand();
+                verifyGuards.CommandText = "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name";
+                await using var guardReader = await verifyGuards.ExecuteReaderAsync();
+                var retained = new List<(string Name, string Sql)>();
+                while (await guardReader.ReadAsync()) retained.Add((guardReader.GetString(0), guardReader.GetString(1)));
+                Assert.Equal(guards, retained);
             }
 
             var error = await Assert.ThrowsAsync<AgentCoreException>(() =>

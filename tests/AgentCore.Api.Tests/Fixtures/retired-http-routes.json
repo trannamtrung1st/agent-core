@@ -1844,5 +1844,35 @@
       "method": "POST",
       "route": "/api/v2/tenants/{tenantId:guid}/webhooks/{sourceId:guid}/rotate"
     }
+  ],
+  "addedCanonical": [
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/state-isolation"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/state-isolation/presets/{preset}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/state-isolation/preview"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/state-isolation/apply"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/runtime-state"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/me/profile"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/me/profile"
+    }
   ]
 }

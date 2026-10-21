@@ -155,6 +155,7 @@ await InitializeIdentityAsync(app.Services, app.Configuration).ConfigureAwait(fa
 app.UseIdentityHttp();
 IdentityEndpoints.Map(app);
 TenantAccessEndpoints.Map(app);
+TenantUserProfileEndpoints.Map(app);
 AuthorizationAuditEndpoints.Map(app);
 SystemAdministrationEndpoints.Map(app);
 TenantAgentEndpoints.Map(app);
