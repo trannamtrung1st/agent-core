@@ -1133,3 +1133,8 @@ Scoped server query/count/paging, original-human post-read fences and the shared
 ### System identity metadata administration checkpoint — 2026-10-21
 
 Canonical metadata catalogues, original-human atomic organization creation/status and Account status, final operator protection, native guarded operator UI and SQLite rollback/recreation are locally qualified as one module; [verification](reports/system-administration-verification-2026-10-21.md) owns exact evidence and limits. This supersedes System identity catalogue/status/UI-pending notes only. Tenant voice, remaining operator/guardrail families, obsolete authority/schema removal and exhaustive original-proposal security/route/design acceptance remain open. The original goal remains active; no milestone or full proposal acceptance follows.
+
+
+## Platform operator assignment checkpoint
+
+Built-in platform role inspection/assignment/revocation now has [focused original-human, atomicity, recovery and native UI qualification](reports/platform-operator-verification-2026-10-21.md). This supersedes operator-role-management-pending notes only for this existing built-in role. Tenant voice, remaining platform guardrails, obsolete authority/schema removal and exhaustive original-proposal route/security/design acceptance remain open. The full goal stays active; no milestone acceptance follows.

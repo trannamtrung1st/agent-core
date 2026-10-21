@@ -967,3 +967,8 @@ Tenant Audit and `/system/audit` reuse `AuthorizationAuditCollection`, native ve
 ### Platform identity metadata administration
 
 `/system/organizations` and `/system/accounts` use `SystemAdministration` under independently selected System permissions. Existing AdminShell/native Form/Table/Drawer/Descriptions, shared wrapping filter/bounded-form/detail layouts, CreateOrganization, draft guard and centered `confirmAction` remain the owners. Show administrative identity metadata, explicit case-sensitive filters and server counts/pages, with no private content links. Inspect exact target/current status; deliberate review captures the current opaque Account version or tenant revision. Stale/unknown replies retain choice and disable further changes until fresh readback; a readback matching the choice prevents replay. Denial retires protected metadata. The final Platform Operator refusal is explained explicitly. [Interaction owner](19-multi-tenant-iam-ux.md#system-administration-metadata-interaction-contract).
+
+
+## Platform operator editor
+
+The exact `/system/operators` route requires `system.governance.manage` and extends shared `SystemAdministration`. Keep Account status and role facts distinct. Reuse explicit filters/native details/exact confirmation/draft guard. Explain global powers, no organization-private access and mandatory fresh sign-in; stale or unknown outcomes require deliberate current-state reload before another review. See the [interaction contract](19-multi-tenant-iam-ux.md#platform-operator-assignment-interaction-contract).

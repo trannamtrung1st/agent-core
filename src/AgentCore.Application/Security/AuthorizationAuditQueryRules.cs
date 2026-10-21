@@ -23,6 +23,7 @@ public static class AuthorizationAuditQueryRules
                 (a.Action == "identity.bootstrap" && a.ReasonCode == "explicit_cli_bootstrap"
                  || a.Action == "account.password.change" && a.ReasonCode == "reauthenticated"
                  || a.Action == "system.accounts.status" && a.ReasonCode == "authorized"
+                 || (a.Action == "system.operators.assign" || a.Action == "system.operators.revoke") && a.ReasonCode == "authorized"
                  || a.Action == "system.browser.privacy.update" && a.ReasonCode == "policy_saved_restart_required"));
         if (query.Action is { } action) rows = rows.Where(a => a.Action == action);
         if (query.Decision is { } decision) rows = rows.Where(a => a.Decision == decision);

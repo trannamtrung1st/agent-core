@@ -40,6 +40,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<AuthorizationAuditQueryService>();
         services.TryAddSingleton<ISystemAdministrationStore>(p => (ISystemAdministrationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<SystemAdministrationService>();
+        services.TryAddSingleton<ISystemOperatorStore>(p => (ISystemOperatorStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<SystemOperatorService>();
         services.TryAddSingleton<ISystemBrowserPrivacyStore>(p => (ISystemBrowserPrivacyStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<SystemBrowserPrivacyService>();
         services.TryAddSingleton<TenantAccessService>();

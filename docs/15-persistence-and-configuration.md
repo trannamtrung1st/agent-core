@@ -1400,3 +1400,8 @@ Downgrade refuses retained tenant ExistingSession Automation/occurrence rows or 
 ### System administration transactions
 
 The System administration facet reuses existing Account/Tenant/authentication/global-role/audit tables; no migration or second identity owner. Metadata count/page snapshots share a SQLite transaction. Original human checks repeat under the InMemory gate or SQLite command transaction before target CAS. Account witnesses are purpose-bound SHA256 hashes of AccountId/status/security stamp; raw stamp/hash/session references are omitted from public rows. Account changes preserve password/login/profile fields and atomically rotate stamp plus body-free audit, enforcing tenant last-Owner and final built-in Platform Operator floors. Tenant Active/Suspended updates change only status and revision plus safe global audit; creation commits the full initial Owner graph and existing tenant audit together. Failed audit publication rolls back status/stamp/revision. [Executed recovery evidence](reports/system-administration-verification-2026-10-21.md).
+
+
+## Platform role assignment atomicity
+
+Canonical operator changes reuse Accounts, Principals, AccessRoles, AccessRoleAssignments and AuthorizationAudit. No schema or migration is added. Both store implementations serialize last-active-operator safety with Account status and role mutation, repeat original-human authority, compare the purpose-bound exact role version and atomically rotate the target Account stamp with role/audit. SQLite audit failure rolls all three back; fresh application hosts retain assignments/revocations. Password/status/role changes invalidate old versions, including remove/re-add ABA.

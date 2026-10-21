@@ -927,3 +927,8 @@ Current raw target read and Agent Chat authority, creation authority and any req
 ### System administrative identity boundaries
 
 `SystemAdministrationService` owns metadata-only global Account/organization queries and original-human administrative commands. Its typed store facet repeats live original login/stamp/global Principal and raw System permission inside atomic status/create transactions. Tenant API membership middleware applies only to `/api/v2/tenants`; a System target ID cannot turn System suspension/reactivation into a membership operation. Metadata read authority never confers tenant-private access. Status preserves retained graphs; Account stamps invalidate sessions, tenant revisions invalidate stale scope, and both tenant last-Owner and final built-in Platform Operator safety remain transactional. [Port contract](04-backend-interfaces.md#system-administration-conversion-contract).
+
+
+## Platform operator assignment ownership
+
+Built-in platform roles use the existing global Account/Principal and System role-assignment owner. Canonical original-human governance checks, exact Account role versions, stamp rotation, last-active-operator safety and body-free audit commit in the same storage gate/transaction. Platform roles grant no tenant-private authority.

@@ -15,9 +15,15 @@ internal static class SystemAdministrationEndpoints
     public sealed record AccountStatusRequest(string Status, string ExpectedVersion);
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed record TenantStatusRequest(string Status, long ExpectedRevision);
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    public sealed record OperatorRequest(bool? Enabled, string ExpectedVersion);
     internal static void Map(WebApplication app)
     {
         var system = app.MapGroup("/api/v2/system").RequireAuthorization();
+        system.MapGet("/operators", (HttpContext http, [AsParameters] Filters filters, bool? isOperator, IIamStore security, SystemOperatorService service, CancellationToken ct) =>
+            IdentityHttp.Respond(async () => Results.Json(await service.QueryAsync(await IdentityHttp.SystemHumanAsync(http, security, ct), filters.Query, isOperator, ct))));
+        system.MapPut("/operators/{accountId:guid}", (Guid accountId, OperatorRequest body, HttpContext http, IIamStore security, SystemOperatorService service, CancellationToken ct) =>
+            IdentityHttp.Respond(async () => { await service.SetAsync(await IdentityHttp.SystemHumanAsync(http, security, ct), accountId, body.ExpectedVersion, body.Enabled ?? throw new ArgumentException("Select the exact operator role state."), ct); return Results.NoContent(); }));
         system.MapGet("/accounts", (HttpContext http, [AsParameters] Filters filters, IIamStore security, SystemAdministrationService service, CancellationToken ct) =>
             IdentityHttp.Respond(async () => Results.Json(await service.AccountsAsync(await IdentityHttp.SystemHumanAsync(http, security, ct), filters.Query, ct))));
         system.MapGet("/tenants", (HttpContext http, [AsParameters] Filters filters, IIamStore security, SystemAdministrationService service, CancellationToken ct) =>
