@@ -169,6 +169,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     private async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
         await RequireUserProfileReferencesAsync(db, state, ct).ConfigureAwait(false);
+        await RequireLearnedMemoryReferences(db, state, ct).ConfigureAwait(false);
         foreach (var assignment in state.Assignments.Where(a => TenantEventAdmissionRules.TryId(a.Scope, out _)))
             if (!await db.CoreEvents.IgnoreQueryFilters().AnyAsync(e => e.TenantId == state.Tenant.TenantId && e.EventId == assignment.Scope.ResourceId, ct))
                 throw new ArgumentException("A Core event assignment requires its actual tenant fact.");

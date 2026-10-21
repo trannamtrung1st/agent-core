@@ -47,7 +47,12 @@ public sealed partial class SqliteIamStore
             SqliteMemoryStore.ApplySession(row, value);
             await TenantCoreEventProduction.StageSessionAsync(db, previous, value, root.Domain(), null, ct).ConfigureAwait(false);
             if (change.Action == TenantSessionAction.Delete)
+            {
                 foreach (var entry in await db.Entries.Where(e => e.SessionId == root.SessionId).ToArrayAsync(ct).ConfigureAwait(false)) RedactSessionEntry(entry);
+                var memories = await db.Set<TenantLearnedMemoryRecord>().Where(i => i.TenantId == root.TenantId && i.SessionId == root.SessionId && i.Scope == 0 && i.Status != 2).ToArrayAsync(ct).ConfigureAwait(false);
+                foreach (var memory in memories) db.Entry(memory).CurrentValues.SetValues(memory with { Status = 2, Subject = "", Content = "", SubjectKey = "",
+                    Revision = checked(memory.Revision + 1), UpdatedAtUtc = Math.Max(memory.UpdatedAtUtc, at.ToUnixTimeMilliseconds()) });
+            }
             saved = new(root.Domain(), value); return true;
         }, ct).ConfigureAwait(false);
         return written ? saved : null;

@@ -334,7 +334,8 @@ public sealed class SqliteAdminLifecycleDeletion(
                 cancellationToken).ConfigureAwait(false),
             await db.StructuredMemories.CountAsync(
                 item => item.OwnerInstanceId == instanceId && item.Scope == 1 && item.Status == 0,
-                cancellationToken).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false) + (tenant is null ? 0 : await db.Set<AgentCore.Infrastructure.Security.TenantLearnedMemoryRecord>()
+                    .CountAsync(i => i.TenantId == tenant && i.AgentInstanceId == instanceId && i.Status != 2, cancellationToken).ConfigureAwait(false)),
             await db.Automations.IgnoreQueryFilters().Where(a => a.TenantId == null || a.TenantId == tenant).CountAsync(
                 item => item.AgentInstanceId == instanceId && !deletedAutomations.Contains(item.AutomationId),
                 cancellationToken).ConfigureAwait(false),

@@ -7,6 +7,8 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
+    private readonly AgentCore.Application.Security.TenantMemoryService? _tenantMemory;
+    private TenantMemoryPlan? _tenantMemoryPlan;
     private async Task<IReadOnlyList<MemoryReceipt>> ApplyMemoryProposalsAsync(
         IReadOnlyList<MemoryProposal> proposals,
         CancellationToken cancellationToken)
@@ -16,6 +18,13 @@ public sealed partial class SessionRuntime
             return [];
         }
 
+        if (_runtimeOwner is not null)
+        {
+            var run = _boundAgentRun ?? throw new AgentCore.Application.Security.AccessDeniedException("memory_context_unavailable");
+            _tenantMemoryPlan = await (_tenantMemory ?? throw new InvalidOperationException("Tenant learned-memory binding is required."))
+                .PrepareAsync(run, _snapshot, proposals, cancellationToken).ConfigureAwait(false);
+            return _tenantMemoryPlan.Receipts;
+        }
         if (_structuredMemory is null)
         {
             return MemoryReceiptProjection.FromResults(
@@ -87,6 +96,7 @@ public sealed partial class SessionRuntime
 
     private void DiscardStagedMemory()
     {
+        _tenantMemoryPlan = null;
         _memoryCommitSettled = true;
         _stagedMemoryProposals = null;
     }

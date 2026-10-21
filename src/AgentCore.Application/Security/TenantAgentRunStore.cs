@@ -81,9 +81,10 @@ public sealed class TenantAgentRunStore(ITenantRuntimeStore storage, ITenantRunS
         Scope(owner, snapshot.SessionId, agentRunId);
         if (frame is null) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
         try { return await storage.CommitTenantOutcomeAsync(frame, snapshot, expectedSessionRevision, completion, draftEntryId, ids.NewId(), cancellationToken).ConfigureAwait(false); }
-        catch (AccessDeniedException e) when (authority is not null && (e.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)))
+        catch (AccessDeniedException e) when (authority is not null && (e.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)))
         {
-            if (e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)) await authority.RecordProfileOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false);
+            if (e.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)) await authority.RecordMemoryOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false);
+            else if (e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)) await authority.RecordProfileOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false);
             else await authority.RecordAccountOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false);
             throw;
         }

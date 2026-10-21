@@ -60,12 +60,14 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
             }
             if (command is AgentRunCommand.Checkpoint profileCheckpoint)
             {
+                RequireMemoryCheckpoint(run, profileCheckpoint.Value, ct);
                 var proposedProfile = AgentRunToolCallCheckpoint.ReadExecutionState(profileCheckpoint.Value).TenantProfileSource;
                 if (AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantProfileSource is not null && proposedProfile is null)
                     throw new AccessDeniedException("profile_source_unavailable");
                 if (proposedProfile is not null) RequireProfileSource(run, proposedProfile, ct);
             }
             if (command is AgentRunCommand.Complete) RequireTenantEventRead(run, ct);
+            if (command is AgentRunCommand.Complete { Learning: not null }) throw AgentCoreErrors.Conflict("Learning requires the atomic response outcome transaction.");
             if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })
             {
                 RequireTenantOutputSources(run, ct);

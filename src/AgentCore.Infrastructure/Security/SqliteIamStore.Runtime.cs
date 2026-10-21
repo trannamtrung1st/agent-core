@@ -43,13 +43,15 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
         var producerRow = await db.AgentRuns.AsNoTracking().SingleAsync(r => r.TenantId == frame.Owner.TenantId && r.AgentRunId == frame.RunId.ToString("D"), ct).ConfigureAwait(false);
         var producer = AgentRunStoreMapping.ToDomain(producerRow);
-        if (TenantAutomationConversationRules.IsConversationRoot(producer) || AgentRunToolCallCheckpoint.ReadExecutionState(producer.Checkpoint).TenantProfileSource is not null)
+        if (TenantAutomationConversationRules.IsConversationRoot(producer) || AgentRunToolCallCheckpoint.ReadExecutionState(producer.Checkpoint).TenantProfileSource is not null
+            || AgentRunToolCallCheckpoint.ReadExecutionState(producer.Checkpoint).TenantMemorySources is { Count: > 0 })
         {
             var rows = await db.Entries.AsNoTracking().Where(e => e.SessionId == producerRow.SessionId && e.ResponseId == producer.ResponseId!.Value.ToString("D")).ToArrayAsync(ct).ConfigureAwait(false);
             var saved = rows.Select(SqliteMemoryStore.ToEntry).ToDictionary(e => e.EntryId);
             if (TenantRuntimeRules.PublishesResponse(producer, snapshot, id => saved.GetValueOrDefault(id)))
             {
                 await RequireStoredProfileSource(db, producer, ct).ConfigureAwait(false);
+                await RequireStoredMemorySources(db, producer, ct).ConfigureAwait(false);
                 if (TenantAutomationConversationRules.IsConversationRoot(producer)) await RequireTenantEventRead(db, producer, ct).ConfigureAwait(false);
             }
         }
@@ -132,12 +134,14 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         }
         if (command is AgentRunCommand.Checkpoint profileCheckpoint)
         {
+            await RequireMemoryCheckpoint(db, run, profileCheckpoint.Value, ct).ConfigureAwait(false);
             var proposedProfile = AgentRunToolCallCheckpoint.ReadExecutionState(profileCheckpoint.Value).TenantProfileSource;
             if (AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantProfileSource is not null && proposedProfile is null)
                 throw new AccessDeniedException("profile_source_unavailable");
             if (proposedProfile is not null) await RequireProfileSource(db, run, proposedProfile, ct).ConfigureAwait(false);
         }
         if (command is AgentRunCommand.Complete) await RequireTenantEventRead(db, run, ct).ConfigureAwait(false);
+        if (command is AgentRunCommand.Complete { Learning: not null }) throw AgentCoreErrors.Conflict("Learning requires the atomic response outcome transaction.");
         if (command is AgentRunCommand.Complete { OutcomeEntryId: not null })
         {
             await RequireTenantOutputSources(db, run, ct).ConfigureAwait(false);

@@ -49,6 +49,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantUserProfileService>();
         services.TryAddSingleton<ITenantRunProfileStore>(p => (ITenantRunProfileStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantRunProfileService>();
+        services.TryAddSingleton<ITenantLearnedMemoryStore>(p => (ITenantLearnedMemoryStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantMemoryService>();
         services.TryAddSingleton<ITenantAgentStore>(provider => (ITenantAgentStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAgentService>();
         services.TryAddSingleton<ITenantAgentDecommissionStore>(p => (ITenantAgentDecommissionStore)p.GetRequiredService<IIamStore>());

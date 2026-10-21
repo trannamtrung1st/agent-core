@@ -188,7 +188,7 @@ public sealed partial class TenantSessionLiveDelivery
             if (_sources.GetValueOrDefault((source.Run.Owner.TenantId.Value, source.Run.SessionId)) != source
                 || current is not { Status: AgentRunStatus.Running, CancellationRequested: false, Claim: { } claim }
                 || claim.Generation != source.Run.Claim!.Generation || claim.LeaseExpiresAtUtc <= time.GetUtcNow()
-                || !await CanReleaseProfileAsync(current, ct).ConfigureAwait(false)) return;
+                || !await CanReleasePrivateSourcesAsync(current, ct).ConfigureAwait(false)) return;
             foreach (var pair in _connections.ToArray().Where(p => p.Value.Current is { } s && s.Tenant == source.Run.Owner.TenantId && s.Session == source.Run.SessionId && ReferenceEquals(s.Voice, source.Voice) && s.Voice?.Active == true))
             {
                 var state = pair.Value; using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5), time);
@@ -199,7 +199,7 @@ public sealed partial class TenantSessionLiveDelivery
                     if (state.Closed || state.Current is not { Voice: { Active: true } lease } sub) continue;
                     var recipient = await access.AuthorizeRecipientAsync(sub.Tenant, sub.Session, sub.Human, bounded.Token).ConfigureAwait(false);
                     if (recipient.Owner != lease.Owner || state.Closed || state.Current != sub || !lease.Active || recipient.Mode != SessionMode.Voice
-                        || !await CanReleaseProfileAsync(current, bounded.Token).ConfigureAwait(false)) continue;
+                        || !await CanReleasePrivateSourcesAsync(current, bounded.Token).ConfigureAwait(false)) continue;
                     await hubs.Clients.Client(pair.Key).SendAsync("AudioOutput", new OutputAudioDto { ProtocolVersion = 1, SessionId = sub.Session.ToString("D"),
                         AttachmentId = sub.Attachment.ToString("D"), ResponseId = audio.ResponseId.ToString("D"), FrameSequence = audio.FrameSequence,
                         SampleOffset = audio.SampleOffset, IsFinal = audio.IsFinal, Data = audio.Data.ToArray() }, bounded.Token).ConfigureAwait(false);

@@ -17,7 +17,8 @@ public sealed record ToolLoopExecutionState(RunPhase Phase = RunPhase.Work, stri
     int? CleanupStartedAtMessage = null, IReadOnlyList<RunAttemptDiagnostic>? FailedAttempts = null,
     ContextManifest? ContextManifest = null, Guid? TranscriptId = null, bool CompletionCorrectionAttempted = false, RunProtocolRecovery? ProtocolRecovery = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantAttachmentContextSource>? TenantAttachmentSources = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantProfileSource? TenantProfileSource = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantProfileSource? TenantProfileSource = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantMemorySource>? TenantMemorySources = null);
 
 public static class AgentRunToolCallCheckpoint
 {

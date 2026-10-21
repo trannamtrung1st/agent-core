@@ -59,6 +59,7 @@ public sealed partial class SessionRuntime
         // Terminalization cancels before releasing this binding. Preserve cancellation
         // instead of diagnosing an expected ownership loss as a provider failure.
         ct.ThrowIfCancellationRequested();
+        if (_tenantMemory is not null && run is not null) await _tenantMemory.RequireAsync(run, executionState?.TenantMemorySources, ct).ConfigureAwait(false);
         if (run is null) throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
         var recordedTenantUncertainty = _tenantApprovalOutcome is { Outcome: AgentCore.Domain.Security.TenantOperationOutcome.Indeterminate } outcome
             && outcome.RunId == run.AgentRunId && run.SideEffect.ToolCallId == "operation:" + outcome.OperationId.ToString("D");

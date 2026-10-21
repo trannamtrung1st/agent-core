@@ -18,6 +18,7 @@ internal sealed class MemoryReceiptJsonConverter : JsonConverter<MemoryReceipt>
         string? subject = null;
         IReadOnlyList<string>? scopes = null;
         string? presentation = null;
+        MemoryReceiptOwner? owner = null;
 
         while (reader.Read())
         {
@@ -57,6 +58,9 @@ internal sealed class MemoryReceiptJsonConverter : JsonConverter<MemoryReceipt>
                 case "presentation":
                     presentation = reader.GetString();
                     break;
+                case "owner":
+                    owner = JsonSerializer.Deserialize<MemoryReceiptOwner>(ref reader, options);
+                    break;
                 default:
                     reader.Skip();
                     break;
@@ -69,7 +73,7 @@ internal sealed class MemoryReceiptJsonConverter : JsonConverter<MemoryReceipt>
             source ?? string.Empty,
             subject ?? string.Empty,
             scopes is { Count: > 0 } ? scopes : null,
-            presentation ?? string.Empty);
+            presentation ?? string.Empty, owner);
     }
 
     public override void Write(Utf8JsonWriter writer, MemoryReceipt value, JsonSerializerOptions options)
@@ -92,6 +96,11 @@ internal sealed class MemoryReceiptJsonConverter : JsonConverter<MemoryReceipt>
         }
 
         writer.WriteString("presentation", value.Presentation);
+        if (value.Owner is { } owner)
+        {
+            writer.WritePropertyName("owner");
+            JsonSerializer.Serialize(writer, owner, options);
+        }
         writer.WriteEndObject();
     }
 

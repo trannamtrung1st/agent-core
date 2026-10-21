@@ -45,6 +45,7 @@ public sealed partial class SqliteIamStore
         AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
         await new SqliteMemoryStore(contexts, clock ?? TimeProvider.System).StageTenantRuntimeSaveAsync(db, frame, snapshot, expectedRevision, ct).ConfigureAwait(false);
+        await StageLearningCommit(db, frame, snapshot, completion.Learning, ct).ConfigureAwait(false);
         if (draft is not null) db.Entries.Remove(draft);
         AgentRunStoreMapping.Apply(row, next); await TenantCoreEventProduction.StageRunAsync(db, run, next, ct).ConfigureAwait(false); await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }

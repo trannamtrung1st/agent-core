@@ -61,7 +61,7 @@ public static class TenantReportReadRules
     }
 }
 
-public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITenantRunStore runs, IIamStore security, IamAuthorizer iam, TenantReportSourceReadService? sourceReads = null, TenantRunProfileService? profiles = null)
+public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITenantRunStore runs, IIamStore security, IamAuthorizer iam, TenantReportSourceReadService? sourceReads = null, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null)
 {
     public async ValueTask RequireAsync(AgentRun report, CancellationToken ct)
     {
@@ -73,6 +73,11 @@ public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITena
         {
             if (profiles is null) throw new AccessDeniedException("profile_context_unavailable");
             await profiles.RequireAsync(source.Child, profile, ct).ConfigureAwait(false);
+        }
+        if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(source.Child.Checkpoint).TenantMemorySources is { Count: > 0 } learned)
+        {
+            if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
+            await memories.RequireAsync(source.Child, learned, ct).ConfigureAwait(false);
         }
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         if (sourceReads is not null)

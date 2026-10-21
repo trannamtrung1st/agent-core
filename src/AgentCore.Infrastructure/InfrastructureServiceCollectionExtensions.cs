@@ -531,7 +531,8 @@ public static class InfrastructureServiceCollectionExtensions
                 tenantContinuations: provider.GetRequiredService<AgentCore.Application.Security.TenantRunContinuationService>(),
                 tenantArtifacts: provider.GetRequiredService<AgentCore.Application.Security.TenantArtifactReferenceService>(),
                 tenantAttachments: provider.GetRequiredService<AgentCore.Application.Security.TenantAttachmentRuntimeContextService>(),
-                tenantProfiles: provider.GetRequiredService<AgentCore.Application.Security.TenantRunProfileService>());
+                tenantProfiles: provider.GetRequiredService<AgentCore.Application.Security.TenantRunProfileService>(),
+                tenantMemory: provider.GetRequiredService<AgentCore.Application.Security.TenantMemoryService>());
         });
         services.TryAddSingleton<AgentCore.Application.Composer.ComposerReferenceService>();
         services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();

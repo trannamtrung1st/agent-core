@@ -21,7 +21,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
     public sealed record Checkpoint(long Revision, DateTimeOffset At, Guid Generation, AgentRunCheckpoint Value, string? Progress)
         : AgentRunCommand(Revision, At);
     public sealed record Complete(long Revision, DateTimeOffset At, Guid Generation, string Summary,
-        AgentRunOutcomeKind OutcomeKind, Guid? OutcomeEntryId)
+        AgentRunOutcomeKind OutcomeKind, Guid? OutcomeEntryId, AgentCore.Application.Ports.TenantMemoryPlan? Learning = null)
         : AgentRunCommand(Revision, At);
     public sealed record Fail(long Revision, DateTimeOffset At, Guid Generation, string Code, string Summary,
         bool ReplaySafe, DateTimeOffset? RetryAt, Guid? DiagnosticId = null)

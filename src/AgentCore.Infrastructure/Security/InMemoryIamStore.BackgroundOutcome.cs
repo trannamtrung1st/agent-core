@@ -33,10 +33,12 @@ public sealed partial class InMemoryIamStore
             var draft = draftEntryId is { } id ? sessionBacking.FindEntry(frame.SessionId, id) : null;
             if (draftEntryId is not null && draft is null) throw AgentCoreErrors.Conflict("Response draft was not found.");
             RequireTenantOutputSources(run, ct);
+            var applyLearning = PrepareLearningCommit(frame, snapshot, completion.Learning, ct);
             AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft);
             AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
             catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
             SaveTenantRuntimeState(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow());
+            applyLearning();
             if (draftEntryId is { } removed) sessionBacking.RemoveResponseDraft(run.SessionId, removed);
             sessionBacking.SaveTenantOperationRun(next, run.Revision); AppendTenantCoreRun(run, next); SettleTenantCompletion(next, run.Claim?.Generation);
             return ValueTask.FromResult(next);

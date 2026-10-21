@@ -215,7 +215,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IAgentRunAuthority? runAuthority = null,
         ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
         AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
-        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null)
+        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null, TenantMemoryService? tenantMemory = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -248,6 +248,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _processor = processor;
         _tenantAttachments = tenantAttachments;
         _tenantProfiles = tenantProfiles;
+        _tenantMemory = tenantMemory;
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
         _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
@@ -2058,6 +2059,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _semanticReady = false;
         _chatAcceptedTimestamp = 0;
         _stagedMemoryProposals = null;
+        _tenantMemoryPlan = null;
         _memoryCommitSettled = false;
         _structuredOutput = false;
         _publishedDisplayLength = 0;
@@ -2766,6 +2768,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var executionState = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint);
         var attachmentSources = AgentCore.Application.Security.TenantAttachmentContextRules.Merge(executionState.TenantAttachmentSources, request.TenantAttachmentSources);
         var profileSource = executionState.TenantProfileSource;
+        var memorySources = executionState.TenantMemorySources ?? [];
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
         var failedAttempts = (executionState.FailedAttempts ?? []).ToList();
@@ -2827,7 +2830,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var cleanupStartedAtMessage = executionState.CleanupStartedAtMessage;
         ToolLoopExecutionState State() => new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
             finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
-            attachmentSources.Count == 0 ? null : attachmentSources, profileSource);
+            attachmentSources.Count == 0 ? null : attachmentSources, profileSource, memorySources.Count == 0 ? null : memorySources);
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
         var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;
@@ -3010,6 +3013,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 working = working with { Context = PromptContextBuilder.WithRequesterContext(working.Context!, _boundAgentRun?.Admission.ExecutionContext,
                     await RequesterContextAsync(_boundAgentRun, generateToken).ConfigureAwait(false)) };
                 TenantRunProfileObservation? profileObservation = null;
+                TenantMemoryObservation? memoryObservation = null;
                 if (_runtimeOwner is not null)
                 {
                     // Metadata/native collection may itself await a live restriction. Refresh at
@@ -3020,7 +3024,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         CurrentFacts(currentProjection), executionRun?.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture), semantics: ContextSemantics.TrustedFact));
                     profileObservation = await (_tenantProfiles ?? throw new InvalidOperationException("Tenant Profile binding is required.")).ReadAsync(_boundAgentRun!, generateToken).ConfigureAwait(false);
                     if (profileObservation is not null && (profileObservation.Profile.Preferences.Count > 0 || profileSource is not null)) profileSource = profileObservation.Source;
-                    working = working with { Context = TenantRunProfileRules.Project(context, profileObservation) };
+                    memoryObservation = await (_tenantMemory ?? throw new InvalidOperationException("Tenant learned-memory binding is required."))
+                        .ReadAsync(_boundAgentRun!, generateToken).ConfigureAwait(false);
+                    memorySources = TenantMemoryService.Merge(memorySources, memoryObservation.Sources);
+                    working = working with { Context = TenantMemoryService.Project(TenantRunProfileRules.Project(context, profileObservation), memoryObservation, _boundAgentRun!, _snapshot.Entries) };
                 }
                 if (!resumingBatch && _runtimeOwner is not null && _boundAgentRun is { } browserRun
                     && TenantBrowserArtifactRules.HasCapture(messages))
@@ -3029,7 +3036,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
-                if (profileSource is not null)
+                if (profileSource is not null || memorySources.Count > 0)
                     await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                         overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
@@ -3054,6 +3061,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         await RequireTenantAttachmentSourcesAsync(_boundAgentRun, attachmentSources, token).ConfigureAwait(false);
                         if (_tenantProfiles is not null && _boundAgentRun is { } profileRun)
                             await _tenantProfiles.RequireProjectionAsync(profileRun, profileObservation, token).ConfigureAwait(false);
+                        if (_tenantMemory is not null && _boundAgentRun is { } memoryRun)
+                            await _tenantMemory.RequireProjectionAsync(memoryRun, memoryObservation, token).ConfigureAwait(false);
                     }
                     if (_runtimeOwner is not null && _boundAgentRun is { } imageRun && TenantBrowserArtifactRules.HasCapture(messages))
                         await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
@@ -4702,7 +4711,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             DiscardStagedMemory();
         }
-        else
+        else if (_runtimeOwner is null)
         {
             await CommitStagedMemoryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -4721,6 +4730,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ? failure ?? ReferenceForResponse(context, responseId, "ResponseFailed", exception: null)
             : null;
         UpdateAssistant(status, failure: storedFailure);
+        if (!failed && _runtimeOwner is not null)
+        {
+            await CommitStagedMemoryAsync(cancellationToken).ConfigureAwait(false);
+            UpdateAssistant(status, failure: storedFailure);
+        }
         await FinishOwnedProgressAsync(
                 context,
                 failed ? ResponseProgressState.Failed : ResponseProgressState.Completed,
@@ -5913,6 +5927,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _semanticReady = false;
         _chatAcceptedTimestamp = 0;
         _stagedMemoryProposals = null;
+        _tenantMemoryPlan = null;
         _memoryCommitSettled = false;
         _structuredOutput = false;
         _responseCts?.Dispose();
@@ -6314,6 +6329,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public AgentRun? AdmittedRun { get; } = admittedRun;
         public AgentRun? AdmissionResult { get; set; }
         public Action<AgentRun>? OnAdmitted { get; set; }
+        public TenantMemoryPlan? LearningPlan { get; init; }
         public TenantDeliveryReceipt? Receipt { get; init; }
         public TenantSessionForeground? Foreground { get; init; }
         public TenantHumanInput? HumanInput { get; init; }
@@ -6429,7 +6445,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, Receipt = tenantReceipt, Foreground = tenantForeground, HumanInput = tenantInput, HumanInputCompleted = tenantInputCompleted };
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted, LearningPlan = userConversationTerminal ? _tenantMemoryPlan : null, Receipt = tenantReceipt, Foreground = tenantForeground, HumanInput = tenantInput, HumanInputCompleted = tenantInputCompleted };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -6474,12 +6490,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
                     && input.Error is AgentCore.Application.Security.AccessDeniedException denied
-                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)
+                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)
                         || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)))
                 {
                     await RefuseProtectedOutputAsync(input.Context, cancellationToken,
                         AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun),
-                        profile: denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)).ConfigureAwait(false);
+                        profile: denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal), memory: denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)).ConfigureAwait(false);
                     job.Ended?.TrySetResult(false); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
@@ -6862,7 +6878,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         else if (job.UserConversationTerminal && _boundAgentRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
             && !terminalRun.CancellationRequested
-            && (AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
+            && (AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || job.LearningPlan is not null || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
             && toSave.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant && e.ResponseId == terminalRun.ResponseId) is { Status: EntryStatus.Completed } finalEntry)
         {
             var current = await _agentRuns.GetAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false)
@@ -6870,7 +6886,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await _agentRuns.CommitOutcomeAsync(toSave, _durableRevision, current.Owner, current.AgentRunId,
                 new AgentRunCommand.Complete(current.Revision, now, terminalClaim.Generation,
                     string.IsNullOrWhiteSpace(finalEntry.Text) ? "Response completed." : finalEntry.Text[..Math.Min(finalEntry.Text.Length, AgentRunLimits.MaxResultCharacters)],
-                    AgentRunOutcomeKind.Response, finalEntry.EntryId), null, cancellationToken).ConfigureAwait(false);
+                    AgentRunOutcomeKind.Response, finalEntry.EntryId, job.LearningPlan), null, cancellationToken).ConfigureAwait(false);
         }
         else await _store.SaveAsync(toSave, _durableRevision, cancellationToken).ConfigureAwait(false);
         return toSave;

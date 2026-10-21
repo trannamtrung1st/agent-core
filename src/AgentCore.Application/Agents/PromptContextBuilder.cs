@@ -91,7 +91,7 @@ public sealed class PromptContextBuilder(
             ManagementBuiltInSkills.Visible(context.PinnedSkillCatalog ?? [], context.Harness, initial: true), context.ModelSupportsTools);
         void Evidence(ContextSectionId id, ContextSourceKind source, string? text)
         { if (!string.IsNullOrEmpty(text)) snapshot = snapshot.Upsert(ContextSection.Evidence(id, source, text)); }
-        var receipts = BuildMemoryReceiptEvidence(history);
+        var receipts = context.ExecutionContext is null ? BuildMemoryReceiptEvidence(history) : "";
         if (receipts.Length > 0)
         {
             snapshot = snapshot.Upsert(ContextSection.Core(CoreProcedure.MemoryReceipts));
@@ -487,7 +487,17 @@ public sealed class PromptContextBuilder(
             + (LocalUserProfile.HasPreferredName(trusted) ? "" : "\nNo preferred user name or form of address is known.");
     }
 
-    private static string BuildMemoryReceiptEvidence(IReadOnlyList<ConversationEntry> history)
+    internal static EffectiveContextSnapshot WithTenantMemoryReceipts(EffectiveContextSnapshot context, IReadOnlyList<ConversationEntry> history,
+        Guid tenant, Guid instance, Guid? user, bool allowed)
+    {
+        context = context.Remove(ContextSectionId.MemoryReceipts).Remove(ContextSectionId.CoreMemoryReceipts);
+        if (!allowed) return context;
+        var text = BuildMemoryReceiptEvidence(history, r => r.Owner is { } owner && owner.TenantId == tenant
+            && owner.AgentInstanceId == instance && owner.UserPrincipalId == user);
+        return text.Length == 0 ? context : context.Upsert(ContextSection.Core(CoreProcedure.MemoryReceipts))
+            .Upsert(ContextSection.Evidence(ContextSectionId.MemoryReceipts, ContextSourceKind.Session, text));
+    }
+    private static string BuildMemoryReceiptEvidence(IReadOnlyList<ConversationEntry> history, Func<MemoryReceipt, bool>? include = null)
     {
         var receiptRows = new List<string>();
         var receiptCharacters = 0;
@@ -497,6 +507,7 @@ public sealed class PromptContextBuilder(
             if (entry.Envelope?.MemoryReceipts is not { Count: > 0 } receipts) continue;
             foreach (var receipt in receipts.Take(MemoryProposalCodec.MaxProposalsPerTurn))
             {
+                if (include is not null && !include(receipt)) continue;
                 if (receiptRows.Count >= MemoryProposalCodec.MaxProposalsPerTurn) break;
                 var row = JsonSerializer.Serialize(new
                 {

@@ -115,6 +115,7 @@ public sealed partial class SqliteIamStore
     private async Task RequireTenantOutputSources(AgentCoreDbContext db, AgentRun parent, CancellationToken ct)
     {
         await RequireStoredProfileSource(db, parent, ct).ConfigureAwait(false);
+        await RequireStoredMemorySources(db, parent, ct).ConfigureAwait(false);
         await RequireTenantEventRead(db, parent, ct).ConfigureAwait(false);
         await RequireCredentialReadSources(db, parent, ct).ConfigureAwait(false);
         await RequireAccountReadSources(db, parent, ct).ConfigureAwait(false);

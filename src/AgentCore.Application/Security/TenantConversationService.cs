@@ -83,7 +83,10 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
         }
         foreach (var entry in page.History.Items)
         {
-            var projected = PublicHistory.FromEntry(entry);
+            var ownedEntry = entry.Envelope is { MemoryReceipts: { } receipts } envelope ? entry with { Envelope = envelope with {
+                MemoryReceipts = receipts.Where(r => r.Owner is { } owner && owner.TenantId == tenant && owner.AgentInstanceId == saved.Owner.AgentInstanceId
+                    && (owner.UserPrincipalId is null || owner.UserPrincipalId == human.PrincipalId)).ToArray() } } : entry;
+            var projected = PublicHistory.FromEntry(ownedEntry);
             var blocks = new List<PublicResponseBlock>();
             foreach (var block in projected.Blocks)
                 if (block.Kind == "unknown" && block.AttachmentId is null && block.ArtifactId is null && block.Text == block.FallbackText
@@ -120,6 +123,18 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
             page.SessionRevision, current.Tenant.Revision);
     }
 
+    public async ValueTask<bool> CanReadMemoryReceiptsAsync(Guid tenant, Guid session, TenantSessionInitiator human, AgentRun run, CancellationToken ct = default)
+    {
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        var saved = await RequireAsync(state, session, human, ct).ConfigureAwait(false);
+        if (run.Owner.TenantId != tenant || run.SessionId != session || run.AgentInstanceId != saved.Owner.AgentInstanceId
+            || run.Admission.ExecutionContext is not { } context || context.OriginalInitiatorPrincipalId is { } requester && requester != human.PrincipalId) return false;
+        var allowed = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("memory.read"),
+            AccessScope.ForResource(tenant, "agent", saved.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false)).Allowed;
+        var after = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (after.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
+        return allowed;
+    }
     private async ValueTask<TenantSession> RequireAsync(TenantSecurityState state, Guid session, TenantSessionInitiator human, CancellationToken ct)
     {
         var saved = await sessions.FindTenantSessionAsync(state.Tenant.TenantId, session, ct).ConfigureAwait(false)

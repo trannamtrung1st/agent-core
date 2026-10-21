@@ -46,8 +46,10 @@ public sealed partial class TenantUserProfileTests
             Assert.Contains("membership owner", membership.Message);
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantUserProfiles SET Revision=Revision WHERE TenantId={tenant} AND PrincipalId={human.PrincipalId}"));
             var retained = await db.Set<TenantUserProfileRecord>().AsNoTracking().SingleAsync(); Assert.Equal(row, retained); Assert.False(db.Database.HasPendingModelChanges());
-            var migrations = db.Database.GetMigrations().ToArray(); Assert.EndsWith("_TenantUserProfiles", migrations[^1]);
-            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[^2]));
+            var migrations = db.Database.GetMigrations().ToArray(); var profileMigration = Array.FindIndex(migrations, m => m.EndsWith("_TenantUserProfiles", StringComparison.Ordinal));
+            Assert.True(profileMigration > 0);
+            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync(migrations[profileMigration - 1]));
+            await db.GetService<IMigrator>().MigrateAsync();
         }
         Assert.Equal(saved.Profile.Revision, (await service.ReadAsync(tenant, human)).Profile.Revision);
         Assert.Single(await f.Iam.ReadAuditAsync(tenant, 100), a => a.Action == "profile.update");

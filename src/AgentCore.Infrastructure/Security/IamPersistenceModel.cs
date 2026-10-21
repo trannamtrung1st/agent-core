@@ -21,6 +21,7 @@ internal static class IamPersistenceModel
         TenantCredentialRecord.Configure(model);
         TenantSessionRecord.Configure(model);
         TenantUserProfileRecord.Configure(model);
+        TenantLearnedMemoryRecord.Configure(model);
         TenantApprovalRecord.Configure(model);
         TenantOperationReceiptRecord.Configure(model);
         TenantCredentialCheckDispatchRecord.Configure(model);

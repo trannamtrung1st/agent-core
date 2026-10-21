@@ -35,6 +35,7 @@ public sealed partial class InMemoryIamStore
             var prior = sessionBacking.ReadTenantSession(next.Tenant.TenantId, change.SessionId);
             ct.ThrowIfCancellationRequested(); var saved = sessionBacking.ChangeTenantSession(next.Tenant.TenantId, change, at);
             if (saved is null) return ValueTask.FromResult<TenantSession?>(null);
+            if (change.Action == TenantSessionAction.Delete) TombstoneSessionMemory(next.Tenant.TenantId, change.SessionId, at);
             AppendTenantCoreSession(prior!, saved);
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); return ValueTask.FromResult<TenantSession?>(saved);
         }

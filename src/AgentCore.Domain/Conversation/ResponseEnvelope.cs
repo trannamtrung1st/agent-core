@@ -30,13 +30,15 @@ public sealed record ResponseSpeech(ResponseSpeechMode Mode, string? Text);
 /// Controller admission outcome stored beside the reply. It is not display or speech text.
 /// <see cref="Scopes"/> lists memory layers covered by a successful admission, not proposal hints.
 /// </summary>
+public sealed record MemoryReceiptOwner(Guid TenantId, Guid AgentInstanceId, Guid? UserPrincipalId);
 public sealed record MemoryReceipt(
     string Outcome,
     string Operation,
     string Source,
     string Subject,
     IReadOnlyList<string>? Scopes,
-    string Presentation)
+    string Presentation,
+    [property: System.Text.Json.Serialization.JsonIgnore] MemoryReceiptOwner? Owner = null)
 {
     public const string Silent = "silent";
     public const string Indicator = "indicator";

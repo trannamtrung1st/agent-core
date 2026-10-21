@@ -3663,6 +3663,121 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("TenantAgentDefinitions", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantLearnedMemoryRecord", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("MemoryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ExecutorPrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OwnerKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RootRunId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RunId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceEntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SubjectKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SupersedesMemoryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("UserPrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TenantId", "MemoryId");
+
+                    b.HasIndex("RootRunId");
+
+                    b.HasIndex("RunId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "SupersedesMemoryId");
+
+                    b.HasIndex("TenantId", "UserPrincipalId", "AccountId");
+
+                    b.HasIndex("TenantId", "OwnerKey", "Kind", "SubjectKey")
+                        .IsUnique()
+                        .HasFilter("Status = 0");
+
+                    b.HasIndex("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId");
+
+                    b.HasIndex("TenantId", "OwnerKey", "Kind", "SubjectKey", "Status", "UpdatedAtUtc");
+
+                    b.HasIndex("TenantId", "UserPrincipalId", "Scope", "AgentInstanceId", "SessionId", "Status");
+
+                    b.ToTable("TenantLearnedMemories", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TenantLearnedMemory_Owner", "Scope IN (0,1,2) AND ((UserPrincipalId IS NULL AND AccountId IS NULL AND UserId IS NULL AND Scope = 0) OR (UserPrincipalId IS NOT NULL AND AccountId IS NOT NULL AND UserId IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_TenantLearnedMemory_Value", "Kind BETWEEN 0 AND 4 AND Status BETWEEN 0 AND 3 AND Revision > 0 AND CreatedAtUtc >= 0 AND UpdatedAtUtc >= CreatedAtUtc AND length(ContentHash) = 64 AND Source IN ('userExplicit','agentInferred') AND length(OwnerKey) BETWEEN 1 AND 160 AND length(Subject) <= 128 AND length(Content) <= 2000 AND (Status = 2 OR (length(Subject) > 0 AND length(Content) > 0))");
+                        });
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantOperationReceiptRecord", b =>
                 {
                     b.Property<Guid>("OperationId")
@@ -4699,6 +4814,44 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasOne("AgentCore.Domain.Security.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantLearnedMemoryRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RootRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Domain.Security.TenantUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantLearnedMemoryRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SupersedesMemoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Domain.Security.TenantUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "UserPrincipalId", "AccountId")
+                        .HasPrincipalKey("TenantId", "PrincipalId", "AccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
