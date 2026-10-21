@@ -24,7 +24,8 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
         IReadOnlyList<SavedChild> Triggers, DateTimeOffset? NextOccurrenceAtUtc, DateTimeOffset? ExpiresAtUtc, int OccurrenceCount,
         long Revision, long TriggerRevision, TriggerProvenance Provenance, string? SuspensionReason,
         string? ModelOverrideCatalogKey, string? ModelOverrideReasoningEffort, bool RequiresTools, bool RequiresVision,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ReportToSessionId = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ReportToSessionId = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TargetSessionId = null);
 
     private static TriggerSchedule Schedule(Timing t) => (t ?? throw new JsonException("Consent timing is missing.")).Kind switch {
         TriggerScheduleKind.OneShot when t.AtUtc is { } at => new OneShotSchedule(at, t.TimeZoneId),
@@ -60,15 +61,22 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
         if (versions.Length == 1)
         {
             var schema = versions[0].Value;
-            if (schema.ValueKind != JsonValueKind.Number || !schema.TryGetInt32(out var version) || version is not (2 or 3)) throw new JsonException("Unsupported Automation consent source schema.");
+            if (schema.ValueKind != JsonValueKind.Number || !schema.TryGetInt32(out var version) || version is not (2 or 3 or 4)) throw new JsonException("Unsupported Automation consent source schema.");
             RequireUnique(document.RootElement, options);
             var events = document.RootElement.Deserialize<SavedEvents>(options) ?? throw new JsonException("Automation consent source is missing.");
             if (events.Triggers is null) throw new JsonException("Consent triggers are missing.");
             var reportName = options.PropertyNamingPolicy?.ConvertName(nameof(SavedEvents.ReportToSessionId)) ?? nameof(SavedEvents.ReportToSessionId);
             var hasReport = document.RootElement.EnumerateObject().Any(p => string.Equals(p.Name, reportName,
                 options.PropertyNameCaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
-            if (version == 2 ? hasReport : !hasReport || events.ReportToSessionId is null || events.ReportToSessionId == Guid.Empty)
-                throw new JsonException("Consent destination does not match its exact source schema.");
+            var targetName = options.PropertyNamingPolicy?.ConvertName(nameof(SavedEvents.TargetSessionId)) ?? nameof(SavedEvents.TargetSessionId);
+            var hasTarget = document.RootElement.EnumerateObject().Any(p => string.Equals(p.Name, targetName,
+                options.PropertyNameCaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            var validDestination = version switch {
+                2 => !hasReport && !hasTarget,
+                3 => hasReport && events.ReportToSessionId is { } report && report != Guid.Empty && !hasTarget,
+                4 => hasTarget && events.TargetSessionId is { } target && target != Guid.Empty && !hasReport,
+                _ => false };
+            if (!validDestination) throw new JsonException("Consent destination does not match its exact source schema.");
             var ownerName = options.PropertyNamingPolicy?.ConvertName(nameof(SavedEvents.Owner)) ?? nameof(SavedEvents.Owner);
             var ownerJson = document.RootElement.EnumerateObject().Single(p => string.Equals(p.Name, ownerName,
                 options.PropertyNameCaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)).Value;
@@ -80,7 +88,8 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
             var source = new Automation(events.AutomationId, events.Owner, events.Status, events.Instructions, events.Triggers.Select(Child).ToArray(),
                 events.NextOccurrenceAtUtc, events.ExpiresAtUtc, events.OccurrenceCount, events.Revision, events.TriggerRevision, events.Provenance,
                 events.SuspensionReason, events.ModelOverrideCatalogKey, events.ModelOverrideReasoningEffort, events.RequiresVision, events.Name,
-                AutomationExecutionTarget.Background, new AutomationCompletionDelivery(events.ReportToSessionId), events.RequiresTools);
+                events.TargetSessionId is { } targetId ? AutomationExecutionTarget.Existing(targetId) : AutomationExecutionTarget.Background,
+                new AutomationCompletionDelivery(events.ReportToSessionId), events.RequiresTools);
             if (source.TriggerRevision != events.TriggerRevision) throw new JsonException("Automation consent trigger revision differs.");
             return source;
         }
@@ -112,19 +121,19 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
 
     public override void Write(Utf8JsonWriter writer, Automation value, JsonSerializerOptions options)
     {
-        if (value.ExecutionTarget != AutomationExecutionTarget.Background)
-            throw new JsonException("Only an exact background execution destination may be prepared.");
+        var target = value.ExecutionTarget.SessionId;
         var report = value.CompletionDelivery.SessionId;
-        if (report is not null || value.Triggers.Count != 1 || value.Triggers[0].Configuration is not ScheduleTrigger)
+        if (target is not null && report is not null) throw new JsonException("Existing execution cannot have a separate report destination.");
+        if (target is not null || report is not null || value.Triggers.Count != 1 || value.Triggers[0].Configuration is not ScheduleTrigger)
         {
             var children = value.Triggers.Select(t => t.Configuration switch {
                 ScheduleTrigger schedule => new SavedChild(t.TriggerId, t.Enabled, t.Revision, t.Configuration.Kind, TimingOf(schedule.Schedule)),
                 EventTrigger webhook => new SavedChild(t.TriggerId, t.Enabled, t.Revision, t.Configuration.Kind, WebhookId: webhook.EventId, FilterExpression: webhook.FilterExpression, Dispatch: webhook.Dispatch),
                 CoreEventTrigger core => new SavedChild(t.TriggerId, t.Enabled, t.Revision, t.Configuration.Kind, CoreEventKey: core.CoreEventKey, FilterExpression: core.FilterExpression, Dispatch: core.Dispatch),
                 _ => throw new JsonException("Unsupported consent trigger.") }).ToArray();
-            JsonSerializer.Serialize(writer, new SavedEvents(report is null ? 2 : 3, value.AutomationId, value.Owner, value.Status, value.Name, value.Instructions,
+            JsonSerializer.Serialize(writer, new SavedEvents(target is not null ? 4 : report is not null ? 3 : 2, value.AutomationId, value.Owner, value.Status, value.Name, value.Instructions,
                 children, value.NextOccurrenceAtUtc, value.ExpiresAtUtc, value.OccurrenceCount, value.Revision, value.TriggerRevision, value.Provenance,
-                value.SuspensionReason, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision, report), options);
+                value.SuspensionReason, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort, value.RequiresTools, value.RequiresVision, report, target), options);
             return;
         }
         // Preserve already-prepared one-Schedule consent bytes and their hashes.

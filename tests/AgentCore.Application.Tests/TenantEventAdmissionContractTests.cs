@@ -11,14 +11,14 @@ namespace AgentCore.Application.Tests;
 
 public sealed class TenantEventAdmissionContractTests
 {
-    private static PreparedTenantOperation Large(Guid? report = null)
+    private static PreparedTenantOperation Large(Guid? report = null, Guid? target = null)
     {
         var tenant = Guid.NewGuid(); var instance = Guid.NewGuid(); var owner = TriggerOwner.ForTenant(tenant, instance, Guid.NewGuid());
         var filter = "true" + new string(' ', 1014) + "&&true"; Assert.Equal(1024, filter.Length);
         var triggers = Enumerable.Range(0, 32).Select(_ => new AutomationTriggerRecord(Guid.NewGuid(), new EventTrigger(Guid.NewGuid(), filter))).ToArray();
         var at = DateTimeOffset.UnixEpoch;
         var automation = new Automation(Guid.NewGuid(), owner, AutomationStatus.Active, new string('a', 2000), triggers, null, null, 0, 1, 1,
-            new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null, name: new string('n', 120), completionDelivery: new AutomationCompletionDelivery(report));
+            new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null, name: new string('n', 120), completionDelivery: new AutomationCompletionDelivery(report), executionTarget: target is { } selected ? AutomationExecutionTarget.Existing(selected) : AutomationExecutionTarget.Background);
         var child = automation.Triggers[0]; var source = ((EventTrigger)child.Configuration).EventId;
         var receipt = new ExternalEvent(Guid.NewGuid(), source, "received-once", at, at, "{\"data\":{}}", tenant, 1);
         var snapshot = new EventSubscriptionSnapshot(automation.AutomationId, owner, 1, filter, new(), TriggerSourceKind.ApplicationEvent, source) { TriggerId = child.TriggerId };
@@ -27,8 +27,8 @@ public sealed class TenantEventAdmissionContractTests
         var model = new ExecutionModelPin("synthetic", "synthetic", "synthetic", null, ExecutionModelSource.UnattendedDefault);
         var occurrence = TenantEventAdmissionRules.Occurrence(automation, delivery, model, at, 1);
         var intent = new PreparedAutomationAdmission(tenant, automation, TenantEventAdmissionRules.Next(automation, at), occurrence,
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, "webhooks.read", new('a', 64),
-            new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort), witness);
+            Guid.NewGuid(), target ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, "webhooks.read", new('a', 64),
+            new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort), witness, target is null ? null : new(7, 2));
         return TenantApprovalRules.PrepareAutomationAdmission(Guid.NewGuid(), instance, intent, 1, 1);
     }
     [Fact]
@@ -81,6 +81,41 @@ public sealed class TenantEventAdmissionContractTests
         else current["ExecutionTarget"] = "existingSession";
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PreparedTenantOperation>(node.ToJsonString(),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
+    }
+
+    [Fact]
+    public void Existing_conversation_consent_roundtrips_its_exact_target_boundary_model_and_hash()
+    {
+        var target = Guid.NewGuid(); var operation = Large(target: target); var json = JsonSerializer.Serialize(operation);
+        Assert.Contains("\"SchemaVersion\":4", json); Assert.DoesNotContain("ReportToSessionId", json);
+        var restored = JsonSerializer.Deserialize<PreparedTenantOperation>(json)!;
+        Assert.Equal(json, JsonSerializer.Serialize(restored)); Assert.Equal(operation.ActionHash, TenantApprovalRules.Rebuild(restored).ActionHash);
+        Assert.Equal(target, restored.AutomationAdmission!.Current.ExecutionTarget.SessionId);
+        Assert.Equal(target, restored.AutomationAdmission.Next.ExecutionTarget.SessionId); Assert.Equal(target, restored.AutomationAdmission.SessionId);
+        Assert.Equal(new PreparedAutomationConversation(7, 2), restored.AutomationAdmission.Conversation);
+    }
+
+    [Theory] [InlineData("missing-target")] [InlineData("null-target")] [InlineData("empty-target")] [InlineData("mixed-report")]
+    [InlineData("old-schema")] [InlineData("duplicate-target")] [InlineData("unknown-conversation")]
+    public void Existing_conversation_consent_rejects_missing_mixed_shadowed_or_unknown_witnesses(string mode)
+    {
+        var node = JsonNode.Parse(JsonSerializer.Serialize(Large(target: Guid.NewGuid())))!;
+        var current = node["AutomationAdmission"]!["Current"]!.AsObject();
+        if (mode == "missing-target") current.Remove("TargetSessionId");
+        else if (mode == "null-target") current["TargetSessionId"] = null;
+        else if (mode == "empty-target") current["TargetSessionId"] = Guid.Empty;
+        else if (mode == "mixed-report") current["ReportToSessionId"] = Guid.NewGuid();
+        else if (mode == "old-schema") current["SchemaVersion"] = 2;
+        else if (mode == "duplicate-target") current["targetSessionId"] = Guid.NewGuid();
+        else node["AutomationAdmission"]!["Conversation"]!["UntrustedField"] = 1;
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PreparedTenantOperation>(node.ToJsonString(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
+    }
+    [Theory] [InlineData("missing")] [InlineData("negative")] [InlineData("wrong-session")]
+    public void Existing_conversation_preparation_requires_its_exact_snapshot_and_address(string mode)
+    {
+        var operation = Large(target: Guid.NewGuid()); var source = operation.AutomationAdmission!;
+        source = mode switch { "missing" => source with { Conversation = null }, "negative" => source with { Conversation = new(0, -1) }, _ => source with { SessionId = Guid.NewGuid() } };
+        Assert.Throws<ArgumentException>(() => TenantApprovalRules.PrepareAutomationAdmission(operation.OperationId, operation.InstanceId, source, 1, 1));
     }
 
     [Theory]

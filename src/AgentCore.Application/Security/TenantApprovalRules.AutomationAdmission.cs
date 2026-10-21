@@ -12,7 +12,7 @@ public static partial class TenantApprovalRules
     {
         var ids = new[] { operation, instance, p.TenantId, p.Current.AutomationId, p.RequestId, p.SessionId, p.EntryId, p.ActivationId, p.RunId, p.ResponseId };
         if (ids.Any(id => id == Guid.Empty) || ids.Distinct().Count() != ids.Length || revision < 1 || personaRevision < 1
-            || p.Permission is not ("automations.run" or "sessions.create" or "agent-runs.create" or "webhooks.read" or "core-events.read" or "credentials.read" or "credentials.use" or "email.read")
+            || p.Permission is not ("automations.run" or "sessions.create" or "agent-runs.create" or "sessions.read" or "agents.chat" or "webhooks.read" or "core-events.read" or "credentials.read" or "credentials.use" or "email.read")
             || p.Current.Owner != p.Next.Owner || p.Current.AutomationId != p.Next.AutomationId || p.Current.Owner.TenantId != p.TenantId
             || p.Current.Owner.AgentInstanceId != instance || p.Current.Status != AutomationStatus.Active
             || p.Occurrence.Owner != p.Current.Owner || p.Occurrence.AutomationId != p.Current.AutomationId
@@ -22,6 +22,12 @@ public static partial class TenantApprovalRules
             || p.Occurrence.ExecutionSessionId is not null || p.Occurrence.AcceptedAgentRunId is not null || p.Next.Revision != p.Current.Revision + 1
             || p.ConfigurationHash is not { Length: 64 } || p.ConfigurationHash.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
             throw new ArgumentException("Invalid exact Automation admission intent.");
+        if (p.Current.ExecutionTarget != p.Occurrence.ExecutionTarget || p.Current.CompletionDelivery != p.Occurrence.CompletionDelivery
+            || p.Current.ExecutionTarget != p.Next.ExecutionTarget || p.Current.CompletionDelivery != p.Next.CompletionDelivery
+            || (p.Conversation is not null) != TenantAutomationConversationRules.Existing(p.Current)
+            || p.Conversation is { } conversation && (conversation.SessionRevision < 1 || conversation.InputBoundarySequence < 0
+                || p.SessionId != p.Current.ExecutionTarget.SessionId))
+            throw new ArgumentException("Consent must bind exactly one execution destination and its conversation witness.");
         if (p.Occurrence.SourceKind is TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent)
             TenantEventAdmissionRules.Shape(p.Current, p.Occurrence, p.EventSource ?? throw new ArgumentException("An event source witness is required."));
         else if (p.EventSource is not null) throw new ArgumentException("Only event admissions may pin an event source.");

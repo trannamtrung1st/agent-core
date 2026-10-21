@@ -83,6 +83,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 else if (command is AgentRunCommand.ResumeWait)
                     next = AgentRunWaitExecution.Apply(run, command, TenantWaitChildren(run, run.Wait ?? throw AgentCoreErrors.Conflict("Run is not waiting.")));
                 else next = command.Apply(run, () => diagnosticId);
+                if (command is AgentRunCommand.Fail { Code: "protected-output-unavailable" }) sessionBacking.SettleRefusedTenantOutput(run, next);
                 sessionBacking.SaveTenantOperationRun(next, run.Revision); AppendTenantCoreRun(run, next); SettleTenantCompletion(next, run.Claim?.Generation); return ValueTask.FromResult(next);
             }
             catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentCore.Infrastructure.Persistence.AgentRunStoreMapping.Map(ex); }

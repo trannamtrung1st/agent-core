@@ -37,8 +37,10 @@ public static class TenantApprovalContinuationRules
 
     private static string CompletionEvidence(AgentRun source) => source.Admission.OutputContract == AgentRunOutputContract.CompletionReport
         ? source.Admission.Activation.EvidenceJson ?? throw new AccessDeniedException("completion_input_unavailable")
-        : JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(source.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome ? TriggerKind.ManualInvocation : TriggerKind.UserTurn,
-            "Continue the exact saved authorization operation. Use its recorded outcome; do not repeat prior effects.", "approval"));
+        : JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(source.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome || TenantTaskExecutionContract.IsIndependent(source) ? TriggerKind.ManualInvocation : TriggerKind.UserTurn,
+            "Continue the exact saved authorization operation. Use its recorded outcome; do not repeat prior effects.", "approval",
+            source.Admission.Activation.EvidenceJson is { } evidence && source.Admission.TaskIntent?.Source == AgentRunTaskSource.Automation
+                ? JsonSerializer.Deserialize<AgentRunAdmissionFactory.SignalInput>(evidence)?.InputBoundarySequence : null));
 
     public static void Require(TenantApprovalRequest request, AgentRun run, AgentRun? source)
     {

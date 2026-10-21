@@ -29,7 +29,8 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                     return null;
                 if (before.State.Tenant.Revision == after.State.Tenant.Revision)
                 {
-                    if (after.Run.Admission.OutputContract is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport)
+                    if (after.Run.Admission.OutputContract is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport
+                        || TenantAutomationConversationRules.IsConversationRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false)))
                     {
                         var root = await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false);
                         if (root.Admission.ExecutionContext!.Origin == ExecutionOrigin.UserMessage)
@@ -52,7 +53,7 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                         await reportReads.RequireAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     }
                     if (eventReads is not null) await eventReads.RequireAsync(after.Run, cancellationToken).ConfigureAwait(false);
-                    else if (TenantEventReadRules.IsEventRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false)))
+                    else if (TenantEventReadRules.IsEventRoot(await TenantExecutionLineage.RootAsync(after.Run, (ITenantRunStore)store, cancellationToken).ConfigureAwait(false)) || AgentCore.Application.Tools.TenantTaskExecutionContract.IsIndependent(after.Run))
                         throw new AccessDeniedException("event_source_unavailable");
                     if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     if (browserReads is not null) await browserReads.RequireStoredObservationsAsync(after.Run, cancellationToken).ConfigureAwait(false);

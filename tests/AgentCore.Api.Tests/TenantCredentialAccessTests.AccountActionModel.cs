@@ -193,7 +193,8 @@ public sealed partial class TenantCredentialAccessTests
             if (request.Context?.Sections.Any(s => s.Id == AgentCore.Application.Context.ContextSectionId.CoreBackground) == true)
             {
                 Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-                Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.EmailSend or ToolCatalog.DriveRename);
+                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.BackgroundStart);
+                Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.EmailSend or ToolCatalog.DriveRename);
                 await foreach (var item in inner.GenerateAsync(request, ct)) yield return item;
                 yield break;
             }

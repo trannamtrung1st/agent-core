@@ -91,8 +91,7 @@ public static class TenantAutomationRules
     }
     public static void Configuration(Automation value, AgentDefinition definition, DateTimeOffset at, bool validateSchedulePolicy = true, TriggerSourceKind? sourceKind = null)
     {
-        if (value.ExecutionTarget != AutomationExecutionTarget.Background
-            || value.Provenance.SourceSessionId is not null || value.Provenance.SourceEventId is not null)
+        if (value.Provenance.SourceSessionId is not null || value.Provenance.SourceEventId is not null)
             throw new ArgumentException("Use the exact owned background destination.");
         if (!value.IsSchedule)
         {
@@ -114,7 +113,7 @@ public static class TenantAutomationRules
         IamAuthorizer iam, CancellationToken ct, Guid? requester = null, TriggerSourceKind? sourceKind = null, PreparedEventAdmissionSource? eventSource = null, IReadOnlyList<Guid>? emailAccounts = null)
     {
         AdmissionSource(state, automation, agent, definition, requester, sourceKind);
-        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(state.Tenant.TenantId, automation.AutomationId).Concat(TenantAutomationAdmissionApprovalRules.SourceTargets(eventSource, emailAccounts)))
+        foreach (var (key, scope) in TenantAutomationAdmissionApprovalRules.Targets(automation).Concat(TenantAutomationAdmissionApprovalRules.SourceTargets(eventSource, emailAccounts)))
         {
             if (!(await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), scope, ct)).Allowed)
                 throw new AccessDeniedException("automation_executor_required");
@@ -176,6 +175,22 @@ public static class TenantAutomationRules
             .WithExecutionAcceptance(root.SessionId, run.AgentRunId, expectedOccurrence.RoutingRevision + 1, at);
         if (!Same(expectedNext, next) || JsonSerializer.Serialize(expectedOccurrence) != JsonSerializer.Serialize(occurrence))
             throw new ArgumentException("Occurrence intent differs from its current owned registration.");
+        if (TenantAutomationConversationRules.Existing(current))
+        {
+            var target = TenantAutomationConversationRules.Require(current, new(root, value.Session), consent?.Conversation);
+            if (value.ExpectedSessionRevision != target.Snapshot.Revision || !run.IsInitialQueued || run.SessionId != target.Owner.SessionId
+                || run.Admission.Configuration is null || value.ExpectedInstanceRevision != agent.Instance.Revision
+                || run.Admission.Configuration.InstanceRevision != agent.Instance.Revision || run.Admission.Configuration.PersonaRevision != agent.Instance.PersonaRevision)
+                throw new ArgumentException("Existing conversation admission changed its exact snapshot or configuration witness.");
+            var resolved = new ResolvedAgentRunConfiguration(run.Admission.Configuration, run.PinnedPersona, run.PinnedSkillCatalog, agent.Instance.ExecutionBudgets);
+            var expected = TenantAutomationConversationRules.ForOccurrence(target, occurrence, agent, resolved, run.ActivationId, run.AgentRunId,
+                run.ResponseId ?? throw new ArgumentException("An occurrence response is required."), pin, at, manualInitiator);
+            if (Hash(resolved) != value.ConfigurationHash || JsonSerializer.Serialize(expected.Admission) != JsonSerializer.Serialize(run.Admission)
+                || expected.Owner != run.Owner || JsonSerializer.Serialize(expected.PinnedModel) != JsonSerializer.Serialize(run.PinnedModel) || expected.MaxAttempts != run.MaxAttempts)
+                throw new ArgumentException("Existing conversation Run differs from its exact occurrence.");
+            return;
+        }
+        if (value.ExpectedSessionRevision is not null || consent?.Conversation is not null) throw new ArgumentException("A Background admission cannot claim an existing conversation witness.");
         if (current.AutomationId != next.AutomationId || next.Revision != current.Revision + 1 || current.Owner != occurrence.Owner
             || occurrence.AutomationId != current.AutomationId || occurrence.SourceKind is not (TriggerSourceKind.Schedule or TriggerSourceKind.ManualInvocation or TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent)
             || occurrence.Disposition != OccurrenceRoutingDisposition.AcceptedDurable || occurrence.ExecutionSessionId != root.SessionId || occurrence.AcceptedAgentRunId != run.AgentRunId

@@ -2497,6 +2497,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             try
             {
+                if (capturedRun is not null) capturedSnapshot = AgentCore.Application.Security.TenantAutomationConversationRules.Projection(capturedSnapshot, capturedRun);
                 var resolved = capturedRun is null ? await _tools.ResolveRunConfigurationAsync(capturedSnapshot, evaluationToken).ConfigureAwait(false) : null;
                 if (_runtimeOwner is not null && (capturedRun is null || await _runAuthority!.CurrentDefinitionAsync(capturedRun, evaluationToken).ConfigureAwait(false) is null))
                     throw AgentCoreErrors.Forbidden("Tenant execution authority is unavailable.");
@@ -2555,7 +2556,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ScheduleDraft: _scheduleDraftContext,
                     DetachedExecution: IsInitialBackgroundRun,
                     OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
-                    AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
+                    AuthoredAutomation: capturedRun?.Admission.TaskIntent?.Source == AgentRunTaskSource.Automation
+                        || capturedRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
                     OwnedSessionId: SessionId,
                     ActiveSkillKeys: capturedRun?.ActiveSkillKeys ?? skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
                     ComposerInput: capturedRun?.Admission.ComposerInput,
@@ -6422,9 +6424,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     job.Ended?.TrySetException(input.Error); job.HumanInputCompleted?.TrySetException(input.Error); return;
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
-                    && input.Error is AgentCore.Application.Security.AccessDeniedException denied && denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal))
+                    && input.Error is AgentCore.Application.Security.AccessDeniedException denied
+                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal)
+                        || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)))
                 {
-                    await RefuseProtectedAccountOutcomeAsync(input.Context, cancellationToken).ConfigureAwait(false);
+                    await RefuseProtectedOutputAsync(input.Context, cancellationToken,
+                        AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)).ConfigureAwait(false);
                     job.Ended?.TrySetResult(false); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
@@ -6807,7 +6812,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         else if (job.UserConversationTerminal && _boundAgentRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
             && !terminalRun.CancellationRequested
-            && (terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
+            && (AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(terminalRun) || terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || AgentCore.Application.Security.TenantCredentialReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountReadReferences.Read(terminalRun).Count > 0 || AgentCore.Application.Security.TenantAccountActionReferences.Read(terminalRun).Count > 0 || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
             && toSave.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant && e.ResponseId == terminalRun.ResponseId) is { Status: EntryStatus.Completed } finalEntry)
         {
             var current = await _agentRuns.GetAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false)

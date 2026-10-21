@@ -18,7 +18,11 @@ public static class TenantAutomationAdmissionApprovalRules
     public static (string Permission, AccessScope Scope)[] Targets(Guid tenant, Guid automation) => Permissions.Select(key =>
         (key, key == "automations.run" ? TenantAutomationRules.Scope(tenant, automation) : AccessScope.ForTenant(tenant))).ToArray();
 
-    public static bool IsSourceRead(string permission) => permission is "webhooks.read" or "core-events.read" or "credentials.read" or "credentials.use" or "email.read";
+    public static (string Permission, AccessScope Scope)[] Targets(Automation value) =>
+        Targets(value.Owner.TenantId!.Value, value.AutomationId).Where(t => !TenantAutomationConversationRules.Existing(value) || t.Permission != "sessions.create")
+            .Concat(TenantAutomationConversationRules.Targets(value)).ToArray();
+
+    public static bool IsSourceRead(string permission) => permission is "sessions.read" or "agents.chat" or "webhooks.read" or "core-events.read" or "credentials.read" or "credentials.use" or "email.read";
     public static (string Permission, AccessScope Scope)[] SourceTargets(PreparedEventAdmissionSource? source, IReadOnlyList<Guid>? emailAccounts = null)
     {
         if (source is null) return [];
@@ -27,7 +31,7 @@ public static class TenantAutomationAdmissionApprovalRules
             : source.EventIds.Select(id => ("core-events.read", TenantEventAdmissionRules.Scope(source.TenantId, id))).ToArray();
         return targets.Concat((emailAccounts ?? []).Distinct().SelectMany(id => TenantEmailWatchRules.SourcePermissions.Select(key => (key, TenantCredentialRules.Scope(source.TenantId, id))))).ToArray();
     }
-    public static (string Permission, AccessScope Scope)[] Targets(PreparedAutomationAdmission source) => Targets(source.TenantId, source.Current.AutomationId).Concat(SourceTargets(source.EventSource, source.EmailSourceAccountIds)).ToArray();
+    public static (string Permission, AccessScope Scope)[] Targets(PreparedAutomationAdmission source) => Targets(source.Current).Concat(SourceTargets(source.EventSource, source.EmailSourceAccountIds)).ToArray();
     public static (string Permission, AccessScope Scope)[] Targets(TenantApprovalRequest request) => Targets(request.Operation.AutomationAdmission ?? throw new ArgumentException("An exact occurrence source is required."));
 
     public static async ValueTask<TenantAutomationAdmissionDecision> EvaluateAsync(TenantSecurityState state, Automation value, TenantAgent agent,
@@ -35,13 +39,13 @@ public static class TenantAutomationAdmissionApprovalRules
     {
         TenantAutomationRules.AdmissionSource(state, value, agent, definition, requester, sourceKind);
         var missing = new List<string>(); var reviews = new List<string>();
-        foreach (var (key, scope) in Targets(state.Tenant.TenantId, value.AutomationId).Concat(SourceTargets(eventSource, emailAccounts)))
+        foreach (var (key, scope) in Targets(value).Concat(SourceTargets(eventSource, emailAccounts)))
         {
             var access = await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false);
             if (!access.Allowed)
             {
                 if (access.ReasonCode != "permission_denied") throw new AccessDeniedException(access.ReasonCode);
-                if (IsSourceRead(key)) throw new AccessDeniedException("event_source_read_required");
+                if (IsSourceRead(key)) throw new AccessDeniedException(key is "sessions.read" or "agents.chat" ? "automation_conversation_permission_required" : "event_source_read_required");
                 missing.Add(key);
             }
             if (await TenantSandboxReadOperationRules.NeedsReviewAsync(state, requester, key, scope, iam, ct).ConfigureAwait(false)) reviews.Add(key);
@@ -62,13 +66,23 @@ public static class TenantAutomationAdmissionApprovalRules
         PendingReason, 1, p.Occurrence.AdmittedAtUtc, null, null);
     public static bool SameOccurrence(TriggerOccurrence a, TriggerOccurrence b) => JsonSerializer.Serialize(a) == JsonSerializer.Serialize(b);
 
-    public static TenantAutomationAdmission Build(TenantApprovalRequest request, TenantAgent agent, ResolvedAgentRunConfiguration resolved, DateTimeOffset? admittedAt = null)
+    public static TenantAutomationAdmission Build(TenantApprovalRequest request, TenantAgent agent, ResolvedAgentRunConfiguration resolved, DateTimeOffset? admittedAt = null, TenantSession? conversation = null)
     {
         var p = request.Operation.AutomationAdmission ?? throw new SecurityConflictException("operation_mismatch");
         Shape(request, agent);
         if (TenantAutomationRules.Hash(resolved) != p.ConfigurationHash) throw new SecurityConflictException("operation_witness_changed");
         var source = Source(p); var at = admittedAt ?? source.AdmittedAtUtc; var model = p.Occurrence.ModelPin ?? throw new ArgumentException("An exact occurrence model is required.");
         if (p.Model.CatalogKey != model.CatalogKey || p.Model.ProviderAlias != model.ProviderAlias || p.Model.ModelId != model.ModelId || p.Model.ReasoningEffort != model.ReasoningEffort) throw new ArgumentException("Model witness changed.");
+        if (TenantAutomationConversationRules.Existing(p.Current))
+        {
+            var target = TenantAutomationConversationRules.Require(p.Current, conversation, p.Conversation
+                ?? throw new ArgumentException("Existing conversation consent requires its exact snapshot witness."));
+            var accepted = Pending(p).WithExecutionAcceptance(p.SessionId, p.RunId, 1, at);
+            var run = TenantAutomationConversationRules.ForOccurrence(target, source, agent, resolved, p.ActivationId, p.RunId, p.ResponseId,
+                model, at, p.ManualInitiatorPrincipalId);
+            return new(p.Current, p.Next, accepted, target.Owner, target.Snapshot, run, request.Operation.ExpectedInstanceRevision,
+                p.ConfigurationHash, p.EventSource, target.Snapshot.Revision);
+        }
         var graph = BackgroundSessionAdmissionFactory.ForOccurrence(p.SessionId, p.EntryId, p.ActivationId, p.RunId, p.ResponseId, source,
             resolved.Configuration.Definition, agent.Instance.Persona, agent.Instance.PersonaRevision, model, resolved.Skills, at, p.Current.Name,
             ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration, p.ManualInitiatorPrincipalId);

@@ -59,6 +59,8 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
                 TenantCompletionDestinationRules.AuthoringAsync(before, human.PrincipalId, proposed,
                     proposed.CompletionDelivery.SessionId is { } destination ? sessionBacking.ReadTenantSession(before.Tenant.TenantId, destination) : null,
                     new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+            if (permission is "automations.create" or "automations.update")
+                RequireAutomationConversation(before, proposed, human.PrincipalId, null, ct);
             ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
             if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
                 && automationBacking.TenantAutomations(before.Tenant.TenantId).Count(a => a.Owner == proposed.Owner && a.Status == AutomationStatus.Active) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))
@@ -107,9 +109,10 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
             if (human is not null) RequireAutomationHuman(before, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
             ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.occurrence.admit", audit);
             if (automationBacking.TenantBusy(current.AutomationId)) return ValueTask.FromResult<TenantAutomationAdmissionResult?>(null);
+            RequireAutomationConversationAdmission(before, admission, human?.PrincipalId, null, false, ct);
             RequireTenantEventAdmission(admission, null, false, ct);
             EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
-            StageTenantBackgroundGraph(admission.SessionOwner, admission.Session, admission.Run);
+            StageTenantAutomationGraph(admission);
             automationBacking.CommitTenantOccurrence(admission.Next, admission.Occurrence); SettleTenantEventSource(admission.EventSource, admission.Occurrence.OccurrenceId, false); _tenants[before.Tenant.TenantId] = next; _audit.Add(audit);
             return ValueTask.FromResult<TenantAutomationAdmissionResult?>(new(true, admission.Occurrence, admission.Run.SessionId, admission.Run.AgentRunId));
         }

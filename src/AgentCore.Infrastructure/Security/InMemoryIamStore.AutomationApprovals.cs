@@ -45,6 +45,7 @@ public sealed partial class InMemoryIamStore
                 try { TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, request, user.PrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult(); return true; }
                 catch (AccessDeniedException) { return false; } });
             if (!qualified) throw new AccessDeniedException("no_eligible_approver");
+            RequireAutomationConversationAdmission(state, admission, human?.PrincipalId, p, true, ct);
             RequireTenantEventAdmission(admission, p, false, ct);
             EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             var occurrence = TenantAutomationAdmissionApprovalRules.Pending(p);
@@ -72,6 +73,7 @@ public sealed partial class InMemoryIamStore
         try { TenantAutomationRules.AdmissionSource(state, p.Current, agent, policy, p.ManualInitiatorPrincipalId, p.Occurrence.SourceKind); }
         catch (ArgumentException) { throw new AccessDeniedException("operation_configuration_changed"); }
         if (p.EventSource is { } eventSource) RequireTenantEventSource(p.Current, p.Occurrence, eventSource, true, ct);
+        RequireAutomationConversation(state, p.Current, p.ManualInitiatorPrincipalId, p.Conversation, ct);
         TenantAutomationAdmissionApprovalRules.ExecutorAsync(state, request, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
         return agent;
     }
@@ -103,15 +105,16 @@ public sealed partial class InMemoryIamStore
                     if (admission is not null)
                     {
                         if (admission.Run.CreatedAtUtc < signal.CreatedAt || admission.Run.CreatedAtUtc > at) throw new SecurityConflictException("operation_witness_changed");
-                        TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); RequireTenantEventAdmission(admission, p, true, ct); complete = true;
+                        TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); RequireAutomationConversationAdmission(state, admission, request.OriginalInitiatorPrincipalId, p, false, ct); RequireTenantEventAdmission(admission, p, true, ct); complete = true;
                     }
                     else if (string.IsNullOrWhiteSpace(reason)) throw new SecurityConflictException("operation_mismatch");
                 }
                 catch (AccessDeniedException error) { reason = error.ReasonCode; }
+                catch (SecurityConflictException error) when (error.ReasonCode == "parent_busy") { return ValueTask.FromResult(false); }
                 catch (SecurityConflictException error) { reason = error.ReasonCode; }
             }
             ct.ThrowIfCancellationRequested();
-            if (complete) StageTenantBackgroundGraph(admission!.SessionOwner, admission.Session, admission.Run);
+            if (complete) StageTenantAutomationGraph(admission!);
             automationBacking.ReplaceTenantOccurrence(complete ? admission!.Occurrence : source.WithRouting(OccurrenceRoutingDisposition.Rejected,
                 reason ?? "automation_admission_unavailable", source.RoutingRevision + 1, at, null, null));
             SettleTenantEventSource(p.EventSource, p.Occurrence.OccurrenceId, false, complete ? null : reason ?? "automation_admission_unavailable");

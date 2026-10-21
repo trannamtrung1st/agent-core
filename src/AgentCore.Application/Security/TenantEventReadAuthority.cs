@@ -109,16 +109,21 @@ public static class TenantEventReadRules
 }
 
 public sealed class TenantEventReadAuthority(IIamStore security, ITenantRunStore runs, ITenantAutomationStore automations,
-    ITenantEventStore events, ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, IamAuthorizer iam, ITenantEmailWatchStore watches)
+    ITenantEventStore events, ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, IamAuthorizer iam, ITenantEmailWatchStore watches, ITenantSessionStore sessions)
 {
     public async ValueTask RequireAsync(AgentRun run, CancellationToken ct)
     {
         var root = await TenantExecutionLineage.RootAsync(run, runs, ct).ConfigureAwait(false);
-        if (!TenantEventReadRules.IsEventRoot(root)) return;
+        if (!TenantEventReadRules.IsEventRoot(root) && !TenantAutomationConversationRules.IsConversationRoot(root)) return;
         var tenant = run.Owner.TenantId!.Value;
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var occurrence = await automations.FindTenantOccurrenceAsync(tenant, root.Admission.Activation.TriggerOccurrenceId!.Value, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("event_source_unavailable");
+        await TenantAutomationConversationRules.RequireExecutionAsync(root, occurrence,
+            TenantAutomationConversationRules.IsConversationRoot(root) ? await sessions.FindTenantSessionAsync(tenant, root.SessionId, ct).ConfigureAwait(false) : null, state, iam,
+            (id, token) => approvals.FindApprovalAsync(tenant, id, token),
+            (id, token) => effects.FindApprovalDecisionAsync(tenant, id, token),
+            (id, token) => approvals.FindOperationGrantAsync(tenant, id, token), ct).ConfigureAwait(false);
         await TenantEventReadRules.RequireAsync(root, occurrence, state, iam,
             (kind, id, trigger, token) => events.FindTenantEventDeliveryAsync(tenant, kind, id, trigger, token),
             (id, token) => events.FindTenantEventBucketAsync(tenant, id, token),

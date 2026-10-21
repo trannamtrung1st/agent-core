@@ -83,7 +83,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
         TenantSessionRules.RequireExecutor(state, agent);
         await TenantExecutionLineage.RequireRequesterAsync(run, state, authorizer, runs, ct).ConfigureAwait(false);
         if (eventReads is not null) await eventReads.RequireAsync(run, ct).ConfigureAwait(false);
-        else if (TenantEventReadRules.IsEventRoot(await TenantExecutionLineage.RootAsync(run, runs, ct).ConfigureAwait(false)))
+        else if (TenantEventReadRules.IsEventRoot(await TenantExecutionLineage.RootAsync(run, runs, ct).ConfigureAwait(false)) || TenantAutomationConversationRules.IsConversationRoot(await TenantExecutionLineage.RootAsync(run, runs, ct).ConfigureAwait(false)))
             throw new AccessDeniedException("event_source_unavailable");
         return (run, state);
     }

@@ -24,7 +24,10 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
         lock (_gate)
         {
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
-                && (r.Operation.AutomationAdmission is not { } admission || (automationVisibility?.CanCreate ?? true)
+                && (r.Operation.AutomationAdmission is not { } admission || (admission.Conversation is null ? automationVisibility?.CanCreate ?? true
+                    : (automationVisibility?.CanCreateRuns ?? true)
+                        && (automationVisibility?.ConversationSessions is null || automationVisibility.ConversationSessions.Contains(admission.SessionId))
+                        && (automationVisibility?.ChatAgents is null || automationVisibility.ChatAgents.Contains(r.Operation.InstanceId)))
                     && (automationVisibility?.Agents is null || automationVisibility.Agents.Contains(r.Operation.InstanceId))
                     && (automationVisibility?.ReadAutomations is null || automationVisibility.ReadAutomations.Contains(admission.Current.AutomationId))
                     && (automationVisibility?.RunAutomations is null || automationVisibility.RunAutomations.Contains(admission.Current.AutomationId))

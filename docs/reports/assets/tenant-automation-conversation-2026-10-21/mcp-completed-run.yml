@@ -1,0 +1,187 @@
+- generic [ref=f7e1]:
+  - generic [ref=f7e75]:
+    - banner [ref=f7e76]:
+      - generic [ref=f7e77]:
+        - generic [ref=f7e78]:
+          - heading "Agent Core" [level=3] [ref=f7e79]
+          - generic [ref=f7e80]: Organization
+        - separator [ref=f7e81]
+        - navigation "Admin breadcrumb" [ref=f7e82]:
+          - list [ref=f7e83]:
+            - listitem [ref=f7e84]:
+              - generic "Chat test foundation" [ref=f7e86]:
+                - 'button "Switch organization. Current: Chat test foundation" [ref=f7e87] [cursor=pointer]':
+                  - generic [ref=f7e92]: Chat test foundation
+            - listitem [aria-hidden] [ref=f7e93]: /
+            - listitem [ref=f7e94]: Runs
+        - generic [ref=f7e95]:
+          - link "Chat" [ref=f7e96] [cursor=pointer]:
+            - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae
+          - button "Your account" [ref=f7e102] [cursor=pointer]
+          - button "Sign out" [ref=f7e107] [cursor=pointer]
+    - generic [ref=f7e112]:
+      - complementary [ref=f7e113]:
+        - navigation "Admin navigation" [ref=f7e114]:
+          - generic [ref=f7e115]:
+            - generic [ref=f7e116]: Activity
+            - link "Automations" [ref=f7e117] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/automations
+            - link "Sessions" [ref=f7e122] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/activity/sessions
+            - link "Runs" [ref=f7e127] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/activity/runs
+          - generic [ref=f7e132]:
+            - generic [ref=f7e133]: Agent instance
+            - link "Profile" [ref=f7e134] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/profile
+            - link "Definition version" [ref=f7e139] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/version
+            - link "Skills" [ref=f7e144] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/skills
+            - link "Resources" [ref=f7e149] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/resources
+            - link "Workspace" [ref=f7e154] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/workspace
+            - link "Sandbox" [ref=f7e159] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/sandbox
+            - link "Settings" [ref=f7e164] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/settings
+            - link "Execution budgets" [ref=f7e169] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/execution-budgets
+            - link "Self-management" [ref=f7e174] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/self-management
+            - link "Unattended model" [ref=f7e179] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/unattended-model
+            - link "Lifecycle" [ref=f7e184] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/lifecycle
+            - link "Access" [ref=f7e189] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/access
+            - link "Connections" [ref=f7e194] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/connections
+          - generic [ref=f7e199]:
+            - generic [ref=f7e200]: Agents
+            - link "Instances" [ref=f7e201] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents
+            - link "Definitions" [ref=f7e206] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/definitions
+          - generic [ref=f7e211]:
+            - generic [ref=f7e212]: Integrations
+            - link "Credentials" [ref=f7e213] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/integrations/credentials
+            - link "Events" [ref=f7e218] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/integrations/events
+            - link "Sandbox profiles" [ref=f7e223] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/integrations/sandboxes
+          - generic [ref=f7e228]:
+            - generic [ref=f7e229]: Access & Security
+            - link "Your access" [ref=f7e230] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/access
+            - link "Members" [ref=f7e235] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/members
+            - link "Roles & permissions" [ref=f7e240] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/roles
+            - link "Approvals" [ref=f7e246] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/approvals
+            - link "Governance" [ref=f7e251] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/governance
+            - link "Audit" [ref=f7e256] [cursor=pointer]:
+              - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/audit
+          - generic [ref=f7e261]:
+            - generic [ref=f7e262]: Platform
+            - link "Browser privacy" [ref=f7e263] [cursor=pointer]:
+              - /url: /system/browser-privacy
+          - generic [ref=f7e269]:
+            - generic [ref=f7e270]: Account
+            - link "My organizations" [ref=f7e271] [cursor=pointer]:
+              - /url: /account/organizations
+            - link "Your account" [ref=f7e276] [cursor=pointer]:
+              - /url: /account/profile
+      - main [ref=f7e14]:
+        - generic [ref=f7e15]:
+          - generic [ref=f7e16]:
+            - heading "Runs" [level=2] [ref=f7e360]
+            - generic [ref=f7e20]: Inspect individual invocations and their saved outcomes.
+          - generic [ref=f7e361]:
+            - generic [ref=f7e362]:
+              - link "Back to instances" [ref=f7e363] [cursor=pointer]:
+                - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents
+              - button "Reload Activity" [ref=f7e364] [cursor=pointer]
+            - generic [ref=f7e366]:
+              - heading "Riley" [level=4] [ref=f7e367]
+              - generic [ref=f7e368]: Active
+              - generic [ref=f7e369]: Definition v32
+            - region "Runs" [ref=f7e370]:
+              - generic [ref=f7e371]:
+                - generic [ref=f7e372]: Individual invocations, including chat, automation and background work. Newest first.
+                - generic [ref=f7e375]:
+                  - img "search" [ref=f7e377]
+                  - textbox "Search loaded runs" [ref=f7e380]
+                - table "Runs table" [ref=f7e388]:
+                  - rowgroup [ref=f7e395]:
+                    - row [ref=f7e396]:
+                      - columnheader "Run" [ref=f7e397]
+                      - columnheader "Session" [ref=f7e398]
+                      - columnheader "Created" [ref=f7e399]
+                      - columnheader "Status" [ref=f7e400]
+                      - columnheader "Updated" [ref=f7e401]
+                  - rowgroup [ref=f7e402]:
+                    - row [ref=f7e403]:
+                      - cell "Manual task ID 01a15c2c…d169e367 Copy Hello!" [ref=f7e404]:
+                        - generic [ref=f7e405]:
+                          - link "Manual task" [ref=f7e406] [cursor=pointer]:
+                            - /url: /t/01a15c2a-d0ba-75ea-a556-eb56a010f9ae/admin/agents/01a15c2b-76f4-7f90-8eea-54635ee62f10/activity/runs?run=01a15c2c-6e02-7e8e-a984-6b35d169e367
+                          - generic "01a15c2c-6e02-7e8e-a984-6b35d169e367" [ref=f7e408]:
+                            - text: ID 01a15c2c…d169e367
+                            - button "Copy" [ref=f7e410] [cursor=pointer]:
+                              - img "copy" [ref=f7e411]
+                          - generic "Hello!" [ref=f7e414]
+                      - cell [ref=f7e415]:
+                        - generic "69db3aaa-75aa-4941-a639-13f7b5bc1164" [ref=f7e416]:
+                          - text: 69db3aaa…b5bc1164
+                          - button "Copy" [ref=f7e418] [cursor=pointer]:
+                            - img "copy" [ref=f7e419]
+                      - cell [ref=f7e422]:
+                        - time [ref=f7e423]: 8:56 AM
+                      - cell "check-circle Completed" [ref=f7e424]:
+                        - generic [ref=f7e425]:
+                          - img "check-circle" [ref=f7e426]
+                          - generic [ref=f7e430]: Completed
+                      - cell [ref=f7e431]:
+                        - time [ref=f7e432]: 8:56 AM
+                - generic [ref=f7e433]: All items loaded
+  - dialog "Run details" [ref=f7e436]:
+    - generic [ref=f7e438]:
+      - button "Close" [ref=f7e439] [cursor=pointer]:
+        - img "close" [ref=f7e440]
+      - generic [ref=f7e443]: Run details
+    - generic [ref=f7e446]:
+      - generic [ref=f7e447]:
+        - generic [ref=f7e448]:
+          - img "check-circle" [ref=f7e449]
+          - generic [ref=f7e453]: Completed
+        - generic [ref=f7e454]: Manual task
+      - generic [ref=f7e455]:
+        - text: Original task
+        - region "Original task" [ref=f7e456]:
+          - generic [ref=f7e457]: Return one bounded factual response in the selected conversation.
+      - table [ref=f7e460]:
+        - rowgroup [ref=f7e461]:
+          - row [ref=f7e462]:
+            - 'cell "Model : scripted-alpha" [ref=f7e463]':
+              - generic [ref=f7e464]:
+                - generic [ref=f7e465]: "Model :"
+                - generic [ref=f7e466]: scripted-alpha
+          - row [ref=f7e468]:
+            - 'cell "Attempt : 1 of 3" [ref=f7e469]':
+              - generic [ref=f7e470]:
+                - generic [ref=f7e471]: "Attempt :"
+                - generic [ref=f7e472]: 1 of 3
+          - row [ref=f7e473]:
+            - 'cell "Updated : 8:56 AM" [ref=f7e474]':
+              - generic [ref=f7e475]:
+                - generic [ref=f7e476]: "Updated :"
+                - time [ref=f7e478]: 8:56 AM
+      - generic [ref=f7e479]:
+        - text: Response
+        - region "Response" [ref=f7e480]:
+          - generic [ref=f7e481]: Hello!

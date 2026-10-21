@@ -69,6 +69,8 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
             await TenantCompletionDestinationRules.AuthoringAsync(before, human.PrincipalId, proposed,
                 target is null ? null : await SessionView(db, target, ct), new IamAuthorizer(this), ct);
         }
+        if (permission is "automations.create" or "automations.update")
+            await RequireAutomationConversation(db, before, proposed, human.PrincipalId, null, ct);
         ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
         if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
             && await OwnedAutomations(db, next.Tenant.TenantId).CountAsync(a => a.AgentInstanceId == agent.Instance.InstanceId.ToString("D") && a.Status == (int)AutomationStatus.Active, ct) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))
@@ -125,8 +127,9 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
         if (human is not null) await RequireAutomationHuman(before, human.PrincipalId, agent, current.AutomationId, "automations.run", false, ct);
         ValidateAutomationTransaction(next, expectedSecurityRevision, current, agent.PrincipalId, "automations.occurrence.admit", audit);
         if (await TenantAutomationBusy(db, tenant.TenantId, admission.Current.AutomationId, ct)) return null;
+        await RequireAutomationConversationAdmission(db, before, admission, human?.PrincipalId, null, false, ct);
         await RequireTenantEventAdmission(db, admission, null, false, ct);
-        await StageTenantBackgroundGraph(db, admission.SessionOwner, admission.Session, admission.Run, ct);
+        await StageTenantAutomationGraph(db, admission, ct);
         StageAutomation(db, row, admission.Next); db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(admission.Occurrence));
         await SettleTenantEventSource(db, admission.EventSource, admission.Occurrence.OccurrenceId, false, null, ct);
         db.Entry(tenant).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct); db.Add(audit);

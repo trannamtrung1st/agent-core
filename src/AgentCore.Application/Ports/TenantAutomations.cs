@@ -6,7 +6,7 @@ namespace AgentCore.Application.Ports;
 
 public sealed record TenantAutomationPage(IReadOnlyList<Automation> Items, int Total, int Page, int PageSize);
 public sealed record TenantAutomationAdmission(Automation Current, Automation Next, TriggerOccurrence Occurrence,
-    TenantSessionRoot SessionOwner, SessionSnapshot Session, AgentRun Run, long ExpectedInstanceRevision, string ConfigurationHash, PreparedEventAdmissionSource? EventSource = null);
+    TenantSessionRoot SessionOwner, SessionSnapshot Session, AgentRun Run, long ExpectedInstanceRevision, string ConfigurationHash, PreparedEventAdmissionSource? EventSource = null, long? ExpectedSessionRevision = null);
 public sealed record TenantAutomationAdmissionResult(bool Created, TriggerOccurrence Occurrence, Guid? SessionId, Guid? RunId, Guid? ApprovalRequestId = null);
 
 // Facet of the existing IAM, Automation/occurrence and Session/Run transaction.

@@ -32,8 +32,20 @@ public sealed partial class TenantAutomationService
         {
             var scope = TenantAutomationRules.Scope(tenant, value.AutomationId);
             var editable = value.Status is not (AutomationStatus.Cancelled or AutomationStatus.Completed or AutomationStatus.Expired);
+            var conversationAllowed = true;
+            if (TenantAutomationConversationRules.Existing(value))
+            {
+                try
+                {
+                    var target = sessions is null ? null : await sessions.FindTenantSessionAsync(tenant, value.ExecutionTarget.SessionId!.Value, ct);
+                    await TenantAutomationConversationRules.AuthoringAsync(state, human.PrincipalId, value, target, iam, ct);
+                    foreach (var (key, destination) in TenantAutomationConversationRules.Targets(value))
+                        conversationAllowed &= (await iam.CheckOwnedTenantAsync(state, agent.PrincipalId, PermissionCatalog.Get(key), destination, ct)).Allowed;
+                }
+                catch (AccessDeniedException) { conversationAllowed = false; }
+            }
             items.Add(new(value, editable && await Can("automations.update", scope), value.Status != AutomationStatus.Cancelled && await Can("automations.delete", scope),
-                value.Status == AutomationStatus.Active && !await store.IsTenantAutomationBusyAsync(tenant, value.AutomationId, ct) && await Can("automations.run", scope)));
+                value.Status == AutomationStatus.Active && conversationAllowed && !await store.IsTenantAutomationBusyAsync(tenant, value.AutomationId, ct) && await Can("automations.run", scope)));
         }
         var create = await Can("automations.create", AccessScope.ForTenant(tenant));
         await Unchanged(state, human, ct);

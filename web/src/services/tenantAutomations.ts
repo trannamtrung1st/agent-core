@@ -8,7 +8,7 @@ export type TenantAutomation = {
   automationId: string; name: string; instructions: string; status: string; revision: number; triggerRevision: number;
   nextOccurrenceAtUtc: string | null; occurrenceCount: number; suspensionReason: string | null;
   modelOverrideCatalogKey: string | null; modelOverrideReasoningEffort: string | null; requiresTools: boolean; requiresVision: boolean;
-  executionTarget: string; completionDelivery: string; reportToSessionId?: string | null; createdAt: string; updatedAt: string;
+  executionTarget: string; completionDelivery: string; reportToSessionId?: string | null; targetSessionId?: string | null; createdAt: string; updatedAt: string;
   triggers: { kind: string; schedule?: ScheduleTiming; source?: EventSourceReference; triggerId?: string; enabled?: boolean; revision?: number; filterExpression?: string | null; dispatch?: EventDispatch | null }[];
 };
 export type TenantAutomationItem = { automation: TenantAutomation; canUpdate: boolean; canCancel: boolean; canRun: boolean };
@@ -17,13 +17,15 @@ export type TenantAutomationEditor = Pick<TenantAgentEditor, 'agent' | 'security
 };
 export type TenantAutomationEvent = { localKey: string; triggerId?: string; revision: number; enabled: boolean; source?: EventSourceReference; filterExpression: string | null; dispatch: EventDispatch };
 export const newTenantAutomationEvent = (): TenantAutomationEvent => ({ localKey: crypto.randomUUID(), revision: 0, enabled: true, filterExpression: null, dispatch: { mode: 'everyMatch' } });
-export type TenantAutomationDraft = { reportToSessionId?: string | null; mode?: 'schedule' | 'events'; events?: TenantAutomationEvent[]; enabled: boolean; name: string; instructions: string; schedule: ScheduleTiming;
+export type TenantAutomationDraft = { targetSessionId?: string | null; reportToSessionId?: string | null; mode?: 'schedule' | 'events'; events?: TenantAutomationEvent[]; enabled: boolean; name: string; instructions: string; schedule: ScheduleTiming;
   modelKey: string | null; reasoningEffort: string | null; requiresTools: boolean; requiresVision: boolean };
 export const tenantAutomationsApi = (tenant: string, instance: string, suffix = '') => tenantAgentApi(tenant, instance, '/automations' + suffix);
 export const automationDraft = (value?: TenantAutomation): TenantAutomationDraft | undefined => {
-  if (!value || value.executionTarget !== 'backgroundSession' || !['none', 'toSession'].includes(value.completionDelivery)
-    || value.completionDelivery === 'toSession' && !value.reportToSessionId) return undefined;
-  const base = { reportToSessionId: value.completionDelivery === 'toSession' ? value.reportToSessionId : null, enabled: value.status === 'active', name: value.name, instructions: value.instructions, modelKey: value.modelOverrideCatalogKey,
+  if (!value || !['backgroundSession', 'existingSession'].includes(value.executionTarget) || !['none', 'toSession'].includes(value.completionDelivery)
+    || value.completionDelivery === 'toSession' && !value.reportToSessionId
+    || value.executionTarget === 'existingSession' && (!value.targetSessionId || value.completionDelivery !== 'none' || value.reportToSessionId != null)
+    || value.executionTarget === 'backgroundSession' && value.targetSessionId != null) return undefined;
+  const base = { targetSessionId: value.executionTarget === 'existingSession' ? value.targetSessionId : null, reportToSessionId: value.completionDelivery === 'toSession' ? value.reportToSessionId : null, enabled: value.status === 'active', name: value.name, instructions: value.instructions, modelKey: value.modelOverrideCatalogKey,
     reasoningEffort: value.modelOverrideReasoningEffort, requiresTools: value.requiresTools, requiresVision: value.requiresVision };
   if (value.triggers.length === 1 && value.triggers[0].kind === 'schedule' && value.triggers[0].schedule)
     return { ...base, schedule: { ...value.triggers[0].schedule } };
@@ -41,11 +43,12 @@ export const automationWitness = (view: TenantAutomationEditor, value?: TenantAu
 export async function saveTenantAutomation(tenant: string, instance: string, view: TenantAutomationEditor, draft: TenantAutomationDraft, value: TenantAutomation | undefined, signal: AbortSignal) {
   const result = await identityRequest<TenantAutomation>(tenantAutomationsApi(tenant, instance, value ? `/${encodeURIComponent(value.automationId)}` : ''), {
     method: value ? 'PUT' : 'POST', signal, body: { enabled: draft.enabled, name: draft.name.trim(), instructions: draft.instructions.trim(), modelKey: draft.modelKey, reasoningEffort: draft.reasoningEffort,
-      requiresTools: draft.requiresTools, requiresVision: draft.requiresVision, reportToSessionId: draft.reportToSessionId || null,
+      requiresTools: draft.requiresTools, requiresVision: draft.requiresVision, targetSessionId: draft.targetSessionId || null, reportToSessionId: draft.reportToSessionId || null,
       ...(draft.mode === 'events' ? { triggers: draft.events?.map(e => ({ kind: 'event', triggerId: e.triggerId, revision: e.revision, enabled: e.enabled,
         source: e.source, filterExpression: e.filterExpression, dispatch: e.dispatch })) } : { schedule: draft.schedule }), ...automationWitness(view, value) }
   });
   if (!result?.automationId || value && result.automationId !== value.automationId || !Number.isSafeInteger(result.revision) || result.revision < 1) throw new IdentityCompletionError();
+  if ((result.targetSessionId ?? null) !== (draft.targetSessionId || null) || result.executionTarget !== (draft.targetSessionId ? 'existingSession' : 'backgroundSession')) throw new IdentityCompletionError();
   if ((result.reportToSessionId ?? null) !== (draft.reportToSessionId || null) || result.completionDelivery !== (draft.reportToSessionId ? 'toSession' : 'none')) throw new IdentityCompletionError();
   return result;
 }

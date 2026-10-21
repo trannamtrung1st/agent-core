@@ -49,6 +49,7 @@ public sealed partial class SqliteIamStore
             catch (AccessDeniedException) { }
         }
         if (!qualified) throw new AccessDeniedException("no_eligible_approver");
+        await RequireAutomationConversationAdmission(db, state, admission, human?.PrincipalId, p, true, ct);
         await RequireTenantEventAdmission(db, admission, p, false, ct);
         var occurrence = TenantAutomationAdmissionApprovalRules.Pending(p);
         try
@@ -99,6 +100,7 @@ public sealed partial class SqliteIamStore
         try { TenantAutomationRules.AdmissionSource(state, p.Current, agent, policy, p.ManualInitiatorPrincipalId, p.Occurrence.SourceKind); }
         catch (ArgumentException) { throw new AccessDeniedException("operation_configuration_changed"); }
         if (p.EventSource is { } eventSource) await RequireTenantEventSource(db, p.Current, p.Occurrence, eventSource, true, ct);
+        await RequireAutomationConversation(db, state, p.Current, p.ManualInitiatorPrincipalId, p.Conversation, ct);
         await TenantAutomationAdmissionApprovalRules.ExecutorAsync(state, request, new IamAuthorizer(this), ct); return agent;
     }
 
@@ -128,14 +130,15 @@ public sealed partial class SqliteIamStore
                 if (admission is not null)
                 {
                     if (admission.Run.CreatedAtUtc < signal.CreatedAt || admission.Run.CreatedAtUtc > at) throw new SecurityConflictException("operation_witness_changed");
-                    TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); await RequireTenantEventAdmission(db, admission, p, true, ct); complete = true;
+                    TenantAutomationRules.Admission(admission, agent, request.OriginalInitiatorPrincipalId, p); await RequireAutomationConversationAdmission(db, state, admission, request.OriginalInitiatorPrincipalId, p, false, ct); await RequireTenantEventAdmission(db, admission, p, true, ct); complete = true;
                 }
                 else if (string.IsNullOrWhiteSpace(reason)) throw new SecurityConflictException("operation_mismatch");
             }
             catch (AccessDeniedException error) { reason = error.ReasonCode; }
+            catch (SecurityConflictException error) when (error.ReasonCode == "parent_busy") { return false; }
             catch (SecurityConflictException error) { reason = error.ReasonCode; }
         }
-        if (complete) await StageTenantBackgroundGraph(db, admission!.SessionOwner, admission.Session, admission.Run, ct);
+        if (complete) await StageTenantAutomationGraph(db, admission!, ct);
         db.Entry(row).CurrentValues.SetValues(TriggerStoreMapping.ToRecord(complete ? admission!.Occurrence
             : source.WithRouting(OccurrenceRoutingDisposition.Rejected, reason ?? "automation_admission_unavailable", source.RoutingRevision + 1, at, null, null)));
         if (p.EventSource is not null) await db.SaveChangesAsync(ct); // Source guards observe the settled occurrence inside this transaction.

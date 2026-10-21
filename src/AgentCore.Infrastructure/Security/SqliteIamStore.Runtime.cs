@@ -41,6 +41,15 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
+        var producerRow = await db.AgentRuns.AsNoTracking().SingleAsync(r => r.TenantId == frame.Owner.TenantId && r.AgentRunId == frame.RunId.ToString("D"), ct).ConfigureAwait(false);
+        var producer = AgentRunStoreMapping.ToDomain(producerRow);
+        if (TenantAutomationConversationRules.IsConversationRoot(producer))
+        {
+            var rows = await db.Entries.AsNoTracking().Where(e => e.SessionId == producerRow.SessionId && e.ResponseId == producer.ResponseId!.Value.ToString("D")).ToArrayAsync(ct).ConfigureAwait(false);
+            var saved = rows.Select(SqliteMemoryStore.ToEntry).ToDictionary(e => e.EntryId);
+            if (TenantRuntimeRules.PublishesResponse(producer, snapshot, id => saved.GetValueOrDefault(id)))
+                await RequireTenantEventRead(db, producer, ct).ConfigureAwait(false);
+        }
         await new SqliteMemoryStore(contexts, clock ?? TimeProvider.System).StageTenantRuntimeSaveAsync(db, frame, snapshot, expectedRevision, ct).ConfigureAwait(false);
         await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
@@ -58,7 +67,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
     }
     private static async Task<long> TenantInputBoundaryAsync(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
     {
-        if (TenantBackgroundCompletionFactory.InputBoundary(run) is { } reportBoundary) return reportBoundary;
+        if ((TenantBackgroundCompletionFactory.InputBoundary(run) ?? TenantAutomationConversationRules.InputBoundary(run)) is { } reportBoundary) return reportBoundary;
         var sources = TenantApprovalContinuationRules.Inputs(run).Select(id => id.ToString("D")).ToArray();
         var inputs = await db.Entries.Where(e => e.SessionId == run.SessionId.ToString("D") && sources.Contains(e.EntryId))
             .Select(e => new { e.EntrySequence, e.Role, e.Status }).ToArrayAsync(ct).ConfigureAwait(false);
@@ -145,6 +154,8 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             else next = command.Apply(run, () => diagnosticId);
         }
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
+        if (command is AgentRunCommand.Fail { Code: "protected-output-unavailable" })
+            await SettleRefusedTenantOutput(db, run, next, ct).ConfigureAwait(false);
         AgentRunStoreMapping.Apply(row, next); await TenantCoreEventProduction.StageRunAsync(db, run, next, ct).ConfigureAwait(false);
         await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }

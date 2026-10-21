@@ -25,7 +25,7 @@ public sealed class TenantAutomationCompletionMigrationTests
                 completionDelivery: AutomationCompletionDelivery.ToSession(Guid.NewGuid()));
             var store = new SqliteTriggerStore(factory); await store.CreateAsync(legacy);
             await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
-            var latest = await Guards(db); Assert.Equal(79, latest.Length); Assert.All(previous, name => Assert.Contains(name, latest));
+            var latest = await Guards(db); Assert.Equal(83, latest.Length); Assert.All(previous, name => Assert.Contains(name, latest));
             Assert.Contains("TR_TenantCompletion_Automation_Insert", latest); Assert.Contains("TR_TenantCompletion_Occurrence_Update", latest);
             Assert.Equal(legacy.CompletionDelivery, (await store.GetAsync(legacy.Owner, legacy.AutomationId))!.CompletionDelivery);
             await db.GetService<IMigrator>().MigrateAsync("20261021040000_TenantEmailWatchOwnership"); Assert.Equal(previous, await Guards(db));

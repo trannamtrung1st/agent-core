@@ -216,7 +216,7 @@ public static class ToolPolicy
         // its approval successors use the converted file and native owners.
         if (context?.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
             && !IamToolContracts.IsInspection(descriptor.Name)) return false;
-        if (TenantTaskExecutionContract.IsBackground(context)
+        if ((TenantTaskExecutionContract.IsBackground(context) || TenantTaskExecutionContract.IsIndependent(context))
             && !IamToolContracts.IsInspection(descriptor.Name) && !TenantTaskExecutionContract.IsTool(descriptor.Name) && !TenantTaskExecutionContract.IsNativeInspection(descriptor.Name)
             && descriptor.Name != ToolCatalog.RequestAuthorization) return false;
         if (context?.ExecutionContext is { } mutation && TenantWorkspaceMutationContract.IsMutation(descriptor.Name))

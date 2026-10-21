@@ -447,10 +447,20 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                             WHERE allowed.value = json_extract(json_extract(fact.PayloadJson, '$.DataJson'), '$.accountId')))))
                 """);
             query = query.Where(r => emailReadable.Any(owned => owned.RequestId == r.RequestId));
+            var targetSessionsJson = System.Text.Json.JsonSerializer.Serialize(visibility.ConversationSessions?.Select(id => id.ToString("D")).ToArray());
+            var targetChatsJson = System.Text.Json.JsonSerializer.Serialize(visibility.ChatAgents?.Select(id => id.ToString("D")).ToArray());
+            var targetReadable = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests WHERE AutomationId IS NULL
+                OR (json_extract(PayloadJson, '$.Operation.AutomationAdmission.Conversation') IS NULL AND {visibility.CanCreate})
+                OR (json_type(PayloadJson, '$.Operation.AutomationAdmission.Conversation') = 'object' AND {visibility.CanCreateRuns}
+                    AND (json_type({targetSessionsJson}) = 'null' OR json_extract(PayloadJson, '$.Operation.AutomationAdmission.SessionId') IN (SELECT value FROM json_each({targetSessionsJson})))
+                    AND (json_type({targetChatsJson}) = 'null' OR InstanceId IN (SELECT value FROM json_each({targetChatsJson}))))
+                """);
+            query = query.Where(r => targetReadable.Any(a => a.RequestId == r.RequestId));
             var agentIds = visibility.Agents?.Select(id => id.ToString("D")).ToArray();
             var readIds = visibility.ReadAutomations?.Select(id => id.ToString("D")).ToArray();
             var runIds = visibility.RunAutomations?.Select(id => id.ToString("D")).ToArray();
-            query = query.Where(r => r.AutomationId == null || visibility.CanCreate && (agentIds == null || agentIds.Contains(r.InstanceId))
+            query = query.Where(r => r.AutomationId == null || (agentIds == null || agentIds.Contains(r.InstanceId))
                 && (readIds == null || readIds.Contains(r.AutomationId)) && (runIds == null || runIds.Contains(r.AutomationId))
                 && db.Automations.IgnoreQueryFilters().Any(a => a.AutomationId == r.AutomationId && a.TenantId == r.TenantId
                     && a.AgentInstanceId == r.InstanceId && a.ExecutorPrincipalId == r.ExecutorPrincipalId));

@@ -45,7 +45,7 @@ public sealed partial class TenantApprovalService
                     ?? throw new AccessDeniedException("approval_unavailable");
                 TenantAutomationAdmissionApprovalRules.Decision(request, decision, await approvals.FindOperationGrantAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false), time.GetUtcNow());
                 await TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, request, decision.HumanPrincipalId, authorizer, ct).ConfigureAwait(false);
-                admission = TenantAutomationAdmissionApprovalRules.Build(request, current.Agent, current.Configuration, time.GetUtcNow());
+                admission = TenantAutomationAdmissionApprovalRules.Build(request, current.Agent, current.Configuration, time.GetUtcNow(), current.Conversation);
             }
             catch (AccessDeniedException error) { refusal = error.ReasonCode; }
             catch (SecurityConflictException error) { refusal = error.ReasonCode; }
@@ -91,10 +91,12 @@ public sealed partial class TenantApprovalService
                 p.Occurrence.SourceKind switch { TriggerSourceKind.Schedule => "Scheduled occurrence · no human requester", TriggerSourceKind.CoreEvent => "Built-in event · no human requester", TriggerSourceKind.ApplicationEvent => "Webhook event · no human requester", _ => "Explicit manual invocation" }, false),
             new("admissionOccurrence", null, $"{(p.EventSource is { IsBucket: true } ? "Batch window ended" : p.EventSource is not null ? p.Occurrence.SourceKind == TriggerSourceKind.ApplicationEvent ? "Producer occurrence time (untrusted)" : "Source occurrence time" : p.Occurrence.ScheduledAtUtc is null ? "Invoked" : "Scheduled")} at {(p.Occurrence.ScheduledAtUtc ?? p.Occurrence.ObservedAtUtc).ToUniversalTime():yyyy-MM-dd HH:mm:ss.fff} UTC · prepared {r.CreatedAt.ToUniversalTime():yyyy-MM-dd HH:mm:ss.fff} UTC · saved registration revision {p.Current.Revision}", false),
             new("admissionPrimaryPermission", null, r.Permission, false), new("admissionObjective", null, p.Current.Instructions, false), new("admissionSchedule", null, AutomationRules.Describe(p.Current), false),
-            new("admissionDestination", null, p.Occurrence.CompletionDelivery.SessionId is { } destination ? $"New separate Background Session · report requested to conversation {destination:D}; delivery requires separate current access and consent" : "New separate Background Session · no completion report", false), new("admissionModel", null, p.Model.CatalogKey, false),
+            new("admissionDestination", null, p.Current.ExecutionTarget.SessionId is { } targetSession ? $"Exact saved conversation {targetSession:D} · reply in that conversation; no separate report" : p.Occurrence.CompletionDelivery.SessionId is { } destination ? $"New separate Background Session · report requested to conversation {destination:D}; delivery requires separate current access and consent" : "New separate Background Session · no completion report", false), new("admissionModel", null, p.Model.CatalogKey, false),
             new("admissionScope", null, string.Join("; ", TenantAutomationAdmissionApprovalRules.Targets(r).Select(t => t.Permission).Distinct()), false),
             new("admissionLimit", null, "One exact reserved occurrence. No work is created before settlement. An exceptional grant covers only its named primary permission; all raw reads, other permissions and later tools remain independent.", false)
         };
+        if (p.Conversation is { } conversation)
+            changes.Add(new("admissionConversation", null, $"Conversation revision {conversation.SessionRevision} · input through entry sequence {conversation.InputBoundarySequence}", false));
         if (p.EventSource is { } source)
         {
             AgentCore.Domain.Events.EventSubscriptionSnapshot? snapshot = null;

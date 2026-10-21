@@ -17,10 +17,14 @@ public sealed partial class InMemoryIamStore
         lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
             var root = TenantCoreRoot(run);
-            if (!TenantEventReadRules.IsEventRoot(root)) return;
+            if (!TenantEventReadRules.IsEventRoot(root) && !TenantAutomationConversationRules.IsConversationRoot(root)) return;
             var tenant = run.Owner.TenantId!.Value;
             var occurrence = automationBacking.ReadTenantOccurrence(tenant, root.Admission.Activation.TriggerOccurrenceId!.Value)
                 ?? throw new AccessDeniedException("event_source_unavailable");
+            TenantAutomationConversationRules.RequireExecutionAsync(root, occurrence, sessionBacking.ReadTenantSession(tenant, root.SessionId), _tenants[tenant], new IamAuthorizer(this),
+                (id, _) => ValueTask.FromResult(_approvals.GetValueOrDefault(id)),
+                (id, _) => ValueTask.FromResult(_approvalDecisions.GetValueOrDefault(id)),
+                (id, _) => ValueTask.FromResult(_operationGrants.GetValueOrDefault(id)), ct).AsTask().GetAwaiter().GetResult();
             TenantEventReadRules.RequireAsync(root, occurrence, _tenants[tenant], new IamAuthorizer(this),
                 (kind, id, trigger, _) => ValueTask.FromResult(TenantEvent(tenant, kind, id, trigger)),
                 (id, _) => ValueTask.FromResult(sessionBacking.CoreEvents.TenantBucket(tenant, id) is { } b ? new TenantEventBucket(tenant, b) : null),

@@ -19,7 +19,7 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantCredentialAccessTests
 {
     private const string AutonomousFileBody = "Independent task bytes: thử nghiệm.";
-    private sealed class AutonomousFileModel(bool review) : ILanguageModel
+    private sealed class AutonomousFileModel(bool review, bool conversation = false) : ILanguageModel
     {
         public ModelCapabilities Capabilities => new ScriptedLanguageModel().Capabilities;
         public readonly ConcurrentQueue<ModelRequest> Requests = new();
@@ -34,7 +34,8 @@ public sealed partial class TenantCredentialAccessTests
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             Requests.Enqueue(request); Entered.TrySetResult(); await Release.Task.WaitAsync(ct);
-            Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
+            if (conversation) Assert.DoesNotContain(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
+            else Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
             Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.BrowserFillCredential);
             var results = request.Messages.Where(m => m.Role == ModelRole.Tool && m.ToolCallId?.StartsWith("independent-stage-", StringComparison.Ordinal) == true).ToArray();
             var refused = results.Any(m => m.Text.Contains("\"error\":", StringComparison.Ordinal) || m.Text.Contains("\"decision\":\"denied\"", StringComparison.Ordinal));
@@ -58,8 +59,16 @@ public sealed partial class TenantCredentialAccessTests
                 yield return new ModelToolCallEvent(new(call, tool, arguments)); yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             Assert.False(ExpectedRefusal, "An expected independent authority refusal was bypassed.");
-            yield return new ModelToolCallEvent(new("independent-finish", ToolCatalog.WorkComplete, """{"outcome":"Response","summary":"Independent exact files completed.","attentionRequired":false}"""));
-            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            if (conversation)
+            {
+                yield return new ModelSemanticResponseReady(new("Independent exact files completed.", new(ModelSpeechMode.None, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            else
+            {
+                yield return new ModelToolCallEvent(new("independent-finish", ToolCatalog.WorkComplete, """{"outcome":"Response","summary":"Independent exact files completed.","attentionRequired":false}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
         }
     }
     public static TheoryData<bool, string, string> AutonomousFileCases
@@ -85,10 +94,16 @@ public sealed partial class TenantCredentialAccessTests
     public Task Independent_Automation_Office_files_preserve_binary_sources_and_exact_consent(bool sqlite, string origin, string mode, string kind)
         => AutonomousFileFlow(sqlite, origin, mode, kind: kind);
 
-    private async Task AutonomousFileFlow(bool sqlite, string origin, string mode, bool restart = false, string kind = "text")
+    [Theory(Timeout = 120000)] [InlineData(false, "manual", false)] [InlineData(true, "manual", false)]
+    [InlineData(false, "scheduled", false)] [InlineData(true, "scheduled", false)]
+    [InlineData(true, "manual", true)] [InlineData(true, "scheduled", true)]
+    public Task Existing_conversation_Automation_file_Review_keeps_empty_input_successors_and_durable_exact_sources(bool sqlite, string origin, bool restart) =>
+        AutonomousFileFlow(sqlite, origin, "review", restart, conversation: true);
+
+    private async Task AutonomousFileFlow(bool sqlite, string origin, string mode, bool restart = false, string kind = "text", bool conversation = false)
     {
         var reviewed = mode is "review" or "grant" or "reject";
-        var model = new AutonomousFileModel(reviewed) { ExpectedRefusal = mode is "reject" or "missing-read" or "revoked-write" };
+        var model = new AutonomousFileModel(reviewed, conversation) { ExpectedRefusal = mode is "reject" or "missing-read" or "revoked-write" };
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); var diagnostics = new AccountReadDiagnostics();
         var root = restart ? Path.Combine(Path.GetTempPath(), "independent-consent-reopen-" + Guid.NewGuid().ToString("N")) : null;
         void Configure(IServiceCollection services) { services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock); services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(diagnostics); }
@@ -125,6 +140,7 @@ public sealed partial class TenantCredentialAccessTests
         var permissions = new List<string> { "automations.run", "sessions.create", "agent-runs.create", "agents.read", "sessions.read", "artifacts.read" };
         if (mode != "missing-read") permissions.Add("workspaces.read");
         if (mode != "grant") permissions.AddRange(["workspaces.write", "artifacts.create"]);
+        if (conversation) permissions.Add("agents.chat");
         var role = await access.SaveRoleAsync(human, tenant, null, "Independent task executor", permissions, await Revision(owner, tenant));
         var assignment = await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
         if (mode is "review" or "reject")
@@ -133,10 +149,16 @@ public sealed partial class TenantCredentialAccessTests
                 using var policy = await owner.PutAsJsonAsync(api + "/operation-policies/" + permission, new { mode = "always", independentReview = origin == "scheduled", expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 });
                 Assert.Equal(HttpStatusCode.OK, policy.StatusCode);
             }
+        Guid? targetSessionId = conversation ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : null;
         var route = api + $"/agents/{instance}/automations";
-        var automation = (await Json(await owner.PostAsJsonAsync(route, new { enabled = true, name = "Independent exact files", instructions = "Write, read and publish exact owned task files.", schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(30).ToString("O") }, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, requiresTools = true }))).GetProperty("automationId").GetGuid();
+        var automation = (await Json(await owner.PostAsJsonAsync(route, new { enabled = true, name = "Independent exact files", instructions = "Write, read and publish exact owned task files.", targetSessionId, schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(30).ToString("O") }, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, requiresTools = true }))).GetProperty("automationId").GetGuid();
         Guid initialId;
-        if (origin == "manual") initialId = (await Json(await owner.PostAsJsonAsync(route + $"/{automation}/run", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, expectedAutomationRevision = 1 }))).GetProperty("runId").GetGuid();
+        if (origin == "manual")
+        {
+            var admitted = await owner.PostAsJsonAsync(route + $"/{automation}/run", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1, expectedAutomationRevision = 1 });
+            Assert.True(admitted.StatusCode == HttpStatusCode.Created, await admitted.Content.ReadAsStringAsync());
+            initialId = (await Json(admitted)).GetProperty("runId").GetGuid();
+        }
         else
         {
             clock.Advance(TimeSpan.FromMinutes(31)); await factory.Services.GetRequiredService<TenantAutomationService>().AdmitDueAsync();
@@ -172,7 +194,7 @@ public sealed partial class TenantCredentialAccessTests
                 {
                     await first.DisposeAsync();
                     var previous = model;
-                    model = new AutonomousFileModel(reviewed) { WriteTool = previous.WriteTool, WriteArguments = previous.WriteArguments,
+                    model = new AutonomousFileModel(reviewed, conversation) { WriteTool = previous.WriteTool, WriteArguments = previous.WriteArguments,
                         ReadTool = previous.ReadTool, ReadArguments = previous.ReadArguments, PublishArguments = previous.PublishArguments };
                     model.Release.TrySetResult();
                     recreated = new OAuthFactory(root, sqlite: true, preserve: true, execute: true, model: model, servicesOverride: Configure); factory = recreated;
@@ -205,6 +227,16 @@ public sealed partial class TenantCredentialAccessTests
             Assert.Equal(await owner.GetByteArrayAsync(api + $"/agents/{instance}/workspace/content?path={Uri.EscapeDataString(path)}"), bytes);
             if (kind == "text") Assert.Equal(AutonomousFileBody, Encoding.UTF8.GetString(bytes));
             Assert.Contains(model.Requests.SelectMany(r => r.Messages), m => m.Role == ModelRole.Tool && m.Text.Contains("Independent task bytes", StringComparison.Ordinal));
+        }
+        if (conversation)
+        {
+            Assert.Equal(targetSessionId, final.SessionId); Assert.Equal(AgentRunOutputContract.ConversationResponse, final.Admission.OutputContract);
+            Assert.Empty(final.Admission.ApprovalResume!.SourceInputEntryIds);
+            var retained = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, final.SessionId))!;
+            Assert.Equal(SessionOriginKind.UserChat, retained.Snapshot.Origin.Kind); Assert.Equal(human, retained.Owner.CreatedByPrincipalId);
+            var history = (await Json(await owner.GetAsync(api + $"/sessions/{final.SessionId}/messages"))).GetProperty("items").EnumerateArray().ToArray();
+            Assert.DoesNotContain(history, row => row.GetProperty("role").GetString()!.Equals("user", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(history, row => row.GetProperty("text").GetString() == "Independent exact files completed.");
         }
         Assert.Equal(reviewed ? mode == "reject" ? 1 : 2 : 0, decided.Count); Assert.Equal(0, factory.Outbound);
         }

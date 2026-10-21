@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -23,6 +24,12 @@ public static class TenantRuntimeRules
             || next.DurablyDeletedAt is not null || next.ArchivedAt != before.ArchivedAt || before.DurablyDeletedAt is not null)
             throw new AccessDeniedException("tenant_runtime_scope_mismatch");
     }
+    public static bool PublishesResponse(AgentRun run, SessionSnapshot proposed, Func<Guid, ConversationEntry?> read) =>
+        proposed.Entries.Any(entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == run.ResponseId
+            && (read(entry.EntryId) is not { } saved || saved.Text != entry.Text
+                || JsonSerializer.Serialize(saved.Envelope) != JsonSerializer.Serialize(entry.Envelope)
+                || saved.Status != EntryStatus.Completed && entry.Status == EntryStatus.Completed));
+
     public static void RequireOwner(AgentRunOwner owner)
     {
         if (owner.TenantId is null || owner.ExecutorPrincipalId is null || owner.ProfileIdOrNull is not null) throw new AccessDeniedException("tenant_context_required");

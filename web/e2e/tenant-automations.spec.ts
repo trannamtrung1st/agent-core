@@ -160,3 +160,63 @@ test('configured completion uses the shared tenant picker, retains a stale desti
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });
+
+test('selected-conversation execution preserves its destination through stale recovery and exact admission Review', async ({ page }, info) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    const target = await call<{ sessionId: string; revision: number }>(f.api, f.root + '/sessions', { agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
+    await call(f.api, f.root + `/sessions/${target.sessionId}`, { title: 'Quarterly analysis — a long existing conversation name retained for exact scheduled execution', expectedRevision: await f.revision(), expectedSessionRevision: target.revision }, 'PATCH');
+    await page.setViewportSize({ width: 1440, height: 1000 }); await signIn(page); await page.goto(f.route);
+    await page.getByRole('button', { name: 'New Automation', exact: true }).click(); const editor = page.getByRole('dialog', { name: 'New Automation', exact: true });
+    await editor.getByRole('textbox', { name: 'Automation name', exact: true }).fill('Reply in the exact selected conversation');
+    await editor.getByRole('textbox', { name: 'Automation instructions', exact: true }).fill('Return one bounded factual response in the selected conversation.');
+    await editor.getByRole('checkbox', { name: 'Enable automatic occurrences', exact: true }).check();
+    await editor.getByRole('spinbutton', { name: 'Schedule maximum occurrences', exact: true }).fill('10');
+    await editor.getByRole('combobox', { name: 'Automation execution destination', exact: true }).click();
+    await page.locator('.ant-select-item-option-content').filter({ hasText: /^Selected conversation$/ }).click();
+    await expect(editor.getByRole('combobox', { name: 'Automation completion report', exact: true })).toHaveCount(0);
+    await expect(editor.getByRole('button', { name: 'Save Automation', exact: true })).toBeDisabled();
+    await editor.getByRole('combobox', { name: 'Execution conversation', exact: true }).click();
+    await page.locator('.ant-select-item-option-content').filter({ hasText: /Quarterly analysis/ }).click();
+    await editor.getByRole('heading', { name: 'Execution', exact: true }).click();
+    await expect(page.locator('.ant-select-dropdown:visible, .ant-tooltip:visible')).toHaveCount(0);
+    for (const width of [1440, 1024, 768, 390, 320]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expect.poll(async () => Math.round(await editor.evaluate(element => element.getBoundingClientRect().width))).toBe(width < 768 ? width : 640);
+      await editor.getByRole('region', { name: 'Execution', exact: true }).scrollIntoViewIfNeeded();
+      await expect(editor.getByRole('combobox', { name: 'Execution conversation', exact: true })).toBeInViewport();
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: info.outputPath(`existing-execution-${width}.png`), fullPage: true });
+    }
+    await call(f.api, f.root + '/roles', { name: 'Concurrent exact-target access update', permissions: ['agents.read'], expectedRevision: await f.revision() });
+    await editor.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(editor.getByText(/Access has changed since/)).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Save Automation', exact: true })).toBeDisabled();
+    await editor.getByRole('button', { name: 'Reload current Automation', exact: true }).click();
+    await expect(editor.getByRole('textbox', { name: 'Automation name', exact: true })).toHaveValue('Reply in the exact selected conversation');
+    await expect(editor.getByRole('button', { name: 'Save Automation', exact: true })).toBeEnabled();
+    await editor.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(editor).toHaveCount(0);
+    const saved = (await call<{ items: { automationId: string; executionTarget: string; targetSessionId: string; completionDelivery: string }[] }>(f.api, f.resource)).items[0];
+    expect(saved).toMatchObject({ executionTarget: 'existingSession', targetSessionId: target.sessionId, completionDelivery: 'none' });
+    await page.getByRole('button', { name: 'Run now', exact: true }).click(); const run = page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true });
+    await expect(run).toContainText('selected conversation'); await run.getByRole('button', { name: 'Run now', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Open the admitted Run in Activity', exact: true })).toBeVisible();
+    const history = async () => (await call<{ items: { role: string; text: string | null; status: string }[] }>(f.api, f.root + `/sessions/${target.sessionId}/messages`)).items;
+    await expect.poll(async () => (await history()).filter(item => item.role.toLowerCase() === 'assistant' && item.status === 'completed' && !!item.text).length).toBe(1);
+    expect((await history()).filter(item => item.role.toLowerCase() === 'user')).toHaveLength(0);
+    expect((await call<{ items: unknown[] }>(f.api, f.root + '/sessions')).items).toHaveLength(1);
+    await call(f.api, f.root + '/operation-policies/agents.chat', { mode: 'always', independentReview: false, expectedRevision: await f.revision(), expectedPolicyRevision: 0 }, 'PUT');
+    await page.getByRole('button', { name: 'Reload Automations', exact: true }).click();
+    await page.getByRole('button', { name: 'Run now', exact: true }).click(); await page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true }).getByRole('button', { name: 'Run now', exact: true }).click();
+    const approval = page.getByRole('link', { name: 'Review the exact admission request', exact: true }); await expect(approval).toBeVisible();
+    const requestId = (await approval.getAttribute('href'))!.split('/').at(-1)!; await approval.click();
+    const review = page.getByRole('dialog', { name: 'Approval details', exact: true }); await expect(review).toContainText(target.sessionId);
+    await expect(review).toContainText('Conversation revision'); await expect(review).toContainText('No Run has been admitted for this occurrence');
+    await review.getByRole('button', { name: 'Approve', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Approve?', exact: true }).getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(async () => (await call<{ review: { executionState: string } }>(f.api, f.root + `/approvals/${requestId}`)).review.executionState).toBe('admitted');
+    await review.getByRole('button', { name: 'Refresh details', exact: true }).click(); await expect(review).toContainText('A Run was admitted in the selected conversation');
+    await expect.poll(async () => (await history()).filter(item => item.role.toLowerCase() === 'assistant' && item.status === 'completed' && !!item.text).length).toBe(2);
+    expect((await call<{ items: unknown[] }>(f.api, f.root + '/sessions')).items).toHaveLength(1);
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});

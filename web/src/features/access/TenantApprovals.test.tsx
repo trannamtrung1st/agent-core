@@ -803,3 +803,34 @@ it('blocks a widened email admission scope with malformed original metadata', as
   item.review.changes.push(...Object.entries({ admissionEventSource: 'One exact saved source', admissionEventFilter: 'true', admissionEventDispatch: 'Every matched receipt', admissionEventData: '{"body":"not an email reference"}' }).map(([field, after]) => ({ field, after, before: null, beforeAvailable: false, afterAvailable: true, restoresDefault: false })));
   view(item); const dialog = await screen.findByRole('dialog'); expect(within(dialog).getByRole('button', { name: /^Approve$/ })).toBeDisabled();
 });
+
+const conversationAdmissionRequest = (): TenantApproval => {
+  const item = admissionRequest(); item.kind = 'review';
+  for (const field of item.review.changes) {
+    if (field.field === 'admissionScope') field.after = 'automations.run; agent-runs.create; sessions.read; agents.chat';
+    if (field.field === 'admissionDestination') field.after = 'Exact saved conversation 11111111-1111-4111-8111-111111111111 · reply in that conversation; no separate report';
+    if (field.field === 'admissionPrimaryPermission') field.after = 'agents.chat';
+  }
+  item.review.changes.push({ field: 'admissionConversation', before: null, after: 'Conversation revision 7 · input through entry sequence 2', beforeAvailable: false, afterAvailable: true, restoresDefault: false });
+  return item;
+};
+it.each(['agents.chat', 'sessions.read', 'agent-runs.create', 'automations.run'])('reviews exact existing-conversation admission under %s without a fabricated new Session', async permission => {
+  const item = conversationAdmissionRequest(); item.review.changes.find(c => c.field === 'admissionPrimaryPermission')!.after = permission;
+  view(item); const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Conversation revision 7 · input through entry sequence 2')).toBeVisible();
+  expect(within(dialog).getByText(/Exact saved conversation 11111111/)).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled();
+  expect(within(dialog).getByText(/No Run has been admitted for this occurrence/)).toBeVisible();
+});
+it.each(['missing-boundary', 'bad-target', 'report', 'wrong-scope', 'duplicate', 'secondary-grant'])('blocks malformed existing-conversation admission: %s', async mode => {
+  const item = conversationAdmissionRequest();
+  if (mode === 'missing-boundary') item.review.changes = item.review.changes.filter(c => c.field !== 'admissionConversation');
+  else if (mode === 'bad-target') item.review.changes.find(c => c.field === 'admissionDestination')!.after = 'Exact saved conversation arbitrary-id · reply in that conversation; no separate report';
+  else if (mode === 'report') item.review.changes.find(c => c.field === 'admissionDestination')!.after += ' · separate report';
+  else if (mode === 'wrong-scope') item.review.changes.find(c => c.field === 'admissionScope')!.after += '; sessions.create';
+  else if (mode === 'duplicate') item.review.changes.push({ ...item.review.changes.find(c => c.field === 'admissionConversation')! });
+  else item.kind = 'exceptionalGrant';
+  view(item); const dialog = await screen.findByRole('dialog'); await within(dialog).findByText('Saved exact task').catch(() => {});
+  expect(within(dialog).getByRole('button', { name: mode === 'secondary-grant' ? 'Authorize once' : 'Approve' })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
+});

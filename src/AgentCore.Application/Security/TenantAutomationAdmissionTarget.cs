@@ -9,10 +9,10 @@ using AgentCore.Domain.Triggers;
 namespace AgentCore.Application.Security;
 
 public sealed record TenantAutomationAdmissionState(TenantSecurityState State, TenantAgent Agent, ResolvedAgentRunConfiguration Configuration,
-    Automation Automation, TriggerOccurrence Occurrence);
+    Automation Automation, TriggerOccurrence Occurrence, TenantSession? Conversation = null);
 
 public sealed class TenantAutomationAdmissionTarget(IIamStore security, ITenantAutomationStore store, TenantRunConfigurationResolver configuration,
-    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null)
+    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null)
 {
     public async ValueTask<TenantAutomationAdmissionState> RequireAsync(TenantApprovalRequest request, CancellationToken ct)
     {
@@ -27,12 +27,15 @@ public sealed class TenantAutomationAdmissionTarget(IIamStore security, ITenantA
         try { TenantAutomationRules.AdmissionSource(state, p.Current, current.Agent, current.Configuration.Configuration.Definition, p.ManualInitiatorPrincipalId, p.Occurrence.SourceKind); }
         catch (ArgumentException) { throw new AccessDeniedException("operation_configuration_changed"); }
         if (TenantAutomationRules.Hash(current.Configuration) != p.ConfigurationHash) throw new SecurityConflictException("operation_witness_changed");
-        var model = ExecutionModelPolicy.Resolve(models, current.Configuration.Configuration.Definition, current.Agent.Instance, p.Current);
+        var conversation = TenantAutomationConversationRules.Existing(p.Current)
+            ? TenantAutomationConversationRules.Require(p.Current, sessions is null ? null : await sessions.FindTenantSessionAsync(p.TenantId, p.SessionId, ct), p.Conversation) : null;
+        var model = conversation is null ? ExecutionModelPolicy.Resolve(models, current.Configuration.Configuration.Definition, current.Agent.Instance, p.Current)
+            : new ExecutionModelDecision(TenantAutomationConversationRules.Model(p.Current, conversation, current.Configuration.Configuration.Definition, models), null);
         if (!model.Accepted || model.Pin is null || model.Pin.CatalogKey != p.Model.CatalogKey || model.Pin.ProviderAlias != p.Model.ProviderAlias
             || model.Pin.ModelId != p.Model.ModelId || model.Pin.ReasoningEffort != p.Model.ReasoningEffort) throw new AccessDeniedException("automation_model_unavailable");
         await TenantAutomationAdmissionApprovalRules.ExecutorAsync(state, request, iam, ct).ConfigureAwait(false);
         if (p.EventSource is { } eventSource) await RequireEventAsync(p, eventSource, ct).ConfigureAwait(false);
-        return new(state, current.Agent, current.Configuration, source, occurrence);
+        return new(state, current.Agent, current.Configuration, source, occurrence, conversation);
     }
     private async ValueTask RequireEventAsync(PreparedAutomationAdmission p, PreparedEventAdmissionSource source, CancellationToken ct)
     {
