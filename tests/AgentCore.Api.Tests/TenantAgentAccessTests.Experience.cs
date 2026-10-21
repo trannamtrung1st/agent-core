@@ -50,6 +50,11 @@ public sealed partial class TenantAgentAccessTests
                 Entered.TrySetResult(); await Release.Task.WaitAsync(ct);
                 if (Followup) { yield return new ModelToolCallEvent(new("after-experience", ToolCatalog.AgentStateInspect, "{}")); yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break; }
             }
+            if (request.Tools?.Any(t => t.Name == ToolCatalog.WorkComplete) == true)
+            {
+                yield return new ModelToolCallEvent(new("complete-manual-review", ToolCatalog.WorkComplete, JsonSerializer.Serialize(new { outcome = "Response", summary = "Experience recording completed.", attentionRequired = false })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
             yield return new ModelSemanticResponseReady(new(Hold ? "Captured Experience answer." : Source == Guid.Empty ? "Experience seed or recall completed." : "Experience recording completed.", new(ModelSpeechMode.None, null), []));
             yield return new ModelCompleted(ModelStopReason.Completed);
         }

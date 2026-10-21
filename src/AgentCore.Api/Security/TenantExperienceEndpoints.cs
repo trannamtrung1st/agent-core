@@ -20,6 +20,25 @@ public static class TenantExperienceEndpoints
             var page = await service.ReadAsync(actor.TenantId, instanceId, Human(http), Query(http) with { ExperienceId = experienceId, IncludeHistorical = true, Page = 1 }, ct).ConfigureAwait(false);
             if (page.Items.Count != 1) throw new AccessDeniedException("experience_unavailable"); return Results.Json(Safe(page));
         })).RequireAuthorization();
+        app.MapGet(path + "/review-source", (Guid instanceId, HttpContext http, TenantExperienceReviewService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+            var query = http.Request.Query;
+            if (query.Count != 2 || query.Any(p => p.Value.Count != 1 || p.Key is not ("sourceKind" or "sourceId"))) throw AgentCoreErrors.Validation("Select one exact review source.");
+            var actor = IdentityHttp.TenantContext(http);
+            var source = await service.ObserveAsync(actor.TenantId, instanceId, Human(http), SourceKind(query["sourceKind"].ToString()), SourceId(query["sourceId"].ToString()), ct).ConfigureAwait(false);
+            return Results.Json(new { sourceKind = source.Witness.Kind.ToString(), sourceId = source.Witness.SourceId, source.Title, source.Witness.ThroughCursor,
+                sourceRevision = source.Witness.SourceRunRevision ?? source.Witness.SessionRevision, source.SecurityRevision, source.InstanceRevision,
+                sourceFingerprint = TenantExperienceReviewRules.Fingerprint(source) });
+        })).RequireAuthorization();
+        app.MapPost(path + "/checkpoints", (Guid instanceId, JsonElement body, HttpContext http, TenantExperienceReviewService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+            if (http.Request.Query.Count != 0) throw AgentCoreErrors.Validation("Supply the exact review command in its body.");
+            Fields(body, ["sourceKind", "sourceId", "expectedRevision", "expectedInstanceRevision", "sourceFingerprint"]);
+            long Number(string key) => body.GetProperty(key) is { ValueKind: JsonValueKind.Number } v && v.TryGetInt64(out var n) && n > 0 ? n : throw AgentCoreErrors.Validation("Use current review revisions.");
+            string Text(string key) => body.GetProperty(key).ValueKind == JsonValueKind.String ? body.GetProperty(key).GetString()! : throw AgentCoreErrors.Validation("Use an exact review source.");
+            var fingerprint = Text("sourceFingerprint"); if (fingerprint.Length != 64 || fingerprint.Any(c => !char.IsAsciiHexDigit(c) || char.IsUpper(c))) throw AgentCoreErrors.Validation("Use the inspected source fingerprint.");
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await service.RequestAsync(actor.TenantId, instanceId, Human(http), SourceKind(Text("sourceKind")), SourceId(Text("sourceId")),
+                Number("expectedRevision"), Number("expectedInstanceRevision"), fingerprint, ct).ConfigureAwait(false));
+        })).RequireAuthorization().WithMetadata(new RequestSizeLimitAttribute(4096));
         foreach (var reset in new[] { false, true })
         {
             app.MapPost(path + (reset ? "/reset" : "/visibility"), (Guid instanceId, JsonElement body, HttpContext http, TenantExperienceManagementService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
@@ -45,13 +64,19 @@ public static class TenantExperienceEndpoints
         var historical = http.Request.Query.TryGetValue("includeHistorical", out var value) ? value.ToString() switch { "true" => true, "false" => false, _ => throw AgentCoreErrors.Validation("Use true or false for historical Experience.") } : false;
         var query = new TenantExperienceQuery(Number("page", 1), Number("pageSize", 25), IncludeHistorical: historical); TenantExperienceManagementRules.Validate(query); return query;
     }
-    private static TenantExperienceChange Change(JsonElement body, bool reset)
+    private static ExperienceSourceKind SourceKind(string value) => value switch { "Session" => ExperienceSourceKind.Session, "AgentRun" => ExperienceSourceKind.AgentRun, _ => throw AgentCoreErrors.Validation("Select Session or AgentRun.") };
+    private static Guid SourceId(string value) => Guid.TryParseExact(value, "D", out var id) && id != Guid.Empty ? id : throw AgentCoreErrors.Validation("Select one exact source ID.");
+    private static void Fields(JsonElement body, string[] required)
     {
-        var required = reset ? new[] { "expectedRevision", "expectedRetainedCount" } : new[] { "expectedRevision", "experienceId", "expectedExperienceRevision", "visibility" };
         if (body.ValueKind != JsonValueKind.Object) throw AgentCoreErrors.Validation("Supply an exact Experience command.");
         var names = body.EnumerateObject().Select(p => p.Name).ToArray();
         if (names.Length != required.Length || names.Distinct(StringComparer.Ordinal).Count() != names.Length || required.Except(names, StringComparer.Ordinal).Any())
             throw AgentCoreErrors.Validation("Use only the exact required Experience command fields.");
+    }
+    private static TenantExperienceChange Change(JsonElement body, bool reset)
+    {
+        var required = reset ? new[] { "expectedRevision", "expectedRetainedCount" } : new[] { "expectedRevision", "experienceId", "expectedExperienceRevision", "visibility" };
+        Fields(body, required);
         long Number(string key) => body.GetProperty(key) is { ValueKind: JsonValueKind.Number } v && v.TryGetInt64(out var n) ? n : throw AgentCoreErrors.Validation("Use exact Experience revisions and counts.");
         var revision = Number("expectedRevision");
         if (reset)

@@ -146,7 +146,7 @@ public sealed class TenantActivityService(IIamStore security, ITenantSessionStor
     }
     private async ValueTask<TenantActivityRun> Run(TenantSecurityState state, AgentRun run, TenantSessionInitiator human, CancellationToken ct) =>
         new(run.AgentRunId, run.SessionId, run.AgentInstanceId, run.Admission.ExecutionContext!, run.Status, run.Revision, run.CreatedAtUtc, run.UpdatedAtUtc,
-            run.Admission.Activation.Kind, run.Admission.OutputContract, run.PinnedModel.CatalogKey, run.AttemptCount, run.MaxAttempts, run.Progress?.Summary, run.Admission.TaskIntent?.Text, run.Result?.Text, run.Result?.OutcomeKind,
+            run.Admission.Activation.Kind, run.Admission.OutputContract, run.PinnedModel.CatalogKey, run.AttemptCount, run.MaxAttempts, run.Progress?.Summary, TenantExperienceReviewRules.DisplayObjective(run), run.Result?.Text, run.Result?.OutcomeKind,
             run.Failure?.Code, run.Failure?.Summary, run.Failure?.DiagnosticId, run.CancellationRequested, !run.IsTerminal && !run.CancellationRequested && await Can(state, human.PrincipalId, "agent-runs.cancel", TenantRunRules.Scope(state.Tenant.TenantId, run.AgentRunId), ct).ConfigureAwait(false)
                 && await Can(state, human.PrincipalId, "agents.chat", AccessScope.ForResource(state.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false));
     private delegate bool ResourceId(AccessScope scope, out Guid id);

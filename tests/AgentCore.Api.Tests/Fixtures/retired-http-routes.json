@@ -1901,6 +1901,14 @@
     {
       "method": "POST",
       "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience/reset"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience/review-source"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience/checkpoints"
     }
   ]
 }

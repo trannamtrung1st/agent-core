@@ -17,6 +17,11 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
         var reader = await MemoryReader(db, run, ct).ConfigureAwait(false); var settings = await ReadIsolationMetadataAsync(db, run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false); var iam = new IamAuthorizer(this);
         if (human is null) TenantExperienceRules.Eligible(reader, settings, TenantExperienceToolContract.Source);
         else await ValidateTenantActorAsync(db, reader.Security, human.Value, ct).ConfigureAwait(false);
+        if (TenantExperienceReviewRules.Selected(reader.Root) is { } selected)
+        {
+            if (kind != selected.Kind || id != selected.SourceId || expected is not null && expected != selected) throw new AccessDeniedException("experience_source_changed");
+            expected = selected;
+        }
         if (kind == ExperienceSourceKind.Session)
         {
             if (id == run.SessionId || !await OwnedSessions(db, reader.Security.Tenant.TenantId).AnyAsync(s => s.SessionId == id.ToString("D") && s.AgentInstanceId == run.AgentInstanceId.ToString("D")
@@ -27,7 +32,7 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
             var rows = await db.Entries.AsNoTracking().Where(e => e.SessionId == id.ToString("D") && e.EntrySequence > after && e.EntrySequence <= source.Snapshot.DurableLastEntrySequence)
                 .OrderByDescending(e => e.EntrySequence).Take(101).ToArrayAsync(ct).ConfigureAwait(false);
             var entries = rows.Select(SqliteMemoryStore.ToEntry).OrderBy(e => e.Sequence).ToArray();
-            return TenantExperienceSourceProjection.Session(reader, settings, source.Snapshot, entries, AgentCore.Application.Experience.ExperienceService.StableSessionCheckpoint(entries), human is null ? expected : null);
+            return TenantExperienceSourceProjection.Session(reader, settings, source.Snapshot, entries, AgentCore.Application.Experience.ExperienceService.StableSessionCheckpoint(entries), human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
         }
         if (kind != ExperienceSourceKind.AgentRun) throw new AccessDeniedException("experience_source_unavailable");
         var metadata = await OwnedRuns(db, reader.Security.Tenant.TenantId).AsNoTracking().Where(r => r.AgentRunId == id.ToString("D") && r.AgentInstanceId == run.AgentInstanceId.ToString("D") && r.ExecutorPrincipalId == reader.Agent.PrincipalId)
@@ -39,7 +44,7 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
         if (privateSource && TenantRunProfileRules.User(sourceRun, root, reader.Security)?.PrincipalId != reader.User?.PrincipalId || human is { } viewer && privateSource && reader.User?.PrincipalId != viewer)
             throw new AccessDeniedException(human is null ? "experience_source_unavailable" : "approval_unavailable");
         await RequireTenantOutputSources(db, sourceRun, ct).ConfigureAwait(false);
-        return TenantExperienceSourceProjection.Run(reader, settings, sourceRun, human is null ? expected : null);
+        return TenantExperienceSourceProjection.Run(reader, settings, sourceRun, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
     }
     public async ValueTask<TenantExperienceSourceObservation> ObserveTenantExperienceSourceAsync(TenantRunReference reference, Guid? generation,
         ExperienceSourceKind kind, Guid id, TenantExperienceSourceWitness? expected = null, Guid? inspectionHuman = null, CancellationToken ct = default)

@@ -11,10 +11,12 @@ import { AccessError, AccessLoading } from './AccessFeedback';
 import { tenantAgentPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
+import { TenantExperienceReviewButton } from './TenantExperienceReview';
 
 export function TenantAgentExperience({ context, id }: { context: TenantContext; id: string }) {
   const [page, setPage] = useState(1); const [historical, setHistorical] = useState(true); const [epoch, setEpoch] = useState(0); const [busy, setBusy] = useState(false);
   return <AgentConfigurationPanel title="Retained Experience" label="Retained Experience" bodyGap="default"
+    extra={<TenantExperienceReviewButton key={`${context.tenant.tenantId}:${context.principalId}:${id}`} context={context} id={id} />}
     description="Derived observations stay separate from learned Memory and instructions. Inspect your private observations and readable Instance observations, including when model recall is off.">
     <Flex wrap align="center" justify="space-between" gap="var(--ac-space-compact)">
       <Flex align="center" gap="var(--ac-space-compact)"><Switch id="experience-history" aria-label="Include Experience history" checked={historical} disabled={busy} onChange={value => { setHistorical(value); setPage(1); }} /><label htmlFor="experience-history">Include superseded and deleted records</label></Flex>

@@ -541,3 +541,12 @@ An Agent’s existing Continuity destination presents learned Memory and retaine
 Suppress/restore and delete use exact row/security witnesses and explicit scope/retention confirmations. Superseded rows permit deletion only; deleted rows expose provenance without content or restoration. Reset confirms the full readable retained count, including suppressed/superseded content, independently of the displayed history filter. Successful, stale or unreadable mutation outcomes retire old values and require deliberate Reload Experience; no command is replayed. Scope retirement aborts pending work and destroys its confirmation.
 
 Conversation approval cards and the shared inspector label exact Experience source, record and consolidation operations. Read consent and content mutation have separate explanations and factual result labels. Complete currently authorized literal sources/content and lineage are reviewed under the existing original-human authority; changed sources cannot be replaced with current bytes under saved consent.
+
+
+## Starting an explicit Experience review
+
+The existing retained Experience panel offers Review completed work. Its native dialog reuses the tenant conversation picker, supports an exact completed Run ID, and checks the selected source before enabling an exact Queue review confirmation. The preview names the actual source and stable cutoff/revision. Changing the visible selector retires the previous preview. The confirmation explains that review admission supplies no inspection consent or recording authority.
+
+A successful response distinguishes newly queued work from an already retained review graph and links to existing Activity background work. That view follows approved continuations to the current factual result; the original technical Run is not presented as the final result. Approval inbox refresh exposes subsequent exact source/record requests under the existing review owner. The review can finish without recording anything. No result is promised in Chat unless separate ordinary delivery is explicitly configured.
+
+Stale, failed or lost commands retire old private preview facts and require deliberate source inspection before another decision. They never replay a command. Source changes and original-human scope retirement abort pending reads/commands and destroy their confirmation. Current read and creation authority remains server-derived; being able to inspect retained Experience does not supply authority to start a review.

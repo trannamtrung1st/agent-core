@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Context;
 using AgentCore.Application.Tools;
 
 namespace AgentCore.Infrastructure.Providers.Synthetic;
@@ -10,10 +11,27 @@ internal static class TenantExperienceScript
 {
     internal static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
+        IReadOnlyList<ModelGenerationEvent> Finish(string text, bool changed = false) => request.Tools?.Any(t => t.Name == ToolCatalog.WorkComplete) == true
+            ? Call(ToolCatalog.WorkComplete, new { outcome = changed ? "Response" : "NoAction", summary = text, attentionRequired = false })
+            : [new ModelTextDelta(text), new ModelCompleted(ModelStopReason.Completed)];
         const string prefix = "synthetic-tenant-experience: ";
         var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text ?? SyntheticTaskContext.Text(request);
-        if (!prompt.StartsWith(prefix, StringComparison.Ordinal)) return null;
-        var parts = prompt[prefix.Length..].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var sourceKind = "Session";
+        string[] parts;
+        if (prompt.StartsWith(prefix, StringComparison.Ordinal)) parts = prompt[prefix.Length..].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        else
+        {
+            var taskText = request.Context?.Sections.FirstOrDefault(s => s.Id == ContextSectionId.RunTask)?.Message.Text ?? prompt;
+            JsonDocument task; try { task = JsonDocument.Parse(taskText); } catch (JsonException) { return null; }
+            using (task)
+            {
+                var value = task.RootElement;
+                if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("experienceReview", out var reviewMarker) || reviewMarker.ValueKind != JsonValueKind.True
+                    || !value.TryGetProperty("sourceKind", out var kind) || kind.ValueKind != JsonValueKind.String || kind.GetString() is not ("Session" or "AgentRun")
+                    || !value.TryGetProperty("sourceId", out var selected) || selected.ValueKind != JsonValueKind.String) return null;
+                sourceKind = kind.GetString()!; parts = ["record", selected.GetString()!];
+            }
+        }
         if (parts.Length != 2 || !Guid.TryParseExact(parts[1], "D", out var id) || id == Guid.Empty) return Finish("Select one exact source or Experience observation.");
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
         JsonElement? Payload(ModelMessage? message) { if (message is null) return null; using var json = JsonDocument.Parse(message.Text); return json.RootElement.Clone(); }
@@ -30,23 +48,22 @@ internal static class TenantExperienceScript
         }
         if (parts[0] != "record" || request.Tools?.Any(t => t.Name == TenantExperienceToolContract.Record) != true || request.Tools.Any(t => t.Name == TenantExperienceToolContract.Source) != true)
             return Finish("Experience recording is unavailable for this task.");
-        if (authorization is { } applied && applied.TryGetProperty("applied", out var done) && done.GetBoolean()) return Finish("The exact Experience observation was recorded with source provenance.");
+        if (authorization is { } applied && applied.TryGetProperty("applied", out var done) && done.GetBoolean()) return Finish("The exact Experience observation was recorded with source provenance.", true);
         var source = Payload(results.LastOrDefault(m => m.Name == TenantExperienceToolContract.Source));
         if (authorization is { } reviewed && reviewed.TryGetProperty("experienceSourceObservation", out var authorized) && authorized.ValueKind == JsonValueKind.Object) source = authorized;
-        var sourceArgs = new { sourceKind = "Session", sourceId = id };
+        var sourceArgs = new { sourceKind, sourceId = id };
         if (source is null) return Call(TenantExperienceToolContract.Source, sourceArgs);
         if (RequiresApproval(source.Value)) return Consent(TenantExperienceToolContract.Source, sourceArgs);
         if (!source.Value.TryGetProperty("tenantExperienceSourceRead", out var marker) || marker.ValueKind != JsonValueKind.True) return Finish("The source was unavailable. No Experience was recorded.");
-        var recordArgs = new { sourceKind = "Session", sourceId = id, throughCursor = source.Value.GetProperty("throughCursor").GetInt64(), goal = "Frontend evidence grouping",
+        var recordArgs = new { sourceKind, sourceId = id, throughCursor = source.Value.GetProperty("throughCursor").GetInt64(), goal = "Frontend evidence grouping",
             attempts = new[] { "Inspected the bounded retained conversation" }, decisions = new[] { "Keep the observed grouping explicit" }, outcomes = new[] { "Retained a derived observation" },
             corrections = Array.Empty<string>(), unresolved = Array.Empty<string>(), difficulties = Array.Empty<string>(), lessons = new[] { "Inspect actual source provenance before recording Experience." } };
         var recorded = Payload(results.LastOrDefault(m => m.Name == TenantExperienceToolContract.Record));
         if (recorded is null) return Call(TenantExperienceToolContract.Record, recordArgs);
         if (RequiresApproval(recorded.Value)) return Consent(TenantExperienceToolContract.Record, recordArgs);
-        return recorded.Value.TryGetProperty("alreadyCompleted", out _) ? Finish("The exact Experience observation is retained with source provenance.") : Finish("Experience recording was unavailable. No change was repeated.");
+        return recorded.Value.TryGetProperty("alreadyCompleted", out _) ? Finish("The exact Experience observation is retained with source provenance.", true) : Finish("Experience recording was unavailable. No change was repeated.");
     }
     private static bool RequiresApproval(JsonElement value) => value.TryGetProperty("decision", out var decision) && decision.GetString() == "requiresApproval";
     private static IReadOnlyList<ModelGenerationEvent> Consent(string tool, object arguments) => Call(ToolCatalog.RequestAuthorization, new { operation = TenantExperienceToolContract.OperationName(tool), experience = new { tool, arguments } });
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) => [new ModelToolCallEvent(new("tenant-experience-" + name + "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(arguments))))[..8], name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];
-    private static IReadOnlyList<ModelGenerationEvent> Finish(string text) => [new ModelTextDelta(text), new ModelCompleted(ModelStopReason.Completed)];
 }

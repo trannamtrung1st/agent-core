@@ -50,3 +50,17 @@ public interface ITenantExperienceManagementStore
     ValueTask<TenantExperienceChangeResult?> TryChangeOwnTenantExperienceAsync(Guid tenant, Guid agent, HumanSessionReference human,
         TenantExperienceChange change, AuthorizationAudit audit, CancellationToken ct = default);
 }
+
+
+public sealed record TenantExperienceReviewSource(Guid TenantId, Guid AgentId, Guid ExecutorPrincipalId, Guid UserPrincipalId,
+    TenantExperienceSourceWitness Witness, string Title, long SecurityRevision, long InstanceRevision);
+public sealed record TenantExperienceReviewAdmission(TenantExperienceReviewSource Source, SessionSnapshot Session, AgentRun Run);
+public sealed record TenantExperienceReviewReceipt(bool Created, Guid SessionId, Guid RunId, long SecurityRevision);
+// Explicit human review is one generic manual background Session/Run graph, not an Experience outbox.
+public interface ITenantExperienceReviewStore
+{
+    ValueTask<TenantExperienceReviewSource> ObserveOwnTenantExperienceReviewAsync(Guid tenant, Guid agent, HumanSessionReference human,
+        ExperienceSourceKind kind, Guid source, CancellationToken ct = default);
+    ValueTask<TenantExperienceReviewReceipt?> TryAdmitOwnTenantExperienceReviewAsync(TenantExperienceReviewAdmission admission,
+        HumanSessionReference human, AuthorizationAudit audit, CancellationToken ct = default);
+}

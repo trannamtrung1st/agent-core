@@ -39,20 +39,20 @@ public static class TenantTaskExecutionContract
         && Guid.TryParseExact(intent.SourceRevision, "D", out var parent) && parent != Guid.Empty
         && execution is { ParentRunId: not null, ParentActivationId: not null }
         && (execution.Origin == ExecutionOrigin.ImmediateBackground && execution.ParentRunId == parent || execution.Origin == ExecutionOrigin.ApprovalContinuation);
-    private static bool Shape(TrustedExecutionContext? execution, AgentRunOutputContract output, AgentRunTaskIntent? intent) =>
+    private static bool Shape(TrustedExecutionContext? execution, AgentRunOutputContract output, AgentRunTaskIntent? intent, Guid? instance) =>
         output is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.ConversationResponse && IndependentSource(execution, intent) is not null
-        || output == AgentRunOutputContract.BackgroundOutcome && Child(execution, intent)
+        || output == AgentRunOutputContract.BackgroundOutcome && (Child(execution, intent) || AgentCore.Application.Security.TenantExperienceReviewRules.Selected(execution, instance, intent) is not null)
         || execution?.OriginalInitiatorPrincipalId is not null
             && (output == AgentRunOutputContract.ConversationResponse && execution.Origin is ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation
                 || output == AgentRunOutputContract.BackgroundOutcome && execution.Origin is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation);
-    public static bool Allows(AgentRun run) => Shape(run.Admission.ExecutionContext, run.Admission.OutputContract, run.Admission.TaskIntent);
+    public static bool Allows(AgentRun run) => Shape(run.Admission.ExecutionContext, run.Admission.OutputContract, run.Admission.TaskIntent, run.AgentInstanceId);
     public static bool Allows(AgentRun run, AgentDefinition current) => Allows(run)
         && (IndependentSource(run.Admission.ExecutionContext, run.Admission.TaskIntent) is { } source
             ? OccurrenceCompatibility.Allows(run.Admission.Configuration!.Definition, source) && OccurrenceCompatibility.Allows(current, source)
-            : !IsBackground(run) || RolePermissions.AllowsTool(run.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
+            : !IsBackground(run) || AgentCore.Application.Security.TenantExperienceReviewRules.Selected(run) is not null || RolePermissions.AllowsTool(run.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
                 && RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart));
     public static bool Allows(AgentContext? context) => context?.ExecutionContext is { } execution
-        && execution.SessionId == context.OwnedSessionId && Shape(execution, context.OutputContract, context.RunTaskIntent);
+        && execution.SessionId == context.OwnedSessionId && Shape(execution, context.OutputContract, context.RunTaskIntent, context.AgentInstanceId);
     public static bool HasOperations(AgentDefinition definition, AgentContext? context = null) => TenantExperienceToolContract.Allowed(definition, context).Count > 0 || TenantMemoryToolContract.Allowed(definition, context).Count > 0 || RolePermissions.AllowsTool(definition, ToolCatalog.EmailAccounts) || RolePermissions.AllowsTool(definition, ToolCatalog.DriveAccounts) || TenantAccountActionContract.Allowed(definition).Count > 0 || TenantAccountReadContract.Allowed(definition).Count > 0 || BackgroundBrowserTools(definition).Count > 0
         || TenantSandboxAuthorizationContract.Allows(definition) || TenantSandboxReadAuthorizationContract.Allowed(definition).Count > 0
         || TenantSandboxControlContract.Allows(definition, AgentCore.Domain.Security.SandboxControlKind.StopProcess)

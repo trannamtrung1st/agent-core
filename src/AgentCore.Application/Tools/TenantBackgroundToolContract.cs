@@ -13,10 +13,10 @@ public static class TenantBackgroundToolContract
         && execution.SessionId == context.OwnedSessionId
         && (name == ToolCatalog.BackgroundStart
             ? TenantTaskExecutionContract.Allows(context) && RolePermissions.AllowsTool(definition, name)
-            : name == ToolCatalog.WorkComplete && IsWorkOrigin(execution.Origin) && context.OutputContract == AgentRunOutputContract.BackgroundOutcome);
+            : name == ToolCatalog.WorkComplete && (IsWorkOrigin(execution.Origin) || AgentCore.Application.Security.TenantExperienceReviewRules.Selected(execution, context.AgentInstanceId, context.RunTaskIntent) is not null) && context.OutputContract == AgentRunOutputContract.BackgroundOutcome);
     public static bool Allows(AgentRun run, string name) => name == ToolCatalog.BackgroundStart
         ? AgentCore.Application.Security.TenantBackgroundCreationRules.Allows(run)
-        : name == ToolCatalog.WorkComplete && run.Admission.ExecutionContext is { } execution && IsWorkOrigin(execution.Origin) && run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;
+        : name == ToolCatalog.WorkComplete && run.Admission.ExecutionContext is { } execution && (IsWorkOrigin(execution.Origin) || AgentCore.Application.Security.TenantExperienceReviewRules.Selected(run) is not null) && run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;
     private static bool IsWorkOrigin(ExecutionOrigin origin) => origin is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation
         or ExecutionOrigin.ScheduledOccurrence or ExecutionOrigin.ManualInvocation or ExecutionOrigin.ApplicationEvent or ExecutionOrigin.CoreEvent;
 }

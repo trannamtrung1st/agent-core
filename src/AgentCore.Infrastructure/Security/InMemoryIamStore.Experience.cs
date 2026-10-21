@@ -17,6 +17,11 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
         var reader = MemoryReader(run, ct); var settings = Isolation(run.AgentInstanceId); var iam = new IamAuthorizer(this);
         if (human is null) TenantExperienceRules.Eligible(reader, settings, TenantExperienceToolContract.Source);
         else ValidateAgentActor(reader.Security, human.Value);
+        if (TenantExperienceReviewRules.Selected(reader.Root) is { } selected)
+        {
+            if (kind != selected.Kind || id != selected.SourceId || expected is not null && expected != selected) throw new AccessDeniedException("experience_source_changed");
+            expected = selected;
+        }
         TenantExperienceSourceObservation result;
         if (kind == ExperienceSourceKind.Session)
         {
@@ -27,7 +32,7 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
             TenantExperienceRules.RawAsync(reader, raw, false, iam, ct, human).AsTask().GetAwaiter().GetResult();
             var rows = sessionBacking.ReadTenantHistoricalWindow(reader.Security.Tenant.TenantId, id, Math.Max(0, source.Snapshot.DurableLastEntrySequence - 100), source.Snapshot.DurableLastEntrySequence, 101);
             var stable = AgentCore.Application.Experience.ExperienceService.StableSessionCheckpoint(rows);
-            result = TenantExperienceSourceProjection.Session(reader, settings, source.Snapshot, rows, stable, human is null ? expected : null);
+            result = TenantExperienceSourceProjection.Session(reader, settings, source.Snapshot, rows, stable, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
         }
         else if (kind == ExperienceSourceKind.AgentRun)
         {
@@ -40,7 +45,7 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
             if (privateSource && TenantRunProfileRules.User(source, root, reader.Security)?.PrincipalId != reader.User?.PrincipalId)
                 throw new AccessDeniedException("experience_source_unavailable");
             if (human is { } viewer && privateSource && reader.User?.PrincipalId != viewer) throw new AccessDeniedException("approval_unavailable");
-            RequireTenantOutputSources(source, ct); result = TenantExperienceSourceProjection.Run(reader, settings, source, human is null ? expected : null);
+            RequireTenantOutputSources(source, ct); result = TenantExperienceSourceProjection.Run(reader, settings, source, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
         }
         else throw new AccessDeniedException("experience_source_unavailable");
         return result;
