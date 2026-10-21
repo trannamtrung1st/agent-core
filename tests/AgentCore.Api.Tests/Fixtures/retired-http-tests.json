@@ -1,0 +1,1808 @@
+[
+  {
+    "file": "ProfileApiTests.cs",
+    "class": "ProfileApiTests",
+    "method": "Get_and_patch_require_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ProfileApiTests.cs",
+    "class": "ProfileApiTests",
+    "method": "Get_returns_typed_seed_and_patch_stamps_userSet",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ProfileApiTests.cs",
+    "class": "ProfileApiTests",
+    "method": "Patch_rejects_unknown_keys_stale_revision_and_invalid_values",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ProfileApiTests.cs",
+    "class": "ProfileApiTests",
+    "method": "Patch_ignores_extra_source_and_provenance_fields",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ProfileApiTests.cs",
+    "class": "ProfileApiTests",
+    "method": "Patch_null_removes_value",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "UnifiedAutomationJourneyTests.cs",
+    "class": "UnifiedAutomationJourneyTests",
+    "method": "Schedule_manual_run_and_event_reaction_share_completion_and_survive_restart",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "UnifiedAutomationJourneyTests.cs",
+    "class": "UnifiedAutomationJourneyTests",
+    "method": "Ordinary_automation_inspects_and_records_a_stable_owned_session_without_special_review_execution",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "EmailAccountApiTests.cs",
+    "class": "EmailAccountApiTests",
+    "method": "Owner_creates_typed_account_tests_separately_edits_and_rotates_without_readback",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "EmailAccountApiTests.cs",
+    "class": "EmailAccountApiTests",
+    "method": "Owner_can_inspect_uncertain_and_immutable_completed_receipts",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "EmailAccountApiTests.cs",
+    "class": "EmailAccountApiTests",
+    "method": "Account_and_selection_routes_require_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HostSessionContractTests.cs",
+    "class": "HostSessionContractTests",
+    "method": "Host_create_persists_purpose_and_policy_without_public_leak",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HostSessionContractTests.cs",
+    "class": "HostSessionContractTests",
+    "method": "Public_lifecycle_cannot_spoof_host_to_bypass_user_completion_policy",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HostSessionContractTests.cs",
+    "class": "HostSessionContractTests",
+    "method": "Host_rejects_ambiguous_deadline_and_raw_timespan_is_not_the_wire_unit",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HostSessionContractTests.cs",
+    "class": "HostSessionContractTests",
+    "method": "Host_purpose_survives_sqlite_restart_and_stays_off_public_projections",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ExperienceJourneyTests.cs",
+    "class": "ExperienceJourneyTests",
+    "method": "Stable_checkpoint_generates_once_recalls_in_new_session_and_survives_sqlite_restart",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "GoogleEmailOAuthApiTests.cs",
+    "class": "GoogleEmailOAuthApiTests",
+    "method": "Owner_start_cookie_callback_status_replay_disconnect_and_same_account_reconnect",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "GoogleEmailOAuthApiTests.cs",
+    "class": "GoogleEmailOAuthApiTests",
+    "method": "HTTPS_configured_return_and_secure_cookie_ignore_poisoned_host_headers",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Transient_filter_recovers_after_restart_using_original_snapshot",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Unavailable_subscription_does_not_block_sibling_and_recovers_without_duplicate_admission",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Transient_filter_retries_are_bounded_and_permanent_errors_are_terminal",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Disabled_core_draft_saves_without_policy_but_enable_and_run_still_require_authority",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Customized_preset_runs_without_original_experience_prerequisite_or_forced_tools",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Webhook_transient_delivery_stays_pending_until_recovery_while_sibling_is_admitted",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Malformed_bucket_does_not_block_other_buckets_and_remains_recoverable",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Customized_preset_schedule_admits_without_original_prerequisites",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventStabilizationTests.cs",
+    "class": "CoreEventStabilizationTests",
+    "method": "Healthy_work_beyond_a_full_failing_recovery_page_makes_progress",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "RuntimeStateApiTests.cs",
+    "class": "RuntimeStateApiTests",
+    "method": "Owner_read_counts_durable_sessions_without_hosting_them_and_redacts_provider_failures",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "Event_automation_does_not_block_chat_attach_or_text_after_sqlite_restart",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "Lost_text_ack_retry_with_changed_payload_after_host_reconstruction_is_rejected",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "Lost_text_ack_retry_after_host_reconstruction_keeps_one_user_entry",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "SendText_killed_before_persist_is_not_silently_dropped",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "Cancelled_terminate_extracts_ending_runtime",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "Failed_end_save_does_not_accept_or_persist_ended",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "Failed_user_persist_invalidates_attachment",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SqliteHostRecoveryTests.cs",
+    "class": "SqliteHostRecoveryTests",
+    "method": "Later_pause_save_failure_keeps_ended_and_rejects_attach",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "EmailMonitoringApiTests.cs",
+    "class": "EmailMonitoringApiTests",
+    "method": "Owner_only_saved_CAS_check_coalescing_and_host_off_are_safe",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ScopedInstanceConfigurationTests.cs",
+    "class": "ScopedInstanceConfigurationTests",
+    "method": "Built_in_knowledge_inspect_disable_reset_and_copy_preserve_admitted_configuration",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ScopedInstanceConfigurationTests.cs",
+    "class": "ScopedInstanceConfigurationTests",
+    "method": "Settings_constraints_explain_rejected_toggles_and_permitted_changes_save_and_reset",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ScopedInstanceConfigurationTests.cs",
+    "class": "ScopedInstanceConfigurationTests",
+    "method": "Common_resource_files_preserve_bytes_and_guard_sequential_deletion",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ScopedInstanceConfigurationTests.cs",
+    "class": "ScopedInstanceConfigurationTests",
+    "method": "Owner_settings_and_resource_journey_preserves_sparse_values_bytes_and_conflicts",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentInstanceSkillTests.cs",
+    "class": "AgentInstanceSkillTests",
+    "method": "Optional_readable_ids_are_owner_scoped_auto_generated_and_stable",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentInstanceSkillTests.cs",
+    "class": "AgentInstanceSkillTests",
+    "method": "Combined_Always_budget_returns_validation_and_preserves_owner_and_skills",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentInstanceSkillTests.cs",
+    "class": "AgentInstanceSkillTests",
+    "method": "Owner_skill_journey_shares_tool_policy_and_rejects_stale_wrong_origin_and_foreign_scope",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "TriggerScheduleApiTests.cs",
+    "class": "TriggerScheduleApiTests",
+    "method": "List_and_cancel_are_owner_scoped_and_hide_scheduler_internals",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "TriggerScheduleApiTests.cs",
+    "class": "TriggerScheduleApiTests",
+    "method": "Schedule_remains_visible_after_sqlite_restart",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HttpDiagnosticTests.cs",
+    "class": "HttpDiagnosticTests",
+    "method": "Request_rejections_preserve_client_status_without_echoing_values_or_creating_server_diagnostics",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HttpDiagnosticTests.cs",
+    "class": "HttpDiagnosticTests",
+    "method": "Expected_http_failures_omit_diagnostic_id",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HttpDiagnosticTests.cs",
+    "class": "HttpDiagnosticTests",
+    "method": "Persistence_503_returns_one_logged_diagnostic_id",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HttpDiagnosticTests.cs",
+    "class": "HttpDiagnosticTests",
+    "method": "Persistence_503_keeps_a_runtime_diagnostic_id_without_a_second_log",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HttpDiagnosticTests.cs",
+    "class": "HttpDiagnosticTests",
+    "method": "Unhandled_http_failure_returns_a_safe_500",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CredentialApiTests.cs",
+    "class": "CredentialApiTests",
+    "method": "Owner_shared_resource_journey_has_no_value_readback_and_enforces_lifecycle",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CredentialApiTests.cs",
+    "class": "CredentialApiTests",
+    "method": "Every_surface_requires_owner_and_invalid_kind_origin_and_empty_values_fail_safely",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventAutomationJourneyTests.cs",
+    "class": "CoreEventAutomationJourneyTests",
+    "method": "Completed_user_runs_across_sessions_are_coalesced_reviewed_and_not_replayed",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventAutomationJourneyTests.cs",
+    "class": "CoreEventAutomationJourneyTests",
+    "method": "Webhook_true_false_and_coalescing_preserve_receipt_replay_and_owner_projection",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventAutomationJourneyTests.cs",
+    "class": "CoreEventAutomationJourneyTests",
+    "method": "Committed_config_fans_out_only_to_owner_with_pinned_filter_and_replays_after_reopen",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventAutomationJourneyTests.cs",
+    "class": "CoreEventAutomationJourneyTests",
+    "method": "Adoption_is_effective_only_and_reentrant_or_unknown_filter_versions_fail_closed",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CoreEventAutomationJourneyTests.cs",
+    "class": "CoreEventAutomationJourneyTests",
+    "method": "Run_now_bypasses_core_filter_without_fabricating_a_source_event",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "FilePreviewPolicyTests.cs",
+    "class": "FilePreviewPolicyTests",
+    "method": "Protected_policy_returns_effective_safety_limits_and_custom_window",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "FilePreviewPolicyTests.cs",
+    "class": "FilePreviewPolicyTests",
+    "method": "Oversized_home_original_remains_downloadable",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "FilePreviewPolicyTests.cs",
+    "class": "FilePreviewPolicyTests",
+    "method": "Office_threshold_and_range_recovery_preserve_original_bytes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "FilePreviewPolicyTests.cs",
+    "class": "FilePreviewPolicyTests",
+    "method": "Immutable_excerpt_budget_returns_structural_limit_and_smaller_range_recovers",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "FilePreviewPolicyTests.cs",
+    "class": "FilePreviewPolicyTests",
+    "method": "Instance_and_draft_resources_apply_preview_policy_while_downloads_keep_originals",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "VisionCapabilityAdmissionTests.cs",
+    "class": "VisionCapabilityAdmissionTests",
+    "method": "SendText_with_image_on_non_vision_model_is_rejected_without_persisting",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "VisionCapabilityAdmissionTests.cs",
+    "class": "VisionCapabilityAdmissionTests",
+    "method": "Text_only_SendText_remains_accepted_on_non_vision_model",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Execution_budget_updates_enforce_owner_ceiling_and_revision_and_expose_effective_values",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Definition_budget_reset_is_published_per_class_and_adopted_without_removing_instance_override",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definitions_require_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definitions_reject_invalid_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definitions_reject_non_trusted_remote_caller",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definitions_succeed_for_trusted_owner",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_version_inspection_is_owner_protected_and_does_not_create_drafts",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_catalog_excludes_context_owned_grants_and_retains_authorizable_attachments",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_effective_config_resolves_exact_instance_state",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_effective_config_returns_the_stored_unattended_model",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_can_archive_managed_instance_and_block_new_session",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_can_update_managed_instance_persona_with_expected_revisions",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_persona_update_rejects_unknown_properties",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_persona_update_rejects_secret_sentinel_and_oversized_fields",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_mutations_reject_stale_expected_revision_after_concurrent_change",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_learned_memory_requires_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_automation_registrations_require_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_learned_memory_delete_requires_confirm",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_effective_config_returns_not_found_for_broken_definition_association",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_responses_do_not_leak_secret_sentinels",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "User_catalog_agents_remain_unprotected_read",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_new_stores_starter_without_a_fork_and_reopens_it",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_authoring_options_and_draft_only_definition_lifecycle_are_server_owned",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_create_returns_created_status",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_fork_returns_created_status",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_delete_is_revision_protected",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_create_rejects_invalid_candidate_with_validation_status",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Retired_instruction_field_is_rejected_without_an_alias_or_saved_draft",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Fractional_automation_policy_returns_field_error_without_saving",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Automation_limit_missing_or_out_of_range_has_precise_validation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Automation_optional_fixed_interval_retains_default_and_case_insensitive_shape",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_authoring_returns_precise_tool_shape_failure",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_create_rejects_null_identity_without_server_error",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_create_rejects_secret_in_goals",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_create_allows_benign_hyphenated_goal_text",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_create_rejects_openrouter_shaped_key_in_goals",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_create_rejects_openai_project_key_in_system_instructions",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_diff_marks_changed_instructions_against_fork_baseline",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_diff_new_draft_lists_candidate_sections_as_added",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_diff_marks_identity_description_change_against_fork_baseline",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_evaluation_routes_require_existing_draft_and_scenario",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_evaluation_upsert_rejects_invalid_requirement_level",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_validate_returns_configuration_fingerprint",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_evaluation_run_records_provenance_and_blocks_stale_publish",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_validate_returns_no_blocking_findings_for_publishable_fork",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_validate_reports_blocking_findings_without_publishing",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_validate_reports_non_textual_knowledge_resource_binding",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_validate_reports_missing_knowledge_resource_binding",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_publish_rejects_missing_knowledge_resource_binding",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_publish_rejects_stale_expected_revision",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_validate_reports_unsupported_reasoning_effort_for_known_model",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_publish_rejects_unknown_model_catalog_key",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_publish_rejects_unknown_tool_name",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_publication_deprecate_rejects_builtin_version",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Agents_list_resolves_active_publication_not_deprecated_highest_version",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_publication_deprecate_marks_durable_version_deprecated",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Draft_csv_knowledge_and_common_document_uploads_support_revision_guarded_deletes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_resource_upload_bind_and_publish_snapshot",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_resource_content_rejects_oversized_declared_length",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_resource_content_rejects_oversized_chunked_body",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_resource_bind_rejects_invalid_resource_id_and_kind",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_events_records_managed_instance_created_after_create",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_create_instance_commits_custom_persona_in_one_history_event",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_events_records_instance_archived_after_lifecycle_update",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_events_records_persona_changed_after_update",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_events_records_instance_definition_version_changed_after_reassociate",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_events_records_draft_created_after_create",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_events_records_publication_created_after_publish",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_events_records_publication_deprecated_after_deprecate",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definitions_inventory_marks_durable_publication_source",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Admin_definition_draft_fork_publish_assigns_next_version",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Managed_instance_session_reads_publication_resource_under_agent",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Batch_resource_bind_is_one_revision_and_a_bad_item_leaves_rows",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Capability_publication_pins_catalog_and_always_subset_without_configuration_requirements",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AdminApiTests.cs",
+    "class": "AdminApiTests",
+    "method": "Retired_application_connection_surface_is_absent_for_owner_and_anonymous",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AutomationDestinationJourneyTests.cs",
+    "class": "AutomationDestinationJourneyTests",
+    "method": "Greeting_due_in_exact_conversation_survives_headless_dispatch_and_restart",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AutomationDestinationJourneyTests.cs",
+    "class": "AutomationDestinationJourneyTests",
+    "method": "Admin_rejects_foreign_target_conflicting_model_and_duplicate_delivery",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Synthetic_text_session_survives_unknown_speech_adapters",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Real_text_session_starts_without_openai_speech_keys",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Browser_speech_selection_needs_no_api_key_and_keeps_synthetic_voice_create",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Default_synthetic_host_resolves_config_synthetic_adapters",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Batch_stt_and_browser_tts_do_not_start_paid_clients",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Browser_stt_and_openai_tts_with_dummy_key_do_not_start_paid_clients",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Gated_hosted_speech_does_not_advertise_voice_available",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "OpenAI_realtime_stt_with_key_does_not_become_selectable_noop",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SpeechConfigurationHostTests.cs",
+    "class": "SpeechConfigurationHostTests",
+    "method": "Hosted_batch_stt_and_openai_tts_resolve_without_outbound_http",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveJourneyTests.cs",
+    "class": "DriveJourneyTests",
+    "method": "Explicit_host_disable_blocks_account_connection",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveJourneyTests.cs",
+    "class": "DriveJourneyTests",
+    "method": "Synthetic_connect_bind_upload_verify_download_and_epoch_fences_share_only_explicit_grants",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveJourneyTests.cs",
+    "class": "DriveJourneyTests",
+    "method": "Lost_upload_response_reconciles_known_identity_without_second_write_or_source_bytes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveOAuthGuidanceTests.cs",
+    "class": "DriveOAuthGuidanceTests",
+    "method": "Unconfigured_account_and_resolve_reference_canonical_GoogleOAuth",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Catalog_exposes_safe_descriptors_without_secrets",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Create_without_model_uses_the_system_default",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Create_with_explicit_model_persists_it",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Host_create_can_provide_model_selection",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Browser_body_cannot_supply_provider_routing",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Session_model_mutation_persists_catalog_choice",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Ended_session_cannot_change_model",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionModelApiTests.cs",
+    "class": "SessionModelApiTests",
+    "method": "Catalog_requires_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OfficePreviewRaceTests.cs",
+    "class": "OfficePreviewRaceTests",
+    "method": "Workspace_growth_after_metadata_preflight_is_rejected_without_full_read_and_download_is_available",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OfficePreviewRaceTests.cs",
+    "class": "OfficePreviewRaceTests",
+    "method": "Resource_growth_between_preview_catalog_and_content_read_is_rejected_before_blob_allocation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Catalog_row_uses_pinned_persona_instead_of_the_definition_name",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Owner_capability_is_required_for_catalog_and_survives_as_hashed_grant",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "V2_create_list_rename_archive_reopen_and_durable_delete",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Support_and_compliance_sessions_are_distinct_catalog_rows",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "V1_delete_leaves_labeled_ended_catalog_row",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "V2_durable_delete_removes_ended_catalog_row",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Archive_cancels_live_runtime",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "V2_bulk_delete_removes_catalog_rows_and_live_runtimes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "V2_bulk_delete_pages_through_catalogs_larger_than_one_batch",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "V2_bulk_delete_respects_include_archived_filter",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "V2_delete_removes_attached_session_without_stale_revision",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Attach_without_owner_capability_is_rejected",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Switching_hub_attachments_preserves_catalog_order",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Deactivate_pauses_without_archive_and_is_idempotent",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCatalogApiTests.cs",
+    "class": "SessionCatalogApiTests",
+    "method": "Knowledge_retrieve_is_role_scoped_and_includes_citation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionCapacityTests.cs",
+    "class": "SessionCapacityTests",
+    "method": "Http_delete_releases_live_capacity_and_rejects_reattach",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentWorkspaceJourneyTests.cs",
+    "class": "AgentWorkspaceJourneyTests",
+    "method": "Search_pages_late_nested_directories_and_reports_file_budget_cutoff",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentWorkspaceJourneyTests.cs",
+    "class": "AgentWorkspaceJourneyTests",
+    "method": "Owner_filter_path_reads_and_current_path_deletion_are_enforced",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentWorkspaceJourneyTests.cs",
+    "class": "AgentWorkspaceJourneyTests",
+    "method": "Native_structure_checks_exact_approval_generation_scope_and_archive",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentWorkspaceJourneyTests.cs",
+    "class": "AgentWorkspaceJourneyTests",
+    "method": "Home_tool_listing_does_not_hide_later_folders_after_a_large_first_folder",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentWorkspaceJourneyTests.cs",
+    "class": "AgentWorkspaceJourneyTests",
+    "method": "Managed_workspace_uses_shared_cwd_current_edits_tree_copy_and_home_artifacts",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentWorkspaceJourneyTests.cs",
+    "class": "AgentWorkspaceJourneyTests",
+    "method": "Sqlite_reopen_preserves_home_and_owner_nested_scratch_then_cleans_each_lifecycle",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AgentWorkspaceJourneyTests.cs",
+    "class": "AgentWorkspaceJourneyTests",
+    "method": "Sqlite_host_startup_purges_bytes_left_after_committed_logical_deletion",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OrderPlacedWebhookApiTests.cs",
+    "class": "OrderPlacedWebhookApiTests",
+    "method": "Review_does_not_advertise_schedules_when_definition_policy_blocks_them",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OrderPlacedWebhookApiTests.cs",
+    "class": "OrderPlacedWebhookApiTests",
+    "method": "Oversized_subscriber_evidence_does_not_block_other_event_deliveries",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OrderPlacedWebhookApiTests.cs",
+    "class": "OrderPlacedWebhookApiTests",
+    "method": "Arbitrary_event_keys_payloads_metadata_and_disabled_subscribers_use_the_same_durable_path",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OrderPlacedWebhookApiTests.cs",
+    "class": "OrderPlacedWebhookApiTests",
+    "method": "Signals_without_subscribers_remain_visible_once_in_admin_activity",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OrderPlacedWebhookApiTests.cs",
+    "class": "OrderPlacedWebhookApiTests",
+    "method": "Valid_post_returns_before_routing_and_duplicate_keeps_the_same_occurrence",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OrderPlacedWebhookApiTests.cs",
+    "class": "OrderPlacedWebhookApiTests",
+    "method": "Pending_delivery_survives_sqlite_reopen_and_ignores_a_later_subscriber",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveApprovalJourneyTests.cs",
+    "class": "DriveJourneyTests",
+    "method": "Trusted_batch_preparation_and_exact_grant_reject_stale_changed_and_revoked_actions",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveApprovalJourneyTests.cs",
+    "class": "DriveJourneyTests",
+    "method": "Old_immutable_definition_never_gains_batch_trash",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OfficeJourneyTests.cs",
+    "class": "OfficeJourneyTests",
+    "method": "Owned_DOCX_with_inert_hyperlink_can_be_inspected_previewed_and_safely_edited",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OfficeJourneyTests.cs",
+    "class": "OfficeJourneyTests",
+    "method": "Published_office_capability_reads_sparse_owned_workbook_and_rechecks_revision_on_continuation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OfficeJourneyTests.cs",
+    "class": "OfficeJourneyTests",
+    "method": "Workspace_spreadsheet_inspection_outside_used_range_returns_metadata_without_continuation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OfficeJourneyTests.cs",
+    "class": "OfficeJourneyTests",
+    "method": "Office_create_inspect_targeted_edit_and_stale_selector_preserve_owned_real_files",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ArtifactApiTests.cs",
+    "class": "ArtifactApiTests",
+    "method": "Materialization_preserves_late_page_collisions_and_concurrent_attachment_copies",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ArtifactApiTests.cs",
+    "class": "ArtifactApiTests",
+    "method": "Materialize_and_download_require_capability_and_fail_closed",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ExperienceSourceProvenanceTests.cs",
+    "class": "ExperienceSourceProvenanceTests",
+    "method": "Review_projects_the_source_run_contract_independently_of_background_generation_and_after_reopen",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ExperienceSourceProvenanceTests.cs",
+    "class": "ExperienceSourceProvenanceTests",
+    "method": "Missing_or_foreign_run_metadata_is_unknown_instead_of_inferred_from_generation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ChatInstanceCatalogTests.cs",
+    "class": "ChatInstanceCatalogTests",
+    "method": "Missing_exact_definitions_do_not_block_valid_chat_instances",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ContinuityBoundaryTests.cs",
+    "class": "ContinuityBoundaryTests",
+    "method": "Detached_automation_cannot_administer_skills_and_origin_payload_cannot_bootstrap_authority",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CommandAdmissionTests.cs",
+    "class": "CommandAdmissionTests",
+    "method": "Parallel_controls_admit_without_losing_either_event_id",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CommandAdmissionTests.cs",
+    "class": "CommandAdmissionTests",
+    "method": "Detach_completes_queued_and_in_flight_commands",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CommandAdmissionTests.cs",
+    "class": "CommandAdmissionTests",
+    "method": "Unknown_user_text_behavior_is_rejected",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "CommandAdmissionTests.cs",
+    "class": "CommandAdmissionTests",
+    "method": "CancelResponse_rejects_unknown_and_missing_ids",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ComposerReferenceTests.cs",
+    "class": "ComposerReferenceTests",
+    "method": "Home_evidence_is_scoped_bounded_read_only_and_pinned_across_source_mutation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ComposerReferenceTests.cs",
+    "class": "ComposerReferenceTests",
+    "method": "Picker_search_scans_native_pages_preserves_continuations_and_scope",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Run_admission_pins_every_effective_authorized_profile_and_never_expands_an_admitted_snapshot",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Explicit_empty_registry_policy_does_not_restore_public_defaults",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Dotted_docker_hub_short_digest_is_saved_with_the_same_host_as_credential_selection",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Configured_registry_allowlist_replaces_public_defaults_and_rejects_other_sources",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Tagged_images_resolve_before_save_and_failed_resolution_preserves_the_saved_revision",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Registry_expiry_can_be_renewed_and_cleared_with_revision_guards_without_exposing_the_secret",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Storage_edits_append_exact_byte_revisions_and_rejected_limits_preserve_the_saved_profile",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Registry_requests_without_a_profile_are_validation_errors_and_preserve_credentials",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Verified_configuration_remains_inspectable_but_disabled_server_blocks_selection_and_run_pins",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Registry_credentials_are_safe_host_authority_and_source_epoch_changes_invalidate_profiles",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Instance_sandbox_sparse_settings_preserve_authorization_CAS_and_effective_inspection",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Shipped_host_enables_sandbox_but_missing_mount_handoff_remains_incompatible",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SandboxApiTests.cs",
+    "class": "SandboxApiTests",
+    "method": "Owner_profile_revisions_limits_and_safe_audit_work_without_a_running_backend",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AttachmentApiTests.cs",
+    "class": "AttachmentApiTests",
+    "method": "Upload_bind_and_content_require_capability_and_fail_closed",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AttachmentApiTests.cs",
+    "class": "AttachmentApiTests",
+    "method": "Archive_and_delete_denials_are_distinct",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AttachmentApiTests.cs",
+    "class": "AttachmentApiTests",
+    "method": "All_file_types_upload_bind_and_preserve_original_bytes_without_a_role_opt_in",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AttachmentApiTests.cs",
+    "class": "AttachmentApiTests",
+    "method": "Spreadsheet_attachment_reads_all_rows_tabs_and_off_window_columns_with_bounded_continuation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AttachmentApiTests.cs",
+    "class": "AttachmentApiTests",
+    "method": "Spreadsheet_attachment_outside_used_range_returns_empty_bounded_inspection_and_remains_readable",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AttachmentApiTests.cs",
+    "class": "AttachmentApiTests",
+    "method": "Document_attachment_read_continues_with_complete_elements_and_rejects_spreadsheet_arguments",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AttachmentApiTests.cs",
+    "class": "AttachmentApiTests",
+    "method": "Ended_session_can_read_attachments_but_not_upload",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BackgroundSessionJourneyTests.cs",
+    "class": "BackgroundSessionJourneyTests",
+    "method": "Instance_runs_page_excludes_deleted_sessions_without_losing_live_runs",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BackgroundSessionJourneyTests.cs",
+    "class": "BackgroundSessionJourneyTests",
+    "method": "Owned_background_session_pages_runs_and_foregrounds_same_identity_without_admitting_a_turn",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BackgroundSessionJourneyTests.cs",
+    "class": "BackgroundSessionJourneyTests",
+    "method": "Original_result_and_files_survive_followups_rename_and_sqlite_reopen",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ContinuityEnhancementJourneyTests.cs",
+    "class": "ContinuityEnhancementJourneyTests",
+    "method": "Admin_schedule_run_edit_disable_and_provenance_share_durable_chat_contract_after_restart",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HarnessManagementTests.cs",
+    "class": "HarnessManagementTests",
+    "method": "Owner_governance_enables_scopes_and_freezes_without_a_preparation_workflow",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BoundedHistorySessionApiTests.cs",
+    "class": "BoundedHistorySessionApiTests",
+    "method": "GetSession_on_long_sqlite_transcript_returns_durable_cursor_without_loading_all_entries",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BoundedHistorySessionApiTests.cs",
+    "class": "BoundedHistorySessionApiTests",
+    "method": "Messages_newest_before_and_after_page_without_full_transcript_load",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BoundedHistorySessionApiTests.cs",
+    "class": "BoundedHistorySessionApiTests",
+    "method": "Messages_paused_and_ended_sessions_share_the_paging_contract",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BoundedHistorySessionApiTests.cs",
+    "class": "BoundedHistorySessionApiTests",
+    "method": "Messages_before_cursor_stays_stable_after_a_newer_append",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "BoundedHistorySessionApiTests.cs",
+    "class": "BoundedHistorySessionApiTests",
+    "method": "Messages_page_uses_public_history_projection_fields",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ShutdownHostTests.cs",
+    "class": "ShutdownHostTests",
+    "method": "Shutdown_stops_admitting_new_sessions",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ShutdownHostTests.cs",
+    "class": "ShutdownHostTests",
+    "method": "Shutdown_evicts_live_runtimes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ShutdownHostTests.cs",
+    "class": "ShutdownHostTests",
+    "method": "Drain_does_not_wait_forever_for_hung_recognizer_dispose",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "StateIsolationWorkspaceTests.cs",
+    "class": "StateIsolationWorkspaceTests",
+    "method": "Default_listing_uses_accessible_root_and_preserves_explicit_home_denial",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "StateIsolationWorkspaceTests.cs",
+    "class": "StateIsolationWorkspaceTests",
+    "method": "Tightened_home_policy_blocks_old_run_reads_and_all_mutation_routes_while_preserving_owner_bytes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "EmailMonitoringRecoveryTests.cs",
+    "class": "EmailMonitoringRecoveryTests",
+    "method": "Atomic_failure_replay_shared_polling_and_monitor_off_fences_match_in_both_stores",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AutomationJourneyTests.cs",
+    "class": "AutomationJourneyTests",
+    "method": "Automation_intervals_enforce_seconds_bounds",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "AutomationJourneyTests.cs",
+    "class": "AutomationJourneyTests",
+    "method": "Experience_automation_cannot_administer_skills_and_survives_restart_quietly",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionWorkingCleanupTests.cs",
+    "class": "SessionWorkingCleanupTests",
+    "method": "Cleanup_waits_for_session_terminal_and_preserves_sibling_home_artifacts_and_run_receipts",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "RealProfileHostTests.cs",
+    "class": "RealComposeHostTests",
+    "method": "Health_reports_real_and_voice_follows_resolvable_synthetic_speech_paths",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionHostRaceTests.cs",
+    "class": "SessionHostRaceTests",
+    "method": "Tenant_reservations_and_legacy_runtime_share_the_same_capacity_limit",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionHostRaceTests.cs",
+    "class": "SessionHostRaceTests",
+    "method": "Restart_repairs_accepted_input_intent_into_one_registered_run_without_requiring_attach",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionHostRaceTests.cs",
+    "class": "SessionHostRaceTests",
+    "method": "Recovered_dispatch_ack_is_fast_and_reattach_observes_the_same_registered_running_response",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionHostRaceTests.cs",
+    "class": "SessionHostRaceTests",
+    "method": "Concurrent_delete_and_reattach_rejects_ended_session",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionHostRaceTests.cs",
+    "class": "SessionHostRaceTests",
+    "method": "Stale_disconnect_does_not_evict_replacement_owner",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionHostRaceTests.cs",
+    "class": "SessionHostRaceTests",
+    "method": "Reattach_during_detach_grace_restores_active_response_and_accepts_deltas",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SessionHostRaceTests.cs",
+    "class": "SessionHostRaceTests",
+    "method": "Refresh_attach_sees_persisted_assistant_after_disconnect_during_generation",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "StateIsolationConfigurationTests.cs",
+    "class": "StateIsolationConfigurationTests",
+    "method": "Visibility_override_and_clear_use_the_explicit_maximum_and_reject_instance_ceiling_edits",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "StateIsolationConfigurationTests.cs",
+    "class": "StateIsolationConfigurationTests",
+    "method": "Restrictive_definition_blocks_Persistent_while_defaults_reset_all_coordinated_overrides_and_preserve_opt_ins",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "StateIsolationConfigurationTests.cs",
+    "class": "StateIsolationConfigurationTests",
+    "method": "Preset_is_an_unsaved_exact_plan_and_atomic_apply_rejects_stale_independent_owner_revisions",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "StateIsolationContextTests.cs",
+    "class": "StateIsolationContextTests",
+    "method": "Stateless_request_completes_an_ordinary_session_and_a_fresh_request_cannot_reuse_context_or_scratch",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "EmailMonitoringJourneyTests.cs",
+    "class": "EmailMonitoringJourneyTests",
+    "method": "One_account_poll_stages_owned_event_runs_authorized_read_and_revocation_fences_pending_delivery",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ConversationFailureHistoryTests.cs",
+    "class": "ConversationFailureHistoryTests",
+    "method": "History_returns_the_safe_reference_and_hides_exception_text",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ContinuityReviewJourneyTests.cs",
+    "class": "ContinuityReviewJourneyTests",
+    "method": "Last_run_remains_linked_after_more_than_one_hundred_unrelated_runs",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ContinuityReviewJourneyTests.cs",
+    "class": "ContinuityReviewJourneyTests",
+    "method": "Owner_can_save_disabled_schedule_changes_after_policy_removal_but_cannot_enable",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "ContinuityReviewJourneyTests.cs",
+    "class": "ContinuityReviewJourneyTests",
+    "method": "Admin_enforces_definition_timing_limits_capacity_and_reenable_without_user_scheduling",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveOfficePreviewTests.cs",
+    "class": "DriveOfficePreviewTests",
+    "method": "Drive_Office_problem_codes_preserve_original_download_and_source_fences",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "OwnerBoundaryTests.cs",
+    "class": "OwnerBoundaryTests",
+    "method": "V1_session_endpoints_require_owner_capability",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "StateIsolationContinuityTests.cs",
+    "class": "StateIsolationContinuityTests",
+    "method": "Tightening_blocks_recall_record_and_maintenance_without_deleting_historical_sources",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "Synthetic_agents_advertise_voice_when_speech_paths_resolve",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "General_assistant_publishes_auto_conversation_language_policy",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "Removed_v1_session_creation_returns_not_found",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "Session_lifecycle_create_get_history_end",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "Session_view_exposes_lifecycle_status_without_private_policy",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "Synthetic_voice_create_is_available",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "There_is_no_public_text_chat_http_endpoint",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "HealthAndSessionLifecycleTests.cs",
+    "class": "HealthAndSessionLifecycleTests",
+    "method": "Chat_agent_instances_list_active_managed_rows_only",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "LiveSessionRenameApiTests.cs",
+    "class": "LiveSessionRenameApiTests",
+    "method": "Rename_while_attached_keeps_live_revision_for_followup_turn",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "MultiTriggerAutomationJourneyTests.cs",
+    "class": "MultiTriggerAutomationJourneyTests",
+    "method": "Persisted_schedule_events_schedule_switches_survive_each_sqlite_reopen",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "MultiTriggerAutomationJourneyTests.cs",
+    "class": "MultiTriggerAutomationJourneyTests",
+    "method": "Mixed_sources_freeze_child_filters_preserve_identity_and_recover_without_replay",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "MultiTriggerAutomationJourneyTests.cs",
+    "class": "MultiTriggerAutomationJourneyTests",
+    "method": "Invalid_child_collections_are_validation_errors_without_partial_writes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "DriveUploadCompletionTests.cs",
+    "class": "DriveJourneyTests",
+    "method": "Completed_checksum_mismatch_reports_exact_cleanup_guidance_without_resuming_or_deleting",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SelfManagementAuthorityTests.cs",
+    "class": "SelfManagementAuthorityTests",
+    "method": "Off_and_freeze_remove_skill_administration_and_revoke_previously_admitted_calls",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "PublicDownloadJourneyTests.cs",
+    "class": "PublicDownloadJourneyTests",
+    "method": "Public_original_docx_download_inspect_fill_publish_and_readback_preserves_template_parts",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "PublicDownloadJourneyTests.cs",
+    "class": "PublicDownloadJourneyTests",
+    "method": "Binary_xlsx_doc_pdf_image_archive_and_unknown_formats_are_exact_and_scope_isolated",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "PublicDownloadJourneyTests.cs",
+    "class": "PublicDownloadJourneyTests",
+    "method": "Safe_header_filename_redirects_create_only_guarded_replacement_and_preflight_rejections",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "PublicDownloadJourneyTests.cs",
+    "class": "PublicDownloadJourneyTests",
+    "method": "Normal_definition_authorization_and_on_demand_discovery_offer_download_without_granting_old_versions",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "PublicDownloadJourneyTests.cs",
+    "class": "PublicDownloadJourneyTests",
+    "method": "Mismatched_or_corrupt_files_never_commit",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "PublicDownloadJourneyTests.cs",
+    "class": "PublicDownloadJourneyTests",
+    "method": "Cancellation_after_transfer_and_workspace_quota_failure_leave_no_file_or_partial_blob",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "PublicDownloadJourneyTests.cs",
+    "class": "PublicDownloadJourneyTests",
+    "method": "Download_is_an_ordinary_file_and_survives_sqlite_host_restart",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "WorkspaceApiTests.cs",
+    "class": "WorkspaceApiTests",
+    "method": "Execution_view_is_lazy_readonly_overlays_and_writable_workspace",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "WorkspaceApiTests.cs",
+    "class": "WorkspaceApiTests",
+    "method": "Working_lists_reflect_session_and_instance_archive_without_losing_bytes",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "WorkspaceApiTests.cs",
+    "class": "WorkspaceApiTests",
+    "method": "Oversized_file_content_length_is_rejected_before_writing",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "WorkspaceApiTests.cs",
+    "class": "WorkspaceApiTests",
+    "method": "Unknown_length_upload_stops_reading_at_file_limit_and_leaves_no_file",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "SignalRMessagePackTests.cs",
+    "class": "SignalRMessagePackTests",
+    "method": "JavaScript_messagepack_scenarios",
+    "reason": "retired_http_fixture"
+  },
+  {
+    "file": "SignalRMessagePackTests.cs",
+    "class": "SignalRMessagePackTests",
+    "method": "JavaScript_json_diagnostic_roundtrip",
+    "reason": "retired_http_fixture"
+  },
+  {
+    "file": "SignalRMessagePackTests.cs",
+    "class": "ClientSpeechMessagePackTests",
+    "method": "JavaScript_client_speech_scenarios",
+    "reason": "retired_http_fixture"
+  },
+  {
+    "file": "IdentityMaintenanceJourneyTests.cs",
+    "class": "IdentityMaintenanceJourneyTests",
+    "method": "Resolved_memory_survives_restart_and_forgetting_still_requires_exact_approval",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "IdentityMaintenanceJourneyTests.cs",
+    "class": "IdentityMaintenanceJourneyTests",
+    "method": "Protected_Automation_approval_survives_restart_and_late_delete_or_opt_out_wins",
+    "reason": "retired_http_contract"
+  },
+  {
+    "file": "IdentityMaintenanceJourneyTests.cs",
+    "class": "IdentityMaintenanceJourneyTests",
+    "method": "Owned_atomic_consolidation_exact_authority_fresh_recall_and_SQLite_restart",
+    "reason": "retired_http_contract"
+  }
+]

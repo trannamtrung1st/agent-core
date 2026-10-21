@@ -1,0 +1,1848 @@
+{
+  "baselineCommit": "5e4f3a20",
+  "baselineRouteEndpoints": 464,
+  "retired": [
+    {
+      "method": "GET",
+      "route": "/api/v1/agents"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/agents/{agentId}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/hooks/{eventKey}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/local/owner-capability"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v1/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/sessions/{sessionId:guid}/messages"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/active-version"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/active-version/preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/core-event-types"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/deliveries"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/filter-test"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/presets"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/{automationId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/{automationId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/{automationId:guid}/run"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/automations/{automationId:guid}/unreviewed-sources"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/browser-profile/reset"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/credential-bindings"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/credential-bindings"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/credential-bindings/{bindingId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/execution-budgets"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/execution-budgets"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/experience"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/experience/checkpoints"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/experience/configuration"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/experience/reset"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/experience/{experienceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/approvals/{approvalId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/cancel"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/policy"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/prepare"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/propose-shared"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/publish-adopt"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/harness/verify"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/isolation/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/isolation/apply"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/isolation/preset"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/isolation/preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/learned-memory"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/learned-memory/reset"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/learned-memory/{memoryId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/learned-memory/{memoryId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/lifecycle"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/maintenance"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/maintenance"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/persona"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}/content"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}/copy"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}/enabled"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}/enabled-override"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/resources/{key}/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/sandbox"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/sandbox/verify"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/self-management/"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/self-management/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/settings/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/settings/{section}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/settings/{section}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/{key}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/{key}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/{key}/customize"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/{key}/enabled"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/skills/{key}/enabled-override"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/state"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/agent-instances/{instanceId:guid}/unattended-model"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/authoring-options"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/connections/events/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/connections/events/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/connections/events/catalog"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/connections/events/catalog/builtin/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/connections/events/{eventId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/connections/events/{eventId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/connections/events/{eventId:guid}/revoke"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/connections/events/{eventId:guid}/rotate"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/container-registry-credentials"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/container-registry-credentials/{credentialId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/credentials"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/credentials"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/credentials/google-drive"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/credentials/{credentialId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/credentials/{credentialId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/credentials/{credentialId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/credentials/{credentialId:guid}/value"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/credentials/{id:guid}/drive-check"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/credentials/{id:guid}/drive-connect"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/credentials/{id:guid}/drive-connection"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/credentials/{id:guid}/drive-disconnect"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definition-drafts"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definition-drafts/fork"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definition-drafts/new"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/diff"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/evaluation-results"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/evaluation-scenarios"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/evaluation-scenarios"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}/run"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/publish"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/resources"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/resources"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/resources/batch"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/resources/content"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/resources/{resourceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/resources/{resourceId:guid}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/resources/{resourceId:guid}/office-preview"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definition-drafts/{draftId:guid}/validate"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definitions"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/admin/definitions/{definitionId}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definitions/{definitionId}/publications"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/definitions/{definitionId}/publications/{version:int}/deprecate"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definitions/{definitionId}/publications/{version:int}/resources"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/definitions/{definitionId}/versions/{version:int}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/email-accounts"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/email-accounts/oauth/configuration"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/connection"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/connection/check"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/monitoring"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/monitoring"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/monitoring/check"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/oauth/disconnect"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/oauth/start"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/email-accounts/{credentialId:guid}/test"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/email-send-operations/{draftId}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/events"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/execution-budget-limits"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/instances"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/instances/{instanceId:guid}/effective-config"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/sandbox-profiles/{id}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/admin/sandbox-profiles/{id}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/sandbox-profiles/{id}/check-image"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/admin/sandbox-profiles/{id}/verify"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/sandboxes"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/admin/tools"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/agent-runs/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/agent-runs/{runId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/background-sessions/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/composer"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/drive/accounts"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/drive/accounts/{accountRef}/files"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/drive/accounts/{accountRef}/files/{fileId}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/drive/accounts/{accountRef}/files/{fileId}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/drive/accounts/{accountRef}/files/{fileId}/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/drive/accounts/{accountRef}/operations/{operationId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/sessions"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/workspace/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/workspace/metadata"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/agent-instances/{instanceId:guid}/workspace/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/file-preview/options"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/host/sessions/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/host/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/host/sessions/{sessionId:guid}/lifecycle"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/integrations/google-drive/oauth/callback"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/integrations/google-drive/oauth/synthetic"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/integrations/google-drive/oauth/synthetic"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/integrations/google-drive/options"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/integrations/google-email/oauth/callback"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/integrations/google-email/oauth/synthetic"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/integrations/google-email/oauth/synthetic"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/models"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/profile/"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/profile/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/sessions/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/agent-runs"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/agent-runs/{runId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/agent-runs/{runId:guid}/approvals/{approvalId:guid}/approve"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/agent-runs/{runId:guid}/approvals/{approvalId:guid}/reject"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/agent-runs/{runId:guid}/cancel"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/archive"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/artifacts/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/artifacts/page"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/artifacts/{artifactId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/artifacts/{artifactId:guid}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/artifacts/{artifactId:guid}/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/stage"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/{attachmentId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/{attachmentId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/{attachmentId:guid}/content"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/{attachmentId:guid}/materialize"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/attachments/{attachmentId:guid}/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/automations/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/automations/{triggerId:guid}/cancel"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/background"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/continue-in-chat"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/deactivate"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/email-account-request/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/email-account-request/decision"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/knowledge/{identity}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/lifecycle"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/model"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/rename"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/reopen"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/sandbox/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/sandbox/executions/{executionId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/sandbox/executions/{executionId:guid}/stop"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/sandbox/reset"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/speech-locale"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/sessions/{sessionId:guid}/unarchive"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/workspace/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/sessions/{sessionId:guid}/workspace/content"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/sessions/{sessionId:guid}/workspace/content"
+    }
+  ],
+  "retained": [
+    {
+      "method": "GET",
+      "route": "/api/v2/account/me"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/account/password"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/account/tenant-invitations/{invitationId:guid}/accept"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/account/tenants"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/auth/csrf"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/auth/invitation"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/auth/login"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/auth/logout"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/auth/register"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/hooks/{tenantId:guid}/{sourceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/integrations/tenant-google/oauth/callback"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/integrations/tenant-google/oauth/synthetic"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/integrations/tenant-google/oauth/synthetic"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/accounts"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/system/accounts/{accountId:guid}/status"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/audit"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/browser/privacy"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/system/browser/privacy"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/operators"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/system/operators/{accountId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/system/tenants"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/system/tenants"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/system/tenants/{tenantId:guid}/status"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/access/check"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/access/me"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/access/resources/{resourceType}/{resourceId}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/from-template"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/access"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/drafts"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/drafts"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/publications"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/publications/{version:int}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/publications/{version:int}/deprecate"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/publications/{version:int}/resources"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-definitions/{definitionId:guid}/publications/{version:int}/resources/{resourceId:guid}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-runs/{runId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-runs/{runId:guid}/cancel"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agent-templates"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/from-publication"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/access"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/active-version"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/active-version/preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/background-sessions"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/runs"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/runs/{runId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/sessions/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/sessions/{sessionId:guid}/background"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/sessions/{sessionId:guid}/runs"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/activity/sessions/{sessionId:guid}/runs/{runId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/editor"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/filter-test"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}/editor"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}/events"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}/run"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/browser/profile"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/browser/profile/reset"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/configuration-controls"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/connected-accounts/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/connected-accounts/{accountRef}/drive/files"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/connected-accounts/{accountRef}/drive/files/{fileId}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/connected-accounts/{accountRef}/drive/files/{fileId}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/connected-accounts/{accountRef}/email/message"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/connected-accounts/{accountRef}/email/messages"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/credential-bindings/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/credential-bindings/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/credential-bindings/{bindingId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/decommission"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/editor"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/effective-config"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/events/core/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/execution-budgets"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/execution-budgets"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/lifecycle"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/persona"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources/editor"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources/{key}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources/{key}/content"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources/{key}/copy"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources/{key}/editor"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources/{key}/enabled"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/resources/{key}/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/sandbox"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/sandbox/verification"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/sandbox/verification/{attemptId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/sandbox/verify"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/self-management"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/self-management"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/self-management/freeze"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/settings"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/settings/{section}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/skills"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/skills/commands"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/skills/editor"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/skills/{key}/editor"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/unattended-model"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/versions"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/access"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/metadata"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/workspace/search"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/approvals/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/approvals/{requestId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/approvals/{requestId:guid}/cancel"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/approvals/{requestId:guid}/decision"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/audit"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/chat/agents"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/chat/models"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/access"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/monitoring/"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/monitoring/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/monitoring/check"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/oauth/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/oauth/check"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/oauth/disconnect"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/oauth/start"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/value"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-authoring-options"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-results"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}/run"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/publish"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/resources"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/resources/batch"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/resources/{resourceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/resources/{resourceId:guid}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-drafts/{draftId:guid}/state"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/definition-templates"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/events/builtin"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/events/core/{eventId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/file-preview/options"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/members"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/members/invitations"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/members/invitations/{invitationId:guid}/revoke"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/members/invite"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/members/{userId:guid}/status"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/operation-policies/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/operation-policies/{permission}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/operation-policies/{permission}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/permissions"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/role-assignments"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/role-assignments/{assignmentId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/roles"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/roles"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/roles/{roleId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/{profileId}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/{profileId}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/{profileId}/check-image"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/{profileId}/verification"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/{profileId}/verification/{attemptId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sandbox-profiles/{profileId}/verify"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/approvals"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/archive"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/artifacts/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/artifacts/{artifactId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/artifacts/{artifactId:guid}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/artifacts/{artifactId:guid}/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/{attachmentId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/{attachmentId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/{attachmentId:guid}/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/{attachmentId:guid}/materialize"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/{attachmentId:guid}/materialize"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/attachments/{attachmentId:guid}/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/browser"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/cancel"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/complete"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/continue-in-chat"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/conversation"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/messages"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/messages"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/pause"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/restore"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/resume"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox/controls"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox/executions/{executionId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox/executions/{executionId:guid}/stop"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox/profile"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/sandbox/reset"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/access"
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/content"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/content"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/metadata"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/office-preview"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/sessions/{sessionId:guid}/workspace/search"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/webhooks/"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/webhooks/"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/webhooks/{sourceId:guid}"
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v2/tenants/{tenantId:guid}/webhooks/{sourceId:guid}"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/webhooks/{sourceId:guid}/receipts"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/webhooks/{sourceId:guid}/revoke"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/webhooks/{sourceId:guid}/rotate"
+    }
+  ]
+}

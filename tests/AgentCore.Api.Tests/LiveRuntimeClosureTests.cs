@@ -74,7 +74,7 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
             ("Aurora Scrum planning specifically with JIRA issue links", "Matched issue keys and checked the configured JIRA workflow states", "Preserve the exact JIRA issue keys and workflow transitions."),
             ("Aurora deployment rehearsal only; no Scrum planning", "Rehearsed a fabricated deployment rollback", "Verify the rollback procedure independently of sprint planning.") })
         {
-            var source = await ExperienceJourneyTests.SeedAsync(s, id);
+            var source = await ExperienceTestSessions.SeedAsync(s, id);
             var eid = Guid.NewGuid();
             var e = new AgentExperience(eid, id, LocalUserProfile.Id, ExperienceSourceKind.Session, source.SessionId, 2, now,
                 "general-assistant", 21, eid, new("deepseek-v41-flash", "primary-llm", options.DefaultModel, null), now);

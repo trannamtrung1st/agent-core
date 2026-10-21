@@ -1,3 +1,4 @@
+using AgentCore.Api.Mapping;
 using AgentCore.Application.Security;
 using AgentCore.Application.Ports;
 using AgentCore.Contracts.Http;
@@ -34,5 +35,5 @@ public static class TenantCredentialBindingEndpoints
         }));
     }
     private static AdminCredentialBindingResponse Safe(AgentCore.Application.Credentials.CredentialBindingView value) =>
-        new(value.BindingId, value.CredentialId, value.Reference, value.Revision, AdminCredentialEndpoints.Map(value.Credential));
+        new(value.BindingId, value.CredentialId, value.Reference, value.Revision, CredentialHttpMapping.Map(value.Credential));
 }

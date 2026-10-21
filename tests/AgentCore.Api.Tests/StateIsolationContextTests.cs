@@ -136,45 +136,6 @@ public sealed class StateIsolationContextTests
     }
 
     [Fact]
-    public async Task Stateless_request_completes_an_ordinary_session_and_a_fresh_request_cannot_reuse_context_or_scratch()
-    {
-        var model = new RecordingModel();
-        await using var host = new FixtureHost(model);
-        using var client = TestOwnerCapability.CreateOwnerClient(host);
-        var id = await CreateInstance(host.Services);
-        var planner = host.Services.GetRequiredService<StateIsolationConfigurationService>();
-        Assert.True(Assert.Single((await client.GetFromJsonAsync<ChatAgentInstanceListResponse>("/api/v2/agent-instances"))!.Items).VoiceAvailable);
-        var plan = await planner.PresetAsync(id, "Stateless");
-        await planner.ApplyAsync(id, plan.Expected, plan.Draft, plan.Fingerprint);
-        Assert.False(Assert.Single((await client.GetFromJsonAsync<ChatAgentInstanceListResponse>("/api/v2/agent-instances"))!.Items).VoiceAvailable);
-        var manager = host.Services.GetRequiredService<SessionManager>();
-        var first = await manager.CreateForInstanceAsync(id, SessionMode.Text);
-        var workspace = host.Services.GetRequiredService<ISessionWorkspace>();
-        await workspace.EnsureAsync(first.SessionId, first.Definition);
-        await workspace.WriteAsync(first.SessionId, "/working/request.txt", "FIRST_REQUEST_SCRATCH"u8.ToArray());
-        await using var a = host.Services.GetRequiredService<SessionRuntimeFactory>().Create(first, new SilentOutput());
-        await a.AttachAsync(); var eventId = Guid.NewGuid();
-        Assert.True(await a.SubmitPersistedUserTextAsync("FIRST_REQUEST_PRIVATE", eventId)); await a.WaitUntilIdleAsync();
-        Assert.Equal(SessionLifecycleStatus.Completed, a.Snapshot.LifecycleStatus);
-        Assert.True(await a.SubmitPersistedUserTextAsync("FIRST_REQUEST_PRIVATE", eventId));
-        Assert.Equal("fresh_session_required", (await Assert.ThrowsAsync<AgentCoreException>(() =>
-            a.SubmitPersistedUserTextAsync("Another request", Guid.NewGuid()))).Code);
-        var second = await manager.CreateForInstanceAsync(id, SessionMode.Text);
-        Assert.NotEqual(first.SessionId, second.SessionId);
-        await using var b = host.Services.GetRequiredService<SessionRuntimeFactory>().Create(second, new SilentOutput());
-        await b.AttachAsync(); Assert.True(await b.SubmitPersistedUserTextAsync("SECOND_REQUEST", Guid.NewGuid())); await b.WaitUntilIdleAsync();
-        Assert.Equal(SessionLifecycleStatus.Completed, b.Snapshot.LifecycleStatus);
-        Assert.Equal(2, model.Requests.Count);
-        Assert.DoesNotContain("FIRST_REQUEST_PRIVATE", AllText(model.Requests.Last()));
-        Assert.DoesNotContain("FIRST_REQUEST_SCRATCH", AllText(model.Requests.Last()));
-        Assert.NotEmpty(await host.Services.GetRequiredService<IMemoryStore>().ReadHistoryAsync(first.SessionId, 0, 50));
-        Assert.Equal("FIRST_REQUEST_SCRATCH"u8.ToArray(), (await workspace.ReadAsync(first.SessionId, first.Definition,
-            "/working/request.txt")).Bytes);
-        Assert.Equal("NotFound", (await Assert.ThrowsAsync<AgentCoreException>(() => workspace.ReadAsync(second.SessionId,
-            second.Definition, "/working/request.txt").AsTask())).Code);
-    }
-
-    [Fact]
     public async Task Session_isolation_keeps_own_followup_but_excludes_other_customer_profile_and_learned_memory()
     {
         var model = new RecordingModel();

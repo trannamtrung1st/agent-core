@@ -79,8 +79,8 @@ public static class IdentityHttp
         app.UseAuthentication(); app.UseAuthorization(); app.UseRateLimiter();
         app.Use(async (http, next) =>
         {
-            // These canonical namespaces have no owner-token fallback. Resource cutover will move the
-            // remaining mappings here; source still awaiting cutover is not a multi-tenant deployment.
+            // Canonical cookie-authenticated HTTP namespaces have no owner-token fallback.
+            // Purpose-bound webhook/OAuth ingress applies its own explicit proof outside these namespaces.
             var canonical = http.Request.Path.StartsWithSegments("/api/v2/auth")
                 || http.Request.Path.StartsWithSegments("/api/v2/account")
                 || http.Request.Path.StartsWithSegments("/api/v2/system")

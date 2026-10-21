@@ -84,7 +84,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         // Fabricated source conversations go through ordinary Experience admission and the Real retrospective generator.
         for (var i = 0; i < 3; i++)
         {
-            var source = await ExperienceJourneyTests.SeedAsync(s, id);
+            var source = await ExperienceTestSessions.SeedAsync(s, id);
             source = source with { Revision = source.Revision + 1, Entries = source.Entries.Select(e => e with { Text = e.Text + " This observation concerns the internal React dashboard only." }).ToArray() };
             await s.GetRequiredService<IMemoryStore>().SaveAsync(source, source.Revision - 1);
             await s.GetRequiredService<ExperienceService>().RequestSessionAsync(id, source.SessionId);

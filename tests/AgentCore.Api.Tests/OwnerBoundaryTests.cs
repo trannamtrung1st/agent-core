@@ -98,22 +98,4 @@ public sealed class OwnerBoundaryTests : IClassFixture<AgentCoreApiFactory>
             DockerPublishedPortGateway.RunningInContainerOverride = null;
         }
     }
-
-    [Fact]
-    public async Task V1_session_endpoints_require_owner_capability()
-    {
-        var client = _factory.CreateClient();
-        var create = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
-        Assert.Equal(HttpStatusCode.Unauthorized, create.StatusCode);
-
-        var sessionId = Guid.NewGuid();
-        var get = await client.GetAsync($"/api/v1/sessions/{sessionId}");
-        Assert.Equal(HttpStatusCode.Unauthorized, get.StatusCode);
-
-        var history = await client.GetAsync($"/api/v1/sessions/{sessionId}/messages?after=0");
-        Assert.Equal(HttpStatusCode.Unauthorized, history.StatusCode);
-
-        var delete = await client.DeleteAsync($"/api/v1/sessions/{sessionId}");
-        Assert.Equal(HttpStatusCode.Unauthorized, delete.StatusCode);
-    }
 }

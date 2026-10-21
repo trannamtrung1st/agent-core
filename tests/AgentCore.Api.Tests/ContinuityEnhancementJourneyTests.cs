@@ -30,7 +30,7 @@ public sealed class ContinuityEnhancementJourneyTests
             var s = host.Services;
             var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
             instanceId = instance.InstanceId;
-            var source = await ExperienceJourneyTests.SeedAsync(s, instanceId); sessionId = source.SessionId;
+            var source = await ExperienceTestSessions.SeedAsync(s, instanceId); sessionId = source.SessionId;
             await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instanceId, 0, true);
             var record = await s.GetRequiredService<ExperienceService>().RequestSessionAsync(instanceId, sessionId); experienceId = record.ExperienceId;
             await s.ExecuteRunsAsync(100);
@@ -141,49 +141,6 @@ public sealed class ContinuityEnhancementJourneyTests
         await services.GetRequiredService<ExperienceService>().RequestSessionAsync(instanceId, sessionId);
         Assert.Equal(2, (await services.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100)).Count);
         Assert.Equal(SessionStatus.Attached, (await memory.LoadMetadataAsync(sessionId))!.Status);
-    }
-
-    [Fact(Timeout = 90000)]
-    public async Task Admin_schedule_run_edit_disable_and_provenance_share_durable_chat_contract_after_restart()
-    {
-        var db = Path.Combine(Path.GetTempPath(), $"continuity-schedule-{Guid.NewGuid():N}.db");
-        Guid instanceId, automationId, workId;
-        await using (var host = new ExperienceHost(db))
-        {
-            var s = host.Services; var client = TestOwnerCapability.CreateOwnerClient(host);
-            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
-            var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
-            var timing = new AutomationTiming("daily", "UTC", LocalTime: "09:00");
-            var draft = new ScheduleAutomationDraft(0, true, "Review pending store orders", timing);
-            var created = await client.PostAsJsonAsync(path, draft); created.EnsureSuccessStatusCode();
-            var r = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!; automationId = Guid.Parse(r.AutomationId);
-            Assert.Equal("AdminOwner", r.AuthorizationOrigin); Assert.Null(r.SourceSessionId);
-            Assert.Single((await client.GetFromJsonAsync<AutomationReview>(path))!.Items);
-            var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
-            Assert.Single((await client.GetFromJsonAsync<SessionAutomationListResponse>($"/api/v2/sessions/{session.SessionId}/automations"))!.Items);
-            Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path + "/" + automationId, draft)).StatusCode);
-            (await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision))).EnsureSuccessStatusCode();
-            Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision))).StatusCode);
-            var edit = await client.PutAsJsonAsync(path + "/" + automationId, draft with { ExpectedRevision = r.Revision, Instructions = "Future task", ModelKey = "scripted-beta" }); edit.EnsureSuccessStatusCode();
-            r = (await edit.Content.ReadFromJsonAsync<AutomationResponse>())!;
-            await AutomationJourneyTests.Intake(s);
-            var item = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(instanceId, LocalUserProfile.Id), 100)); workId = item.AgentRunId;
-            Assert.Equal(ActivationKind.ManualBackground, item.Admission.Activation.Kind); Assert.Equal("scripted-alpha", item.PinnedModel.CatalogKey);
-            Assert.Contains("Review pending store orders", (await s.SessionAsync(item)).Entries[0].Text); Assert.DoesNotContain("Future task", (await s.SessionAsync(item)).Entries[0].Text);
-            var disabled = await client.PutAsJsonAsync(path + "/" + automationId, draft with { ExpectedRevision = r.Revision, Enabled = false, Instructions = "Future task", ModelKey = "scripted-beta" }); disabled.EnsureSuccessStatusCode();
-            r = (await disabled.Content.ReadFromJsonAsync<AutomationResponse>())!;
-            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision))).StatusCode);
-        }
-        await using var reopened = new ExperienceHost(db);
-        var services = reopened.Services; var owner = new TriggerOwner(instanceId, LocalUserProfile.Id);
-        var stored = (await services.GetRequiredService<ITriggerStore>().GetAsync(owner, automationId))!;
-        Assert.Equal(AutomationStatus.Disabled, stored.Status); Assert.Equal(TriggerAuthorizationOrigin.AdminOwner, stored.Provenance.AuthorizationOrigin);
-        Assert.Equal("scripted-beta", stored.ModelOverrideCatalogKey);
-        await services.ExecuteRunsAsync(100);
-        var work = (await services.GetRequiredService<IAgentRunStore>().GetAsync(new(instanceId, LocalUserProfile.Id), workId))!;
-        Assert.Equal(AgentRunStatus.Failed, work.Status); Assert.Equal("authority-unavailable", work.Failure!.Code); Assert.Null(work.Result);
-        await services.GetRequiredService<AdminAutomationAuthoringService>().DeleteAsync(instanceId, automationId, stored.Revision);
-        Assert.Equal(AutomationStatus.Cancelled, (await services.GetRequiredService<ITriggerStore>().GetAsync(owner, automationId))!.Status);
     }
     private sealed class MaintenanceClock(DateTimeOffset now) : TimeProvider
     {

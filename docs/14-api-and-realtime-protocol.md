@@ -783,6 +783,12 @@ This document owns wire protocol version 1. Contracts contains closed typed DTOs
 
 ## HTTP
 
+Canonical private HTTP uses authenticated `/api/v2/account`, `/api/v2/system` and `/api/v2/tenants/{tenantId}` routes and the original-human/service authority described above. Authentication endpoints own their explicit sign-in/invitation/CSRF contracts; tenant webhook ingress and Google OAuth callbacks have separate purpose-bound external proofs. Health, static SPA delivery and development OpenAPI grant no private resource authority.
+
+The former v1 agent/Session/hook/token-issuance endpoints and unscoped v2 Admin, Session, profile, host, model, workspace/file, account-integration and OAuth endpoints have been removed. They return 404, including with a previously valid owner token or a signed-in platform operator. No redirects or route aliases translate them into tenant access. [The exact retirement inventory and qualification](reports/http-authority-cutover-verification-2026-10-21.md) records all 228 removed method/path pairs and retention of the 232 canonical pairs. This HTTP checkpoint does not certify removal of the separate obsolete Hub/internal/schema authority.
+
+The remaining historical HTTP examples in this document describe retired contracts and are not supported routes. Canonical family sections above/below own current requests and responses; final documentation consolidation will remove the obsolete examples together with the remaining internal cutover.
+
 REST handles creation, discovery, history, state and terminal ending. Live user text, audio and playback use SignalR. All examples are JSON, including the JSON-equivalent view of MessagePack messages. Nullable fields are serialized explicitly as null, except optional HTTP validation errors/extensions. Content-Type is application/json. IDs below are illustrative; creation generates fresh IDs.
 
 **P7 Admin (observed):** Owner-protected `/api/v2/admin/...` routes in the table below are trusted-local HTTP only; they do not attach a Session Runtime or enter the SignalR mailbox. Managed user chat still uses `POST /api/v2/sessions` with `agentInstanceId` to pin definition version and persona into the session snapshot. History, effective-config, validation, diff, and event list responses use allowlisted projections (no secrets or raw provider credentials). Owner-protected draft read, evaluation scenario, and resource content routes return editing payloads the Admin UI needs; learned-memory and automation surfaces still redact sensitive bodies. See [Backend Implementation](12-backend-implementation-spec.md#p7b-definition-lifecycle-observed).
@@ -1087,7 +1093,7 @@ Historical Phases A–H included Docker `sandbox.run`; [current sandbox contract
 
 **Lease versus Attachment.** Wire `attachmentId` is the hub **connection lease**. User-uploaded files are HTTP `Attachment` records with `AttachmentId`. Never send attachment binaries or base64 on SignalR.
 
-**Trusted-local owner capability.** Catalog, lifecycle, attach, upload, bind, artifact, and content routes require `X-AgentCore-Owner-Capability` (hub attach includes the same token). `SessionId` is not a credential. Native issue/use is loopback `POST /api/v1/local/owner-capability`; Compose published-port NAT additionally trusts this container's default gateway when `Hosting:TrustPublishedPortGateway` is true. Browser restore from `localStorage`; hashed grant survives API restart. Fail closed without leaking other sessions.
+**Retired HTTP owner capability.** The former issuance and owner-gated HTTP routes are removed; a saved header token cannot reach them or authenticate a canonical Account/tenant route. The obsolete Hub/internal token path is a separate remaining cutover item, not an HTTP fallback or a completed security model.
 
 **Additive lifecycle (keep v1 DELETE).** Versioned routes:
 

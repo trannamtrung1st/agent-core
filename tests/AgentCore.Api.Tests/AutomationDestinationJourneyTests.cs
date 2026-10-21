@@ -20,54 +20,6 @@ public sealed class AutomationDestinationJourneyTests
     private static readonly DateTimeOffset Now = new(2026, 10, 8, 3, 0, 0, TimeSpan.Zero);
 
     [Theory(Timeout = 60000)]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Greeting_due_in_exact_conversation_survives_headless_dispatch_and_restart(bool detached)
-    {
-        var db = Path.Combine(Path.GetTempPath(), $"automation-target-{Guid.NewGuid():N}.db");
-        var clock = new AutomationClock(Now);
-        Guid sessionId, instanceId, runId;
-        await using (var host = new ExperienceHost(db, clock: clock))
-        {
-            var s = host.Services;
-            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
-            var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
-            sessionId = session.SessionId;
-            var unrelated = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
-            if (detached) await s.GetRequiredService<IMemoryStore>().SaveAsync(session with { Revision = session.Revision + 1,
-                Status = SessionStatus.Paused, PauseReason = "disconnected" }, session.Revision);
-            using var client = TestOwnerCapability.CreateOwnerClient(host);
-            var saved = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{instanceId}/automations", new AutomationRequest(
-                0, true, "Greeting", "Say hello once in this conversation", new AutomationTriggerDto("schedule", new("oneShot", AtUtc: Now.AddSeconds(30).ToString("O"))),
-                ExecutionTarget: new("existingSession", sessionId.ToString("D")), CompletionDelivery: new("none")));
-            saved.EnsureSuccessStatusCode();
-            var automation = (await saved.Content.ReadFromJsonAsync<AutomationResponse>())!;
-            Assert.Equal(sessionId.ToString("D"), automation.ExecutionTarget.SessionId);
-            clock.Advance(TimeSpan.FromSeconds(30));
-            await s.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow());
-            await AdmitAndExecute(s);
-            var owner = new AgentRunOwner(instanceId, LocalUserProfile.Id);
-            var run = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListForSessionAsync(owner, sessionId));
-            runId = run.AgentRunId;
-            Assert.Equal(AgentRunStatus.Completed, run.Status);
-            Assert.Equal(AgentRunOutputContract.ConversationResponse, run.Admission.OutputContract);
-            Assert.Empty(run.Admission.Activation.SourceEntryIds);
-            var history = await s.GetRequiredService<IMemoryStore>().LoadAsync(sessionId);
-            Assert.Equal("Hello!", Assert.Single(history!.Entries).Text);
-            Assert.Empty((await s.GetRequiredService<IMemoryStore>().LoadAsync(unrelated.SessionId))!.Entries);
-            Assert.Empty((await s.GetRequiredService<IMemoryStore>().ListBackgroundSessionsAsync(owner, null, 50, false)).Items);
-            await s.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
-            await s.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync();
-            Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListForSessionAsync(owner, sessionId));
-        }
-        await using var restarted = new ExperienceHost(db, clock: clock);
-        var restored = await restarted.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId);
-        Assert.Equal("Hello!", Assert.Single(restored!.Entries).Text);
-        Assert.Equal(runId, Assert.Single(await restarted.Services.GetRequiredService<IAgentRunStore>()
-            .ListForSessionAsync(new(instanceId, LocalUserProfile.Id), sessionId)).AgentRunId);
-    }
-
-    [Theory(Timeout = 60000)]
     [InlineData(false, "user")]
     [InlineData(true, "user")]
     [InlineData(false, "ended")]
@@ -245,28 +197,6 @@ public sealed class AutomationDestinationJourneyTests
         if (disposition == "cancelled") Assert.Contains("cancelled", history.Entries[0].Text);
         await s.GetRequiredService<BackgroundCompletionReporter>().ReportPendingAsync(100);
         Assert.Equal(history.Entries.Count, (await s.GetRequiredService<IMemoryStore>().LoadAsync(parent.SessionId))!.Entries.Count);
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task Admin_rejects_foreign_target_conflicting_model_and_duplicate_delivery()
-    {
-        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"target-authority-{Guid.NewGuid():N}.db"));
-        var s = host.Services;
-        var admin = s.GetRequiredService<AdminAgentInstanceService>();
-        var a = await admin.CreateManagedAsync("general-assistant", 21);
-        var b = await admin.CreateManagedAsync("general-assistant", 21);
-        var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(b.InstanceId, SessionMode.Text);
-        using var client = TestOwnerCapability.CreateOwnerClient(host);
-        var draft = new AutomationRequest(0, true, "Greeting", "Say hello", new AutomationTriggerDto("schedule", new("oneShot", AtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O"))),
-            ExecutionTarget: new("existingSession", session.SessionId.ToString("D")), CompletionDelivery: new("none"));
-        var path = $"/api/v2/admin/agent-instances/{a.InstanceId}/automations";
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, draft)).StatusCode);
-        var own = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(a.InstanceId, SessionMode.Text);
-        draft = draft with { ExecutionTarget = new("existingSession", own.SessionId.ToString("D")) };
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, draft with { CompletionDelivery = new("toSession", own.SessionId.ToString("D")) })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, draft with { ModelKey = "missing-model" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, draft with { ExecutionTarget = null })).StatusCode);
-        (await client.PostAsJsonAsync(path, draft)).EnsureSuccessStatusCode();
     }
 
     [Fact(Timeout = 60000)]

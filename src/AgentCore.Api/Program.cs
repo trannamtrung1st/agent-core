@@ -198,26 +198,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHub<SessionHub>("/hubs/session");
-AdminEndpoints.Map(app);
-GoogleEmailOAuthEndpoints.Map(app);
-HookEndpoints.Map(app);
-SessionCatalogEndpoints.Map(app);
-EmailSelectionEndpoints.Map(app);
-SessionAutomationEndpoints.Map(app);
 
-BackgroundSessionEndpoints.Map(app);
-ProfileEndpoints.Map(app);
-HostSessionEndpoints.Map(app);
-LegacySessionEndpoints.Map(app);
-AttachmentEndpoints.Map(app);
-WorkspaceEndpoints.Map(app);
-SandboxEndpoints.Map(app);
-AgentWorkspaceEndpoints.Map(app);
-ComposerEndpoints.Map(app);
-ArtifactEndpoints.Map(app);
-OfficePreviewEndpoints.Map(app);
-GoogleDriveOAuthEndpoints.Map(app);
-DriveEndpoints.Map(app);
 
 // Read the loaded API assembly, never a mutable checkout or DLL on disk.
 var buildVersion = typeof(Program).Assembly
@@ -229,25 +210,6 @@ app.MapGet("/health", (IConfiguration configuration, SchedulerReadiness schedule
             configuration["AgentCore:Profile"] ?? "Synthetic",
             HttpMapping.ProtocolVersion, buildVersion, scheduler.Snapshot())))
     .WithName("Health");
-
-app.MapGet("/api/v1/agents", async (SessionManager sessions, CancellationToken cancellationToken) =>
-{
-    var agents = await sessions.ListAgentsAsync(cancellationToken).ConfigureAwait(false);
-    return Results.Json(new AgentListResponse(agents.Select(HttpMapping.ToAgent).ToArray()));
-});
-
-app.MapGet("/api/v1/agents/{agentId}", async (string agentId, int? version, SessionManager sessions, CancellationToken cancellationToken) =>
-{
-    try
-    {
-        var agent = await sessions.GetAgentAsync(agentId, version, cancellationToken).ConfigureAwait(false);
-        return Results.Json(HttpMapping.ToAgent(agent));
-    }
-    catch (AgentCoreException ex)
-    {
-        return ProblemResults.From(ex);
-    }
-});
 
 MapSpaFallback(app, spaIndex);
 

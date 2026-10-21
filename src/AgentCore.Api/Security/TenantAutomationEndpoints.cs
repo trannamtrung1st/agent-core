@@ -1,3 +1,4 @@
+using AgentCore.Api.Mapping;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Contracts.Http;
@@ -60,9 +61,9 @@ public static class TenantAutomationEndpoints
         }));
     }
     private static HumanSessionReference Human(HttpContext http, Guid account, Guid principal) => new(account, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), principal);
-    private static TenantAutomationChange Change(SaveRequest value) => new(value.Enabled, value.Name, value.Instructions, value.Schedule is null ? null : AdminAutomationEndpoints.Parse(value.Schedule), value.ModelKey, value.ReasoningEffort, value.RequiresTools, value.RequiresVision,
+    private static TenantAutomationChange Change(SaveRequest value) => new(value.Enabled, value.Name, value.Instructions, value.Schedule is null ? null : AutomationHttpMapping.Parse(value.Schedule), value.ModelKey, value.ReasoningEffort, value.RequiresTools, value.RequiresVision,
         value.Triggers?.Select(t => new TenantAutomationTriggerChange(t.TriggerId is null ? null : Guid.Parse(t.TriggerId),
-            AdminAutomationEndpoints.ParseTrigger(t), t.Enabled, t.TriggerId is null ? 0 : t.Revision)).ToArray(), value.ReportToSessionId, value.TargetSessionId);
+            AutomationHttpMapping.ParseTrigger(t), t.Enabled, t.TriggerId is null ? 0 : t.Revision)).ToArray(), value.ReportToSessionId, value.TargetSessionId);
     private static void Route(Automation value, Guid instance) { if (value.Owner.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable"); }
     private static object Editor(TenantAutomationEditor view) => new { agent = new { view.Agent.PrincipalId, view.Agent.SystemIdentityId, instance = AgentCore.Api.Mapping.AdminHttpMapping.ToAgentInstance(view.Agent.Instance) }, view.Policy, view.Total, view.Page, view.PageSize, view.SecurityRevision, view.CanCreate, view.CanSchedule, view.CanCoreEvents, view.CanWebhookEvents,
         items = view.Items.Select(i => new { automation = Safe(i.Automation), i.CanUpdate, i.CanCancel, i.CanRun }) };
@@ -70,6 +71,6 @@ public static class TenantAutomationEndpoints
         value.AutomationId, agentInstanceId = value.Owner.AgentInstanceId, value.Name, value.Instructions, status = value.Status.ToString().ToLowerInvariant(),
         value.Revision, value.TriggerRevision, value.NextOccurrenceAtUtc, value.OccurrenceCount, value.ExpiresAtUtc, value.ModelOverrideCatalogKey, value.ModelOverrideReasoningEffort,
         value.RequiresTools, value.RequiresVision, executionTarget = value.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession ? "existingSession" : "backgroundSession", targetSessionId = value.ExecutionTarget.SessionId, completionDelivery = value.CompletionDelivery.SessionId is null ? "none" : "toSession", reportToSessionId = value.CompletionDelivery.SessionId, value.SuspensionReason,
-        createdAt = value.Provenance.CreatedAt, updatedAt = value.Provenance.UpdatedAt, triggers = value.Triggers.Select(AdminAutomationEndpoints.TriggerRecord)
+        createdAt = value.Provenance.CreatedAt, updatedAt = value.Provenance.UpdatedAt, triggers = value.Triggers.Select(AutomationHttpMapping.TriggerRecord)
     };
 }

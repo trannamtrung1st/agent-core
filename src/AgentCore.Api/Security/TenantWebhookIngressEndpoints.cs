@@ -1,3 +1,4 @@
+using AgentCore.Api.Http;
 using AgentCore.Application.Events;
 using AgentCore.Application.Security;
 
@@ -10,9 +11,9 @@ public static class TenantWebhookIngressEndpoints
     {
         http.Response.Headers.CacheControl = "no-store";
         if (!http.Request.IsHttps && (!options.AllowInsecureLocalHttp || !Http.TrustedLocalCaller.IsLoopback(http))) return Error(400, "https_required");
-        if (!HookEndpoints.TryBearer(http.Request, out var token) || !await service.CredentialsMatchAsync(tenantId, sourceId, token, ct)) return Error(401, "unauthorized");
+        if (!WebhookHttp.TryBearer(http.Request, out var token) || !await service.CredentialsMatchAsync(tenantId, sourceId, token, ct)) return Error(401, "unauthorized");
         if (http.Request.ContentLength > ExternalEventEnvelope.MaxRawBytes) return Error(400, "payload_too_large");
-        var body = await HookEndpoints.ReadBoundedAsync(http.Request.Body, ct); if (body is null) return Error(400, "payload_too_large");
+        var body = await WebhookHttp.ReadBoundedAsync(http.Request.Body, ct); if (body is null) return Error(400, "payload_too_large");
         try
         {
             var result = await service.AdmitAsync(tenantId, sourceId, token, body, ct);

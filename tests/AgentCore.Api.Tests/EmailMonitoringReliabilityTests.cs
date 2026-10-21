@@ -153,10 +153,10 @@ public sealed class EmailMonitoringReliabilityTests
         }
         public async Task<Automation> Automation(Guid owner, string name, bool coalesce = false)
         {
-            var response = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{owner}/automations", new AutomationRequest(0, true, name, "Inspect inbox evidence",
-                new AutomationTriggerDto("coreEvent", CoreEventKey: "email.message.received", Dispatch: coalesce ? new("coalesceLatest", 60) : new("everyMatch")),
-                ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
-            Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+            await Host.Services.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(owner, null, 0, true, name, "Inspect inbox evidence",
+                new CoreEventTrigger("email.message.received", null,
+                    coalesce ? new(EventDispatchMode.CoalesceLatest, 60) : new(EventDispatchMode.EveryMatch)), null, null,
+                executionTarget: AutomationExecutionTarget.Background, completionDelivery: AutomationCompletionDelivery.None);
             return Assert.Single(await Triggers.ListAsync(new(owner, LocalUserProfile.Id), AutomationStatus.Active), a => a.Name == name);
         }
         public async Task<CoreEventReceipt[]> EmailEvents() => (await Events.PendingAsync()).Where(e => e.Event.Key == "email.message.received").ToArray();

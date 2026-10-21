@@ -20,50 +20,6 @@ namespace AgentCore.Api.Tests;
 
 public sealed class ContinuityReviewJourneyTests
 {
-    [Theory(Timeout = 90000)]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Last_run_remains_linked_after_more_than_one_hundred_unrelated_runs(bool fixedInterval)
-    {
-        await using var host = new ExperienceHost(Database());
-        var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
-        var client = TestOwnerCapability.CreateOwnerClient(host);
-        var root = $"/api/v2/admin/agent-instances/{instance.InstanceId}";
-        var path = root + "/automations";
-        string automationId;
-        if (fixedInterval)
-        {
-            var created = await client.PostAsJsonAsync(path, new IntervalAutomationDraft(0, true, 3600, "Review; do nothing if no action is useful.", null, null));
-            created.EnsureSuccessStatusCode();
-            automationId = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!.AutomationId;
-        }
-        else
-        {
-            var created = await client.PostAsJsonAsync(path, new ScheduleAutomationDraft(0, true, "Known future obligation", new("daily", "UTC", LocalTime: "09:00")));
-            created.EnsureSuccessStatusCode();
-            automationId = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!.AutomationId;
-        }
-        var run = await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(1));
-        run.EnsureSuccessStatusCode();
-        await AutomationJourneyTests.Intake(services);
-        var store = services.GetRequiredService<IAgentRunStore>();
-        var owner = new AgentRunOwner(instance.InstanceId, LocalUserProfile.Id);
-        var original = Assert.Single(await store.ListAsync(owner, 100));
-        // Imported historical rows represent other sources without executing them.
-        for (var index = 0; index < 101; index++)
-        {
-            var at = original.CreatedAtUtc.AddMinutes(index + 1);
-            var snapshot = AgentRunTestFixtures.Snapshot(owner,
-                (await services.SessionAsync(original)).Definition, at);
-            await store.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, at));
-        }
-        Assert.DoesNotContain(await store.ListAsync(owner, 100), item => item.AgentRunId == original.AgentRunId);
-        var review = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(path);
-        Assert.Equal(original.AgentRunId.ToString("D"), review.GetProperty("items")[0].GetProperty("lastAgentRunId").GetString());
-        var detail = (await client.GetFromJsonAsync<AgentRunResponse>(root.Replace("/admin/", "/") + "/agent-runs/" + original.AgentRunId))!;
-        Assert.Equal(automationId, detail.AutomationId);
-    }
 
     [Fact(Timeout = 90000)]
     public async Task Continuity_empty_broad_current_deleted_and_invalid_queries_stay_bounded_and_untrusted()
@@ -71,12 +27,12 @@ public sealed class ContinuityReviewJourneyTests
         await using var host = new ExperienceHost(Database());
         var services = host.Services;
         var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
-        var source = await ExperienceJourneyTests.SeedAsync(services, instance.InstanceId);
+        var source = await ExperienceTestSessions.SeedAsync(services, instance.InstanceId);
         var continuity = services.GetRequiredService<ContinuityService>();
         Assert.Empty(await continuity.SearchAsync(instance.InstanceId, "zxq83761unknown"));
         Assert.DoesNotContain(await continuity.SearchAsync(instance.InstanceId, "store", currentSessionId: source.SessionId),
             item => item.Kind == ContinuityKind.Session && item.Id == source.SessionId);
-        for (var i = 0; i < 11; i++) await ExperienceJourneyTests.SeedAsync(services, instance.InstanceId);
+        for (var i = 0; i < 11; i++) await ExperienceTestSessions.SeedAsync(services, instance.InstanceId);
         var broad = await continuity.SearchAsync(instance.InstanceId, null);
         Assert.Equal(ContinuityService.MaxResults, broad.Count);
         Assert.True(ContinuityService.Serialize(broad).Length <= ContinuityService.MaxCharacters);
@@ -102,86 +58,6 @@ public sealed class ContinuityReviewJourneyTests
         await history.SaveAsync(source with { Revision = source.Revision + 1, DurablyDeletedAt = DateTimeOffset.UtcNow }, source.Revision);
         Assert.DoesNotContain(await continuity.SearchAsync(instance.InstanceId, "store"), item => item.Id == source.SessionId);
         Assert.Equal(404, (await Assert.ThrowsAsync<AgentCoreException>(() => continuity.GetAsync(instance.InstanceId, ContinuityKind.Session, source.SessionId).AsTask())).StatusCode);
-    }
-
-    [Fact(Timeout = 90000)]
-    public async Task Owner_can_save_disabled_schedule_changes_after_policy_removal_but_cannot_enable()
-    {
-        OverrideDefinitions? definitions = null;
-        await using var host = new ExperienceHost(Database(), configure: services =>
-            services.AddSingleton<IAgentDefinitionStore>(sp => definitions = new(sp.GetRequiredService<IBuiltInAgentDefinitionStore>())));
-        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
-        var client = TestOwnerCapability.CreateOwnerClient(host);
-        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
-        var draft = new ScheduleAutomationDraft(0, true, "Known task", new("daily", "UTC", LocalTime: "09:00"));
-        var created = await client.PostAsJsonAsync(path, draft); created.EnsureSuccessStatusCode();
-        var row = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!;
-        definitions!.RemovePolicy = true;
-        var disabledDraft = draft with { ExpectedRevision = row.Revision, Enabled = false };
-        var disabled = await client.PutAsJsonAsync(path + "/" + row.AutomationId, disabledDraft); disabled.EnsureSuccessStatusCode();
-        row = (await disabled.Content.ReadFromJsonAsync<AutomationResponse>())!;
-        Assert.Equal("Disabled", row.Status); Assert.Null(row.NextRunAt); Assert.Equal("AdminOwner", row.AuthorizationOrigin);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.AutomationId,
-            draft with { ExpectedRevision = row.Revision })).StatusCode);
-        var reconfigured = await client.PutAsJsonAsync(path + "/" + row.AutomationId,
-            disabledDraft with { ExpectedRevision = row.Revision, Schedule = draft.Schedule with { LocalTime = "10:00" } });
-        reconfigured.EnsureSuccessStatusCode();
-        row = (await reconfigured.Content.ReadFromJsonAsync<AutomationResponse>())!;
-        Assert.Equal("10:00", row.Triggers!.Single().Schedule!.LocalTime);
-        var retained = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(path))!.Items, item => item.AutomationId == row.AutomationId);
-        Assert.Equal("Disabled", retained.Status); Assert.Equal(row.Revision, retained.Revision);
-    }
-
-    [Fact(Timeout = 90000)]
-    public async Task Admin_enforces_definition_timing_limits_capacity_and_reenable_without_user_scheduling()
-    {
-        OverrideDefinitions? definitions = null;
-        await using var host = new ExperienceHost(Database(), configure: services =>
-            services.AddSingleton<IAgentDefinitionStore>(sp => definitions = new(sp.GetRequiredService<IBuiltInAgentDefinitionStore>())));
-        var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
-        var client = TestOwnerCapability.CreateOwnerClient(host);
-        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
-        var policy = new TriggerPolicy(true, false, true, true, true, true, 3, 2, 4, ["schedule"], true, 300);
-        var now = DateTimeOffset.UtcNow;
-        AutomationTiming daily = new("daily", "UTC", Interval: 1, LocalTime: "09:00");
-        ScheduleAutomationDraft Draft(AutomationTiming timing) => new(0, true, "Known task", timing);
-        async Task Denied(TriggerPolicy p, AutomationTiming timing)
-        {
-            definitions!.Policy = p;
-            var response = await client.PostAsJsonAsync(path, Draft(timing));
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Empty((await client.GetFromJsonAsync<AutomationReview>(path))!.Items);
-        }
-        await Denied(policy with { AllowDaily = false }, daily);
-        await Denied(policy with { AllowWeekly = false }, new("weekly", "UTC", LocalTime: "09:00", Weekdays: [1]));
-        await Denied(policy with { AllowFixedInterval = false }, new("fixedInterval", Interval: 600, AnchorAtUtc: now.AddHours(1).ToString("O")));
-        await Denied(policy with { AllowOneShot = false }, new("oneShot", AtUtc: now.AddDays(1).ToString("O")));
-        await Denied(policy, new("oneShot", AtUtc: now.AddDays(3).ToString("O")));
-        await Denied(policy with { MinRecurrenceDays = 3 }, daily);
-        await Denied(policy with { MinRecurrenceDays = 8 }, new("weekly", "UTC", LocalTime: "09:00", Weekdays: [1]));
-        await Denied(policy, new("fixedInterval", Interval: 60, AnchorAtUtc: now.AddHours(1).ToString("O")));
-        await Denied(policy with { AllowIndefiniteRecurrence = false }, daily);
-        definitions!.Policy = policy with { AllowIndefiniteRecurrence = false };
-        var triggers = s.GetRequiredService<ITriggerStore>();
-        var owner = new TriggerOwner(instance.InstanceId, LocalUserProfile.Id);
-        for (var i = 0; i < 2; i++)
-            await triggers.CreateAsync(new(Guid.NewGuid(), owner, AutomationStatus.Active, "Existing event subscription",
-                new EventTrigger(Guid.NewGuid()), null, null, 0, 1, 1,
-                new(TriggerAuthorizationOrigin.ApplicationEvent, null, null, now, now), null));
-        Assert.Equal(2, await triggers.CountActiveAsync(owner));
-        var finite = Draft(daily with { Interval = policy.MinRecurrenceDays, MaxOccurrences = 2 });
-        var created = await client.PostAsJsonAsync(path, finite); created.EnsureSuccessStatusCode();
-        var row = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!;
-        Assert.Equal("AdminOwner", row.AuthorizationOrigin);
-        Assert.False((await client.GetFromJsonAsync<AutomationReview>(path))!.Policy!.AllowIndefiniteRecurrence);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, finite)).StatusCode);
-        var disabled = await client.PutAsJsonAsync(path + "/" + row.AutomationId, finite with { ExpectedRevision = row.Revision, Enabled = false });
-        disabled.EnsureSuccessStatusCode(); row = (await disabled.Content.ReadFromJsonAsync<AutomationResponse>())!;
-        definitions.Policy = policy with { AllowDaily = false };
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path + "/" + row.AutomationId, finite with { ExpectedRevision = row.Revision })).StatusCode);
-        var retained = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(path))!.Items, item => item.AutomationId == row.AutomationId);
-        Assert.Equal("Disabled", retained.Status); Assert.Equal(row.Revision, retained.Revision);
     }
 
     [Fact(Timeout = 90000)]

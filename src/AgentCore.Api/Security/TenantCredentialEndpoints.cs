@@ -1,3 +1,4 @@
+using AgentCore.Api.Mapping;
 using AgentCore.Application.Security;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
@@ -52,7 +53,7 @@ public static class TenantCredentialEndpoints
             return Results.NoContent();
         }));
     }
-    private static object Safe(TenantCredentialView item) => new { item.TenantId, credential = AdminCredentialEndpoints.Map(item.Credential) };
+    private static object Safe(TenantCredentialView item) => new { item.TenantId, credential = CredentialHttpMapping.Map(item.Credential) };
     private static T Parse<T>(string value) where T : struct, Enum => Enum.TryParse<T>(value, false, out var parsed)
         && Enum.IsDefined(parsed) && Enum.GetNames<T>().Contains(value) ? parsed : throw AgentCoreErrors.Validation("Unknown credential kind, purpose, status or mail option.");
     private static ContainerRegistryProfile? Registry(ContainerRegistryProfileDto? input) => input is null ? null

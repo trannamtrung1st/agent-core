@@ -13,37 +13,6 @@ namespace AgentCore.Api.Tests;
 
 public sealed class SelfManagementAuthorityTests
 {
-    [Fact]
-    public async Task Off_and_freeze_remove_skill_administration_and_revoke_previously_admitted_calls()
-    {
-        await using var factory = new AgentCoreApiFactory();
-        var services = factory.Services;
-        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22);
-        var executor = services.GetRequiredService<SessionToolExecutor>();
-        var definition = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
-        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId);
-        var list = new ModelToolCall("list", "skills.list", "{}");
-        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), list, 100000, admission: admission)).Text);
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(services));
-        var endpoint = $"/api/v2/admin/agent-instances/{owner.InstanceId}/harness/policy";
-        var enabled = await client.PutAsJsonAsync(endpoint, new HarnessPolicyRequest(owner.Revision, "Managed", ["Skills"], [], []));
-        enabled.EnsureSuccessStatusCode();
-        var review = (await enabled.Content.ReadFromJsonAsync<HarnessReviewResponse>())!;
-        // An admitted Off Run cannot acquire the newly granted area.
-        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), list, 100000, admission: admission)).Text);
-        definition = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
-        var context = await executor.HarnessContextAsync(owner.InstanceId, default);
-        admission = admission with { Harness = context };
-        Assert.DoesNotContain("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), list, 100000, admission: admission)).Text);
-        var frozen = await client.PutAsJsonAsync(endpoint, new HarnessPolicyRequest(review.InstanceRevision, "Disabled", [], [], [], Frozen: true));
-        frozen.EnsureSuccessStatusCode();
-        Assert.Null(await executor.HarnessContextAsync(owner.InstanceId, default));
-        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), list, 100000, admission: admission)).Text);
-        // Normal use is independent of the management switch.
-        Assert.Equal(ToolPolicyDecision.Allow, ToolPolicy.EvaluateExecution(definition, ToolCatalog.SkillsLoad,
-            ToolConfigurationGates.Unconfigured, admission: admission));
-    }
 
     [Fact]
     public async Task Sparse_policy_inherits_per_field_and_freeze_wins_over_new_definition_defaults()

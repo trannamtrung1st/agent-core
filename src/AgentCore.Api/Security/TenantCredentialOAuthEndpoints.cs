@@ -1,3 +1,4 @@
+using AgentCore.Api.Mapping;
 using System.Net;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
@@ -23,7 +24,7 @@ public static class TenantCredentialOAuthEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             var result = await service.CheckAsync(actor.TenantId, credentialId, Initiator(http, actor), body.ExpectedRevision, body.ExpectedCredentialRevision, ct).ConfigureAwait(false);
-            return Results.Json(new { result.Credential.TenantId, credential = AdminCredentialEndpoints.Map(result.Credential.Credential), result.ReconnectRequired });
+            return Results.Json(new { result.Credential.TenantId, credential = CredentialHttpMapping.Map(result.Credential.Credential), result.ReconnectRequired });
         })).WithMetadata(new RequestSizeLimitAttribute(8192));
         group.MapGet("", (Guid credentialId, HttpContext http, [FromServices] TenantCredentialOAuthService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -41,7 +42,7 @@ public static class TenantCredentialOAuthEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             var result = await service.DisconnectAsync(actor.TenantId, credentialId, Initiator(http, actor), body.ExpectedRevision, body.ExpectedCredentialRevision, ct).ConfigureAwait(false);
-            return Results.Json(new { result.Credential.TenantId, credential = AdminCredentialEndpoints.Map(result.Credential.Credential), result.ProviderRevoked });
+            return Results.Json(new { result.Credential.TenantId, credential = CredentialHttpMapping.Map(result.Credential.Credential), result.ProviderRevoked });
         })).WithMetadata(new RequestSizeLimitAttribute(8192));
         app.MapGet(Root + "/callback", (HttpContext http, [FromServices] TenantCredentialOAuthService service, CancellationToken ct) => Purpose(http, async () =>
             await Complete(http, service, http.Request.Query["state"], http.Request.Query["code"], http.Request.Query["error"], false, ct).ConfigureAwait(false))).AllowAnonymous();

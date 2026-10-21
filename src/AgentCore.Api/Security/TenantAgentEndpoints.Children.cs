@@ -1,3 +1,4 @@
+using AgentCore.Api.Mapping;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
@@ -30,10 +31,10 @@ public static partial class TenantAgentEndpoints
             {
                 return await service.ProjectResourceContentAsync(a.TenantId, instanceId, Human(http), key,
                     item => policy.OfficeLimit(item.LogicalPath, item.MediaType),
-                    (source, token) => ValueTask.FromResult(OfficePreviewEndpoints.Project(Path.GetFileName(source.Resource.LogicalPath),
+                    (source, token) => ValueTask.FromResult(OfficePreviewMapping.Project(Path.GetFileName(source.Resource.LogicalPath),
                         source.Resource.MediaType, source.Bytes, sheet, range, office, policy, token)), ct).ConfigureAwait(false);
             }
-            catch (AgentCore.Application.Sessions.AgentCoreException ex) { return OfficePreviewEndpoints.Problem(ex); }
+            catch (AgentCore.Application.Sessions.AgentCoreException ex) { return OfficePreviewMapping.Problem(ex); }
             catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException or System.Xml.XmlException)
             { return Results.Problem(statusCode: 400, title: "invalid_office_package", detail: "This Office package could not be interpreted safely. Download the original."); }
         }));

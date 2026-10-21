@@ -47,7 +47,7 @@ public sealed class ChatAutomationJourneyTests
         await experience.ConfigureMaintenanceAsync(instanceId, 0, true);
         for (var i = 0; i < 3; i++)
         {
-            var source = await ExperienceJourneyTests.SeedAsync(services, instanceId);
+            var source = await ExperienceTestSessions.SeedAsync(services, instanceId);
             await services.GetRequiredService<ExperienceService>().RequestSessionAsync(instanceId, source.SessionId);
         }
         var executor = services.GetRequiredService<AgentRunCoordinator>();

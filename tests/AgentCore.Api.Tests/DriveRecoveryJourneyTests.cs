@@ -16,8 +16,6 @@ public sealed partial class DriveJourneyTests
 {
     private static async Task<(DriveService Service, DriveAccess Access, LostFactory Fault)> Recovery(Factory host, string mode, int version = 27)
     {
-        var client = host.CreateClient(new() { AllowAutoRedirect = false });
-        client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
         var credentials = host.Services.GetRequiredService<CredentialService>();
         var account = await credentials.CreateGoogleDriveAccountAsync("Recovery");
         var oauth = host.Services.GetRequiredService<IGoogleDriveOAuthService>();
@@ -25,9 +23,7 @@ public sealed partial class DriveJourneyTests
         var start = await oauth.StartAsync(account.CredentialId, 1, profile, default);
         var state = QueryHelpers.ParseQuery(start.AuthorizationUrl[start.AuthorizationUrl.IndexOf('?')..])["state"].ToString();
         await oauth.CompleteAsync(state, start.Correlation, profile, "consent", null, default);
-        var made = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version });
-        made.EnsureSuccessStatusCode(); using var json = JsonDocument.Parse(await made.Content.ReadAsStringAsync());
-        var owner = json.RootElement.GetProperty("instanceId").GetGuid();
+        var owner = (await host.Services.GetRequiredService<IAgentInstanceService>().CreateAsync("general-assistant", version)).InstanceId;
         await credentials.BindAsync(owner, account.CredentialId, "drive", 1);
         var fault = new LostFactory(host.Services.GetRequiredService<IGoogleDriveProviderFactory>()) { Mode = mode,
             Operations = host.Services.GetRequiredService<IDriveOperationStore>() };
@@ -73,9 +69,6 @@ public sealed partial class DriveJourneyTests
         Assert.Equal("drive_operation_failed", inspection.Code);
         var repeated = await Assert.ThrowsAsync<AgentCoreException>(() => service.EffectAsync(access, id, "drive.upload", 1, null, RecoveryEffect, RecoveryBytes, default).AsTask());
         Assert.Equal("drive_operation_failed", repeated.Code); Assert.Equal(1, fault.Uploads);
-        var client = host.CreateClient(); client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
-        var http = await client.GetAsync($"/api/v2/agent-instances/{access.InstanceId}/drive/accounts/drive/operations/{id}");
-        Assert.Equal(HttpStatusCode.Conflict, http.StatusCode); Assert.Contains("drive_operation_failed", await http.Content.ReadAsStringAsync());
         var fresh = await service.EffectAsync(access, Guid.NewGuid(), "drive.upload", 1, null, RecoveryEffect, RecoveryBytes, default);
         Assert.Equal("Succeeded", fresh.Status); Assert.Equal(2, fault.Uploads);
         Assert.Single((await service.ListAsync(access, null, null, null, 20, default)).Items);

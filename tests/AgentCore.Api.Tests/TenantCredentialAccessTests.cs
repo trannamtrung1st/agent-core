@@ -27,7 +27,7 @@ public sealed partial class TenantCredentialAccessTests
         using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync($"/api/v2/admin/credentials/{id}")).StatusCode);
-        Assert.DoesNotContain(id.ToString("D"), await legacy.GetStringAsync("/api/v2/admin/credentials"));
+        Assert.Equal(HttpStatusCode.NotFound, (await legacy.GetAsync("/api/v2/admin/credentials")).StatusCode);
         Assert.Equal(HttpStatusCode.MethodNotAllowed, (await owner.GetAsync(path + $"/{id}/value")).StatusCode);
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Beta", slug = "beta" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(0, (await Json(await owner.GetAsync($"/api/v2/tenants/{beta}/credentials"))).GetProperty("total").GetInt32());
