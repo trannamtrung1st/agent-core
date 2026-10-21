@@ -25,14 +25,14 @@ describe("AttachmentPreview", () => {
   it("renders a file chip with kind and a download label", async () => {
 
     render(
-      <HistoryAttachmentView
+      <HistoryAttachmentView tenantId="tenant"
         sessionId="s1"
         file={{ attachmentId: "a1", displayName: "architecture.pdf", contentType: "application/pdf" }}
       />
     );
     const download = await screen.findByRole("button", { name: "Download architecture.pdf" });
     expect(readFile).not.toHaveBeenCalled();fireEvent.click(download);
-    await waitFor(()=>expect(downloadFile).toHaveBeenCalledWith({kind:"attachment",sessionId:"s1",attachmentId:"a1"},expect.any(AbortSignal)));
+    await waitFor(()=>expect(downloadFile).toHaveBeenCalledWith({kind:"attachment",tenantId:"tenant",sessionId:"s1",attachmentId:"a1"},expect.any(AbortSignal)));
     expect(screen.getByText("PDF")).toBeInTheDocument();
   });
 
@@ -46,7 +46,7 @@ describe("AttachmentPreview", () => {
     const name = "Tổng hợp các đơn vị cung cấp dịch vụ cưới.xlsx";
     let reject!: (error: Error) => void;
     vi.mocked(downloadFile).mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
-    render(<HistoryAttachmentView sessionId="s1" file={{ attachmentId: "a1", displayName: name, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }} />);
+    render(<HistoryAttachmentView tenantId="tenant" sessionId="s1" file={{ attachmentId: "a1", displayName: name, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }} />);
     const group = screen.getByRole("group", { name });
     expect(screen.getByText(name)).toHaveAttribute("title", name);
     expect(screen.getByRole("button", { name: `Preview ${name}` })).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe("AttachmentPreview", () => {
     vi.mocked(downloadFile).mockImplementation(async (_, signal) => {
       await new Promise<void>(resolve => signal!.addEventListener("abort", () => resolve()));
     });
-    const { unmount } = render(<HistoryAttachmentView sessionId="s1" file={{ attachmentId: "a1", displayName: "notes.txt", contentType: "text/plain" }} />);
+    const { unmount } = render(<HistoryAttachmentView tenantId="tenant" sessionId="s1" file={{ attachmentId: "a1", displayName: "notes.txt", contentType: "text/plain" }} />);
     fireEvent.click(screen.getByRole("button", { name: "Download notes.txt" }));
     const signal = vi.mocked(downloadFile).mock.calls[0][1]!;
     unmount();
@@ -79,7 +79,7 @@ describe("AttachmentPreview", () => {
     vi.mocked(resolveFile).mockResolvedValue({displayName:"screenshot.png",contentType:"image/png",byteSize:png.length});
     vi.mocked(readFile).mockResolvedValue(new NodeBlob([png],{type:"image/png"}) as unknown as Blob);
     render(
-      <HistoryAttachmentView
+      <HistoryAttachmentView tenantId="tenant"
         sessionId="s1"
         file={{ attachmentId: "a2", displayName: "screenshot.png", contentType: "image/png" }}
       />
@@ -119,4 +119,10 @@ describe("AttachmentPreview", () => {
     expect(onRemove).toHaveBeenCalledOnce();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
+});
+
+it('does not infer an organization or reveal an actionable Attachment when scope is absent', () => {
+  render(<HistoryAttachmentView sessionId="s1" file={{ attachmentId: 'a1', displayName: 'provided.txt', contentType: 'text/plain' }} />);
+  expect(screen.getByText('File unavailable')).toBeVisible(); expect(screen.queryByText('provided.txt')).not.toBeInTheDocument();
+  expect(resolveFile).not.toHaveBeenCalled(); expect(downloadFile).not.toHaveBeenCalled();
 });

@@ -22,7 +22,7 @@ vi.mock('./previewPolicy', async (original) => ({
   ...(await original<typeof import('./previewPolicy')>()),
   decodeText: vi.fn().mockResolvedValue('current content'),
 }));
-const file = { kind: 'artifact' as const, sessionId: 's1', artifactId: 'a1' };
+const file = { kind: 'artifact' as const, tenantId: 'tenant', sessionId: 's1', artifactId: 'a1' };
 const metadata = {
   displayName: 'readme.txt',
   contentType: 'text/plain',
@@ -100,12 +100,12 @@ it('uses the exact tenant policy owner and reports definitive read loss to retir
   expect(screen.queryByRole('button', { name: 'Download readme.txt' })).not.toBeInTheDocument();
 });
 
-it.each([['docx', false], ['xlsx', false], ['docx', true], ['xlsx', true]] as const)('Office %s preview failures keep original Download available (Drive: %s)', async (extension, drive) => {
+it.each([['docx', false], ['xlsx', false], ['docx', true], ['xlsx', true]] as const)('Office %s preview failures keep original Download available (Resource: %s)', async (extension, resource) => {
   vi.mocked(resolveFile).mockResolvedValue({ displayName: 'original.' + extension, contentType: 'application/vnd.openxmlformats-officedocument.' + (extension === 'docx' ? 'wordprocessingml.document' : 'spreadsheetml.sheet'), byteSize: 15 });
   vi.mocked(readOfficePreview).mockRejectedValue(new PreviewError('office_feature_unsupported', 'This Office file contains a feature the preview does not support. The original file is still available to download.'));
-  const source = drive ? { kind: 'drive' as const, instanceId: 'i', accountRef: 'work', fileId: 'f', version: '2', authEpoch: 3, bindingId: 'b', synthetic: true, metadata: { displayName: 'original.' + extension, contentType: 'application/octet-stream', byteSize: 15 } } : file;
+  const source = resource ? { kind: 'tenantResource' as const, tenantId: 'tenant', instanceId: 'i', resourceKey: 'resource', metadata: { displayName: 'original.' + extension, contentType: 'application/octet-stream', byteSize: 15 } } : file;
   render(<FilePreviewButton file={source} />);
-  fireEvent.click(screen.getByRole('button', { name: drive ? 'Preview original.' + extension : 'Preview file' }));
+  fireEvent.click(screen.getByRole('button', { name: resource ? 'Preview original.' + extension : 'Preview file' }));
   await waitFor(() => expect(screen.getByText(/The original file is still available to download/)).toBeVisible());
   expect(screen.getByRole('button', { name: 'Download original.' + extension })).toBeEnabled();
   expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();

@@ -456,3 +456,18 @@ it('offers tenant Steer only with current cancellation authority and keeps Ctrl+
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true }); expect(onSend).toHaveBeenLastCalledWith('interrupt');
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' }); expect(onSend).toHaveBeenLastCalledWith();
 });
+
+it('fences Send and form submission until the first selected file has finished conversation intake', async () => {
+  let complete!: () => void;
+  vi.mocked(queueComposerFiles).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+  const onSend = vi.fn();
+  render(<Composer {...emptyComposerProps()} plainTextOnly fileAttachmentsEnabled canSend draft="Keep my original" onSend={onSend} />);
+  const form = document.querySelector('form.composer')!;
+  fireEvent.drop(form, { dataTransfer: { files: asFileList([new File(['original'], 'proof.txt', { type: 'text/plain' })]) } });
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  fireEvent.submit(form); fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });
+  expect(onSend).not.toHaveBeenCalled();
+  await act(async () => { complete(); });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(onSend).toHaveBeenCalledTimes(1);
+});

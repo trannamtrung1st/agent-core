@@ -1,4 +1,3 @@
-import { ownerFetch } from '../../services/api';
 import { PreviewError } from './fileSource';
 import { identityReadResponse, tenantApi } from '../../services/identity';
 export type PreviewOptions = {
@@ -8,17 +7,13 @@ export type PreviewOptions = {
   spreadsheet: { rowsPerWindow: number; columnsPerWindow: number; maxCellsPerWindow: number; csvMaxParsedRows: number; csvMaxParsedColumns: number; maxCellCharacters: number; maxWindowCharacters: number };
   workerTimeoutMs: number;
 };
-let pending: Promise<PreviewOptions> | null = null;
-// Safe host policy is cached for this application load. Failed reads remain retryable.
-export function loadPreviewOptions(tenant?: string, signal?: AbortSignal): Promise<PreviewOptions> {
-  // A tenant read is never shared across retired Accounts/organizations or aborted preview owners.
-  if (tenant) return fetchPolicy(tenant, signal);
-  if (!pending) pending = fetchPolicy().catch(error => { pending = null; throw error instanceof PreviewError ? error : new PreviewError('preview_policy_unavailable', 'Preview settings could not be loaded. Retry or download the original.'); });
-  return pending;
+// Each owner reads current cookie-authorized policy; failures remain explicitly retryable.
+export function loadPreviewOptions(tenant: string, signal?: AbortSignal): Promise<PreviewOptions> {
+  return fetchPolicy(tenant, signal);
 }
-async function fetchPolicy(tenant?: string, signal?: AbortSignal): Promise<PreviewOptions> {
+async function fetchPolicy(tenant: string, signal?: AbortSignal): Promise<PreviewOptions> {
   const bounded = signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000);
-  const response = tenant ? await identityReadResponse(tenantApi(tenant, '/file-preview/options'), bounded) : await ownerFetch('/api/v2/file-preview/options', { signal: bounded });
+  const response = await identityReadResponse(tenantApi(tenant, '/file-preview/options'), bounded);
   if (!response.ok) throw new PreviewError('preview_policy_unavailable', 'Preview settings could not be loaded. Retry or download the original.');
   const policy = await response.json() as PreviewOptions;
   if (!validPreviewOptions(policy)) throw new PreviewError('preview_policy_unavailable', 'Preview settings are unavailable. Retry or download the original.');

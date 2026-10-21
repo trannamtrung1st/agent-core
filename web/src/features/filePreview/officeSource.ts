@@ -1,10 +1,8 @@
 import type { PreviewOptions } from './previewOptions';
-import { OwnerCapabilityError } from '../../services/api';
 import {
   PreviewError,
   readFailure,
   sourcePath,
-  driveReadQuery,
   type FileRef,
   fileReadResponse,
 } from './fileSource';
@@ -37,20 +35,17 @@ export async function readOfficePreview(
   range?: string,
 ): Promise<OfficePreview> {
   const query = new URLSearchParams(
-    file.kind === 'drive' ? driveReadQuery(file) : file.kind === 'home' || file.kind === 'tenantWorkspace' ? new URLSearchParams({path: file.path}).toString() : '',
+    file.kind === 'tenantWorkspace' ? new URLSearchParams({path: file.path}).toString() : '',
   );
   const selection = new URLSearchParams({
     ...(sheet ? { sheet } : {}),
     ...(range ? { range } : {}),
   });
   selection.forEach((value, key) => query.set(key, value));
-  const response = await fileReadResponse(file,
+  const response = await fileReadResponse(
     `${sourcePath(file)}/office-preview${query.size ? '?' + query : ''}`,
     signal,
-  ).catch(reason => {
-    if (reason instanceof OwnerCapabilityError) throw readFailure(403);
-    throw reason;
-  });
+  );
   if (!response.ok) {
     if (response.status === 400 || response.status === 413) {
       const code = await readProblemCode(response, signal);

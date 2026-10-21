@@ -12,12 +12,13 @@ import { AttachmentMaterializeAction } from "./AttachmentMaterializeAction";
 import { ChatFileCard } from "./ChatFileCard";
 
 export function HistoryAttachmentView({ sessionId, tenantId, file }: { sessionId: string; tenantId?: string; file: HistoryAttachment }) {
+  if (!tenantId) return <ChatFileCard metadataFailed onDownload={() => {}} />;
   return <HistoryFile key={`${tenantId ?? ""}:${sessionId}:${file.attachmentId}`} sessionId={sessionId} tenantId={tenantId} file={file} />;
 }
-function HistoryFile({ sessionId, tenantId, file }: { sessionId: string; tenantId?: string; file: HistoryAttachment }) {
+function HistoryFile({ sessionId, tenantId, file }: { sessionId: string; tenantId: string; file: HistoryAttachment }) {
   const [href, setHref] = useState<string | null>(null); const [failed, setFailed] = useState(false); const [busy, setBusy] = useState(false);
   const downloads = useRef<AbortController | null>(null);
-  const ref: FileRef = { kind: 'attachment', sessionId, attachmentId: file.attachmentId, ...(tenantId !== undefined ? { tenantId } : {}) };
+  const ref: FileRef = { kind: 'attachment', sessionId, attachmentId: file.attachmentId, tenantId };
   useEffect(() => {
     const controller = new AbortController(); let url: string | null = null;
     if (file.contentType.startsWith('image/')) void (async () => {

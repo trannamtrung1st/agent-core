@@ -106,7 +106,7 @@ export function ChatMessage({
               {showSpeech && entry.speechText ? (
                 <SpokenText speechText={entry.speechText} deliveryMode={entry.deliveryMode} />
               ) : null}
-              {entry.text ? <MarkdownMessage source={entry.text} /> : null}
+              {entry.text ? <MarkdownMessage tenantId={tenantId} source={entry.text} /> : null}
               {blocks}
               {files}
             </>
@@ -180,7 +180,7 @@ function RichBlock({ sessionId, tenantId, block }: { sessionId: string | null; t
   if (block.kind === "markdown") {
     return (
       <div className="entry-block" data-kind="markdown">
-        <MarkdownMessage source={block.text || block.fallbackText} />
+        <MarkdownMessage tenantId={tenantId} source={block.text || block.fallbackText} />
       </div>
     );
   }

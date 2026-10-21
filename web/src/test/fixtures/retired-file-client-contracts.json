@@ -1,0 +1,29 @@
+{
+  "baseline": "ef400082",
+  "removedFileRefKinds": [
+    "home",
+    "resource",
+    "drive",
+    "draftResource"
+  ],
+  "retainedFileRefKinds": [
+    "tenantWorkspace",
+    "tenantResource",
+    "attachment",
+    "artifact"
+  ],
+  "scope": "All retained variants require explicit tenant identity; tenantWorkspace retains explicit home/working ownership.",
+  "retiredTestDeclarations": {
+    "web/src/services/artifacts.test.ts": [
+      "deduplicates authenticated metadata, scopes by session, and never reads a body on render",
+      "evicts least recently used metadata and bounds pending requests"
+    ]
+  },
+  "preservedCoverage": [
+    "Bounded stream/length/hash and safe status handling ported to closed tenant sources",
+    "Office recovery matrix uses explicit tenant Attachment, Workspace and Resource references",
+    "Artifact retry/download/cancellation cases retain current cookie reads without metadata cache",
+    "Rendered card lifecycle cases now supply explicit tenant scopes",
+    "Policy freshness, retired renderer requests and no-scope file surfaces are exercised directly"
+  ]
+}

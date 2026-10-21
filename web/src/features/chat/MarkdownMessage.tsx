@@ -7,7 +7,7 @@ import rehypeSanitize from "rehype-sanitize";
 import { HighlightedCode } from "../filePreview/HighlightedCode";
 import { authorizedHref } from "./sanitizedMarkdown";
 
-export function MarkdownMessage({ source }: { source: string }) {
+export function MarkdownMessage({ source, tenantId, policy }: { source: string; tenantId?: string; policy?: import('../filePreview/previewOptions').PreviewOptions }) {
   return (
     <div className="markdown-message">
       <Markdown
@@ -31,7 +31,7 @@ export function MarkdownMessage({ source }: { source: string }) {
               </a>
             );
           },
-          pre: ({ children }) => <CodeBlock>{children}</CodeBlock>
+          pre: ({ children }) => <CodeBlock tenantId={tenantId} policy={policy}>{children}</CodeBlock>
         }}
       >
         {source}
@@ -40,7 +40,7 @@ export function MarkdownMessage({ source }: { source: string }) {
   );
 }
 
-function CodeBlock({ children }: { children?: ReactNode }) {
+function CodeBlock({ children, tenantId, policy }: { children?: ReactNode; tenantId?: string; policy?: import('../filePreview/previewOptions').PreviewOptions }) {
   const [copied, setCopied] = useState(false);
   const text = codeText(children);
 
@@ -74,7 +74,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
       >
         {copied ? "Copied" : "Copy"}
       </Button>
-      <HighlightedCode source={text} language={codeLanguage(children)} />
+      <HighlightedCode policy={policy} tenantId={tenantId} source={text} language={codeLanguage(children)} />
     </div>
   );
 }

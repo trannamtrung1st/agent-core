@@ -30,11 +30,11 @@ export function ArtifactView({
     let cancelled = false;
     const metadataRequest = new AbortController();
     setFile(null);
-    setMetadataFailed(!sessionId);
+    setMetadataFailed(!sessionId || !tenantId);
     setDownloadFailed(false);
     setDownloading(false);
-    if (sessionId)
-      void (tenantId ? getArtifact(sessionId, artifactId, tenantId, metadataRequest.signal) : getArtifact(sessionId, artifactId))
+    if (sessionId && tenantId)
+      void getArtifact(sessionId, artifactId, tenantId, metadataRequest.signal)
         .then((value) => {
           if (!cancelled) setFile(value);
         })
@@ -50,14 +50,13 @@ export function ArtifactView({
   }, [tenantId, sessionId, artifactId, attempt]);
 
   async function startDownload() {
-    if (!sessionId || !file || download.current) return;
+    if (!sessionId || !tenantId || !file || download.current) return;
     const controller = new AbortController();
     download.current = controller;
     setDownloading(true);
     setDownloadFailed(false);
     try {
-      if (tenantId) await downloadArtifact(sessionId, artifactId, controller.signal, tenantId);
-      else await downloadArtifact(sessionId, artifactId, controller.signal);
+      await downloadArtifact(sessionId, artifactId, controller.signal, tenantId);
     } catch (error) {
       if (!controller.signal.aborted) {
         if (error instanceof IdentityError && [401, 403, 404].includes(error.status)) { setFile(null); setMetadataFailed(true); }
@@ -80,8 +79,8 @@ export function ArtifactView({
           : undefined
       }
       fileRef={
-        file && sessionId
-          ? { kind: 'artifact', sessionId, artifactId, ...(tenantId ? { tenantId } : {}) }
+        file && sessionId && tenantId
+          ? { kind: 'artifact', sessionId, artifactId, tenantId }
           : undefined
       }
       downloading={downloading}
@@ -90,7 +89,7 @@ export function ArtifactView({
       onDownload={() => void startDownload()}
       onReadLost={() => { setFile(null); setMetadataFailed(true); }}
       onRetryMetadata={
-        sessionId ? () => setAttempt((value) => value + 1) : undefined
+        sessionId && tenantId ? () => setAttempt((value) => value + 1) : undefined
       }
     />
   );

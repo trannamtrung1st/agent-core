@@ -1,6 +1,13 @@
 # Testing Strategy
 
 
+## Closed file-client transport verification
+
+`pnpm run test:e2e:tenant-file-reads` runs native desktop/narrow flows with real canonical fixture setup: select/upload an original, send text, preview code/Markdown and download exact bytes, confirm Working/Artifact copies, preview/download each copy and explicitly recover metadata after a controlled Artifact-content 403. Seeded obsolete tokens must cause no owner endpoint/header use. The denied response is a controlled client recovery check; actual source revocation is qualified separately by the tenant Resource minimum-reader XLSX scenario. Narrow Resource authoring additionally exercises preview/download and stale recovery.
+
+Policy/metadata/source tests verify fresh tenant cookie reads, current-source identity, streamed bounds and safe Office errors. Renderer/card tests verify source aborts and absent-scope withholding. A deferred first-file intake test keeps Send, Enter and native form submission fenced until staging settles. Retired owner-cache test declarations and closed source variants are inventoried in `web/src/test/fixtures/retired-file-client-contracts.json`. [Execution evidence](reports/file-client-authority-cutover-verification-2026-10-21.md) distinguishes CLI fallback from unavailable MCP and does not establish proposal-wide acceptance.
+
+
 ## Administrative client transport qualification
 
 Exercise retained fields and commands through canonical tenant Credential purposes/Google consent/protected failure/deletion, Definition authoring/publication/read revocation and narrow Instance settings stale-save/reset/departure. Observe obsolete owner endpoints and headers. Confirmed Credential DELETE must close its busy-guarded inspector; failures and uncertain acknowledgments must preserve recovery without duplicate writes. Shared settings/filter controls receive explicit transports and pure Definition budget/form tests receive scoped metadata; monitoring recovery/race tests use the tenant request path. `web/src/test/fixtures/retired-admin-transports.json` inventories obsolete SDK exports and retired owner-only tests, while mixed pure cases remain exercised. [Focused evidence](reports/admin-client-transport-cutover-verification-2026-10-21.md) records the CLI fallback when MCP cannot connect; it does not establish proposal-wide acceptance.

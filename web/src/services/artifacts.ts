@@ -1,9 +1,5 @@
-import { ownerFetch, type CursorPage } from './api';
+import type { CursorPage } from './api';
 import { identityReadResponse, identityRequest, IdentityError, tenantApi } from './identity';
-
-// Immutable metadata only. Pending requests share the same bound as completed reads.
-const metadata = new Map<string, Promise<ArtifactMetadata>>();
-const metadataLimit = 128;
 
 export type ArtifactMetadata = {
   artifactId: string;
@@ -13,16 +9,16 @@ export type ArtifactMetadata = {
   byteSize: number;
 };
 
-function artifactPath(sessionId: string, artifactId: string, tenantId?: string): string {
+function artifactPath(sessionId: string, artifactId: string, tenantId: string): string {
   const suffix = `/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`;
-  return tenantId ? tenantApi(tenantId, suffix) : `/api/v2${suffix}`;
+  return tenantApi(tenantId, suffix);
 }
 
 export async function listArtifactPage(
   sessionId: string,
-  before?: string,
-  agentRunId?: string,
-  tenantId?: string,
+  before: string | undefined,
+  agentRunId: string | undefined,
+  tenantId: string,
   signal?: AbortSignal,
 ): Promise<CursorPage<ArtifactMetadata>> {
   const query = new URLSearchParams({
@@ -30,13 +26,7 @@ export async function listArtifactPage(
     ...(before ? { before } : {}),
     ...(agentRunId ? { agentRunId } : {}),
   });
-  let page: CursorPage<ArtifactMetadata>;
-  if (tenantId) page = await identityRequest(tenantApi(tenantId, `/sessions/${encodeURIComponent(sessionId)}/artifacts?${query}`), { signal });
-  else {
-    const response = await ownerFetch(`/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/page?${query}`, { signal });
-    if (!response.ok) throw new Error('Files could not be loaded. Try again.');
-    page = await response.json() as CursorPage<ArtifactMetadata>;
-  }
+  const page = await identityRequest<CursorPage<ArtifactMetadata>>(tenantApi(tenantId, `/sessions/${encodeURIComponent(sessionId)}/artifacts?${query}`), { signal });
   if (
     !Array.isArray(page.items) ||
     page.items.length > 20 ||
@@ -68,20 +58,12 @@ export async function listArtifactPage(
 export function getArtifact(
   sessionId: string,
   artifactId: string,
-  tenantId?: string,
+  tenantId: string,
   signal?: AbortSignal,
 ): Promise<ArtifactMetadata> {
-  const key = JSON.stringify([sessionId, artifactId]);
-  const cached = tenantId ? undefined : metadata.get(key);
-  if (cached) {
-    metadata.delete(key);
-    metadata.set(key, cached);
-    return cached;
-  }
   const request = (async () => {
-    const response = tenantId ? await identityReadResponse(artifactPath(sessionId, artifactId, tenantId), signal ?? AbortSignal.timeout(10000))
-      : await ownerFetch(artifactPath(sessionId, artifactId), { signal });
-    if (!response.ok) { if (tenantId) throw new IdentityError(response.status, 'resource_unavailable'); throw new Error('File unavailable.'); }
+    const response = await identityReadResponse(artifactPath(sessionId, artifactId, tenantId), signal ?? AbortSignal.timeout(10000));
+    if (!response.ok) throw new IdentityError(response.status, 'resource_unavailable');
     const body = (await response.json()) as ArtifactMetadata;
     if (
       body.sessionId !== sessionId ||
@@ -103,27 +85,19 @@ export function getArtifact(
       byteSize: body.byteSize,
     };
   })();
-  if (tenantId) return request; // Current recipient metadata is never cached across identity/access changes.
-  metadata.set(key, request);
-  if (metadata.size > metadataLimit)
-    metadata.delete(metadata.keys().next().value!);
-  void request.catch(() => {
-    if (metadata.get(key) === request) metadata.delete(key);
-  });
   return request;
 }
 
 export async function downloadArtifact(
   sessionId: string,
   artifactId: string,
-  signal?: AbortSignal,
-  tenantId?: string,
+  signal: AbortSignal | undefined,
+  tenantId: string,
 ): Promise<void> {
   const file = await getArtifact(sessionId, artifactId, tenantId, signal);
   signal?.throwIfAborted();
-  const response = tenantId ? await identityReadResponse(`${artifactPath(sessionId, artifactId, tenantId)}/content`, signal ?? AbortSignal.timeout(30000))
-    : await ownerFetch(`${artifactPath(sessionId, artifactId)}/content`, { signal });
-  if (!response.ok) { if (tenantId) throw new IdentityError(response.status, 'resource_unavailable'); throw new Error('Download failed. Try again.'); }
+  const response = await identityReadResponse(`${artifactPath(sessionId, artifactId, tenantId)}/content`, signal ?? AbortSignal.timeout(30000));
+  if (!response.ok) throw new IdentityError(response.status, 'resource_unavailable');
   const blob = await response.blob();
   signal?.throwIfAborted();
   const url = URL.createObjectURL(blob);

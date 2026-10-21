@@ -50,7 +50,7 @@ describe('Artifact card', () => {
         resolve = done;
       }),
     );
-    render(<ArtifactView sessionId="s1" artifactId="id" />);
+    render(<ArtifactView tenantId="tenant" sessionId="s1" artifactId="id" />);
     expect(screen.getByText('Preparing file…')).toBeInTheDocument();
     expect(screen.getByRole('group')).toHaveAttribute('aria-busy', 'true');
     await act(async () => resolve(file));
@@ -68,7 +68,7 @@ describe('Artifact card', () => {
         reject = fail;
       }),
     );
-    render(<ArtifactView sessionId="s1" artifactId="id" />);
+    render(<ArtifactView tenantId="tenant" sessionId="s1" artifactId="id" />);
     const button = await screen.findByRole('button', {
       name: 'Download scrum-project-plan.md',
     });
@@ -97,7 +97,7 @@ describe('Artifact card', () => {
 
   it('fails without UUID or raw exception fallback and retries metadata', async () => {
     vi.mocked(getArtifact).mockRejectedValueOnce(new Error('/private/uuid'));
-    render(<ArtifactView sessionId="s1" artifactId="secret-id" />);
+    render(<ArtifactView tenantId="tenant" sessionId="s1" artifactId="secret-id" />);
     await screen.findByText('File unavailable');
     expect(screen.queryByText(/secret-id|private|uuid/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Retry file' }));
@@ -113,7 +113,7 @@ describe('Artifact card', () => {
       ...file,
       displayName: longName,
     });
-    render(<ArtifactView sessionId="ended-session" artifactId="id" />);
+    render(<ArtifactView tenantId="tenant" sessionId="ended-session" artifactId="id" />);
     const button = await screen.findByRole('button', {
       name: `Download ${longName}`,
     });
@@ -124,6 +124,7 @@ describe('Artifact card', () => {
         'ended-session',
         'id',
         expect.any(AbortSignal),
+        'tenant',
       ),
     );
   });
@@ -142,9 +143,9 @@ describe('Artifact card', () => {
         displayName: 'current-session.md',
       });
     const { rerender } = render(
-      <ArtifactView sessionId="s1" artifactId="id" />,
+      <ArtifactView tenantId="tenant" sessionId="s1" artifactId="id" />,
     );
-    rerender(<ArtifactView sessionId="s2" artifactId="id" />);
+    rerender(<ArtifactView tenantId="tenant" sessionId="s2" artifactId="id" />);
     await screen.findByRole('button', { name: 'Download current-session.md' });
     await act(async () => resolveOld(file));
     expect(screen.queryByText(file.displayName)).toBeNull();
@@ -156,12 +157,13 @@ describe('Artifact card', () => {
         's2',
         'id',
         expect.any(AbortSignal),
+        'tenant',
       ),
     );
   });
 
   it('cancels an in-flight download on unmount', async () => {
-    const { unmount } = render(<ArtifactView sessionId="s1" artifactId="id" />);
+    const { unmount } = render(<ArtifactView tenantId="tenant" sessionId="s1" artifactId="id" />);
     vi.mocked(downloadArtifact).mockImplementation(async (_, __, signal) => {
       await new Promise<void>((resolve) =>
         signal!.addEventListener('abort', () => resolve()),
@@ -206,4 +208,11 @@ describe('Artifact card', () => {
       '1.8 MB',
     ]);
   });
+});
+
+it('withholds metadata and download requests when no organization scope is supplied', async () => {
+  render(<ArtifactView sessionId="s1" artifactId="id" />);
+  expect(await screen.findByText('File unavailable')).toBeVisible();
+  expect(screen.queryByText(file.displayName)).not.toBeInTheDocument();
+  expect(getArtifact).not.toHaveBeenCalled(); expect(downloadArtifact).not.toHaveBeenCalled();
 });

@@ -205,7 +205,7 @@ function ComposerActionTooltip({ suppressed, title, children }: { suppressed: bo
 
 export function Composer({
   draft, parts, instanceId, onPartsChange, plainTextOnly = false, fileAttachmentsEnabled = false,
-  canSend,
+  canSend: suppliedCanSend,
   canStop,
   approvalPending = false,
   sendLabel,
@@ -276,6 +276,8 @@ export function Composer({
   const [pickerRequest, setPickerRequest] = useState<PickerRequest>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editorValid, setEditorValid] = useState(true);
+  const [fileIntakes, setFileIntakes] = useState(0);
+  const canSend = suppliedCanSend && fileIntakes === 0;
   const [queueExpanded, setQueueExpanded] = useState(false);
 
   useEffect(() => {
@@ -310,7 +312,8 @@ export function Composer({
       return;
     }
 
-    void queueComposerFiles(files);
+    setFileIntakes(count => count + 1);
+    void queueComposerFiles(files).finally(() => setFileIntakes(count => count - 1));
   }
 
   function onDrop(event: DragEvent<HTMLFormElement>) {
@@ -414,7 +417,7 @@ export function Composer({
         className="composer composer-shell"
         onSubmit={(event) => {
           event.preventDefault();
-          if(editorValid) onSend();
+          if (canSend && editorValid) onSend();
         }}
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}

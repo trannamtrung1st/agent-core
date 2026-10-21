@@ -23,7 +23,7 @@ describe("Conversation", () => {
   ))("keeps $status reply time after progress with completion time $completedAt", ({ status, completedAt }) => {
     const startedAt = "2026-09-15T00:00:00.000Z";
     const noticeAt = "2026-09-15T00:02:00.000Z";
-    const { container } = render(<Conversation agentName="Alex" sessionId="s1" activity={{ kind: "idle" }} entries={[
+    const { container } = render(<Conversation tenantId="tenant" agentName="Alex" sessionId="s1" activity={{ kind: "idle" }} entries={[
       entry({ entryId: "a1", role: "assistant", text: "Done", responseId: "r1", sequence: 1, createdAt: startedAt, completedAt, status }),
       entry({ entryId: "m1", role: "applicationMessage", text: "Checking", responseId: "r1", sequence: 2, createdAt: noticeAt })
     ]} />);
@@ -33,7 +33,7 @@ describe("Conversation", () => {
 
   it("shows the empty prompt when there are no entries and no transcript chrome", () => {
     render(
-      <Conversation agentName="Alex" sessionId="s1" entries={[]} activity={{ kind: "idle" }} />
+      <Conversation tenantId="tenant" agentName="Alex" sessionId="s1" entries={[]} activity={{ kind: "idle" }} />
     );
     expect(screen.getByRole("listitem")).toHaveClass("chat-message-empty");
     expect(screen.getByText("Send a message or start voice.")).toBeInTheDocument();
@@ -42,7 +42,7 @@ describe("Conversation", () => {
 
   it("uses text-only empty hint when voice is unavailable", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[]}
@@ -56,7 +56,7 @@ describe("Conversation", () => {
 
   it("does not describe Browser STT as offline", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[]}
@@ -76,7 +76,7 @@ describe("Conversation", () => {
 
   it("lays out user bubbles and open assistant messages with status labels", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -116,7 +116,7 @@ describe("Conversation", () => {
 
   it("keeps interrupted chips in the message stack without an empty body", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -139,7 +139,7 @@ describe("Conversation", () => {
 
   it("keeps messages readable and uses inline reconnect status instead of an overlay", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Jordan"
         sessionId="s1"
         entries={[
@@ -160,7 +160,7 @@ describe("Conversation", () => {
 
   it("renders extra markdown, attachment, and artifact blocks without speech text", async () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -211,7 +211,7 @@ describe("Conversation", () => {
 
   it("renders an unknown block as unsupported content", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -239,7 +239,7 @@ describe("Conversation", () => {
 
   it("renders sanitized markdown, artifact labels, and rejects script links as text", async () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -279,7 +279,7 @@ describe("Conversation", () => {
 
   it("does not surface hidden speech text or raw tool payloads as visible messages", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -310,7 +310,7 @@ describe("Conversation", () => {
 
   it("counts distinct remembered items beside the reply without folding them into the message", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -357,7 +357,7 @@ describe("Conversation", () => {
 
   it("shows an explicit memory failure outside the assistant reply", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -385,7 +385,7 @@ describe("Conversation", () => {
 
     it("does not add a Spoken or Speech text section when speech is absent or equivalent", () => {
     const { rerender } = render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "a1", role: "assistant", text: "Hello there." })]}
@@ -396,7 +396,7 @@ describe("Conversation", () => {
     expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
 
     rerender(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "a1", role: "assistant", text: "Hello there.", speechText: "Hello there." })]}
@@ -407,7 +407,7 @@ describe("Conversation", () => {
     expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
 
     rerender(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "a1", role: "assistant", text: "Hello  there.\n", speechText: " Hello there. " })]}
@@ -420,7 +420,7 @@ describe("Conversation", () => {
 
   it("renders Speech text for custom text delivery and Spoken for Voice", () => {
     const { rerender } = render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -439,7 +439,7 @@ describe("Conversation", () => {
     expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
 
     rerender(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -460,7 +460,7 @@ describe("Conversation", () => {
 
   it("does not render secondary speech when speech text is omitted", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "a1", role: "assistant", text: "Shown only.", speechText: null })]}
@@ -474,7 +474,7 @@ describe("Conversation", () => {
 
   it("still renders differing speech from older history rows", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s-old"
         entries={[
@@ -494,7 +494,7 @@ describe("Conversation", () => {
 
   it("renders Spoken before display in the same assistant message when they differ", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -519,7 +519,7 @@ describe("Conversation", () => {
 
   it("never renders Spoken on a user message", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -539,7 +539,7 @@ describe("Conversation", () => {
 
   it("keeps Spoken on a read-only terminal assistant row", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s-ended"
         entries={[
@@ -561,7 +561,7 @@ describe("Conversation", () => {
 
   it("shows transient activity instead of persisting it as a message", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "u1", role: "user", text: "Hello" })]}
@@ -574,7 +574,7 @@ describe("Conversation", () => {
 
   it("groups live agent meta with thinking instead of splitting an empty streaming row", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -601,12 +601,12 @@ describe("Conversation", () => {
 
   it("reserves reply space after the latest user send, not on empty chat", () => {
     const { rerender } = render(
-      <Conversation agentName="Alex" sessionId="s1" entries={[]} activity={{ kind: "idle" }} />
+      <Conversation tenantId="tenant" agentName="Alex" sessionId="s1" entries={[]} activity={{ kind: "idle" }} />
     );
     expect(screen.queryByTestId("conversation-reply-space")).not.toBeInTheDocument();
 
     rerender(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "u1", role: "user", text: "now?" })]}
@@ -618,7 +618,7 @@ describe("Conversation", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
 
     rerender(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -650,7 +650,7 @@ describe("Conversation", () => {
     }) {
       return (
         <div className="conversation-scroll">
-          <Conversation agentName="Alex" sessionId="s1" entries={history} activity={{ kind: "idle" }} />
+          <Conversation tenantId="tenant" agentName="Alex" sessionId="s1" entries={history} activity={{ kind: "idle" }} />
         </div>
       );
     }
@@ -694,7 +694,7 @@ describe("Conversation", () => {
     }) {
       return (
         <div className="conversation-scroll">
-          <Conversation agentName="Alex" sessionId="s1" entries={history} activity={{ kind: "idle" }} />
+          <Conversation tenantId="tenant" agentName="Alex" sessionId="s1" entries={history} activity={{ kind: "idle" }} />
         </div>
       );
     }
@@ -720,7 +720,7 @@ describe("Conversation", () => {
   it("shows Load earlier messages for active, paused, and terminal transcripts", () => {
     const onLoadOlder = vi.fn();
     const { rerender } = render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "u1", role: "user", text: "Hi" })]}
@@ -733,7 +733,7 @@ describe("Conversation", () => {
     expect(onLoadOlder).toHaveBeenCalledTimes(1);
 
     rerender(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[entry({ entryId: "u1", role: "user", text: "Hi" })]}
@@ -748,7 +748,7 @@ describe("Conversation", () => {
 
   it("shows an in-flow application message before the assistant answer and apart from activity", () => {
     render(
-      <Conversation
+      <Conversation tenantId="tenant"
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -792,7 +792,7 @@ describe("Conversation", () => {
     const text = `billing-${"detail".repeat(80)}`;
     render(
       <div style={{ width: 390 }}>
-        <Conversation
+        <Conversation tenantId="tenant"
           agentName="Alex"
           sessionId="s1"
           entries={[

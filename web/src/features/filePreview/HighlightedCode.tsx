@@ -5,19 +5,27 @@ import { processPreview } from './previewWorker';
 
 export function HighlightedCode({
   policy,
+  tenantId,
   source,
   language = 'text',
   wrap = false,
   query = '',
 }: {
   policy?: PreviewOptions;
+  tenantId?: string;
   source: string;
   language?: string;
   wrap?: boolean;
   query?: string;
 }) {
   const [effective, setEffective] = useState(policy);
-  useEffect(() => { if (policy) setEffective(policy); else void loadPreviewOptions().then(setEffective).catch(() => undefined); }, [policy]);
+  useEffect(() => {
+    const owner = new AbortController(); setEffective(policy);
+    if (!policy && tenantId) void loadPreviewOptions(tenantId, owner.signal).then(value => {
+      if (!owner.signal.aborted) setEffective(value);
+    }).catch(() => undefined);
+    return () => owner.abort();
+  }, [policy, tenantId]);
   const [result, setResult] = useState<{
     source: string;
     language: string;

@@ -6,7 +6,11 @@ import { ArtifactView } from "./ArtifactView";
 import { DrawerListFooter } from "./DrawerListFooter";
 
 export function SessionArtifacts({ sessionId, open, agentRunId, tenantId }: { sessionId: string; open: boolean; agentRunId?: string; tenantId?: string }) {
-  const fetchPage = useCallback((_scope: string, before?: string) => tenantId ? listArtifactPage(sessionId, before, agentRunId, tenantId) : agentRunId ? listArtifactPage(sessionId, before, agentRunId) : listArtifactPage(sessionId, before), [tenantId, sessionId, agentRunId]);
+  if (!tenantId) return <Typography.Text type="secondary">Files are unavailable outside an organization.</Typography.Text>;
+  return <TenantSessionArtifacts sessionId={sessionId} open={open} agentRunId={agentRunId} tenantId={tenantId} />;
+}
+function TenantSessionArtifacts({ sessionId, open, agentRunId, tenantId }: { sessionId: string; open: boolean; agentRunId?: string; tenantId: string }) {
+  const fetchPage = useCallback((_scope: string, before?: string) => listArtifactPage(sessionId, before, agentRunId, tenantId), [tenantId, sessionId, agentRunId]);
   const page = useCursorPages(`${tenantId ?? ""}:${sessionId}:${agentRunId ?? "all"}`, open, fetchPage);
   const { token } = theme.useToken();
   return <Flex vertical gap={token.padding}>

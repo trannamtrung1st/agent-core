@@ -89,7 +89,7 @@ export function TextPreview({
           description="Empty document"
         />
       ) : mode === 'Rendered' ? (
-        <MarkdownMessage source={text} />
+        <MarkdownMessage policy={policy} source={text} />
       ) : (
         <HighlightedCode
           policy={policy}

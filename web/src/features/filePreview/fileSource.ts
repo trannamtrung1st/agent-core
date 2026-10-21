@@ -1,4 +1,3 @@
-import { ownerFetch } from '../../services/api';
 import { identityReadResponse, tenantApi } from '../../services/identity';
 import { tenantAgentApi, type TenantResourceDetail } from '../../services/tenantAgentConfiguration';
 import { tenantWorkspaceApi, type TenantWorkspaceOwner } from '../../services/tenantWorkspace';
@@ -12,42 +11,10 @@ export type FileMetadata = {
 export type FileRef =
   | { kind: 'tenantWorkspace'; owner: TenantWorkspaceOwner; instanceId: string; path: string; metadata: FileMetadata }
   | { kind: 'tenantResource'; tenantId: string; instanceId: string; resourceKey: string; metadata: FileMetadata }
-  | { kind: 'attachment'; sessionId: string; attachmentId: string; tenantId?: string }
-  | { kind: 'artifact'; sessionId: string; artifactId: string; tenantId?: string }
-  | { kind: 'home'; instanceId: string; path: string; metadata: FileMetadata }
-  | {
-      kind: 'resource';
-      instanceId: string;
-      resourceKey: string;
-      metadata: FileMetadata;
-    }
-  | {
-      kind: 'drive';
-      instanceId: string;
-      accountRef: string;
-      fileId: string;
-      version: string;
-      authEpoch: number;
-      bindingId: string;
-      synthetic: boolean;
-      metadata: FileMetadata;
-    }
-  | {
-      kind: 'draftResource';
-      draftId: string;
-      resourceId: string;
-      metadata: FileMetadata;
-    };
-export const sourceLabel = {
-  tenantWorkspace: 'Workspace',
-  tenantResource: 'Instance Resource',
-  attachment: 'Attachment',
-  artifact: 'Artifact',
-  home: 'Agent Workspace',
-  resource: 'Resource',
-  draftResource: 'Definition Resource',
-  drive: 'Google Drive',
-};
+  | { kind: 'attachment'; tenantId: string; sessionId: string; attachmentId: string }
+  | { kind: 'artifact'; tenantId: string; sessionId: string; artifactId: string };
+export const sourceLabel = { tenantWorkspace: 'Workspace', tenantResource: 'Instance Resource', attachment: 'Attachment', artifact: 'Artifact' };
+export function fileTenantId(ref: FileRef): string { return ref.kind === 'tenantWorkspace' ? ref.owner.tenantId : ref.tenantId; }
 const enc = encodeURIComponent;
 export function sourcePath(ref: FileRef): string {
   switch (ref.kind) {
@@ -56,19 +23,9 @@ export function sourcePath(ref: FileRef): string {
     case 'tenantResource':
       return tenantAgentApi(ref.tenantId, ref.instanceId, `/resources/${enc(ref.resourceKey)}`);
     case 'attachment':
-      return ref.tenantId !== undefined ? tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`)
-        : `/api/v2/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`;
+      return tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/attachments/${enc(ref.attachmentId)}`);
     case 'artifact':
-      return ref.tenantId !== undefined ? tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`)
-        : `/api/v2/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`;
-    case 'home':
-      return `/api/v2/agent-instances/${enc(ref.instanceId)}/workspace`;
-    case 'resource':
-      return `/api/v2/admin/agent-instances/${enc(ref.instanceId)}/resources/${enc(ref.resourceKey)}`;
-    case 'drive':
-      return `/api/v2/agent-instances/${enc(ref.instanceId)}/drive/accounts/${enc(ref.accountRef)}/files/${enc(ref.fileId)}`;
-    case 'draftResource':
-      return `/api/v2/admin/definition-drafts/${enc(ref.draftId)}/resources/${enc(ref.resourceId)}`;
+      return tenantApi(ref.tenantId, `/sessions/${enc(ref.sessionId)}/artifacts/${enc(ref.artifactId)}`);
   }
 }
 export class PreviewError extends Error {
@@ -106,7 +63,7 @@ export async function resolveFile(
   signal: AbortSignal,
 ): Promise<FileMetadata> {
   if (ref.kind === 'tenantResource') {
-    const response = await fileReadResponse(ref, `${sourcePath(ref)}/editor`, signal);
+    const response = await fileReadResponse(`${sourcePath(ref)}/editor`, signal);
     if (!response.ok) throw readFailure(response.status);
     const value = await response.json() as TenantResourceDetail;
     const item = value?.item?.resource;
@@ -115,16 +72,15 @@ export async function resolveFile(
       throw new PreviewError('preview_unavailable', 'Current resource metadata is unavailable. Reload the resource list.');
     return { displayName: item.logicalPath.split('/').at(-1)!, contentType: item.mediaType, byteSize: item.byteLength, sha256: item.contentSha256 };
   }
-  if (ref.kind === 'home' || ref.kind === 'tenantWorkspace') {
-    const response = await fileReadResponse(ref, `${sourcePath(ref)}/metadata?${new URLSearchParams({path: ref.path})}`, signal);
+  if (ref.kind === 'tenantWorkspace') {
+    const response = await fileReadResponse(`${sourcePath(ref)}/metadata?${new URLSearchParams({path: ref.path})}`, signal);
     if (!response.ok) throw readFailure(response.status);
     const item = await response.json();
     if (item.agentInstanceId !== ref.instanceId || item.logicalPath !== ref.path || typeof item.contentType !== 'string' || !Number.isSafeInteger(item.byteSize) || item.byteSize < 0)
       throw new PreviewError('preview_unavailable', 'Current file metadata is unavailable. Reload the workspace.');
     return {displayName: ref.path.split('/').pop()!, contentType: item.contentType, byteSize: item.byteSize};
   }
-  if ('metadata' in ref) return ref.metadata;
-  const response = await fileReadResponse(ref, sourcePath(ref), signal);
+  const response = await fileReadResponse(sourcePath(ref), signal);
   if (!response.ok) throw readFailure(response.status);
   const raw = await response.json();
   if (
@@ -155,13 +111,13 @@ export async function readFile(
   maxBytes: number,
   signal: AbortSignal,
 ): Promise<Blob> {
-  if (ref.kind !== 'home' && ref.kind !== 'tenantWorkspace' && metadata.byteSize > maxBytes)
+  if (ref.kind !== 'tenantWorkspace' && metadata.byteSize > maxBytes)
     throw new PreviewError(
       'preview_too_large',
       `This file is ${(metadata.byteSize / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB; its preview limit is ${(maxBytes / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB. Download the original.`,
     );
-  const response = await fileReadResponse(ref,
-    `${sourcePath(ref)}/content${ref.kind === 'drive' ? '?' + driveReadQuery(ref) : ref.kind === 'home' || ref.kind === 'tenantWorkspace' ? '?' + new URLSearchParams({path: ref.path}) : ''}`,
+  const response = await fileReadResponse(
+    `${sourcePath(ref)}/content${ref.kind === 'tenantWorkspace' ? '?' + new URLSearchParams({path: ref.path}) : ''}`,
     signal,
   );
   if (!response.ok) throw readFailure(response.status);
@@ -199,8 +155,8 @@ export async function readFile(
   }
   signal.throwIfAborted();
   const blob = new Blob(chunks, { type: metadata.contentType });
-  if (ref.kind !== 'home' && ref.kind !== 'tenantWorkspace' && blob.size !== metadata.byteSize) throw readFailure(409);
-  if (ref.kind !== 'home' && ref.kind !== 'tenantWorkspace' && metadata.sha256) {
+  if (ref.kind !== 'tenantWorkspace' && blob.size !== metadata.byteSize) throw readFailure(409);
+  if (ref.kind !== 'tenantWorkspace' && metadata.sha256) {
     const hash = await crypto.subtle.digest(
       'SHA-256',
       await blob.arrayBuffer(),
@@ -212,8 +168,8 @@ export async function readFile(
   }
   return blob;
 }
-export function fileReadResponse(ref: FileRef, path: string, signal: AbortSignal): Promise<Response> {
-  return ref.kind === 'tenantWorkspace' || ref.kind === 'tenantResource' || (ref.kind === 'artifact' || ref.kind === 'attachment') && ref.tenantId !== undefined ? identityReadResponse(path, signal) : ownerFetch(path, { signal });
+export function fileReadResponse(path: string, signal: AbortSignal): Promise<Response> {
+  return identityReadResponse(path, signal);
 }
 export const fileReadLost = (error: unknown) => error instanceof PreviewError && ['preview_forbidden', 'preview_unavailable'].includes(error.code);
 export async function downloadFile(
@@ -221,7 +177,7 @@ export async function downloadFile(
   signal: AbortSignal,
 ): Promise<void> {
   const metadata = await resolveFile(ref, signal);
-  const blob = await readFile(ref, metadata, ref.kind === 'home' || ref.kind === 'tenantWorkspace' ? 50 * 1024 * 1024 : metadata.byteSize, signal);
+  const blob = await readFile(ref, metadata, ref.kind === 'tenantWorkspace' ? 50 * 1024 * 1024 : metadata.byteSize, signal);
   signal.throwIfAborted();
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -235,14 +191,4 @@ export async function downloadFile(
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-}
-
-export function driveReadQuery(
-  ref: Extract<FileRef, { kind: 'drive' }>,
-): string {
-  return new URLSearchParams({
-    expectedVersion: ref.version,
-    authEpoch: String(ref.authEpoch),
-    bindingId: ref.bindingId,
-  }).toString();
 }
