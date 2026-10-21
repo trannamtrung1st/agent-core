@@ -156,6 +156,7 @@ app.UseIdentityHttp();
 IdentityEndpoints.Map(app);
 TenantAccessEndpoints.Map(app);
 TenantUserProfileEndpoints.Map(app);
+TenantMemoryEndpoints.Map(app);
 AuthorizationAuditEndpoints.Map(app);
 SystemAdministrationEndpoints.Map(app);
 TenantAgentEndpoints.Map(app);

@@ -1873,6 +1873,18 @@
     {
       "method": "PATCH",
       "route": "/api/v2/tenants/{tenantId:guid}/me/profile"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/memory"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/memory/{memoryId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/memory/forget"
     }
   ]
 }

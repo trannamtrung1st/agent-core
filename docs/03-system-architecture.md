@@ -2,6 +2,8 @@
 
 ## Canonical learned Memory ownership
 
+Human retention management extends the same scoped fact owner through actual live tenant User identity, independent current raw reads/manage and atomic tombstone/security/audit writes. It does not grant a model operation or source conversation access. Human inspection remains available when Runtime recall is disabled. [Management contract](04-backend-interfaces.md#human-learned-memory-management).
+
 Canonical learned Memory uses actual tenant User membership and stored causal attribution, without a global Profile adapter. Session facts additionally bind that requester; IdentityUser and User scopes retain explicit promotion/retrieval opt-ins and current source-Agent read rights. Independent Automation does not inherit creator memory. Learning is prepared by the incumbent store and revalidated inside the same response-outcome transaction; response, private receipt ownership, facts, tenant revision and audit commit together. Live policy narrows new Evidence and current raw permission fences captured sources. Deleting a conversation clears Session-only facts while independently promoted copies remain owned by the User. [Contract](04-backend-interfaces.md#canonical-learned-memory-ownership-and-outcome-commits).
 
 ## Canonical runtime registry and process lifetime

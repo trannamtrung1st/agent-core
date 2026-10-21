@@ -1,0 +1,58 @@
+# Human Memory and organization Profile management — 2026-10-22
+
+This checkpoint qualifies canonical human retention management and its native UI. It supersedes human Memory/Profile management-pending statements in earlier checkpoints for these paths only. Model-driven forgetting/consolidation with durable consent, maintenance settings/execution and broader continuity/Experience/Harness remain open. The full proposal and original goal remain active; no milestone acceptance is claimed.
+
+## Implemented result
+
+Original live humans can inspect their actual tenant User's learned facts through the existing IAM/fact owner. Agent-User and organization-wide User scopes bind retained Account/User/Principal identity. Session scope additionally requires the exact readable Session and Agent; independently owned agent Session facts remain separate from any creator's human memory. Other human Users' facts stay private even when a peer has tenant-wide raw read/manage permissions. Origin Agent read permissions filter before ordering, page selection and totals. No arbitrary Account/User/Profile selector or global fallback is introduced.
+
+Raw `agents.read`, `memory.read`, Session reads and `memory.manage` remain independent. Authorized humans can inspect retained values when Runtime recall is disabled. Each item exposes current management eligibility; scope reset requires management over every readable retained origin and refuses instead of partially skipping a protected fact. An exact item command binds its Memory revision and current tenant security revision. A reset binds the whole readable retained scope, current retained count and security revision. The owning transaction repeats original login, membership, ownership, current raw permissions and witnesses, then tombstones values and commits fact revisions, tenant revision and a body-free audit together. SQLite uses the existing scoped owner indexes and a set update without loading historical private bodies; InMemory uses its owner/status index under the incumbent locks. No migration or new execution owner is added.
+
+Tombstones retain immutable identity/provenance/hash but empty subject, subject key and content. Other scopes and learned copies remain independently owned. Source conversations, Profile, Experience and files remain retained; forgetting is not a universal free-text scrub. A captured source subsequently forgotten cannot authorize new protected output. An inaccessible exact lookup cannot disclose another User's fact or count. Public views omit private Account/User/source-entry/Run owner links.
+
+`/t/{tenant}/profile` extends the current organization shell with the existing four-field self-service editor. Empty stays empty; changes send only deliberate fields, null clears, and both Profile/security revisions. Conflicts and unreadable success responses retain the draft, require a fresh saved read and never automatically repeat the write. Reload preserves changed fields and shows their current saved values; Discard restores saved values. Account/password and Agent persona remain separate destinations.
+
+The Agent Memory destination extends the same shell, Ant Design configuration panel, table expansion, confirmation and responsive detail layout. Scope selectors, Session identity, current-readable counts, content/provenance/status and per-item management are explicit. Confirmations name the organization and Agent and explain retained copies/history. Completed/uncertain writes retire stale private rows until deliberate Reload Memory. Changing the visible Session ID draft retires its previously loaded facts, preventing a command against a different displayed target. Retired scopes abort old reads/callbacks and close their confirmations. Narrow details stack and the table scrolls locally; no second UI kit or CSS layout system is introduced.
+
+## Executed evidence
+
+**152 distinct backend cases passed, zero skips.** Twenty-two new store cases and five new API cases qualify human management. The remaining 125 are affected learning/Profile/HTTP cutover regressions. `/private/tmp/tenant-memory-management-results/distinct-final.json` records each latest outcome and TRX; repeated cases count once.
+
+| Evidence | Actual workflow and observed result |
+| --- | --- |
+| 22 new store cases | Both stores: learn then update real owned facts, inspect active/superseded values, exact forgetting and full readable-scope reset, content-free tombstones, stale count/revision refusal, original-login logout refusal and foreign-Agent denial. Another User with broad raw reads sees zero facts/counts and cannot inspect/delete the original User's ID. Learning under valid authority followed by independent raw read/manage revocation withholds inspection or mutation. Forgetting a captured value invalidates its active Run source while another scope remains. Two actual origin Agents verify hidden-before-count/page filtering and atomic reset refusal when a readable origin lacks manage authority; restoring read access proves its fact was retained. |
+| 5 new HTTP/recovery cases | Both stores: actual model learning, bounded public inspection, exact scope/ID checks, stale refusal, successful item/reset commands and independently retained copies. Unknown/duplicate owner/query/body members and missing/invalid Session scopes refuse. Actual SQLite application recreation retains the forgotten tombstone and unrelated scope without another model call or command replay. |
+| 125 affected cases | Existing learned-memory ownership/atomic outcomes/source guards, Profile self-service/schema and HTTP cutover remain passing. The exact inventory retains all 232 original canonical pairs and 228 retired pairs, with ten explicitly added canonical pairs including this module's three endpoints. |
+| 36 distinct frontend cases | Profile/Memory, route, Runtime State and isolation cases pass. Changed-only/null Profile saves, retained conflicts, unreadable success without replay, independent management controls, exact confirmation witnesses, private-content retirement, old-scope abortion and Session-draft invalidation are exercised. |
+| 2 native browser cases | Desktop 1400×950 and narrow 390×844: visible sign-in, empty four-field organization Profile, save/clear/reload; actual concurrent Profile update forces CAS conflict while preserving the draft, followed by explicit saved comparison and deliberate save. Visible Chat learns a Synthetic fact; Memory expansion inspects it. Another actual Profile update makes the Memory delete stale; no mutation occurs until explicit readback and another confirmation. Cancel preserves the fact; confirmed exact forgetting, reload/tombstone retention and Session reset succeed. Source conversation history remains. The same Account in another organization sees an empty Profile. No page/related-network errors or retired routes/headers occur. |
+
+Commands from repository root:
+
+```sh
+dotnet build AgentCore.sln --no-restore --nologo -m:1 -nodeReuse:false -p:UseSharedCompilation=false
+dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-build --no-restore --nologo --filter 'FullyQualifiedName~Tenant_human_memory|FullyQualifiedName~Tenant_User_Profile|FullyQualifiedName~Tenant_learned_memory|FullyQualifiedName~Tenant_HTTP_cutover'
+dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-build --no-restore --nologo --filter 'FullyQualifiedName~Tenant_human_memory|FullyQualifiedName~Tenant_learned_memory|FullyQualifiedName~TenantUserProfileTests'
+```
+
+Final exact reruns selected `Tenant_HTTP_cutover` (2/2), `Tenant_human_memory_actual_owner_still_requires` (6/6), and `Tenant_human_memory_SQLite_application_recreation` (1/1). The final cross-origin filter/reset cases also passed 2/2 in 9s. The representative HTTP learning/inspection/stale/forget/reset workflow passed first in both stores. Grouped API results retained 30 passing cases and two inventory failures; the exact inventory rerun supersedes those two. The store cohort retained 115 passing cases and two fixture failures; the six-case raw-authority rerun supersedes the corrected cases. Final solution build passed with zero warnings/errors in 18.04s.
+
+From `web`:
+
+```sh
+env NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run src/features/access/TenantUserProfile.test.tsx src/features/access/TenantAgentMemory.test.tsx src/features/access/accessRoute.test.ts src/features/access/TenantAgentState.test.tsx src/features/access/TenantAgentIsolation.test.tsx
+env NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run src/features/access/TenantUserProfile.test.tsx src/features/access/TenantAgentMemory.test.tsx
+pnpm run build
+TENANT_CHAT_API_PORT=5096 TENANT_CHAT_WEB_PORT=5186 TENANT_CHAT_TEST_RUN_ROOT=/private/tmp/tenant-memory-management-native-qualified pnpm exec playwright test --config playwright.tenant-chat.config.ts tenant-memory-management.spec.ts
+```
+
+The grouped five-file frontend run passed 34 cases; the final two-file run passed all 11 cases after adding two boundary cases, yielding 36 distinct cases. Frontend build passed in 6.58s with existing SignalR PURE annotation/chunk-size advisories. Native cases passed in 21.9s. Desktop/narrow Profile and Memory captures under the qualified result directory were inspected together; the shared panel spacing, wrapped controls, local table scrolling and stacked details remain usable. User ports 5080/5173 were untouched; disposable hosts were stopped and their ports released.
+
+Configured Playwright MCP navigation to the actual local app returned **Transport closed**. Native Playwright CLI supplied the runtime fallback. No physical/live-vendor, other-OS, multi-instance, hosted Actions or full local CI qualification is claimed.
+
+## Corrections and limits
+
+The initial raw-authority fixture attempted to learn after removing human manage authority; current policy correctly withheld learning. It now legitimately learns first, then revises the role before read/forget assertions. No production guard was weakened or test skipped. The canonical route inventory was extended by exactly the three registered authenticated endpoints, preserving its retired-route assertions. Initial fixture helper names and an audit property name were corrected at compilation.
+
+Initial browser expectations assumed explicit user provenance; the Synthetic model actually produces agent-inferred provenance. Its label assertion was corrected. The first cold Chat completion exceeded a 15-second UI wait; the qualified flow keeps the completion assertion with a 30-second allowance and passed. Ant Design's virtual Select exposed only its current accessibility entries while the third option was visibly rendered; the test now clicks the observed visible label. The interrupted unsuccessful runner's confirmed disposable child processes were terminated before a fresh run. All passing browser assertions remain enabled; earlier failure traces are retained in the separate initial/final directories.
+
+Model-driven exact forgetting/consolidation and its durable consent, maintenance settings/execution, broad continuity/Experience/Harness, full Definition publication/adoption, rich Skill/reference authoring/discovery/private-source consent, mutable conversation locale/model, draft/Drive previews, internal Runtime/live Approval/default authority and obsolete service/store/schema retirement, scalable cleanup proof continuation, guardrails and the exhaustive original proposal audit remain required. Product/Design context and sidecar synchronization remains part of that final proposal work; this module preserves the established Ant Design world.

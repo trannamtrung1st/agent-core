@@ -42,7 +42,7 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(232, retained.Count);
             var added = manifest.RootElement.GetProperty("addedCanonical").EnumerateArray()
                 .Select(item => (method: item.GetProperty("method").GetString()!, route: item.GetProperty("route").GetString()!)).ToHashSet();
-            Assert.Equal(7, added.Count); Assert.DoesNotContain(added, retained.Contains);
+            Assert.Equal(10, added.Count); Assert.DoesNotContain(added, retained.Contains);
             var supported = retained.Union(added).ToHashSet();
             var mapped = actual.Where(item => item.route.StartsWith("/api/", StringComparison.Ordinal)).ToHashSet();
             Assert.True(supported.SetEquals(mapped), "Canonical route inventory differs. Missing: "
