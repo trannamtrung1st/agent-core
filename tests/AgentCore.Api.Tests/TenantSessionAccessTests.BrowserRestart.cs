@@ -111,7 +111,7 @@ public sealed partial class TenantSessionAccessTests
                 sourceId = (await Json(await owner.PostAsJsonAsync(api + $"/sessions/{sessionId}/messages", new { messageId = Guid.NewGuid(), text = "Review the exact Browser navigation", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 }))).GetProperty("runId").GetGuid();
                 var runs = first.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitBrowserRestartRun(runs, tenant, sourceId, true);
                 Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status); requestId = waiting.ApprovalRequestId!.Value; Volatile.Write(ref execution.Enabled, false);
-                var capacity = first.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>();
+                var capacity = first.Services.GetRequiredService<AgentCore.Api.Realtime.TenantRuntimeCapacity>();
                 using (var drained = new CancellationTokenSource(TimeSpan.FromSeconds(15))) { while (!capacity.TryReserveTenantRuntime()) await Task.Delay(25, drained.Token); capacity.ReleaseTenantRuntime(); }
                 Assert.Equal(stage == "warm" ? 1 : 0, (await native.ObserveTenantSessionAsync(new(tenant, instance, executor, sessionId))).LiveContexts);
                 if (stage is not ("pending" or "warm"))

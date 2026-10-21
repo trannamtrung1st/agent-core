@@ -48,7 +48,7 @@ public sealed partial class TenantSessionAccessTests
         Assert.Equal(factory.Model.ProposedPersona, request.Operation.Persona);
         Assert.Equal(waiting.Admission.ExecutionContext!.RootActivationId, request.RootActivationId);
         Assert.Contains(factory.Model.Requests, r => r.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) == true);
-        var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>(); var released = false;
+        var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantRuntimeCapacity>(); var released = false;
         using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
             while (!deadline.IsCancellationRequested)
             {

@@ -39,18 +39,6 @@ public sealed class WorkspaceCleanupHostedService(
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception ex) { HandledFailureLog.Warning(logger, ex, "attachments.cleanup", "attachment_cleanup_scan_failed", diagnostics: diagnosticIds); }
-            try
-            {
-                // Resolve inside supervision so an unavailable cleanup dependency does not block host startup.
-                await services.GetRequiredService<IAdminLifecycleDeletion>().RecoverWorkspaceCleanupAsync(stoppingToken);
-                await services.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>().RecoverAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-            catch (Exception ex)
-            {
-                // Avoid physical paths/provider contents in logs; the durable receipts remain retryable.
-                HandledFailureLog.Warning(logger, ex, "workspace.cleanup", "workspace_cleanup_failed", diagnostics: diagnosticIds);
-            }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 }

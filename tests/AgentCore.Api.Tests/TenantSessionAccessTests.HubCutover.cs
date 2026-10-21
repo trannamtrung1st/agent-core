@@ -16,7 +16,7 @@ public sealed partial class TenantSessionAccessTests
     public void Tenant_Hub_declares_only_authenticated_canonical_methods_without_owner_host_dispatch()
     {
         Assert.NotNull(typeof(SessionHub).GetCustomAttribute<AuthorizeAttribute>());
-        Assert.DoesNotContain(typeof(SessionHub).GetConstructors().SelectMany(c => c.GetParameters()), p => p.ParameterType == typeof(SessionHost));
+        Assert.DoesNotContain(typeof(SessionHub).GetConstructors().SelectMany(c => c.GetParameters()), p => p.ParameterType.FullName == "AgentCore.Api.Realtime.SessionHost");
         var methods = typeof(SessionHub).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .Where(m => m.Name != nameof(SessionHub.OnDisconnectedAsync)).Select(m => m.Name).Order(StringComparer.Ordinal).ToArray();
         Assert.Equal(new[] { "AttachTenant", "CancelResponse", "PlaybackCompleted", "PlaybackProgress", "PlaybackStarted", "PlaybackStopped",

@@ -18,14 +18,11 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
     private readonly SchedulerReadiness? _readiness;
 
     public TriggerSchedulerHostedService(
-        TriggerScheduler scheduler,
-        TriggerOccurrenceRouter router,
-        ExternalEventIngress events,
         TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
-        IDiagnosticIdSource diagnostics, CoreEventDispatcher coreEvents, SchedulerReadiness readiness, AgentCore.Application.Security.TenantAutomationService tenantAutomations, AgentCore.Application.Events.TenantEventProcessor tenantEvents)
+        IDiagnosticIdSource diagnostics, SchedulerReadiness readiness, AgentCore.Application.Security.TenantAutomationService tenantAutomations, AgentCore.Application.Events.TenantEventProcessor tenantEvents)
         : this(
-            cancellationToken => RunProductionAsync(scheduler, router, events, coreEvents, time, logger, diagnostics, cancellationToken, tenantAutomations, tenantEvents),
+            cancellationToken => RunProductionAsync(logger, diagnostics, cancellationToken, tenantAutomations, tenantEvents),
             time,
             logger,
             diagnostics, readiness)
@@ -96,22 +93,13 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
     }
 
     private static async Task RunProductionAsync(
-        TriggerScheduler scheduler,
-        TriggerOccurrenceRouter router,
-        ExternalEventIngress events,
-        CoreEventDispatcher coreEvents,
-        TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
         IDiagnosticIdSource diagnostics,
-        CancellationToken cancellationToken, AgentCore.Application.Security.TenantAutomationService? tenantAutomations = null, AgentCore.Application.Events.TenantEventProcessor? tenantEvents = null)
+        CancellationToken cancellationToken, AgentCore.Application.Security.TenantAutomationService tenantAutomations, AgentCore.Application.Events.TenantEventProcessor tenantEvents)
     {
         var succeeded = await RunPhasesAsync([
-            async ct => { if (tenantAutomations is not null) await tenantAutomations.AdmitDueAsync(ct).ConfigureAwait(false); },
-            async ct => { if (tenantEvents is not null) await tenantEvents.RunOnceAsync(ct).ConfigureAwait(false); },
-            async ct => { await coreEvents.RunOnceAsync(ct).ConfigureAwait(false); },
-            async ct => { await events.ResumePendingAsync(ct).ConfigureAwait(false); },
-            async ct => { await scheduler.RunOnceAsync(time.GetUtcNow(), ct).ConfigureAwait(false); },
-            async ct => { await router.RouteOnceAsync(ct).ConfigureAwait(false); }
+            async ct => { await tenantAutomations.AdmitDueAsync(ct).ConfigureAwait(false); },
+            async ct => { await tenantEvents.RunOnceAsync(ct).ConfigureAwait(false); }
         ], logger, diagnostics, cancellationToken).ConfigureAwait(false);
         if (!succeeded) throw new InvalidOperationException("One or more scheduler phases failed.");
     }

@@ -1,5 +1,14 @@
 # Observability and Operations
 
+## Canonical host shutdown and worker cutover
+
+`SessionShutdownHostedService` stops the same canonical tenant runtime singleton used for execution/control. Its cached drain closes shared capacity admission, cancels supervised Runs and retires Voice and recipient output. Repeated stop/dispose does not start another drain. Cancellation of a stop caller's wait does not reopen capacity or abandon the underlying cleanup. Pending durable work retains its canonical recovery rules; shutdown is not permission to replay effects.
+
+Only canonical tenant Run recovery, Automation/event admission and email watches execute on hosted passes. Old owner occurrence intake, Run dispatch, Experience reconciliation, event fanout and duplicate owner cleanup loops are removed. Existing diagnostic IDs, phase isolation, cadences and Synthetic/no-provider behavior remain. `AgentCore:MaxActiveSessions` now feeds the dedicated capacity owner. The browser removes only its obsolete owner-token local-storage key on startup; blocked storage cannot prevent app entry.
+
+[Focused evidence](reports/runtime-registry-cutover-verification-2026-10-21.md) separates shutdown, native runtime/browser, store recovery and unrun production/physical-device/CI claims.
+
+
 ## Tenant Agent decommission recovery
 
 Canonical backend decommission requires an archived, unreferenced Agent and a current original human with `agents.read` and `agents.delete`. Inspect the exact [HTTP preflight](14-api-and-realtime-protocol.md#tenant-agent-decommission-http); do not convert retained-history blockers into cascaded deletion. A committed result reports physical cleanup separately. The existing supervised resource sweep retries only exact retired owner roots; logout/restart does not revoke that technical mandate. Live or uncertain Sandbox mounts keep workspace bytes, and uncertain Browser closure keeps profile cleanup pending. Inspect current retained facts rather than replaying logical deletion with a new operation. Never delete a user profile/workspace manually to make a check pass. This qualification used disposable roots only and did not restart any user host.

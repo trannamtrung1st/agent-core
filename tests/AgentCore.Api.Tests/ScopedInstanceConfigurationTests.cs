@@ -23,7 +23,7 @@ public sealed class ScopedInstanceConfigurationTests
     private static WebApplicationFactory<Program> Host(bool sqlite, string db) => sqlite ? new ExperienceHost(db) : new AgentCoreApiFactory();
     private static WebApplicationFactory<Program> ControlledHost(bool sqlite, string db) => Host(sqlite, db).WithWebHostBuilder(builder =>
         builder.ConfigureTestServices(services => {
-            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IHostedService) && (d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService) || d.ImplementationType == typeof(AgentCore.Api.BackgroundOccurrenceIntakeHostedService) || d.ImplementationType == typeof(AgentCore.Api.TriggerSchedulerHostedService))).ToArray())
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IHostedService) && (d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService) || d.ImplementationType == typeof(AgentCore.Api.TriggerSchedulerHostedService))).ToArray())
                 services.Remove(descriptor);
         }));
 

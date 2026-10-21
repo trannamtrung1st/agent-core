@@ -334,7 +334,7 @@ public sealed partial class TenantDefinitionAccessTests
             var waiting = await Await(r => r.Status == AgentRunStatus.WaitingForApproval);
             Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}"); Assert.Null(waiting.Claim);
             Assert.Equal(0, commands); Assert.Equal(0, contacts);
-            var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>(); var released = false;
+            var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantRuntimeCapacity>(); var released = false;
             using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
                 while (!deadline.IsCancellationRequested)
                 {

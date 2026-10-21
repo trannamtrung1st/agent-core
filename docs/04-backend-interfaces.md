@@ -1,5 +1,12 @@
 # Backend Interfaces
 
+## Runtime registry cutover checkpoint
+
+The registered dispatcher is `ITenantRunDispatcher` backed by the singleton `TenantSessionRuntimeHost`; input, foreground, cancellation and receipt controls resolve to that same object. The old unowned `IAgentRunDispatcher` registration, `IEnvironmentEventIngress`, live occurrence directory/mailbox, hosted state reader and profile live-update adapter are removed. Shared claimed-Run coordination still receives explicit tenant persistence and dispatcher bindings. No replacement empty authority adapter is registered.
+
+`TenantRuntimeCapacity` owns bounded server lifetime reservations only. `SessionShutdownHostedService` drains the canonical host through its idempotent `StopAsync`. These are lifecycle services, not another authorization engine. Earlier owner-host interface descriptions below are historical implemented behavior and do not describe the current host registration. Remaining internal interfaces/owner service/schema and Runtime-state/Experience parity require final reconciliation. [Measured scope](reports/runtime-registry-cutover-verification-2026-10-21.md).
+
+
 ## Independent Automation protected-task execution
 
 An admitted tenant Schedule, Core/Webhook event or explicit human Manual occurrence may use the configured protected file/native/account operations under its actual executor and existing exact consent/receipt owners. Its approval successor preserves task, root, source and original initiator, including a genuinely absent scheduled requester. Current source-kind capability replaces the human-chat `background.start` prerequisite for these independent roots; it never replaces IAM. Manual invocations retain current actual-invoker authority. Scheduled `WhenRequesterLacksPermission` does not invent a human; `Always` and independent reviewer requirements remain mandatory. Raw source reads, secondary permissions and recipient reads never come from a primary-only grant. The owning transactions recheck current authority and source witnesses, and unknown native effects never replay.

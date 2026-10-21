@@ -8,9 +8,9 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Realtime;
 
-// Canonical runtimes never enter SessionHost's legacy connection/control registry; recipient delivery is separately authenticated.
+// Tenant Run lifetimes and recipient-authenticated delivery have separate owners.
 public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITenantRuntimeStore storage, ITenantRunStore runs,
-    TenantRunExecutionAuthority authority, TenantToolAuthorization tools, SessionHost capacity, IIdGenerator ids, TimeProvider time,
+    TenantRunExecutionAuthority authority, TenantToolAuthorization tools, TenantRuntimeCapacity capacity, IIdGenerator ids, TimeProvider time,
     ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations, TenantRunCancellationService cancellations,
     TenantSessionLiveDelivery delivery, IIamStore inputSecurity, ITenantSessionStore inputSessions,
     TenantVoiceService? voiceService = null, VoiceAvailability? voiceAvailability = null,
@@ -216,9 +216,21 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
             }
         }
     }
-    public async ValueTask DisposeAsync()
+    private Task? shutdown;
+    public Task StopAsync(CancellationToken ct = default)
     {
-        Live[] pending; TenantVoiceLease[] speech; lock (_gate) { _stopping = true; pending = _live.Values.ToArray(); speech = _voices.Values.Select(v => v.Lease).ToArray(); }
+        Task pending;
+        lock (_gate)
+        {
+            _stopping = true; capacity.StopAdmissions();
+            shutdown ??= DrainAsync(_live.Values.ToArray(), _voices.Values.Select(v => v.Lease).ToArray());
+            pending = shutdown;
+        }
+        return pending.WaitAsync(ct);
+    }
+    public ValueTask DisposeAsync() => new(StopAsync());
+    private async Task DrainAsync(Live[] pending, TenantVoiceLease[] speech)
+    {
         var speechCleanup = Task.WhenAll(speech.Select(l => RetireVoiceAsync(l).AsTask()));
         foreach (var live in pending) StopTokens(live);
         await Task.WhenAll(pending.Select(l => l.Stopped.Task)).ConfigureAwait(false);

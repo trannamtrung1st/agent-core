@@ -25,7 +25,7 @@ public sealed partial class TenantSessionAccessTests
     public async Task Model_preference_authorization_persists_exact_parameters_and_resumes_the_saved_effect(bool sqlite, bool review, string decision, bool freeze, bool busy)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-preference-approval-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        AgentCore.Api.Realtime.SessionHost? reservedCapacity = null; var capacityHeld = false;
+        AgentCore.Api.Realtime.TenantRuntimeCapacity? reservedCapacity = null; var capacityHeld = false;
         try
         {
             var model = new ApprovalRecordingModel();
@@ -88,7 +88,7 @@ public sealed partial class TenantSessionAccessTests
                 })).StatusCode);
             if (busy)
             {
-                reservedCapacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>();
+                reservedCapacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantRuntimeCapacity>();
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 while (!capacityHeld && !deadline.IsCancellationRequested)
                 { capacityHeld = reservedCapacity.TryReserveTenantRuntime(); if (!capacityHeld) await Task.Delay(25, deadline.Token); }

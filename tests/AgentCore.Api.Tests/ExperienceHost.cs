@@ -34,7 +34,7 @@ internal sealed class ExperienceHost : DurableSqliteHostFactory
         builder.ConfigureTestServices(services =>
         {
             foreach (var hosted in services.Where(s => s.ImplementationType is { } t &&
-                (t == typeof(AgentRunHostedService) || t == typeof(BackgroundOccurrenceIntakeHostedService) || t == typeof(TriggerSchedulerHostedService))).ToArray()) services.Remove(hosted);
+                (t == typeof(AgentRunHostedService) || t == typeof(TriggerSchedulerHostedService))).ToArray()) services.Remove(hosted);
             if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(clock); }
             services.RemoveAll<IStructuredMemoryStore>(); services.AddSingleton<IStructuredMemoryStore, SqliteStructuredMemoryStore>();
             services.RemoveAll<IExperienceStore>(); services.AddSingleton<IExperienceStore, SqliteExperienceStore>();

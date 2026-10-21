@@ -433,12 +433,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ITriggerInstancePolicyReconciliationService, TriggerInstancePolicyReconciliationService>();
         services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
         services.TryAddSingleton<IEventFilterEvaluator, AgentCore.Infrastructure.Events.RestrictedEventFilter>();
-        services.TryAddSingleton<ExternalEventIngress>();
-        services.TryAddSingleton<CoreEventDispatcher>();
         services.TryAddSingleton<AutomationPresetCatalog>();
         services.TryAddSingleton<WebhookEventService>();
         services.TryAddSingleton<UnifiedEventCatalog>();
-        services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),
             provider.GetRequiredService<IAgentDefinitionStore>(),
@@ -535,9 +532,6 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.TryAddSingleton<AgentCore.Application.Composer.ComposerReferenceService>();
         services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();
-        services.TryAddSingleton<AgentCore.Application.Execution.BackgroundOccurrenceIntake>();
-        services.TryAddSingleton<AgentCore.Application.Execution.BackgroundCompletionReporter>();
-        services.TryAddSingleton<AgentCore.Application.Execution.AgentRunCoordinator>();
         return services;
     }
 }

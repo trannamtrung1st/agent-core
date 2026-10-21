@@ -103,7 +103,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Single(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 100), a => a.Action == "agent-runs.cancel");
                 Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(route, new { expectedRevision = revision, expectedRunRevision = running.Revision })).StatusCode);
                 await Assert.ThrowsAsync<AccessDeniedException>(() => storage.SaveTenantRuntimeAsync(frame, savedBefore, savedBefore.Revision).AsTask());
-                var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>(); var released = false;
+                var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantRuntimeCapacity>(); var released = false;
                 using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
                     while (!released)
                     {

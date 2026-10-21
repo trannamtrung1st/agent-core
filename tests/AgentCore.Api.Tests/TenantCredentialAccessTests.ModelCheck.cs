@@ -106,7 +106,7 @@ public sealed partial class TenantCredentialAccessTests
         Volatile.Write(ref factory.TenantExecutionEnabled, false);
         // A durable wait precedes supervisor cleanup. Prove the sole Runtime slot was released
         // before manually dispatching a successor in the negative-path cases below.
-        var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>();
+        var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantRuntimeCapacity>();
         using (var drained = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
         {
             while (!capacity.TryReserveTenantRuntime()) await Task.Delay(25, drained.Token);

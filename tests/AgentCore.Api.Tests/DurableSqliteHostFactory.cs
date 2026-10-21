@@ -134,8 +134,7 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
                 foreach (var hosted in services.Where(item =>
                              item.ImplementationType == typeof(TriggerSchedulerHostedService)
                              || item.ImplementationType == typeof(EmailWatchHostedService)
-                             || item.ImplementationType == typeof(AgentRunHostedService)
-                             || item.ImplementationType == typeof(BackgroundOccurrenceIntakeHostedService)).ToArray())
+                             || item.ImplementationType == typeof(AgentRunHostedService)).ToArray())
                 {
                     services.Remove(hosted);
                 }

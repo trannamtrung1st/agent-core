@@ -1,5 +1,16 @@
 # System Architecture
 
+## Canonical runtime registry and process lifetime
+
+`TenantSessionRuntimeHost` is the sole registered conversation/Run runtime registry. `ITenantRunDispatcher`, input, foreground, cancellation and delivery-receipt controls resolve to that same singleton. `SessionHost`, its owner connection/control registry, live occurrence mailbox, profile notifier and unowned dispatcher are removed.
+
+`TenantRuntimeCapacity` bounds process Runtime lifetimes independently of authorization. Runs and Voice retain their existing shared-slot accounting; neither a capacity reservation nor a delivery connection creates execution authority. Admission remains the current tenant transaction and immutable per-Run frame. Shutdown closes capacity admission, caches one drain task, cancels supervised lifetimes and retires Voice/output; repeated stop/dispose waits the same cleanup. A caller cancellation bounds its wait without reopening admission or discarding cleanup.
+
+Hosted Run recovery executes tenant Runs only. The scheduler runs canonical Automation admission and tenant event processing with independent supervised phases. Email monitoring polls tenant-owned watches only. Native owner background occurrence intake, Experience reconciliation/Run dispatch, event fanout and old cleanup loops are no longer startup work. Tenant cleanup services retain exact saved ownership proofs. This removes the registered old execution host; it does not complete legacy internal Runtime/store/schema retirement or missing canonical Experience/maintenance/Runtime-state parity.
+
+[Verification](reports/runtime-registry-cutover-verification-2026-10-21.md).
+
+
 ## Independent protected-task ownership
 
 Admitted Schedule/manual Automation tasks reuse the incumbent protected file, native Browser/Sandbox, connected-account consent, grant, effect and receipt owners. Current typed task intent and saved source lineage determine eligibility; a task is not required to impersonate a human chat child or declare `background.start`. Source reads and current executor/reviewer authority remain independent of any primary-only grant. Every schedule/manual root is joined back to its immutable accepted occurrence and exact frozen Automation intent before operation authorization. Approval successors keep that root and its actual original initiator, including an absent scheduled requester. No second executor or authority service is introduced.

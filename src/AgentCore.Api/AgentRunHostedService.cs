@@ -16,11 +16,9 @@ public sealed class AgentRunHostedService : BackgroundService
     private readonly IDiagnosticIdSource _diagnostics;
 
     public AgentRunHostedService(
-        AgentRunCoordinator coordinator,
         TimeProvider time,
         ILogger<AgentRunHostedService> logger,
         IDiagnosticIdSource diagnostics,
-        AgentCore.Application.Experience.ExperienceService experience,
         AgentCore.Application.Security.TenantApprovalService approvals,
         AgentCore.Application.Security.TenantCredentialCheckService credentialChecks,
         AgentCore.Application.Security.TenantBrowserEffectService browserEffects,
@@ -29,16 +27,12 @@ public sealed class AgentRunHostedService : BackgroundService
         : this(
             async cancellationToken =>
             {
-                await experience.ReconcileAsync(cancellationToken).ConfigureAwait(false);
                 await approvals.DispatchPendingAsync(cancellationToken).ConfigureAwait(false);
                 await credentialChecks.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await browserEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await workspaceEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await accountEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
-                await tenantExecution.ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken).ConfigureAwait(false);
-                var executed = await coordinator
-                    .ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken)
-                    .ConfigureAwait(false);
+                var executed = await tenantExecution.ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken).ConfigureAwait(false);
                 if (executed > 0)
                 {
                     logger.LogInformation("AgentRun pass dispatched {ExecutedCount} turn(s).", executed);

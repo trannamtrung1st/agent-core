@@ -1,5 +1,10 @@
 # Testing Strategy
 
+## Canonical runtime registry and hosted execution qualification
+
+The [registry cutover](reports/runtime-registry-cutover-verification-2026-10-21.md) adds actual DI/assembly, bounded capacity, repeated shutdown and noncooperative late-output scenarios for both stores. Focused regressions exercise canonical approvals, actual wire/Voice, Automation/event/watch and cleanup recovery after old owner execution workers are removed. Native desktop/narrow journeys verify Voice, exact Activity-to-Chat continuation and the obsolete-token purge. This is focused local module qualification; remaining internal/schema/parity and exhaustive proposal acceptance stay open. Optional CI and physical/live-vendor behavior remain unrun.
+
+
 ## Core client authority qualification checkpoint
 
 The canonical core client cutover is qualified with focused Chat/Activity/realtime/queue/file/history/route tests and native Synthetic browser flows. Fixtures declare tenant/read/action authority instead of restoring old owner transports. Obsolete owner-only test declarations are inventoried explicitly; tests are not skipped and canonical missing parity remains open. Browser checks include a seeded obsolete local token and assert no owner header or private unscoped request.

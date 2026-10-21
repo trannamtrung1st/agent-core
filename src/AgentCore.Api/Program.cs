@@ -99,19 +99,14 @@ builder.Services.AddSingleton<AgentDefinitionDraftPublishService>();
 builder.Services.AddSingleton<AgentDefinitionDraftDiffService>();
 builder.Services.AddSingleton<AgentDefinitionDraftEvaluationService>();
 builder.Services.AddSingleton<AgentDefinitionResourceService>();
-builder.Services.AddSingleton<SessionHost>();
-builder.Services.AddSingleton<IHostedSessionStateReader>(services => services.GetRequiredService<SessionHost>());
-builder.Services.AddSingleton<RuntimeStateService>();
-builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
+builder.Services.AddSingleton<TenantRuntimeCapacity>();
+builder.Services.AddSingleton<TenantSessionRuntimeHost>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
-builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddHostedService<WorkspaceCleanupHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();
 builder.Services.AddHostedService<EmailWatchHostedService>();
-builder.Services.AddHostedService<BackgroundOccurrenceIntakeHostedService>();
-builder.Services.AddSingleton<IAgentRunDispatcher, AgentRunDispatcher>();
 builder.Services.AddSingleton<Func<TenantRunService>>(p => () => p.GetRequiredService<TenantRunService>());
-builder.Services.AddSingleton<ITenantRunDispatcher, TenantSessionRuntimeHost>();
+builder.Services.AddSingleton<ITenantRunDispatcher>(p => p.GetRequiredService<TenantSessionRuntimeHost>());
 builder.Services.AddSingleton<TenantSessionLiveDelivery>();
 builder.Services.AddSingleton<ITenantRunControl>(p => (ITenantRunControl)p.GetRequiredService<ITenantRunDispatcher>());
 builder.Services.AddSingleton<ITenantSessionInputControl>(p => (ITenantSessionInputControl)p.GetRequiredService<ITenantRunDispatcher>());
@@ -120,9 +115,6 @@ builder.Services.AddSingleton<ITenantDeliveryReceiptControl>(p => (ITenantDelive
 builder.Services.AddSingleton<TenantBackgroundCompletionService>();
 builder.Services.AddSingleton<ITenantRunExecution, TenantRunExecution>();
 builder.Services.AddHostedService<AgentRunHostedService>();
-builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
-builder.Services.AddSingleton<ILiveOccurrenceDirectory>(provider => provider.GetRequiredService<SessionHost>());
-builder.Services.AddSingleton<IOccurrenceMailbox>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 32 * 1024;

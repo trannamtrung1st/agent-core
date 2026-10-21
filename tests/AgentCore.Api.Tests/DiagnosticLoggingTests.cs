@@ -29,7 +29,7 @@ public sealed class DiagnosticLoggingTests
 
         var hosted = factory.Services.GetServices<IHostedService>().ToArray();
         Assert.Contains(hosted, service => service is TriggerSchedulerHostedService);
-        Assert.Contains(hosted, service => service is BackgroundOccurrenceIntakeHostedService);
+        Assert.DoesNotContain(hosted, service => service.GetType().Name == "BackgroundOccurrenceIntakeHostedService");
         Assert.Contains(hosted, service => service is AgentRunHostedService);
     }
 
@@ -43,10 +43,6 @@ public sealed class DiagnosticLoggingTests
         await AssertPassAsync<AgentRunHostedService>(
             "AgentRun pass failed.",
             (pass, logs, diagnostics) => new AgentRunHostedService(pass, TimeProvider.System, logs, diagnostics),
-            service => service.RunPassAsync(CancellationToken.None));
-        await AssertPassAsync<BackgroundOccurrenceIntakeHostedService>(
-            "Background admission pass failed.",
-            (pass, logs, diagnostics) => new BackgroundOccurrenceIntakeHostedService(pass, TimeProvider.System, logs, diagnostics),
             service => service.RunPassAsync(CancellationToken.None));
         await AssertPassAsync<AgentRunHostedService>(
             "AgentRun pass failed.",

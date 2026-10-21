@@ -60,6 +60,7 @@ test('tenant text, rendered receipt, reload, rename, archive and read-only compl
     await signIn(page); await page.goto(f.path);
     await expect(page.getByRole('button', { name: 'Voice', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add content', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).toBeNull();
     await send(page, 'First private tenant message'); await reply(page);
     await expect(page).toHaveURL(new RegExp(`${f.path}/c/`));
     const savedUrl = page.url(), id = savedUrl.split('/').pop()!;
