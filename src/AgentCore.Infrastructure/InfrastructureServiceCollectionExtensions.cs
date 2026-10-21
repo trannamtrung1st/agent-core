@@ -314,6 +314,7 @@ public static class InfrastructureServiceCollectionExtensions
                 sessions: provider.GetRequiredService<IMemoryStore>(), instances: provider.GetRequiredService<IAgentInstanceStore>(), sandboxes: provider.GetRequiredService<ISandboxStore>(),
                 tenantAuthority: provider.GetRequiredService<AgentCore.Application.Security.TenantSandboxExecutionAuthority>());
         });
+        services.TryAddSingleton<ITenantWorkingCleanupBytes>(provider => (ITenantWorkingCleanupBytes)provider.GetRequiredService<ISessionWorkspace>());
         services.TryAddSingleton<ITenantSandboxWorkspacePreparer>(provider => (ITenantSandboxWorkspacePreparer)provider.GetRequiredService<ISessionWorkspace>());
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {

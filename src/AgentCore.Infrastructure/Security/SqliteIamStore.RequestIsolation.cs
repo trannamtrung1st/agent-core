@@ -31,7 +31,7 @@ public sealed partial class SqliteIamStore : ITenantRequestIsolationStore
             .OrderBy(o => o.SessionId).Take(limit + 1).ToArrayAsync(ct).ConfigureAwait(false);
         return new(roots.Take(limit).Select(o => o.Domain()).ToArray(), roots.Length > limit ? Guid.Parse(roots[limit - 1].SessionId) : null);
     }
-    private async ValueTask<TenantRequestIsolationState?> RequestIsolation(AgentCoreDbContext db, TenantSessionRoot owner, CancellationToken ct)
+    private async ValueTask<(TenantSessionSettlement Graph, SandboxLease? Lease)?> SessionSettlement(AgentCoreDbContext db, TenantSessionRoot owner, CancellationToken ct)
     {
         var id = owner.SessionId.ToString("D"); var tenant = owner.TenantId;
         var root = await db.Set<TenantSessionRecord>().AsNoTracking().SingleOrDefaultAsync(o => o.TenantId == tenant && o.SessionId == id, ct).ConfigureAwait(false);
@@ -54,7 +54,14 @@ public sealed partial class SqliteIamStore : ITenantRequestIsolationStore
         var leaseRow = await db.Set<SandboxLeaseRow>().AsNoTracking().SingleOrDefaultAsync(l => l.SessionId == id, ct).ConfigureAwait(false);
         var lease = leaseRow is null ? null : SandboxRuntimePersistence.Value(leaseRow);
         if (lease is not null && !TenantRequestIsolationRules.LeaseOwner(owner, lease)) throw new AccessDeniedException("sandbox_owner_mismatch");
-        return new(session, childRows.Length <= 100 && TenantRequestIsolationRules.Ready(session, runs, children, childRuns, receipts), lease);
+        return (new(session, runs, children, childRuns, receipts, childRows.Length <= 100), lease);
+    }
+    private async ValueTask<TenantRequestIsolationState?> RequestIsolation(AgentCoreDbContext db, TenantSessionRoot owner, CancellationToken ct)
+    {
+        var state = await SessionSettlement(db, owner, ct).ConfigureAwait(false);
+        if (state is null) return null;
+        var graph = state.Value.Graph;
+        return new(graph.Session, graph.Complete && TenantRequestIsolationRules.Ready(graph.Session, graph.Runs, graph.Children, graph.ChildRuns, graph.Receipts), state.Value.Lease);
     }
     public async ValueTask<TenantRequestIsolationState?> ReadTenantRequestIsolationAsync(TenantSessionRoot owner, CancellationToken ct = default)
     {

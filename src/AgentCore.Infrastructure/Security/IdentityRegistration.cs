@@ -54,6 +54,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAgentConfigurationService>();
         services.TryAddSingleton<ITenantRuntimeStateStore>(p => (ITenantRuntimeStateStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantRuntimeStateService>();
+        services.TryAddSingleton<ITenantWorkingCleanupStore>(p => (ITenantWorkingCleanupStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AgentCore.Application.Workspaces.TenantWorkingCleanupService>();
         services.TryAddSingleton<ITenantRequestIsolationStore>(p => (ITenantRequestIsolationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantRequestIsolationService>();
         services.TryAddSingleton<Func<TenantRequestIsolationService>>(p => () => p.GetRequiredService<TenantRequestIsolationService>());

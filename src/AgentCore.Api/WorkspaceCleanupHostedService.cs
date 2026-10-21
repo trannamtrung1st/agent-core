@@ -3,7 +3,7 @@ using AgentCore.Application.Observability;
 
 namespace AgentCore.Api;
 
-/// <summary>Committed deletion receipts survive the commit-to-filesystem cleanup gap.</summary>
+/// <summary>Retained lifecycle/policy and deletion receipts survive the commit-to-filesystem cleanup gap.</summary>
 public sealed class WorkspaceCleanupHostedService(
     IServiceProvider services, ILogger<WorkspaceCleanupHostedService> logger, IDiagnosticIdSource? diagnosticIds = null) : BackgroundService
 {
@@ -24,6 +24,12 @@ public sealed class WorkspaceCleanupHostedService(
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception ex) { HandledFailureLog.Warning(logger, ex, "browser.cleanup", "browser_retirement_scan_failed", diagnostics: diagnosticIds); }
+            try
+            {
+                await services.GetRequiredService<AgentCore.Application.Workspaces.TenantWorkingCleanupService>().RecoverAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex) { HandledFailureLog.Warning(logger, ex, "working.cleanup", "working_cleanup_scan_failed", diagnostics: diagnosticIds); }
             try
             {
                 await services.GetRequiredService<AgentCore.Application.Workspaces.TenantArtifactCleanupService>().RecoverAsync(stoppingToken);

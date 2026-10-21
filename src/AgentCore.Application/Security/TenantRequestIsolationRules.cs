@@ -25,6 +25,13 @@ public static class TenantRequestIsolationRules
         if (parent.Snapshot.ProfileId is not null || parent.Snapshot.DurablyDeletedAt is not null || parent.Snapshot.ArchivedAt is not null
             || parent.Snapshot.LifecycleStatus != SessionLifecycleStatus.Active || parent.Snapshot.PendingAgentInputIds.Count > 0
             || runs.Count is 0 or > 100 || children.Count > 100 || childRuns.Count > 1000 || !Strict(parent.Snapshot, runs)) return false;
+        return Settled(new(parent, runs, children, childRuns, receipts));
+    }
+    public static bool Settled(TenantSessionSettlement graph)
+    {
+        var (parent, runs, children, childRuns, receipts, complete) = graph;
+        if (!complete || parent.Snapshot.ProfileId is not null || parent.Snapshot.PendingAgentInputIds.Count > 0
+            || runs.Count > 100 || children.Count > 100 || childRuns.Count > 1000 || receipts.Count > 1000) return false;
         static bool Unsettled(AgentRun r) => !r.IsTerminal || r.SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared
             or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate;
         if (runs.Any(r => r.Owner != AgentRunOwner.ForTenant(parent.Owner.TenantId, parent.Owner.AgentInstanceId, parent.Owner.ExecutorPrincipalId)

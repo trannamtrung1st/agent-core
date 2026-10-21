@@ -160,6 +160,7 @@ public sealed partial class TenantAgentAccessTests
     private sealed class RequestIsolationFactory(bool sqlite, string? root = null, TimeProvider? clock = null) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => true;
+        protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => new Dictionary<string, string?> { ["Persistence:WorkspaceRoot"] = Path.Combine(Root, "workspaces") };
         public string Root { get; } = root ?? Path.Combine(Path.GetTempPath(), "tenant-request-isolation-" + Guid.NewGuid().ToString("N"));
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {

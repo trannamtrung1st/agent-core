@@ -22,11 +22,11 @@ public sealed partial class InMemoryIamStore : ITenantRequestIsolationStore
     }
     private TenantRequestIsolationState? RequestIsolation(TenantSessionRoot owner)
     {
-        var graph = sessionBacking.RequestIsolation(owner); if (graph is null) return null;
+        var graph = sessionBacking.SessionSettlement(owner); if (graph is null) return null;
         var lease = sandboxBacking.TenantLease(owner.TenantId, owner.SessionId);
         if (lease is null && sandboxBacking.HasLease(owner.SessionId)) throw new AccessDeniedException("sandbox_owner_mismatch");
         if (lease is not null && !TenantRequestIsolationRules.LeaseOwner(owner, lease)) throw new AccessDeniedException("sandbox_owner_mismatch");
-        return new(graph.Value.Session, graph.Value.Ready, lease);
+        return new(graph.Session, TenantRequestIsolationRules.Ready(graph.Session, graph.Runs, graph.Children, graph.ChildRuns, graph.Receipts), lease);
     }
     public ValueTask<TenantRequestIsolationState?> ReadTenantRequestIsolationAsync(TenantSessionRoot owner, CancellationToken ct = default)
     {

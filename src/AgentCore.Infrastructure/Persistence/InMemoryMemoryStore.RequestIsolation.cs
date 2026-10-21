@@ -18,11 +18,11 @@ public sealed partial class InMemoryMemoryStore
             return new(page.Take(limit).ToArray(), page.Length > limit ? page[limit - 1].SessionId : null);
         }
     }
-    internal (TenantSession Session, bool Ready)? RequestIsolation(TenantSessionRoot owner)
+    internal TenantSessionSettlement? SessionSettlement(TenantSessionRoot owner)
     {
         lock (_gate)
         {
-            var session = ReadTenantSession(owner.TenantId, owner.SessionId);
+            var session = ReadRetainedTenantBackgroundSession(owner.TenantId, owner.SessionId);
             if (session?.Owner != owner) return null;
             var runs = AgentRuns.Runs.Values.Where(r => r.Owner.TenantId == owner.TenantId && r.SessionId == owner.SessionId).Take(101).ToArray();
             var children = tenantSessions.Values.Where(o => o.TenantId == owner.TenantId && _sessions[o.SessionId].Origin.OriginatingSessionId == owner.SessionId)
@@ -31,7 +31,7 @@ public sealed partial class InMemoryMemoryStore
             var childRuns = AgentRuns.Runs.Values.Where(r => r.Owner.TenantId == owner.TenantId && childIds.Contains(r.SessionId)).Take(1001).ToArray();
             var receipts = AgentRuns.CompletionReceipts.Values.Select(CompletionInboxMapping.Read)
                 .Where(r => r.Owner.TenantId == owner.TenantId && r.ParentSessionId == owner.SessionId).Take(1001).ToArray();
-            return (session, TenantRequestIsolationRules.Ready(session, runs, children, childRuns, receipts));
+            return new(session, runs, children, childRuns, receipts);
         }
     }
     internal TenantSession CompleteIsolatedRequest(TenantSession session, DateTimeOffset at)
