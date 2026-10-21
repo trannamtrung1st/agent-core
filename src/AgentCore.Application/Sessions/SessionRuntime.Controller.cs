@@ -266,17 +266,19 @@ public sealed partial class SessionRuntime
         }
 
         _muted = input.Muted;
+        AbandonLiveSpeech(rotateEpoch: true);
         if (_muted)
         {
-            AbandonLiveSpeech(rotateEpoch: false);
+            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
         }
         else
         {
-            lock (_audioGate)
+            try { await StartRecognitionAsync(cancellationToken, _ids.NewId()).ConfigureAwait(false); }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
             {
-                SetStreamId(_ids.NewId());
-                _expectedFrameSequence = 1;
-                _expectedSampleOffset = 0;
+                LogHandledRuntimeFailure(ex, "speech.start", "recognition_start_failed");
+                await FailVoiceAsync(input.Context, cancellationToken).ConfigureAwait(false); return;
             }
         }
 

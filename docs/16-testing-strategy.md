@@ -1454,3 +1454,8 @@ Use a gated model to revoke raw Chat or enable new communication Review before o
 ## Platform operator qualification
 
 [Focused operator qualification](reports/platform-operator-verification-2026-10-21.md) records nine new actual Memory/SQLite HTTP/store/recreation cases,25 System administration and12 audit regressions (46passing together),52focused UI cases, both builds, actual Synthetic browser and independent MCP stale/readback evidence. Exact identity, invalidated logins, no tenant-private access, no replay and last-operator refusal remain required boundaries. This is local qualification, not full proposal/milestone acceptance.
+
+
+## Speech input resource qualification
+
+[Speech ingress lifecycle qualification](reports/speech-ingress-lifecycle-verification-2026-10-21.md) records sample- versus message-budget checks, bounded future markers, equal-offset order, owned PCM buffers, stale/non-cooperative provider retirement, supervised provider failure and usable text fallback. Runtime integration preserves independent capture/playback, locale, transcript durability and client speech. The MessagePack stream-retirement scenario rejects an old boundary/PCM after mute/unmute and then commits exactly one fresh utterance. Its legacy Session fixture is not canonical tenant Voice acceptance; tenant microphone authority and voice delivery remain separate open work.

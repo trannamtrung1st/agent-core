@@ -932,3 +932,8 @@ Current raw target read and Agent Chat authority, creation authority and any req
 ## Platform operator assignment ownership
 
 Built-in platform roles use the existing global Account/Principal and System role-assignment owner. Canonical original-human governance checks, exact Account role versions, stamp rotation, last-active-operator safety and body-free audit commit in the same storage gate/transaction. Platform roles grant no tenant-private authority.
+
+
+## Speech stream resource lifetime
+
+One `SpeechRecognitionIngress` resource owns one opened recognizer, PCM/control queue, stream continuity and deferred markers. Session Runtime retains the single conversation/controller mailbox and applies normalized evidence; the stream resource owns no conversation, execution identity, persisted history, mode or Run admission. Its stop fence retires callbacks before provider cleanup. Explicit mute retires that recognition stream while playback remains independent; unmute creates a fresh stream/epoch. Sample-count and message bounds prevent 40 ms frames or future-boundary floods from exceeding the declared input budget. This extraction is a prerequisite for canonical tenant voice wiring; it does not replace exact tenant Run leases with mutable frames or enable tenant microphone input by itself.

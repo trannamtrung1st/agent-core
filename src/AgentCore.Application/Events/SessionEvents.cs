@@ -40,7 +40,7 @@ public sealed record SpeechEvidenceReceived(
     double? ActivityScore,
     int Epoch) : SessionInput(Context);
 
-public sealed record AudioIngressFaultReceived(EventContext Context, string Code, string Message) : SessionInput(Context);
+public sealed record AudioIngressFaultReceived(EventContext Context, string Code, string Message, int SpeechEpoch, Guid StreamId) : SessionInput(Context);
 
 public sealed record ClassifierReturned(
     EventContext Context,

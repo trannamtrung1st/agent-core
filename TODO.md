@@ -1,5 +1,7 @@
 # TODO
 
+The shared speech input path now has [bounded stream-lifecycle qualification](docs/reports/speech-ingress-lifecycle-verification-2026-10-21.md): sample-based buffering, bounded boundary markers, retired recognizer callbacks, fresh unmute and supervised failure to usable text. This is a prerequisite; canonical tenant voice admission/delivery/UI remains open, together with remaining platform guardrails, obsolete authority/schema removal and full proposal qualification. The original goal stays active.
+
 Canonical platform operator assignment/revocation now has [focused original-human, atomicity, recovery and native UI qualification](docs/reports/platform-operator-verification-2026-10-21.md). Exact built-in roles, fresh sign-in after changes and last-operator safety are covered. Tenant voice, remaining platform guardrails, obsolete authority/schema removal and exhaustive proposal-wide route/security/design qualification remain open; the original goal stays active.
 
 System identity metadata administration now has [focused authority/status/UI/recovery qualification](docs/reports/system-administration-verification-2026-10-21.md): bounded Account/organization catalogues, exact status confirmation/CAS, original-login commit fences, final operator protection and SQLite rollback/recreation. This supersedes the corresponding System catalogue/status/UI gaps below only. Voice, remaining operator/guardrail families, obsolete authority/schema removal and exhaustive proposal-wide security/route/design qualification remain open; the full goal stays active.

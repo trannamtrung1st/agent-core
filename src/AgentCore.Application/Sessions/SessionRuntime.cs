@@ -66,11 +66,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly InteractionPolicy _policy;
     private readonly VoiceAvailability _voice;
     private readonly object _audioGate = new();
-    private AudioIngress _ingress = new();
-    private ISpeechRecognitionSession? _recognitionSession;
-    private CancellationTokenSource? _sttCts;
-    private long _expectedFrameSequence = 1;
-    private long _expectedSampleOffset;
+    private SpeechRecognitionIngress? _speechIngress;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _brainEvaluationCts;
     private readonly Task _loop;
@@ -460,7 +456,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public bool Muted => _muted;
 
-    public bool RecognitionActive => _recognitionSession is not null;
+    public bool RecognitionActive => _speechIngress is not null;
 
     public OutputActivity Output => _outputActivity;
 

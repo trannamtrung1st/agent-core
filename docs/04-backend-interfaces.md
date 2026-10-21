@@ -1796,3 +1796,8 @@ Canonical System Account status additionally preserves at least one active Accou
 ## System operator store facet
 
 `ISystemOperatorStore.QuerySystemOperatorsAsync` returns bounded safe Account/role metadata after literal filters and before paging. `TrySetSystemOperatorAsync` accepts trusted original-human references, exact Account version and enabled intent; actual stores repeat current governance authority and atomically settle role, rotated Account stamp and audit. `SystemOperatorService` repeats read authority before/after I/O. This is an existing built-in role assignment, not a general System role editor.
+
+
+## Shared speech input stream resource
+
+`SpeechRecognitionIngress` owns one opened `ISpeechRecognitionSession`, fresh stream ID, bounded PCM/control queue, sequence/offset validation and bounded deferred boundary markers. It copies admitted PCM into transport-owned memory and emits only normalized speech evidence/faults. It is not a conversation controller, human ingress authority or Run-admission API. The owning Session Runtime still owns mode, mute, utterance/controller decisions and conversational writes. Raw PCM stays outside the domain mailbox and persistence. Stop retires callbacks before provider cleanup, including late non-cooperative recognizers; provider-worker exceptions are supervised with safe diagnostics. Muting retires the provider stream; unmute opens a fresh one with a fresh ID/epoch, preserving independent playback. This shared resource does not itself enable tenant Voice transport or relax tenant Run-frame fences.

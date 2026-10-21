@@ -121,6 +121,36 @@ public sealed class SpeechDuplexTests
     private static AudioFrame Frame(long sequence, long offset) =>
         new(sequence, offset, new byte[960]);
 
+    [Fact]
+    public async Task Recognition_worker_failure_during_playback_stops_old_audio_and_leaves_usable_text()
+    {
+        var output=new CapturingSessionOutput();var recognizer=new DeferredFailureRecognizer();await using var runtime=Create(output,recognizer);
+        try
+        {
+            await runtime.AttachAsync();await runtime.SetModeAsync(SessionMode.Voice);await output.WaitForAsync(item=>item.Payload is StateChangedOutput {Mode:SessionMode.Voice});
+            await runtime.SubmitUserTextAsync("First voice response");var audio=await output.WaitForAsync(item=>item.Payload is AudioFrameOutput);var oldResponse=audio.ResponseId!.Value;
+            recognizer.Fail.TrySetResult();await output.WaitForAsync(item=>item.ResponseId==oldResponse&&item.Payload is PlaybackStopOutput);await output.WaitForAsync(item=>item.Payload is ErrorOutput {Code:"VoiceUnavailable"});await runtime.WaitUntilMailboxDrainedAsync();
+            Assert.Equal(SessionMode.Text,runtime.Snapshot.Mode);Assert.False(runtime.RecognitionActive);Assert.Null(runtime.ActiveResponseId);
+            var interrupted=Assert.Single(runtime.Snapshot.Entries,e=>e.ResponseId==oldResponse);Assert.Equal(EntryStatus.Interrupted,interrupted.Status);Assert.Equal(0,interrupted.HeardTextEndExclusive);
+            await runtime.SubmitPlaybackAsync(oldResponse,"completed",runtime.SentSamples,interrupted.Text.Length);await runtime.WaitUntilMailboxDrainedAsync();Assert.Equal(0,runtime.Snapshot.Entries.Single(e=>e.ResponseId==oldResponse).HeardTextEndExclusive);
+            await runtime.SubmitUserTextAsync("Continue safely in text");await output.WaitForAsync(item=>item.ResponseId!=oldResponse&&item.Payload is ResponseCompletedOutput);await runtime.WaitUntilIdleAsync();Assert.Equal(SessionMode.Text,runtime.Snapshot.Mode);
+        }
+        finally{recognizer.Fail.TrySetResult();}
+    }
+    private sealed class DeferredFailureRecognizer : ISpeechRecognizer
+    {
+        public RecognitionCapabilities Capabilities {get;}=new(true,true,true,true);public TaskCompletionSource Fail {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ValueTask<ISpeechRecognitionSession> OpenAsync(RecognitionOptions options,CancellationToken ct=default)=>ValueTask.FromResult<ISpeechRecognitionSession>(new DeferredSession(Fail.Task));
+        private sealed class DeferredSession(Task fail) : ISpeechRecognitionSession
+        {
+            public ValueTask PushAudioAsync(AudioFrame frame,CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask ObserveBoundaryAsync(Guid id,SpeechBoundary boundary,CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask CompleteInputAsync(CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask DisposeAsync()=>ValueTask.CompletedTask;
+            public async IAsyncEnumerable<SpeechRecognitionEvent> ReadEventsAsync([System.Runtime.CompilerServices.EnumeratorCancellation]CancellationToken ct=default){await fail.WaitAsync(ct);if(!ct.IsCancellationRequested)throw new InvalidOperationException("controlled recognition worker failure");yield break;}
+        }
+    }
+
     private static SessionRuntime Create(
         ISessionOutput output,
         ISpeechRecognizer recognizer,

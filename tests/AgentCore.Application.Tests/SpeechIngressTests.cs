@@ -470,6 +470,64 @@ public sealed class SpeechIngressTests
         }
     }
 
+    [Fact]
+    public async Task Muting_retires_provider_session_and_unmute_uses_a_fresh_session_before_new_speech()
+    {
+        var output=new CapturingSessionOutput();var recognizer=new LateSpeechRecognizer();await using var runtime=Create(output,recognizer);
+        await runtime.AttachAsync();await runtime.SetModeAsync(SessionMode.Voice);await output.WaitForAsync(item=>item.Payload is StateChangedOutput {Mode:SessionMode.Voice});
+        var old=Assert.Single(recognizer.Sessions);var oldStream=runtime.StreamId;
+        await runtime.SetMutedAsync(true);await output.WaitForAsync(item=>item.Payload is StateChangedOutput {Muted:true});Assert.True(old.Disposed);Assert.False(runtime.RecognitionActive);
+        await runtime.SetMutedAsync(false);await output.WaitForAsync(item=>item.Payload is StateChangedOutput {Muted:false,StreamId:not null} state&&state.StreamId!=oldStream);Assert.Equal(2,recognizer.Sessions.Count);
+        var utterance=Guid.NewGuid();old.Events.Writer.TryWrite(new SpeechStarted(utterance));old.Events.Writer.TryWrite(new SpeechFinal(utterance,"retired provider tail",0.9));old.Events.Writer.TryComplete();await old.Finished.Task.WaitAsync(TimeSpan.FromSeconds(5));await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.DoesNotContain(runtime.Snapshot.Entries,e=>e.Text.Contains("retired provider tail",StringComparison.Ordinal));
+        var current=recognizer.Sessions[1];current.Events.Writer.TryWrite(new SpeechStarted(utterance));current.Events.Writer.TryWrite(new SpeechFinal(utterance,"Fresh recognized turn",0.9));
+        await output.WaitForAsync(item=>item.Payload is TranscriptFinalOutput final&&final.Text=="Fresh recognized turn");Assert.Single(runtime.Snapshot.Entries,e=>e.Role==ConversationRole.User);
+        current.Events.Writer.TryComplete();
+    }
+
+    private sealed class LateSpeechRecognizer : ISpeechRecognizer
+    {
+        public RecognitionCapabilities Capabilities {get;}=new(true,true,true,true);
+        public List<LateSession> Sessions {get;}=[];
+        public ValueTask<ISpeechRecognitionSession> OpenAsync(RecognitionOptions options,CancellationToken ct=default)
+        {var session=new LateSession();Sessions.Add(session);return ValueTask.FromResult<ISpeechRecognitionSession>(session);}
+        public sealed class LateSession : ISpeechRecognitionSession
+        {
+            public bool Disposed;
+            public System.Threading.Channels.Channel<SpeechRecognitionEvent> Events {get;}=System.Threading.Channels.Channel.CreateUnbounded<SpeechRecognitionEvent>();
+            public TaskCompletionSource Finished {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public ValueTask PushAudioAsync(AudioFrame frame,CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask ObserveBoundaryAsync(Guid id,SpeechBoundary boundary,CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask CompleteInputAsync(CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask DisposeAsync(){Disposed=true;return ValueTask.CompletedTask;}
+            public async IAsyncEnumerable<SpeechRecognitionEvent> ReadEventsAsync([System.Runtime.CompilerServices.EnumeratorCancellation]CancellationToken ct=default)
+            {try{await foreach(var evidence in Events.Reader.ReadAllAsync())yield return evidence;}finally{Finished.TrySetResult();}}
+        }
+    }
+
+    [Fact]
+    public async Task Provider_reader_failure_falls_back_to_text_without_reopen_loop_and_text_remains_usable()
+    {
+        var output=new CapturingSessionOutput();var recognizer=new BrokenReaderRecognizer();await using var runtime=Create(output,recognizer);
+        await runtime.AttachAsync();await runtime.SetModeAsync(SessionMode.Voice);await output.WaitForAsync(item=>item.Payload is ErrorOutput {Code:"VoiceUnavailable"});await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(SessionMode.Text,runtime.Snapshot.Mode);Assert.False(runtime.RecognitionActive);Assert.Equal(1,recognizer.Opens);
+        await runtime.SubmitUserTextAsync("Continue in text");await output.WaitForAsync(item=>item.Payload is ResponseCompletedOutput);await runtime.WaitUntilIdleAsync();Assert.Contains(runtime.Snapshot.Entries,e=>e.Role==ConversationRole.User&&e.Text=="Continue in text");
+        Assert.DoesNotContain(output.Items,item=>item.Payload is ErrorOutput error&&error.SafeMessage.Contains("provider-secret-body",StringComparison.Ordinal));
+    }
+    private sealed class BrokenReaderRecognizer : ISpeechRecognizer
+    {
+        public int Opens;public RecognitionCapabilities Capabilities {get;}=new(true,true,true,true);
+        public ValueTask<ISpeechRecognitionSession> OpenAsync(RecognitionOptions options,CancellationToken ct=default){Opens++;return ValueTask.FromResult<ISpeechRecognitionSession>(new BrokenSession());}
+        private sealed class BrokenSession : ISpeechRecognitionSession
+        {
+            public ValueTask PushAudioAsync(AudioFrame frame,CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask ObserveBoundaryAsync(Guid id,SpeechBoundary boundary,CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask CompleteInputAsync(CancellationToken ct=default)=>ValueTask.CompletedTask;
+            public ValueTask DisposeAsync()=>ValueTask.CompletedTask;
+            public async IAsyncEnumerable<SpeechRecognitionEvent> ReadEventsAsync([System.Runtime.CompilerServices.EnumeratorCancellation]CancellationToken ct=default){await Task.CompletedTask;if (!ct.IsCancellationRequested) throw new InvalidOperationException("provider-secret-body");yield break;}
+        }
+    }
+
     private static AudioFrame Frame(long sequence, long offset) =>
         new(sequence, offset, new byte[960]);
 

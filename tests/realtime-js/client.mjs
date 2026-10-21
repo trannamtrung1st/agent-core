@@ -506,6 +506,38 @@ async function run() {
       }
       break;
     }
+    case "speech-stream-retirement": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      const ready = await waitForEvent(evt => evt.type === "session.ready");
+      const attachmentId = ready.attachmentId;
+      let sequence = 1;
+      const invoke = async (method, type, payload) => {
+        const ack = await connection.invoke(method, command(session.sessionId, sequence++, type, payload, { attachmentId }));
+        if (!ack.accepted) throw new Error(JSON.stringify(ack));
+        return ack;
+      };
+      await invoke("SetMode", "session.mode.set", { mode: "voice" });
+      const active = await waitForEvent(evt => evt.type === "session.state.changed" && evt.payload?.mode === "voice");
+      const oldStream = active.payload.streamId;
+      await invoke("SetMuted", "session.mute", { muted: true });
+      await waitForEvent(evt => evt.type === "session.state.changed" && evt.payload?.muted === true);
+      await invoke("SetMuted", "session.mute", { muted: false });
+      const resumed = await waitForEvent(evt => evt.type === "session.state.changed" && evt.payload?.muted === false && evt.payload?.streamId && evt.payload.streamId !== oldStream);
+      const utteranceId = uuid();
+      const stale = await connection.invoke("SpeechEnded", command(session.sessionId, sequence++, "user.speech.ended", { streamId: oldStream, utteranceId, sampleOffset: 0, durationMs: 20, activityScore: 0.2 }, { attachmentId }));
+      if (stale.accepted || stale.error?.code !== "AudioDiscontinuity") throw new Error(`retired boundary admitted: ${JSON.stringify(stale)}`);
+      await connection.invoke("SendAudio", { protocolVersion: 1, sessionId: session.sessionId, attachmentId, streamId: oldStream, frameSequence: 1, sampleOffset: 0, data: new Uint8Array(960) });
+      const streamId = resumed.payload.streamId;
+      await invoke("SpeechStarted", "user.speech.started", { streamId, utteranceId, sampleOffset: 0, activityScore: 0.9 });
+      await invoke("SpeechEnded", "user.speech.ended", { streamId, utteranceId, sampleOffset: 480, durationMs: 20, activityScore: 0.2 });
+      await connection.invoke("SendAudio", { protocolVersion: 1, sessionId: session.sessionId, attachmentId, streamId, frameSequence: 1, sampleOffset: 0, data: new Uint8Array(960) });
+      await waitForEvent(evt => evt.type === "transcript.final" && evt.payload?.utteranceId === utteranceId);
+      if (events.filter(evt => evt.type === "transcript.final").length !== 1) throw new Error("retired stream produced another transcript");
+      await connection.stop();
+      break;
+    }
     case "speech-boundary-order": {
       const session = await createSession();
       const connection = await connect();

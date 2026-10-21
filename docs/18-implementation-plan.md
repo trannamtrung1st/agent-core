@@ -1138,3 +1138,8 @@ Canonical metadata catalogues, original-human atomic organization creation/statu
 ## Platform operator assignment checkpoint
 
 Built-in platform role inspection/assignment/revocation now has [focused original-human, atomicity, recovery and native UI qualification](reports/platform-operator-verification-2026-10-21.md). This supersedes operator-role-management-pending notes only for this existing built-in role. Tenant voice, remaining platform guardrails, obsolete authority/schema removal and exhaustive original-proposal route/security/design acceptance remain open. The full goal stays active; no milestone acceptance follows.
+
+
+## Shared speech ingress prerequisite
+
+The existing speech pipeline now uses a bounded, supervised per-stream resource while retaining the Session Runtime's sole conversation/controller mailbox and immutable tenant Run-frame model. [Focused qualification](reports/speech-ingress-lifecycle-verification-2026-10-21.md) owns actual evidence and limits. This closes only the extracted stream's duration/control bounds, callback retirement and failure lifecycle; canonical tenant Voice admission/delivery/UI remains open. Remaining platform guardrails, obsolete authority/schema removal and exhaustive proposal-wide route/security/design qualification also remain open. The full original goal stays active; no milestone acceptance follows.

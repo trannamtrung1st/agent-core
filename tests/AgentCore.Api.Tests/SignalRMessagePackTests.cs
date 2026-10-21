@@ -25,6 +25,12 @@ public class KestrelHostFixture : IAsyncLifetime
         };
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["AgentCore__Profile"] = "Synthetic";
+        start.Environment["Persistence__Provider"] = "InMemory";
+        start.Environment["Security__EphemeralBootstrap__Login"] = "wire-owner@example.test";
+        start.Environment["Security__EphemeralBootstrap__Password"] = "explicit-synthetic-wire-password";
+        start.Environment["Security__EphemeralBootstrap__DisplayName"] = "Wire fixture owner";
+        start.Environment["Security__EphemeralBootstrap__TenantName"] = "Wire fixture foundation";
+        start.Environment["Security__EphemeralBootstrap__TenantSlug"] = "wire-fixture-foundation";
         foreach (var (key, directory) in new[] { ("WorkspaceRoot", "workspaces"), ("AttachmentRoot", "attachments"), ("ArtifactRoot", "artifacts"), ("DefinitionResourceRoot", "definition-resources") })
             start.Environment["Persistence__" + key] = Path.Combine(_dataRoot, directory);
         start.Environment["Providers__Speech__Recognition__Adapter"] = "Synthetic";
@@ -170,6 +176,7 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("response-received")]
     [InlineData("audio-session-mismatch")]
     [InlineData("speech-boundary-order")]
+    [InlineData("speech-stream-retirement")]
     [InlineData("older-retry")]
     [InlineData("reconnect-retry")]
     [InlineData("stale-attachment")]

@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
@@ -15,283 +14,71 @@ public sealed partial class SessionRuntime
     public bool TryAdmitAudio(AudioFrame frame, Guid? streamId = null)
     {
         lock (_audioGate)
-        {
-            if (_inputStreamFailed)
-            {
-                return false;
-            }
-
-            if (_snapshot.Mode != SessionMode.Voice
-                || _muted
-                || _streamId is null
-                || (streamId ?? _streamId) != _streamId)
-            {
-                return false;
-            }
-
-            if (_voice.EffectivePlan.InputTransport == SpeechTransport.ClientTranscript
-                || _recognitionSession is null)
-            {
-                return false;
-            }
-
-            try
-            {
-                PcmCodec.ValidateFrame(frame);
-            }
-            catch (ArgumentException)
-            {
-                LatchInputStreamFailure("AudioDiscontinuity", "PCM frame is invalid.");
-                return false;
-            }
-
-            if (frame.FrameSequence != _expectedFrameSequence
-                || !PcmCodec.IsContiguous(_expectedSampleOffset, frame))
-            {
-                LatchInputStreamFailure("AudioDiscontinuity", "Input audio sequence or sample offset gap.");
-                return false;
-            }
-
-            if (!_ingress.TryWrite(new IngressAudio(frame)))
-            {
-                RuntimeTelemetry.RecordDropped("audio");
-                LatchInputStreamFailure("AudioDiscontinuity", "Input audio queue exceeded 500 ms.");
-                return false;
-            }
-
-            _expectedFrameSequence++;
-            _expectedSampleOffset = frame.SampleOffset + PcmCodec.SampleCount(frame.Data);
-            FlushPendingBoundaries();
-            return true;
-        }
+            return !_inputStreamFailed && _snapshot.Mode == SessionMode.Voice && !_muted && _streamId is { } stream
+                && _voice.EffectivePlan.InputTransport != SpeechTransport.ClientTranscript
+                && _speechIngress?.TryAdmitAudio(frame, streamId ?? stream) == true;
     }
 
-    public bool TryAdmitBoundary(
-        Guid utteranceId,
-        SpeechBoundary boundary,
-        double? activityScore,
-        long sampleOffset = 0,
-        double durationMs = 0,
-        Guid? streamId = null)
+    public bool TryAdmitBoundary(Guid utteranceId, SpeechBoundary boundary, double? activityScore,
+        long sampleOffset = 0, double durationMs = 0, Guid? streamId = null)
     {
         lock (_audioGate)
-        {
-            if (_inputStreamFailed)
-            {
-                return false;
-            }
-
-            if (_snapshot.Mode != SessionMode.Voice
-                || _recognitionSession is null
-                || _muted
-                || _streamId is null
-                || (streamId ?? _streamId) != _streamId)
-            {
-                return false;
-            }
-
-            if (sampleOffset < 0 || durationMs < 0)
-            {
-                return false;
-            }
-
-            if (sampleOffset > _expectedSampleOffset)
-            {
-                _pendingBoundaries.Add(new PendingBoundary(utteranceId, boundary, activityScore, sampleOffset, durationMs));
-                _pendingBoundaries.Sort((left, right) => left.SampleOffset.CompareTo(right.SampleOffset));
-                return true;
-            }
-
-            return WriteBoundary(utteranceId, boundary, activityScore);
-        }
+            return !_inputStreamFailed && _snapshot.Mode == SessionMode.Voice && !_muted && _streamId is { } stream
+                && _speechIngress?.TryAdmitBoundary(utteranceId, boundary, activityScore, sampleOffset, durationMs, streamId ?? stream) == true;
     }
 
-    private bool WriteBoundary(Guid utteranceId, SpeechBoundary boundary, double? activityScore)
+    private void LatchInputStreamFailure(string code, string message, int epoch, Guid stream)
     {
-        if (_ingress.TryWrite(new IngressBoundary(utteranceId, boundary, activityScore)))
-        {
-            return true;
-        }
-
-        RuntimeTelemetry.RecordDropped("audio");
-        LatchInputStreamFailure("AudioDiscontinuity", "Input audio queue exceeded 500 ms.");
-        return false;
-    }
-
-    private void FlushPendingBoundaries()
-    {
-        while (_pendingBoundaries.Count > 0 && _pendingBoundaries[0].SampleOffset <= _expectedSampleOffset)
-        {
-            var pending = _pendingBoundaries[0];
-            if (!WriteBoundary(pending.UtteranceId, pending.Boundary, pending.ActivityScore))
-            {
-                return;
-            }
-
-            _pendingBoundaries.RemoveAt(0);
-        }
-    }
-
-    private readonly List<PendingBoundary> _pendingBoundaries = [];
-
-    private readonly record struct PendingBoundary(
-        Guid UtteranceId,
-        SpeechBoundary Boundary,
-        double? ActivityScore,
-        long SampleOffset,
-        double DurationMs);
-
-    private void LatchInputStreamFailure(string code, string message)
-    {
-        if (_inputStreamFailed)
+        if (_inputStreamFailed || epoch != _speechEpoch || stream != _streamId)
         {
             return;
         }
 
         _inputStreamFailed = true;
-        EnqueueFault(code, message);
+        EnqueueFault(code, message, epoch, stream);
     }
 
-    private void EnqueueFault(string code, string message)
+    private void EnqueueFault(string code, string message, int epoch, Guid stream)
     {
         BeginWork();
-        Enqueue(new AudioIngressFaultReceived(NewContext(), code, message), urgent: true);
+        Enqueue(new AudioIngressFaultReceived(NewContext(), code, message, epoch, stream), urgent: true);
     }
 
     private async Task StartRecognitionAsync(CancellationToken cancellationToken, Guid? rotateStreamId = null)
     {
         await StopRecognitionAsync(rotateStreamId, assignStreamId: rotateStreamId.HasValue).ConfigureAwait(false);
+        lock (_audioGate)
+        {
+            _inputStreamFailed = false;
+            _streamId ??= _ids.NewId();
+        }
         if (_voice.EffectivePlan.InputTransport == SpeechTransport.ClientTranscript)
         {
-            lock (_audioGate)
-            {
-                _expectedFrameSequence = 1;
-                _expectedSampleOffset = 0;
-                _inputStreamFailed = false;
-                _ingress = new AudioIngress();
-                if (!rotateStreamId.HasValue)
-                {
-                    _streamId ??= _ids.NewId();
-                }
-            }
-
             _input = InputActivity.Listening;
             return;
         }
-
-        if (_recognizer is null)
-        {
-            return;
-        }
-
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        var session = await _recognizer
-            .OpenAsync(new RecognitionOptions(CanonicalAudio.Format, SpeechLocale.Resolve(_snapshot).Effective), cancellationToken)
-            .ConfigureAwait(false);
-        ChannelReader<IngressMessage> reader;
-        int epoch;
-        lock (_audioGate)
-        {
-            _expectedFrameSequence = 1;
-            _expectedSampleOffset = 0;
-            _inputStreamFailed = false;
-            _ingress = new AudioIngress();
-            _sttCts = cts;
-            _recognitionSession = session;
-            reader = _ingress.Reader;
-            epoch = _speechEpoch;
-        }
-
-        _ = PumpIngressAsync(session, reader, cts.Token, epoch);
-        _ = PumpRecognitionAsync(session, cts.Token, epoch);
+        if (_recognizer is null) return;
+        var session = await _recognizer.OpenAsync(new RecognitionOptions(CanonicalAudio.Format, SpeechLocale.Resolve(_snapshot).Effective), cancellationToken).ConfigureAwait(false);
+        var epoch = _speechEpoch;
+        var stream = _streamId!.Value;
+        var ingress = new SpeechRecognitionIngress(session, stream,
+            (evidence, score) => EnqueueSpeech(evidence, score, epoch),
+            (code, message) => LatchInputStreamFailure(code, message, epoch, stream), _lifetime.Token);
+        lock (_audioGate) _speechIngress = ingress;
+        ingress.Start();
     }
 
     private Task StopRecognitionAsync() => StopRecognitionAsync(null, assignStreamId: false);
 
     private async Task StopRecognitionAsync(Guid? streamId, bool assignStreamId)
     {
-        ISpeechRecognitionSession? session;
-        CancellationTokenSource? cts;
+        SpeechRecognitionIngress? ingress;
         lock (_audioGate)
         {
-            session = _recognitionSession;
-            cts = _sttCts;
-            _recognitionSession = null;
-            _sttCts = null;
-            _pendingBoundaries.Clear();
-            _ingress.Complete();
-            if (assignStreamId)
-            {
-                _streamId = streamId;
-            }
+            ingress = _speechIngress; _speechIngress = null;
+            if (assignStreamId) _streamId = streamId;
         }
-
-        if (cts is not null)
-        {
-            await cts.CancelAsync().ConfigureAwait(false);
-        }
-
-        if (session is not null)
-        {
-            try
-            {
-                await session.CompleteInputAsync().ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-
-            await session.DisposeAsync().ConfigureAwait(false);
-        }
-
-        cts?.Dispose();
-    }
-
-    private async Task PumpIngressAsync(
-        ISpeechRecognitionSession session,
-        ChannelReader<IngressMessage> reader,
-        CancellationToken cancellationToken,
-        int epoch)
-    {
-        try
-        {
-            await foreach (var message in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-            {
-                switch (message)
-                {
-                    case IngressAudio audio:
-                        await session.PushAudioAsync(audio.Frame, cancellationToken).ConfigureAwait(false);
-                        break;
-                    case IngressBoundary boundary:
-                        EnqueueSpeech(
-                            boundary.Boundary == SpeechBoundary.Started
-                                ? new SpeechStarted(boundary.UtteranceId)
-                                : new SpeechEnded(boundary.UtteranceId),
-                            boundary.ActivityScore,
-                            epoch);
-                        await session.ObserveBoundaryAsync(boundary.UtteranceId, boundary.Boundary, cancellationToken)
-                            .ConfigureAwait(false);
-                        break;
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
-    private async Task PumpRecognitionAsync(ISpeechRecognitionSession session, CancellationToken cancellationToken, int epoch)
-    {
-        try
-        {
-            await foreach (var evidence in session.ReadEventsAsync(cancellationToken).ConfigureAwait(false))
-            {
-                EnqueueSpeech(evidence, null, epoch);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
+        if (ingress is not null) await ingress.DisposeAsync().ConfigureAwait(false);
     }
 
     private void EnqueueSpeech(SpeechRecognitionEvent evidence, double? activityScore, int epoch)
@@ -318,7 +105,7 @@ public sealed partial class SessionRuntime
 
     private async Task HandleAudioFaultAsync(AudioIngressFaultReceived input, CancellationToken cancellationToken)
     {
-        if (_snapshot.Mode != SessionMode.Voice)
+        if (_snapshot.Mode != SessionMode.Voice || _muted || input.SpeechEpoch != _speechEpoch || input.StreamId != _streamId)
         {
             return;
         }
@@ -333,6 +120,13 @@ public sealed partial class SessionRuntime
 
         AbandonLiveSpeech(rotateEpoch: true);
         await StopRecognitionAsync(_ids.NewId(), assignStreamId: true).ConfigureAwait(false);
+
+        if (input.Code == "SpeechRecognitionFailed")
+        {
+            // A broken provider must not create an unbounded open/fail/reopen loop.
+            await FailVoiceAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            return;
+        }
 
         await PublishAsync(
                 new SessionOutput(
@@ -362,6 +156,8 @@ public sealed partial class SessionRuntime
 
     private async Task FailVoiceAsync(EventContext context, CancellationToken cancellationToken)
     {
+        if (_snapshot.Mode == SessionMode.Voice && _activeResponseId is { } response)
+            await SupersedeAsync(context, response, cancellationToken, "modeChange").ConfigureAwait(false);
         AbandonLiveSpeech(rotateEpoch: true);
         await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
         _snapshot = _snapshot with
