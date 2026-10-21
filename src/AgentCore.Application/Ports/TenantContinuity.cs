@@ -11,7 +11,7 @@ public sealed record TenantHistoricalSession(Guid SessionId, long Revision, long
     long AfterEntrySequence, int Limit, string ObservationHash);
 public sealed record TenantContinuityObservation(TenantMemoryReader Reader, TenantContinuityArguments Arguments,
     IReadOnlyList<TenantHistoricalSession> Sessions, TenantMemoryOperationObservation? Memory, PreparedContinuityRead Value,
-    bool HasMore, bool SourcesChanged = false);
+    bool HasMore, bool SourcesChanged = false, TenantExperienceFactObservation? Experience = null);
 public sealed record TenantHistoricalSource(Guid TenantId, Guid SessionId, long Revision, long ThroughEntrySequence, long AfterEntrySequence, int Limit, string ObservationHash);
 
 public interface ITenantContinuityStore

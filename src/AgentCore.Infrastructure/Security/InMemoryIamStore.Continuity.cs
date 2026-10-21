@@ -11,7 +11,7 @@ public sealed partial class InMemoryIamStore : ITenantContinuityStore
     public ValueTask<TenantContinuityObservation> ObserveTenantContinuityAsync(TenantRunReference reference, Guid? generation,
         TenantContinuityArguments arguments, PreparedContinuityRead? expected = null, Guid? inspectionHuman = null, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (isolationBacking.IsolationGate)
         {
             var run = sessionBacking.ReadRetainedTenantOperationRun(reference.TenantId, reference.RunId) ?? throw new AccessDeniedException("continuity_unavailable");
             if (generation is { } claim) _ = RequireMemoryFrame(new(run.Owner, run.SessionId, run.AgentRunId, claim));
@@ -28,9 +28,13 @@ public sealed partial class InMemoryIamStore : ITenantContinuityStore
         TenantMemoryOperationObservation? memory = null;
         if (human is not null ? expected!.Memory is not null : TenantContinuityRules.IncludeMemoryAsync(reader, args, iam, ct).AsTask().GetAwaiter().GetResult())
             memory = ObserveMemoryOperation(run, TenantMemoryToolContract.Parse(args.Tool, args.CanonicalArguments), expected?.Memory, human, ct);
+        TenantExperienceFactObservation? experience = null;
+        var settings = Isolation(run.AgentInstanceId);
+        if (human is not null ? expected!.Experience is not null : TenantContinuityRules.IncludeExperienceAsync(reader, settings, args, iam, ct).AsTask().GetAwaiter().GetResult())
+            experience = ObserveExperienceFacts(run, args, expected?.Experience, human, ct);
         var named = human is not null ? TenantContinuityRules.Sessions(expected!) : null;
         var candidates = args.Kind is not null || human is not null ? [] : sessionBacking.ListTenantSessions(reader.Security.Tenant.TenantId, visible, 0, TenantContinuityRules.CandidateLimit + 2, instanceId: run.AgentInstanceId, recentFirst: true).Items.Where(s => s.Owner.SessionId != run.SessionId).Select(s => s.Owner.SessionId).ToArray();
-        var selected = args.Kind == "Memory" ? [] : named is not null ? named.Select(s => s.SessionId).ToArray() : args.Id is { } selectedId ? [selectedId]
+        var selected = args.Kind is "Memory" or "Experience" ? [] : named is not null ? named.Select(s => s.SessionId).ToArray() : args.Id is { } selectedId ? [selectedId]
             : candidates.Take(TenantContinuityRules.CandidateLimit).ToArray();
         var documents = new List<TenantHistoricalSession>();
         foreach (var id in selected.Where(id => id != run.SessionId && (visible is null || visible.Contains(id))))
@@ -46,11 +50,11 @@ public sealed partial class InMemoryIamStore : ITenantContinuityStore
         }
         if (named is not null && documents.Count != named.Length) throw new AccessDeniedException("continuity_source_unavailable");
         return TenantContinuityRules.Observe(reader, args, documents.AsReadOnly(), memory, expected, human is not null,
-            human is null && args.Kind is null && candidates.Length > TenantContinuityRules.CandidateLimit);
+            human is null && args.Kind is null && candidates.Length > TenantContinuityRules.CandidateLimit, experience);
     }
     public ValueTask RequireTenantHistoricalSourcesAsync(TenantRunReference reference, IReadOnlyList<TenantHistoricalSource> sources, Guid? generation = null, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (isolationBacking.IsolationGate)
         {
             var run = sessionBacking.ReadRetainedTenantOperationRun(reference.TenantId, reference.RunId) ?? throw new AccessDeniedException("continuity_unavailable");
             if (generation is { } claim) _ = RequireMemoryFrame(new(run.Owner, run.SessionId, run.AgentRunId, claim));

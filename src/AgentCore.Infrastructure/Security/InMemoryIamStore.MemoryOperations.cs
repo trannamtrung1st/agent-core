@@ -86,7 +86,7 @@ public sealed partial class InMemoryIamStore
                 || _approvalDecisions.GetValueOrDefault(request!.RequestId) is not { Status: TenantApprovalStatus.Approved } decision) continue;
             var references = TenantMemoryOperationRules.Sources(value).Select(s => learnedMemories.GetValueOrDefault((request.TenantId, s.MemoryId))?.Reference()).ToArray();
             if (references.Any(s => s is null)) continue;
-            try { ValidateAgentActor(reader.Security, decision.HumanPrincipalId); TenantMemoryReadConsent.RequireAsync(request, reader, references.Select(s => s!).ToArray(), decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult(); return true; }
+            try { ValidateAgentActor(reader.Security, decision.HumanPrincipalId); RequireContinuityExperienceConsent(request, reader, decision.HumanPrincipalId, ct); TenantMemoryReadConsent.RequireAsync(request, reader, references.Select(s => s!).ToArray(), decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult(); return true; }
             catch (AccessDeniedException) { }
         }
         return false;

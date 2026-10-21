@@ -7,6 +7,7 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
+    private readonly AgentCore.Application.Security.TenantExperienceService? _tenantExperience;
     private readonly AgentCore.Application.Security.TenantMemoryService? _tenantMemory;
     private TenantMemoryPlan? _tenantMemoryPlan;
     private async Task<IReadOnlyList<MemoryReceipt>> ApplyMemoryProposalsAsync(

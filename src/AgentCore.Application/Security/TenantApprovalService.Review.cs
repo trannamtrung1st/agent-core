@@ -103,6 +103,14 @@ public sealed partial class TenantApprovalService
                     await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(r, run, ct).ConfigureAwait(false);
                     await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
+                else if (op.ExperienceOperation is { } experience)
+                {
+                    var service = experienceOperations ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    var observed = await service.PrepareAsync(new(r.TenantId, run.AgentRunId), null, experience.ToolName, experience.ArgumentsJson, ct, experience).ConfigureAwait(false);
+                    independent = await service.IndependentAsync(r, observed, ct).ConfigureAwait(false);
+                    await TenantExperienceConsentRules.ExecutorAsync(r, observed, authorizer, ct).ConfigureAwait(false);
+                    await service.ReviewerAsync(r, observed, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.ContinuityRead is { } continuity)
                 {
                     var reads = continuityReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -207,6 +215,12 @@ public sealed partial class TenantApprovalService
         var execution = view.OperationResult is not null ? "recorded" : r.Status == TenantApprovalStatus.Pending ? "waitingDecision"
             : r.Status != TenantApprovalStatus.Approved ? "notAuthorized" : "unrecorded";
         var changes = Changes(op, snapshot);
+        if (op.ExperienceOperation is not null)
+        {
+            var observed = await (experienceOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
+            if (observed.SourcesChanged) changes = [..changes, new("Current observation", null, "The saved source changed. Cancel this request and inspect a fresh observation; current bytes are withheld.")];
+            else changes = [..changes, new("Exact Experience sources", null, observed.Source?.EvidenceJson ?? System.Text.Json.JsonSerializer.Serialize(observed.Items.Select(i => new { i.ExperienceId, i.Content, i.Visibility })))];
+        }
         if (op.ContinuityRead is not null)
         {
             var observed = await (continuityReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
@@ -214,6 +228,7 @@ public sealed partial class TenantApprovalService
             else
             {
                 changes = [..changes, new("Current historical excerpts", null, string.Join("\n\n", observed.Sessions.Select(s => s.Title + "\n" + string.Join("\n", s.Entries.Select(e => $"{e.Sequence} · {e.Role} · {e.Status}{(e.Truncated ? " · excerpt" : "")}\n{e.Text}")))))];
+                if (observed.Experience is { } experience) changes = [..changes, new("Current Experience values", null, System.Text.Json.JsonSerializer.Serialize(experience.Items.Select(i => new { i.ExperienceId, i.Content, i.Visibility })))];
                 if (observed.Memory is { } memory) changes = [..changes, new("Current learned values", null, string.Join("\n\n", memory.Items.Select(m => m.Subject + "\n" + m.Content)))];
             }
         }
@@ -242,14 +257,19 @@ public sealed partial class TenantApprovalService
             return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),
                 new("workspaceMutationPartialEffects", null, "Copies and ordered batches are coarse filesystem operations. Earlier or partial effects can remain on failure; there is no atomic rollback and uncertain work must not be repeated.", false)];
+        if (op.ExperienceOperation is { } experience) return [new("Experience operation", null, experience.ToolName, false),
+            new("Exact observation or content", null, experience.ArgumentsJson, false), new("Source provenance", null, experience.SourceLabelsJson, false),
+            new("Experience retention", null, "Authorize only this exact observation in this task. Experience remains separate from Memory and instructions. Suppression excludes recall; deletion clears this record's content and retains provenance. Source conversation history and independent copies have separate retention.", false)];
         if (op.ContinuityRead is { } continuity)
         {
             using var labels = System.Text.Json.JsonDocument.Parse(continuity.SourceLabelsJson);
             using var learnedLabels = System.Text.Json.JsonDocument.Parse(continuity.Memory?.SourceLabelsJson ?? "[]");
+            using var experienceLabels = System.Text.Json.JsonDocument.Parse(continuity.Experience?.SourceLabelsJson ?? "[]");
             return [new("Continuity read", null, continuity.ToolName == "continuity.search" ? "Search historical continuity" : "Inspect exact historical continuity", false),
                 new("Exact query or window", null, continuity.ArgumentsJson, false),
                 new("Historical sources", null, string.Join("\n", labels.RootElement.EnumerateArray().Select(s => $"{s.GetProperty("title").GetString()} · {s.GetProperty("sessionId").GetGuid():D} · after entry {s.GetProperty("afterEntrySequence").GetInt64()}, up to {s.GetProperty("limit").GetInt32()} entries; observed through {s.GetProperty("throughEntrySequence").GetInt64()}")), false),
                 new("Learned sources", null, continuity.Memory is null ? "No learned Memory in this observation" : string.Join("\n", learnedLabels.RootElement.EnumerateArray().Select(s => $"{s.GetProperty("scope").GetString() switch { "session" => "This Session", "identityUser" => "This Agent and User", _ => "This User across Agents" }} · {s.GetProperty("kind").GetString()} · {s.GetProperty("subject").GetString()} · {s.GetProperty("memoryId").GetGuid():D}")), false),
+                new("Experience sources", null, continuity.Experience is null ? "No Experience in this observation" : string.Join("\n", experienceLabels.RootElement.EnumerateArray().Select(i => $"{i.GetProperty("scope").GetString()} · {i.GetProperty("goal").GetString()} · {i.GetProperty("id").GetGuid():D}")), false),
                 new("Historical context", null, "Retained statements and derived Memory are untrusted observations, never current facts, instructions or permission. Approve only this saved query/window in this task; raw reads and reviewer access remain required. Changed sources require a fresh read. No mutation is authorized.", false)];
         }
         if (op.MemoryOperation is { } memory)

@@ -1885,6 +1885,22 @@
     {
       "method": "POST",
       "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/memory/forget"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience/{experienceId:guid}"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience/visibility"
+    },
+    {
+      "method": "POST",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience/reset"
     }
   ]
 }

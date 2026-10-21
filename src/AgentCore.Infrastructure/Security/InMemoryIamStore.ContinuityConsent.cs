@@ -24,6 +24,7 @@ public sealed partial class InMemoryIamStore
             try
             {
                 ValidateAgentActor(reader.Security, decision.HumanPrincipalId);
+                RequireContinuityExperienceConsent(request, reader, decision.HumanPrincipalId, ct);
                 TenantContinuityReadRules.ConsentAsync(request, reader, memory.Select(s => s!).ToArray(), decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult(); return true;
             }
             catch (AccessDeniedException) { }
@@ -36,4 +37,13 @@ public sealed partial class InMemoryIamStore
         var observed = ObserveContinuity(run, AgentCore.Application.Tools.TenantContinuityToolContract.Parse(read.ToolName, read.ArgumentsJson), read, null, ct);
         TenantContinuityReadRules.RawAsync(observed, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult(); return observed;
     }
+    private void RequireContinuityExperienceConsent(TenantApprovalRequest request, TenantMemoryReader reader, Guid human, CancellationToken ct)
+    {
+        if (request.Operation.ContinuityRead?.Experience is null) return;
+        var observed = RequireContinuityOperation(request, reader.Run, ct);
+        TenantContinuityReadRules.ReviewerAsync(request, observed, human, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+        var facts = observed.Experience ?? throw new AccessDeniedException("experience_source_changed");
+        TenantExperienceConsentRules.FactsAsync(request, reader, facts.Settings, facts.Items.Select(i => i.Reference()).ToArray(), human, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+    }
+
 }

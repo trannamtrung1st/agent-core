@@ -193,6 +193,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         var continuityChat = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.ChatAgents?.Select(id => id.ToString("D")).ToArray());
         var continuitySessions = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.Sessions?.Select(id => id.ToString("D")).ToArray());
         var continuityMemory = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.MemoryAgents?.Select(id => id.ToString("D")).ToArray());
+        var experienceRuns = System.Text.Json.JsonSerializer.Serialize(continuityVisibility?.Runs?.Select(id => id.ToString("D")).ToArray());
         var source = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE
             (json_type(PayloadJson, '$.Operation.ContinuityRead') IS NOT 'object' OR ({continuityVisible}
@@ -213,6 +214,29 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                             AND ({continuityMemory} = 'null' OR fact.AgentInstanceId IN (SELECT value FROM json_each({continuityMemory})))
                             AND ({continuityAgents} = 'null' OR fact.AgentInstanceId IN (SELECT value FROM json_each({continuityAgents})))
                             AND (fact.Scope <> 0 OR {continuitySessions} = 'null' OR fact.SessionId IN (SELECT value FROM json_each({continuitySessions})))))))))
+            AND (json_type(PayloadJson, '$.Operation.ContinuityRead.Experience') IS NOT 'object' OR (
+                (json_extract(PayloadJson, '$.Operation.ContinuityRead.Experience.UserPrincipalId') IS NULL OR json_extract(PayloadJson, '$.Operation.ContinuityRead.Experience.UserPrincipalId') = {continuityHuman})
+                AND ({continuityMemory} = 'null' OR InstanceId IN (SELECT value FROM json_each({continuityMemory})))
+                AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson, '$.Operation.ContinuityRead.Experience.SourcesJson')) source
+                    WHERE NOT EXISTS (SELECT 1 FROM TenantExperiences fact WHERE fact.TenantId=TenantApprovalRequests.TenantId AND fact.AgentInstanceId=TenantApprovalRequests.InstanceId
+                        AND lower(fact.ExperienceId)=json_extract(source.value,'$.ExperienceId') AND (fact.UserPrincipalId IS NULL OR lower(fact.UserPrincipalId)={continuityHuman})))))
+            AND (json_type(PayloadJson, '$.Operation.ExperienceOperation') IS NOT 'object' OR ({continuityVisible}
+                AND ({continuityAgents}='null' OR InstanceId IN (SELECT value FROM json_each({continuityAgents})))
+                AND ({continuityChat}='null' OR InstanceId IN (SELECT value FROM json_each({continuityChat})))
+                AND ({continuitySessions}='null' OR (SessionId IN (SELECT value FROM json_each({continuitySessions}))
+                    AND json_extract(PayloadJson,'$.Operation.ExperienceOperation.RootSessionId') IN (SELECT value FROM json_each({continuitySessions}))
+                    AND (json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source.SessionId') IS NULL OR json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source.SessionId') IN (SELECT value FROM json_each({continuitySessions})))))
+                AND (json_extract(PayloadJson,'$.Operation.ExperienceOperation.ToolName')='experience.source' OR json_extract(PayloadJson,'$.Operation.ExperienceOperation.UserPrincipalId') IS NULL OR json_extract(PayloadJson,'$.Operation.ExperienceOperation.UserPrincipalId')={continuityHuman})
+                AND (json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source.PrivateUserPrincipalId') IS NULL OR json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source.PrivateUserPrincipalId')={continuityHuman})
+                AND (json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source.SourceRunId') IS NULL OR {experienceRuns}='null' OR json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source.SourceRunId') IN (SELECT value FROM json_each({experienceRuns})))
+                AND (json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source') IS NULL OR EXISTS (SELECT 1 FROM TenantSessions owner JOIN Sessions saved ON saved.SessionId=owner.SessionId
+                    WHERE owner.TenantId=TenantApprovalRequests.TenantId AND owner.AgentInstanceId=TenantApprovalRequests.InstanceId AND saved.DurablyDeletedAtUtc IS NULL
+                        AND owner.SessionId=json_extract(PayloadJson,'$.Operation.ExperienceOperation.Source.SessionId')))
+                AND (json_extract(PayloadJson,'$.Operation.ExperienceOperation.ToolName')<>'experience.consolidate' OR (
+                    ({continuityMemory}='null' OR InstanceId IN (SELECT value FROM json_each({continuityMemory})))
+                    AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson,'$.Operation.ExperienceOperation.SourcesJson')) source
+                        WHERE NOT EXISTS (SELECT 1 FROM TenantExperiences fact WHERE fact.TenantId=TenantApprovalRequests.TenantId AND fact.AgentInstanceId=TenantApprovalRequests.InstanceId
+                            AND lower(fact.ExperienceId)=json_extract(source.value,'$.ExperienceId') AND (fact.UserPrincipalId IS NULL OR lower(fact.UserPrincipalId)={continuityHuman})))))))
             AND
             (json_type(PayloadJson, '$.Operation.MemoryOperation') IS NOT 'object' OR ({memoryVisible}
                 AND (json_extract(PayloadJson, '$.Operation.MemoryOperation.UserPrincipalId') IS NULL OR json_extract(PayloadJson, '$.Operation.MemoryOperation.UserPrincipalId') = {memoryHuman})
@@ -548,6 +572,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.BackgroundStart is not null) await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.ExperienceOperation is not null) _ = await RequireExperienceApproval(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.ContinuityRead is not null) _ = await RequireContinuityOperation(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.MemoryOperation is not null) _ = await RequireMemoryOperation(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.WorkspaceRead is not null) await RequireWorkspaceReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -655,6 +680,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 await RequireWorkspaceMutationOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.ExperienceOperation is not null)
+            {
+                var experience = await RequireExperienceApproval(db, request, run, ct).ConfigureAwait(false);
+                await TenantExperienceConsentRules.ReviewerAsync(request, experience, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.ContinuityRead is not null)
             {

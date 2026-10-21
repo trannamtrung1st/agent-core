@@ -37,9 +37,9 @@ public sealed partial class SessionRuntime
             Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct),
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
-            ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
+            ContinuityContext: _runtimeOwner is not null ? null : await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
             { ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
-                Configuration = _boundAgentRun?.Admission.Configuration, RunTaskIntent = _boundAgentRun?.Admission.TaskIntent };
+                Configuration = _boundAgentRun?.Admission.Configuration, CurrentContinuitySettings = await CurrentContinuitySettingsAsync(_boundAgentRun, ct).ConfigureAwait(false), RunTaskIntent = _boundAgentRun?.Admission.TaskIntent };
     }
 
     private async Task<CapabilityLoadMailboxResult> RequestCapabilityLoadAsync(EventContext cause, Guid responseId,

@@ -21,11 +21,13 @@ public static class ToolProjectionService
             || BrowserBootstrap.Contains(t.Name)
             || always.Contains(t.Name, StringComparer.Ordinal) || skill.Contains(t.Name)
             || loaded.Contains(t.Name, StringComparer.Ordinal)
-            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantMemoryToolContract.IsTool(t.Name) || TenantCredentialDiscoveryContract.IsFamilyTool(t.Name) || TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name is ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreateFromWorkspace || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name) || t.Name == ToolCatalog.AgentStateInspect)))
+            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantExperienceToolContract.IsTool(t.Name) || TenantMemoryToolContract.IsTool(t.Name) || TenantCredentialDiscoveryContract.IsFamilyTool(t.Name) || TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name is ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreateFromWorkspace || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name) || t.Name == ToolCatalog.AgentStateInspect)))
             .Select(t => ForContext(t, context))
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }
     private static ModelToolDefinition ForContext(ModelToolDefinition tool, AgentContext? context) => context?.ExecutionContext is null ? tool
+        : TenantExperienceToolContract.IsTool(tool.Name) ? TenantExperienceToolContract.ForModel(tool)
+        : TenantContinuityToolContract.IsTool(tool.Name) ? TenantContinuityToolContract.ForModel(tool, context.CurrentContinuitySettings?.ExperienceEnabled == true && context.Definition.StateIsolationPolicy?.ExperienceRecall != false)
         : TenantMemoryToolContract.IsTool(tool.Name) ? TenantMemoryToolContract.ForModel(tool)
         : TenantCredentialDiscoveryContract.IsFamilyTool(tool.Name) ? TenantCredentialDiscoveryContract.Descriptor(tool.Name)
         : TenantWorkspaceMutationContract.IsMutation(tool.Name) ? TenantWorkspaceMutationContract.ForModel(tool)

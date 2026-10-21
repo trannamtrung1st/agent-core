@@ -215,7 +215,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IAgentRunAuthority? runAuthority = null,
         ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
         AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
-        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null, TenantMemoryService? tenantMemory = null)
+        AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null, TenantMemoryService? tenantMemory = null, TenantExperienceService? tenantExperience = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -249,6 +249,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _tenantAttachments = tenantAttachments;
         _tenantProfiles = tenantProfiles;
         _tenantMemory = tenantMemory;
+        _tenantExperience = tenantExperience;
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
         _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
@@ -2597,12 +2598,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
-                    AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
+                    AllowAgentConsolidation: _runtimeOwner is not null ? (await CurrentContinuitySettingsAsync(capturedRun, evaluationToken).ConfigureAwait(false))?.AllowMaintenance == true : await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
                     ExperienceContext: executionDefinition.StateIsolationPolicy?.ExperienceRecall != false ? await RunExperienceContextAsync(evaluationToken) : null,
-                    ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, executionDefinition, evaluationToken))
+                    ContinuityContext: _runtimeOwner is not null ? null : await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, executionDefinition, evaluationToken))
                 {
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
                     Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
+                    CurrentContinuitySettings = await CurrentContinuitySettingsAsync(capturedRun, evaluationToken).ConfigureAwait(false),
                     ExecutionContext = capturedRun?.Admission.ExecutionContext,
                     RequesterContext = await RequesterContextAsync(capturedRun, evaluationToken).ConfigureAwait(false),
                     ApprovalOutcome = capturedApprovalOutcome,
@@ -2770,6 +2772,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var profileSource = executionState.TenantProfileSource;
         var memorySources = TenantMemoryOperationReferences.Read(checkpoint);
         var historicalSources = TenantHistoricalReferences.Read(checkpoint);
+        var experienceSourceReads = TenantExperienceReferences.Sources(checkpoint);
+        var experienceFacts = TenantExperienceReferences.Facts(checkpoint);
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
         var failedAttempts = (executionState.FailedAttempts ?? []).ToList();
@@ -2833,9 +2837,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             memorySources = TenantMemoryService.Merge(memorySources, TenantMemoryOperationReferences.Read(messages));
             historicalSources = TenantHistoricalReferences.Merge(historicalSources, TenantHistoricalReferences.Read(messages));
+            experienceSourceReads = TenantExperienceReferences.Merge(experienceSourceReads, TenantExperienceReferences.Sources(messages));
+            experienceFacts = TenantExperienceReferences.Merge(experienceFacts, TenantExperienceReferences.Facts(messages));
             return new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
             finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
-            attachmentSources.Count == 0 ? null : attachmentSources, profileSource, memorySources.Count == 0 ? null : memorySources);
+            attachmentSources.Count == 0 ? null : attachmentSources, profileSource, memorySources.Count == 0 ? null : memorySources,
+            historicalSources.Count == 0 ? null : historicalSources, experienceSourceReads.Count == 0 ? null : experienceSourceReads, experienceFacts.Count == 0 ? null : experienceFacts);
         }
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
@@ -3020,6 +3027,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await RequesterContextAsync(_boundAgentRun, generateToken).ConfigureAwait(false)) };
                 TenantRunProfileObservation? profileObservation = null;
                 TenantMemoryObservation? memoryObservation = null;
+                TenantExperienceObservation? experienceObservation = null;
                 if (_runtimeOwner is not null)
                 {
                     // Metadata/native collection may itself await a live restriction. Refresh at
@@ -3033,7 +3041,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     memoryObservation = await (_tenantMemory ?? throw new InvalidOperationException("Tenant learned-memory binding is required."))
                         .ReadAsync(_boundAgentRun!, generateToken).ConfigureAwait(false);
                     memorySources = TenantMemoryService.Merge(memorySources, memoryObservation.Sources);
-                    working = working with { Context = TenantMemoryService.Project(TenantRunProfileRules.Project(context, profileObservation), memoryObservation, _boundAgentRun!, _snapshot.Entries) };
+                    if (_tenantExperience is not null)
+                    {
+                        experienceObservation = await _tenantExperience.ReadAsync(_boundAgentRun!, generateToken).ConfigureAwait(false);
+                        experienceFacts = TenantExperienceReferences.Merge(experienceFacts, TenantExperienceService.Sources(experienceObservation));
+                    }
+                    else if (_boundAgentRun!.Admission.Configuration?.ContinuitySettings?.ExperienceEnabled == true) throw new InvalidOperationException("Tenant Experience binding is required.");
+                    working = working with { Context = TenantExperienceService.Project(TenantMemoryService.Project(TenantRunProfileRules.Project(context, profileObservation), memoryObservation, _boundAgentRun!, _snapshot.Entries), experienceObservation) };
                 }
                 if (!resumingBatch && _runtimeOwner is not null && _boundAgentRun is { } browserRun
                     && TenantBrowserArtifactRules.HasCapture(messages))
@@ -3042,7 +3056,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
-                if (profileSource is not null || memorySources.Count > 0)
+                if (profileSource is not null || memorySources.Count > 0 || historicalSources.Count > 0 || experienceSourceReads.Count > 0 || experienceFacts.Count > 0)
                     await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                         overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
@@ -3069,6 +3083,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             await _tenantProfiles.RequireProjectionAsync(profileRun, profileObservation, token).ConfigureAwait(false);
                         if (_tenantMemory is not null && _boundAgentRun is { } memoryRun)
                             await _tenantMemory.RequireProjectionAsync(memoryRun, memoryObservation, token).ConfigureAwait(false);
+                        if (_tenantExperience is not null && _boundAgentRun is { } experienceRun)
+                            await _tenantExperience.RequireProjectionAsync(experienceRun, experienceObservation, token).ConfigureAwait(false);
                     }
                     if (_runtimeOwner is not null && _boundAgentRun is { } imageRun && TenantBrowserArtifactRules.HasCapture(messages))
                         await (_tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."))
@@ -6496,12 +6512,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
                     && input.Error is AgentCore.Application.Security.AccessDeniedException denied
-                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal)
+                    && (denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("experience_", StringComparison.Ordinal)
                         || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)))
                 {
                     await RefuseProtectedOutputAsync(input.Context, cancellationToken,
                         AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun),
-                        profile: denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal), memory: denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal), continuity: denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal)).ConfigureAwait(false);
+                        profile: denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal), memory: denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal), continuity: denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal), experience: denied.ReasonCode.StartsWith("experience_", StringComparison.Ordinal)).ConfigureAwait(false);
                     job.Ended?.TrySetResult(false); return;
                 }
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;

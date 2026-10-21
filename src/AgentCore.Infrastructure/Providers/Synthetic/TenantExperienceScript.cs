@@ -1,0 +1,52 @@
+using System.Text.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
+
+namespace AgentCore.Infrastructure.Providers.Synthetic;
+
+// Key-free native fixture. Source inspection, consent, recording and fact reads
+// still execute through the ordinary tenant tool and transaction owners.
+internal static class TenantExperienceScript
+{
+    internal static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
+    {
+        const string prefix = "synthetic-tenant-experience: ";
+        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text ?? SyntheticTaskContext.Text(request);
+        if (!prompt.StartsWith(prefix, StringComparison.Ordinal)) return null;
+        var parts = prompt[prefix.Length..].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2 || !Guid.TryParseExact(parts[1], "D", out var id) || id == Guid.Empty) return Finish("Select one exact source or Experience observation.");
+        var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
+        JsonElement? Payload(ModelMessage? message) { if (message is null) return null; using var json = JsonDocument.Parse(message.Text); return json.RootElement.Clone(); }
+        var authorization = Payload(results.LastOrDefault(m => m.Name == ToolCatalog.RequestAuthorization));
+        if (authorization is { } denied && denied.TryGetProperty("outcome", out var outcome) && outcome.GetString() != "completed") return Finish("The saved Experience operation was not authorized. It will not be repeated.");
+        if (parts[0] == "get")
+        {
+            if (request.Tools?.Any(t => t.Name == ToolCatalog.ContinuityGet && t.ParametersJson.Contains("Experience", StringComparison.Ordinal)) != true) return Finish("Experience inspection is unavailable for this task.");
+            var args = new { kind = "Experience", id }; var observation = Payload(results.LastOrDefault(m => m.Name == ToolCatalog.ContinuityGet));
+            if (authorization is { } read && read.TryGetProperty("continuityObservation", out var saved) && saved.ValueKind == JsonValueKind.Object) observation = saved;
+            if (observation is null) return Call(ToolCatalog.ContinuityGet, args);
+            if (RequiresApproval(observation.Value)) return Call(ToolCatalog.RequestAuthorization, new { operation = "inspect_continuity", continuity = new { tool = ToolCatalog.ContinuityGet, arguments = args } });
+            return observation.Value.TryGetProperty("items", out var items) && items.GetArrayLength() == 1 ? Finish("The exact owned Experience was inspected under current access.") : Finish("Experience inspection was unavailable. No change was made.");
+        }
+        if (parts[0] != "record" || request.Tools?.Any(t => t.Name == TenantExperienceToolContract.Record) != true || request.Tools.Any(t => t.Name == TenantExperienceToolContract.Source) != true)
+            return Finish("Experience recording is unavailable for this task.");
+        if (authorization is { } applied && applied.TryGetProperty("applied", out var done) && done.GetBoolean()) return Finish("The exact Experience observation was recorded with source provenance.");
+        var source = Payload(results.LastOrDefault(m => m.Name == TenantExperienceToolContract.Source));
+        if (authorization is { } reviewed && reviewed.TryGetProperty("experienceSourceObservation", out var authorized) && authorized.ValueKind == JsonValueKind.Object) source = authorized;
+        var sourceArgs = new { sourceKind = "Session", sourceId = id };
+        if (source is null) return Call(TenantExperienceToolContract.Source, sourceArgs);
+        if (RequiresApproval(source.Value)) return Consent(TenantExperienceToolContract.Source, sourceArgs);
+        if (!source.Value.TryGetProperty("tenantExperienceSourceRead", out var marker) || marker.ValueKind != JsonValueKind.True) return Finish("The source was unavailable. No Experience was recorded.");
+        var recordArgs = new { sourceKind = "Session", sourceId = id, throughCursor = source.Value.GetProperty("throughCursor").GetInt64(), goal = "Frontend evidence grouping",
+            attempts = new[] { "Inspected the bounded retained conversation" }, decisions = new[] { "Keep the observed grouping explicit" }, outcomes = new[] { "Retained a derived observation" },
+            corrections = Array.Empty<string>(), unresolved = Array.Empty<string>(), difficulties = Array.Empty<string>(), lessons = new[] { "Inspect actual source provenance before recording Experience." } };
+        var recorded = Payload(results.LastOrDefault(m => m.Name == TenantExperienceToolContract.Record));
+        if (recorded is null) return Call(TenantExperienceToolContract.Record, recordArgs);
+        if (RequiresApproval(recorded.Value)) return Consent(TenantExperienceToolContract.Record, recordArgs);
+        return recorded.Value.TryGetProperty("alreadyCompleted", out _) ? Finish("The exact Experience observation is retained with source provenance.") : Finish("Experience recording was unavailable. No change was repeated.");
+    }
+    private static bool RequiresApproval(JsonElement value) => value.TryGetProperty("decision", out var decision) && decision.GetString() == "requiresApproval";
+    private static IReadOnlyList<ModelGenerationEvent> Consent(string tool, object arguments) => Call(ToolCatalog.RequestAuthorization, new { operation = TenantExperienceToolContract.OperationName(tool), experience = new { tool, arguments } });
+    private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) => [new ModelToolCallEvent(new("tenant-experience-" + name + "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(arguments))))[..8], name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];
+    private static IReadOnlyList<ModelGenerationEvent> Finish(string text) => [new ModelTextDelta(text), new ModelCompleted(ModelStopReason.Completed)];
+}

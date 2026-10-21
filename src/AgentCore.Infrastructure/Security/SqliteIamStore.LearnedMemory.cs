@@ -158,12 +158,14 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
     }
     private async Task RequireStoredMemorySources(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
     {
+        await RequireExperienceSources(db, run, TenantExperienceReferences.Sources(run.Checkpoint), TenantExperienceReferences.Facts(run.Checkpoint), ct).ConfigureAwait(false);
         if (TenantHistoricalReferences.Read(run.Checkpoint) is { Count: > 0 } history) await RequireHistoricalSources(db, run, history, ct).ConfigureAwait(false);
         if (TenantMemoryOperationReferences.Read(run.Checkpoint) is { Count: > 0 } sources)
             await RequireMemorySources(db, run, sources, ct).ConfigureAwait(false);
     }
     private async Task RequireMemoryCheckpoint(AgentCoreDbContext db, AgentRun run, AgentRunCheckpoint checkpoint, CancellationToken ct)
     {
+        await RequireExperienceCheckpoint(db, run, checkpoint, ct).ConfigureAwait(false);
         var oldHistory = TenantHistoricalReferences.Read(run.Checkpoint); var nextHistory = TenantHistoricalReferences.Read(checkpoint);
         if (oldHistory.Except(nextHistory).Any()) throw new AccessDeniedException("continuity_source_unavailable");
         if (nextHistory.Count > 0) await RequireHistoricalSources(db, run, nextHistory, ct).ConfigureAwait(false);

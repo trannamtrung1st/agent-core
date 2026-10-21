@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -31,6 +31,9 @@
   <ItemGroup>
     <None Update="Notices/**/*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Browser\Fixture\*.html" />
+    <!-- Versioned frozen SQL keeps SQLite guards without consuming the CLR string heap. -->
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261021214545_TenantExperienceConsent.Up.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261021214545_TenantExperienceConsent.Up.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261021214545_TenantExperienceConsent.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261021214545_TenantExperienceConsent.Down.sql" />
   </ItemGroup>
 
   <ItemGroup>

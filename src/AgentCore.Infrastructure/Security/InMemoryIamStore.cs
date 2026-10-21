@@ -146,6 +146,9 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
             throw new ArgumentException("A credential assignment requires a current owned credential.");
         RequireUserProfileReferences(state);
         RequireLearnedMemoryReferences(state);
+        if (tenantExperiences.Values.Any(i => i.TenantId == state.Tenant.TenantId && i.UserPrincipalId is not null
+            && !state.Users.Any(u => u.UserId == i.UserId && u.PrincipalId == i.UserPrincipalId && u.AccountId == i.AccountId)))
+            throw new ArgumentException("Retain the actual Experience User owner without reparenting it.");
         if (audit.TenantId != state.Tenant.TenantId || state.Users.Any(u => !_accounts.ContainsKey(u.AccountId)))
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);

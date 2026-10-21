@@ -1025,7 +1025,7 @@ public sealed class SessionRuntimeFactory(
     AgentCore.Application.Security.TenantArtifactReferenceService? tenantArtifacts = null,
     AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null,
     AgentCore.Application.Security.TenantRunProfileService? tenantProfiles = null,
-    AgentCore.Application.Security.TenantMemoryService? tenantMemory = null)
+    AgentCore.Application.Security.TenantMemoryService? tenantMemory = null, AgentCore.Application.Security.TenantExperienceService? tenantExperience = null)
 {
     private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
 
@@ -1045,7 +1045,7 @@ public sealed class SessionRuntimeFactory(
             tenantContinuations: tenantContinuations ?? throw new InvalidOperationException("Tenant continuation binding is required."),
             tenantAttachments: tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."), tenantVoice: tenantVoice,
             tenantProfiles: tenantProfiles ?? throw new InvalidOperationException("Tenant Profile context binding is required."),
-            tenantMemory: tenantMemory ?? throw new InvalidOperationException("Tenant learned-memory binding is required."));
+            tenantMemory: tenantMemory ?? throw new InvalidOperationException("Tenant learned-memory binding is required."), tenantExperience: tenantExperience);
     }
     public ValueTask<ISpeechRecognitionSession> OpenTenantRecognitionAsync(RecognitionOptions options, CancellationToken ct)
         => (recognizer ?? throw AgentCoreErrors.VoiceUnavailable()).OpenAsync(options, ct);

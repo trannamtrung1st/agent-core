@@ -35,7 +35,7 @@ public sealed class TenantContinuityContractTests
         Assert.DoesNotContain(ToolCatalog.For(disabled, context with { Definition = disabled }, ToolConfigurationGates.AllowAll), t => t.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet or ToolCatalog.RequestAuthorization);
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
     }
-    [Theory] [InlineData("null")] [InlineData("[]")] [InlineData("{\"kind\":\"Experience\",\"id\":\"00000000-0000-0000-0000-000000000001\"}")]
+    [Theory] [InlineData("null")] [InlineData("[]")] [InlineData("{\"kind\":\"Other\",\"id\":\"00000000-0000-0000-0000-000000000001\"}")]
     [InlineData("{\"kind\":\"Session\",\"id\":\"00000000-0000-0000-0000-000000000001\",\"limit\":0}")]
     [InlineData("{\"kind\":\"Session\",\"id\":\"00000000-0000-0000-0000-000000000001\",\"limit\":21}")]
     [InlineData("{\"kind\":\"Session\",\"id\":\"00000000-0000-0000-0000-000000000001\",\"afterEntrySequence\":-1}")]

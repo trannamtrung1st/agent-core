@@ -50,12 +50,25 @@ public static class TenantContinuityRules
     }
     public static async ValueTask<bool> IncludeMemoryAsync(TenantMemoryReader reader, TenantContinuityArguments args, IamAuthorizer iam, CancellationToken ct, Guid? human = null)
     {
-        if (args.Kind == "Session") return false;
+        if (args.Kind is "Session" or "Experience") return false;
         var allowed = reader.Effective.MemoryPolicy?.SessionMemory == true && (await iam.CheckOwnedTenantAsync(reader.Security,
             human ?? reader.Agent.PrincipalId, PermissionCatalog.Get("memory.read"), AccessScope.ForResource(reader.Security.Tenant.TenantId, "agent", reader.Run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false)).Allowed;
         if (!allowed && args.Kind == "Memory") throw new AccessDeniedException("continuity_source_unavailable");
         return allowed;
     }
+    public static async ValueTask<bool> IncludeExperienceAsync(TenantMemoryReader reader, TenantIsolationMetadata settings, TenantContinuityArguments args, IamAuthorizer iam, CancellationToken ct)
+    {
+        if (args.Kind is "Session" or "Memory") return false;
+        var allowed = false;
+        try { TenantExperienceRules.Eligible(reader, settings, TenantExperienceToolContract.Source);
+            await TenantExperienceRules.RawAsync(reader, null, true, iam, ct).ConfigureAwait(false); allowed = true; }
+        catch (AccessDeniedException) { }
+        if (!allowed && args.Kind == "Experience") throw new AccessDeniedException("experience_unavailable");
+        return allowed;
+    }
+    public static string ObservationHash(TenantContinuityArguments args, string sessions, PreparedMemoryOperation? memory, PreparedExperienceRead? experience) =>
+        TenantMemoryOperationRules.Hash(experience is null ? JsonSerializer.Serialize(new { args.Tool, args.CanonicalArguments, sessions, memory })
+            : JsonSerializer.Serialize(new { args.Tool, args.CanonicalArguments, sessions, memory, experience }));
     public static string Safe(string value, int limit, out bool truncated)
     {
         truncated = value.Length > limit;
@@ -87,7 +100,7 @@ public static class TenantContinuityRules
         return sources;
     }
     public static TenantContinuityObservation Observe(TenantMemoryReader reader, TenantContinuityArguments args, IReadOnlyList<TenantHistoricalSession> candidates,
-        TenantMemoryOperationObservation? memory, PreparedContinuityRead? expected = null, bool inspection = false, bool candidateHasMore = false)
+        TenantMemoryOperationObservation? memory, PreparedContinuityRead? expected = null, bool inspection = false, bool candidateHasMore = false, TenantExperienceFactObservation? experience = null)
     {
         if (!inspection) Eligible(reader);
         var selected = args.Tool == ToolCatalog.ContinuityGet || inspection ? candidates.ToArray() : candidates
@@ -99,10 +112,10 @@ public static class TenantContinuityRules
         var labels = JsonSerializer.Serialize(selected.Select(s => new { sessionId = s.SessionId, title = s.Title, throughEntrySequence = s.ThroughEntrySequence, afterEntrySequence = s.AfterEntrySequence, limit = s.Limit }));
         var memoryValue = memory?.Value;
         var value = new PreparedContinuityRead(reader.Run.SessionId, reader.Root.SessionId, reader.User?.PrincipalId, args.Tool, args.CanonicalArguments,
-            json, TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { args.Tool, args.CanonicalArguments, sessions = json, memory = memoryValue })), labels, memoryValue);
-        var changed = expected is not null && (value != expected || memory is not null && TenantMemoryOperationRules.Sources(memory.Value).Any(s => !memory.Items.Any(m => m.MemoryId == s.MemoryId && m.Revision == s.Revision && m.ContentHash == s.ContentHash)));
+            json, ObservationHash(args, json, memoryValue, experience?.Value), labels, memoryValue, experience?.Value);
+        var changed = experience?.SourcesChanged == true || expected is not null && (value != expected || memory is not null && TenantMemoryOperationRules.Sources(memory.Value).Any(s => !memory.Items.Any(m => m.MemoryId == s.MemoryId && m.Revision == s.Revision && m.ContentHash == s.ContentHash)));
         if (changed && !inspection) throw new SecurityConflictException("continuity_source_changed");
         return new(reader, args, Array.AsReadOnly(selected), memory, inspection ? expected! : value,
-            candidateHasMore || selected.Length > args.Limit || memory?.HasMore == true, changed);
+            candidateHasMore || selected.Length > args.Limit || memory?.HasMore == true || experience?.HasMore == true, changed, experience);
     }
 }

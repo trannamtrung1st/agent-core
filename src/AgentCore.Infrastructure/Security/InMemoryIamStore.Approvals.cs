@@ -68,6 +68,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                     && (r.Operation.ArtifactPublication.Source is null || ArtifactSourceApprovalVisible(r, workspaceReadVisibility, attachmentReadVisibility)))
                 && (r.Operation.MemoryOperation is null || MemoryApprovalVisible(r, memoryVisibility))
                 && (r.Operation.ContinuityRead is null || ContinuityApprovalVisible(r, continuityVisibility))
+                && (r.Operation.ExperienceOperation is null || ExperienceApprovalVisible(r, continuityVisibility))
                 && (r.Operation.WorkspaceRead is null || WorkspaceApprovalVisible(r, workspaceReadVisibility, attachmentReadVisibility))
                 && (r.Operation.WorkspaceMutation is null || WorkspaceMutationApprovalVisible(r, workspaceMutationVisibility))
                 && (r.Operation.AttachmentRead is null || attachmentBacking is not null
@@ -134,6 +135,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (request.Operation.ArtifactPublication is not null) RequireArtifactOperation(request, run, agent);
             if (request.Operation.BrowserCommand is not null) RequireBrowserOperation(request, run, agent);
             if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
+            if (request.Operation.ExperienceOperation is not null) _ = RequireExperienceApproval(request, run, ct);
             if (request.Operation.ContinuityRead is not null) _ = RequireContinuityOperation(request, run, ct);
             if (request.Operation.MemoryOperation is not null) _ = RequireMemoryOperation(request, run, ct);
             if (request.Operation.WorkspaceRead is not null) RequireWorkspaceReadOperation(request, run, agent);
@@ -238,6 +240,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             {
                 RequireWorkspaceMutationOperation(request, run, agent);
                 TenantWorkspaceMutationOperationRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            if (request.Operation.ExperienceOperation is not null && request.Status != TenantApprovalStatus.Cancelled)
+            {
+                var experience = RequireExperienceApproval(request, run, ct);
+                TenantExperienceConsentRules.ReviewerAsync(request, experience, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             }
             if (request.Operation.ContinuityRead is not null && request.Status != TenantApprovalStatus.Cancelled)
             {

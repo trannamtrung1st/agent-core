@@ -7,4 +7,8 @@ namespace AgentCore.Domain.Security;
 public sealed record PreparedHistoricalSession(Guid SessionId, long Revision, long ThroughEntrySequence, long AfterEntrySequence, int Limit, string ObservationHash);
 public sealed record PreparedContinuityRead(Guid SessionId, Guid RootSessionId, Guid? UserPrincipalId,
     string ToolName, string ArgumentsJson, string SessionsJson, string ObservationHash, string SourceLabelsJson,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedMemoryOperation? Memory = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedMemoryOperation? Memory = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedExperienceRead? Experience = null);
+
+public sealed record PreparedExperienceRead(Guid SessionId, Guid RootSessionId, Guid? UserPrincipalId, string ToolName,
+    string ArgumentsJson, string SourcesJson, string SourceLabelsJson, string ObservationHash, long ExperienceRevision);

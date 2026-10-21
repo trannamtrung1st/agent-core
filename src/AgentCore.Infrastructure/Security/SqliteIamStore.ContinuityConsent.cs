@@ -38,6 +38,7 @@ public sealed partial class SqliteIamStore
             try
             {
                 await ValidateTenantActorAsync(db, reader.Security, row.HumanPrincipalId, ct).ConfigureAwait(false);
+                await RequireContinuityExperienceConsent(db, request, reader, row.HumanPrincipalId, ct).ConfigureAwait(false);
                 await TenantContinuityReadRules.ConsentAsync(request, reader, memory, row.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false); return true;
             }
             catch (AccessDeniedException) { }
@@ -50,4 +51,13 @@ public sealed partial class SqliteIamStore
         var observed = await ObserveContinuity(db, run, AgentCore.Application.Tools.TenantContinuityToolContract.Parse(read.ToolName, read.ArgumentsJson), read, null, ct).ConfigureAwait(false);
         await TenantContinuityReadRules.RawAsync(observed, new IamAuthorizer(this), ct).ConfigureAwait(false); return observed;
     }
+    private async Task RequireContinuityExperienceConsent(AgentCoreDbContext db, TenantApprovalRequest request, TenantMemoryReader reader, Guid human, CancellationToken ct)
+    {
+        if (request.Operation.ContinuityRead?.Experience is null) return;
+        var observed = await RequireContinuityOperation(db, request, reader.Run, ct).ConfigureAwait(false);
+        await TenantContinuityReadRules.ReviewerAsync(request, observed, human, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        var facts = observed.Experience ?? throw new AccessDeniedException("experience_source_changed");
+        await TenantExperienceConsentRules.FactsAsync(request, reader, facts.Settings, facts.Items.Select(i => i.Reference()).ToArray(), human, new IamAuthorizer(this), ct).ConfigureAwait(false);
+    }
+
 }

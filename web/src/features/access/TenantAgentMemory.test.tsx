@@ -10,6 +10,7 @@ const fetchMock = vi.fn<typeof fetch>(); let saved: TenantMemoryPage; let comman
 beforeEach(() => { resetIdentityCsrf(); commands = []; failed = 0; saved = { items: [{ memoryId: 'fact', scope: 'identityUser', kind: 'Preference', status: 'Active', subject: 'Private fact', content: 'PRIVATE_BODY', revision: 3, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), originAgentId: 'agent', source: 'userExplicit', canForget: true }], total: 1, retainedCount: 1, page: 1, pageSize: 25, securityRevision: 7, canReset: true, agentName: 'Memory agent' };
   vi.stubGlobal('fetch', fetchMock); fetchMock.mockReset(); fetchMock.mockImplementation(async (path, options) => {
     if (String(path).endsWith('/csrf')) return response({ token: 'test' });
+    if (String(path).includes('/experience')) return response({ items: [], total: 0, retainedCount: 0, page: 1, pageSize: 25, securityRevision: 7, canReset: false, agentName: 'Memory agent' });
     if (options?.method === 'POST') { commands.push(JSON.parse(options.body as string)); return failed ? response({ reasonCode: 'stale_revision' }, failed) : response({ itemsForgotten: 1, securityRevision: 8 }); }
     return response(saved);
   });

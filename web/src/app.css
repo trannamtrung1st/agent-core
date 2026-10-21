@@ -2791,8 +2791,9 @@ body,
   text-decoration: none;
 }
 
-/* Expanded Credential details stay within the collection viewport while the table scrolls. */
+/* Expanded records fit the collection viewport while summary columns scroll. */
 .admin-collection-table { container-type: inline-size; }
+.admin-expanded-record { width: min(100%, calc(100cqw - 2 * var(--ac-space-compact))); min-width: 0; overflow-wrap: anywhere; }
 .admin-credential-details { overflow-wrap: anywhere; }
 /* Admin shell owns navigation geometry; panels keep their existing single inset. */
 .admin-layout { height: 100dvh; min-height: 0; }

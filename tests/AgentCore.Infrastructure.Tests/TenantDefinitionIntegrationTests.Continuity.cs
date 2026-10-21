@@ -32,8 +32,11 @@ public sealed partial class TenantDefinitionIntegrationTests
     {
         var authorization = new ModelToolCall("continuity-consent", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "inspect_continuity", continuity = new { tool = call.Name, arguments = JsonDocument.Parse(call.ArgumentsJson).RootElement } }));
         var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(frame.Owner.TenantId!.Value, frame.RunId))!;
+        var state = AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint) with {
+            TenantMemorySources = TenantMemoryOperationReferences.Read(run.Checkpoint), TenantHistoricalSources = TenantHistoricalReferences.Read(run.Checkpoint),
+            TenantExperienceSourceReads = TenantExperienceReferences.Sources(run.Checkpoint), TenantExperienceSources = TenantExperienceReferences.Facts(run.Checkpoint) };
         run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, DateTimeOffset.UtcNow, frame.Generation,
-            new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [authorization])]), 1, 0, 180000, 0), null), f.Ids.NewId());
+            new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [authorization])], executionState: state), 1, 0, 180000, 0), null), f.Ids.NewId());
         var result = await approvals.PrepareContinuityAsync(new(frame.Owner.TenantId!.Value, frame.RunId), call, run.Revision, frame.Generation);
         Assert.Equal(OperationDecisionKind.RequiresApproval, result.Decision); return Assert.IsType<TenantApprovalRequest>(result.Request);
     }

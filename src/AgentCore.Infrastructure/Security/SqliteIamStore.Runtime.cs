@@ -44,7 +44,8 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         var producerRow = await db.AgentRuns.AsNoTracking().SingleAsync(r => r.TenantId == frame.Owner.TenantId && r.AgentRunId == frame.RunId.ToString("D"), ct).ConfigureAwait(false);
         var producer = AgentRunStoreMapping.ToDomain(producerRow);
         if (TenantAutomationConversationRules.IsConversationRoot(producer) || AgentRunToolCallCheckpoint.ReadExecutionState(producer.Checkpoint).TenantProfileSource is not null
-            || TenantMemoryOperationReferences.Read(producer.Checkpoint) is { Count: > 0 } || TenantHistoricalReferences.Read(producer.Checkpoint) is { Count: > 0 })
+            || TenantMemoryOperationReferences.Read(producer.Checkpoint) is { Count: > 0 } || TenantHistoricalReferences.Read(producer.Checkpoint) is { Count: > 0 }
+            || TenantExperienceReferences.Sources(producer.Checkpoint) is { Count: > 0 } || TenantExperienceReferences.Facts(producer.Checkpoint) is { Count: > 0 })
         {
             var rows = await db.Entries.AsNoTracking().Where(e => e.SessionId == producerRow.SessionId && e.ResponseId == producer.ResponseId!.Value.ToString("D")).ToArrayAsync(ct).ConfigureAwait(false);
             var saved = rows.Select(SqliteMemoryStore.ToEntry).ToDictionary(e => e.EntryId);

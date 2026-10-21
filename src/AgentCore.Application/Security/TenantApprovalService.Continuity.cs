@@ -10,7 +10,7 @@ public sealed partial class TenantApprovalService
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var memory = await MemoryVisibilityAsync(tenant, human, ct).ConfigureAwait(false);
         return new(human.PrincipalId, await VisibleIds(state, human.PrincipalId, "agents.read", "agent", ct).ConfigureAwait(false),
-            await VisibleIds(state, human.PrincipalId, "agents.chat", "agent", ct).ConfigureAwait(false), memory.Sessions, memory.Agents);
+            await VisibleIds(state, human.PrincipalId, "agents.chat", "agent", ct).ConfigureAwait(false), memory.Sessions, memory.Agents, await VisibleIds(state, human.PrincipalId, "agent-runs.read", "agent-run", ct).ConfigureAwait(false));
     }
 
     public async ValueTask<TenantApprovalPreparationResult> PrepareContinuityAsync(TenantRunReference reference, ModelToolCall call,

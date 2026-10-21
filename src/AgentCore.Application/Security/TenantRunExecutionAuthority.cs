@@ -86,6 +86,11 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                         if (memorySources is null) throw new AccessDeniedException("memory_context_unavailable");
                         await memorySources.RequireAsync(after.Run, learned, cancellationToken).ConfigureAwait(false);
                     }
+                    if (TenantExperienceReferences.Sources(after.Run.Checkpoint).Count > 0 || TenantExperienceReferences.Facts(after.Run.Checkpoint).Count > 0)
+                    {
+                        if (continuitySources is null) throw new AccessDeniedException("experience_unavailable");
+                        await continuitySources.RequireExperienceAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    }
                     if (TenantHistoricalReferences.Read(after.Run.Checkpoint) is { Count: > 0 } historical)
                     {
                         if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");
@@ -112,6 +117,11 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
         return (current, state);
     }
 
+    public async ValueTask<AgentRunContinuitySettings?> CurrentContinuitySettingsAsync(AgentRun run, CancellationToken ct = default)
+    {
+        _ = await ResolveCurrentAsync(run, ct).ConfigureAwait(false);
+        return await configurations.CurrentContinuitySettingsAsync(run, ct).ConfigureAwait(false);
+    }
     public async ValueTask<TenantRequesterContext> CurrentRequesterAsync(AgentRun run, CancellationToken ct = default)
     {
         var (current, state) = await ResolveCurrentAsync(run, ct).ConfigureAwait(false);

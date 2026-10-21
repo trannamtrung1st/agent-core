@@ -7,9 +7,9 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
-    private async Task RefuseProtectedOutputAsync(EventContext context, CancellationToken ct, bool conversation = false, bool profile = false, bool memory = false, bool continuity = false)
+    private async Task RefuseProtectedOutputAsync(EventContext context, CancellationToken ct, bool conversation = false, bool profile = false, bool memory = false, bool continuity = false, bool experience = false)
     {
-        var message = continuity ? "Current historical source access or state no longer permits this result. Start new work after reviewing access." : memory ? "Current learned-memory access or state no longer permits this result. Start new work after reviewing access." : profile ? "Current Profile access no longer permits this result. Start new work after reviewing access." : conversation ? "Current conversation access no longer permits this result. Start new work after reviewing access."
+        var message = experience ? "Current Experience access or state no longer permits this result. Start new work after reviewing access." : continuity ? "Current historical source access or state no longer permits this result. Start new work after reviewing access." : memory ? "Current learned-memory access or state no longer permits this result. Start new work after reviewing access." : profile ? "Current Profile access no longer permits this result. Start new work after reviewing access." : conversation ? "Current conversation access no longer permits this result. Start new work after reviewing access."
             : "Current account access no longer permits this result. Start new work after reviewing access.";
         var bound = _boundAgentRun!;
         var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, ct).ConfigureAwait(false)

@@ -532,3 +532,12 @@ Use the existing explicit review/confirm, stale or uncertain result fence, retai
 ## Historical continuity consent interaction
 
 Use the shared Chat/Inbox exact-read Drawer for historical continuity. The human reviews the saved search/window and named source ranges, readable learned scope/kind/subject labels and bounded current excerpts. Keep the historical-data trust boundary and exact task scope visible; confirmation does not grant raw read access, future reads or mutation. A changed source removes current excerpts from the preview and disables the decision while retaining authorized cancellation. A fresh task/read can prepare a replacement observation. Approval status, consumed read outcome and completed Chat answer are distinct facts. Preserve the existing responsive Ant Design inspector and keyboard/focus behavior; no second history-management screen is added by this read module.
+
+
+## Canonical retained Experience controls
+
+An Agent’s existing Continuity destination presents learned Memory and retained Experience in separate Ant Design configuration panels. Experience shows own private Agent/User and readable Instance observations, readable retained counts and optional superseded/deleted history. Expanding a row shows the full literal structured observation, source identity/cursor and immediate lineage. Model recall settings link to the existing State & Isolation editor; disabling recall does not erase or hide human-inspectable content.
+
+Suppress/restore and delete use exact row/security witnesses and explicit scope/retention confirmations. Superseded rows permit deletion only; deleted rows expose provenance without content or restoration. Reset confirms the full readable retained count, including suppressed/superseded content, independently of the displayed history filter. Successful, stale or unreadable mutation outcomes retire old values and require deliberate Reload Experience; no command is replayed. Scope retirement aborts pending work and destroys its confirmation.
+
+Conversation approval cards and the shared inspector label exact Experience source, record and consolidation operations. Read consent and content mutation have separate explanations and factual result labels. Complete currently authorized literal sources/content and lineage are reviewed under the existing original-human authority; changed sources cannot be replaced with current bytes under saved consent.

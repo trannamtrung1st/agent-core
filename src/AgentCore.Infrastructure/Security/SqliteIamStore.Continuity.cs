@@ -29,13 +29,17 @@ public sealed partial class SqliteIamStore : ITenantContinuityStore
         TenantMemoryOperationObservation? memory = null;
         if (human is not null ? expected!.Memory is not null : await TenantContinuityRules.IncludeMemoryAsync(reader, args, iam, ct).ConfigureAwait(false))
             memory = await ObserveMemoryOperation(db, run, TenantMemoryToolContract.Parse(args.Tool, args.CanonicalArguments), expected?.Memory, human, ct).ConfigureAwait(false);
+        TenantExperienceFactObservation? experience = null;
+        var settings = await ReadIsolationMetadataAsync(db, run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
+        if (human is not null ? expected!.Experience is not null : await TenantContinuityRules.IncludeExperienceAsync(reader, settings, args, iam, ct).ConfigureAwait(false))
+            experience = await ObserveExperienceFacts(db, run, args, expected?.Experience, human, ct).ConfigureAwait(false);
         var named = human is not null ? TenantContinuityRules.Sessions(expected!) : null;
         var roots = OwnedSessions(db, reader.Security.Tenant.TenantId).AsNoTracking().Where(s => s.AgentInstanceId == run.AgentInstanceId.ToString("D")
             && s.ExecutorPrincipalId == reader.Agent.PrincipalId && s.SessionId != run.SessionId.ToString("D"));
         if (visible is not null) { var ids = visible.Select(id => id.ToString("D")).ToArray(); roots = roots.Where(s => ids.Contains(s.SessionId)); }
         if (named is not null) { var ids = named.Select(s => s.SessionId.ToString("D")).ToArray(); roots = roots.Where(s => ids.Contains(s.SessionId)); }
+        else if (args.Kind is "Memory" or "Experience") roots = roots.Where(s => false);
         else if (args.Id is { } sourceId) roots = roots.Where(s => s.SessionId == sourceId.ToString("D"));
-        else if (args.Kind == "Memory") roots = roots.Where(s => false);
         var metadata = await (from root in roots join session in db.Sessions.AsNoTracking() on root.SessionId equals session.SessionId
             join snapshot in db.Snapshots.AsNoTracking() on root.SessionId equals snapshot.SessionId
             orderby session.UpdatedAtUtc descending, root.SessionId
@@ -52,7 +56,7 @@ public sealed partial class SqliteIamStore : ITenantContinuityStore
                 DateTimeOffset.FromUnixTimeMilliseconds(source.UpdatedAtUtc), rows.Take(limit).Select(SqliteMemoryStore.ToEntry).ToArray(), after, limit, rows.Length > limit));
         }
         return TenantContinuityRules.Observe(reader, args, documents.AsReadOnly(), memory, expected, human is not null,
-            human is null && args.Kind is null && metadata.Length > TenantContinuityRules.CandidateLimit);
+            human is null && args.Kind is null && metadata.Length > TenantContinuityRules.CandidateLimit, experience);
     }
     public async ValueTask RequireTenantHistoricalSourcesAsync(TenantRunReference reference, IReadOnlyList<TenantHistoricalSource> sources, Guid? generation = null, CancellationToken ct = default)
     {

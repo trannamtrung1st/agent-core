@@ -12,6 +12,7 @@ import { tenantAgentPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
 import { TenantMemorySources } from './TenantMemorySources';
+import { TenantAgentExperience } from './TenantAgentExperience';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function TenantAgentMemory({ context, id }: { context: TenantContext; id: string }) {
   const [scope, setScope] = useState<MemoryScope>('identityUser'); const [session, setSession] = useState(''); const [requestedSession, setRequestedSession] = useState('');
@@ -29,6 +30,7 @@ export function TenantAgentMemory({ context, id }: { context: TenantContext; id:
         : <MemoryRows key={`${context.tenant.tenantId}:${context.principalId}:${id}:${scope}:${requestedSession}:${page}:${epoch}`} context={context} id={id} scope={scope} session={scope === 'session' ? requestedSession : undefined} page={page}
           onPage={setPage} onBusy={setBusy} reload={() => setEpoch(e => e + 1)} />}
     </AgentConfigurationPanel>
+    <TenantAgentExperience context={context} id={id} />
   </Flex>;
 }
 function MemoryRows({ context, id, scope, session, page, onPage, onBusy, reload }: { context: TenantContext; id: string; scope: MemoryScope; session?: string; page: number; onPage: (v: number) => void; onBusy: (v: boolean) => void; reload: () => void }) {
@@ -57,12 +59,12 @@ function MemoryRows({ context, id, scope, session, page, onPage, onBusy, reload 
     {!invalidated && (view.loading ? <AccessLoading /> : view.error ? <AccessError error={view.error} retry={reload} /> : view.data && <>
       <Typography.Text strong>Memory for {view.data.agentName}</Typography.Text>
       <Typography.Text type="secondary">{view.data.retainedCount} readable retained facts. Counts include resolved and superseded facts; deleted rows retain only provenance. Retained Memory remains inspectable when recall is disabled.</Typography.Text>
-      <Table<TenantMemoryItem> size="small" rowKey="memoryId" dataSource={view.data.items} scroll={{ x: 580 }} locale={{ emptyText: 'No readable learned facts in this scope.' }}
+      <Table<TenantMemoryItem> className="admin-collection-table" size="small" rowKey="memoryId" dataSource={view.data.items} scroll={{ x: 580 }} locale={{ emptyText: 'No readable learned facts in this scope.' }}
         pagination={{ current: view.data.page, pageSize: view.data.pageSize, total: view.data.total, showSizeChanger: false, onChange: onPage, disabled: command.busy }} columns={[
           { title: 'Subject', key: 'subject', render: (_, item) => <Typography.Text>{item.status === 'Deleted' ? 'Forgotten fact' : item.subject}</Typography.Text> },
           { title: 'Kind', dataIndex: 'kind' }, { title: 'Status', key: 'status', render: (_, item) => <Tag>{item.status}</Tag> },
           { title: 'Action', key: 'action', render: (_, item) => <Button danger size="small" disabled={block || !item.canForget} onClick={() => forget(item)} aria-label={`Forget ${item.subject || 'fact'}`}>Forget</Button> }
-        ]} expandable={{ expandedRowRender: item => <Flex vertical gap="var(--ac-space-default)"><Descriptions {...detail} size="small" column={1} items={[
+        ]} expandable={{ expandedRowRender: item => <Flex className="admin-expanded-record" vertical gap="var(--ac-space-default)"><Descriptions {...detail} size="small" column={1} items={[
           { key: 'content', label: 'Content', children: item.status === 'Deleted' ? 'Content removed' : <Typography.Paragraph style={{ whiteSpace: 'pre-wrap' }}>{item.content}</Typography.Paragraph> },
           { key: 'id', label: 'Memory ID', children: <Typography.Text copyable>{item.memoryId}</Typography.Text> },
           { key: 'revision', label: 'Revision', children: item.revision },

@@ -52,6 +52,7 @@ public static class TenantApprovalEndpoints
             TenantOperationKind.BackgroundReport => ("Deliver exact background completion", "deliver_background_completion"),
             TenantOperationKind.BackgroundStart => ("Start exact background work", "start_background_work"),
             TenantOperationKind.WorkspaceMutation => ("Change exact workspace paths", "mutate_workspace"),
+            TenantOperationKind.ExperienceOperation => (op.ExperienceOperation!.ToolName switch { "experience.source" => "Inspect exact Experience source", "experience.record" => "Record exact Experience", _ => "Consolidate exact Experience" }, AgentCore.Application.Tools.TenantExperienceToolContract.OperationName(op.ExperienceOperation.ToolName)),
             TenantOperationKind.ContinuityRead => (op.ContinuityRead!.ToolName == "continuity.search" ? "Search historical continuity" : "Inspect exact historical continuity", "inspect_continuity"),
             TenantOperationKind.MemoryOperation => (op.MemoryOperation!.ToolName switch { "continuity.search" => "Search learned Memory", "continuity.get" => "Inspect learned Memory", "memory.forget" => "Forget learned Memory", _ => "Consolidate learned Memory" }, AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(op.MemoryOperation.ToolName) ? "inspect_memory" : "manage_memory"),
             TenantOperationKind.WorkspaceRead => ("Read exact workspace observation", "inspect_workspace"),

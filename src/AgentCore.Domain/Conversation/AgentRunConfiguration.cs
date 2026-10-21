@@ -12,7 +12,7 @@ public sealed class AgentRunConfiguration
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public AgentRunConfiguration(AgentDefinition definition, long instanceRevision, long personaRevision,
         IReadOnlyList<EffectiveAgentResource> resources, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? credentialBindings = null,
-        IReadOnlyDictionary<string, RuntimeFieldSource>? fieldSources = null, BrowserIsolation? resolvedBrowserIsolation = null)
+        IReadOnlyDictionary<string, RuntimeFieldSource>? fieldSources = null, BrowserIsolation? resolvedBrowserIsolation = null, AgentRunContinuitySettings? continuitySettings = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(resources);
@@ -25,9 +25,15 @@ public sealed class AgentRunConfiguration
         Resources = Array.AsReadOnly(resources.ToArray());
         CredentialBindings = Array.AsReadOnly((credentialBindings ?? []).ToArray());
         InstanceRevision = instanceRevision; PersonaRevision = personaRevision;
+        if (continuitySettings is { } continuity && (continuity.ExperienceRevision < 0 || continuity.MaintenanceRevision < 0
+            || continuity.ExperienceEnabled && continuity.ExperienceRevision == 0 || continuity.AllowMaintenance && continuity.MaintenanceRevision == 0))
+            throw new ArgumentException("Continuity opt-ins require their actual owner revisions.");
+        ContinuitySettings = continuitySettings;
         ResolvedBrowserIsolation = resolvedBrowserIsolation;
         Definition = Freeze(definition) with { ExecutionResources = Resources };
-        var bytes = resolvedBrowserIsolation is null
+        var bytes = continuitySettings is not null
+            ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources, ResolvedBrowserIsolation, ContinuitySettings }, Json)
+            : resolvedBrowserIsolation is null
             ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources }, Json)
             : JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources, ResolvedBrowserIsolation }, Json);
         ConfigurationHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
@@ -40,6 +46,8 @@ public sealed class AgentRunConfiguration
     public string ConfigurationHash { get; }
     public IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding> CredentialBindings { get; }
     public BrowserIsolation? ResolvedBrowserIsolation { get; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AgentRunContinuitySettings? ContinuitySettings { get; }
 
     private static IReadOnlyList<T> Copy<T>(IReadOnlyList<T> values) => Array.AsReadOnly(values.ToArray());
     private static AgentDefinition Freeze(AgentDefinition d) => d with {
@@ -59,3 +67,5 @@ public sealed class AgentRunConfiguration
 }
 
 public sealed record RuntimeFieldSource(string Kind, string Revision);
+
+public sealed record AgentRunContinuitySettings(bool ExperienceEnabled, long ExperienceRevision, bool AllowMaintenance, long MaintenanceRevision);

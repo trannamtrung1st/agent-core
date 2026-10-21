@@ -170,6 +170,10 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     {
         await RequireUserProfileReferencesAsync(db, state, ct).ConfigureAwait(false);
         await RequireLearnedMemoryReferences(db, state, ct).ConfigureAwait(false);
+        var experienceOwners = await db.Set<TenantExperienceRecord>().AsNoTracking().Where(i => i.TenantId == state.Tenant.TenantId && i.UserPrincipalId != null)
+            .Select(i => new { i.UserId, i.UserPrincipalId, i.AccountId }).Distinct().ToArrayAsync(ct).ConfigureAwait(false);
+        if (experienceOwners.Any(i => !state.Users.Any(u => u.UserId == i.UserId && u.PrincipalId == i.UserPrincipalId && u.AccountId == i.AccountId)))
+            throw new ArgumentException("Retain the actual Experience User owner without reparenting it.");
         foreach (var assignment in state.Assignments.Where(a => TenantEventAdmissionRules.TryId(a.Scope, out _)))
             if (!await db.CoreEvents.IgnoreQueryFilters().AnyAsync(e => e.TenantId == state.Tenant.TenantId && e.EventId == assignment.Scope.ResourceId, ct))
                 throw new ArgumentException("A Core event assignment requires its actual tenant fact.");

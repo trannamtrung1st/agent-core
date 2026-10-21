@@ -22,7 +22,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
         TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate) lock (isolationBacking.IsolationGate)
         {
             if (_operationReceipts.GetValueOrDefault(commit.OperationId) is { } previous)
                 return ValueTask.FromResult<TenantOperationReceipt?>(TenantLocalEffectRules.MatchingReceipt(previous, next.Tenant.TenantId, commit));
@@ -115,6 +115,17 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
             }
+            IReadOnlyList<AgentCore.Domain.Experience.TenantExperience> experienceValues = [];
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ExperienceOperation is not null)
+            {
+                try
+                {
+                    experienceValues = RequireExperienceEffect(request, run, decision.HumanPrincipalId, at, ct);
+                }
+                catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             IReadOnlyList<AgentCore.Domain.Memory.TenantLearnedMemory> memoryValues = [];
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.MemoryOperation is not null)
             {
@@ -184,6 +195,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             }
             if (configure) foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(target.Instance, updated,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(request.TenantId, updated.InstanceId, target.PrincipalId))) AppendTenantCore(fact);
+            if (commit.Outcome == TenantOperationOutcome.Completed) foreach (var value in experienceValues) SaveExperience(value);
             foreach (var memory in memoryValues) SetLearnedMemory(memory);
             sessionBacking.SaveTenantOperationRun(savedRun, run.Revision);
             if (pending is not null) sandboxBacking.SaveTenantLease(pending);

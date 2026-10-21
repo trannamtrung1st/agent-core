@@ -130,6 +130,17 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
         }
+        IReadOnlyList<AgentCore.Domain.Experience.TenantExperience> experienceValues = [];
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ExperienceOperation is not null)
+        {
+            try
+            {
+                experienceValues = await RequireExperienceEffect(db, request, run, decision.HumanPrincipalId, at, ct).ConfigureAwait(false);
+            }
+            catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+        }
         TenantMemoryOperationObservation? memoryEffect = null;
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.MemoryOperation is not null)
         {
@@ -212,6 +223,13 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
             run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
             updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()));
+        if (commit.Outcome == TenantOperationOutcome.Completed)
+            foreach (var value in experienceValues)
+            {
+                var previousExperience = await db.Set<TenantExperienceRecord>().SingleOrDefaultAsync(i => i.TenantId == value.TenantId && i.ExperienceId == value.ExperienceId, ct).ConfigureAwait(false);
+                if (previousExperience is null) db.Add(TenantExperienceRecord.Row(value));
+                else db.Entry(previousExperience).CurrentValues.SetValues(TenantExperienceRecord.Row(value));
+            }
         db.Add(TenantOperationReceiptRecord.From(receipt)); db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
         if (complete && memoryEffect is not null) await StageMemoryEffect(db, memoryEffect, at, ct).ConfigureAwait(false);

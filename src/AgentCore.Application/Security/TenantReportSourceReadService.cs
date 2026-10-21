@@ -21,6 +21,11 @@ public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, I
             if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
             await memories.RequireAsync(child, learned, ct).ConfigureAwait(false);
         }
+        if (TenantExperienceReferences.Sources(child.Checkpoint).Count > 0 || TenantExperienceReferences.Facts(child.Checkpoint).Count > 0)
+        {
+            if (continuitySources is null) throw new AccessDeniedException("experience_unavailable");
+            await continuitySources.RequireExperienceAsync(child, ct).ConfigureAwait(false);
+        }
         if (TenantHistoricalReferences.Read(child.Checkpoint) is { Count: > 0 } historical)
         {
             if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");

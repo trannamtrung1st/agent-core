@@ -21,4 +21,11 @@ public sealed partial class SessionRuntime
             throw AgentCoreErrors.Forbidden("Tenant requester context is unavailable.");
         return await source.CurrentRequesterAsync(run, ct).ConfigureAwait(false);
     }
+    private async ValueTask<AgentRunContinuitySettings?> CurrentContinuitySettingsAsync(AgentRun? run, CancellationToken ct)
+    {
+        if (_runtimeOwner is null) return null;
+        if (run is null || run.Owner != _runtimeOwner || _runAuthority is not ITenantRunContext source) throw AgentCoreErrors.Forbidden("Tenant continuity context is unavailable.");
+        return await source.CurrentContinuitySettingsAsync(run, ct).ConfigureAwait(false);
+    }
+
 }

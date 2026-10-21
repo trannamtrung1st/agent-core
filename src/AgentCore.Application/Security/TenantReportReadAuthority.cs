@@ -79,6 +79,11 @@ public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITena
             if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
             await memories.RequireAsync(source.Child, learned, ct).ConfigureAwait(false);
         }
+        if (TenantExperienceReferences.Sources(source.Child.Checkpoint).Count > 0 || TenantExperienceReferences.Facts(source.Child.Checkpoint).Count > 0)
+        {
+            if (continuitySources is null) throw new AccessDeniedException("experience_unavailable");
+            await continuitySources.RequireExperienceAsync(source.Child, ct).ConfigureAwait(false);
+        }
         if (TenantHistoricalReferences.Read(source.Child.Checkpoint) is { Count: > 0 } historical)
         {
             if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");

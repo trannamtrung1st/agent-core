@@ -14,9 +14,17 @@ public static class TenantContinuityReadRules
         return true;
     }
     public static IEnumerable<(string Permission, AccessScope Scope)> Targets(TenantContinuityObservation observed) => TenantContinuityRules.Targets(observed.Reader,
-        observed.Sessions.Select(s => s.SessionId), observed.Memory?.Items.Select(m => m.Reference()), observed.Memory is not null);
-    public static ValueTask RawAsync(TenantContinuityObservation observed, IamAuthorizer iam, CancellationToken ct, Guid? human = null) => TenantContinuityRules.RequireRawAsync(observed.Reader,
-        observed.Sessions.Select(s => s.SessionId), iam, ct, human, observed.Memory?.Items.Select(m => m.Reference()), observed.Memory is not null);
+        observed.Sessions.Select(s => s.SessionId), observed.Memory?.Items.Select(m => m.Reference()), observed.Memory is not null).Concat(observed.Experience is null ? [] : TenantExperienceRules.Targets(observed.Reader, null, true, false));
+    public static async ValueTask RawAsync(TenantContinuityObservation observed, IamAuthorizer iam, CancellationToken ct, Guid? human = null)
+    {
+        await TenantContinuityRules.RequireRawAsync(observed.Reader,
+        observed.Sessions.Select(s => s.SessionId), iam, ct, human, observed.Memory?.Items.Select(m => m.Reference()), observed.Memory is not null).ConfigureAwait(false);
+        if (observed.Experience is { } experience)
+        {
+            if (human is { } viewer && experience.Items.Any(i => i.UserPrincipalId is { } owner && owner != viewer)) throw new AccessDeniedException("approval_unavailable");
+            await TenantExperienceRules.RawAsync(observed.Reader, null, true, iam, ct, human).ConfigureAwait(false);
+        }
+    }
     public static async ValueTask ReviewerAsync(TenantApprovalRequest request, TenantContinuityObservation observed, Guid human, IamAuthorizer iam, CancellationToken ct)
     {
         await RawAsync(observed, iam, ct, human).ConfigureAwait(false);

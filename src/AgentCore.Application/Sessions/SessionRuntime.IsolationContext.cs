@@ -13,7 +13,7 @@ public sealed partial class SessionRuntime
         if (!policy.ProfileEvidence) context = context.Remove(ContextSectionId.Profile);
         if (!policy.ExperienceRecall) context = context.Remove(ContextSectionId.Experience);
         if (!policy.CrossSessionContinuity) context = context.Remove(ContextSectionId.Continuity);
-        if (_runtimeOwner is not null) context = context.Remove(ContextSectionId.Memory);
+        if (_runtimeOwner is not null) context = context.Remove(ContextSectionId.Memory).Remove(ContextSectionId.Experience).Remove(ContextSectionId.Continuity);
         else if (effective.MemoryPolicy != ExecutionDefinition.MemoryPolicy)
         {
             // A live restriction can narrow individual scopes; refresh that Evidence block through

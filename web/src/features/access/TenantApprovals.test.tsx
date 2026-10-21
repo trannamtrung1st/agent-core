@@ -863,3 +863,14 @@ it('blocks a changed historical source while leaving cancellation available and 
   expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled(); expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
   expect(within(dialog).queryByText('Current historical excerpts')).not.toBeInTheDocument();
 });
+
+it.each(['inspect_experience_source', 'record_experience', 'consolidate_experience'])('presents exact %s evidence and bounded consent in the shared inspector', async operation => {
+  view({ ...request, kind: 'review', summary: 'Review exact Experience', preparedAction: { ...request.preparedAction, operation },
+    review: { ...request.review, changes: [{ field: 'Exact source provenance', before: null, after: 'Owned <script>literal</script> source and exact cursor 8', beforeAvailable: false, afterAvailable: true, restoresDefault: false }] } });
+  const dialog = await screen.findByRole('dialog'); expect(await within(dialog).findByText('Exact source provenance')).toBeVisible();
+  expect(within(dialog).getByText('Owned <script>literal</script> source and exact cursor 8')).toBeVisible(); expect(dialog.querySelector('script')).toBeNull();
+  expect(within(dialog).queryByText('Saved field')).not.toBeInTheDocument(); fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(operation === 'inspect_experience_source' ? /Current raw source reads and reviewer access remain required/ : /exact saved Experience content and source lineage/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});

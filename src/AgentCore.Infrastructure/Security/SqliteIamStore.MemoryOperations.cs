@@ -112,7 +112,7 @@ public sealed partial class SqliteIamStore
                 .Select(i => new TenantMemoryReference(i.TenantId, i.MemoryId, (MemoryScope)i.Scope, i.UserPrincipalId, i.AccountId, i.UserId,
                     Guid.Parse(i.AgentInstanceId), i.ExecutorPrincipalId, Guid.Parse(i.SessionId), i.ContentHash, (MemoryItemStatus)i.Status)).ToArrayAsync(ct).ConfigureAwait(false);
             if (references.Length != ids.Length) continue;
-            try { await ValidateTenantActorAsync(db, reader.Security, row.HumanPrincipalId, ct).ConfigureAwait(false); await TenantMemoryReadConsent.RequireAsync(request, reader, references, row.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false); return true; }
+            try { await ValidateTenantActorAsync(db, reader.Security, row.HumanPrincipalId, ct).ConfigureAwait(false); await RequireContinuityExperienceConsent(db, request, reader, row.HumanPrincipalId, ct).ConfigureAwait(false); await TenantMemoryReadConsent.RequireAsync(request, reader, references, row.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false); return true; }
             catch (AccessDeniedException) { }
         }
         return false;
