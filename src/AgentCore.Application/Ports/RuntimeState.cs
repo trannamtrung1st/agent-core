@@ -11,12 +11,6 @@ public sealed record ResourceStateObservation(string Kind, string Availability, 
     int? ActiveGenerations = null, int? ActiveCommands = null, int? CleanupPending = null,
     string? Code = null);
 
-public interface IHostedSessionStateReader
-{
-    HostedSessionState Observe(AgentRunOwner owner);
-    HostedSessionState ObserveSession(AgentRunOwner owner, Guid sessionId) => throw new NotSupportedException();
-}
-
 public interface IBrowserStateReader
 {
     ValueTask<ResourceStateObservation> ObserveAsync(Guid trustedInstanceId, CancellationToken ct = default);

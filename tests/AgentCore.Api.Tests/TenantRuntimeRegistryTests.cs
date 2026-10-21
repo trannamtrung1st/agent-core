@@ -29,7 +29,8 @@ public sealed class TenantRuntimeRegistryTests
         Assert.Null(services.GetService<ILiveOccurrenceDirectory>());
         Assert.Null(services.GetService<IOccurrenceMailbox>());
         Assert.Null(services.GetService<IEnvironmentEventIngress>());
-        Assert.Null(services.GetService<IHostedSessionStateReader>());
+        Assert.Null(typeof(ITenantHostedRuntimeStateReader).Assembly.GetType("AgentCore.Application.Ports.IHostedSessionStateReader"));
+        Assert.Same(runtime, services.GetRequiredService<ITenantHostedRuntimeStateReader>());
         var hosted = services.GetServices<IHostedService>().Select(s => s.GetType().Name).ToArray();
         Assert.DoesNotContain("BackgroundOccurrenceIntakeHostedService", hosted);
         Assert.DoesNotContain("AttachmentTtlHostedService", hosted);

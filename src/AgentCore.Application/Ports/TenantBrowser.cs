@@ -26,6 +26,7 @@ public interface ITenantBrowserBinding
 public interface ITenantBrowserStateReader
 {
     // Existing handles only; no binding, native launch, page inspection or filesystem read.
+    ValueTask<ResourceStateObservation> ObserveTenantAgentAsync(TenantBrowserAgentOwner owner, IReadOnlyList<Guid>? readableSessions, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<ResourceStateObservation> ObserveTenantSessionAsync(TenantBrowserOwner owner, CancellationToken ct = default);
 }
 

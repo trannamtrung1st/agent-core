@@ -11,7 +11,7 @@ namespace AgentCore.Application.Tools;
 // remain with the owning native/file/consent/receipt services and transactions.
 public static class TenantTaskExecutionContract
 {
-    public static bool IsNativeInspection(string name) => TenantBrowserInspectionContract.IsInspection(name) || TenantSandboxInspectionContract.IsInspection(name);
+    public static bool IsNativeInspection(string name) => TenantBrowserInspectionContract.IsInspection(name) || TenantSandboxInspectionContract.IsInspection(name) || name == ToolCatalog.AgentStateInspect;
     public static IReadOnlyList<string> BackgroundBrowserTools(AgentDefinition definition) => TenantBrowserAuthorizationContract.Allowed(definition)
         .Where(name => name != ToolCatalog.BrowserFillCredential).ToArray();
     public static bool IsTool(string name) => TenantCredentialDiscoveryContract.IsTool(name) || TenantWorkspaceReadContract.IsRead(name)

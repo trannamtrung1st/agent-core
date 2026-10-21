@@ -52,7 +52,7 @@ public static class ToolRegistry
                 """{"type":"object","additionalProperties":false,"properties":{"cursor":{"type":["string","null"],"maxLength":64},"limit":{"type":["integer","null"],"minimum":1,"maximum":100}}}""",
                 ToolEffect.ReadOnly, ToolOfferRule.CredentialAuthority),
             [ToolCatalog.AgentStateInspect] = Descriptor(ToolCatalog.AgentStateInspect,
-                "Observe bounded current Session runtime and resource counts. Defaults to currentSession; instanceSummary requires explicit visibility permission and returns aggregate counts only. State is timestamped observation, never permission or evidence of login/logout. Wait at least one second between refreshes. No resource is allocated.",
+                "Observe bounded current Session runtime and resource counts. Defaults to currentSession; instanceSummary requires explicit visibility permission and returns aggregate counts only. Only currently readable scopes contribute; restricted or unavailable counts are unknown. Observation requests or consumes no approval; use source-specific inspection/review for protected details. State is timestamped observation, never permission or evidence of login/logout. Wait at least one second between refreshes. No resource is allocated.",
                 """{"type":"object","additionalProperties":false,"properties":{"scope":{"type":"string","enum":["currentSession","instanceSummary"]}}}""",
                 ToolEffect.ReadOnly, ToolOfferRule.RoleAllowlist, ToolResourceScope.Session),
             [ToolCatalog.CapabilitiesLoad] = Descriptor(ToolCatalog.CapabilitiesLoad,

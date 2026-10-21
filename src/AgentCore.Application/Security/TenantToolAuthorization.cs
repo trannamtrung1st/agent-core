@@ -5,10 +5,10 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
+public sealed partial class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
     TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
     TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserReadService? browserReads = null,
-    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? tenantAttachments = null, IOfficeProcessor? office = null)
+    TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? tenantAttachments = null, IOfficeProcessor? office = null, Func<TenantRuntimeStateService>? runtimeState = null)
 {
     internal async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration?> ResolveConfigurationAsync(AgentCore.Domain.Conversation.SessionSnapshot snapshot, CancellationToken ct)
     {
@@ -60,7 +60,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                 && (run.Admission.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
                     || TenantTaskExecutionContract.IsBackground(run) && !TenantTaskExecutionContract.IsTool(tool) && !TenantTaskExecutionContract.IsNativeInspection(tool) && tool != ToolCatalog.RequestAuthorization))
                 return new(true, false, reference, "tenant_effect_unavailable");
-            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || TenantCredentialDiscoveryContract.IsTool(tool) || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool))
+            var allowed = IamToolContracts.IsInspection(tool) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || TenantCredentialDiscoveryContract.IsTool(tool) || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool) || tool == ToolCatalog.AgentStateInspect)
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -110,6 +110,12 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
         try
         {
+            if (call.Name == ToolCatalog.AgentStateInspect)
+            {
+                if (runtimeState is null || admission?.AgentRunGeneration is not { } generation) throw new AccessDeniedException("state_inspection_unavailable");
+                var run = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
+                return await runtimeState().InspectForRunAsync(new(run.Owner, session, run.AgentRunId, generation), call, remainingBytes, ct).ConfigureAwait(false);
+            }
             if (call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace)
             {
                 if (artifactPublications is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
@@ -192,6 +198,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
         { return JsonSerializer.Serialize(new { decision = "requiresApproval", reasonCode = ex.ReasonCode, applied = false, operationId = (Guid?)null }); }
         catch (AccessDeniedException ex) { return Error("forbidden", ex.ReasonCode); }
         catch (SecurityConflictException ex) { return Error("conflict", ex.ReasonCode); }
+        catch (AgentCore.Application.Sessions.AgentCoreException ex) when (call.Name == ToolCatalog.AgentStateInspect) { return Error(ex.Code, ex.Code); }
     }
     public async ValueTask<TenantApprovalPreparationResult> PrepareAsync(Guid session, ModelToolCall call, ToolExecutionAdmission admission, CancellationToken ct)
     {
@@ -248,7 +255,7 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
             ? await approvals.PreparePreferencesAsync(boundary.Reference, preferences, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false)
             : await approvals.PreparePersonaAsync(boundary.Reference, intent.Persona!, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
     }
-    private static bool IsTenantTool(string name) => IamToolContracts.IsInspection(name) || name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name;
+    private static bool IsTenantTool(string name) => IamToolContracts.IsInspection(name) || name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name or ToolCatalog.AgentStateInspect;
     private static object Project(OperationAuthorizationDecision decision) => new { decision = JsonNamingPolicy.CamelCase.ConvertName(decision.Decision.ToString()),
         reasonCode = decision.ReasonCode, requiredPermission = decision.Permission, targetResource = new { type = decision.Resource.ResourceType, id = decision.Resource.ResourceId },
         approvalKind = decision.ApprovalKind is { } kind ? JsonNamingPolicy.CamelCase.ConvertName(kind.ToString()) : null };

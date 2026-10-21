@@ -21,7 +21,7 @@ public static class ToolProjectionService
             || BrowserBootstrap.Contains(t.Name)
             || always.Contains(t.Name, StringComparer.Ordinal) || skill.Contains(t.Name)
             || loaded.Contains(t.Name, StringComparer.Ordinal)
-            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantCredentialDiscoveryContract.IsFamilyTool(t.Name) || TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name is ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreateFromWorkspace || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name))))
+            || !ToolRegistry.Get(t.Name).Discoverable || context?.ExecutionContext is not null && (TenantCredentialDiscoveryContract.IsFamilyTool(t.Name) || TenantWorkspaceMutationContract.IsMutation(t.Name) || TenantWorkspaceReadContract.IsRead(t.Name) || t.Name is ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreateFromWorkspace || TenantSandboxInspectionContract.IsInspection(t.Name) || TenantBrowserInspectionContract.IsInspection(t.Name) || t.Name == ToolCatalog.AgentStateInspect)))
             .Select(t => ForContext(t, context))
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }

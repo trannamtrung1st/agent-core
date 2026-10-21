@@ -1,6 +1,6 @@
 import { draftPages, type DraftPage } from '../admin/adminNavigation';
 export type AccessPage = 'governance' | 'access' | 'members' | 'roles' | 'audit' | 'definitions' | 'credentials' | 'events' | 'sandboxes' | 'approvals' | 'agents';
-export type TenantInstancePage = 'profile' | 'version' | 'skills' | 'resources' | 'state-isolation' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'sandbox' | 'workspace' | 'access' | 'connections' | 'lifecycle' | 'activity-sessions' | 'activity-runs' | 'automations';
+export type TenantInstancePage = 'profile' | 'version' | 'skills' | 'resources' | 'state' | 'state-isolation' | 'settings' | 'execution-budgets' | 'self-management' | 'unattended-model' | 'sandbox' | 'workspace' | 'access' | 'connections' | 'lifecycle' | 'activity-sessions' | 'activity-runs' | 'automations';
 export type AccessRoute = { area: 'access' } & (
   | { view: 'sign-in' }
   | { view: 'system'; page: 'browser-privacy' | 'audit' | 'organizations' | 'accounts' | 'operators' }
@@ -23,7 +23,7 @@ export function parseAccessRoute(path: string): AccessRoute | null {
   if (sandboxes) return { area: 'access', view: 'tenant', tenantId: sandboxes[1].toLowerCase(), page: 'sandboxes' };
   const activity = new RegExp(`^/t/(${uuid})/admin/agents/(${uuid})/activity(?:/(sessions|runs))?/?$`, 'i').exec(path);
   if (activity) return { area: 'access', view: 'tenant', tenantId: activity[1].toLowerCase(), page: 'agents', instanceId: activity[2].toLowerCase(), instancePage: activity[3]?.toLowerCase() === 'runs' ? 'activity-runs' : 'activity-sessions' };
-  const agent = new RegExp(`^/t/(${uuid})/admin/agents(?:/(${uuid})/(profile|version|skills|resources|state-isolation|settings|sandbox|workspace|execution-budgets|self-management|unattended-model|access|connections|lifecycle|automations))?/?$`, 'i').exec(path);
+  const agent = new RegExp(`^/t/(${uuid})/admin/agents(?:/(${uuid})/(profile|version|skills|resources|state|state-isolation|settings|sandbox|workspace|execution-budgets|self-management|unattended-model|access|connections|lifecycle|automations))?/?$`, 'i').exec(path);
   if (agent) return { area: 'access', view: 'tenant', tenantId: agent[1].toLowerCase(), page: 'agents', instanceId: agent[2]?.toLowerCase(), instancePage: agent[3]?.toLowerCase() as TenantInstancePage | undefined };
   const approval = new RegExp(`^/t/(${uuid})/admin/approvals(?:/(${uuid}))?/?$`, 'i').exec(path);
   if (approval) return { area: 'access', view: 'tenant', tenantId: approval[1].toLowerCase(), page: 'approvals', requestId: approval[2]?.toLowerCase() };

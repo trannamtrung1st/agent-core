@@ -16,6 +16,7 @@ public static partial class TenantAgentEndpoints
     {
         MapSandboxVerification(group);
         MapIsolation(group);
+        MapRuntimeState(group);
         group.MapGet("/agents/{instanceId:guid}/sandbox", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);

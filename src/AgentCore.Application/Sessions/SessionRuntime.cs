@@ -2932,7 +2932,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (authorizedTools?.Any(t => t.Name == ToolCatalog.AgentStateInspect) == true)
                 {
                     sections = sections.Upsert(ContextSection.Core(CoreProcedure.StateObservation));
-                    if (await _tools.RuntimeStateFactsAsync(SessionId, executionRun?.AgentRunId, generateToken) is { } observation)
+                    if (await _tools.RuntimeStateFactsAsync(SessionId, executionRun?.AgentRunId, executionRun?.Claim?.Generation, generateToken) is { } observation)
                         executionFacts += "\nTrusted runtime observation: " + SessionToolExecutor.RenderRuntimeStateFacts(observation);
                 }
                 else sections = sections.Remove(ContextSectionId.CoreStateObservation);

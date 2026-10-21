@@ -52,6 +52,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAgentDecommissionCleanup>();
         services.TryAddSingleton<TenantAgentAccessService>();
         services.TryAddSingleton<TenantAgentConfigurationService>();
+        services.TryAddSingleton<ITenantRuntimeStateStore>(p => (ITenantRuntimeStateStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantRuntimeStateService>();
+        services.TryAddSingleton<Func<TenantRuntimeStateService>>(p => () => p.GetRequiredService<TenantRuntimeStateService>());
         services.TryAddSingleton<TenantAgentReadService>();
         services.TryAddSingleton<ITenantDefinitionStore>(provider => (ITenantDefinitionStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantDefinitionService>();

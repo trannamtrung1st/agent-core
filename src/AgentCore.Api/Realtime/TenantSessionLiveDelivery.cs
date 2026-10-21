@@ -21,7 +21,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
         public volatile bool Closed;
         public volatile Subscription? Current;
     }
-    private sealed class Subscription(Guid tenant, Guid session, TenantSessionInitiator human, Guid attachment)
+    private sealed class Subscription(Guid tenant, Guid session, TenantSessionInitiator human, Guid attachment, TenantSessionRoot owner)
     {
         public sealed record Delivered(Guid EntryId, long EntrySequence, int PublishedEnd, int ReceivedEnd)
         {
@@ -29,6 +29,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             public int SpeechEnd { get; init; }
             public int ProjectionEnd { get; init; }
             public ConcurrentDictionary<string, TenantDeliveredBlock> Blocks { get; } = new(); }
+        public TenantSessionRoot Owner { get; } = owner;
         public Guid Tenant { get; } = tenant;
         public Guid Session { get; } = session;
         public TenantSessionInitiator Human { get; } = human;
@@ -87,6 +88,11 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             finally { Gate.Release(); }
         }
     }
+    internal int ObserveAttachedTenantSessions(TenantRuntimeStateQuery query) => _connections.Values
+        .Where(c => !c.Closed).Select(c => c.Current).OfType<Subscription>()
+        .Where(s => s.Owner.TenantId == query.Owner.TenantId && s.Owner.AgentInstanceId == query.Owner.AgentInstanceId
+            && s.Owner.ExecutorPrincipalId == query.Owner.ExecutorPrincipalId && (query.Sessions is null || query.Sessions.Contains(s.Session)))
+        .Select(s => s.Session).Distinct().Count();
     public Source CreateSource(AgentRun run, TenantVoiceLease? voice = null) => new(this, run, voice);
     public void Detach(string connection)
     {
@@ -115,7 +121,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                     if (recipient.SecurityRevision != history.SecurityRevision || recipient.SessionRevision != history.SessionRevision)
                         throw new SecurityConflictException("stale_revision");
 
-                    var subscription = new Subscription(tenant, session, human, ids.NewId());
+                    var subscription = new Subscription(tenant, session, human, ids.NewId(), recipient.Owner);
                     connection.Current = subscription;
                     if (_sources.GetValueOrDefault((tenant, session)) != source) { connection.Current = null; continue; }
                     var entries = history.Items.ToList();
