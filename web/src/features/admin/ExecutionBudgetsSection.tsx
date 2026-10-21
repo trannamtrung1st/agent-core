@@ -1,9 +1,8 @@
-import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
-import { useExecutionBudgetLimits } from "./executionBudgetLimits";
-import { memo, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Alert, Button, Collapse, Flex, Form, InputNumber, Select, Spin, Typography, theme } from 'antd';
-import { getExecutionBudgets, setExecutionBudgets, type ExecutionBudgetPolicy, type ExecutionBudgetProfile, type ExecutionBudgetLimits } from '../../services/adminApi';
+import { Alert,Button,Collapse,Flex,Form,InputNumber,Select,Spin,Typography,theme } from 'antd';
+import { memo,useCallback,useId,useRef,type ReactNode } from 'react';
+import { type ExecutionBudgetLimits,type ExecutionBudgetPolicy,type ExecutionBudgetProfile } from '../../services/adminApi';
 import type { DefinitionCandidate } from './definitionCandidate';
+import { useExecutionBudgetLimits } from "./executionBudgetLimits";
 
 const classes = ['standard', 'interactiveBrowser', 'unattendedBoundBrowser'] as const;
 const labels = { standard: 'Standard', interactiveBrowser: 'Interactive Browser', unattendedBoundBrowser: 'Unattended Bound Browser' };
@@ -92,48 +91,4 @@ export function DefinitionExecutionBudgets({ candidate, busy, readOnly, onChange
     {limits && <BudgetFields limits={limits} value={(candidate.executionBudgets as ExecutionBudgetPolicy | null) ?? emptyPolicy} disabled={busy || readOnly}
       onChange={updateBudget} /> }
   </ExecutionBudgetPanel>;
-}
-export function InstanceExecutionBudgets({ instanceId, archived, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; onUpdated: () => void; onDirtyChange?: (dirty: boolean) => void }) {
-  const { token } = theme.useToken();
-  const { limits, error: limitsError, reload: reloadLimits } = useExecutionBudgetLimits();
-  const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof getExecutionBudgets>> | null>(null);
-  const [value, setValue] = useState<ExecutionBudgetPolicy>({}); const [busy, setBusy] = useState(false);
-  const preserveDraft = useRef(false);
-  const scope = useRef(instanceId);
-  const epoch = useRef(0);
-  const [error, setError] = useState<string | null>(null); const [attempt, setAttempt] = useState(0);
-  useEffect(() => { let current = true; epoch.current++;
-    if (scope.current !== instanceId) { scope.current = instanceId; preserveDraft.current = false; setValue({}); }
-    setLoaded(null); setError(null); setBusy(false);
-    getExecutionBudgets(instanceId).then(v => { if (current) { setLoaded(v); if (!preserveDraft.current) setValue(v.executionBudgets ?? {}); preserveDraft.current = false; } })
-      .catch(e => { if (current) setError(e instanceof Error ? e.message : 'Budgets could not be loaded.'); });
-    return () => { current = false; epoch.current++; };
-  }, [instanceId, attempt]);
-  const dirty = loaded && JSON.stringify(value) !== JSON.stringify(loaded.executionBudgets ?? {});
-  useEffect(() => { onDirtyChange?.(!!dirty); }, [dirty, onDirtyChange]);
-  async function save(expectedRevision?: number) {
-    if (!limits || !loaded || !validExecutionBudgets(value, limits)) return;
-    const generation = epoch.current;
-    setBusy(true); setError(null);
-    try { const updated = await setExecutionBudgets(instanceId, expectedRevision ?? loaded.revision, value);
-      if (generation === epoch.current) { setLoaded({ ...loaded, revision: updated.revision, executionBudgets: value }); if (expectedRevision === undefined) onUpdated(); return updated.revision; }
-    }
-    catch (e) { if (generation === epoch.current) setError(e instanceof Error ? e.message : 'The Instance changed. Reload and review before saving.'); if (expectedRevision !== undefined) throw e; }
-    finally { if (generation === epoch.current) setBusy(false); }
-  }
-  const configuration = useInstanceConfigurationEditor('Execution budgets', { dirty: !!dirty, busy, revision: loaded?.revision,
-    blocked: !limits || !loaded || !validExecutionBudgets(value, limits) ? 'Check execution budgets and host limits before saving.' : undefined,
-    save: async revision => { const updated = await save(revision); if (updated === undefined) throw new Error('Budgets could not be saved.'); return updated; },
-    discard: () => setValue(loaded?.executionBudgets ?? {}), refresh: async () => { const updated = await getExecutionBudgets(instanceId); setLoaded(updated); } });
-  return <ExecutionBudgetPanel needsAttention={!!error || !!limitsError || !!limits && !validExecutionBudgets(value, limits)}><Flex vertical gap={token.padding}>
-    {error && <Alert showIcon type="error" title={error} action={<Button onClick={() => { preserveDraft.current = !!dirty; setAttempt(v => v + 1); }}>Reload</Button>} />}
-    {limitsError && <Alert showIcon type="error" title={limitsError} action={<Button onClick={reloadLimits}>Retry limits</Button>} />}
-    {!limits && !limitsError && <Spin aria-label="Loading execution limits" />}
-    {!loaded ? !error && <Spin aria-label="Loading execution budgets" /> : <>
-      {limits && <BudgetFields limits={limits} value={value} inherited={loaded.definitionDefaults ?? emptyPolicy} instance disabled={busy || archived} onChange={setValue} /> }
-      {dirty && <Typography.Text type="secondary">Unsaved budget changes</Typography.Text>}
-      {!configuration.managed && <Flex gap={token.paddingSM} wrap><Button type="primary" loading={busy} disabled={!limits || !dirty || archived || !validExecutionBudgets(value, limits)} aria-label="Save execution budgets" onClick={() => void save()}>Save</Button>
-        <Button disabled={!dirty || busy} aria-label="Discard execution budget changes" onClick={() => setValue(loaded.executionBudgets ?? {})}>Discard</Button></Flex>}
-    </>}
-  </Flex></ExecutionBudgetPanel>;
 }

@@ -1,32 +1,31 @@
-import { draftSettingGroups, type DraftPage } from './adminNavigation';
-import { DefinitionSelfManagement } from "./DefinitionSelfManagement";
-import { AutomationTriggerPermissions } from "./AutomationTriggerPermissions";
-import { orderedReasoningEfforts, retainedReasoningEffort } from "../models/reasoningEfforts";
-import { DefinitionExecutionBudgets } from "./ExecutionBudgetsSection";
-import { AgentConfigurationPanel, AgentIdentitySections } from "./AgentConfigurationLayout";
-import { useEffect, useId, useState } from "react";
-import { Alert, Button, Collapse, Flex, Input, InputNumber, Segmented, Select, Switch, Typography, theme } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
-import {
-  applyVoiceEnabled,
-  automationNumberErrors,
-  memoryPolicyDefaults,
-  patchRecord,
-  readBoolean,
-  readCandidateStringList,
-  readMetadataRows,
-  readNumber,
-  readString,
-  triggerPolicyDefaults,
-  writeMetadataRows,
-  writeModelDefault,
-  writeNullableString,
-  writePath,
-  type DefinitionCandidate
-} from "./definitionCandidate";
-import { listAdminAuthoringOptions, type AdminAuthoringOptions } from "../../services/adminApi";
-import { describeAdminError } from "./adminErrors";
+import { Alert,Button,Collapse,Flex,Input,InputNumber,Select,Switch,Typography,theme } from "antd";
+import { useId } from "react";
+import { type AdminAuthoringOptions } from "../../services/adminApi";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
+import { orderedReasoningEfforts,retainedReasoningEffort } from "../models/reasoningEfforts";
+import { draftSettingGroups,type DraftPage } from './adminNavigation';
+import { AgentConfigurationPanel,AgentIdentitySections } from "./AgentConfigurationLayout";
+import { AutomationTriggerPermissions } from "./AutomationTriggerPermissions";
+import {
+applyVoiceEnabled,
+automationNumberErrors,
+memoryPolicyDefaults,
+patchRecord,
+readBoolean,
+readCandidateStringList,
+readMetadataRows,
+readNumber,
+readString,
+triggerPolicyDefaults,
+writeMetadataRows,
+writeModelDefault,
+writeNullableString,
+writePath,
+type DefinitionCandidate
+} from "./definitionCandidate";
+import { DefinitionSelfManagement } from "./DefinitionSelfManagement";
+import { DefinitionExecutionBudgets } from "./ExecutionBudgetsSection";
 
 export type DefinitionEditorView = "form" | "json";
 
@@ -45,97 +44,6 @@ const INITIATIVE_TRIGGERS = [
   { value: "environmentUpdate", label: "Environment update" },
   { value: "unfinishedInteraction", label: "Unfinished interaction" }
 ];
-
-
-export function DefinitionCandidateEditor({
-  candidate,
-  view,
-  jsonText,
-  busy,
-  readOnly = false,
-  onCandidateChange,
-  onJsonTextChange,
-  onViewChange,
-  page
-}: {
-  candidate: DefinitionCandidate;
-  view: DefinitionEditorView;
-  jsonText: string;
-  busy: boolean;
-  readOnly?: boolean;
-  onCandidateChange: (candidate: DefinitionCandidate) => void;
-  onJsonTextChange: (text: string) => void;
-  onViewChange: (view: DefinitionEditorView) => void;
-  page?: DraftPage;
-}) {
-  const [authoring, setAuthoring] = useState<AdminAuthoringOptions | null>(null);
-  const [authoringError, setAuthoringError] = useState<string | null>(null);
-  const [authoringDiagnosticId, setAuthoringDiagnosticId] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void listAdminAuthoringOptions()
-      .then((options) => {
-        if (!cancelled) {
-          setAuthoring(options);
-          setAuthoringError(null);
-          setAuthoringDiagnosticId(null);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setAuthoringError(readOnly
-            ? "Authoring options could not be loaded. Inspect the stored values in Advanced JSON."
-            : "Authoring options could not be loaded. Advanced JSON can still name a configured value.");
-          setAuthoringDiagnosticId(describeAdminError(error, "").diagnosticId ?? null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [readOnly]);
-
-  return (
-    <Flex vertical gap={12}>
-      {!page && <Segmented
-        aria-label="Definition editor view"
-        className="admin-draft-view-switch"
-        value={view}
-        options={[
-          { label: "Form", value: "form" },
-          { label: "Advanced JSON", value: "json" }
-        ]}
-        onChange={(value) => onViewChange(value as DefinitionEditorView)}
-        disabled={busy}
-      />}
-      {view === "json" ? (
-        <AgentConfigurationPanel title="Advanced JSON" label="Definition JSON editor">
-        <Input.TextArea
-          aria-label="Advanced JSON"
-          value={jsonText}
-          rows={18}
-          disabled={busy}
-          readOnly={readOnly}
-          spellCheck={false}
-          className="admin-draft-instructions"
-          onChange={(event) => onJsonTextChange(event.target.value)}
-        />
-        </AgentConfigurationPanel>
-      ) : null}
-      <div hidden={view !== "form"}>
-        <DefinitionCandidateForm
-          page={page}
-          candidate={candidate}
-          busy={busy}
-          readOnly={readOnly}
-          authoring={authoring}
-          authoringError={authoringError}
-          authoringDiagnosticId={authoringDiagnosticId}
-          onCandidateChange={onCandidateChange}
-        />
-      </div>
-    </Flex>
-  );
-}
 
 export function DefinitionCandidateForm({
   candidate,

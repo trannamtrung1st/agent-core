@@ -1,5 +1,14 @@
 # Frontend Implementation Specification
 
+
+## Explicit administrative client transports
+
+Canonical administrative pages supply their own exact tenant request transport and authorized metadata. Shared `InstanceSettingsSection` requires an `InstanceSettingsTransport`; Sandbox inventory/summary comes from the explicit tenant context. `AutomationEventFilter` requires the owning tenant evaluator callback. `EmailMonitoringSection` requires its tenant and the complete tenant watch/access witnesses; there is no global watcher/count/Instance-management fallback. `ScopedExecutionBudgetLimits` supplies current metadata/error/reload to pure Definition budget controls, with no implicit global limits request. `DefinitionCandidateForm` receives its authoring options explicitly.
+
+`ContainerRegistryFields`, `DriveAccountFields` and `CustomEmailAccountFields` are the retained field compositions consumed by `TenantCredentialEditor`. Their former owner-authorized dialogs and Gmail connection panel are removed; canonical tenant Google consent and native credential commands remain separate owners. `adminApi`, `instanceConfiguration`, `sandboxes`, `drive` and `stateIsolation` retain shared types and pure parsing/presentation helpers, with their obsolete HTTP SDK functions removed. Unused owner-only Sandbox, import and coordinated isolation compositions are retired; this does not certify missing feature parity.
+
+After a confirmed Credential DELETE, the inspector releases its busy draft guard before navigating to the collection. Rejection or uncertain completion retains the existing recovery lock and does not replay deletion. [Focused execution evidence](reports/admin-client-transport-cutover-verification-2026-10-21.md). Core Chat/realtime/file-preview token removal and full proposal qualification remain separate open work.
+
 ## Authenticated browser entry cutover
 
 `AppRouter` mounts only canonical Account/System/organization administration and exact `/t/{tenantId}` or `/t/{tenantId}/c/{sessionId}` Chat. Bare root navigation enters `/account/organizations`; an unauthenticated Account read takes the existing sign-in path with that destination. Root presentation queries do not select a tenant. Retired `/admin/...`, unscoped `/c/...` and unknown paths resolve to Page not found without mounting Chat or inferring an organization. Old Admin aliases are removed rather than redirected to a guessed tenant.

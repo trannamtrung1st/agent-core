@@ -1,0 +1,433 @@
+{
+  "baseline": "53ab8b58",
+  "removedFunctions": {
+    "web/src/services/adminApi.ts": [
+      "listAdminDefinitions",
+      "getAdminDefinitionVersion",
+      "listAdminInstances",
+      "listAdminAuthoringOptions",
+      "deleteAdminAgentInstance",
+      "deleteAdminDefinition",
+      "getAdminToolRegistry",
+      "listAdminToolNames",
+      "getAdminEffectiveConfig",
+      "listAdminDefinitionDrafts",
+      "getAdminDefinitionDraft",
+      "createNewAdminDefinitionDraft",
+      "forkAdminDefinitionDraft",
+      "updateAdminDefinitionDraft",
+      "deleteAdminDefinitionDraft",
+      "publishAdminDefinitionDraft",
+      "validateAdminDefinitionDraft",
+      "getAdminDefinitionDraftDiff",
+      "listAdminDefinitionEvaluationScenarios",
+      "upsertAdminDefinitionEvaluationScenario",
+      "removeAdminDefinitionEvaluationScenario",
+      "runAdminDefinitionEvaluationScenario",
+      "listAdminDefinitionEvaluationResults",
+      "listAdminDefinitionPublications",
+      "deprecateAdminDefinitionPublication",
+      "instanceMutationConflictMessage",
+      "updateAdminAgentInstancePersona",
+      "updateAdminAgentInstanceLifecycle",
+      "updateAdminAgentInstanceActiveVersion",
+      "listAdminDraftResources",
+      "uploadAdminDraftResourceContent",
+      "bindAdminDraftResources",
+      "upsertAdminDraftResource",
+      "removeAdminDraftResource",
+      "listAdminPublicationResources",
+      "createAdminAgentInstance",
+      "listAdminLearnedMemory",
+      "getAdminLearnedMemory",
+      "deleteAdminLearnedMemory",
+      "resetAdminLearnedMemoryScope",
+      "credentialRequest",
+      "listCredentials",
+      "createCredential",
+      "updateCredential",
+      "replaceCredentialValue",
+      "deleteCredential",
+      "listCredentialBindings",
+      "bindCredential",
+      "unbindCredential",
+      "resetBrowserProfile",
+      "eventResourcePath",
+      "listWebhookEvents",
+      "getWebhookEvent",
+      "createWebhookEvent",
+      "renameWebhookEvent",
+      "rotateWebhookEvent",
+      "revokeWebhookEvent",
+      "setAdminUnattendedModel",
+      "getHarnessReview",
+      "updateHarness",
+      "instanceContinuityRequest",
+      "listEventCatalog",
+      "getExecutionBudgets",
+      "setExecutionBudgets",
+      "getExecutionBudgetLimits",
+      "getSelfManagement",
+      "saveSelfManagement",
+      "createEmailAccount",
+      "updateEmailAccount",
+      "testEmailAccount",
+      "emailOAuthConfiguration",
+      "getEmailConnection",
+      "startEmailOAuth",
+      "checkEmailConnection",
+      "disconnectEmailOAuth",
+      "getEmailMonitoring",
+      "saveEmailMonitoring",
+      "checkEmailMonitoring",
+      "createContainerRegistry",
+      "updateContainerRegistry"
+    ],
+    "web/src/services/instanceConfiguration.ts": [
+      "root",
+      "request",
+      "listInstanceSettings",
+      "patchInstanceSettings",
+      "listInstanceResources",
+      "uploadInstanceResource",
+      "toggleInstanceResource",
+      "deleteInstanceResource",
+      "downloadInstanceResource",
+      "readInstanceResourceFile",
+      "copyInstanceResource",
+      "previewInstanceVersion"
+    ],
+    "web/src/services/sandboxes.ts": [
+      "request",
+      "getSandboxPlatform",
+      "saveSandboxProfile",
+      "getSandboxProfile",
+      "verifySandboxProfile",
+      "getInstanceSandbox",
+      "getSessionSandbox",
+      "getSandboxExecution",
+      "stopSandboxExecution",
+      "resetSessionSandbox",
+      "checkSandboxImage",
+      "verifyInstanceSandbox"
+    ],
+    "web/src/services/stateIsolation.ts": [
+      "request"
+    ],
+    "web/src/features/admin/AddCredentialDialog.tsx": [
+      "choices",
+      "AddCredentialDialog"
+    ],
+    "web/src/features/admin/DriveAccountDialog.tsx": [
+      "DriveAccountDialog"
+    ],
+    "web/src/features/admin/ExecutionBudgetsSection.tsx": [
+      "InstanceExecutionBudgets"
+    ],
+    "web/src/features/admin/definitionCandidateEditor.tsx": [
+      "DefinitionCandidateEditor"
+    ]
+  },
+  "removedFiles": [
+    "web/src/features/admin/GmailConnectionPanel.tsx",
+    "web/src/features/admin/DefinitionSandboxPolicy.tsx",
+    "web/src/features/admin/StateIsolationConfigurationProvider.tsx",
+    "web/src/features/admin/InstanceSandboxSummary.tsx",
+    "web/src/features/admin/resourceImportPanel.tsx",
+    "web/src/features/chat/SessionSandboxDrawer.tsx",
+    "web/src/features/admin/AddCredentialDialog.tsx",
+    "web/src/features/admin/DriveAccountDialog.tsx",
+    "web/src/features/admin/EmailAccountDialog.tsx",
+    "web/src/features/admin/definitionCandidateEditor.tsx"
+  ],
+  "retiredTests": [
+    {
+      "file": "web/src/features/admin/AddCredentialDialog.test.tsx",
+      "declarations": [
+        "creates registry expiry as UTC metadata and clears protected input after a failed save",
+        "switching purposes clears transient secrets and names and submits a typed Custom profile",
+        "failed Gmail consent start reuses the saved account and locks purpose on retry"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/EmailAccountDialog.test.tsx",
+      "declarations": [
+        "Gmail creates without passwords or endpoints and begins owner consent, retaining account after start failure",
+        "missing operator config has guidance and disabled Connect without password fallback",
+        "Google verified identity remains read-only while safe metadata edits preserve profile",
+        "Custom keeps typed TLS endpoints, protected password, and failure clears only transient secret",
+        "restores safe name/status after callback only after modal fields mount",
+        "blocked storage cleanup cannot prevent dismissal or misreport a committed metadata save"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/GmailConnectionPanel.test.tsx",
+      "declarations": [
+        "keeps a completed access check when a retired StrictMode startup read returns later",
+        "releases a pending action on account change and ignores its old result and refresh",
+        "does not refresh a closed workspace after a committed check finishes"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/DefinitionSandboxPolicy.test.tsx",
+      "declarations": [
+        "preserves grants and fences both selectors when inventory fails, then recovers on retry",
+        "keeps the default within remaining allowed grants and clears policy when the final grant is removed",
+        "inspects immutable published policy without edit or verification controls",
+        "ignores a late failed inventory response after a different owner is mounted",
+        "requires explicit repair of an unavailable stored policy without silently substituting an image"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/InstanceSandboxSummary.test.tsx",
+      "declarations": [
+        "can verify an explicit alternate when the default profile is missing from the catalog",
+        "verifies saved setup with exact revision and exposes collapsed failure evidence",
+        "requires saved configuration before verification",
+        "ignores a late verification result after switching Instances"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/resourceImportPanel.test.tsx",
+      "declarations": [
+        "previews chosen files without a package root and binds them once",
+        "keeps new selections neutral and validates only the field that has been left",
+        "shows oversized file status without marking its valid path as erroneous",
+        "strips the selected folder root and infers kind from the top-level directory",
+        "does not bind when one content upload fails"
+      ]
+    },
+    {
+      "file": "web/src/features/chat/SessionSandboxDrawer.test.tsx",
+      "declarations": [
+        "shows failed command evidence with separate collapsed stderr and truthful truncation",
+        "keeps completed recycled commands concise and reveals lifecycle evidence on demand",
+        "distinguishes completed command exit from pending process termination",
+        "shows pending mount-policy enforcement without implying file rollback",
+        "does not promise retained selection after an explicit reset of a recycled generation",
+        "groups labeled command diagnostics with metadata and copies the owned context",
+        "keeps initialization and fallback command diagnostics in their own metadata groups",
+        "keeps recovery disabled after a failed read until status is observed again",
+        "shows confirmed absence without an error or recovery action",
+        "recovers automatically from a failed read without presenting false absence",
+        "retains evidence after a refresh failure and clears the error on recovery",
+        "shares a pending manual refresh with polling and ignores late reads after Session changes",
+        "requires exact generation confirmation and ignores a modal retained across Session selection",
+        "resets only the observed owned generation and keeps foreground cancellation in Chat",
+        "retains filesystem effects when command completion is uncertain",
+        "keeps process cleanup distinct from present files",
+        "explains initialization recovery without losing the diagnostic or reset action",
+        "explains expiry and retained files while leaving a terminated generation stopped",
+        "allows reset to clear a retained profile choice after clean termination",
+        "retains initialization output and permits explicit reset after uncertain setup was cleaned up",
+        "accepts a confirmed recovery while a normal status poll is in flight",
+        "rejects a recovery confirmation when another execution replaces its evidence",
+        "retains evidence after failed reset and requires a successful inspection before retrying",
+        "explains known clean cancellation with retained files and a new independent command"
+      ]
+    },
+    {
+      "file": "web/src/services/sandboxes.test.ts",
+      "declarations": [
+        "treats a successful unprovisioned response (%j) as no environment"
+      ]
+    },
+    {
+      "file": "web/src/services/sandboxes.test.ts",
+      "declarations": [
+        "reads an existing environment without changing its status"
+      ]
+    },
+    {
+      "file": "web/src/services/sandboxes.test.ts",
+      "declarations": [
+        "does not treat an unsuccessful empty response as no environment"
+      ]
+    },
+    {
+      "file": "web/src/services/sandboxes.test.ts",
+      "declarations": [
+        "does not hide a malformed successful response"
+      ]
+    },
+    {
+      "file": "web/src/services/sandboxes.test.ts",
+      "declarations": [
+        "still requires JSON for a command receipt"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/ExecutionBudgetsSection.test.tsx",
+      "declarations": [
+        "inherits each class independently, retains a conflicting draft and permits discard"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/ExecutionBudgetsSection.test.tsx",
+      "declarations": [
+        "uses returned ceilings for display, accessible validation and Save admission"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/ExecutionBudgetsSection.test.tsx",
+      "declarations": [
+        "fails closed on limit loading and restores the retained draft after retry"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/ExecutionBudgetsSection.test.tsx",
+      "declarations": [
+        "ignores an earlier Instance save after switching to another Instance"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/EmailMonitoringSection.test.tsx",
+      "declarations": [
+        "names the Custom incoming test in paused recovery and leaves explicit Check now available"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/EmailMonitoringSection.test.tsx",
+      "declarations": [
+        "shows account-wide status read-only in an Instance with canonical management and Automation links"
+      ]
+    }
+  ],
+  "removedRuntimeExports": {
+    "web/src/services/adminApi.ts": [
+      "listAdminDefinitions",
+      "getAdminDefinitionVersion",
+      "listAdminInstances",
+      "listAdminAuthoringOptions",
+      "deleteAdminAgentInstance",
+      "deleteAdminDefinition",
+      "getAdminToolRegistry",
+      "listAdminToolNames",
+      "getAdminEffectiveConfig",
+      "listAdminDefinitionDrafts",
+      "getAdminDefinitionDraft",
+      "createNewAdminDefinitionDraft",
+      "forkAdminDefinitionDraft",
+      "updateAdminDefinitionDraft",
+      "deleteAdminDefinitionDraft",
+      "publishAdminDefinitionDraft",
+      "validateAdminDefinitionDraft",
+      "getAdminDefinitionDraftDiff",
+      "listAdminDefinitionEvaluationScenarios",
+      "upsertAdminDefinitionEvaluationScenario",
+      "removeAdminDefinitionEvaluationScenario",
+      "runAdminDefinitionEvaluationScenario",
+      "listAdminDefinitionEvaluationResults",
+      "listAdminDefinitionPublications",
+      "deprecateAdminDefinitionPublication",
+      "updateAdminAgentInstancePersona",
+      "updateAdminAgentInstanceLifecycle",
+      "updateAdminAgentInstanceActiveVersion",
+      "listAdminDraftResources",
+      "uploadAdminDraftResourceContent",
+      "bindAdminDraftResources",
+      "upsertAdminDraftResource",
+      "removeAdminDraftResource",
+      "listAdminPublicationResources",
+      "createAdminAgentInstance",
+      "listAdminLearnedMemory",
+      "getAdminLearnedMemory",
+      "deleteAdminLearnedMemory",
+      "resetAdminLearnedMemoryScope",
+      "listCredentials",
+      "createCredential",
+      "updateCredential",
+      "replaceCredentialValue",
+      "deleteCredential",
+      "listCredentialBindings",
+      "bindCredential",
+      "unbindCredential",
+      "resetBrowserProfile",
+      "listWebhookEvents",
+      "getWebhookEvent",
+      "createWebhookEvent",
+      "renameWebhookEvent",
+      "rotateWebhookEvent",
+      "revokeWebhookEvent",
+      "setAdminUnattendedModel",
+      "getHarnessReview",
+      "updateHarness",
+      "instanceContinuityRequest",
+      "listEventCatalog",
+      "getExecutionBudgets",
+      "setExecutionBudgets",
+      "getExecutionBudgetLimits",
+      "getSelfManagement",
+      "saveSelfManagement",
+      "createEmailAccount",
+      "updateEmailAccount",
+      "testEmailAccount",
+      "emailOAuthConfiguration",
+      "getEmailConnection",
+      "startEmailOAuth",
+      "checkEmailConnection",
+      "disconnectEmailOAuth",
+      "getEmailMonitoring",
+      "saveEmailMonitoring",
+      "checkEmailMonitoring",
+      "createContainerRegistry",
+      "updateContainerRegistry"
+    ],
+    "web/src/services/instanceConfiguration.ts": [
+      "listInstanceSettings",
+      "patchInstanceSettings",
+      "listInstanceResources",
+      "uploadInstanceResource",
+      "toggleInstanceResource",
+      "deleteInstanceResource",
+      "downloadInstanceResource",
+      "readInstanceResourceFile",
+      "copyInstanceResource",
+      "previewInstanceVersion"
+    ],
+    "web/src/services/sandboxes.ts": [
+      "getSandboxPlatform",
+      "saveSandboxProfile",
+      "getSandboxProfile",
+      "verifySandboxProfile",
+      "getInstanceSandbox",
+      "getSessionSandbox",
+      "getSandboxExecution",
+      "stopSandboxExecution",
+      "resetSessionSandbox",
+      "checkSandboxImage",
+      "verifyInstanceSandbox"
+    ],
+    "web/src/services/drive.ts": [
+      "getDriveOptions",
+      "createDriveAccount",
+      "getDriveConnection",
+      "startDriveConnection",
+      "checkDriveConnection",
+      "disconnectDriveConnection",
+      "getDriveAccounts",
+      "listDriveFiles",
+      "inspectDriveOperation",
+      "safeDriveLink"
+    ],
+    "web/src/services/stateIsolation.ts": [
+      "readIsolation",
+      "presetIsolation",
+      "previewIsolation",
+      "applyIsolation"
+    ]
+  },
+  "preservation": [
+    "Credential registry/Drive/Custom fields remain unchanged in canonical composition; old owner dialogs removed",
+    "DefinitionCandidateForm receives scoped authoring metadata; controlled form/Skills/error cases preserved with explicit test metadata",
+    "Settings behavior tests use an explicit transport; no production owner default remains",
+    "Monitoring recovery/race cases use the cookie/tenant request path; exact witness and revocation cases retained",
+    "Budget Definition cases use explicit scoped metadata; registry-host normalization cases retained"
+  ],
+  "extractedFieldModules": [
+    "ContainerRegistryFields.tsx",
+    "DriveAccountFields.tsx",
+    "CustomEmailAccountFields.tsx",
+    "DefinitionCandidateForm.tsx"
+  ]
+}

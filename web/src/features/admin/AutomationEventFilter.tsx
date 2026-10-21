@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Flex, Form, Input, InputNumber, Select, Typography, theme } from "antd";
-import { instanceContinuityRequest, type AutomationChild, type FilterTestResult } from "../../services/adminApi";
+import { Alert,Button,Flex,Form,Input,InputNumber,Select,Typography,theme } from "antd";
+import { useEffect,useRef,useState } from "react";
+import { type AutomationChild,type FilterTestResult } from "../../services/adminApi";
 
 const failureText: Record<string, string> = {
   "filter-syntax-not-allowed": "Use a Boolean expression with static event paths, comparisons and logical operators.",
@@ -21,7 +21,7 @@ const failureText: Record<string, string> = {
 type Trigger = Exclude<AutomationChild, { kind: "schedule" }>;
 export function AutomationEventFilter({ instanceId, trigger, example, disabled, onChange, sampleValue, onSampleChange, testFilter }: {
   instanceId: string; trigger: Trigger; example: Record<string, unknown>; disabled: boolean; onChange: (trigger: Trigger) => void; sampleValue?: string; onSampleChange?: (sample: string) => void;
-  testFilter?: (expression: string | null, event: unknown) => Promise<FilterTestResult>;
+  testFilter: (expression: string | null, event: unknown) => Promise<FilterTestResult>;
 }) {
   const { token } = theme.useToken();
   const [localSample, setLocalSample] = useState(() => JSON.stringify(example, null, 2));
@@ -38,7 +38,7 @@ export function AutomationEventFilter({ instanceId, trigger, example, disabled, 
     setBusy(true); setResult(null);
     try {
       const event: unknown = JSON.parse(sample);
-      const next = await (testFilter ? testFilter(trigger.filterExpression || null, event) : instanceContinuityRequest<FilterTestResult>(instanceId, "automations/filter-test", "POST", { expression: trigger.filterExpression || null, event }));
+      const next = await testFilter(trigger.filterExpression || null, event);
       if (version === generation.current) setResult(next);
     } catch { if (version === generation.current) setResult({ matched: null, status: "error", code: "Check sample JSON and connection, then retry." }); }
     finally { if (version === generation.current) setBusy(false); }

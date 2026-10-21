@@ -27,7 +27,7 @@ test('canonical Credential purposes, protected replacement and separate Google c
   page.on('console', entry => { if (entry.type() === 'error') failures.push(entry.text()); });
   page.on('response', response => { if (response.status() >= 400) failures.push(`HTTP ${response.status()} ${new URL(response.url()).pathname}`); });
   page.on('requestfailed', r => { if (r.failure()?.errorText !== 'net::ERR_ABORTED') failures.push(`Network failure ${new URL(r.url()).pathname}`); });
-  page.on('request', r => { if (new URL(r.url()).pathname.startsWith('/api/v2/admin/')) legacy.push('unscoped request'); });
+  page.on('request', r => { if (new URL(r.url()).pathname.startsWith('/api/v2/admin/') || new URL(r.url()).pathname.includes('owner-capability') || r.headers()['x-agentcore-owner-capability']) legacy.push('obsolete owner request'); });
   await login(page); const { path } = await scope(page); const suffix = crypto.randomUUID().slice(0, 8);
   await page.goto(path); await page.getByRole('button', { name: 'Add credential', exact: true }).click();
   let dialog = page.getByRole('dialog', { name: 'Add credential', exact: true });

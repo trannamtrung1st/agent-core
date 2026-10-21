@@ -1,18 +1,18 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { App, Alert, Flex, Form, Modal, Select, Typography } from 'antd';
+import { Alert,App,Flex,Form,Modal,Select,Typography } from 'antd';
+import { useLayoutEffect,useRef,useState } from 'react';
 import type { SystemCredential } from '../../services/adminApi';
-import { identityRequest, IdentityError } from '../../services/identity';
-import { credentialApi, credentialPurpose, freshCredentialAccess, freshTenantRevision, purposeLabel, type CredentialPurpose, type TenantCredential } from '../../services/tenantCredentials';
-import { CredentialFields, ProtectedValueField, safeFields, type CredentialFieldsValue } from '../admin/CredentialFields';
-import { ContainerRegistryFields, type RegistryCredentialFieldsValue } from '../admin/AddCredentialDialog';
-import { DriveAccountFields } from '../admin/DriveAccountDialog';
-import { EmailAccountFields, custom, type EmailAccountFieldsValue } from '../admin/EmailAccountDialog';
+import { IdentityError,identityRequest } from '../../services/identity';
+import { credentialApi,credentialPurpose,freshCredentialAccess,freshTenantRevision,purposeLabel,type CredentialPurpose,type TenantCredential } from '../../services/tenantCredentials';
+import { ContainerRegistryFields,type RegistryCredentialFieldsValue } from '../admin/ContainerRegistryFields';
+import { CredentialFields,ProtectedValueField,safeFields,type CredentialFieldsValue } from '../admin/CredentialFields';
+import { DriveAccountFields } from '../admin/DriveAccountFields';
+import { CustomEmailAccountFields,custom,type CustomEmailAccountFieldsValue } from '../admin/CustomEmailAccountFields';
 import { showAdminFormValidation } from '../admin/adminFormFeedback';
 import { AccessError } from './AccessFeedback';
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useTenantCommand } from './useTenantCommand';
 
-type Fields = CredentialFieldsValue & EmailAccountFieldsValue & RegistryCredentialFieldsValue;
+type Fields = CredentialFieldsValue & CustomEmailAccountFieldsValue & RegistryCredentialFieldsValue;
 const purposes: CredentialPurpose[] = ['General', 'Gmail', 'Drive', 'Custom', 'Registry'];
 function initial(item?: SystemCredential) {
   return { displayName: item?.displayName ?? '', kind: item?.kind ?? 'Password', status: item?.status ?? 'Active',
@@ -72,7 +72,7 @@ export function TenantCredentialEditor({ tenant, organization, account, replace 
           } finally { form.setFieldValue('protectedValue', undefined); }
         }, result => { saved.current = result; guard.release(); setDirty(false); form.resetFields(); setOpen(false); message.success(replace ? 'Protected value replaced.' : 'Credential saved.'); })}>
         {replace ? <ProtectedValueField email={purpose === 'Custom'} /> : purpose === 'General' ? <CredentialFields create={!account} />
-          : purpose === 'Registry' ? <ContainerRegistryFields edit={!!account} /> : purpose === 'Custom' ? <EmailAccountFields form={form} preset="Custom" fixedPreset account={account} onSaved={async () => {}} />
+          : purpose === 'Registry' ? <ContainerRegistryFields edit={!!account} /> : purpose === 'Custom' ? <CustomEmailAccountFields account={account} />
             : <DriveAccountFields account={account} />}
       </Form>
     </Flex>

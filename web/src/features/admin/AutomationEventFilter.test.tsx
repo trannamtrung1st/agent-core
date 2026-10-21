@@ -5,11 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { AutomationEventFilter } from './AutomationEventFilter';
 import type { AutomationChild, FilterTestResult } from '../../services/adminApi';
 const request = vi.hoisted(() => vi.fn());
-vi.mock('../../services/adminApi', () => ({ instanceContinuityRequest: request }));
+
 const sample = { schemaVersion: 1, data: { total: 150 } };
 function Editor() {
   const [trigger, setTrigger] = useState<Exclude<AutomationChild, { kind: 'schedule' }>>({ kind: 'event', source: { kind: 'builtin', key: 'run.completed' }, triggerId: 'sample', enabled: true, revision: 1 });
-  return <Form><AutomationEventFilter instanceId='owned-instance' trigger={trigger} example={sample} disabled={false} onChange={setTrigger} /></Form>;
+  return <Form><AutomationEventFilter testFilter={request} instanceId='owned-instance' trigger={trigger} example={sample} disabled={false} onChange={setTrigger} /></Form>;
 }
 describe('event filter testing', () => {
   it('uses the backend evaluator, shows a safe error and never submits an Automation', async () => {
@@ -18,7 +18,7 @@ describe('event filter testing', () => {
     fireEvent.change(screen.getByLabelText('Event filter expression'), { target: { value: 'event.data.total < 100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Test filter' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Not matched'));
-    expect(request).toHaveBeenCalledWith('owned-instance', 'automations/filter-test', 'POST', { expression: 'event.data.total < 100', event: sample });
+    expect(request).toHaveBeenCalledWith('event.data.total < 100', sample);
 
     fireEvent.change(screen.getByLabelText('Event filter expression'), { target: { value: 'event.data.total' } });
     fireEvent.click(screen.getByRole('button', { name: 'Test filter' }));

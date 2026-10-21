@@ -1,6 +1,11 @@
 # Testing Strategy
 
 
+## Administrative client transport qualification
+
+Exercise retained fields and commands through canonical tenant Credential purposes/Google consent/protected failure/deletion, Definition authoring/publication/read revocation and narrow Instance settings stale-save/reset/departure. Observe obsolete owner endpoints and headers. Confirmed Credential DELETE must close its busy-guarded inspector; failures and uncertain acknowledgments must preserve recovery without duplicate writes. Shared settings/filter controls receive explicit transports and pure Definition budget/form tests receive scoped metadata; monitoring recovery/race tests use the tenant request path. `web/src/test/fixtures/retired-admin-transports.json` inventories obsolete SDK exports and retired owner-only tests, while mixed pure cases remain exercised. [Focused evidence](reports/admin-client-transport-cutover-verification-2026-10-21.md) records the CLI fallback when MCP cannot connect; it does not establish proposal-wide acceptance.
+
+
 ## Browser entry cutover verification
 
 The focused `tenant-chat.spec.ts` entry scenarios run at 1440px and 390px against disposable Synthetic hosts. Seed an obsolete local owner token; anonymous root enters Account selection then sign-in, authenticated root shows My organizations, and retired `/admin`, exact old Instance Activity, unscoped `/c` and unknown paths show Page not found without a composer. Native rail/Drawer navigation between Instances and Roles remains usable, then the canonical Chat link admits text and displays a completed Synthetic answer. Observe zero owner/unscoped API requests and zero page exceptions. Applicable conversation lifecycle, switch/logout and real WebSocket reconnect scenarios preserve their independent outcomes.

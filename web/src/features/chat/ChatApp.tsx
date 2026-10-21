@@ -1,77 +1,78 @@
-import { tenantActivitySource } from "../../services/tenantActivity";
-import { legacyActivitySource } from "../../services/activitySource";
-import { TenantSessionFilesDrawer } from './TenantSessionFilesDrawer';
-import { tenantMayManageSession, tenantCanCreateChat, tenantRunControl } from '../../services/tenantChat';
-import { TenantConversationApprovals } from './TenantConversationApprovals';
-import type { TenantContext } from '../../services/identity';
-import { AccessError } from '../access/AccessFeedback';
-import { newChatPath } from '../../app/sessionRoute';
-import { followAppLink } from "../../app/appLink";
+import { ArrowLeftOutlined,MenuOutlined,PlusOutlined,SettingOutlined } from "@ant-design/icons";
+import { Alert,App as AntApp,Button,Drawer,Flex,Layout,Tooltip,Typography } from "antd";
+import { useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode } from "react";
 import { appMessageConfig } from "../../app/appFeedback";
+import { followAppLink } from "../../app/appLink";
 import { adminHomePath } from "../../app/appRoute";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useWorkReadState } from "./workReadState";
-import { messageTimestamp } from "./chatTime";
-import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
-import { ArrowLeftOutlined, MenuOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
-import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
+import { newChatPath } from '../../app/sessionRoute';
+import { legacyActivitySource } from "../../services/activitySource";
+import { cancelSessionAutomation,getSession,listSessionAutomations,type AgentRun } from "../../services/api";
+import type { TenantContext } from '../../services/identity';
 import {
-  beginNewChat,
-  bootstrap,
-  cancelVoice,
-  clearRouteNotice,
-  composerSendEnabled,
-  composerSendLabel,
-  composerStopEnabled,
-  hangUp,
-  loadOlderHistory,
-  openCatalogSession,
-  reportCommittedEntries,
-  requestVoice,
-  resumeCapture,
-  resumeLiveSessionForNavigation,
-  retryConnection,
-  resumePausedSession,
-  reloadChatAgentInstances, searchChatAgents, loadMoreChatAgents,
-  selectChatIdentity,
-  sendDraft,
-  applySpeechLocale,
-  applySessionModel,
-  cancelRenderedResponse,
-  respondToApproval,
-  setDraft,
-  setDraftParts,
-  addResourceToDraft,
-  setMuted
+addResourceToDraft,
+applySessionModel,
+applySpeechLocale,
+beginNewChat,
+bootstrap,
+cancelRenderedResponse,
+cancelVoice,
+clearRouteNotice,
+composerSendEnabled,
+composerSendLabel,
+composerStopEnabled,
+hangUp,
+loadMoreChatAgents,
+loadOlderHistory,
+openCatalogSession,
+reloadChatAgentInstances,
+reportCommittedEntries,
+requestVoice,
+respondToApproval,
+resumeCapture,
+resumeLiveSessionForNavigation,
+resumePausedSession,
+retryConnection,
+searchChatAgents,
+selectChatIdentity,
+sendDraft,
+setDraft,
+setDraftParts,
+setMuted
 } from "../../services/realtime";
+import { tenantActivitySource } from "../../services/tenantActivity";
+import { tenantCanCreateChat,tenantMayManageSession,tenantRunControl } from '../../services/tenantChat';
+import { clientRecognitionSupported,clientSynthesisSupported } from "../../speech/clientSpeechSupport";
+import { voiceControlEnabled } from "../../speech/voiceEnablement";
+import { isReadonlySession,isSessionModelBusy,useSessionStore } from "../../state/sessionStore";
+import { AccessError } from '../access/AccessFeedback';
+import { conversationStatusLabel,conversationStatusTone,mapAgentActivity,pausedSessionMessage } from "./activityState";
 import { AgentPicker } from "./AgentPicker";
-import { resolveNewChatIdentityPresentation } from "./chatIdentity";
-import { SpeechLocalePicker, speechLocaleSelectValue } from "./SpeechLocalePicker";
-import {
-  ModelPicker,
-  effortSelectValue,
-  modelSelectValue,
-  nextEffortForModel,
-  selectedCatalogModel,
-  wireModelSelectionKey
-} from "./ModelPicker";
-import { imageModelCompatibility } from "./imageModelCompatibility";
-import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
-import { terminalSessionNote } from "./sessionLifecycle";
-import { ChatHeader } from "./ChatHeader";
-import { getSession, listSessionAutomations, cancelSessionAutomation, type AgentRun } from "../../services/api";
-import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
-import { SessionSandboxDrawer } from './SessionSandboxDrawer';
-import { TenantSessionSandboxDrawer } from './TenantSessionSandboxDrawer';
+import { ApprovalModal } from "./ApprovalModal";
 import { AutomationDrawer } from "./AutomationDrawer";
+import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { ChatHeader } from "./ChatHeader";
+import { resolveNewChatIdentityPresentation } from "./chatIdentity";
+import { messageTimestamp } from "./chatTime";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
 import { EmailAccountPicker } from "./EmailAccountPicker";
-import { ApprovalModal } from "./ApprovalModal";
+import { imageModelCompatibility } from "./imageModelCompatibility";
+import {
+ModelPicker,
+effortSelectValue,
+modelSelectValue,
+nextEffortForModel,
+selectedCatalogModel,
+wireModelSelectionKey
+} from "./ModelPicker";
 import { SessionFailureAlert } from "./SessionFailureAlert";
+import { terminalSessionNote } from "./sessionLifecycle";
 import { SessionRail } from "./SessionRail";
-import { voiceControlEnabled } from "../../speech/voiceEnablement";
-import { clientRecognitionSupported, clientSynthesisSupported } from "../../speech/clientSpeechSupport";
+import { SpeechLocalePicker,speechLocaleSelectValue } from "./SpeechLocalePicker";
+import { TenantConversationApprovals } from './TenantConversationApprovals';
+import { TenantSessionFilesDrawer } from './TenantSessionFilesDrawer';
+import { TenantSessionSandboxDrawer } from './TenantSessionSandboxDrawer';
+import { useWorkReadState } from "./workReadState";
 
 const { Header, Sider, Content } = Layout;
 const NARROW_QUERY = "(max-width: 767px)";
@@ -590,7 +591,6 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
           onClose={() => setWorkOpen(false)} afterClose={() => workButtonRef.current?.focus()} onAddReference={!organization ? (sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label) : undefined} /> : null}
         {tenantContext && state.sessionId && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
         {tenantContext && state.sessionId && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
-        {!organization && state.sessionId && <SessionSandboxDrawer key={state.sessionId} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} readOnly={readonly} onClose={() => setSandboxOpen(false)} />}
 
         {!organization && state.sessionId ? (
           <AutomationDrawer

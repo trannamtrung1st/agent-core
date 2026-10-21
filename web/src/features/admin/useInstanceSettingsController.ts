@@ -1,11 +1,11 @@
-import { AdminRequestError } from '../../services/adminApi';
 import { App } from 'antd';
-import { showAdminFailure } from './adminFailure';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { listInstanceSettings, patchInstanceSettings, type SettingValue, type SettingsSection } from '../../services/instanceConfiguration';
+import { useCallback,useEffect,useRef,useState } from 'react';
+import { AdminRequestError } from '../../services/adminApi';
 import { listModels } from '../../services/api';
-import { describeAdminError } from './adminErrors';
 import { IdentityCompletionError } from '../../services/identity';
+import { type SettingValue,type SettingsSection } from '../../services/instanceConfiguration';
+import { describeAdminError } from './adminErrors';
+import { showAdminFailure } from './adminFailure';
 export type SettingsDraft = { set: Record<string, SettingValue>; clear: string[] };
 export const emptyDraft = (): SettingsDraft => ({ set: {}, clear: [] });
 export type InstanceSettingsTransport = {
@@ -13,9 +13,8 @@ export type InstanceSettingsTransport = {
   patch: (id: string, section: SettingsSection, set: Record<string, SettingValue>, clear: string[], signal?: AbortSignal) => Promise<SettingsSection>;
   models: (signal?: AbortSignal) => ReturnType<typeof listModels>;
 };
-const ownerSettingsTransport: InstanceSettingsTransport = { list: id => listInstanceSettings(id), patch: (id, section, set, clear) => patchInstanceSettings(id, section, set, clear), models: () => listModels() };
 /** Exact-owner reads and independent sparse section drafts; pages only select presentation. */
-export function useInstanceSettingsController(instanceId: string, archived: boolean, active: boolean, onUpdated: () => void, externalRevision?: number, deferRefresh = false, transport = ownerSettingsTransport) {
+export function useInstanceSettingsController(instanceId: string, archived: boolean, active: boolean, onUpdated: () => void, externalRevision: number | undefined, deferRefresh: boolean | undefined, transport: InstanceSettingsTransport) {
   const { message } = App.useApp();
   const [sections, setSections] = useState<SettingsSection[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, SettingsDraft>>({});

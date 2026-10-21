@@ -9,7 +9,7 @@ import { AdminOwnerHeading } from '../admin/AdminShell';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { type DraftPage } from '../admin/adminNavigation';
 import { applyCandidateJson, candidateForPersistence, candidateToJson, candidatesEqual, cloneCandidate, automationNumberErrors, type DefinitionCandidate } from '../admin/definitionCandidate';
-import { DefinitionCandidateForm } from '../admin/definitionCandidateEditor';
+import { DefinitionCandidateForm } from '../admin/DefinitionCandidateForm';
 import { ScopedExecutionBudgetLimits } from '../admin/executionBudgetLimits';
 import { validExecutionBudgets } from '../admin/ExecutionBudgetsSection';
 import { DefinitionSkillsSection } from '../admin/DefinitionSkillsSection';

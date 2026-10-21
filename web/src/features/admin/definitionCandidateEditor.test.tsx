@@ -1,19 +1,15 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { App } from "antd";
+import { App, Input, Segmented } from "antd";
 import { applyCandidateJson, candidateForPersistence, candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
+import { DefinitionCandidateForm } from "./DefinitionCandidateForm";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 
 import { exposedRoles } from "../../test/exposedRoles";
 
-vi.mock("../../services/adminApi", () => ({
-  getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),
-  listAdminAuthoringOptions: vi.fn()
-}));
-import { listAdminAuthoringOptions } from '../../services/adminApi';
-
+import { ScopedExecutionBudgetLimits } from './executionBudgetLimits';
+import type { AdminAuthoringOptions } from '../../services/adminApi';
 const authoringOptions = {
   languageModelAliases: ["backup-llm", "primary-llm"],
   speechRecognizerAliases: ["primary-stt"],
@@ -39,6 +35,18 @@ const authoringOptions = {
   interruptionClassifiers: ["heuristic"]
 };
 
+
+let suppliedAuthoring: AdminAuthoringOptions = authoringOptions;
+let suppliedFailure: (Error & { diagnosticId?: string }) | undefined;
+function DefinitionCandidateEditor(props: {
+  candidate: DefinitionCandidate; view: 'form' | 'json'; jsonText: string; busy: boolean;
+  onCandidateChange: (value: DefinitionCandidate) => void; onJsonTextChange: (value: string) => void; onViewChange: (value: 'form' | 'json') => void;
+}) {
+  return <ScopedExecutionBudgetLimits value={{ limits: { maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }, error: null, reload: () => {} }}>
+    <Segmented value={props.view} options={[{ label: 'Form', value: 'form' }, { label: 'Advanced JSON', value: 'json' }]} onChange={value => props.onViewChange(value as 'form' | 'json')} />
+    {props.view === 'json' ? <Input.TextArea aria-label="Advanced JSON" value={props.jsonText} onChange={event => props.onJsonTextChange(event.target.value)} /> : <DefinitionCandidateForm candidate={props.candidate} busy={props.busy} readOnly={false} authoring={suppliedFailure ? null : suppliedAuthoring} authoringError={suppliedFailure ? 'Authoring options could not be loaded.' : null} authoringDiagnosticId={suppliedFailure?.diagnosticId ?? null} onCandidateChange={props.onCandidateChange} />}
+  </ScopedExecutionBudgetLimits>;
+}
 
 const storedCandidate = {
   schemaVersion: 2,
@@ -110,7 +118,7 @@ const storedCandidate = {
 // Exercise the controlled form without loading inventory, version tables, resources,
 // and publication gates. Canonical tenant editor tests cover save and revision behavior.
 async function renderCandidate(candidate: DefinitionCandidate = storedCandidate) {
-  vi.mocked(listAdminAuthoringOptions).mockResolvedValue(authoringOptions);
+  suppliedAuthoring = authoringOptions; suppliedFailure = undefined;
   const changed = vi.fn<(candidate: DefinitionCandidate) => void>();
   function ControlledEditor() {
     const [value, setValue] = useState(candidate);
@@ -166,6 +174,7 @@ describe("definition candidate editor", () => {
     value.triggerPolicy.allowedSourceKinds = ["schedule", kind];
     fireEvent.change(json, { target: { value: JSON.stringify(value) } });
     fireEvent.click(screen.getByText("Form", { selector: ".ant-segmented-item-label" }));
+    openSettings("Trigger restrictions");
     expect(exposedRoles().getByRole("checkbox", { name: "Schedule" })).toBeChecked();
     expect(exposedRoles().getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
     expect(changed.mock.lastCall?.[0]).toMatchObject({ triggerPolicy: { allowedSourceKinds: ["schedule", kind] } });
@@ -240,7 +249,7 @@ describe("definition candidate editor", () => {
   it("orders descending model efforts without rewriting the selected candidate", async () => {
     const descending = { ...authoringOptions, models: authoringOptions.models.map(model => ({ ...model,
       supportedReasoningEfforts: [...model.supportedReasoningEfforts].reverse() })) };
-    vi.mocked(listAdminAuthoringOptions).mockResolvedValue(descending);
+    suppliedAuthoring = descending;
     const changed = vi.fn();
     render(<DefinitionCandidateEditor candidate={storedCandidate} view="form" jsonText={candidateToJson(storedCandidate)}
       busy={false} onCandidateChange={changed} onJsonTextChange={vi.fn()} onViewChange={vi.fn()} />);
@@ -323,7 +332,7 @@ describe("authoring options failure", () => {
     const failure = new Error("Admin authoring options failed (500)");
     failure.name = "AdminRequestError";
     Object.assign(failure, { diagnosticId: "019944af-0008-7000-8000-0000000000e2" });
-    vi.mocked(listAdminAuthoringOptions).mockRejectedValueOnce(failure);
+    suppliedFailure = failure;
 
     renderEditor();
     fireEvent.click(exposedRoles().getByRole("tab", { name: "Settings" }));
@@ -335,7 +344,7 @@ describe("authoring options failure", () => {
   });
 
   it("keeps the warning without error details when the failure has no id", async () => {
-    vi.mocked(listAdminAuthoringOptions).mockRejectedValueOnce(new Error("offline"));
+    suppliedFailure = new Error("offline");
 
     renderEditor();
     fireEvent.click(exposedRoles().getByRole("tab", { name: "Settings" }));
