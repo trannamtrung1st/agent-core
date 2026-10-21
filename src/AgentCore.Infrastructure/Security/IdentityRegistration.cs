@@ -36,6 +36,8 @@ public static class IdentityRegistration
         });
         services.TryAddSingleton<IdentityService>();
         services.TryAddSingleton<IamAuthorizer>();
+        services.TryAddSingleton<IAuthorizationAuditQueryStore>(p => (IAuthorizationAuditQueryStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<AuthorizationAuditQueryService>();
         services.TryAddSingleton<ISystemBrowserPrivacyStore>(p => (ISystemBrowserPrivacyStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<SystemBrowserPrivacyService>();
         services.TryAddSingleton<TenantAccessService>();

@@ -123,6 +123,13 @@ public static class IdentityHttp
         && Guid.TryParse(user.FindFirstValue(SessionClaim), out var id) && id != Guid.Empty ? id : null;
     public static AuthenticatedTenant TenantContext(HttpContext http) => http.Items.TryGetValue(TenantItem, out var value) && value is AuthenticatedTenant tenant
         ? tenant : throw new AccessDeniedException("not_member");
+    internal static async ValueTask<HumanSessionReference> SystemHumanAsync(HttpContext http, IIamStore security, CancellationToken ct)
+    {
+        var account = AccountId(http.User) ?? throw new AccessDeniedException("initiator_unavailable");
+        var principal = (await security.ReadSystemAsync(ct).ConfigureAwait(false)).Principals.SingleOrDefault(p => p.AccountId == account && p.TenantId is null
+            && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active) ?? throw new AccessDeniedException("initiator_unavailable");
+        return new(account, SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), principal.PrincipalId);
+    }
     public static ClaimsPrincipal Claims(SignedInAccount account) => new(new ClaimsIdentity(
         [new Claim(ClaimTypes.NameIdentifier, account.Account.AccountId.ToString("D")), new Claim(SessionClaim, account.Session.SessionId.ToString("D"))], Scheme));
     public static Task FailureAsync(HttpResponse response, int status, string reason)

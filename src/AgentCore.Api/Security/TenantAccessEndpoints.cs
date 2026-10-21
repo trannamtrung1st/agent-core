@@ -132,14 +132,8 @@ public static class TenantAccessEndpoints
             }
             return Results.Json(await authorizer.CheckAsync(body.PrincipalId, body.Permission, scope, ct).ConfigureAwait(false));
         }));
-        group.MapGet("/audit", (HttpContext http, IIamStore store, IamAuthorizer authorizer, int? limit, CancellationToken ct) => IdentityHttp.Respond(async () =>
-        {
-            var actor = IdentityHttp.TenantContext(http);
-            await authorizer.RequireAsync(actor.PrincipalId, "security.audit.read", AccessScope.ForTenant(actor.TenantId), ct).ConfigureAwait(false);
-            return Results.Json(new { items = (await store.ReadAuditAsync(actor.TenantId, limit ?? 50, ct).ConfigureAwait(false)).Select(AuditEntry) });
-        }));
     }
-    private static TenantAuditEntryDto AuditEntry(AuthorizationAudit audit)
+    internal static TenantAuditEntryDto AuditEntry(AuthorizationAudit audit)
     {
         var e = audit.Execution; var c = e?.Context;
         return new(audit.AuditId, audit.TenantId, audit.ActorPrincipalId, audit.Action, audit.Target, audit.Decision, audit.ReasonCode, audit.At,

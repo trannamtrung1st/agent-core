@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Grid } from 'antd';
-import { TenantAudit } from './TenantAudit';
+import { SystemAudit, TenantAudit } from './TenantAudit';
 import type { TenantContext } from '../../services/identity';
 
 const context: TenantContext = { tenant: { tenantId: 'tenant-one', name: 'Audit organization', slug: 'audit' },
@@ -12,7 +12,7 @@ const execution = { context: { agentPrincipalId: 'agent-principal', originalInit
   purpose: 'ApprovalPreparation', approvalKind: 'ExceptionalGrant' };
 const review = { auditId: 'review', actorPrincipalId: 'agent-principal', action: 'authorization.operation', target: 'agent-instance',
   at: '2026-10-17T00:00:00Z', decision: 'requiresApproval', reasonCode: 'agent_missing_delegatable_permission', execution };
-const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const response = (body: unknown, status = 200) => new Response(JSON.stringify(body && typeof body === 'object' && 'items' in body ? { total: (body as { items: unknown[] }).items.length, page: 0, pageSize: 30, ...body } : body), { status, headers: { 'Content-Type': 'application/json' } });
 const fetchMock = vi.fn<typeof fetch>();
 beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -63,7 +63,7 @@ it('clears a previous organization and its expanded details while another organi
   view.rerender(<TenantAudit context={{ ...context, tenant: { ...context.tenant, tenantId: 'tenant-two' } }} />);
   expect(screen.queryByText('run-reference')).not.toBeInTheDocument();
   expect(await screen.findByText('No audit entries yet.')).toBeVisible();
-  expect(fetchMock.mock.calls[1][0]).toBe('/api/v2/tenants/tenant-two/audit?limit=100');
+  expect(fetchMock.mock.calls[1][0]).toBe('/api/v2/tenants/tenant-two/audit?page=0&pageSize=30');
 });
 
 
@@ -114,7 +114,9 @@ it('opens mobile lineage in the shared bounded drawer and closes it by the visib
   fetchMock.mockResolvedValueOnce(response({ items: [review] }));
   render(<TenantAudit context={context} />);
   fireEvent.click(await screen.findByRole('button', { name: 'View details: Agent authorization checked' }));
-  const drawer = await screen.findByRole('dialog', { name: 'Audit details' });
+  // AntD test-mode useId repeats test-id for Select and Drawer; the real browser uses unique IDs.
+  const drawer = await screen.findByRole('dialog');
+  expect(within(drawer).getByText('Audit details')).toBeVisible();
   expect(within(drawer).getByText('Approval required', { exact: true })).toBeVisible();
   expect(within(drawer).getByText('The agent needs authorization for this exact operation.')).toBeVisible();
   expect(within(drawer).getByText('root-reference')).toBeVisible();
@@ -130,6 +132,64 @@ it('keeps one detail ID when a selected desktop row moves into the mobile drawer
   expect(document.querySelectorAll('[id="audit-review"]')).toHaveLength(1);
   breakpoint.mockReturnValue({ md: false, sm: false });
   view.rerender(<TenantAudit context={context} />);
-  expect(await screen.findByRole('dialog', { name: 'Audit details' })).toBeVisible();
+  expect(await screen.findByRole('dialog')).toBeVisible();
   await waitFor(() => expect(document.querySelectorAll('[id="audit-review"]')).toHaveLength(1));
+});
+
+
+it('uses server counts and pages, then applies exact filters without retaining an expanded prior entry', async () => {
+  fetchMock.mockResolvedValueOnce(response({ items: [review], total: 31 }))
+    .mockResolvedValueOnce(response({ items: [{ ...review, auditId: 'second' }], total: 31, page: 1 }))
+    .mockResolvedValueOnce(response({ items: [], total: 0 }));
+  render(<TenantAudit context={context} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'View details: Agent authorization checked' }));
+  expect(screen.getByText('31 entries')).toBeVisible();
+  fireEvent.click(screen.getByTitle('2'));
+  await waitFor(() => expect(fetchMock.mock.calls[1][0]).toBe('/api/v2/tenants/tenant-one/audit?page=1&pageSize=30'));
+  expect(await screen.findByRole('button', { name: 'View details: Agent authorization checked' })).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.change(screen.getByLabelText('Activity code'), { target: { value: 'approvals.request' } });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+  await waitFor(() => expect(fetchMock.mock.calls[2][0]).toBe('/api/v2/tenants/tenant-one/audit?page=0&pageSize=30&action=approvals.request'));
+  expect(await screen.findByText('0 entries')).toBeVisible();
+});
+
+it('blocks invalid exact principal and reversed time filters without requesting a page', async () => {
+  fetchMock.mockResolvedValueOnce(response({ items: [] })); render(<TenantAudit context={context} />);
+  fireEvent.change(await screen.findByLabelText('Actor principal'), { target: { value: 'arbitrary-person' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+  expect(await screen.findByText('Enter a complete principal ID.')).toBeVisible(); expect(fetchMock).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  fireEvent.change(screen.getByLabelText('From (local time)'), { target: { value: '2026-10-22T12:00:00' } });
+  fireEvent.change(screen.getByLabelText('Through (local time)'), { target: { value: '2026-10-21T12:00:00' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+  expect(await screen.findByText('Choose a time on or after From.')).toBeVisible(); expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('uses only the System query for platform records and explains its independent scope', async () => {
+  fetchMock.mockResolvedValueOnce(response({ items: [{ ...review, action: 'identity.bootstrap', execution: null, target: 'global-account', decision: 'allowed', reasonCode: 'explicit_cli_bootstrap' }] }));
+  render(<SystemAudit />);
+  expect(await screen.findByRole('button', { name: 'View details: Platform initialized' })).toBeVisible();
+  expect(screen.getByText(/Organization activity requires access/)).toBeVisible();
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/v2/system/audit?page=0&pageSize=30');
+});
+
+it('retires visible rows and details after a denied refresh', async () => {
+  fetchMock.mockResolvedValueOnce(response({ items: [review] })).mockResolvedValueOnce(response({ reasonCode: 'permission_denied' }, 403));
+  render(<TenantAudit context={context} />); fireEvent.click(await screen.findByRole('button', { name: 'View details: Agent authorization checked' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); expect(await screen.findByRole('alert')).toBeVisible();
+  expect(screen.queryByText('run-reference')).not.toBeInTheDocument(); expect(screen.queryByText('1 entry')).not.toBeInTheDocument();
+});
+
+it('rejects malformed successful page metadata without rendering captured records', async () => {
+  fetchMock.mockResolvedValueOnce(response({ items: [review], total: -1 })); render(<TenantAudit context={context} />);
+  expect(await screen.findByRole('alert')).toBeVisible(); expect(screen.queryByText('run-reference')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'View details: Agent authorization checked' })).not.toBeInTheDocument();
+});
+
+it.each([null, [null], [{ ...review, target: { privateBody: 'must not render' } }]])('retires malformed successful audit rows without crashing (%j)', async items => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items, total: 1, page: 0, pageSize: 30 }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  render(<TenantAudit context={context} />);
+  expect(await screen.findByRole('alert')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /details:/ })).not.toBeInTheDocument();
 });

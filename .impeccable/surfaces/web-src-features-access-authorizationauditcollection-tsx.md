@@ -1,0 +1,17 @@
+# Authorization Audit collections
+
+Mode: Operate. Ordinary extension of the existing dark Ant Design v6 Access/Admin world; no replacement visual world or comp.
+
+Tenant Audit and Platform audit reuse `AuthorizationAuditCollection`: native vertical Form, wrapping filter controls, exact Apply/Clear actions, server count and responsive native Table pagination. Preserve the existing desktop expanded details and bounded mobile Drawer. Scope lives in the existing AccessApp heading/navigation; platform explanatory copy makes its limited facts clear. No dashboard, cards, token, font, asset or generic control wrapper is introduced.
+
+Use existing bounded-form/mobile input/button sizing, 8/12/16 spacing roles and shared Admin detail layout. `.access-collection-filters` owns sibling form gap and wrapping field width; the existing shell owns outer inset. Fields remain in document order at narrow widths. Native local date/time inputs avoid a wide date-range popup. Explicit Apply prevents private queries on every keystroke; Clear and Refresh retire prior details. Permission loss retires data and counts through shared AccessError.
+
+Behavior authority: [canonical tenant and System audit query interaction contract](../../docs/19-multi-tenant-iam-ux.md#canonical-tenant-and-system-audit-query-interaction-contract). The existing design sidecar and historical drift stay unchanged.
+
+## Bounded finish evidence — 2026-10-21
+
+The fresh finish reviewer returned SHIP without material fixes for eight final 1000px-high captures in `../review/authorization-audit/`: tenant collection tops at 1440/1024/768/390/320px, `tenant-390-details.png`, and System collection tops at 1440/320px. This documenter sampled tenant 1440/320px, the settled 390px Drawer and System 320px and checked all eight dimensions/fingerprints against the current source composition. The captures establish the scope → explicit filters → count/Refresh → first records hierarchy and settled narrow detail presentation. Below-fold narrow paging, execution-lineage details, transient states, keyboard behavior and measured contrast are outside this visual verdict.
+
+The implementation handoff separately reports 12 passing focused API cases across both stores, 50 focused UI cases, passing frontend/API builds and an 18.7-second CLI journey: exact actor/time/action filters returned three rows, server paging split 34 entries into 30/4, actual role revocation cleared records, and tenant-only authority could not fetch System Audit. The journey reported no page errors or legacy calls. Independent MCP also exercised actual filter, detail and zero-result controls. Detector output was `[]`; hooks reported no findings. These checks do not extend the capture verdict to unreviewed states, and this documentation pass runs no app checks.
+
+Sampled sources: `AuthorizationAuditCollection.tsx`, `TenantAudit.tsx`, AccessApp audit headings/navigation, native navigation icons, the appended filter layout and shared theme/AppShell bridge. The ordinary extension preserves native Ant Design v6 Form/Table/Drawer and existing bounded-form/detail/mobile owners; it warrants no new token or component recipe. Normative DESIGN frontmatter, fonts, assets and `.impeccable/design.json` remain unchanged; its SHA-256 remains `8bdc3659a25b706454ac8cc0394323c5e0e60ea1ade616756b180efbaecef49b`. Known historical CSS/AccessApp/PRODUCT/DESIGN fingerprint drift is preserved without repair or broad extraction. Full proposal, design-system and milestone acceptance remain open.

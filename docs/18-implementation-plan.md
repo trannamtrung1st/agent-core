@@ -1125,3 +1125,7 @@ Canonical tenant event receipt snapshots, matching/coalescing, actual Core metad
 ### Tenant email monitoring checkpoint — 2026-10-21
 
 Canonical tenant account polling, atomic metadata/proof production, exact source read/use and Review, current eligible coalesced subsets, scoped human facts/Activity/approval counts, protected refresh, source retirement and shared native monitoring controls are locally qualified as one module. [Focused qualification](reports/tenant-email-watch-verification-2026-10-21.md) records both-store, actual SQLite application recreation, provider-fixture and browser evidence with its limits. This supersedes tenant-watcher-pending notes only. Destinations/reporting, remaining voice/System/audit, obsolete authority/schema removal and final proposal-wide route/security/design qualification remain open. The original full goal stays active; no milestone or full proposal acceptance is claimed.
+
+### Tenant and System audit query checkpoint — 2026-10-21
+
+Scoped server query/count/paging, original-human post-read fences and the shared native tenant/Platform Audit UI are locally qualified as one module; [evidence](reports/tenant-system-audit-verification-2026-10-21.md) owns exact checks and limits. This supersedes audit-query/UI-pending notes only. Tenant voice, remaining System/operator and guardrail families, final obsolete authority/schema removal and exhaustive original-proposal security/design/route acceptance remain open. The full goal stays active; no milestone or full proposal acceptance follows.

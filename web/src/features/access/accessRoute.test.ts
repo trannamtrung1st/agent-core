@@ -62,3 +62,10 @@ describe('canonical access navigation', () => {
  it('recognizes the canonical organization Governance destination', () => {
   expect(parseAccessRoute('/t/11111111-1111-1111-1111-111111111111/admin/governance')).toMatchObject({ view: 'tenant', page: 'governance' });
  });
+
+
+it('keeps Platform audit outside organization routing and rejects extra segments', () => {
+  expect(parseAccessRoute('/system/audit')).toEqual({ area: 'access', view: 'system', page: 'audit' });
+  expect(canonicalAppUrl('/system/audit')).toBe('/system/audit');
+  expect(parseAccessRoute('/system/audit/foreign')?.view).toBe('not-found');
+});
