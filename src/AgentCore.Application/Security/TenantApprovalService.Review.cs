@@ -202,7 +202,7 @@ public sealed partial class TenantApprovalService
         if (op.BackgroundReport is { } report)
         {
             var evidence = System.Text.Json.JsonSerializer.Deserialize<AgentCore.Application.Execution.AgentRunAdmissionFactory.SignalInput>(report.EvidenceJson)!;
-            return [new("reportDestination", null, "Original conversation", false),
+            return [new("reportDestination", null, $"Exact saved conversation {report.ParentSessionId:D}", false),
                 new("reportContent", null, AgentCore.Application.Execution.BackgroundCompletionProjection.ReportText(evidence.Text!), false), new("reportModel", null, report.Model.CatalogKey, false)];
         }
         if (op.BackgroundStart is { } task) return [new("backgroundObjective", null, task.Objective, false), new("backgroundTitle", null, task.Title, false),

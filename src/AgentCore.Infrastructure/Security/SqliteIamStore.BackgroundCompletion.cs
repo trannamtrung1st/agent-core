@@ -34,7 +34,9 @@ public sealed partial class SqliteIamStore
             return previous is null ? null : AgentRunStoreMapping.ToDomain(previous);
         }, ct).ConfigureAwait(false);
         var receipt = await db.BackgroundCompletionReceipts.AsNoTracking().SingleOrDefaultAsync(r => r.ChildAgentRunId == childRunId.ToString("D") && r.ProfileId == null, ct).ConfigureAwait(false);
-        return new(run, child, parent, initial, receipt is null ? null : CompletionInboxMapping.Read(receipt));
+        var occurrenceRow = initial.Admission.Activation.TriggerOccurrenceId is { } occurrenceId
+            ? await db.TriggerOccurrences.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(o => o.TenantId == owner.TenantId && o.OccurrenceId == occurrenceId.ToString("D"), ct).ConfigureAwait(false) : null;
+        return new(run, child, parent, initial, receipt is null ? null : CompletionInboxMapping.Read(receipt), occurrenceRow is null ? null : TriggerStoreMapping.ToOccurrence(occurrenceRow));
     }
     public async ValueTask<IReadOnlyList<TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default)
     {
@@ -91,11 +93,12 @@ public sealed partial class SqliteIamStore
         var agent = Owned(agentRow); TenantSessionRules.RequireExecutor(state, agent); var now = (clock ?? TimeProvider.System).GetUtcNow();
         TenantBackgroundCompletionRules.Shape(source, report, agent, expectedParentRevision, now);
         var root = await TenantExecutionLineage.RootAsync(source.Child, this, ct).ConfigureAwait(false);
+        await TenantCompletionDestinationRules.CommunicationAsync(state, source, new IamAuthorizer(this), ct, requireNoReview: true).ConfigureAwait(false);
         var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
             ? (await FindDefinitionPublicationAsync(tenant, definition, agent.Instance.ActiveVersion, ct).ConfigureAwait(false))?.Payload
             : builtIns is null ? null : await builtIns.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         if (baseline is null) throw new AccessDeniedException("definition_unavailable");
-        await TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), this, ct).ConfigureAwait(false);
+        await TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), this, ct, source).ConfigureAwait(false);
         if (source.Parent!.Snapshot.PendingAgentInputIds.Count > 0 || await db.AgentRuns.AnyAsync(r => r.SessionId == report.SessionId.ToString("D") && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false))
             throw new SecurityConflictException("parent_busy");
         db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(source.Parent.Snapshot, report)); db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(report));

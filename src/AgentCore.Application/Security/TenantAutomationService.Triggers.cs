@@ -28,7 +28,7 @@ public sealed partial class TenantAutomationService
         if ((change.Schedule is null) == (change.Events is null)) throw new ArgumentException("Use one Schedule or a bounded list of typed event subscriptions.");
         if (change.Schedule is { } timing)
         {
-            var prior = current?.IsSchedule == true ? current.Triggers[0] : null; var next = new ScheduleTrigger(timing);
+            var prior = current?.IsSchedule == true ? current.Triggers[0] : null; var next = new ScheduleTrigger(TenantAutomationRules.CanonicalSchedule(timing));
             return [new(prior?.TriggerId ?? ids.NewId(), next, true, prior is null ? 1 : prior.Revision + (prior.Configuration.SemanticEquals(next) && prior.Enabled ? 0 : 1))];
         }
         if (change.Events is not { Count: > 0 and <= TriggerLimits.MaxEventSubscriptions } events) throw new ArgumentException("Use 1–32 distinct event subscriptions.");

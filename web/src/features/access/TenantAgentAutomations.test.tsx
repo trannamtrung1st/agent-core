@@ -27,7 +27,7 @@ beforeEach(() => {
       if (options.method === 'DELETE') { current.items[0].automation.status = 'cancelled'; current.items[0].automation.nextOccurrenceAtUtc = '2027-01-01T09:00:00Z'; return response(current.items[0].automation); }
       if (url.endsWith('/run')) return response({ runId: 'admitted-run', sessionId: 'task-session' });
       const body = JSON.parse(String(options.body ?? '{}'));
-      if (body.name) current.items[0].automation = { ...current.items[0].automation, ...body, revision: 7 };
+      if (body.name) current.items[0].automation = { ...current.items[0].automation, ...body, completionDelivery: body.reportToSessionId ? 'toSession' : 'none', revision: 7 };
       return response(current.items[0].automation);
     }
     if (url.includes('/automations/')) return denied ? response({ reasonCode: 'permission_denied' }, 403) : response(current);
@@ -101,4 +101,33 @@ it('acknowledges pending admission consent without claiming a Run exists or repl
   expect(screen.queryByRole('link', { name: 'Open the admitted Run in Activity' })).not.toBeInTheDocument();
   expect(screen.getByText('No Session or Run has been created for this occurrence. Approval and admission remain separate steps.')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Reload Automations' })); await waitFor(() => expect(writes()).toHaveLength(1));
+});
+
+it('authors an exact report destination through the shared picker and retains it after a stale write', async () => {
+  await open(); await edit();
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Automation completion report' }));
+  fireEvent.click(await screen.findByText('Selected conversation', { selector: '.ant-select-item-option-content' }));
+  expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Enter Session ID' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Session ID' }), { target: { value: 'exact-report-conversation' } });
+  stale = true; fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
+  await screen.findByText(/Access has changed since/);
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ reportToSessionId: 'exact-report-conversation', expectedAutomationRevision: 6 });
+  expect(screen.getByRole('textbox', { name: 'Session ID' })).toHaveValue('exact-report-conversation');
+  stale = false; current.securityRevision = 22;
+  fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
+  expect(screen.getByText('Session ID: exact-report-conversation')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ reportToSessionId: 'exact-report-conversation', expectedRevision: 22 });
+});
+it('opens a configured report for editing and can explicitly remove that destination', async () => {
+  current.items[0].automation.completionDelivery = 'toSession'; current.items[0].automation.reportToSessionId = 'exact-report-conversation';
+  await open(); await edit();
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Automation completion report' }));
+  fireEvent.click(await screen.findByText('None', { selector: '.ant-select-item-option-content' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ reportToSessionId: null });
 });

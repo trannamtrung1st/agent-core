@@ -96,6 +96,7 @@ public sealed partial class InMemoryIamStore
                 (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(parent.Owner.TenantId!.Value, id)),
                 (id, _) => ValueTask.FromResult(CompletionSource(parent.Owner, id)), ct).AsTask().GetAwaiter().GetResult();
             RequireTenantReportRead(_tenants[parent.Owner.TenantId!.Value], source, ct);
+            RequireTenantReportDelivery(_tenants[parent.Owner.TenantId.Value], source, parent, ct);
         }
         foreach (var item in sessionBacking.AgentRuns.CompletionReceipts.Values.Select(CompletionInboxMapping.Read)
             .Where(i => i.Owner == parent.Owner && i.ClaimRunId == parent.AgentRunId && i.Status == CompletionInboxStatus.Claimed && i.Acknowledgment is not null && i.ClaimExpiresAtUtc > now))

@@ -30,6 +30,8 @@ public sealed partial class TenantApprovalService
         var prior = await approvals.FindRootApprovalAsync(context.TenantId, context.RootActivationId, context.AgentPrincipalId, op, ct).ConfigureAwait(false);
         if (prior is not null) return new(OperationDecisionKind.RequiresApproval, TenantApprovalRules.DuplicateReason(prior), prior.Operation, prior);
         var eligibility = await operations.Evaluate(current.State, context, "agent-runs.create", AccessScope.ForTenant(context.TenantId), ct).ConfigureAwait(false);
+        if (eligibility.Decision == OperationDecisionKind.Allowed && await TenantCompletionDestinationRules.NeedsCommunicationReviewAsync(current.State, source, authorizer, ct).ConfigureAwait(false))
+            eligibility = eligibility with { Decision = OperationDecisionKind.RequiresApproval, ApprovalKind = ApprovalKind.Review, ReasonCode = "review_required" };
         if (eligibility.Decision != OperationDecisionKind.RequiresApproval)
             return await PreparationOutcome(current.State, run, op, eligibility.Decision, eligibility.ReasonCode, null, ct).ConfigureAwait(false);
         var request = new TenantApprovalRequest(ids.NewId(), context.TenantId, run.AgentRunId, run.SessionId, context.RootActivationId, context.AgentPrincipalId,

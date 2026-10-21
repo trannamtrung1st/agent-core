@@ -21,7 +21,9 @@ public sealed partial class InMemoryIamStore
         if (run?.Owner != owner || sessionBacking.ReadRetainedTenantBackgroundSession(owner.TenantId.Value, run.SessionId) is not { } child) return null;
         var parent = child.Snapshot.Origin.OriginatingSessionId is { } parentId ? sessionBacking.ReadTenantSession(owner.TenantId.Value, parentId) : null;
         var initial = TenantBackgroundLineage.InitialAsync(run, (id, _) => ValueTask.FromResult(sessionBacking.ReadRetainedTenantOperationRun(owner.TenantId.Value, id)), CancellationToken.None).AsTask().GetAwaiter().GetResult();
-        return new(run, child, parent, initial, sessionBacking.AgentRuns.CompletionReceipts.TryGetValue(childRunId, out var receipt) ? CompletionInboxMapping.Read(receipt) : null);
+        var occurrence = initial.Admission.Activation.TriggerOccurrenceId is { } occurrenceId
+            ? automationBacking.ReadTenantOccurrence(owner.TenantId.Value, occurrenceId) : null;
+        return new(run, child, parent, initial, sessionBacking.AgentRuns.CompletionReceipts.TryGetValue(childRunId, out var receipt) ? CompletionInboxMapping.Read(receipt) : null, occurrence);
     }
     public ValueTask<IReadOnlyList<TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default)
     {
@@ -78,11 +80,12 @@ public sealed partial class InMemoryIamStore
             var now = (clock ?? TimeProvider.System).GetUtcNow();
             TenantBackgroundCompletionRules.Shape(source, report, agent, expectedParentRevision, now);
             var root = TenantExecutionLineage.RootAsync(source.Child, this, ct).AsTask().GetAwaiter().GetResult();
+            TenantCompletionDestinationRules.CommunicationAsync(state, source, new IamAuthorizer(this), ct, requireNoReview: true).AsTask().GetAwaiter().GetResult();
             var baseline = Guid.TryParse(agent.Instance.DefinitionId, out var definition)
                 ? definitions.TenantPublication(tenant, definition, agent.Instance.ActiveVersion)?.Payload
                 : builtIns?.GetAsync(agent.Instance.DefinitionId, agent.Instance.ActiveVersion, ct).AsTask().GetAwaiter().GetResult();
             if (baseline is null) throw new AccessDeniedException("definition_unavailable");
-            TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), this, ct).AsTask().GetAwaiter().GetResult();
+            TenantBackgroundAdmissionRules.AuthorizeReportAsync(state, root, InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides), new IamAuthorizer(this), this, ct, source).AsTask().GetAwaiter().GetResult();
             if (source.Parent!.Snapshot.PendingAgentInputIds.Count > 0 || all.Runs.Values.Any(r => r.SessionId == report.SessionId && !r.IsTerminal))
                 throw new SecurityConflictException("parent_busy");
             if (all.Runs.ContainsKey(report.AgentRunId) || all.Activations.ContainsKey(report.ActivationId) || _audit.Any(a => a.AuditId == auditId)) throw new SecurityConflictException("identity_conflict");

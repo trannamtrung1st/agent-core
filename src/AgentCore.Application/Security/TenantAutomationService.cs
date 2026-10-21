@@ -12,10 +12,10 @@ namespace AgentCore.Application.Security;
 public sealed record TenantAutomationTriggerChange(Guid? TriggerId, AutomationTrigger Configuration, bool Enabled = true, long ExpectedRevision = 0);
 public sealed record TenantAutomationChange(bool Enabled, string Name, string Instructions, TriggerSchedule? Schedule,
     string? ModelKey = null, string? ReasoningEffort = null, bool RequiresTools = true, bool RequiresVision = false,
-    IReadOnlyList<TenantAutomationTriggerChange>? Events = null);
+    IReadOnlyList<TenantAutomationTriggerChange>? Events = null, Guid? ReportToSessionId = null);
 
 public sealed partial class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null)
 {
     private readonly SemaphoreSlim dueGate = new(1, 1);
     private string? dueCursor;
@@ -64,9 +64,11 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
             isSchedule ? change.Enabled ? TriggerScheduleCalculator.InitialNext(((ScheduleTrigger)children[0].Configuration).Schedule, at) : current?.IsSchedule == true ? current.NextOccurrenceAtUtc : null : null, current?.ExpiresAtUtc, current?.OccurrenceCount ?? 0,
             automationRevision + 1, children.Max(t => t.Revision),
             current?.Provenance.WithUpdated(at) ?? new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null, change.ModelKey, change.ReasoningEffort,
-            change.RequiresVision, change.Name, AutomationExecutionTarget.Background, AutomationCompletionDelivery.None, change.RequiresTools);
+            change.RequiresVision, change.Name, AutomationExecutionTarget.Background, change.ReportToSessionId is { } destination ? AutomationCompletionDelivery.ToSession(destination) : AutomationCompletionDelivery.None, change.RequiresTools);
         TenantAutomationRules.Configuration(proposed, policy, at);
         await TenantAutomationRules.HumanSourcesAsync(state, human.PrincipalId, proposed, iam, ct);
+        await TenantCompletionDestinationRules.AuthoringAsync(state, human.PrincipalId, proposed,
+            proposed.CompletionDelivery.SessionId is { } reportTo && sessions is not null ? await sessions.FindTenantSessionAsync(tenant, reportTo, ct) : null, iam, ct);
         if (proposed.Status == AutomationStatus.Active && (proposed.IsSchedule && proposed.NextOccurrenceAtUtc is null || !ExecutionModelPolicy.Resolve(models, policy, agent.Instance, proposed).Accepted))
             throw new AccessDeniedException("automation_model_unavailable");
         var audit = new AuthorizationAudit(ids.NewId(), tenant, human.PrincipalId, permission, proposed.AutomationId.ToString("D"), "allowed", "automation_saved", at);

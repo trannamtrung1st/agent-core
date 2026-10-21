@@ -55,6 +55,10 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
             AutomationRules.ValidateSave(current, proposed, expectedAutomationRevision); TenantAutomationRules.Configuration(proposed, policy, audit.At);
             RequireAutomationHuman(before, human.PrincipalId, agent, proposed.AutomationId, permission, current is null, ct);
             if (permission is "automations.create" or "automations.update") TenantAutomationRules.HumanSourcesAsync(before, human.PrincipalId, proposed, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            if (permission is "automations.create" or "automations.update")
+                TenantCompletionDestinationRules.AuthoringAsync(before, human.PrincipalId, proposed,
+                    proposed.CompletionDelivery.SessionId is { } destination ? sessionBacking.ReadTenantSession(before.Tenant.TenantId, destination) : null,
+                    new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
             if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
                 && automationBacking.TenantAutomations(before.Tenant.TenantId).Count(a => a.Owner == proposed.Owner && a.Status == AutomationStatus.Active) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))

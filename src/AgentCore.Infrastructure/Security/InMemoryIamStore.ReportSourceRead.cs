@@ -38,6 +38,24 @@ public sealed partial class InMemoryIamStore
         RequireReportSourceReadOperation(request);
         TenantReportSourceReadRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).AsTask().GetAwaiter().GetResult();
     }
+    private void RequireTenantReportDelivery(TenantSecurityState state, TenantBackgroundCompletion source, AgentRun report, CancellationToken ct)
+    {
+        var iam = new IamAuthorizer(this);
+        var agent = FindTenantAgentAsync(state.Tenant.TenantId, source.Child.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("executor_unavailable");
+        var root = TenantExecutionLineage.RootAsync(source.Child, this, ct).AsTask().GetAwaiter().GetResult();
+        var current = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
+        if (!TenantCompletionDestinationRules.Allows(source, root, current)) throw new AccessDeniedException("background_unavailable");
+        if (!TenantCompletionDestinationRules.NeedsCommunicationReviewAsync(state, source, iam, ct).AsTask().GetAwaiter().GetResult()) return;
+        var lookup = TenantBackgroundReportRules.Lookup(source);
+        var request = _approvals.Values.SingleOrDefault(r => r.TenantId == state.Tenant.TenantId && r.RootActivationId == source.Child.Admission.ExecutionContext!.RootActivationId
+            && r.ExecutorPrincipalId == source.Child.Owner.ExecutorPrincipalId && r.Fingerprint == lookup.OperationFingerprint)
+            ?? throw new AccessDeniedException("completion_communication_review_required");
+        if (!_operationReceipts.TryGetValue(request.Operation.OperationId, out var receipt) || !_approvalDecisions.TryGetValue(request.RequestId, out var decision))
+            throw new AccessDeniedException("completion_communication_review_required");
+        TenantBackgroundReportRules.DeliveryReceipt(source, report, request, receipt, decision, _operationGrants.GetValueOrDefault(request.RequestId));
+        TenantApprovalRules.Validate(request, source.Child, agent);
+        TenantBackgroundReportRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).AsTask().GetAwaiter().GetResult();
+    }
     public ValueTask<bool> SettleTenantReportSourceReadAsync(ApprovalProcessedSignal signal, Guid auditId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); if (auditId == Guid.Empty) throw new ArgumentException("Audit identity is required.");

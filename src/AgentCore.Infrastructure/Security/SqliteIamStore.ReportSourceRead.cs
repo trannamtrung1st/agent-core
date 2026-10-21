@@ -43,6 +43,29 @@ public sealed partial class SqliteIamStore
         await RequireReportSourceReadOperation(db, request, ct).ConfigureAwait(false);
         await TenantReportSourceReadRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
     }
+    private async Task RequireTenantReportDelivery(AgentCoreDbContext db, TenantSecurityState state, TenantBackgroundCompletion source, AgentRun report, CancellationToken ct)
+    {
+        var iam = new IamAuthorizer(this);
+        var agentRow = await OwnedAgents(db, state.Tenant.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == source.Child.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("executor_unavailable");
+        var agent = Owned(agentRow);
+        var root = await TenantExecutionLineage.RootAsync(source.Child, this, ct).ConfigureAwait(false);
+        var current = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
+        if (!TenantCompletionDestinationRules.Allows(source, root, current)) throw new AccessDeniedException("background_unavailable");
+        if (!await TenantCompletionDestinationRules.NeedsCommunicationReviewAsync(state, source, iam, ct).ConfigureAwait(false)) return;
+        var row = await RootApproval(db, state.Tenant.TenantId, source.Child.Admission.ExecutionContext!.RootActivationId.ToString("D"),
+            source.Child.Owner.ExecutorPrincipalId!.Value, TenantBackgroundReportRules.Lookup(source)).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("completion_communication_review_required");
+        var request = row.Domain();
+        var receipt = await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == request.TenantId && r.OperationId == request.Operation.OperationId, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("completion_communication_review_required");
+        var decision = await db.Set<TenantApprovalDecision>().AsNoTracking().SingleOrDefaultAsync(d => d.TenantId == request.TenantId && d.RequestId == request.RequestId, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("completion_communication_review_required");
+        var grant = await db.Set<TenantOperationGrant>().AsNoTracking().SingleOrDefaultAsync(g => g.TenantId == request.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
+        TenantBackgroundReportRules.DeliveryReceipt(source, report, request, receipt.Domain(), decision, grant);
+        TenantApprovalRules.Validate(request, source.Child, agent);
+        await TenantBackgroundReportRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
+    }
     public async ValueTask<bool> SettleTenantReportSourceReadAsync(ApprovalProcessedSignal signal, Guid auditId, CancellationToken ct = default)
     {
         if (auditId == Guid.Empty) throw new ArgumentException("Audit identity is required.");

@@ -62,6 +62,13 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
             AutomationRules.ValidateSave(current, proposed, expectedAutomationRevision); TenantAutomationRules.Configuration(proposed, policy, audit.At);
         await RequireAutomationHuman(before, human.PrincipalId, agent, proposed.AutomationId, permission, current is null, ct);
         if (permission is "automations.create" or "automations.update") await TenantAutomationRules.HumanSourcesAsync(before, human.PrincipalId, proposed, new IamAuthorizer(this), ct);
+        if (permission is "automations.create" or "automations.update")
+        {
+            var target = proposed.CompletionDelivery.SessionId is { } destination
+                ? await OwnedSessions(db, before.Tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == destination.ToString("D"), ct) : null;
+            await TenantCompletionDestinationRules.AuthoringAsync(before, human.PrincipalId, proposed,
+                target is null ? null : await SessionView(db, target, ct), new IamAuthorizer(this), ct);
+        }
         ValidateAutomationTransaction(next, expectedSecurityRevision, proposed, human.PrincipalId, permission, audit);
         if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active
             && await OwnedAutomations(db, next.Tenant.TenantId).CountAsync(a => a.AgentInstanceId == agent.Instance.InstanceId.ToString("D") && a.Status == (int)AutomationStatus.Active, ct) >= (policy.TriggerPolicy?.MaxActiveRegistrations ?? 0))

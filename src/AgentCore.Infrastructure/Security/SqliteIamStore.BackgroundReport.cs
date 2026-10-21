@@ -20,7 +20,7 @@ public sealed partial class SqliteIamStore
         TenantBackgroundReportRules.Require(request, source, agent, current);
         await TenantExecutionLineage.RequireRequesterAsync(child, state, iam, this, ct).ConfigureAwait(false);
         var root = await TenantExecutionLineage.RootAsync(child, this, ct).ConfigureAwait(false);
-        await TenantBackgroundReportRules.ExecutorAsync(state, request, root, current, iam, ct).ConfigureAwait(false);
+        await TenantBackgroundReportRules.ExecutorAsync(state, request, root, current, iam, ct, source).ConfigureAwait(false);
         return source;
     }
     public async ValueTask<bool> SettleTenantBackgroundReportApprovalAsync(ApprovalProcessedSignal signal, AgentRun? report, string? refusal, Guid auditId, CancellationToken ct = default)

@@ -27,8 +27,6 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                 if (current.Agent.PrincipalId != run.Owner.ExecutorPrincipalId
                     || current.Agent.Instance.Lifecycle != AgentInstanceLifecycle.Active || current.Agent.Instance.DefinitionId != run.DefinitionId)
                     return null;
-                if (run.Admission.ExecutionContext?.Origin == ExecutionOrigin.CompletionReport
-                    && !AgentCore.Application.Agents.RolePermissions.AllowsTool(current.Definition, AgentCore.Application.Tools.ToolCatalog.BackgroundStart)) return null;
                 if (before.State.Tenant.Revision == after.State.Tenant.Revision)
                 {
                     if (after.Run.Admission.OutputContract is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.CompletionReport)

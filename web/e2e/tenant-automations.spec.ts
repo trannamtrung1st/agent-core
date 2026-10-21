@@ -17,7 +17,7 @@ async function fixture() {
   const root = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, root + '/access/me')).revision;
   const agent = await call<{ principalId: string; instance: { instanceId: string } }>(api, root + '/agents', { templateId: 'general-assistant', version: 32, expectedRevision: await revision() });
   const id = agent.instance.instanceId; const route = `/t/${tenant}/admin/agents/${id}/automations`, resource = root + `/agents/${id}/automations`;
-  const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Independent scheduled executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create'], expectedRevision: await revision() });
+  const role = await call<{ roleId: string }>(api, root + '/roles', { name: 'Independent scheduled executor', permissions: ['automations.run', 'sessions.create', 'agent-runs.create', 'sessions.read', 'agent-runs.read', 'agents.chat'], expectedRevision: await revision() });
   await call(api, root + '/role-assignments', { principalId: agent.principalId, roleId: role.roleId, expectedRevision: await revision() });
   return { api, tenant, root, revision, id, route, resource };
 }
@@ -83,8 +83,9 @@ test('scoped Automation reader has no mutation controls and read revocation reti
 test('exact Automation admission is reviewed before any work exists and settles truthfully at narrow width', async ({ page }, info) => {
   const f = await fixture(); const observed = watch(page);
   try {
+    const target = await call<{ sessionId: string }>(f.api, f.root + '/sessions', { agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
     await call(f.api, f.root + '/operation-policies/agent-runs.create', { mode: 'always', independentReview: false, expectedRevision: await f.revision(), expectedPolicyRevision: 0 }, 'PUT');
-    await call(f.api, f.resource, { enabled: true, name: 'Approval before work exists', instructions: 'synthetic-automation-attention: finish this exact approved occurrence', schedule: { kind: 'daily', interval: 1, timeZone: 'UTC', localTime: '09:00' }, expectedRevision: await f.revision(), expectedInstanceRevision: 1, requiresTools: true });
+    await call(f.api, f.resource, { enabled: true, name: 'Approval before work exists', instructions: 'synthetic-automation-attention: finish this exact approved occurrence', schedule: { kind: 'daily', interval: 1, timeZone: 'UTC', localTime: '09:00' }, expectedRevision: await f.revision(), expectedInstanceRevision: 1, requiresTools: true, reportToSessionId: target.sessionId });
     await page.setViewportSize({ width: 390, height: 844 }); await signIn(page); await page.goto(f.route);
     await page.getByRole('button', { name: 'Run now', exact: true }).click(); const confirmation = page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true });
     await confirmation.getByRole('button', { name: 'Run now', exact: true }).click();
@@ -95,6 +96,7 @@ test('exact Automation admission is reviewed before any work exists and settles 
     expect(pending.runId).toBeNull(); expect(pending.sessionId).toBeNull(); expect(pending.review.executionState).toBe('waitingDecision');
     await link.click(); const review = page.getByRole('dialog', { name: 'Approval details', exact: true });
     await expect(review).toBeVisible(); await expect(review.getByText('synthetic-automation-attention: finish this exact approved occurrence', { exact: true })).toBeVisible();
+    await expect(review).toContainText(target.sessionId);
     expect(await review.getByRole('link', { name: 'Open original conversation', exact: true }).count()).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect.poll(async () => Math.round(await review.evaluate(element => element.getBoundingClientRect().x))).toBe(0);
@@ -104,6 +106,57 @@ test('exact Automation admission is reviewed before any work exists and settles 
     await expect(decide).toContainText('Later tools need their own authority'); await decide.getByRole('button', { name: 'Approve', exact: true }).click();
     await expect.poll(async () => (await call<{ review: { executionState: string } }>(f.api, f.root + `/approvals/${requestId}`)).review.executionState).toBe('admitted');
     await review.getByRole('button', { name: 'Refresh details', exact: true }).click(); await expect(review.getByText(/One Background Session and Run were admitted/)).toBeVisible();
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});
+
+test('configured completion uses the shared tenant picker, retains a stale destination and delivers the exact report once', async ({ page }, info) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    const target = await call<{ sessionId: string; revision: number }>(f.api, f.root + '/sessions', { agentInstanceId: f.id, mode: 'text', expectedRevision: await f.revision(), expectedInstanceRevision: 1 });
+    await call(f.api, f.root + `/sessions/${target.sessionId}`, { title: 'Quarterly research — a deliberately long conversation title for completion reports', expectedRevision: await f.revision(), expectedSessionRevision: target.revision }, 'PATCH');
+    await page.setViewportSize({ width: 1440, height: 1000 }); await signIn(page); await page.goto(f.route);
+    await page.getByRole('button', { name: 'New Automation', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: 'New Automation', exact: true });
+    await editor.getByRole('textbox', { name: 'Automation name', exact: true }).fill('Independent work with an exact conversation report');
+    await editor.getByRole('textbox', { name: 'Automation instructions', exact: true }).fill('synthetic-automation-attention: finish the bounded task and retain its factual result');
+    await editor.getByRole('checkbox', { name: 'Enable automatic occurrences', exact: true }).check();
+    await editor.getByRole('spinbutton', { name: 'Schedule maximum occurrences', exact: true }).fill('10');
+    await editor.getByRole('combobox', { name: 'Automation completion report', exact: true }).click();
+    await page.locator('.ant-select-item-option-content').filter({ hasText: /^Selected conversation$/ }).click();
+    await expect(editor.getByRole('button', { name: 'Save Automation', exact: true })).toBeDisabled();
+    await editor.getByRole('combobox', { name: 'Report destination', exact: true }).click();
+    await page.locator('.ant-select-item-option-content').filter({ hasText: /Quarterly research/ }).click();
+    await expect(editor.getByRole('button', { name: 'Save Automation', exact: true })).toBeEnabled();
+    await editor.getByRole('heading', { name: 'Completion', exact: true }).click();
+    await expect(page.locator('.ant-select-dropdown:visible, .ant-tooltip:visible')).toHaveCount(0);
+    await editor.getByRole('region', { name: 'Completion', exact: true }).scrollIntoViewIfNeeded();
+    for (const width of [1440, 1024, 768, 390, 320]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expect.poll(async () => Math.round(await editor.evaluate(element => element.getBoundingClientRect().width))).toBe(width < 768 ? width : 640);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await editor.getByRole('region', { name: 'Completion', exact: true }).scrollIntoViewIfNeeded();
+      await expect(editor.getByRole('combobox', { name: 'Report destination', exact: true })).toBeInViewport();
+      await page.screenshot({ path: info.outputPath(`configured-report-${width}.png`), fullPage: true });
+    }
+    // A real concurrent security mutation makes the prepared save stale.
+    await call(f.api, f.root + '/roles', { name: 'Concurrent access update', permissions: ['agents.read'], expectedRevision: await f.revision() });
+    await editor.getByRole('button', { name: 'Save Automation', exact: true }).click();
+    await expect(editor.getByText(/Access has changed since/)).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Save Automation', exact: true })).toBeDisabled();
+    await editor.getByRole('button', { name: 'Reload current Automation', exact: true }).click();
+    await expect(editor.getByRole('textbox', { name: 'Automation name', exact: true })).toHaveValue('Independent work with an exact conversation report');
+    await expect(editor.getByRole('button', { name: 'Save Automation', exact: true })).toBeEnabled();
+    await editor.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(editor).toHaveCount(0);
+    const saved = (await call<{ items: { automationId: string; reportToSessionId: string; completionDelivery: string }[] }>(f.api, f.resource)).items[0];
+    expect(saved.reportToSessionId).toBe(target.sessionId); expect(saved.completionDelivery).toBe('toSession');
+    await page.getByRole('button', { name: 'Run now', exact: true }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Run saved Automation now?', exact: true });
+    await confirmation.getByRole('button', { name: 'Run now', exact: true }).click();
+    const activity = page.getByRole('link', { name: 'Open the admitted Run in Activity', exact: true }); await expect(activity).toBeVisible();
+    const runId = new URL((await activity.getAttribute('href'))!, 'http://localhost').searchParams.get('run')!;
+    await expect.poll(async () => (await call<{ status: string }>(f.api, f.root + `/agent-runs/${runId}`)).status).toBe('completed');
+    await expect.poll(async () => (await call<{ items: { text: string | null; role: string }[] }>(f.api, f.root + `/sessions/${target.sessionId}/messages`)).items.filter(item => item.role.toLowerCase() === 'assistant').length).toBe(1);
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });

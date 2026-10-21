@@ -20,6 +20,7 @@ public static class TenantReportReadRules
     }
     public static async ValueTask RequireRawAsync(TenantSecurityState state, TenantBackgroundCompletion source, IamAuthorizer iam, CancellationToken ct)
     {
+        await TenantCompletionDestinationRules.CommunicationAsync(state, source, iam, ct).ConfigureAwait(false);
         foreach (var (key, scope) in Targets(source))
         {
             var permission = PermissionCatalog.Get(key);
@@ -69,8 +70,16 @@ public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITena
         var source = await TenantReportReadRules.SourceAsync(report, (id, token) => runs.FindTenantRunAsync(tenant, id, token),
             (id, token) => storage.ReadTenantBackgroundCompletionAsync(report.Owner, id, token), ct).ConfigureAwait(false);
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
-        if (sourceReads is not null) await sourceReads.RequireAuthorizedAsync(source, state, ct).ConfigureAwait(false);
-        else await TenantReportReadRules.RequireAsync(state, source, iam, ct).ConfigureAwait(false);
+        if (sourceReads is not null)
+        {
+            await sourceReads.RequireAuthorizedAsync(source, state, ct).ConfigureAwait(false);
+            await sourceReads.RequireDeliveryAsync(source, state, report, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            await TenantReportReadRules.RequireAsync(state, source, iam, ct).ConfigureAwait(false);
+            await TenantCompletionDestinationRules.CommunicationAsync(state, source, iam, ct, requireNoReview: true).ConfigureAwait(false);
+        }
         if ((await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false))?.Tenant.Revision != state.Tenant.Revision)
             throw new SecurityConflictException("completion_source_changed");
     }

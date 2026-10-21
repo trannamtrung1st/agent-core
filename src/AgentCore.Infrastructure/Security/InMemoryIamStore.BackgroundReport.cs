@@ -19,7 +19,7 @@ public sealed partial class InMemoryIamStore
         TenantBackgroundReportRules.Require(request, source, agent, current);
         TenantExecutionLineage.RequireRequesterAsync(child, state, iam, this, CancellationToken.None).AsTask().GetAwaiter().GetResult();
         var root = TenantExecutionLineage.RootAsync(child, this, CancellationToken.None).AsTask().GetAwaiter().GetResult();
-        TenantBackgroundReportRules.ExecutorAsync(state, request, root, current, iam, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        TenantBackgroundReportRules.ExecutorAsync(state, request, root, current, iam, CancellationToken.None, source).AsTask().GetAwaiter().GetResult();
         return source;
     }
     public ValueTask<bool> SettleTenantBackgroundReportApprovalAsync(ApprovalProcessedSignal signal, AgentRun? report, string? refusal, Guid auditId, CancellationToken ct = default)

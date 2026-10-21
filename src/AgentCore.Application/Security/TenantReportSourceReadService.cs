@@ -19,8 +19,7 @@ public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, I
         await TenantExecutionLineage.RequireRequesterAsync(source.Child, state, iam, runs, ct).ConfigureAwait(false);
         await TenantReportReadRules.RequireRawAsync(state, source, iam, ct).ConfigureAwait(false);
         var root = await TenantExecutionLineage.RootAsync(source.Child, runs, ct).ConfigureAwait(false);
-        if (!AgentCore.Application.Agents.RolePermissions.AllowsTool(root.Admission.Configuration!.Definition, Tools.ToolCatalog.BackgroundStart)
-            || !AgentCore.Application.Agents.RolePermissions.AllowsTool(current.Configuration.Configuration.Definition, Tools.ToolCatalog.BackgroundStart))
+        if (!TenantCompletionDestinationRules.Allows(source, root, current.Configuration.Configuration.Definition))
             throw new AccessDeniedException("background_unavailable");
         return (source, state, current.Agent);
     }
@@ -61,5 +60,24 @@ public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, I
         TenantReportSourceReadRules.Receipt(prior, receipt, decision, await approvals.FindOperationGrantAsync(prior.TenantId, prior.RequestId, ct).ConfigureAwait(false));
         await RequireAsync(prior, ct).ConfigureAwait(false);
         await TenantReportSourceReadRules.ReviewerAsync(state, prior, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
+    }
+
+    public async ValueTask RequireDeliveryAsync(TenantBackgroundCompletion source, TenantSecurityState state, AgentRun report, CancellationToken ct)
+    {
+        var current = await configurations.ResolveAsync(source.Child.Owner.TenantId!.Value, source.Child.AgentInstanceId, ct).ConfigureAwait(false);
+        var root = await TenantExecutionLineage.RootAsync(source.Child, runs, ct).ConfigureAwait(false);
+        if (!TenantCompletionDestinationRules.Allows(source, root, current.Configuration.Configuration.Definition)) throw new AccessDeniedException("background_unavailable");
+        if (!await TenantCompletionDestinationRules.NeedsCommunicationReviewAsync(state, source, iam, ct).ConfigureAwait(false)) return;
+        var request = await approvals.FindRootApprovalAsync(state.Tenant.TenantId, source.Child.Admission.ExecutionContext!.RootActivationId,
+            source.Child.Owner.ExecutorPrincipalId!.Value, TenantBackgroundReportRules.Lookup(source), ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("completion_communication_review_required");
+        var receipt = await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("completion_communication_review_required");
+        var decision = await effects.FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("completion_communication_review_required");
+        TenantBackgroundReportRules.DeliveryReceipt(source, report, request, receipt, decision,
+            await approvals.FindOperationGrantAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false));
+        TenantApprovalRules.Validate(request, source.Child, current.Agent);
+        await TenantBackgroundReportRules.ReviewerAsync(state, request, decision.HumanPrincipalId, iam, ct).ConfigureAwait(false);
     }
 }

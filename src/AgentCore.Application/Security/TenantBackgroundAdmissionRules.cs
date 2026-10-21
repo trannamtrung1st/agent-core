@@ -51,14 +51,14 @@ public static class TenantBackgroundAdmissionRules
     public static ValueTask AuthorizeAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
         IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, runs, ct, true);
     public static ValueTask AuthorizeReportAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
-        IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct) => AuthorizeAsync(state, parent, current, authorizer, runs, ct, false);
+        IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct, TenantBackgroundCompletion source) => AuthorizeAsync(state, parent, current, authorizer, runs, ct, false, source);
     private static async ValueTask AuthorizeAsync(TenantSecurityState state, AgentRun parent, AgentDefinition current,
-        IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct, bool createSession)
+        IamAuthorizer authorizer, ITenantRunStore runs, CancellationToken ct, bool createSession, TenantBackgroundCompletion? source = null)
     {
         var execution = parent.Admission.ExecutionContext!;
         if (state.Tenant.Status != IdentityStatus.Active || state.Tenant.TenantId != execution.TenantId
-            || !TenantTaskExecutionContract.Allows(parent, current) || !RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
-            || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)) throw new AccessDeniedException("background_unavailable");
+            || !TenantTaskExecutionContract.Allows(parent, current) || (createSession || source is null || !TenantCompletionDestinationRules.Configured(source))
+                && (!RolePermissions.AllowsTool(parent.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart) || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart))) throw new AccessDeniedException("background_unavailable");
         foreach (var key in createSession ? new[] { "sessions.create", "agent-runs.create" } : new[] { "agent-runs.create" })
         {
             var permission = PermissionCatalog.Get(key); var scope = AccessScope.ForTenant(execution.TenantId);

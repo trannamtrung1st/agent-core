@@ -11,14 +11,14 @@ namespace AgentCore.Application.Tests;
 
 public sealed class TenantEventAdmissionContractTests
 {
-    private static PreparedTenantOperation Large()
+    private static PreparedTenantOperation Large(Guid? report = null)
     {
         var tenant = Guid.NewGuid(); var instance = Guid.NewGuid(); var owner = TriggerOwner.ForTenant(tenant, instance, Guid.NewGuid());
         var filter = "true" + new string(' ', 1014) + "&&true"; Assert.Equal(1024, filter.Length);
         var triggers = Enumerable.Range(0, 32).Select(_ => new AutomationTriggerRecord(Guid.NewGuid(), new EventTrigger(Guid.NewGuid(), filter))).ToArray();
         var at = DateTimeOffset.UnixEpoch;
         var automation = new Automation(Guid.NewGuid(), owner, AutomationStatus.Active, new string('a', 2000), triggers, null, null, 0, 1, 1,
-            new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null, name: new string('n', 120));
+            new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null, name: new string('n', 120), completionDelivery: new AutomationCompletionDelivery(report));
         var child = automation.Triggers[0]; var source = ((EventTrigger)child.Configuration).EventId;
         var receipt = new ExternalEvent(Guid.NewGuid(), source, "received-once", at, at, "{\"data\":{}}", tenant, 1);
         var snapshot = new EventSubscriptionSnapshot(automation.AutomationId, owner, 1, filter, new(), TriggerSourceKind.ApplicationEvent, source) { TriggerId = child.TriggerId };
@@ -45,6 +45,44 @@ public sealed class TenantEventAdmissionContractTests
         Assert.InRange(JsonSerializer.SerializeToUtf8Bytes(request).Length, 1, 1048576);
         Assert.Equal("webhooks.read", request.Permission); Assert.Equal(a.EventSource!.ResourceId!.Value.ToString("D"), request.ResourceId);
     }
+    [Fact]
+    public void Configured_report_consent_roundtrips_exact_destination_and_keeps_historical_event_bytes()
+    {
+        var historical = Large();
+        var oldJson = JsonSerializer.Serialize(historical);
+        Assert.DoesNotContain("ReportToSessionId", oldJson);
+        Assert.Contains("\"SchemaVersion\":2", oldJson);
+        Assert.Equal(oldJson, JsonSerializer.Serialize(JsonSerializer.Deserialize<PreparedTenantOperation>(oldJson)));
+        var destination = Guid.NewGuid();
+        var operation = Large(destination);
+        var json = JsonSerializer.Serialize(operation);
+        Assert.Contains("\"SchemaVersion\":3", json);
+        var restored = JsonSerializer.Deserialize<PreparedTenantOperation>(json)!;
+        Assert.Equal(json, JsonSerializer.Serialize(restored));
+        Assert.Equal(operation.ActionHash, TenantApprovalRules.Rebuild(restored).ActionHash);
+        Assert.Equal(destination, restored.AutomationAdmission!.Current.CompletionDelivery.SessionId);
+        Assert.Equal(destination, restored.AutomationAdmission.Next.CompletionDelivery.SessionId);
+        Assert.Equal(destination, restored.AutomationAdmission.Occurrence.CompletionDelivery.SessionId);
+    }
+
+    [Theory]
+    [InlineData("old-schema")] [InlineData("missing")] [InlineData("null")] [InlineData("empty")]
+    [InlineData("duplicate")] [InlineData("execution-target")]
+    public void Configured_report_consent_rejects_ambiguous_or_missing_destinations(string mode)
+    {
+        var operation = Large(Guid.NewGuid());
+        var node = JsonNode.Parse(JsonSerializer.Serialize(operation))!;
+        var current = node["AutomationAdmission"]!["Current"]!.AsObject();
+        if (mode == "old-schema") current["SchemaVersion"] = 2;
+        else if (mode == "missing") current.Remove("ReportToSessionId");
+        else if (mode == "null") current["ReportToSessionId"] = null;
+        else if (mode == "empty") current["ReportToSessionId"] = Guid.Empty;
+        else if (mode == "duplicate") current["reportToSessionId"] = Guid.NewGuid();
+        else current["ExecutionTarget"] = "existingSession";
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PreparedTenantOperation>(node.ToJsonString(),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
+    }
+
     [Theory]
     [InlineData("unknown-child")] [InlineData("unknown-parent")] [InlineData("shadow-child")] [InlineData("shadow-owner")]
     public void Event_consent_rejects_unknown_and_duplicate_source_fields(string mode)

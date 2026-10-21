@@ -36,9 +36,7 @@ public static class TenantReportSourceReadRules
     {
         Source(request, source.Child); TenantBackgroundCompletionFactory.RequireParent(source);
         TenantApprovalRules.Validate(request, source.Child, agent);
-        if (request.Operation.ReportSourceRead != Witness(source) || !TenantTaskExecutionContract.Allows(root, current) || agent.PrincipalId != source.Child.Owner.ExecutorPrincipalId
-            || !RolePermissions.AllowsTool(root.Admission.Configuration!.Definition, ToolCatalog.BackgroundStart)
-            || !RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)
+        if (request.Operation.ReportSourceRead != Witness(source) || !TenantCompletionDestinationRules.Allows(source, root, current) || agent.PrincipalId != source.Child.Owner.ExecutorPrincipalId
             || pending && source.Item?.Status != CompletionInboxStatus.Pending) throw new AccessDeniedException("completion_source_changed");
     }
     public static async ValueTask ReadAsync(TenantSecurityState state, TenantApprovalRequest request, Guid human, IamAuthorizer iam, CancellationToken ct)

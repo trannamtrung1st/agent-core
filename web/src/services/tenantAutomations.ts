@@ -1,13 +1,14 @@
 import type { AutomationPolicy, ScheduleTiming, EventSourceReference, EventDispatch } from './adminApi';
 import type { TenantAgentEditor } from './tenantAgentConfiguration';
 import { tenantAgentApi } from './tenantAgentConfiguration';
-import { IdentityCompletionError, identityRequest } from './identity';
+import { IdentityCompletionError, identityRequest, tenantApi } from './identity';
+import type { SessionPickerSource, SessionPickerItem } from './api';
 
 export type TenantAutomation = {
   automationId: string; name: string; instructions: string; status: string; revision: number; triggerRevision: number;
   nextOccurrenceAtUtc: string | null; occurrenceCount: number; suspensionReason: string | null;
   modelOverrideCatalogKey: string | null; modelOverrideReasoningEffort: string | null; requiresTools: boolean; requiresVision: boolean;
-  executionTarget: string; completionDelivery: string; createdAt: string; updatedAt: string;
+  executionTarget: string; completionDelivery: string; reportToSessionId?: string | null; createdAt: string; updatedAt: string;
   triggers: { kind: string; schedule?: ScheduleTiming; source?: EventSourceReference; triggerId?: string; enabled?: boolean; revision?: number; filterExpression?: string | null; dispatch?: EventDispatch | null }[];
 };
 export type TenantAutomationItem = { automation: TenantAutomation; canUpdate: boolean; canCancel: boolean; canRun: boolean };
@@ -16,12 +17,13 @@ export type TenantAutomationEditor = Pick<TenantAgentEditor, 'agent' | 'security
 };
 export type TenantAutomationEvent = { localKey: string; triggerId?: string; revision: number; enabled: boolean; source?: EventSourceReference; filterExpression: string | null; dispatch: EventDispatch };
 export const newTenantAutomationEvent = (): TenantAutomationEvent => ({ localKey: crypto.randomUUID(), revision: 0, enabled: true, filterExpression: null, dispatch: { mode: 'everyMatch' } });
-export type TenantAutomationDraft = { mode?: 'schedule' | 'events'; events?: TenantAutomationEvent[]; enabled: boolean; name: string; instructions: string; schedule: ScheduleTiming;
+export type TenantAutomationDraft = { reportToSessionId?: string | null; mode?: 'schedule' | 'events'; events?: TenantAutomationEvent[]; enabled: boolean; name: string; instructions: string; schedule: ScheduleTiming;
   modelKey: string | null; reasoningEffort: string | null; requiresTools: boolean; requiresVision: boolean };
 export const tenantAutomationsApi = (tenant: string, instance: string, suffix = '') => tenantAgentApi(tenant, instance, '/automations' + suffix);
 export const automationDraft = (value?: TenantAutomation): TenantAutomationDraft | undefined => {
-  if (!value || value.executionTarget !== 'backgroundSession' || value.completionDelivery !== 'none') return undefined;
-  const base = { enabled: value.status === 'active', name: value.name, instructions: value.instructions, modelKey: value.modelOverrideCatalogKey,
+  if (!value || value.executionTarget !== 'backgroundSession' || !['none', 'toSession'].includes(value.completionDelivery)
+    || value.completionDelivery === 'toSession' && !value.reportToSessionId) return undefined;
+  const base = { reportToSessionId: value.completionDelivery === 'toSession' ? value.reportToSessionId : null, enabled: value.status === 'active', name: value.name, instructions: value.instructions, modelKey: value.modelOverrideCatalogKey,
     reasoningEffort: value.modelOverrideReasoningEffort, requiresTools: value.requiresTools, requiresVision: value.requiresVision };
   if (value.triggers.length === 1 && value.triggers[0].kind === 'schedule' && value.triggers[0].schedule)
     return { ...base, schedule: { ...value.triggers[0].schedule } };
@@ -39,11 +41,12 @@ export const automationWitness = (view: TenantAutomationEditor, value?: TenantAu
 export async function saveTenantAutomation(tenant: string, instance: string, view: TenantAutomationEditor, draft: TenantAutomationDraft, value: TenantAutomation | undefined, signal: AbortSignal) {
   const result = await identityRequest<TenantAutomation>(tenantAutomationsApi(tenant, instance, value ? `/${encodeURIComponent(value.automationId)}` : ''), {
     method: value ? 'PUT' : 'POST', signal, body: { enabled: draft.enabled, name: draft.name.trim(), instructions: draft.instructions.trim(), modelKey: draft.modelKey, reasoningEffort: draft.reasoningEffort,
-      requiresTools: draft.requiresTools, requiresVision: draft.requiresVision,
+      requiresTools: draft.requiresTools, requiresVision: draft.requiresVision, reportToSessionId: draft.reportToSessionId || null,
       ...(draft.mode === 'events' ? { triggers: draft.events?.map(e => ({ kind: 'event', triggerId: e.triggerId, revision: e.revision, enabled: e.enabled,
         source: e.source, filterExpression: e.filterExpression, dispatch: e.dispatch })) } : { schedule: draft.schedule }), ...automationWitness(view, value) }
   });
   if (!result?.automationId || value && result.automationId !== value.automationId || !Number.isSafeInteger(result.revision) || result.revision < 1) throw new IdentityCompletionError();
+  if ((result.reportToSessionId ?? null) !== (draft.reportToSessionId || null) || result.completionDelivery !== (draft.reportToSessionId ? 'toSession' : 'none')) throw new IdentityCompletionError();
   return result;
 }
 
@@ -51,3 +54,16 @@ export type TenantAutomationEventActivity = { eventId: string; triggerId: string
   receivedAtUtc: string; occurredAtUtc: string; status: string; code: string | null; decision: string | null; batchReadable: boolean;
   bucketId: string | null; batchCount: number | null; occurrenceId: string | null; runId: string | null; sessionId: string | null; runStatus: string | null; approvalRequestId: string | null; data: Record<string, unknown> | null };
 export type TenantAutomationEventActivityPage = { items: TenantAutomationEventActivity[]; total: number; page: number; pageSize: number; securityRevision: number };
+
+export function tenantAutomationConversations(tenant: string): SessionPickerSource {
+  type Metadata = Omit<SessionPickerItem, 'archived' | 'ended'> & { archivedAt: string | null };
+  return {
+    async list(options) {
+      const page = options.cursor ? Number(options.cursor) : 0;
+      const value = await identityRequest<{ items: Metadata[]; total: number }>(tenantApi(tenant, `/sessions?page=${page}&pageSize=${options.limit}&includeArchived=true`));
+      return { items: value.items.map(item => ({ ...item, archived: item.archivedAt !== null, ended: ['ended', 'ending'].includes(item.status) })),
+        hasMore: (page + 1) * options.limit < value.total, nextCursor: (page + 1) * options.limit < value.total ? String(page + 1) : null };
+    },
+    read: id => identityRequest<Metadata>(tenantApi(tenant, `/sessions/${encodeURIComponent(id)}`)),
+  };
+}

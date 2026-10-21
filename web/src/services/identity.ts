@@ -10,6 +10,8 @@ export type InvitationProof = { tenantId: string; invitationId: string; token: s
 export type Invitation = { invitationId: string; tenantId: string; organizationName: string; login: string; expiresAt: string };
 
 const reasons: Record<string, string> = {
+  completion_destination_unavailable: 'This report destination is unavailable or you no longer have access. Choose an active conversation for this instance, or select no report.',
+  completion_destination_permission_required: 'The agent no longer has access to communicate in the selected conversation. Review its conversation and agent access.',
   automation_admission_review_required: 'This occurrence requires admission review. No work was admitted. Keep the saved Automation and check organization policy.',
   automation_executor_required: 'The agent needs its own Automation run, Session creation and Run creation access. No work was admitted.',
   automation_model_unavailable: 'The saved Automation cannot resolve an available execution model. Check its model and current Definition requirements.',

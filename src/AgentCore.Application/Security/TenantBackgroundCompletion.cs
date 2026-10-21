@@ -6,10 +6,11 @@ using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Security;
 
-public sealed record TenantBackgroundCompletion(AgentRun Child, TenantSession ChildSession, TenantSession? Parent, AgentRun? InitialChild = null, CompletionInboxItem? Item = null);
+public sealed record TenantBackgroundCompletion(AgentRun Child, TenantSession ChildSession, TenantSession? Parent, AgentRun? InitialChild = null, CompletionInboxItem? Item = null, TriggerOccurrence? DestinationOccurrence = null);
 
 public static class TenantBackgroundCompletionFactory
 {
@@ -45,10 +46,21 @@ public static class TenantBackgroundCompletionFactory
             || initial.Owner != child.Owner || initial.SessionId != child.SessionId || initial.Admission.OutputContract != child.Admission.OutputContract
             || source.ChildSession.Owner.TenantId != child.Owner.TenantId || source.ChildSession.Owner.ExecutorPrincipalId != child.Owner.ExecutorPrincipalId
             || parent is null || parent.Owner.TenantId != child.Owner.TenantId || parent.Owner.ExecutorPrincipalId != child.Owner.ExecutorPrincipalId
-            || parent.Owner.AgentInstanceId != child.AgentInstanceId || initial.Admission.Activation.SourceSessionId != parent.Owner.SessionId
+            || parent.Owner.AgentInstanceId != child.AgentInstanceId
             || snapshot!.DurablyDeletedAt is not null || snapshot.ArchivedAt is not null || LifecycleTransition.IsTerminal(snapshot)
             || snapshot.Status is SessionStatus.Ended or SessionStatus.Ending || snapshot.LifecycleStatus != SessionLifecycleStatus.Active
             || snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason))
+            throw new AccessDeniedException("parent_unavailable");
+        if (TenantCompletionDestinationRules.Configured(source))
+        {
+            TenantCompletionDestinationRules.Binding(initial, source.DestinationOccurrence, parent.Owner.SessionId);
+            if (source.ChildSession.Snapshot.Origin.Kind != SessionOriginKind.AutomationOccurrence
+                || source.ChildSession.Snapshot.Origin.TriggerOccurrenceId != source.DestinationOccurrence!.OccurrenceId
+                || source.ChildSession.Snapshot.Origin.AutomationId != source.DestinationOccurrence.AutomationId
+                || !TenantCompletionDestinationRules.Eligible(parent, child.Owner.TenantId!.Value, child.AgentInstanceId, child.Owner.ExecutorPrincipalId!.Value))
+                throw new AccessDeniedException("completion_destination_unavailable");
+        }
+        else if (initial.Admission.Activation.SourceSessionId != parent.Owner.SessionId || source.DestinationOccurrence is not null)
             throw new AccessDeniedException("parent_unavailable");
     }
 }

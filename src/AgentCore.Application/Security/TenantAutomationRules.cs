@@ -74,10 +74,25 @@ public static class TenantAutomationRules
     {
         if (value.Owner != TriggerOwner.ForTenant(agent.TenantId, agent.Instance.InstanceId, agent.PrincipalId)) throw new AccessDeniedException("automation_unavailable");
     }
+    // Match the incumbent persistence/wire precision before semantic revision checks.
+    public static TriggerSchedule CanonicalSchedule(TriggerSchedule schedule)
+    {
+        static TimeOnly Seconds(TimeOnly value) => new(value.Hour, value.Minute, value.Second);
+        return schedule switch
+        {
+            OneShotSchedule value => new OneShotSchedule(TriggerScheduleCalculator.Truncate(value.AtUtc), value.TimeZoneId,
+                value.LocalDate, value.LocalTime is { } local ? Seconds(local) : null),
+            FixedIntervalSchedule value => new FixedIntervalSchedule(value.IntervalSeconds, TriggerScheduleCalculator.Truncate(value.AnchorAtUtc),
+                value.EndAtUtc is { } end ? TriggerScheduleCalculator.Truncate(end) : null, value.MaxOccurrences),
+            DailySchedule value => new DailySchedule(value.IntervalDays, Seconds(value.LocalTime), value.TimeZoneId, value.StartDate, value.EndDate, value.MaxOccurrences),
+            WeeklySchedule value => new WeeklySchedule(value.IntervalWeeks, value.Weekdays, Seconds(value.LocalTime), value.TimeZoneId, value.StartDate, value.EndDate, value.MaxOccurrences),
+            _ => throw new ArgumentException("Use a supported exact schedule.")
+        };
+    }
     public static void Configuration(Automation value, AgentDefinition definition, DateTimeOffset at, bool validateSchedulePolicy = true, TriggerSourceKind? sourceKind = null)
     {
         if (value.ExecutionTarget != AutomationExecutionTarget.Background
-            || value.CompletionDelivery != AutomationCompletionDelivery.None || value.Provenance.SourceSessionId is not null || value.Provenance.SourceEventId is not null)
+            || value.Provenance.SourceSessionId is not null || value.Provenance.SourceEventId is not null)
             throw new ArgumentException("Use the exact owned background destination.");
         if (!value.IsSchedule)
         {

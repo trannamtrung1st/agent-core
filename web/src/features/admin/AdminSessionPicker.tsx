@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Flex, Form, Input, Select, Typography, theme } from "antd";
-import { getSession, listCatalog, type CatalogItem } from "../../services/api";
+import { getSession, listCatalog, type SessionPickerItem, type SessionPickerSource } from "../../services/api";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminRetryAction } from "./adminFailure";
 
-/** Owner conversation browsing shared by session-scoped Memory and Experience. */
-export function AdminSessionPicker({ instanceId, value, onChange, disabled = false, eligibleOnly = false, label = "Source conversation" }: {
+/** Conversation browsing shared by source selection and exact Automation destinations. */
+export function AdminSessionPicker({ instanceId, value, onChange, disabled = false, eligibleOnly = false, label = "Source conversation", source }: {
   instanceId: string;
   value: string;
   onChange: (sessionId: string) => void;
   disabled?: boolean;
   eligibleOnly?: boolean;
   label?: string;
+  source?: SessionPickerSource;
 }) {
   const { token } = theme.useToken();
   const [manual, setManual] = useState(false);
-  const [items, setItems] = useState<CatalogItem[]>([]);
+  const [items, setItems] = useState<SessionPickerItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,7 +27,7 @@ export function AdminSessionPicker({ instanceId, value, onChange, disabled = fal
     order.current++; pending.current = false;
     setItems([]); setCursor(null); setLoaded(false); setLoading(false); setError(null);
     return () => { order.current++; };
-  }, [instanceId]);
+  }, [instanceId, source]);
 
   async function load(more = false) {
     if (pending.current) return;
@@ -34,7 +35,7 @@ export function AdminSessionPicker({ instanceId, value, onChange, disabled = fal
     const generation = ++order.current;
     setLoading(true); setError(null);
     try {
-      const page = await listCatalog({ limit: 50, includeArchived: true, cursor: more ? cursor : null });
+      const page = await (source?.list ?? listCatalog)({ limit: 50, includeArchived: true, cursor: more ? cursor : null });
       if (generation !== order.current) return;
       setItems(current => more ? [...current, ...page.items.filter(item => !current.some(row => row.sessionId === item.sessionId))] : page.items);
       setCursor(page.hasMore ? page.nextCursor : null); setLoaded(true);
@@ -52,7 +53,7 @@ export function AdminSessionPicker({ instanceId, value, onChange, disabled = fal
     const generation = ++order.current;
     setLoading(true); setError(null);
     try {
-      const session = await getSession(sessionId);
+      const session = await (source?.read ?? getSession)(sessionId);
       if (generation !== order.current) return;
       if (eligibleOnly && (["ended", "ending"].includes(session.status.toLowerCase()) || ["completed", "cancelled", "expired", "ended"].includes((session.lifecycleStatus ?? "").toLowerCase())
         || session.status.toLowerCase() === "paused" && !["disconnected", "recovered"].includes(session.pauseReason ?? ""))) {

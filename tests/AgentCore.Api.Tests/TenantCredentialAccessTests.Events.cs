@@ -31,12 +31,23 @@ public sealed partial class TenantCredentialAccessTests
             return cases;
         }
     }
+    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public Task Configured_Automation_event_completion_keeps_exact_Webhook_or_Core_admission_and_delivery_consent(bool sqlite, bool core) =>
+        Tenant_event_receipt_snapshots_match_and_admit_only_the_exact_current_authorized_owner(sqlite, core ? "completion-core-review" : "completion-review");
+
     [Theory] [MemberData(nameof(TenantEventCases))]
     public async Task Tenant_event_receipt_snapshots_match_and_admit_only_the_exact_current_authorized_owner(bool sqlite, string mode)
     {
+        var configuredCompletion = mode.StartsWith("completion-", StringComparison.Ordinal);
+        if (configuredCompletion) mode = mode["completion-".Length..];
         var coreSource = mode is "core" or "core-review" or "core-scoped-reader" or "core-batch-reader";
+        var completionModel = new OwnedAutomationModel();
         var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-        await using var factory = new OAuthFactory(sqlite: sqlite, servicesOverride: services => { services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock); });
+        await using var factory = new OAuthFactory(sqlite: sqlite, execute: configuredCompletion, model: configuredCompletion ? completionModel : null, servicesOverride: services =>
+        {
+            services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
+            if (configuredCompletion) foreach (var host in services.Where(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService)).ToArray()) services.Remove(host);
+        });
         using var owner = ConnectedClient(factory); await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         foreach (var service in factory.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await service.StopAsync(CancellationToken.None);
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
@@ -45,7 +56,7 @@ public sealed partial class TenantCredentialAccessTests
         var instance = createdAgent.GetProperty("instance").GetProperty("instanceId").GetGuid();
         var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
         var access = factory.Services.GetRequiredService<TenantAccessService>();
-        var permissions = new[] { "automations.run", "sessions.create", "agent-runs.create", "webhooks.read", "core-events.read" }.Where(p => mode != "missing-read" || p != "webhooks.read").Where(p => mode != "exception" || p != "agent-runs.create").ToArray();
+        var permissions = new[] { "automations.run", "sessions.create", "agent-runs.create", "webhooks.read", "core-events.read" }.Concat(configuredCompletion ? new[] { "agents.chat", "sessions.read", "agent-runs.read" } : Array.Empty<string>()).Where(p => mode != "missing-read" || p != "webhooks.read").Where(p => mode != "exception" || p != "agent-runs.create").ToArray();
         var role = await access.SaveRoleAsync(human, tenant, null, "Event executor", permissions, await Revision(owner, tenant));
         await access.AssignRoleAsync(human, tenant, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(tenant), await Revision(owner, tenant));
         if (mode is "review" or "source-review" or "core-review" or "scoped-source-reader" or "core-scoped-reader" or "core-batch-reader" or "rotate")
@@ -55,6 +66,7 @@ public sealed partial class TenantCredentialAccessTests
         }
         var webhook = await Json(await owner.PostAsJsonAsync(api + "/webhooks", new { displayName = "Receipt source", eventKey = "events.qualified", expectedRevision = await Revision(owner, tenant) }));
         var source = webhook.GetProperty("source").GetProperty("resourceId").GetGuid(); var token = webhook.GetProperty("token").GetString()!;
+        Guid? completionDestination = configuredCompletion ? (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid() : null;
         var route = api + $"/agents/{instance}/automations";
         var registrations = factory.Services.GetRequiredService<ITenantAutomationStore>(); var events = factory.Services.GetRequiredService<ITenantEventStore>();
         var processor = factory.Services.GetRequiredService<TenantEventProcessor>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
@@ -66,7 +78,7 @@ public sealed partial class TenantCredentialAccessTests
         {
             var prior = id is null ? null : await registrations.FindTenantAutomationAsync(tenant, id.Value);
             var body = new { enabled = true, name = "Source-bound Automation", instructions, triggers = new[] { Trigger(filter, prior?.Triggers[0].TriggerId, prior?.Triggers[0].Revision ?? 1) },
-                expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = prior?.Revision ?? 0, requiresTools = false };
+                expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = prior?.Revision ?? 0, requiresTools = false, reportToSessionId = completionDestination };
             using var response = id is null ? await owner.PostAsJsonAsync(route, body) : await owner.PutAsJsonAsync(route + $"/{id}", body);
             Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync()); return (await Json(response)).GetProperty("automationId").GetGuid();
         }
@@ -240,5 +252,30 @@ public sealed partial class TenantCredentialAccessTests
                 new AgentCore.Application.Execution.AgentRunCommand.Complete(claimed.Revision, clock.GetUtcNow(), claimed.Claim!.Generation, "No visible reply", AgentRunOutcomeKind.NoAction, null), Guid.NewGuid()).AsTask());
         }
         await processor.RunOnceAsync(); Assert.Single((await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+        if (configuredCompletion)
+        {
+            var execution = factory.Services.GetRequiredService<ITenantRunExecution>();
+            async Task<AgentRun> Execute(Guid id)
+            {
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30)); AgentRun result;
+                do { await execution.ExecuteRunnableAsync(8, deadline.Token); result = (await runs.FindTenantRunAsync(tenant, id, deadline.Token))!; if (!result.IsTerminal) await Task.Delay(20, deadline.Token); } while (!result.IsTerminal);
+                Assert.True(result.Status == AgentRunStatus.Completed, $"{result.Status}: {result.Failure?.Code}"); return result;
+            }
+            var childRun = await Execute(run.AgentRunId);
+            var completions = factory.Services.GetRequiredService<TenantBackgroundCompletionService>(); await completions.AdmitPendingAsync(10, CancellationToken.None);
+            if (mode == "review")
+            {
+                var reportConsent = Assert.Single((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(PageSize: 100))).Items, r => r.Status == TenantApprovalStatus.Pending);
+                Assert.NotNull(reportConsent.Operation.BackgroundReport); Assert.Equal(completionDestination, reportConsent.Operation.BackgroundReport.ParentSessionId);
+                var approved = await owner.PostAsJsonAsync(api + $"/approvals/{reportConsent.RequestId}/decision", new { decision = "approve", actionHash = reportConsent.Operation.ActionHash, expectedRevision = await Revision(owner, tenant), expectedRequestRevision = reportConsent.Revision });
+                Assert.True(approved.IsSuccessStatusCode, await approved.Content.ReadAsStringAsync()); await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
+            }
+            var report = Assert.Single((await runs.ListTenantSessionRunsAsync(tenant, completionDestination, null, 0, 100)).Items);
+            Assert.Null(report.Admission.ExecutionContext!.OriginalInitiatorPrincipalId); Assert.Equal(childRun.AgentRunId, report.Admission.ExecutionContext.ParentRunId);
+            var delivered = await Execute(report.AgentRunId); Assert.Contains("Owned automation completed.", delivered.Result!.Text); Assert.Single(completionModel.Requests);
+            Assert.Equal(CompletionInboxStatus.Delivered, (await runs.FindTenantCompletionAsync(childRun.Owner, childRun.AgentRunId))!.Status);
+            Assert.Equal(childRun.Revision, (await runs.FindTenantRunAsync(tenant, childRun.AgentRunId))!.Revision);
+            await completions.AdmitPendingAsync(10, CancellationToken.None); Assert.Single((await runs.ListTenantSessionRunsAsync(tenant, completionDestination, null, 0, 100)).Items);
+        }
     }
 }

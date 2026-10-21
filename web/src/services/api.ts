@@ -148,6 +148,12 @@ export type CatalogItem = {
   agentRole?: string | null;
 };
 
+export type SessionPickerItem = Pick<CatalogItem, 'sessionId' | 'title' | 'updatedAt' | 'agentName' | 'agentId' | 'agentInstanceId' | 'archived' | 'ended' | 'status' | 'lifecycleStatus' | 'pauseReason'>;
+export type SessionPickerSource = {
+  list: (options: { limit: number; includeArchived: boolean; cursor: string | null }) => Promise<{ items: SessionPickerItem[]; hasMore: boolean; nextCursor: string | null }>;
+  read: (id: string) => Promise<{ agentInstanceId?: string; status: string; lifecycleStatus?: string | null; pauseReason?: string | null }>;
+};
+
 export type CatalogPage = {
   items: CatalogItem[];
   nextCursor: string | null;

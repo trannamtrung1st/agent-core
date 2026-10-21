@@ -125,6 +125,7 @@ public sealed partial class SqliteIamStore
             var source = await TenantReportReadRules.SourceAsync(parent, (id, token) => CompletionRun(db, tenant, id, token),
                 async (id, token) => await CompletionSource(db, parent.Owner, id, token).ConfigureAwait(false), ct).ConfigureAwait(false);
             await RequireTenantReportRead(db, state, source, ct).ConfigureAwait(false);
+            await RequireTenantReportDelivery(db, state, source, parent, ct).ConfigureAwait(false);
         }
         var rows = await db.BackgroundCompletionReceipts.Where(r => r.ClaimRunId == parent.AgentRunId.ToString("D") && r.Status == (int)CompletionInboxStatus.Claimed).ToArrayAsync(ct).ConfigureAwait(false);
         foreach (var item in rows.Select(CompletionInboxMapping.Read).Where(i => i.Owner == parent.Owner && i.Acknowledgment is not null && i.ClaimExpiresAtUtc > now))

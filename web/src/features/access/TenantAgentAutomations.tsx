@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, App, Button, Checkbox, Collapse, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, Pagination, Select, Table, Tabs, Tag, Typography, theme } from 'antd';
 import { followAppLink } from '../../app/appLink';
 import { confirmAction } from '../../app/confirmAction';
 import { IdentityCompletionError, IdentityError, identityRequest, tenantApi, type TenantContext } from '../../services/identity';
-import { automationDraft, automationWitness, newTenantAutomationEvent, validTenantAutomationEvents, saveTenantAutomation, tenantAutomationsApi, type TenantAutomationDraft, type TenantAutomationEditor, type TenantAutomationItem } from '../../services/tenantAutomations';
+import { automationDraft, automationWitness, tenantAutomationConversations, newTenantAutomationEvent, validTenantAutomationEvents, saveTenantAutomation, tenantAutomationsApi, type TenantAutomationDraft, type TenantAutomationEditor, type TenantAutomationItem } from '../../services/tenantAutomations';
 import type { listModels } from '../../services/api';
+import { AdminSessionPicker } from '../admin/AdminSessionPicker';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
 import { AdminCollectionToolbar } from '../admin/AdminCollectionToolbar';
 import { AutomationScheduleFields, defaultAutomationTiming, validAutomationTiming } from '../admin/AutomationScheduleFields';
@@ -79,7 +80,7 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
     {admitted && <Alert type="success" showIcon title="Run admitted" description={<Typography.Link href={`${tenantAgentPath(tenant, id, 'activity-runs')}?run=${encodeURIComponent(admitted)}`} onClick={followAppLink}>Open the admitted Run in Activity</Typography.Link>} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && <>
       <TenantAgentHeading view={{ agent: view.agent, canUpdate: view.canCreate || view.items.some(i => i.canUpdate || i.canCancel || i.canRun) }} readOnlyDescription="Automation actions require independent access on the exact registration." />
-      <AgentConfigurationPanel title="Automations" label="Automations" description="Run saved tasks from a schedule, received events, or an explicit action. Results stay in Background work." bodyGap="section">
+      <AgentConfigurationPanel title="Automations" label="Automations" description="Run saved tasks from a schedule, received events, or an explicit action. Results stay in Background work, with an optional report to a selected conversation." bodyGap="section">
         <AdminCollectionToolbar label="Automations on this page" value={search} onChange={setSearch} showScrollHint={false} filters={<Button ref={newButton} type="primary" disabled={blocked || !view.canCreate} onClick={event => setSelection({ opener: event.currentTarget })}>New Automation</Button>} />
         <Table<TenantAutomationItem> className="admin-collection-table" size="small" tableLayout="fixed" rowKey={item => item.automation.automationId} dataSource={rows} pagination={false}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? 'No matching readable Automations on this page.' : 'No readable Automations on this page.'} /> }} columns={[{ title: 'Saved task and triggers', render: (_, item) => {
@@ -105,6 +106,7 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
   const [attempted, setAttempted] = useState(false); const [unknown, setUnknown] = useState(false); const initialized = useRef(false);
   const state = useIdentityQuery<TenantAutomationEditor>(tenantAutomationsApi(tenant, instance, selection.id ? `/${selection.id}/editor` : '/editor?page=0&pageSize=1'));
   const models = useIdentityQuery<Awaited<ReturnType<typeof listModels>>>(tenantApi(tenant, '/chat/models'));
+  const conversations = useMemo(() => tenantAutomationConversations(tenant), [tenant, state.data?.securityRevision]);
   const view = state.data; const item = view?.items[0]; const value = selection.id ? item?.automation : undefined;
   useEffect(() => {
     if (!state.data) return; setAttempted(false);
@@ -125,7 +127,7 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
   const eventsMode = draft?.mode === 'events';
   const enabledAllowed = eventsMode ? !!draft?.events?.every(event => event.source?.kind === 'builtin' ? view?.canCoreEvents : event.source?.kind === 'webhook' && view?.canWebhookEvents) : scheduleAllowed;
   const triggerValid = eventsMode ? validTenantAutomationEvents(draft?.events) && sourcesReady : !!draft && validAutomationTiming(draft.schedule);
-  const valid = !!draft && !!draft.name.trim() && draft.name.trim().length <= 120 && !!draft.instructions.trim() && draft.instructions.trim().length <= 2000 && triggerValid && modelValid && (!draft.enabled || enabledAllowed);
+  const valid = !!draft && !!draft.name.trim() && draft.name.trim().length <= 120 && !!draft.instructions.trim() && draft.instructions.trim().length <= 2000 && triggerValid && modelValid && draft.reportToSessionId !== '' && (!draft.enabled || enabledAllowed);
   const update = (part: Partial<TenantAutomationDraft>) => setDraft(current => current ? { ...current, ...part } : current);
   const reload = () => { if (command.busy) return; command.clearError(); state.reload(); models.reload(); };
   function save() {
@@ -148,7 +150,15 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
           <Checkbox checked={draft.enabled} disabled={disabled} onChange={e => update({ enabled: e.target.checked })}>Enable automatic occurrences</Checkbox>
           {draft.enabled && !enabledAllowed && <Alert type="warning" showIcon title="The current Definition does not permit these triggers" description="Choose permitted sources or timing, or save the Automation disabled." />}
           {eventsMode ? <TenantAutomationEventFields tenant={tenant} instance={instance} automation={selection.id} events={draft.events ?? []} disabled={disabled} reloadKey={String(view?.securityRevision ?? 0)} onChange={events => update({ events })} onReady={setSourcesReady} /> : <AutomationScheduleFields timing={draft.schedule} setTiming={patch => update({ schedule: { ...draft.schedule, ...patch } })} disabled={disabled} policy={policy} />}
-          <Typography.Text type="secondary">Separate Background work · No completion report. Explicit Run now uses these saved instructions.</Typography.Text>
+          <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="Completion">
+            <Typography.Title level={5} style={{ margin: 0 }}>Completion</Typography.Title>
+            <Typography.Text type="secondary">Runs independently in Background work. A report is a separate delivery and may require approval.</Typography.Text>
+            <Form.Item label="Report completion to"><Select aria-label="Automation completion report" disabled={disabled} value={draft.reportToSessionId == null ? 'none' : 'toSession'}
+              options={[{ value: 'none', label: 'None' }, { value: 'toSession', label: 'Selected conversation' }]} onChange={kind => update({ reportToSessionId: kind === 'none' ? null : '' })} /></Form.Item>
+            {draft.reportToSessionId != null && <Form.Item label="Report destination" extra="Choose an active conversation for this instance. Current access is checked again before delivery.">
+              <AdminSessionPicker instanceId={instance} value={draft.reportToSessionId} disabled={disabled} eligibleOnly label="Report destination" source={conversations} onChange={reportToSessionId => update({ reportToSessionId })} />
+            </Form.Item>}
+          </Flex>
           <Collapse ghost items={[{ key: 'model', label: 'Execution options', children: <Flex vertical gap={token.padding}>
             {models.loading ? <AccessLoading /> : models.error ? <AccessError error={models.error} retry={models.reload} /> : <ExecutionModelFields models={models.data?.models ?? []} modelKey={draft.modelKey ?? ''} reasoningEffort={draft.reasoningEffort ?? ''} modelLabel="Automation execution model" effortLabel="Automation reasoning effort" defaultLabel="Unattended default" disabled={disabled} onChange={(key, effort) => update({ modelKey: key || null, reasoningEffort: effort || null })} />}
             {!modelValid && !models.loading && <Alert type="warning" showIcon title="Check the current execution model" description="Reload the model catalog, then select an available model and reasoning effort or use the unattended default." />}

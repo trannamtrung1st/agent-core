@@ -103,9 +103,18 @@ public static class TenantExecutionLineage
                 throw new AccessDeniedException("tenant_lineage_unavailable");
             if (context.Origin == ExecutionOrigin.CompletionReport
                 && (a.Kind != ActivationKind.BackgroundCompleted || !parent.IsTerminal || parent.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome
-                    || (await TenantBackgroundLineage.InitialAsync(parent, (id, token) => runReader(id, token), ct).ConfigureAwait(false)).Admission.Activation.SourceSessionId != run.SessionId
                     || run.Admission.OutputContract != AgentRunOutputContract.CompletionReport))
                 throw new AccessDeniedException("tenant_lineage_unavailable");
+            if (context.Origin == ExecutionOrigin.CompletionReport)
+            {
+                var childRoot = await TenantBackgroundLineage.InitialAsync(parent, runReader, ct).ConfigureAwait(false);
+                if (AgentCore.Application.Tools.TenantTaskExecutionContract.IsIndependent(childRoot))
+                {
+                    var occurrence = await occurrenceReader(childRoot.Admission.Activation.TriggerOccurrenceId!.Value, ct).ConfigureAwait(false);
+                    TenantCompletionDestinationRules.Binding(childRoot, occurrence, run.SessionId);
+                }
+                else if (childRoot.Admission.Activation.SourceSessionId != run.SessionId) throw new AccessDeniedException("tenant_lineage_unavailable");
+            }
             if (context.Origin == ExecutionOrigin.ApprovalContinuation
                 && (a.Kind != ActivationKind.ApprovalContinuation || parent.SessionId != run.SessionId || parent.Admission.OutputContract != run.Admission.OutputContract
                     || parent.Result?.ContinuationRunId != run.AgentRunId || parent.Result.OutcomeKind != AgentRunOutcomeKind.Continued))
