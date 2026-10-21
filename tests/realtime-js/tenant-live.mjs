@@ -43,7 +43,7 @@ try {
   const human=new Human(); await human.login();
   const tenant=(await human.json('/api/v2/account/tenants')).items[0].tenantId;
   const session=await human.session(tenant);
-  const anonymous=await connect(null); await assert.rejects(anonymous.hub.invoke('AttachTenant',attach(session,tenant))); assert.equal(anonymous.events.length,0);
+  await assert.rejects(connect(null), /WebSocket|401|Unauthorized|Unexpected server response/i);
   for(const origin of ['https://foreign.example.test',null]) {
     const denied=await connect(human,origin); const ack=await denied.hub.invoke('AttachTenant',attach(session,tenant)); assert.equal(ack.accepted,false);assert.equal(ack.error.code,'origin_not_allowed');assert.equal(denied.events.length,0);
   }

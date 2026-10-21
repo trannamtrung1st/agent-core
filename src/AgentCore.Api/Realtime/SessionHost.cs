@@ -143,7 +143,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<AttachPayload> command,
         CancellationToken cancellationToken)
     {
-        var ack = Validate(command, attach: true, expectedType: "session.attach");
+        var ack = SessionCommandValidation.Validate(command, attach: true, expectedType: "session.attach");
         if (!ack.Accepted)
         {
             return ack;
@@ -1225,7 +1225,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<UserTextPayload> command,
         CancellationToken cancellationToken)
     {
-        var envelope = Validate(command, attach: false, expectedType: "user.text");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "user.text");
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1350,7 +1350,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<ApprovalResponsePayload> command,
         CancellationToken cancellationToken)
     {
-        var envelope = Validate(command, attach: false, expectedType: "agent.approval.respond");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "agent.approval.respond");
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1415,7 +1415,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<CancelResponsePayload> command,
         CancellationToken cancellationToken)
     {
-        var envelope = Validate(command, attach: false, expectedType: "agent.response.cancel");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "agent.response.cancel");
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1460,7 +1460,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<SetModePayload> command,
         CancellationToken cancellationToken)
     {
-        var envelope = Validate(command, attach: false, expectedType: "session.mode.set");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "session.mode.set");
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1486,7 +1486,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<EndPayload> command,
         CancellationToken cancellationToken)
     {
-        var envelope = Validate(command, attach: false, expectedType: "session.end");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "session.end");
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1528,7 +1528,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     public Task<CommandAck> AdmitSpeechStartedAsync(string connectionId, ClientCommand<SpeechStartedPayload> command)
     {
-        var envelope = Validate(command, attach: false, expectedType: "user.speech.started");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "user.speech.started");
         if (!envelope.Accepted)
         {
             return Task.FromResult(envelope);
@@ -1549,7 +1549,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     public Task<CommandAck> AdmitSpeechEndedAsync(string connectionId, ClientCommand<SpeechEndedPayload> command)
     {
-        var envelope = Validate(command, attach: false, expectedType: "user.speech.ended");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "user.speech.ended");
         if (!envelope.Accepted)
         {
             return Task.FromResult(envelope);
@@ -1574,7 +1574,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<ClientSpeechEvidencePayload> command,
         CancellationToken cancellationToken)
     {
-        var envelope = Validate(command, attach: false, expectedType: "client.speech.evidence");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "client.speech.evidence");
         if (!envelope.Accepted)
         {
             return Task.FromResult(envelope);
@@ -1680,7 +1680,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         ClientCommand<PlaybackPayload> command,
         string expectedType)
     {
-        var envelope = Validate(command, attach: false, expectedType);
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType);
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1736,7 +1736,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     public async Task<CommandAck> AcceptReceiptAsync(string connectionId, ClientCommand<ResponseReceiptPayload> command)
     {
-        var envelope = Validate(command, attach: false, expectedType: "response.received");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "response.received");
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1776,7 +1776,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     public async Task<CommandAck> AcceptMuteAsync(string connectionId, ClientCommand<MutePayload> command)
     {
-        var envelope = Validate(command, attach: false, expectedType: "session.mute");
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: "session.mute");
         if (!envelope.Accepted)
         {
             return envelope;
@@ -1965,43 +1965,6 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                     new ErrorOutput("Protocol", "ProtocolError", message, true, null)),
                 CancellationToken.None)
             .ConfigureAwait(false);
-    }
-
-    internal static CommandAck Validate(IRealtimeCommand command, bool attach, string expectedType)
-    {
-        if (command.CorrelationId is not null || command.CausationId is not null)
-        {
-            return Reject(command.EventId, "Protocol", "ProtocolError", "Client must not set correlationId or causationId.", true, null);
-        }
-
-        if (command.ProtocolVersion != 1)
-        {
-            var mismatch = Reject(command.EventId, "Protocol", "ProtocolVersionMismatch", "Unsupported protocol version.", true, null);
-            mismatch.Error!.Extensions = new Dictionary<string, object?> { ["supportedVersions"] = new[] { 1 } };
-            return mismatch;
-        }
-
-        if (!string.Equals(command.Type, expectedType, StringComparison.Ordinal))
-        {
-            return Reject(command.EventId, "Protocol", "ProtocolError", "Command type does not match the hub method.", true, null);
-        }
-
-        if (!Guid.TryParse(command.SessionId, out _) || !Guid.TryParse(command.EventId, out _))
-        {
-            return Reject(command.EventId, "Protocol", "ProtocolError", "IDs must be UUIDs.", true, null);
-        }
-
-        if (attach && command.Sequence != 0)
-        {
-            return Reject(command.EventId, "Protocol", "ProtocolError", "Attach sequence must be 0.", true, null);
-        }
-
-        if (!attach && command.Sequence < 1)
-        {
-            return Reject(command.EventId, "Protocol", "StaleCommand", "Control sequence must increase from 1.", false, null);
-        }
-
-        return Accept(command.EventId);
     }
 
     private async Task<CommandAck> AdmitControlAsync(

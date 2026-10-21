@@ -1432,18 +1432,23 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
 }
 
 async function sendPlayback(method: string, type: string, responseId: string, consumed: number, textEndExclusive?: number): Promise<void> {
-  await dispatchHubCommand((sequence) =>
-    invoke(
-      method,
-      type,
-      {
-        consumedSamples: consumed,
-        textEndExclusive: textEndExclusive ?? useSessionStore.getState().entries.find(entry => entry.responseId === responseId)?.speechText?.length ?? renderedTextOffset(responseId)
-      },
-      sequence,
-      responseId
-    )
-  );
+  try {
+    await dispatchHubCommand((sequence) =>
+      invoke(
+        method,
+        type,
+        {
+          consumedSamples: consumed,
+          textEndExclusive: textEndExclusive ?? useSessionStore.getState().entries.find(entry => entry.responseId === responseId)?.speechText?.length ?? renderedTextOffset(responseId)
+        },
+        sequence,
+        responseId
+      )
+    );
+  } catch {
+    // Playback feedback is best effort. Transport loss proves no local hearing credit;
+    // the server receipt transaction owns durability. Never replay it after reattach.
+  }
 }
 
 function abortPlayback(): void {

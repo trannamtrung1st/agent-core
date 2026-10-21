@@ -13,7 +13,6 @@ namespace AgentCore.Api.Realtime;
 public sealed partial class TenantSessionLiveDelivery
 {
     private sealed record CommandRecord(string Fingerprint, long Sequence, CommandAck Ack, Guid? Run);
-    public bool IsTenantConnection(string connection) => _connections.ContainsKey(connection);
 
     public Task<CommandAck> ReceiveAsync(string connection, ClientCommand<ResponseReceiptPayload> command, ITenantDeliveryReceiptControl control, CancellationToken ct)
         => ExecuteAsync(connection, command, "response.received", _ => null, (_, _, _) => Task.CompletedTask, async (subscription, _, token) =>
@@ -99,7 +98,7 @@ public sealed partial class TenantSessionLiveDelivery
         Func<Subscription, Guid?, CancellationToken, Task> authorize, Func<Subscription, Guid?, CancellationToken, Task<CommandAck>> action, CancellationToken ct,
         Func<Subscription, CancellationToken, Task>? reauthorizeCached = null)
     {
-        var envelope = SessionHost.Validate(command, attach: false, expectedType: type);
+        var envelope = SessionCommandValidation.Validate(command, attach: false, expectedType: type);
         if (!envelope.Accepted) return envelope;
         if (!_connections.TryGetValue(connectionId, out var connection)) return Reject(command.EventId, "StaleAttachment", "Attach again before sending a command.");
         await connection.Commands.WaitAsync(ct).ConfigureAwait(false);

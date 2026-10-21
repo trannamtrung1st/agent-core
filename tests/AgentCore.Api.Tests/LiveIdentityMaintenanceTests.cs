@@ -33,7 +33,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         .AddEnvironmentVariables().Build()["OPENROUTER_API_KEY"];
 
     [LiveIdentityMaintenanceFact(Timeout = 480000)]
-    public async Task Real_profile_repeated_Experience_inferred_Memory_contradiction_and_explicit_forget()
+    public async Task Real_profile_repeated_Experience_and_inferred_Memory_contradiction()
     {
         var db = Path.Combine(Path.GetTempPath(), $"p910-real-{Guid.NewGuid():N}.db");
         var options = new LanguageModelProviderOptions { Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/", ApiKey = Key(), DefaultModel = "deepseek/deepseek-v4.1-flash", Tools = true, StructuredOutput = false };
@@ -114,41 +114,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         Assert.Equal("NoAction", noOp.Result!.OutcomeKind.ToString());
         Assert.Equal(2, await memories.CountActiveIdentityUserAsync(other.InstanceId, LocalUserProfile.Id));
 
-        // The final case uses the real attached UserTurn and UI approval contract over SignalR.
-        var fresh = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
-        await using var hub = new HubConnectionBuilder().WithUrl(new Uri(host.Server.BaseAddress, "/hubs/session"), options => {
-            options.HttpMessageHandlerFactory = _ => host.Server.CreateHandler(); options.Transports = HttpTransportType.LongPolling;
-            TestOwnerCapability.Apply(options, s);
-        }).AddMessagePackProtocol().Build();
-        var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var approval = new TaskCompletionSource<ServerEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        hub.On<ServerEvent>("SessionEvent", e => {
-            if (e.Type == "session.ready") ready.TrySetResult(e.AttachmentId!);
-            if (e.Type == "agent.approval.requested") approval.TrySetResult(e);
-            if (e.Type == "agent.response.completed") ended.TrySetResult();
-        });
-        await hub.StartAsync();
-        ClientCommand<T> Command<T>(string type, long sequence, T payload, string? attachment = null, string? response = null) => new() {
-            ProtocolVersion = 1, SessionId = fresh.SessionId.ToString(), EventId = Guid.NewGuid().ToString(), Timestamp = DateTimeOffset.UtcNow.ToString("o"),
-            Sequence = sequence, Type = type, Payload = payload, AttachmentId = attachment, ResponseId = response };
-        Assert.True((await hub.InvokeAsync<CommandAck>("Attach", Command("session.attach", 0, new AttachPayload { OwnerCapability = TestOwnerCapability.Token(s) }))).Accepted);
-        var attachment = await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
-        Assert.True((await hub.InvokeAsync<CommandAck>("SendText", Command("user.text", 1, new UserTextPayload {
-            Text = $"Forget exactly learned-memory item {canonical.MemoryId} with memory.forget. Only remove that learned-memory item from future retrieval; keep source conversations and Experience. Do not create a replacement memory." }, attachment))).Accepted);
-        var a = await approval.Task.WaitAsync(TimeSpan.FromSeconds(90));
-        var body = System.Text.Json.JsonSerializer.SerializeToElement(a.Payload);
-        Assert.Equal(ToolCatalog.MemoryForget, body.GetProperty("toolName").GetString());
-        Assert.True((await hub.InvokeAsync<CommandAck>("RespondApproval", Command("agent.approval.respond", 2, new ApprovalResponsePayload {
-            ApprovalId = body.GetProperty("approvalId").GetString()!, Decision = "approve" }, attachment, a.ResponseId))).Accepted);
-        await ended.Task.WaitAsync(TimeSpan.FromSeconds(90));
-        Assert.Equal(MemoryItemStatus.Deleted, (await memories.FindIdentityUserAsync(id, LocalUserProfile.Id, canonical.MemoryId))!.Status);
-        var after = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
-        Assert.Empty(await SessionMemoryPrompt.LoadAsync(memory, after.SessionId, definition, profile, [], agentInstanceId: id));
-        Assert.NotNull((await s.GetRequiredService<IExperienceStore>().GetAsync(id, generalized.ExperienceId))!.Content);
-        var retained = await s.GetRequiredService<IMemoryStore>().ReadHistoryAsync(fresh.SessionId, 0, 100);
-        output.WriteLine("Forget response: " + string.Join(" ", retained.Where(e => e.Role == ConversationRole.Assistant).Select(e => e.Text)));
-        Assert.DoesNotContain(retained, e => e.Role == ConversationRole.Assistant && e.Text.Contains("deleted all", StringComparison.OrdinalIgnoreCase));
+
     }
 }
 

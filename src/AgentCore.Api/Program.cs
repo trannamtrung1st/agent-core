@@ -197,7 +197,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.MapHub<SessionHub>("/hubs/session");
+app.MapHub<SessionHub>("/hubs/session").RequireAuthorization();
 
 
 // Read the loaded API assembly, never a mutable checkout or DLL on disk.

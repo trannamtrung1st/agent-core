@@ -14,6 +14,22 @@ beforeEach(() => {
   useSessionStore.setState({ ...emptySession(), connection: 'ready', sessionId: 'session-one', attachmentId: 'attachment-one', status: 'attached', draft: 'Prepared text', agents: [] });
 });
 afterEach(() => { hooks.resetOutput(); hooks.setConnection(null); });
+it('settles lost playback feedback without replay, hearing credit or damage to a replacement attachment', async () => {
+  let reject!: (error: Error) => void;
+  const original = vi.fn(() => new Promise((_, fail) => { reject = fail; }));
+  hooks.setConnection({ invoke: original } as never);
+  const feedback = hooks.sendPlayback('PlaybackProgress', 'playback.progress', 'old-response', 480, 4);
+  await vi.waitFor(() => expect(original).toHaveBeenCalledOnce());
+  hooks.setConnection(null); useSessionStore.setState({ connection: 'reconnecting', attachmentId: null });
+  reject(new Error('Invocation canceled due to the underlying connection being closed.'));
+  await expect(feedback).resolves.toBeUndefined();
+  expect(useSessionStore.getState()).toMatchObject({ connection: 'reconnecting', draft: 'Prepared text', error: null, entries: [] });
+  const replacement = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke: replacement } as never);
+  useSessionStore.setState({ connection: 'ready', attachmentId: 'attachment-two' });
+  await hooks.sendPlayback('PlaybackProgress', 'playback.progress', 'new-response', 480, 4);
+  expect(original).toHaveBeenCalledOnce(); expect(replacement).toHaveBeenCalledOnce();
+  expect(replacement).toHaveBeenCalledWith('PlaybackProgress', expect.objectContaining({ attachmentId: 'attachment-two', responseId: 'new-response' }));
+});
 it('does not send a prepared protected command across an attachment change', async () => {
   const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke } as never);
   let resolve!: (value: unknown) => void;

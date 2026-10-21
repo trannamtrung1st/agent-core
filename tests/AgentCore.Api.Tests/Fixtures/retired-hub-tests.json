@@ -1,0 +1,22 @@
+[
+  {
+    "file": "ChatAutomationJourneyTests.cs",
+    "method": "Chat_authored_recurring_action_runs_on_schedule_with_current_consolidation_permission",
+    "reason": "retired_owner_hub_contract"
+  },
+  {
+    "file": "ChatAutomationJourneyTests.cs",
+    "method": "Current_user_turn_creates_disabled_review_preset_through_normal_chat_authoring",
+    "reason": "retired_owner_hub_contract"
+  },
+  {
+    "file": "AutomationActivationJourneyTests.cs",
+    "method": "Exact_enable_request_lists_inspects_and_enables_with_exact_semantic_verification_without_duplicate",
+    "reason": "retired_owner_hub_contract"
+  },
+  {
+    "file": "LiveIdentityMaintenanceTests.cs",
+    "method": "Real_profile_repeated_Experience_inferred_Memory_contradiction_and_explicit_forget",
+    "reason": "retired_owner_hub_approval_subsection_only; direct optional live maintenance checks retained under renamed method"
+  }
+]

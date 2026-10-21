@@ -60,7 +60,12 @@ for (const width of [1440, 390]) test(`tenant voice keeps capture active, credit
     await expect(page.getByTestId('connection')).not.toHaveText('Listening…');
     await expect.poll(() => page.evaluate(() => window.__agentCore?.capturePrepared())).toBe(true);
     await expect.poll(async () => {
-      const h = await call<{ items: { role: string; heardTextEndExclusive: number }[] }>(api, `${prefix}/sessions/${session}/messages`);
+      const response = await api.get(`${prefix}/sessions/${session}/messages`);
+      // A coherent history read can lose to the receipt currently being committed.
+      // Retry only that read conflict; authorization and other failures still fail the scenario.
+      if (response.status() === 409) return 0;
+      expect(response.ok(), `history read: ${response.status()}`).toBeTruthy();
+      const h = await response.json() as { items: { role: string; heardTextEndExclusive: number }[] };
       return h.items.find(e => e.role === 'assistant')?.heardTextEndExclusive ?? 0;
     }).toBeGreaterThan(0);
     await page.screenshot({ path: `.playwright-mcp/tenant-voice-${width}.png`, fullPage: true });
