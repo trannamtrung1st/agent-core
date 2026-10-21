@@ -37,7 +37,7 @@ describe('canonical access navigation', () => {
   it('fails closed for malformed tenant routes and unsupported future screens', () => {
     for (const route of ['/t/invalid/admin/members', `/t/${tenant}/admin/approvals/invalid`, '/account/unknown']) expect(parseAccessRoute(route)?.view).toBe('not-found');
     expect(parseAccessRoute('/c/session')).toBeNull();
-    expect(parseAppRoute('/admin/instances').area).toBe('admin');
+    expect(parseAppRoute('/admin/instances')).toEqual({ area: 'access', view: 'not-found' });
   });
   it('opens the exact organization Sandbox catalog and retains its item query', () => {
     const path = tenantSandboxPath(tenant, 'p-exact-profile');

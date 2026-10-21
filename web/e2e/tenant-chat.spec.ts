@@ -57,7 +57,7 @@ test('tenant text, rendered receipt, reload, rename, archive and read-only compl
   try {
     await signIn(page); await page.goto(f.path);
     await expect(page.getByRole('button', { name: 'Voice', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Add content', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add content', exact: true })).toBeVisible();
     await send(page, 'First private tenant message'); await reply(page);
     await expect(page).toHaveURL(new RegExp(`${f.path}/c/`));
     const savedUrl = page.url(), id = savedUrl.split('/').pop()!;
@@ -284,5 +284,42 @@ test('Chat permission permits Queue while Steer requires independent Run cancell
     expect((await call<{ status: string }>(f.api, `${f.prefix}/agent-runs/${active!.runId}`)).status).toBe('running');
     await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toContainText('Retain my unprivileged queued objective');
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]); // The independent Run-read metadata request is expected to return 403.
+  } finally { await f.api.dispose(); }
+});
+
+for (const width of [1440, 390]) test(`authenticated entry and retired browser routes at ${width}px`, async ({ page }) => {
+  const f = await fixture(); const observed = watch(page); const ownerRequests: string[] = [];
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    if (path.includes('owner-capability') || /^\/api\/v[12]\/(admin|sessions|agent-instances)(\/|$)/.test(path)) ownerRequests.push(path);
+  });
+  await page.setViewportSize({ width, height: 900 });
+  await page.addInitScript(() => localStorage.setItem('agent-core.owner-capability', 'obsolete-browser-entry-test'));
+  try {
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/sign-in\?notice=expired&returnTo=%2Faccount%2Forganizations$/);
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
+    await signIn(page);
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+    for (const path of ['/admin', `/admin/instances/${f.agent}/activity/sessions`, `/c/${crypto.randomUUID()}`, '/unknown']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { name: 'Page not found', exact: true })).toBeVisible();
+      await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'New chat', exact: true })).toHaveCount(0);
+    }
+    await page.goto(`${f.path}/admin/agents`);
+    await expect(page.getByRole('heading', { name: 'Instances', exact: true })).toBeVisible();
+    if (width < 1024) await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Roles & permissions', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Roles & permissions', exact: true })).toBeVisible();
+    if (width < 1024) await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Admin navigation', exact: true }).getByRole('link', { name: 'Instances', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Instances', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Chat', exact: true }).click();
+    await expect(page).toHaveURL(f.path);
+    await send(page, 'Canonical entry remains usable'); await reply(page);
+    expect(observed.errors).toEqual([]); expect(ownerRequests).toEqual([]);
   } finally { await f.api.dispose(); }
 });

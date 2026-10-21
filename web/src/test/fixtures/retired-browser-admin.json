@@ -1,0 +1,376 @@
+{
+  "baseline": "90a351d0",
+  "reason": "Unscoped Admin page tree depended on removed owner-authorized HTTP contracts. Canonical Account/System/tenant entry points remain. Independent pure controls and shared types are retained.",
+  "removedProductionFiles": [
+    "web/src/features/admin/AdminApp.tsx",
+    "web/src/features/admin/SandboxProfilesSection.tsx",
+    "web/src/features/admin/CredentialsSection.tsx",
+    "web/src/features/admin/DriveConnectionPanel.tsx",
+    "web/src/features/admin/DriveFiles.tsx",
+    "web/src/features/admin/EventsSection.tsx",
+    "web/src/features/admin/BuiltinEventSubscribers.tsx",
+    "web/src/features/admin/WebhookRequestExample.tsx",
+    "web/src/features/admin/AdminGlobalPages.tsx",
+    "web/src/features/admin/DefinitionDetail.tsx",
+    "web/src/features/admin/adminManagedChat.ts",
+    "web/src/features/admin/definitionDraftPublishGatePanel.tsx",
+    "web/src/features/admin/useAdminAnchor.ts",
+    "web/src/features/admin/DefinitionVersionsTable.tsx",
+    "web/src/features/admin/AdminRecordSummaries.tsx",
+    "web/src/features/admin/DefinitionDraftWorkspace.tsx",
+    "web/src/features/admin/InstanceDetail.tsx",
+    "web/src/features/admin/HarnessManagementSection.tsx",
+    "web/src/features/admin/InstanceAutomationsSection.tsx",
+    "web/src/features/admin/useAutomationSelection.ts",
+    "web/src/features/admin/InstanceContinuitySection.tsx",
+    "web/src/features/admin/instanceMemoryAutomation.tsx",
+    "web/src/features/admin/InstanceOverview.tsx",
+    "web/src/features/admin/InstanceResourcesSection.tsx",
+    "web/src/features/admin/InstanceStateSection.tsx",
+    "web/src/services/runtimeState.ts",
+    "web/src/features/admin/StateIsolationConfigurationSection.tsx",
+    "web/src/features/admin/InstanceSkillsSection.tsx",
+    "web/src/features/admin/InstanceWorkspaceSection.tsx",
+    "web/src/features/admin/SelfManagementSection.tsx",
+    "web/src/features/admin/EffectiveConfigView.tsx",
+    "web/src/features/admin/InstanceProfile.tsx"
+  ],
+  "retiredTests": [
+    {
+      "file": "web/src/features/admin/AdminApp.test.tsx",
+      "testDeclarations": [
+        "marks State & Isolation dirty in Definition navigation and clears the indicator on save",
+        "keeps an exact draft read failure when the Definition catalog finishes loading",
+        "renders definition and instance inventory",
+        "groups immutable versions under one logical definition",
+        "offers only published definitions when creating an instance",
+        "confirms and removes a definition draft at its current revision",
+        "keeps definitions when instances fail and offers retry",
+        "shows unauthorized recovery for owner capability errors",
+        "renders read-only effective configuration with a link to the global privacy owner",
+        "saves visible instructions before publishing a draft",
+        "preserves unsaved instructions after a resource mutation",
+        "ignores stale publication resource responses after definition changes",
+        "shows publication resource load failures with retry",
+        "shows the diagnostic id on a publication resource server failure",
+        "shows draft resources tab when a draft is open",
+        "saves typed capabilities through the draft editor",
+        "binds a knowledge source to a Knowledge resource path",
+        "retries tool registry loading from the Capabilities tab",
+        "shows instance identity from effective config when inventory is unavailable",
+        "ignores a late effective configuration %s after instance navigation",
+        "keeps persona edits after unrelated instance revisions and accepts a newer saved persona",
+        "saves managed instance persona from the form tab",
+        "syncs persona form edits into the JSON tab before save",
+        "does not save persona JSON that includes non-persona fields",
+        "lists built-in and durable versions for active-version changes",
+        "confirms archive while keeping unsaved persona form edits",
+        "keeps built-in and durable fork sources distinct when version numbers overlap",
+        "shows one effective published version per number when creating an instance",
+        "defaults fork source to the highest non-deprecated version on definition detail",
+        "deprecates an active durable publication from the definition detail view",
+        "applies a version while retaining dirty persona JSON",
+        "creates a new definition through the starter endpoint",
+        "creates a managed instance from the latest active version without a custom persona",
+        "prefills custom persona from the exact Definition and retains edits across mode toggles",
+        "ignores stale persona defaults after a version change",
+        "retries failed persona defaults before allowing custom creation",
+        "warns on a deprecated version and sends a custom persona",
+        "opens a stored starter draft when the definition has no published version",
+        "shows latest and latest active when the newest publication is deprecated"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/AdminInstanceNavigation.test.tsx",
+      "testDeclarations": [
+        "preserves an archived exact Run requested through %s",
+        "keeps owner search results separate when the Instance is named Global Admin",
+        "retains exact independent Run and Automation selections in both directions",
+        "preserves archived read-only Run inspection and blocks active-only Experience"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/BuiltinEventSubscribers.test.tsx",
+      "testDeclarations": [
+        "clears an inventory error after retry without requiring an Instance selection",
+        "uses the current embedded owner and ignores a late previous-owner read",
+        "retries a failed owned subscription read and restores the exact Automation link"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/CredentialsSection.test.tsx",
+      "testDeclarations": [
+        "explicitly manages registry expiry (%s) through the existing revision-protected editor",
+        "preserves registry expiry while editing safe scope and name fields",
+        "retains existing dynamic metadata when editing safe fields",
+        "clears transient protected input after replacement failure and cancel",
+        "round trips dynamic metadata keys that collide with JavaScript object properties",
+        "shows a collection load failure and retries to an empty inventory",
+        "lets archived owners inspect grants while disabling mutation and profile reset",
+        "searches visible origin, metadata key and status fields and distinguishes no matches",
+        "retains complete safe metadata in expandable details without growing the collection row",
+        "keeps failed binding feedback and alias inside the dialog and permits a retry",
+        "refreshes the owner revision after binding before a consecutive unbind"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/DefinitionVersionsTable.test.tsx",
+      "testDeclarations": [
+        "retries a failed inspection and renders the immutable form and JSON read-only",
+        "keeps colliding source versions distinct when filtering and reopening the drawer"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/DriveConnectionPanel.test.tsx",
+      "testDeclarations": [
+        "ignores a retired read after a successful check",
+        "resets busy and rejects late checks on account revision or identity change"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/DriveFiles.test.tsx",
+      "testDeclarations": [
+        "clearing Drive search restores the unfiltered list using the emitted value"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/EventsSection.test.tsx",
+      "testDeclarations": [
+        "shows an empty state, then a credential only once",
+        "does not present a failed inventory read as empty and retries",
+        "names reactivation explicitly and cancellation leaves the Event revoked",
+        "shows unsubscribed signals separately, truthful counts and copyable request examples",
+        "keeps clipboard failure and manual copy inside the one-time credential dialog",
+        "retains a failed creation draft for retry and clears cancelled drafts"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/HarnessManagementSection.test.tsx",
+      "testDeclarations": [
+        "keeps Manual defaults and explains conversational teaching without preparation controls",
+        "keeps evidence ownership, staleness and external limitations in operator inspection",
+        "discards an unfinished historical candidate only after confirmation",
+        "retains published evidence and the tested revision after freeze",
+        "offers a retry for a failed governance load"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/IdentityMaintenance.test.tsx",
+      "testDeclarations": [
+        "persists a default-off revisioned setting and keeps the switch disabled while saving",
+        "offers reload after a stale revision and then uses the refreshed revision",
+        "shows bounded memory lineage, historical states and recoverable source reads",
+        "distinguishes consolidated and superseded Experience without offering restoration"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/InstanceAutomationsSection.test.tsx",
+      "testDeclarations": [
+        "validates an unavailable Webhook sibling only when enabled=%s",
+        "saves an enabled Schedule despite an unrelated Webhook catalog failure",
+        "keeps a known Event draft saveable as disabled after catalog and collection refresh failures",
+        "updates the save summary for schedule, background reporting and disabled state",
+        "allows disabled Schedule authoring when the Definition has no policy",
+        "keeps Event load failures visible after an Automation refresh and retries the catalog",
+        "explains a missing Event policy before saving an existing subscription",
+        "deletes %s automations with the current revision",
+        "uses readable run state for %s",
+        "refreshes a source created after the cached review when returning from Runs",
+        "does not advertise a future run for %s registrations",
+        "resets pagination when searching provenance and preserves the selected registration revision",
+        "creates a structured schedule without model interpretation",
+        "requires a finite bound under Definition policy and sends the selected occurrence limit",
+        "preserves chat provenance and keeps accepted run locked across stale status until a new execution",
+        "releases a rejected run and does not automatically replay a stale mutation",
+        "edits and disables through the same revisioned registration",
+        "opens the exact source beyond pagination without discarding an editor draft",
+        "retains a hidden editor draft when another automation is disabled",
+        "pauses polling while hidden and retains the unsaved task when shown"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/InstanceContinuitySection.test.tsx",
+      "testDeclarations": [
+        "labels, searches and describes %s / %s from the source execution",
+        "keeps source-run navigation distinct from the run that recorded the experience",
+        "does not claim a checkpoint disappeared when its source read fails and recovers on Reload",
+        "paginates records and searches observation text across pages",
+        "shows separate observations and preserves revisioned detail actions",
+        "admits one rapid Experience mutation and releases controls for a later owner action",
+        "distinguishes captured checkpoint time from source creation and marks legacy times unknown",
+        "keeps a newer experience configuration when an earlier refresh completes late",
+        "reports a revision conflict and reloads without automatically replaying the mutation",
+        "opens a retrospection checkpoint beyond pagination and keeps an unsaved source draft"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/InstanceIsolationWorkspace.test.tsx",
+      "testDeclarations": [
+        "preset, detailed pages, manual edits, discard and reset share one atomic draft",
+        "mixed settings save retains disjoint edits and preserves opt-in fences (race=%s)",
+        "an unavailable coordinated read disables shared fields and recovers without losing independent edits"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/InstanceSkillsSection.test.tsx",
+      "testDeclarations": [
+        "shows a read-only Core Skill and distinguishes missing authority from policy suppression",
+        "groups both same-name origins, warns about missing capabilities, and toggles with revision",
+        "searches capability and copy provenance without changing ownership",
+        "keeps Definition content read-only and confirms explicit independent customization",
+        "retains an editable draft on conflicts and confirms local deletion",
+        "creates an independent Skill with explicit projection and required capabilities",
+        "keeps failures distinct from empty ownership states and retries",
+        "disables mutation on archived instances"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/InstanceStateSection.test.tsx",
+      "testDeclarations": [
+        "a pending browser transition keeps unknown counts and explains the unsettled work",
+        "failed refresh retains a stale observation, unknown provider counts and retry recovers",
+        "inactive surfaces do not read and late foreign responses cannot replace the selected owner"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/InstanceWorkspaceSection.test.tsx",
+      "testDeclarations": [
+        "loads metadata, downloads and requires modal confirmation before guarded deletion",
+        "shows folders, disables file downloads and confirms only empty-folder deletion",
+        "shows empty, loading and retry without a false empty state on failure",
+        "keeps archived downloads and disables durable deletion",
+        "discards an older instance's delayed response",
+        "keeps long paths accessible and supports search and no-match recovery"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/NewInstanceButton.test.tsx",
+      "testDeclarations": [
+        "shows all areas and exact inherited choices without writing a policy on creation",
+        "saves sparse automatic and procedure choices even when mode stays inherited",
+        "keeps Off explicit and preserves automatic choices across mode toggles",
+        "retains a failed policy draft and retries the same created Instance with a fresh revision",
+        "reloads defaults and clears custom overrides when changing the selected publication",
+        "blocks creation after a defaults load failure and recovers on Retry"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/SandboxProfilesSection.test.tsx",
+      "testDeclarations": [
+        "tracks storage-only drafts, converts MiB to exact bytes, and retains a conflicting draft until discard",
+        "reveals collapsed lifetime and UTF-8 script validation errors without submitting or losing edits",
+        "refreshes selected clean source eligibility after credential revocation",
+        "refreshes source status while retaining dirty fields across credential and configuration changes",
+        "retains a conflicting revision draft and discards explicitly without granting verification",
+        "saves the next profile revision and keeps it unverified with a clean form",
+        "verifies the exact saved revision without appending another configuration revision",
+        "shows a local failure and recovers without fabricating readiness",
+        "retains a failed initialization observation on the exact profile revision",
+        "checks only image readiness without mutating or verifying the saved setup",
+        "allows onboarding verification with no eligible catalog entries while the server is ready",
+        "suppresses late image-check messages after leaving the catalog",
+        "retains a failed creation in the modal and selects the saved profile after retry"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/SelfManagementSection.test.tsx",
+      "testDeclarations": [
+        "inherits Off and disables mutations for archived Instances",
+        "saves an explicit sparse grant without increasing inherited automatic allowances",
+        "keeps a draft after a stale save and refreshes only the revision before an explicit retry",
+        "requires deliberate Admin confirmation to remove a frozen lock",
+        "changes only the persisted lock with unsaved mode and area edits (frozen=%s)"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/StateIsolationConfigurationSection.test.tsx",
+      "testDeclarations": [
+        "preset label derives from underlying fields and an independent edit becomes Custom",
+        "Persistent matches inherited recipes and preserves saved enablement flags",
+        "visibility recipe follows Definition constraints and inheritance resolves the effective cleanup",
+        "inheriting isolated Definition defaults is never labeled Persistent",
+        "distinguishes independent Instance activation from inherited Definition permissions",
+        "Use Definition defaults requests a separate unsaved reset action",
+        "refresh rebases untouched opt-ins and preserves explicit intent: %s",
+        "switching presets protects the dirty draft on cancel and replaces it only after confirmation",
+        "selecting a preset is a draft and a conflict preserves it for refresh",
+        "inherit previews the Definition value and removes the redundant reset until edited again"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/adminManagedChat.test.ts",
+      "testDeclarations": [
+        "opens the session once before navigating to chat",
+        "throws when the session cannot be opened"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionDraftPublishGatePanel.test.tsx",
+      "testDeclarations": [
+        "keeps publish blocked while evaluation evidence is still loading",
+        "keeps publish blocked when evaluation evidence loading fails",
+        "aborts superseded evidence and invalidates reads before publication or editor closure"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/instanceMemoryAutomation.test.tsx",
+      "testDeclarations": [
+        "does not present an unsaved or rejected model selection as effective",
+        "uses the refreshed owner revision without discarding an unattended model draft",
+        "loads a stored unattended model and clears it only from the visible conversation default",
+        "ignores stale memory responses after scope change",
+        "surfaces pinned-session policy denial from the server for Session scope",
+        "disables reset when User scope is policy-denied",
+        "disables destructive actions while a memory list request is in flight",
+        "refreshes the table after delete and does not resurrect removed rows"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionCandidateEditor.test.tsx",
+      "testDeclarations": [
+        "blocks fractional recurrence with an inline error and saves after correction"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionCandidateEditor.test.tsx",
+      "testDeclarations": [
+        "edits every supported candidate area through the form and saves that candidate"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionCandidateEditor.test.tsx",
+      "testDeclarations": [
+        "clears speech aliases when voice is turned off"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionCandidateEditor.test.tsx",
+      "testDeclarations": [
+        "keeps dirty edits across views and does not save invalid JSON"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionCandidateEditor.test.tsx",
+      "testDeclarations": [
+        "permits more than 32 authorized tools without a replacement count ceiling"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionCandidateEditor.test.tsx",
+      "testDeclarations": [
+        "preserves capability authorization and always projection through Form save"
+      ]
+    },
+    {
+      "file": "web/src/features/admin/definitionCandidateEditor.test.tsx",
+      "testDeclarations": [
+        "saves from JSON using the same draft revision"
+      ]
+    }
+  ],
+  "preservedMixedTests": [
+    "Four independent inventory presentation cases extracted to adminPresentation.test.ts",
+    "Controlled Definition candidate/Skills and authoring-option failure cases retained in definitionCandidateEditor.test.tsx",
+    "Independent complete consolidation-preview case extracted to ApprovalModal.maintenance.test.tsx"
+  ]
+}

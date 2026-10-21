@@ -1,5 +1,13 @@
 # Frontend Implementation Specification
 
+## Authenticated browser entry cutover
+
+`AppRouter` mounts only canonical Account/System/organization administration and exact `/t/{tenantId}` or `/t/{tenantId}/c/{sessionId}` Chat. Bare root navigation enters `/account/organizations`; an unauthenticated Account read takes the existing sign-in path with that destination. Root presentation queries do not select a tenant. Retired `/admin/...`, unscoped `/c/...` and unknown paths resolve to Page not found without mounting Chat or inferring an organization. Old Admin aliases are removed rather than redirected to a guessed tenant.
+
+`AccessApp` owns the permission-filtered navigation context passed explicitly to the shared `AdminShell`. The shell preserves the canonical desktop rail, narrow navigation Drawer, heading/breadcrumb, draft indicators and focus behavior. It has no implicit global Admin inventory or search fallback. `TenantChatEntry` remains the only mounted Chat entry; organization selection/switching retains document boundaries and private-request/transport retirement. Remembered conversations accept only same-origin exact tenant Chat paths and use separate organization keys.
+
+The unscoped Admin page tree is removed. Independent pure form/validation/presentation controls and types used by canonical pages remain shared. Historical owner-host observations below describe their earlier checkpoint; their old route/transport instructions are superseded by this section and the canonical tenant sections. Remaining browser owner-token/unscoped service defaults, feature parity, internal/schema cleanup and full proposal qualification remain open. [Focused entry evidence](reports/browser-entry-cutover-verification-2026-10-21.md).
+
 ## Tenant connected-account action review
 
 Organization Approvals and Conversation approvals use the same `TenantApprovalDetail` native large Drawer for `use_connected_account`. A focused account-action preview validates the complete closed saved projection before enabling Approve/Authorize once or Reject; malformed, duplicate, missing or contradictory evidence retains authorized cancellation and refresh. Server IAM and exact witnesses remain authoritative.
@@ -466,7 +474,7 @@ Observed history is the reconnect restore window plus one newest GET `/messages?
 
 ## Client routing (observed)
 
-The active durable session is reflected at `/c/{sessionId}` (lowercase GUID). `/` is the new-chat composer. Opening a catalog row **pushes** history; creating a session on first send **replaces** the current entry so one composer step does not stack history. **New chat** pushes `/`. Deleting the open catalog row and invalid archived deep links **replace** `/` so browser Back does not return to a dead `/c/...` URL. Confirmed header **End** keeps `/c/{sessionId}` and shows the read-only history. Reload or direct navigation to `/c/{sessionId}` loads agents and the catalog, then reopens/attaches when the session is available; an ended session loads the same read-only history without attach. Archived or unknown/failed live opens show a dismissible inline notice and stay on `/`. A failed ended-history load stays on `/c/{sessionId}` with Retry. `popstate` re-syncs attachment from the URL without rewriting it. Vite dev/preview and the API host’s SPA fallback (`MapSpaFallback` when `wwwroot/index.html` is present) serve `index.html` for non-API paths.
+The active canonical conversation is reflected at `/t/{tenantId}/c/{sessionId}` (lowercase GUID); `/t/{tenantId}` is its new-chat composer. Root `/` enters Account organization selection. Opening a catalog row pushes history; first-send creation replaces the composer entry. New chat pushes the tenant root; deleted or unavailable live opens replace that tenant root. End completes through canonical HTTP and retains the same read-only conversation. Reload and direct navigation use canonical tenant reads and authenticated `AttachTenant` when live; completed history requires no live attachment. `popstate` delegates same-tenant conversation changes; entering/leaving Chat or changing organizations preserves document navigation and private retirement. Vite/API SPA fallback serves the document for non-API paths; it does not restore retired browser routes.
 
 ## Attachment picker (observed)
 

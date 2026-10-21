@@ -1,5 +1,12 @@
 # Testing Strategy
 
+
+## Browser entry cutover verification
+
+The focused `tenant-chat.spec.ts` entry scenarios run at 1440px and 390px against disposable Synthetic hosts. Seed an obsolete local owner token; anonymous root enters Account selection then sign-in, authenticated root shows My organizations, and retired `/admin`, exact old Instance Activity, unscoped `/c` and unknown paths show Page not found without a composer. Native rail/Drawer navigation between Instances and Roles remains usable, then the canonical Chat link admits text and displays a completed Synthetic answer. Observe zero owner/unscoped API requests and zero page exceptions. Applicable conversation lifecycle, switch/logout and real WebSocket reconnect scenarios preserve their independent outcomes.
+
+Route/router and access tests assert the closed entry set and tenant-isolated remembered conversations. Shared System privacy draft guards and controlled candidate/presentation tests remain independent. Removed owner-host page tests are recorded by name in `web/src/test/fixtures/retired-browser-admin.json`; pure mixed-file cases are retained rather than skipped. [Execution evidence and exact limitations](reports/browser-entry-cutover-verification-2026-10-21.md) distinguish passing CLI fallback from unavailable MCP.
+
 ## Independent child and completion qualification
 
 Exercise both stores and actual Schedule/manual roots through child admission, exact creation Review/primary-only grants, child protected-read successors, background waits and exclusive list/inspect/take/acknowledge consumption. Include two-level nested children under the existing root budget, rejection without a partial graph, missing secondary creation authority, missing raw completion reads, late source-read revocation and Stop after provisional acknowledgment. Verify exact parent/root/initial child/source identities, real or absent requester, actual System Session creator, factual terminal outcomes and zero provider calls.

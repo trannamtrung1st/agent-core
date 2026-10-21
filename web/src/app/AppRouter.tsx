@@ -1,10 +1,8 @@
 import { AccessApp } from "../features/access/AccessApp";
 import { useEffect, useRef, useState } from "react";
-import { ChatApp } from "../features/chat/ChatApp";
 import { TenantChatEntry } from '../features/chat/TenantChatEntry';
-import { AdminApp } from "../features/admin/AdminApp";
 import { navigateFromBrowserHistory, suspendLiveSessionForNavigation } from "../services/realtime";
-import { adminHomePath, approveAppNavigation, canonicalAppUrl, initializeAppHistory, navigateToAppPath, parseAppRoute, rememberChatUrl, type AppRoute } from "./appRoute";
+import { approveAppNavigation, canonicalAppUrl, initializeAppHistory, parseAppRoute, rememberChatUrl, type AppRoute } from "./appRoute";
 
 export function AppRouter() {
   initializeAppHistory();
@@ -65,34 +63,5 @@ export function AppRouter() {
   }, [route.area]);
 
   if (route.area === "access") return <AccessApp key={route.view === 'tenant' ? route.tenantId : route.view} route={route} />;
-  if (route.area === "admin") {
-    return <AdminApp route={route} />;
-  }
-  if (route.area === 'chat' && route.tenantId) return <TenantChatEntry tenantId={route.tenantId} />;
-
-  const returnPath = new URLSearchParams(window.location.search).get("returnTo");
-  let activityHref: string | undefined;
-  if (returnPath) {
-    try {
-      const target = new URL(returnPath, window.location.origin);
-      const returnRoute = parseAppRoute(target.pathname);
-      if (target.origin === window.location.origin && returnRoute.area === "admin" && returnRoute.view === "instance" && (returnRoute.page === "sessions" || returnRoute.page === "runs")) {
-        activityHref = target.pathname + target.search + target.hash;
-      }
-    } catch { /* Malformed return targets provide no Activity action. */ }
-  }
-
-  return (
-    <ChatApp
-      returnToActivityHref={activityHref}
-      returnToActivity={activityHref ? () => navigateToAppPath(activityHref) : undefined}
-      onOpenAdmin={() => {
-        void (async () => {
-          rememberChatUrl(window.location.pathname + window.location.search + window.location.hash);
-          await suspendLiveSessionForNavigation();
-          navigateToAppPath(adminHomePath());
-        })();
-      }}
-    />
-  );
+  return <TenantChatEntry tenantId={route.tenantId} />;
 }

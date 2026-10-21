@@ -1,9 +1,8 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { App } from "antd";
 import { applyCandidateJson, candidateForPersistence, candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AdminTestWorkspace as AdminApp } from "../../test/AdminTestWorkspace";
 import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 
@@ -11,48 +10,9 @@ import { exposedRoles } from "../../test/exposedRoles";
 
 vi.mock("../../services/adminApi", () => ({
   getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),
-  listAdminDefinitions: vi.fn(),
-  listAdminInstances: vi.fn(),
-  getAdminEffectiveConfig: vi.fn(),
-  listAdminDefinitionDrafts: vi.fn(),
-  listAdminDefinitionPublications: vi.fn(),
-  getAdminDefinitionDraft: vi.fn(),
-  deleteAdminDefinitionDraft: vi.fn(),
-  updateAdminDefinitionDraft: vi.fn(),
-  publishAdminDefinitionDraft: vi.fn(),
-  createNewAdminDefinitionDraft: vi.fn(),
-  createAdminAgentInstance: vi.fn(),
-  forkAdminDefinitionDraft: vi.fn(),
-  listAdminDraftResources: vi.fn(),
-  listAdminPublicationResources: vi.fn(),
-  getAdminToolRegistry: vi.fn().mockResolvedValue({ toolNames: ["workspace.read"], maxToolAllowlistEntries: 32 }),
-  uploadAdminDraftResourceContent: vi.fn(),
-  upsertAdminDraftResource: vi.fn(),
-  bindAdminDraftResources: vi.fn(),
-  removeAdminDraftResource: vi.fn(),
-  updateAdminAgentInstancePersona: vi.fn(),
-  updateAdminAgentInstanceLifecycle: vi.fn(),
-  updateAdminAgentInstanceActiveVersion: vi.fn(),
-  deprecateAdminDefinitionPublication: vi.fn(),
-  validateAdminDefinitionDraft: vi.fn(),
-  getAdminDefinitionDraftDiff: vi.fn(),
-  listAdminDefinitionEvaluationScenarios: vi.fn(),
-  listAdminDefinitionEvaluationResults: vi.fn(),
   listAdminAuthoringOptions: vi.fn()
 }));
-
-import {
-  getAdminDefinitionDraft,
-  listAdminDefinitionDrafts,
-  listAdminDefinitionPublications,
-  listAdminDefinitions,
-  listAdminDraftResources,
-  listAdminInstances,
-  listAdminAuthoringOptions,
-  getAdminToolRegistry,
-  publishAdminDefinitionDraft,
-  updateAdminDefinitionDraft
-} from "../../services/adminApi";
+import { listAdminAuthoringOptions } from '../../services/adminApi';
 
 const authoringOptions = {
   languageModelAliases: ["backup-llm", "primary-llm"],
@@ -79,7 +39,6 @@ const authoringOptions = {
   interruptionClassifiers: ["heuristic"]
 };
 
-const draftId = "019944af-00d1-7000-8000-0000000000c1";
 
 const storedCandidate = {
   schemaVersion: 2,
@@ -148,79 +107,8 @@ const storedCandidate = {
   untouchedMarker: { nested: "preserve-me" }
 };
 
-function mockDraft(candidate: Record<string, unknown> = storedCandidate) {
-  vi.mocked(listAdminDefinitions).mockResolvedValue([
-    {
-      definitionId: "examiner",
-      version: 1,
-      source: "builtIn",
-      status: "published",
-      displayName: "Examiner"
-    }
-  ]);
-  vi.mocked(listAdminInstances).mockResolvedValue([]);
-  vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
-    {
-      draftId,
-      definitionId: "examiner",
-      revision: 2,
-      sourceKind: "ForkBuiltIn",
-      sourceVersion: 1,
-      updatedAt: "2026-01-01T00:00:00Z"
-    }
-  ]);
-  vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
-  vi.mocked(listAdminDraftResources).mockResolvedValue([]);
-  vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve"], maxToolAllowlistEntries: 32 });
-  vi.mocked(listAdminAuthoringOptions).mockResolvedValue(authoringOptions);
-  vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
-    draftId,
-    definitionId: "examiner",
-    revision: 2,
-    sourceKind: "ForkBuiltIn",
-    sourceVersion: 1,
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
-    candidate
-  });
-  vi.mocked(updateAdminDefinitionDraft).mockResolvedValue({
-    draftId,
-    definitionId: "examiner",
-    revision: 3,
-    sourceKind: "ForkBuiltIn",
-    sourceVersion: 1,
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-02T00:00:00Z",
-    candidate
-  });
-  vi.mocked(publishAdminDefinitionDraft).mockResolvedValue({
-    definitionId: "examiner",
-    version: 2,
-    status: "published",
-    metadataRevision: 1,
-    publishedAt: "2026-01-02T00:00:00Z"
-  });
-}
-
-async function openDraft() {
-  await act(async () => { render(<AdminApp route={{ area: 'admin', view: 'draft', definitionId: 'examiner', draftId, page: 'instructions' }} />); });
-  await screen.findByLabelText('Agent instructions');
-}
-
-async function navigateDraft(label: string) {
-  await act(async () => { fireEvent.click(within(screen.getByRole('navigation', { name: 'Admin navigation' })).getByRole('link', { name: label })); });
-}
-async function openDraftSettings(...sections: string[]) {
-  const owners: Record<string, string> = { 'Memory policy': 'Memory policy', 'Trigger restrictions': 'Trigger restrictions', 'Advanced / metadata': 'Metadata', 'Agent self-management defaults': 'Self-management', 'Model defaults': 'Models', 'Provider preferences': 'Providers', 'Execution budgets': 'Execution budgets', Conversation: 'Conversation', Behavior: 'Behavior', Initiative: 'Initiative', Voice: 'Voice' };
-  for (const name of sections.length ? sections : ['Agent instructions']) {
-    await navigateDraft(owners[name] ?? 'Instructions');
-    const header = screen.getByRole('button', { name });
-    if (header.getAttribute('aria-expanded') === 'false') fireEvent.click(header);
-  }
-}
-
 // Exercise the controlled form without loading inventory, version tables, resources,
-// and publication gates. The AdminApp tests below retain save/revision and tab wiring.
+// and publication gates. Canonical tenant editor tests cover save and revision behavior.
 async function renderCandidate(candidate: DefinitionCandidate = storedCandidate) {
   vi.mocked(listAdminAuthoringOptions).mockResolvedValue(authoringOptions);
   const changed = vi.fn<(candidate: DefinitionCandidate) => void>();
@@ -253,16 +141,6 @@ function openSettings(...sections: string[]) {
   }
 }
 
-async function chooseOption(label: string, optionName: string) {
-  fireEvent.mouseDown(screen.getByLabelText(label));
-  const option = await screen.findByTitle(optionName);
-  await act(async () => { fireEvent.click(option); });
-}
-
-function setSpin(label: string, value: string) {
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
-}
-
 function setText(label: string, value: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
@@ -291,31 +169,6 @@ describe("definition candidate editor", () => {
     expect(exposedRoles().getByRole("checkbox", { name: "Schedule" })).toBeChecked();
     expect(exposedRoles().getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
     expect(changed.mock.lastCall?.[0]).toMatchObject({ triggerPolicy: { allowedSourceKinds: ["schedule", kind] } });
-  });
-
-  it("blocks fractional recurrence with an inline error and saves after correction", async () => {
-    mockDraft();
-    await openDraft();
-    // These controls stay mounted across draft tabs. Reuse their accessible
-    // handles instead of rescanning the entire AntD form after every change.
-    const save = exposedRoles().getByRole("button", { name: "Save draft" });
-    await openDraftSettings('Trigger restrictions');
-    setSpin("Minimum recurrence days", "0.5");
-    expect(screen.getByLabelText("Minimum recurrence days")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText("Minimum recurrence days")).toHaveAccessibleDescription(
-      "Whole days. 1 to 365. Minimum recurrence days must be a whole number from 1 to 365.");
-    expect(save).toBeDisabled();
-    await navigateDraft('Capabilities');
-    expect(save).toBeInTheDocument();
-    expect(save).toBeDisabled();
-    expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
-    await openDraftSettings('Trigger restrictions');
-    setSpin("Minimum recurrence days", "2");
-    expect(screen.getByLabelText("Minimum recurrence days")).not.toHaveAttribute("aria-invalid", "true");
-    expect(save).toBeEnabled();
-    fireEvent.click(save);
-    await waitFor(() => expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
-      draftId, 2, expect.objectContaining({ triggerPolicy: expect.objectContaining({ minRecurrenceDays: 2 }) })));
   });
 
   it("validates and adds a Skill while preserving inherited content", async () => {
@@ -402,248 +255,6 @@ describe("definition candidate editor", () => {
     expect(changed.mock.lastCall![0].modelDefaults.reasoningEffort).toBe("high");
   });
 
-  it("edits every supported candidate area through the form and saves that candidate", async () => {
-    mockDraft({ ...storedCandidate, skills: [{
-      id: "refund.handle", name: "Refund", description: "Handle a refund",
-      procedure: "REFUND_PROCEDURE", projection: "OnDemand", defaultEnabled: true,
-      requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"]
-    }] });
-    await openDraft();
-
-    await navigateDraft('Identity & goals');
-    expect(screen.getByLabelText('Definition ID')).toHaveTextContent('examiner');
-    expect(screen.queryByRole('textbox', { name: 'Definition ID' })).not.toBeInTheDocument();
-    await navigateDraft('Initiative');
-    expect(screen.getByLabelText("Silence threshold")).toHaveAccessibleDescription(
-      "Milliseconds. 1,000 to 120,000."
-    );
-    expect(screen.getByLabelText("Cooldown")).toHaveAccessibleDescription(
-      "Milliseconds. 5,000 to 600,000."
-    );
-    expect(screen.getByLabelText("Max inactivity")).toHaveAccessibleDescription(
-      "Milliseconds. Empty uses 900,000."
-    );
-    expect(screen.getByLabelText("Silence threshold")).toHaveValue("3000");
-    await navigateDraft('Conversation');
-    expect(screen.getByLabelText("Conversation language")).toHaveAccessibleDescription(
-      "auto, or a BCP 47 tag such as en."
-    );
-    await navigateDraft('Models');
-    expect(await screen.findByTitle('Scripted Alpha')).toBeInTheDocument();
-    await navigateDraft('Providers');
-    expect(screen.getByText(/Speech aliases are required when voice is on/)).toBeInTheDocument();
-
-    await navigateDraft('Identity & goals');
-    setText("Definition name", "Guide");
-    setText("Definition role", "Coach");
-    setText("Definition description", "Helps the operator.");
-    setText("Definition tone", "Direct");
-    setText("Goal 1", "Coach the operator");
-    fireEvent.click(exposedRoles().getByRole("button", { name: "Add goal" }));
-    setText("Goal 2", "Keep answers short");
-    await openDraftSettings();
-    setText("Agent instructions", "Edited instructions");
-    await navigateDraft('Skills');
-    fireEvent.click(exposedRoles().getByRole("button", { name: "Edit" }));
-    setText("Procedure", "REFUND_PROCEDURE_EDITED");
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save Skill" })); });
-    await navigateDraft('Behavior');
-    await chooseOption("Interruption style", "Answer the new turn");
-    fireEvent.click(screen.getByLabelText("Acknowledge interruption"));
-    fireEvent.click(screen.getByLabelText("Avoid unsupported claims"));
-    await navigateDraft('Conversation');
-    await chooseOption("Response length", "Balanced");
-    setText("Conversation language", "en");
-    setSpin("Max output tokens", "512");
-    fireEvent.click(screen.getByLabelText("Ask one question at a time"));
-    await navigateDraft('Initiative');
-    fireEvent.click(screen.getByLabelText("Initiative enabled"));
-    setSpin("Silence threshold", "4000");
-    setSpin("Cooldown", "20000");
-    setSpin("Max prompts per silence", "2");
-    setSpin("Max consecutive proactive turns", "3");
-    setSpin("Max silent evaluations", "9");
-    setSpin("Max inactivity", "120000");
-    await chooseOption("Initiative triggers", "Environment update");
-    await navigateDraft('Models');
-    await chooseOption("Reasoning", "Medium");
-    await chooseOption("Model", "Scripted Beta");
-    await navigateDraft('Providers');
-    await chooseOption("Language-model provider", "backup-llm");
-    await openDraftSettings('Voice');
-    fireEvent.click(screen.getByLabelText("Voice enabled"));
-    setText("Voice id", "alloy");
-    setSpin("Speaking rate", "1.2");
-    await openDraftSettings('Memory policy');
-    fireEvent.click(screen.getByLabelText("Session memory"));
-    fireEvent.click(screen.getByLabelText("Identity user promotion"));
-    fireEvent.click(screen.getByLabelText("Identity user retrieval"));
-    fireEvent.click(screen.getByLabelText("User promotion"));
-    fireEvent.click(screen.getByLabelText("User retrieval"));
-    await openDraftSettings('Trigger restrictions');
-    fireEvent.click(screen.getByLabelText("Automation enabled"));
-    fireEvent.click(screen.getByLabelText("Allow user scheduling"));
-    fireEvent.click(screen.getByLabelText("Allow one-shot"));
-    fireEvent.click(screen.getByLabelText("Allow daily"));
-    fireEvent.click(screen.getByLabelText("Allow weekly"));
-    fireEvent.click(screen.getByLabelText("Allow indefinite recurrence"));
-    fireEvent.click(screen.getByLabelText("Allow fixed interval"));
-    setSpin("Max active registrations", "8");
-    setSpin("One-shot horizon days", "14");
-    setSpin("Minimum recurrence days", "2");
-    setSpin("Minimum fixed interval seconds", "120");
-    fireEvent.click(exposedRoles().getByRole("checkbox", { name: "Webhook Events" }));
-    await openDraftSettings('Advanced / metadata');
-    setText("Metadata key 1", "team");
-    setText("Metadata value 1", "platform");
-
-    await navigateDraft('Capabilities');
-    const harness = screen.getByLabelText("Harness labels");
-    fireEvent.mouseDown(harness);
-    fireEvent.change(harness, { target: { value: "lab-harness" } });
-    fireEvent.keyDown(harness, { key: "Enter", code: "Enter", keyCode: 13 });
-    await chooseOption("Authorized capabilities", "workspace.read");
-    fireEvent.click(exposedRoles().getByRole("button", { name: "Add knowledge source" }));
-    setText("Knowledge identity 1", "refund-policy");
-    setText("Knowledge title 1", "Refund Policy");
-    setText("Knowledge citation 1", "refund-policy@v3");
-    setText("Workspace template id", "examiner-default");
-    expect(screen.queryByLabelText("Allow unread unsupported attachment types")).not.toBeInTheDocument();
-
-
-    await navigateDraft('Advanced JSON');
-    const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
-    const parsed = JSON.parse(json.value) as {
-      identity: { name: string; role: string; description: string; tone: string };
-      goals: string[];
-      agentInstructions: string;
-      behaviorPolicy: { interruptionStyle: string; acknowledgeInterruption: boolean; avoidUnsupportedClaims: boolean };
-      conversationPolicy: {
-        responseLength: string;
-        askOneQuestionAtATime: boolean;
-        language: string;
-        maxOutputTokens: number;
-      };
-      initiativePolicy: {
-        enabled: boolean;
-        silenceThresholdMs: number;
-        cooldownMs: number;
-        maxPerSilencePeriod: number;
-        triggers: string[];
-        maxConsecutiveProactiveTurns: number;
-        maxSilentEvaluations: number;
-        maxInactivityMs: number;
-      };
-      modelDefaults: { catalogKey: string; reasoningEffort: string };
-      providerPreferences: {
-        languageModel: string;
-        speechRecognizer: string;
-        speechSynthesizer: string;
-        interruptionClassifier: string;
-      };
-      voice: { enabled: boolean; voiceId: string; speakingRate: number };
-      memoryPolicy: Record<string, boolean>;
-      triggerPolicy: Record<string, unknown>;
-      metadata: { team: string };
-      environment: {
-        harness: string[];
-        toolAllowlist?: string[];
-        capabilities: { mode: string; resolvedCapabilities: string[] };
-        knowledgeSources: Array<{ identity: string; title: string; citation: string }>;
-        workspace: { templateId: string };
-        attachments: { allowUnreadUnsupportedTypes: boolean };
-      };
-      untouchedMarker: { nested: string };
-      definitionId: string;
-    };
-
-    expect(parsed.definitionId).toBe("examiner");
-    expect(parsed.identity).toEqual({
-      name: "Guide",
-      role: "Coach",
-      description: "Helps the operator.",
-      tone: "Direct"
-    });
-    expect(parsed.goals).toEqual(["Coach the operator", "Keep answers short"]);
-    expect(parsed.agentInstructions).toBe("Edited instructions");
-    expect(parsed.behaviorPolicy).toMatchObject({
-      interruptionStyle: "answerNewTurn",
-      acknowledgeInterruption: true,
-      avoidUnsupportedClaims: true
-    });
-    expect(parsed.conversationPolicy).toMatchObject({
-      responseLength: "balanced",
-      askOneQuestionAtATime: true,
-      language: "en",
-      maxOutputTokens: 512
-    });
-    expect(parsed.initiativePolicy).toMatchObject({
-      enabled: true,
-      silenceThresholdMs: 4000,
-      cooldownMs: 20000,
-      maxPerSilencePeriod: 2,
-      maxConsecutiveProactiveTurns: 3,
-      maxSilentEvaluations: 9,
-      maxInactivityMs: 120000
-    });
-    expect(parsed.initiativePolicy.triggers).toEqual(expect.arrayContaining(["longSilence", "environmentUpdate"]));
-    expect(parsed.modelDefaults).toEqual({ catalogKey: "scripted-beta", reasoningEffort: null });
-    expect(parsed.providerPreferences).toEqual({
-      languageModel: "backup-llm",
-      speechRecognizer: "primary-stt",
-      speechSynthesizer: "primary-tts",
-      interruptionClassifier: "heuristic"
-    });
-    expect(parsed.voice).toMatchObject({ enabled: true, voiceId: "alloy", speakingRate: 1.2 });
-    expect(parsed.memoryPolicy).toMatchObject({
-      sessionMemory: true,
-      identityUserPromotion: true,
-      identityUserRetrieval: true,
-      userPromotion: true,
-      userRetrieval: true
-    });
-    expect(parsed.triggerPolicy).toMatchObject({
-      enabled: true,
-      allowUserScheduling: true,
-      allowOneShot: true,
-      allowDaily: true,
-      allowWeekly: true,
-      allowIndefiniteRecurrence: true,
-      allowFixedInterval: true,
-      maxActiveRegistrations: 8,
-      oneShotHorizonDays: 14,
-      minRecurrenceDays: 2,
-      minFixedIntervalSeconds: 120
-    });
-    expect(parsed.triggerPolicy.allowedSourceKinds).toEqual(
-      expect.arrayContaining(["schedule", "applicationEvent"])
-    );
-    expect(parsed.metadata).toEqual({ team: "platform" });
-    expect(parsed.environment.harness).toEqual(expect.arrayContaining(["examiner-turn-taking", "lab-harness"]));
-    expect(parsed.environment.toolAllowlist).toBeUndefined();
-    expect(parsed.environment.capabilities).toEqual({ mode: "Selected", resolvedCapabilities: ["workspace.read"] });
-    expect(parsed.environment.knowledgeSources).toEqual([
-      { identity: "refund-policy", title: "Refund Policy", citation: "refund-policy@v3" }
-    ]);
-    expect(parsed.environment.workspace.templateId).toBe("examiner-default");
-    expect(parsed.environment.attachments.allowUnreadUnsupportedTypes).toBe(false);
-    expect(parsed.untouchedMarker).toEqual({ nested: "preserve-me" });
-
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
-    await waitFor(() => {
-      expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.any(Object));
-    });
-    expect(vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2]).toEqual({
-      ...parsed,
-      skills: [{ id: "refund.handle", name: "Refund", description: "Handle a refund",
-        procedure: "REFUND_PROCEDURE_EDITED", projection: "OnDemand", defaultEnabled: true,
-        requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"] }]
-    });
-    expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
-    // This integration walks every field and the revision-protected save.
-    // Leaf round-trips above avoid repeatedly loading the Admin shell.
-  }, 180_000);
-
   it("emits a voice-enabled candidate with default speech aliases", async () => {
     const changed = await renderCandidate();
 
@@ -660,39 +271,6 @@ describe("definition candidate editor", () => {
     expect(saved.providerPreferences).toMatchObject({
       speechRecognizer: "primary-stt",
       speechSynthesizer: "primary-tts"
-    });
-  });
-
-  it("clears speech aliases when voice is turned off", async () => {
-    mockDraft({
-      ...storedCandidate,
-      voice: { enabled: true, voiceId: "verse", speakingRate: 1 },
-      providerPreferences: {
-        languageModel: "primary-llm",
-        speechRecognizer: "primary-stt",
-        speechSynthesizer: "primary-tts",
-        interruptionClassifier: "heuristic"
-      }
-    });
-
-    await openDraft();
-
-    await openDraftSettings('Voice');
-    fireEvent.click(screen.getByLabelText("Voice enabled"));
-    expect(screen.queryByTitle("primary-stt")).not.toBeInTheDocument();
-    expect(screen.queryByTitle("primary-tts")).not.toBeInTheDocument();
-
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
-    await waitFor(() => expect(updateAdminDefinitionDraft).toHaveBeenCalled());
-    const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
-      voice?: { enabled?: boolean };
-      providerPreferences?: { speechRecognizer?: string | null; speechSynthesizer?: string | null };
-    };
-    expect(saved.voice?.enabled).toBe(false);
-    expect(saved.providerPreferences).toMatchObject({
-      speechRecognizer: null,
-      speechSynthesizer: null,
-      languageModel: "primary-llm"
     });
   });
 
@@ -723,97 +301,6 @@ describe("definition candidate editor", () => {
     openSettings("Voice");
     expect(screen.getByLabelText("Voice id")).toHaveValue("verse");
     expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
-  });
-
-  it("keeps dirty edits across views and does not save invalid JSON", async () => {
-    mockDraft();
-    await openDraft();
-    const actions = within(document.querySelector<HTMLElement>('.admin-draft-actions')!);
-    const save = actions.getByRole('button', { name: 'Save draft' });
-    const publish = actions.getByRole('button', { name: 'Publish…' });
-    setText("Agent instructions", "Unsaved instruction edit");
-    await navigateDraft('Advanced JSON');
-    const json = screen.getByLabelText("Advanced JSON", { selector: "textarea" }) as HTMLTextAreaElement;
-    expect(screen.getByText("Unsaved changes — save before using Test & Publish.")).toBeInTheDocument();
-    expect(json.value).toContain(
-      "Unsaved instruction edit"
-    );
-
-    fireEvent.change(json, { target: { value: "{ " } });
-    expect(screen.getByText("Advanced JSON is invalid")).toBeInTheDocument();
-    expect(save).toBeDisabled();
-    await act(async () => { fireEvent.click(save); });
-    fireEvent.click(publish);
-    expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
-    expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
-
-    await navigateDraft('Instructions');
-    expect(screen.getByLabelText('Agent instructions')).toBeDisabled();
-    await navigateDraft('Capabilities');
-    expect(screen.getByText(/Fix Advanced JSON before changing capabilities/)).toBeInTheDocument();
-    expect(exposedRoles().getByRole('button', { name: 'Add knowledge source' })).toBeDisabled();
-    fireEvent.click(exposedRoles().getByRole('button', { name: 'Add knowledge source' }));
-    await navigateDraft('Resources');
-    await navigateDraft('Advanced JSON');
-    expect(screen.getByLabelText('Advanced JSON', { selector: 'textarea' })).toHaveValue('{ ');
-    expect(save).toBeInTheDocument();
-    expect(save).toBeDisabled();
-    expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
-  });
-
-  it("permits more than 32 authorized tools without a replacement count ceiling", async () => {
-    const tools = Array.from({ length: 40 }, (_, i) => `workspace.tool${i}`);
-    mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: tools.slice(0, 33) } });
-    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: tools, maxToolAllowlistEntries: null });
-    await openDraft();
-    setText("Agent instructions", "Keep this edit");
-    await navigateDraft('Capabilities');
-    expect(await screen.findByText("Authorized: 33 · Always selected: 33")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByLabelText("Authorized capabilities"));
-    fireEvent.change(screen.getByLabelText("Authorized capabilities"), { target: { value: tools[33] } });
-    await act(async () => { fireEvent.click(await screen.findByTitle(tools[33])); });
-    expect(screen.getByText("Authorized: 34 · Always selected: 33")).toBeInTheDocument();
-    expect(exposedRoles().getByRole("button", { name: "Save draft" })).toBeEnabled();
-  });
-
-  it("preserves capability authorization and always projection through Form save", async () => {
-    mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: undefined,
-      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve", "browser.navigate"] },
-      projection: { alwaysCapabilities: ["workspace.read"] } } });
-    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve", "browser.navigate"], maxToolAllowlistEntries: null });
-    await openDraft();
-    setText("Agent instructions", "Keep this edit");
-    await navigateDraft('Capabilities');
-    expect(await screen.findByText("Authorized: 3 · Always selected: 1")).toBeInTheDocument();
-    expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
-    expect(screen.getByText("Core also includes authorized, eligible Browser v2 bootstrap tools and active Skill requirements. These can appear without an Always selection; permission still comes from Authorized capabilities.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Other authorized capabilities" })).not.toBeInTheDocument();
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
-    expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.objectContaining({ environment: expect.objectContaining({
-      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve", "browser.navigate"] },
-      projection: { alwaysCapabilities: ["workspace.read"] }
-    }) }));
-  });
-
-  it("saves from JSON using the same draft revision", async () => {
-    mockDraft();
-    await openDraft();
-    await navigateDraft('Advanced JSON');
-    const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
-    const edited = JSON.parse(json.value) as { agentInstructions: string; untouchedMarker: { nested: string } };
-    edited.agentInstructions = "Saved from JSON";
-    fireEvent.change(json, { target: { value: JSON.stringify(edited, null, 2) } });
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
-    await waitFor(() => {
-      expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
-        draftId,
-        2,
-        expect.objectContaining({
-          agentInstructions: "Saved from JSON",
-          untouchedMarker: { nested: "preserve-me" }
-        })
-      );
-    });
   });
 });
 

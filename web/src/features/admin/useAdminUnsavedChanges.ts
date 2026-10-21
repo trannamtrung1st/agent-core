@@ -11,8 +11,7 @@ export function useAdminUnsavedChanges(owner: string, dirty: boolean, onDiscard?
   useEffect(() => registerNavigationGuard(path => {
     if (!current.current.dirty) return true;
     const route = parseAppRoute(new URL(path, window.location.origin).pathname);
-    const next = route.area === 'admin' ? route.view === 'instance' ? `instance:${route.instanceId}`
-      : route.view === 'draft' ? `draft:${route.definitionId}:${route.draftId}` : route.view === 'home' ? `global:${route.collection}` : '' : '';
+    const next = route.area === 'access' && route.view === 'system' ? `system:${route.page}` : '';
     if (next === current.current.owner) return true;
     if (pending.current) return false;
     pending.current = true;
@@ -24,7 +23,7 @@ export function useAdminUnsavedChanges(owner: string, dirty: boolean, onDiscard?
         pending.current = false;
         if (stayed) {
           const target = previousFocus?.isConnected && previousFocus !== document.body && previousFocus.getClientRects().length && getComputedStyle(previousFocus).visibility !== 'hidden'
-            ? previousFocus : document.querySelector<HTMLElement>(`button[aria-label="${fromMenu ? 'Open Admin navigation' : 'Search Admin'}"]`);
+            ? previousFocus : document.querySelector<HTMLElement>(fromMenu ? 'button[aria-label="Open Admin navigation"]' : '[data-admin-page-heading]');
           target?.focus({ preventScroll: true });
         }
       } });
