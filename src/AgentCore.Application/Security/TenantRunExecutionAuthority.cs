@@ -81,7 +81,7 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                         if (profileSources is null) throw new AccessDeniedException("profile_context_unavailable");
                         await profileSources.RequireAsync(after.Run, profile, cancellationToken).ConfigureAwait(false);
                     }
-                    if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(after.Run.Checkpoint).TenantMemorySources is { Count: > 0 } learned)
+                    if (TenantMemoryOperationReferences.Read(after.Run.Checkpoint) is { Count: > 0 } learned)
                     {
                         if (memorySources is null) throw new AccessDeniedException("memory_context_unavailable");
                         await memorySources.RequireAsync(after.Run, learned, cancellationToken).ConfigureAwait(false);

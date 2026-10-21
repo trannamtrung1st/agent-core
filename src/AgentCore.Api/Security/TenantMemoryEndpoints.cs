@@ -26,7 +26,7 @@ public static class TenantMemoryEndpoints
     }
     private static object Safe(TenantMemoryPage page) => new { items = page.Items.Select(i => new {
         i.Memory.MemoryId, scope = TenantMemoryRules.ScopeName(i.Memory.Scope), kind = i.Memory.Kind.ToString(), status = i.Memory.Status.ToString(), i.Memory.Subject, i.Memory.Content,
-        i.Memory.Revision, i.Memory.CreatedAt, i.Memory.UpdatedAt, originAgentId = i.Memory.AgentInstanceId, i.Memory.Source, i.Memory.SupersedesMemoryId, i.CanForget }),
+        i.Memory.Revision, i.Memory.CreatedAt, i.Memory.UpdatedAt, originAgentId = i.Memory.AgentInstanceId, i.Memory.Source, i.Memory.SupersedesMemoryId, sourceMemoryIds = TenantMemoryOperationMutation.Sources(i.Memory), i.CanForget }),
         page.Total, page.RetainedCount, page.Page, page.PageSize, page.SecurityRevision, page.CanReset, page.AgentName };
     private static HumanSessionReference Human(HttpContext http) { var a = IdentityHttp.TenantContext(http); return new(a.AccountId,
         IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), a.PrincipalId); }

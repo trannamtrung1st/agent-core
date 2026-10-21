@@ -16,7 +16,7 @@ public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, I
             if (profiles is null) throw new AccessDeniedException("profile_context_unavailable");
             await profiles.RequireAsync(child, source, ct).ConfigureAwait(false);
         }
-        if (state.TenantMemorySources is { Count: > 0 } learned)
+        if (TenantMemoryOperationReferences.Read(child.Checkpoint) is { Count: > 0 } learned)
         {
             if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
             await memories.RequireAsync(child, learned, ct).ConfigureAwait(false);

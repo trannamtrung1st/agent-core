@@ -11,6 +11,7 @@ import { AccessError, AccessLoading } from './AccessFeedback';
 import { tenantAgentPath } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 import { useTenantCommand } from './useTenantCommand';
+import { TenantMemorySources } from './TenantMemorySources';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function TenantAgentMemory({ context, id }: { context: TenantContext; id: string }) {
   const [scope, setScope] = useState<MemoryScope>('identityUser'); const [session, setSession] = useState(''); const [requestedSession, setRequestedSession] = useState('');
@@ -61,15 +62,15 @@ function MemoryRows({ context, id, scope, session, page, onPage, onBusy, reload 
           { title: 'Subject', key: 'subject', render: (_, item) => <Typography.Text>{item.status === 'Deleted' ? 'Forgotten fact' : item.subject}</Typography.Text> },
           { title: 'Kind', dataIndex: 'kind' }, { title: 'Status', key: 'status', render: (_, item) => <Tag>{item.status}</Tag> },
           { title: 'Action', key: 'action', render: (_, item) => <Button danger size="small" disabled={block || !item.canForget} onClick={() => forget(item)} aria-label={`Forget ${item.subject || 'fact'}`}>Forget</Button> }
-        ]} expandable={{ expandedRowRender: item => <Descriptions {...detail} size="small" column={1} items={[
+        ]} expandable={{ expandedRowRender: item => <Flex vertical gap="var(--ac-space-default)"><Descriptions {...detail} size="small" column={1} items={[
           { key: 'content', label: 'Content', children: item.status === 'Deleted' ? 'Content removed' : <Typography.Paragraph style={{ whiteSpace: 'pre-wrap' }}>{item.content}</Typography.Paragraph> },
           { key: 'id', label: 'Memory ID', children: <Typography.Text copyable>{item.memoryId}</Typography.Text> },
           { key: 'revision', label: 'Revision', children: item.revision },
-          { key: 'origin', label: 'Origin', children: item.source === 'userExplicit' ? 'Explicit user information' : 'Agent inferred' },
+          { key: 'origin', label: 'Origin', children: item.sourceMemoryIds?.length ? item.source === 'userExplicit' ? 'Consolidated from explicit user information' : 'Agent consolidation' : item.source === 'userExplicit' ? 'Explicit user information' : 'Agent inferred' },
           { key: 'agent', label: 'Origin agent', children: <Typography.Text copyable>{item.originAgentId}</Typography.Text> },
-          { key: 'parent', label: 'Supersedes', children: item.supersedesMemoryId ?? 'None' },
+          { key: 'parent', label: 'Source lineage', children: item.sourceMemoryIds?.length ? `${item.sourceMemoryIds.length} retained sources` : item.supersedesMemoryId ?? 'None' },
           { key: 'time', label: 'Updated', children: new Date(item.updatedAt).toLocaleString() }
-        ]} /> }} />
+        ]} /><TenantMemorySources tenant={tenant} agent={id} scope={scope} session={session} item={item} /></Flex> }} />
     </>)}
   </Flex>;
 }

@@ -1549,3 +1549,10 @@ Hold the Profile command after application checks and before the owning store. R
 ## Human Memory and organization Profile management qualification
 
 The [management report](reports/tenant-memory-management-verification-2026-10-22.md) records actual requester ownership, independent raw read/manage, hidden-before-count/page filtering, stale selection/login refusal, atomic item/reset tombstones, protected source invalidation and actual SQLite application recreation. Frontend cases and desktop/narrow Synthetic journeys exercise empty Profile editing/clearing, retained drafts after real conflicts, explicit readback, exact confirmation/cancellation, Session scope reset, retained history and same-Account organization separation. Model-driven maintenance/forgetting consent and broader continuity remain separately pending.
+
+
+## Protected learned Memory operation qualification
+
+Use `TenantDefinitionIntegrationTests.MemoryOperations*` against both real store owners. Exercise direct mutation withholding, exact Review and primary-only grant, actual saved tool checkpoint/approval continuation, same-task read proof, revoked raw reads, source tombstoning, refusal, no partial consolidation, no repeated receipt effect, learning suppression, independently retained copies and SQLite recreation. Schema checks retain populated prior facts/triggers on upgrade and refuse lossy downgrade with prepared requests/lineage. `TenantMemorySources.test.tsx` and protected Memory cases in `TenantApprovals.test.tsx` cover on-demand exact source reads, deleted-body hiding, malformed lineage, tenant retirement, escaped previews and consent text. Native `tenant-memory-operations.spec.ts` exercises actual Synthetic read Review, consolidation/lineage inspection and exact forget grant through Chat and the shared inspector at desktop/narrow widths.
+
+Focused qualification does not establish full-proposal acceptance, broad Experience/history continuity, autonomous maintenance, physical audio or live-provider correctness.

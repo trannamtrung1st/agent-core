@@ -17,6 +17,9 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && TenantMemoryToolContract.IsTool(toolName))
+            return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                && TenantMemoryToolContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && (toolName == ToolCatalog.ExecutionWait || TenantCompletionToolContract.IsTool(toolName)))
             return admission is { AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
                 && RolePermissions.AllowsTool(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -207,6 +210,8 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is { } memory && TenantMemoryToolContract.IsTool(descriptor.Name))
+            return memory.SessionId == context.OwnedSessionId && TenantTaskExecutionContract.Allows(context) && TenantMemoryToolContract.Allows(definition, descriptor.Name, context);
         if (context?.ExecutionContext is not null && TenantCompletionToolContract.IsTool(descriptor.Name))
             return TenantCompletionToolContract.IsOffered(definition, context, descriptor.Name);
         if (context?.ExecutionContext is not null && descriptor.Name == ToolCatalog.ExecutionWait)

@@ -834,3 +834,11 @@ it.each(['missing-boundary', 'bad-target', 'report', 'wrong-scope', 'duplicate',
   expect(within(dialog).getByRole('button', { name: mode === 'secondary-grant' ? 'Authorize once' : 'Approve' })).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Cancel request' })).toBeEnabled();
 });
+it.each(['inspect_memory', 'manage_memory'])('shows exact protected %s facts and separates consent from eventual effect', async operation => {
+  view({ ...request, kind: 'review', summary: 'Review learned Memory', preparedAction: { ...request.preparedAction, operation },
+    review: { ...request.review, changes: [{ field: 'Exact current source values', before: null, after: 'Original <script>private value</script>\nComplete source', beforeAvailable: false, afterAvailable: true, restoresDefault: false }] } });
+  const detail = await screen.findByRole('dialog'); expect(await within(detail).findByText('Exact current source values')).toBeVisible(); expect(within(detail).getByText(/Original <script>private value/)).toBeVisible(); expect(detail.querySelector('script')).toBeNull(); expect(within(detail).queryByText('Saved field')).not.toBeInTheDocument();
+  fireEvent.click(within(detail).getByRole('button', { name: 'Approve' })); const confirmation = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirmation).getByText(operation === 'inspect_memory' ? /no Memory mutation/ : /remain separately retained/)).toBeVisible()); fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep reviewing' }));
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});

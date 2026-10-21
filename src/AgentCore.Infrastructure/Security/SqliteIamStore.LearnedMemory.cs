@@ -90,7 +90,7 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
     {
         if (sources.Count > MemoryLimits.MaxActiveItems || sources.Distinct().Count() != sources.Count) throw new AccessDeniedException("memory_source_unavailable");
         if (sources.Count == 0) return; var reader = await MemoryReader(db, run, ct).ConfigureAwait(false);
-        if (!await MemoryAllowed(reader, null, false, ct).ConfigureAwait(false)) throw new AccessDeniedException("memory_read_unavailable");
+        var ordinaryRead = await MemoryAllowed(reader, null, false, ct).ConfigureAwait(false);
         var ids = sources.Select(s => s.MemoryId).ToArray();
         var rows = await db.Set<TenantLearnedMemoryRecord>().AsNoTracking().Where(i => i.TenantId == run.Owner.TenantId && ids.Contains(i.MemoryId))
             .Select(i => new TenantMemoryReference(i.TenantId, i.MemoryId, (MemoryScope)i.Scope, i.UserPrincipalId, i.AccountId, i.UserId,
@@ -100,7 +100,9 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
             var item = rows.SingleOrDefault(i => i.MemoryId == source.MemoryId);
             if (source.TenantId != run.Owner.TenantId || item is null || item.ContentHash != source.ContentHash
                 || !TenantMemoryRules.ScopeEnabled(run.Admission.Configuration!.Definition.MemoryPolicy, item.Scope, false)
-                || !await TenantMemoryRules.SourceAllowedAsync(reader, item, false, new IamAuthorizer(this), ct).ConfigureAwait(false)) throw new AccessDeniedException("memory_source_changed");
+                || item.Status == MemoryItemStatus.Deleted && !source.MetadataOnly && !await OwnMemoryForget(db, run, source.MemoryId, source.ContentHash, ct).ConfigureAwait(false)
+                || !(ordinaryRead && await TenantMemoryRules.SourceAllowedAsync(reader, item, false, new IamAuthorizer(this), ct, source.MetadataOnly || await OwnMemoryForget(db, run, source.MemoryId, source.ContentHash, ct).ConfigureAwait(false)).ConfigureAwait(false)
+                    || await MemoryReadConsented(db, reader, item, ct).ConfigureAwait(false))) throw new AccessDeniedException("memory_source_changed");
         }
     }
     public async ValueTask<TenantMemoryPlan> PrepareTenantLearningAsync(TenantRuntimeFrame frame, SessionSnapshot proposed, IReadOnlyList<MemoryProposal> proposals,
@@ -120,7 +122,7 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
         var owned = await OwnedMemory(db, reader, proposals, ct).ConfigureAwait(false); var writable = new HashSet<Guid>();
         foreach (var item in owned) if (await MemoryAllowed(reader, item, true, ct).ConfigureAwait(false)) writable.Add(item.MemoryId);
         return TenantMemoryRules.Plan(frame, reader, owned, writable, proposals, candidateIds, auditId, preparedAt,
-            await MemoryAllowed(reader, null, true, ct).ConfigureAwait(false), proposed.Entries);
+            await MemoryAllowed(reader, null, true, ct).ConfigureAwait(false) && !await OwnMemoryForget(db, reader.Run, null, null, ct).ConfigureAwait(false), proposed.Entries);
     }
     private async Task StageLearningCommit(AgentCoreDbContext db, TenantRuntimeFrame frame, SessionSnapshot snapshot, TenantMemoryPlan? plan, CancellationToken ct)
     {
@@ -156,13 +158,13 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
     }
     private async Task RequireStoredMemorySources(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
     {
-        if (AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantMemorySources is { Count: > 0 } sources)
+        if (TenantMemoryOperationReferences.Read(run.Checkpoint) is { Count: > 0 } sources)
             await RequireMemorySources(db, run, sources, ct).ConfigureAwait(false);
     }
     private async Task RequireMemoryCheckpoint(AgentCoreDbContext db, AgentRun run, AgentRunCheckpoint checkpoint, CancellationToken ct)
     {
-        var old = AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantMemorySources ?? [];
-        var proposed = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint).TenantMemorySources ?? [];
+        var old = TenantMemoryOperationReferences.Read(run.Checkpoint);
+        var proposed = TenantMemoryOperationReferences.Read(checkpoint);
         if (old.Except(proposed).Any()) throw new AccessDeniedException("memory_source_unavailable");
         await RequireMemorySources(db, run, proposed, ct).ConfigureAwait(false);
         var added = proposed.Except(old).Select(s => s.MemoryId).ToArray(); if (added.Length == 0) return;

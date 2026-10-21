@@ -104,6 +104,19 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 TenantCredentialReadOperationRules.ReviewerAsync(before, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                     decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             }
+            IReadOnlyList<AgentCore.Domain.Memory.TenantLearnedMemory> memoryValues = [];
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.MemoryOperation is not null)
+            {
+                try
+                {
+                    var memory = RequireMemoryOperation(request, run, ct);
+                    TenantMemoryOperationReview.ReviewerAsync(request, memory, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+                    memoryValues = MemoryEffectValues(memory, at);
+                }
+                catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             TenantArtifactMaterialization? artifact = null;
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactPublication is not null)
             {
@@ -160,6 +173,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             }
             if (configure) foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(target.Instance, updated,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(request.TenantId, updated.InstanceId, target.PrincipalId))) AppendTenantCore(fact);
+            foreach (var memory in memoryValues) SetLearnedMemory(memory);
             sessionBacking.SaveTenantOperationRun(savedRun, run.Revision);
             if (pending is not null) sandboxBacking.SaveTenantLease(pending);
             if (stopped is not null) sandboxBacking.SaveTenantExecution(stopped);

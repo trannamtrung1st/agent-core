@@ -9,7 +9,7 @@ public sealed record TenantLearnedMemory(Guid TenantId, Guid MemoryId, MemorySco
     Guid SessionId, Guid RunId, Guid RootRunId, Guid? SourceEntryId,
     MemoryKind Kind, MemoryItemStatus Status, string Subject, string Content, string SubjectKey,
     string Source, string ContentHash, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
-    Guid? SupersedesMemoryId = null)
+    Guid? SupersedesMemoryId = null, string? SourceMemoryIdsJson = null)
 {
     public TenantMemoryReference Reference() => new(TenantId, MemoryId, Scope, UserPrincipalId, AccountId, UserId,
         AgentInstanceId, ExecutorPrincipalId, SessionId, ContentHash, Status);

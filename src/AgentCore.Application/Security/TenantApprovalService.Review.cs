@@ -103,6 +103,13 @@ public sealed partial class TenantApprovalService
                     await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(r, run, ct).ConfigureAwait(false);
                     await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
+                else if (op.MemoryOperation is { } memory)
+                {
+                    var service = memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable");
+                    var observed = await service.PrepareAsync(new(r.TenantId, run.AgentRunId), null, memory.ToolName, memory.ArgumentsJson, ct, memory).ConfigureAwait(false);
+                    independent = await service.IndependentAsync(r, observed, ct).ConfigureAwait(false);
+                    await service.ReviewerAsync(r, observed, human.PrincipalId, ct).ConfigureAwait(false);
+                }
                 else if (op.WorkspaceRead is not null)
                 {
                     var reads = workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -192,8 +199,15 @@ public sealed partial class TenantApprovalService
         }
         var execution = view.OperationResult is not null ? "recorded" : r.Status == TenantApprovalStatus.Pending ? "waitingDecision"
             : r.Status != TenantApprovalStatus.Approved ? "notAuthorized" : "unrecorded";
+        var changes = Changes(op, snapshot);
+        if (op.MemoryOperation is not null)
+        {
+            var observed = await (memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
+            changes = [..changes, new("Exact current source values", null, string.Join("\n\n", observed.Items.Select(i =>
+                $"{i.MemoryId:D} · {i.Status}\n{(i.Status == AgentCore.Domain.Memory.MemoryItemStatus.Deleted ? "Content removed" : i.Subject + "\n" + i.Content)}")))];
+        }
         return new(snapshot?.AgentName ?? target?.Instance.Persona.Name ?? "Unavailable agent", await Name(r.OriginalInitiatorPrincipalId).ConfigureAwait(false),
-            await Name(view.Decision?.HumanPrincipalId).ConfigureAwait(false), Changes(op, snapshot), unavailable is null, cancel, unavailable,
+            await Name(view.Decision?.HumanPrincipalId).ConfigureAwait(false), changes, unavailable is null, cancel, unavailable,
             independent, at, execution);
     }
 
@@ -211,6 +225,21 @@ public sealed partial class TenantApprovalService
             return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),
                 new("workspaceMutationPartialEffects", null, "Copies and ordered batches are coarse filesystem operations. Earlier or partial effects can remain on failure; there is no atomic rollback and uncertain work must not be repeated.", false)];
+        if (op.MemoryOperation is { } memory)
+        {
+            var args = AgentCore.Application.Tools.TenantMemoryToolContract.Parse(memory.ToolName, memory.ArgumentsJson);
+            var changes = new List<TenantApprovalFieldChange>();
+            changes.Add(new("Memory operation", null, memory.ToolName switch { "continuity.search" => "Search learned Memory", "continuity.get" => "Inspect learned Memory", "memory.forget" => "Forget learned Memory", _ => "Consolidate learned Memory" }));
+            using var labels = System.Text.Json.JsonDocument.Parse(memory.SourceLabelsJson);
+            changes.Add(new("Owned sources", null, string.Join("\n", labels.RootElement.EnumerateArray().Select(s =>
+                $"{s.GetProperty("scope").GetString() switch { "session" => "This Session", "identityUser" => "This Agent and User", _ => "This User across Agents" }} · {s.GetProperty("kind").GetString()} · {s.GetProperty("subject").GetString()} · {s.GetProperty("memoryId").GetGuid():D}"))));
+            if (labels.RootElement.EnumerateArray().Any(s => s.GetProperty("scope").GetString() == "user")) changes.Add(new("Shared User scope", null, "This changes this User’s learned fact across Agents that can currently read it."));
+            if (args.Query is not null) changes.Add(new("Search", null, args.Query));
+            if (args.Subject is not null) changes.Add(new("Replacement subject", null, args.Subject));
+            if (args.Content is not null) changes.Add(new("Complete replacement", null, args.Content));
+            changes.Add(new("Retained data", null, "Other learned copies, source conversations, approval history, Profile, Experience and files remain separately retained."));
+            return changes;
+        }
         if (op.WorkspaceRead is { } workspace)
         {
             var args = AgentCore.Application.Tools.TenantWorkspaceReadContract.Parse(workspace.ToolName, workspace.ArgumentsJson);

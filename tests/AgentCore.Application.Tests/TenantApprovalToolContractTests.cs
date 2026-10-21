@@ -94,6 +94,7 @@ public sealed class TenantApprovalToolContractTests
     public async Task Credential_offering_is_independent_of_Settings_and_restricts_its_schema_without_authorizing_other_operations()
     {
         var definition = await CapabilityProjectionTests.Definition();
+        definition = definition with { MemoryPolicy = MemoryPolicy.Disabled };
         definition = definition with { SelfManagement = HarnessManagementPolicy.Disabled,
             Environment = definition.Environment! with { Capabilities = new("Selected", [ToolCatalog.DriveAccounts]), ToolAllowlist = [ToolCatalog.DriveAccounts] } };
         var instance = Guid.NewGuid(); var session = Guid.NewGuid(); var activation = Guid.NewGuid(); var at = DateTimeOffset.UtcNow;
@@ -170,6 +171,7 @@ public sealed class TenantApprovalToolContractTests
     public async Task Offering_requires_tenant_context_and_pinned_Settings_eligibility_and_never_becomes_a_definition_allowlist_permission()
     {
         var definition = await CapabilityProjectionTests.Definition();
+        definition = definition with { MemoryPolicy = MemoryPolicy.Disabled };
         var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = CapabilityProjectionTests.Context(definition) with
         {

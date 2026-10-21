@@ -17,7 +17,7 @@ public sealed record TenantApprovalView(TenantApprovalRequest Request, long Secu
 public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantBackgroundCreationTarget? backgroundCreations = null, TenantBackgroundReportTarget? backgroundReports = null, ITenantRuntimeStore? reportRuntime = null, TenantCompletionReadService? completionReads = null, TenantReportSourceReadService? reportSourceReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountActionTarget? accountActions = null, ITenantRunStore? accountRuns = null, TenantAutomationAdmissionTarget? automationAdmissions = null, ITenantAutomationStore? automationStore = null)
+    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantBackgroundCreationTarget? backgroundCreations = null, TenantBackgroundReportTarget? backgroundReports = null, ITenantRuntimeStore? reportRuntime = null, TenantCompletionReadService? completionReads = null, TenantReportSourceReadService? reportSourceReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountActionTarget? accountActions = null, ITenantRunStore? accountRuns = null, TenantAutomationAdmissionTarget? automationAdmissions = null, ITenantAutomationStore? automationStore = null, TenantMemoryOperationService? memoryOperations = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -213,7 +213,9 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         var coreEvents = await VisibleIds(before, human.PrincipalId, "core-events.read", "event", ct).ConfigureAwait(false);
         var emailSources = new[] { credentialIds, credentialRead, emailRead }.Where(ids => ids is not null).Select(ids => ids!).ToArray();
         IReadOnlyList<Guid>? emailSourceIds = emailSources.Length == 0 ? null : emailSources.Skip(1).Aggregate(emailSources[0].AsEnumerable(), (ids, next) => ids.Intersect(next)).ToArray();
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions, emailRead, driveRead, emailDraft, emailSend, driveWrite, driveDelete), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeAgents, sandboxSessions, resourceScopes), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeAgents, sandboxSessions), new(attachmentReadIds, sandboxSessions), creationRead, new(reportCreate, sandboxSessions, reportRuns), new(creationRead, homeAgents, automationReads, automationRuns, webhookSources, coreEvents, emailSourceIds, reportCreate, sandboxSessions, automationChatAgents)).ConfigureAwait(false);
+        var memoryAgents = await VisibleIds(before, human.PrincipalId, "memory.read", "agent", ct).ConfigureAwait(false);
+        memoryAgents = memoryAgents is null ? homeAgents : homeAgents is null ? memoryAgents : memoryAgents.Intersect(homeAgents).ToArray();
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions, emailRead, driveRead, emailDraft, emailSend, driveWrite, driveDelete), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeAgents, sandboxSessions, resourceScopes), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeAgents, sandboxSessions), new(attachmentReadIds, sandboxSessions), creationRead, new(reportCreate, sandboxSessions, reportRuns), new(creationRead, homeAgents, automationReads, automationRuns, webhookSources, coreEvents, emailSourceIds, reportCreate, sandboxSessions, automationChatAgents), new(human.PrincipalId, memoryAgents, sandboxSessions)).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -393,6 +395,11 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                 await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(request, run, ct).ConfigureAwait(false);
                 await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, request, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
             }
+            if (request.Operation.MemoryOperation is { } memory)
+            {
+                var observed = await (memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(new(tenant, run.AgentRunId), null, memory.ToolName, memory.ArgumentsJson, ct, memory).ConfigureAwait(false);
+                await memoryOperations.ReviewerAsync(request, observed, human.PrincipalId, ct).ConfigureAwait(false);
+            }
             if (request.Operation.WorkspaceRead is not null)
             {
                 var reads = workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
@@ -484,6 +491,8 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             try { await TenantWorkspaceMutationOperationRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false); }
             catch (AccessDeniedException) { throw new AccessDeniedException("approval_unavailable"); }
         }
+        if (request.Operation.MemoryOperation is not null)
+            _ = await (memoryOperations ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.WorkspaceRead is not null)
         {
             try { await (workspaceReads ?? throw new AccessDeniedException("approval_unavailable")).RequireInspectionReadAsync(request, state, human, ct).ConfigureAwait(false); }

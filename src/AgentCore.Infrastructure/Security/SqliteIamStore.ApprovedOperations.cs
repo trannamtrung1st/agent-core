@@ -119,6 +119,18 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             await TenantCredentialReadOperationRules.ReviewerAsync(before, request.Operation.CredentialRead, request.OriginalInitiatorPrincipalId,
                 decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
         }
+        TenantMemoryOperationObservation? memoryEffect = null;
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.MemoryOperation is not null)
+        {
+            try
+            {
+                memoryEffect = await RequireMemoryOperation(db, request, run, ct).ConfigureAwait(false);
+                await TenantMemoryOperationReview.ReviewerAsync(request, memoryEffect, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+        }
         ArtifactRecordRow? artifactRow = null;
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ArtifactPublication is not null)
         {
@@ -191,6 +203,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()));
         db.Add(TenantOperationReceiptRecord.From(receipt)); db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
+        if (complete && memoryEffect is not null) await StageMemoryEffect(db, memoryEffect, at, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return receipt; }
         catch (DbUpdateConcurrencyException) { return null; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }

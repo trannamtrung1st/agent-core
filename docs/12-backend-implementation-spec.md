@@ -1273,3 +1273,10 @@ The Runtime holds normalized model/brain callbacks while the matching input pers
 ## Tenant Automation editor reads
 
 Canonical list/detail editor reads compose the existing human identity, Agent-read, owned Automation reads, configuration resolver and scoped IAM checker. `EditorAsync` repeats unchanged current human/security authority after projection. The API maps the Instance through the incumbent safe Admin mapping, including its stable lifecycle string; Domain/provider structures do not become new wire contracts. No mutation owner, scheduling worker, authority, table or migration changes. [Contract](04-backend-interfaces.md#tenant-automation-editor-projection).
+
+
+## Protected learned Memory persistence
+
+The canonical Memory-operation facet joins existing learned facts, prepared approvals, completed receipts and causal Runs. Both adapters repeat current raw/owner/source/reviewer checks at approval creation, decision and atomic local effect. SQLite stores nullable `SourceMemoryIdsJson` on the existing learned-fact row, retaining two to eight immediate parents; ordinary learning retains its existing single-supersedes field. Insert guards require actual same-owner/scope/kind superseded parents; updates cannot change lineage. The explicit `20261021185601_TenantMemoryOperations` migration freezes both affected table definitions and restores all 28 pre-existing referencing triggers, then adds four Memory source/root/immutability guards. Foreign-key checks run before completion. Downgrade refuses any prepared Memory request or multi-parent lineage instead of discarding it; databases with only prior facts can round-trip without adoption or deletion.
+
+[Application contract](04-backend-interfaces.md#protected-model-learned-memory-operations) owns consent/proof semantics. This is local transactional persistence, with no new queue, repository abstraction or secondary conversation writer.

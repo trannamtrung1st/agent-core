@@ -2768,7 +2768,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var executionState = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint);
         var attachmentSources = AgentCore.Application.Security.TenantAttachmentContextRules.Merge(executionState.TenantAttachmentSources, request.TenantAttachmentSources);
         var profileSource = executionState.TenantProfileSource;
-        var memorySources = executionState.TenantMemorySources ?? [];
+        var memorySources = TenantMemoryOperationReferences.Read(checkpoint);
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
         var failedAttempts = (executionState.FailedAttempts ?? []).ToList();
@@ -2828,9 +2828,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var completionCorrectionAttempted = executionState.CompletionCorrectionAttempted;
         var cleanupPhase = executionState.Phase == RunPhase.Cleanup || executionState.CleanupStartedAtMessage is not null;
         var cleanupStartedAtMessage = executionState.CleanupStartedAtMessage;
-        ToolLoopExecutionState State() => new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
+        ToolLoopExecutionState State()
+        {
+            memorySources = TenantMemoryService.Merge(memorySources, TenantMemoryOperationReferences.Read(messages));
+            return new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
             finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
             attachmentSources.Count == 0 ? null : attachmentSources, profileSource, memorySources.Count == 0 ? null : memorySources);
+        }
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
         var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;

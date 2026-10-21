@@ -88,13 +88,15 @@ public sealed partial class InMemoryIamStore : ITenantLearnedMemoryStore
     {
         if (sources.Count > MemoryLimits.MaxActiveItems || sources.Distinct().Count() != sources.Count) throw new AccessDeniedException("memory_source_unavailable");
         if (sources.Count == 0) return; var reader = MemoryReader(run, ct);
-        if (!MemoryAllowed(reader, null, false, ct)) throw new AccessDeniedException("memory_read_unavailable");
+        var ordinaryRead = MemoryAllowed(reader, null, false, ct);
         foreach (var source in sources)
         {
             var item = learnedMemories.GetValueOrDefault((source.TenantId, source.MemoryId));
             if (source.TenantId != run.Owner.TenantId || item is null || item.ContentHash != source.ContentHash
                 || !TenantMemoryRules.ScopeEnabled(run.Admission.Configuration!.Definition.MemoryPolicy, item.Scope, false)
-                || !MemoryAllowed(reader, item, false, ct)) throw new AccessDeniedException("memory_source_changed");
+                || item.Status == MemoryItemStatus.Deleted && !source.MetadataOnly && !OwnMemoryForget(run, source.MemoryId, source.ContentHash)
+                || !(ordinaryRead && TenantMemoryRules.SourceAllowedAsync(reader, item, false, new IamAuthorizer(this), ct, source.MetadataOnly || OwnMemoryForget(run, source.MemoryId, source.ContentHash)).AsTask().GetAwaiter().GetResult()
+                    || MemoryReadConsented(reader, item.Reference(), ct))) throw new AccessDeniedException("memory_source_changed");
         }
     }
     public ValueTask<TenantMemoryPlan> PrepareTenantLearningAsync(TenantRuntimeFrame frame, SessionSnapshot proposed, IReadOnlyList<MemoryProposal> proposals,
@@ -111,7 +113,7 @@ public sealed partial class InMemoryIamStore : ITenantLearnedMemoryStore
         if (preparedAt > (clock ?? TimeProvider.System).GetUtcNow() || candidateIds.Any(id => learnedMemories.ContainsKey((reader.Security.Tenant.TenantId, id)))
             || _audit.Any(a => a.AuditId == auditId)) throw new AccessDeniedException("memory_learning_changed");
         var owned = OwnedMemory(reader, proposals); var writable = owned.Where(i => MemoryAllowed(reader, i, true, ct)).Select(i => i.MemoryId).ToHashSet();
-        return TenantMemoryRules.Plan(frame, reader, owned, writable, proposals, candidateIds, auditId, preparedAt, MemoryAllowed(reader, null, true, ct), proposed.Entries);
+        return TenantMemoryRules.Plan(frame, reader, owned, writable, proposals, candidateIds, auditId, preparedAt, MemoryAllowed(reader, null, true, ct) && !HasOwnMemoryMaintenance(reader.Run), proposed.Entries);
     }
     private Action PrepareLearningCommit(TenantRuntimeFrame frame, SessionSnapshot snapshot, TenantMemoryPlan? plan, CancellationToken ct)
     {
@@ -150,12 +152,12 @@ public sealed partial class InMemoryIamStore : ITenantLearnedMemoryStore
     }
     private void RequireStoredMemorySources(AgentRun run, CancellationToken ct)
     {
-        if (AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantMemorySources is { Count: > 0 } sources) RequireMemorySources(run, sources, ct);
+        if (TenantMemoryOperationReferences.Read(run.Checkpoint) is { Count: > 0 } sources) RequireMemorySources(run, sources, ct);
     }
     private void RequireMemoryCheckpoint(AgentRun run, AgentRunCheckpoint checkpoint, CancellationToken ct)
     {
-        var old = AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).TenantMemorySources ?? [];
-        var proposed = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint).TenantMemorySources ?? [];
+        var old = TenantMemoryOperationReferences.Read(run.Checkpoint);
+        var proposed = TenantMemoryOperationReferences.Read(checkpoint);
         if (old.Except(proposed).Any()) throw new AccessDeniedException("memory_source_unavailable");
         RequireMemorySources(run, proposed, ct);
         var added = proposed.Except(old).ToArray(); if (added.Length == 0) return;

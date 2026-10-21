@@ -71,11 +71,11 @@ public static class TenantMemoryRules
             || reader.Run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId is { } user
                 && (await iam.CheckOwnedTenantAsync(state, user, permission, scope, ct).ConfigureAwait(false)).Allowed);
     }
-    public static async ValueTask<bool> SourceAllowedAsync(TenantMemoryReader reader, TenantLearnedMemory item, bool write, IamAuthorizer iam, CancellationToken ct)
-        => await SourceAllowedAsync(reader, item.Reference(), write, iam, ct).ConfigureAwait(false);
-    public static async ValueTask<bool> SourceAllowedAsync(TenantMemoryReader reader, TenantMemoryReference item, bool write, IamAuthorizer iam, CancellationToken ct)
+    public static async ValueTask<bool> SourceAllowedAsync(TenantMemoryReader reader, TenantLearnedMemory item, bool write, IamAuthorizer iam, CancellationToken ct, bool allowDeleted = false)
+        => await SourceAllowedAsync(reader, item.Reference(), write, iam, ct, allowDeleted).ConfigureAwait(false);
+    public static async ValueTask<bool> SourceAllowedAsync(TenantMemoryReader reader, TenantMemoryReference item, bool write, IamAuthorizer iam, CancellationToken ct, bool allowDeleted = false)
     {
-        if (!Owns(reader, item) || item.Status == MemoryItemStatus.Deleted || !reader.Security.SystemIdentities.Any(i => i.TenantId == item.TenantId
+        if (!Owns(reader, item) || item.Status == MemoryItemStatus.Deleted && !allowDeleted || !reader.Security.SystemIdentities.Any(i => i.TenantId == item.TenantId
             && i.AgentInstanceId == item.AgentInstanceId && i.PrincipalId == item.ExecutorPrincipalId && i.Kind == SystemIdentityKind.Agent)) return false;
         var tenant = item.TenantId;
         if (!await PermissionAsync(reader, write ? "memory.manage" : "memory.read", AccessScope.ForResource(tenant, "agent", item.AgentInstanceId.ToString("D")), iam, ct).ConfigureAwait(false)) return false;

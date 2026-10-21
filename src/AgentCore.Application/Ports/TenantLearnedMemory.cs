@@ -4,7 +4,7 @@ using AgentCore.Domain.Memory;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantMemorySource(Guid TenantId, Guid MemoryId, string ContentHash);
+public sealed record TenantMemorySource(Guid TenantId, Guid MemoryId, string ContentHash, bool MetadataOnly = false);
 public sealed record TenantMemoryObservation(IReadOnlyList<TenantLearnedMemory> Items, IReadOnlyList<TenantMemorySource> Sources,
     long SecurityRevision, long InstanceRevision, Guid? UserPrincipalId, bool ReadAllowed);
 public sealed record TenantMemoryChange(TenantLearnedMemory Value, long ExpectedRevision);

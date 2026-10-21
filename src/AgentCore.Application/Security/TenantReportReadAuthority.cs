@@ -74,7 +74,7 @@ public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITena
             if (profiles is null) throw new AccessDeniedException("profile_context_unavailable");
             await profiles.RequireAsync(source.Child, profile, ct).ConfigureAwait(false);
         }
-        if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(source.Child.Checkpoint).TenantMemorySources is { Count: > 0 } learned)
+        if (TenantMemoryOperationReferences.Read(source.Child.Checkpoint) is { Count: > 0 } learned)
         {
             if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
             await memories.RequireAsync(source.Child, learned, ct).ConfigureAwait(false);

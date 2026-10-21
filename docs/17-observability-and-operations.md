@@ -848,3 +848,10 @@ The canonical self-service source stores no default/global seed. Original-human 
 ## Human Memory/Profile management operations
 
 Canonical human retention management reuses the explicit learned-Memory migration; this module adds no upgrade or data conversion. Never log Profile preferences, learned values or private owner links. A successful human forget/reset records only the existing body-free tenant audit and content-free retained tombstones. Recover lost/stale write responses by deliberate current reads, never automatic command replay. `web/playwright.tenant-chat.config.ts` includes `tenant-memory-management.spec.ts`; use its disposable Synthetic ports/data controls. [Exact executed commands and limits](reports/tenant-memory-management-verification-2026-10-22.md).
+
+
+## Protected model Memory operations
+
+Use native Synthetic with explicit disposable roots for Memory consent journeys; the browser needs loopback HTTP opt-in and its exact allowed Hub origin. No provider credentials or global Memory/Profile adoption is needed. The owning local effect writes `operations.memory.apply` with body-free allowed/denied reason; learning suppression after maintenance is factual task behavior, not an erasure guarantee.
+
+Before applying `20261021185601_TenantMemoryOperations` to a selected persistent database, preserve the database and its existing data/key roots using the incumbent backup procedure. It rebuilds two existing tables while preserving owned rows and referencing guards. A downgrade is intentionally blocked once a Memory request or multi-parent lineage exists; do not delete those records to bypass it. Recover the supported forward version. Uncertain acknowledgements are resolved by existing request/receipt inspection and fresh reads, without replaying a changed action.

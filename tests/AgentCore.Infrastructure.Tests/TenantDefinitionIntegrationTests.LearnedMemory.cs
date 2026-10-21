@@ -20,7 +20,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     private sealed record MemoryTurn(AgentRun Run, TenantRuntimeFrame Frame, SessionSnapshot Before, SessionSnapshot Proposed);
     private static MemoryProposal Learned(string body = "Use typed durable evidence", MemoryScopeHint scope = MemoryScopeHint.User,
         MemoryKind kind = MemoryKind.Preference, MemoryProposalOperation operation = MemoryProposalOperation.Upsert) => new(operation, kind, "Evidence workflow", body, scope, MemoryProposalSource.UserExplicit);
-    private static async Task<MemorySetup> MemoryOwner(Fixture f, bool read = true, bool manage = true)
+    private static async Task<MemorySetup> MemoryOwner(Fixture f, bool read = true, bool manage = true, bool operations = false)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
@@ -32,7 +32,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var publication = await f.Service.PublishAsync(human.PrincipalId, owner.TenantId, draft.DraftId, await Revision(), draft.Revision);
         var builtIns = new SessionNoBuiltinFallback(); var agents = new TenantAgentService(f.Iam, (ITenantAgentStore)f.Iam, builtIns, f.Authorizer, f.Ids, TimeProvider.System, ownedDefinitions: f.Definitions);
         var agent = await agents.CreateFromPublicationAsync(human.PrincipalId, owner.TenantId, Guid.Parse(publication.DefinitionId), 1, await Revision());
-        var permissions = new List<string> { "sessions.read", "agents.chat" }; if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
+        var permissions = new List<string> { "sessions.read", "agents.chat" }; if (operations) permissions.Add("agents.read"); if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
         var role = await f.Access.SaveRoleAsync(human.PrincipalId, owner.TenantId, null, "Independent learned-memory rights", permissions, await Revision());
         var assignment = await f.Access.AssignRoleAsync(human.PrincipalId, owner.TenantId, agent.PrincipalId, role.RoleId, AccessScope.ForTenant(owner.TenantId), await Revision());
         var sessions = new TenantSessionService(f.Iam, (ITenantAgentStore)f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Definitions,
