@@ -1,24 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { App, ConfigProvider } from "antd";
 import * as antd from "antd";
+import { App, ConfigProvider } from "antd";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { antdTheme } from "../../app/antdTheme";
 import type { CatalogItem } from "../../services/api";
-import {
-  archiveCatalogItem,
-  deleteAllCatalogItems,
-  deleteCatalogItem,
-  refreshCatalog,
-  renameCatalogItem,
-  unarchiveCatalogItem
-} from "../../services/catalog";
+import { archiveCatalogItem, deleteCatalogItem, refreshCatalog, renameCatalogItem, unarchiveCatalogItem } from "../../services/catalog";
 import { useSessionStore } from "../../state/sessionStore";
 import { SessionRail } from "./SessionRail";
 
 vi.mock("../../services/catalog", () => ({
   archiveCatalogItem: vi.fn(),
-  deleteAllCatalogItems: vi.fn(),
+
   deleteCatalogItem: vi.fn(),
   refreshCatalog: vi.fn(),
   renameCatalogItem: vi.fn(),
@@ -28,6 +21,7 @@ vi.mock("../../services/catalog", () => ({
 
 const live: CatalogItem = {
   sessionId: "s1",
+  canManage: true,
   title: "Planning notes",
   agentId: "examiner",
   agentVersion: 1,
@@ -193,7 +187,7 @@ describe("SessionRail", () => {
     expect(screen.queryByText(/· Ended/)).not.toBeInTheDocument();
   });
 
-  it("fails closed when owner capability is lost", () => {
+  it("fails closed when current access is lost", () => {
     renderRail({
       items: [],
       agents: [],
@@ -201,12 +195,12 @@ describe("SessionRail", () => {
       includeArchived: false,
       hasMore: false,
       capabilityLost: true,
-      error: "Local owner access is unavailable.",
+      error: "Current access is unavailable.",
       mutation: null,
       onNewChat: vi.fn(),
       onOpen: vi.fn()
     });
-    expect(screen.getByRole("alert")).toHaveTextContent("Local owner access is unavailable.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Current access is unavailable.");
     expect(screen.queryByText("No chats yet.")).not.toBeInTheDocument();
   });
 
@@ -475,57 +469,6 @@ describe("SessionRail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh chats" }));
     await waitFor(() => expect(refreshCatalog).toHaveBeenCalledWith(true));
-  });
-
-  it("does not leave an archived active chat when delete all keeps archived rows", async () => {
-    vi.mocked(deleteAllCatalogItems).mockResolvedValue(1);
-    const onNewChat = vi.fn();
-    renderRail({
-      items: [archived],
-      agents,
-      activeSessionId: "s3",
-      includeArchived: false,
-      hasMore: false,
-      capabilityLost: false,
-      error: null,
-      mutation: null,
-      onNewChat,
-      onOpen: vi.fn()
-    });
-    useSessionStore.setState({ catalogItems: [archived] });
-
-    fireEvent.click(screen.getByRole("button", { name: "Chat list options" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete all chats" }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete all" }));
-    await waitFor(() => expect(deleteAllCatalogItems).toHaveBeenCalled());
-    expect(onNewChat).not.toHaveBeenCalled();
-  });
-
-  it("confirms delete all and returns to new chat when the active session is removed", async () => {
-    vi.mocked(deleteAllCatalogItems).mockResolvedValue(1);
-    const onNewChat = vi.fn();
-    renderRail({
-      items: [live],
-      agents,
-      activeSessionId: "s1",
-      includeArchived: false,
-      hasMore: false,
-      capabilityLost: false,
-      error: null,
-      mutation: null,
-      onNewChat,
-      onOpen: vi.fn()
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Chat list options" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete all chats" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("Delete all chats?");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete all" }));
-    await waitFor(() => expect(deleteAllCatalogItems).toHaveBeenCalled());
-    expect(onNewChat).toHaveBeenCalledWith({ urlMode: "replace" });
-    expect(await screen.findByText("Deleted 1 chat.")).toBeInTheDocument();
   });
 
   it("toasts catalog mutation failures", async () => {

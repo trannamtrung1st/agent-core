@@ -1,32 +1,24 @@
-import { legacyActivitySource, type ActivitySource } from "../../services/activitySource";
-import { followAppLink } from "../../app/appLink";
-import { adminInstancePath } from "../../app/appRoute";
-import { useEffect, useState } from "react";
 import { Alert, Button, Drawer, Empty, Flex, Spin, Table, Typography, theme } from "antd";
-import { getHealth, type HealthResponse, type AgentRun } from "../../services/api";
+import { useEffect, useState } from "react";
+import { followAppLink } from "../../app/appLink";
+import { type ActivitySource } from "../../services/activitySource";
+import { type AgentRun } from "../../services/api";
+import { tenantAgentPath } from '../access/accessRoute';
 import { AgentRunDetails, AgentRunStatus } from "../chat/AgentRunDetails";
-import { useCursorPages } from "../chat/useCursorPages";
+import { formatChatTime } from "../chat/chatTime";
 import { DrawerListFooter } from "../chat/DrawerListFooter";
 import { runActivationLabel, type RunSource } from "../chat/runPresentation";
-import { formatChatTime } from "../chat/chatTime";
+import { useCursorPages } from "../chat/useCursorPages";
 import { AdminCollectionToolbar } from "./AdminCollectionToolbar";
 import { useActivitySearch } from "./useActivitySearch";
 
-export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedAgentRunId, onClose, onSource, onRun, detailsOnly, afterClose, source = legacyActivitySource, activityPath }: {
-  source?: ActivitySource; activityPath?: string; instanceId: string; open: boolean; wide?: boolean; inline?: boolean; selectedAgentRunId?: string; onClose: () => void;
+export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedAgentRunId, onClose, onSource, onRun, detailsOnly, afterClose, source, activityPath }: {
+  source: ActivitySource; activityPath?: string; instanceId: string; open: boolean; wide?: boolean; inline?: boolean; selectedAgentRunId?: string; onClose: () => void;
   onSource?: (source: RunSource) => void; onRun?: (runId: string) => void; detailsOnly?: boolean; afterClose?: () => void;
 }) {
   const { token } = theme.useToken();
   const page = useCursorPages(`${source.scope}:${instanceId}`, open && !detailsOnly, (_scope, cursor) => source.listInstanceRuns(instanceId, cursor));
   const { search, setSearch } = useActivitySearch();
-  const [scheduler, setScheduler] = useState<HealthResponse["scheduler"]>();
-  useEffect(() => {
-    if (!open || detailsOnly || source.tenantId) return;
-    let current = true;
-    async function refresh() { try { const health = await getHealth(); if (current) setScheduler(health.scheduler); } catch { if (current) setScheduler(undefined); } }
-    void refresh(); const timer = window.setInterval(() => void refresh(), 5_000);
-    return () => { current = false; window.clearInterval(timer); };
-  }, [open, detailsOnly]);
   const [selected, setSelected] = useState<AgentRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [detailRefresh, setDetailRefresh] = useState(0);
@@ -43,23 +35,19 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
     return () => { current = false; generation++; window.clearInterval(timer); };
   }, [instanceId, selectedAgentRunId, open, source, detailRefresh]);
   const content = detailsOnly ? <Flex vertical gap={token.padding}>
-    {selected?.automationId ? <Button href={`${adminInstancePath(instanceId, "automations")}?automation=${selected.automationId}`} onClick={event => followAppLink(event, onSource ? () => onSource({ kind: "automation", automationId: selected.automationId! }) : undefined)}>View Automation</Button>
+    {selected?.automationId ? <Button href={`${tenantAgentPath(source.tenantId, instanceId, "automations")}?automation=${selected.automationId}`} onClick={event => followAppLink(event, onSource ? () => onSource({ kind: "automation", automationId: selected.automationId! }) : undefined)}>View Automation</Button>
       : selected?.experienceId ? <Button onClick={() => onSource?.({ kind: "experience", agentRunId: selected.agentRunId })}>View Experience</Button> : null}
     {error ? <Alert type="error" showIcon title={error} action={<Button onClick={() => setDetailRefresh(value => value + 1)}>Retry run</Button>} /> : selected ? <AgentRunDetails showContextProvenance run={selected} actions={source.actions} onChange={setSelected} /> : <Spin aria-label="Loading run details" />}
   </Flex> : <Flex vertical gap={token.padding} className="activity-collection">
     <Typography.Text type="secondary">Individual invocations, including chat, automation and background work. Newest first.</Typography.Text>
-    {source.tenantId ? null : scheduler ? <Typography.Text type={scheduler.status === "ready" ? "secondary" : "warning"}>
-      Scheduler: {({ ready: "Ready", starting: "Starting", stale: "No recent pass", degraded: "A scheduler phase failed" })[scheduler.status]}
-      {scheduler.lastPassAt ? ` · Last pass ${new Date(scheduler.lastPassAt).toLocaleString()}` : ""}
-    </Typography.Text> : <Typography.Text type="secondary">Scheduler readiness unavailable.</Typography.Text>}
     <AdminCollectionToolbar label="loaded runs" value={search} onChange={setSearch} />
     {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
     <Table<AgentRun> aria-label="Runs table" className="admin-collection-table" size="small" rowKey="agentRunId"
-      loading={page.loading} dataSource={(source.tenantId && page.error ? [] : page.items).filter(row => `${runActivationLabel(row.activationKind)} ${row.agentRunId} ${row.sessionId ?? ""} ${row.status} ${row.outcome?.summary ?? ""}`.toLowerCase().includes(search.toLowerCase()))} pagination={false} tableLayout="fixed" scroll={{ x: 1000 }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={page.error ? "Runs could not be loaded. Retry below." : search ? "No matching loaded runs. Clear search or load older runs." : source.tenantId ? "No Runs are available with your current access." : "No runs yet. Runs appear when this Agent takes a turn."} /> }}
+      loading={page.loading} dataSource={(page.error ? [] : page.items).filter(row => `${runActivationLabel(row.activationKind)} ${row.agentRunId} ${row.sessionId ?? ""} ${row.status} ${row.outcome?.summary ?? ""}`.toLowerCase().includes(search.toLowerCase()))} pagination={false} tableLayout="fixed" scroll={{ x: 1000 }}
+      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={page.error ? "Runs could not be loaded. Retry below." : search ? "No matching loaded runs. Clear search or load older runs." : "No Runs are available with your current access."} /> }}
       columns={[
         { title: "Run", key: "run", width: 300, render: (_, row) => <Flex vertical gap={token.paddingXS}>
-          <Button type="link" className="admin-collection-name" href={`${activityPath ?? adminInstancePath(instanceId, "runs")}?${new URLSearchParams({ ...(search ? { q: search } : {}), run: row.agentRunId })}`} onClick={event => followAppLink(event, onRun ? () => onRun(row.agentRunId) : undefined)}>{runActivationLabel(row.activationKind)}</Button>
+          <Button type="link" className="admin-collection-name" href={`${activityPath ?? tenantAgentPath(source.tenantId, instanceId, "activity-runs")}?${new URLSearchParams({ ...(search ? { q: search } : {}), run: row.agentRunId })}`} onClick={event => followAppLink(event, onRun ? () => onRun(row.agentRunId) : undefined)}>{runActivationLabel(row.activationKind)}</Button>
           <Typography.Text type="secondary" className="admin-activity-id" copyable={{ text: row.agentRunId }} title={row.agentRunId}>ID {`${row.agentRunId.slice(0, 8)}…${row.agentRunId.slice(-8)}`}</Typography.Text>
           {row.outcome?.summary ? <Typography.Text type="secondary" ellipsis title={row.outcome.summary}>{row.outcome.summary}</Typography.Text> : null}
         </Flex> },

@@ -1,3 +1,9 @@
+vi.mock('./tenantChat', async original => ({ ...await original<object>(),
+ chatTenantId: '11111111-1111-1111-1111-111111111111',
+ tenantTextWitness: vi.fn(async () => ({expectedRevision: 1, expectedSessionRevision: 1})),
+ tenantCancelWitness: vi.fn(async () => ({expectedRevision: 1, expectedRunRevision: 1})),
+ tenantInterruptWitness: vi.fn(async (_session: string, run: string) => ({expectedRevision: 1, expectedSessionRevision: 1, interruptedRunId: run, expectedRunRevision: 1}))
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession, useSessionStore } from "../state/sessionStore";
 
@@ -42,14 +48,6 @@ vi.mock("@microsoft/signalr", () => ({
 vi.mock("@microsoft/signalr-protocol-msgpack", () => ({
   MessagePackHubProtocol: hub.MessagePackHubProtocol
 }));
-
-vi.mock("./api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./api")>();
-  return {
-    ...actual,
-    ensureOwnerCapability: vi.fn().mockResolvedValue("owner-token")
-  };
-});
 
 import { bytesOf, retryConnection } from "./realtime";
 

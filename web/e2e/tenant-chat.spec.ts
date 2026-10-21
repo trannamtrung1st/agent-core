@@ -36,6 +36,7 @@ function watch(page: Page) {
   page.on('pageerror', e => errors.push(e.message));
   page.on('request', r => {
     const path = new URL(r.url()).pathname;
+    if (r.headers()["x-agentcore-owner-capability"]) legacy.push("retired owner header");
     if (/^\/api\/v[12]\/(owner-capability|sessions|agent-instances)(\/|$)/.test(path)) legacy.push(path);
   });
   return { errors, legacy };
@@ -55,6 +56,7 @@ test.beforeAll(async () => {
 test('tenant text, rendered receipt, reload, rename, archive and read-only completion', async ({ page }) => {
   const f = await fixture(); const observed = watch(page);
   try {
+    await page.addInitScript(() => localStorage.setItem("agent-core.owner-capability", "retired-token-must-be-ignored"));
     await signIn(page); await page.goto(f.path);
     await expect(page.getByRole('button', { name: 'Voice', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add content', exact: true })).toBeVisible();

@@ -1,4 +1,4 @@
-import { chatTenantId, createTenantChat, deleteTenantChat, tenantChatCandidates, tenantChatCatalog, tenantChatHistory, tenantChatModels, tenantChatMutation, tenantSessionView } from './tenantChat';
+import { createTenantChat, deleteTenantChat, tenantChatCandidates, tenantChatCatalog, tenantChatHistory, tenantChatModels, tenantChatMutation, tenantSessionView } from './tenantChat';
 
 export type AutomationTarget = { kind: "backgroundSession" | "existingSession"; sessionId?: string | null };
 export type AutomationDelivery = { kind: "none" | "toSession"; sessionId?: string | null };
@@ -160,81 +160,11 @@ export type CatalogPage = {
   hasMore: boolean;
 };
 
-export const OWNER_STORAGE_KEY = "agent-core.owner-capability";
-
-export class OwnerCapabilityError extends Error {
-  constructor(message = "Local owner access is unavailable.") {
-    super(message);
-    this.name = "OwnerCapabilityError";
-  }
-}
-
 export class CatalogRevisionConflictError extends Error {
   constructor(message = "Session changed. Review it and confirm delete again.") {
     super(message);
     this.name = "CatalogRevisionConflictError";
   }
-}
-
-export function clearOwnerCapability(): void {
-  window.localStorage.removeItem(OWNER_STORAGE_KEY);
-}
-
-let capabilityRefresh: Promise<string> | null = null;
-
-async function refreshOwnerCapability(): Promise<string> {
-  if (!capabilityRefresh) {
-    capabilityRefresh = issueOwnerCapability().finally(() => {
-      capabilityRefresh = null;
-    });
-  }
-
-  return capabilityRefresh;
-}
-
-export async function ensureOwnerCapability(): Promise<string> {
-  if (chatTenantId) throw new Error('Local owner access is unavailable in organization Chat.');
-  const stored = window.localStorage.getItem(OWNER_STORAGE_KEY);
-  if (stored) {
-    return stored;
-  }
-
-  return refreshOwnerCapability();
-}
-
-async function issueOwnerCapability(): Promise<string> {
-  const response = await fetch("/api/v1/local/owner-capability", { method: "POST" });
-  if (!response.ok) {
-    throw new OwnerCapabilityError();
-  }
-
-  const body = (await response.json()) as { token: string };
-  window.localStorage.setItem(OWNER_STORAGE_KEY, body.token);
-  return body.token;
-}
-
-export async function ownerFetch(input: string, init: RequestInit = {}, retried = false): Promise<Response> {
-  if (chatTenantId) throw new Error('This action is unavailable in this conversation.');
-  const token = await ensureOwnerCapability();
-  const headers = new Headers(init.headers);
-  headers.set("X-AgentCore-Owner-Capability", token);
-  const response = await fetch(input, { ...init, headers });
-  if (response.status === 401 && !retried) {
-    clearOwnerCapability();
-    await refreshOwnerCapability();
-    return ownerFetch(input, init, true);
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    clearOwnerCapability();
-    throw new OwnerCapabilityError();
-  }
-
-  return response;
-}
-
-export function ownerHeaders(token: string): HeadersInit {
-  return { "X-AgentCore-Owner-Capability": token };
 }
 
 export type ChatAgentInstance = {
@@ -247,26 +177,6 @@ export type ChatAgentInstance = {
   language: string;
 };
 
-export async function listChatAgentInstances(): Promise<ChatAgentInstance[]> {
-  if (chatTenantId) return (await tenantChatCandidates()).items;
-  const response = await ownerFetch("/api/v2/agent-instances");
-  if (!response.ok) {
-    throw new Error(`Unable to list managed chat instances (${response.status}).`);
-  }
-  const payload = (await response.json()) as { items: ChatAgentInstance[] };
-  return payload.items;
-}
-
-export async function listAgents(): Promise<AgentDescriptor[]> {
-  const response = await fetch("/api/v1/agents");
-  if (!response.ok) {
-    throw new Error("Unable to list agents.");
-  }
-
-  const body = (await response.json()) as { agents: AgentDescriptor[] };
-  return body.agents;
-}
-
 export async function getHealth(): Promise<HealthResponse> {
   const response = await fetch("/health");
   if (!response.ok) {
@@ -274,252 +184,6 @@ export async function getHealth(): Promise<HealthResponse> {
   }
 
   return (await response.json()) as HealthResponse;
-}
-
-export async function listModels(): Promise<ModelCatalog> {
-  if (chatTenantId) return tenantChatModels();
-  const response = await ownerFetch("/api/v2/models");
-  if (!response.ok) {
-    throw new Error("Unable to load models.");
-  }
-
-  return (await response.json()) as ModelCatalog;
-}
-
-export async function createSessionForInstance(
-  agentInstanceId: string,
-  mode = "text",
-  speechLocale?: string | null,
-  model?: SessionModelChoice | null
-): Promise<SessionResponse> {
-  if (chatTenantId) return createTenantChat(agentInstanceId, model);
-  const body: Record<string, unknown> = { agentInstanceId, mode };
-  if (speechLocale) {
-    body.speechLocale = speechLocale;
-  }
-  if (model) {
-    body.model = model;
-  }
-
-  const response = await ownerFetch("/api/v2/sessions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    throw new Error("Unable to create a session.");
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
-export async function setSessionModel(
-  sessionId: string,
-  model: SessionModelChoice
-): Promise<SessionResponse> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/model`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(model)
-  });
-  if (!response.ok) {
-    let message = "Unable to update the model.";
-    try {
-      const problem = (await response.json()) as { title?: string; detail?: string };
-      message = problem.detail?.trim() || problem.title?.trim() || message;
-    } catch {
-      // keep fallback
-    }
-
-    throw new Error(message);
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
-export async function setSpeechLocale(sessionId: string, locale: string | null): Promise<SessionResponse> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/speech-locale`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ locale })
-  });
-  if (!response.ok) {
-    let message = "Unable to update the speech locale.";
-    try {
-      const problem = (await response.json()) as { title?: string; detail?: string };
-      message = problem.detail?.trim() || problem.title?.trim() || message;
-    } catch {
-      // keep fallback
-    }
-
-    throw new Error(message);
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
-export async function endSession(sessionId: string): Promise<void> {
-  if (chatTenantId) { await tenantChatMutation(sessionId, 'complete'); return; }
-  const response = await ownerFetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error("Unable to end the session.");
-  }
-}
-
-export async function listCatalog(options?: {
-  cursor?: string | null;
-  includeArchived?: boolean;
-  limit?: number;
-}): Promise<CatalogPage> {
-  if (chatTenantId) return tenantChatCatalog(options);
-  const params = new URLSearchParams();
-  if (options?.cursor) {
-    params.set("cursor", options.cursor);
-  }
-  if (options?.includeArchived) {
-    params.set("includeArchived", "true");
-  }
-  if (options?.limit) {
-    params.set("limit", String(options.limit));
-  }
-
-  const query = params.toString();
-  const response = await ownerFetch(`/api/v2/sessions${query ? `?${query}` : ""}`);
-  if (!response.ok) {
-    throw new Error("Unable to load sessions.");
-  }
-
-  return (await response.json()) as CatalogPage;
-}
-
-export async function renameSession(sessionId: string, title: string): Promise<CatalogItem> {
-  if (chatTenantId) return tenantChatMutation(sessionId, 'rename', title);
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/rename`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title })
-  });
-  if (!response.ok) {
-    throw new Error("Unable to rename the session.");
-  }
-
-  return (await response.json()) as CatalogItem;
-}
-
-export async function archiveSession(sessionId: string): Promise<CatalogItem> {
-  if (chatTenantId) return tenantChatMutation(sessionId, 'archive');
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/archive`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error("Unable to archive the session.");
-  }
-
-  return (await response.json()) as CatalogItem;
-}
-
-export async function unarchiveSession(sessionId: string): Promise<CatalogItem> {
-  if (chatTenantId) return tenantChatMutation(sessionId, 'restore');
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/unarchive`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error("Unable to unarchive the session.");
-  }
-
-  return (await response.json()) as CatalogItem;
-}
-
-export async function getSession(sessionId: string): Promise<SessionResponse> {
-  if (chatTenantId) return tenantSessionView(sessionId);
-  const response = await ownerFetch(`/api/v1/sessions/${sessionId}`);
-  if (!response.ok) {
-    throw new Error("Unable to load the session.");
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
-export async function listSessionMessages(
-  sessionId: string,
-  query: SessionHistoryQuery = {}
-): Promise<HistoryPage> {
-  if (chatTenantId) return tenantChatHistory(sessionId, query);
-  const params = new URLSearchParams();
-  if (query.after != null) {
-    params.set("after", String(query.after));
-  }
-  if (query.before != null) {
-    params.set("before", String(query.before));
-  }
-  params.set("limit", String(query.limit ?? 50));
-  const response = await ownerFetch(`/api/v1/sessions/${sessionId}/messages?${params}`, {
-    signal: query.signal
-  });
-  if (!response.ok) {
-    throw new Error("Unable to load the conversation.");
-  }
-
-  return (await response.json()) as HistoryPage;
-}
-
-export async function transitionLifecycle(
-  sessionId: string,
-  target: string,
-  reason?: string
-): Promise<CatalogItem> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/lifecycle`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target, reason })
-  });
-  if (!response.ok) {
-    throw new Error("Unable to update the session lifecycle.");
-  }
-
-  return (await response.json()) as CatalogItem;
-}
-
-export async function reopenSession(sessionId: string): Promise<"reopened" | "in-use"> {
-  if (chatTenantId) { await tenantChatMutation(sessionId, 'resume'); return 'reopened'; }
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/reopen`, { method: "POST" });
-  if (response.status === 409) {
-    return "in-use";
-  }
-  if (!response.ok) {
-    throw new Error("Unable to reopen the session.");
-  }
-
-  return "reopened";
-}
-
-export async function durableDeleteSession(sessionId: string): Promise<void> {
-  if (chatTenantId) return deleteTenantChat(sessionId);
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error("Unable to delete the session.");
-  }
-}
-
-export async function deleteAllSessions(options?: { includeArchived?: boolean }): Promise<number> {
-  const params = new URLSearchParams();
-  if (options?.includeArchived) {
-    params.set("includeArchived", "true");
-  }
-
-  const query = params.toString();
-  const response = await ownerFetch(`/api/v2/sessions${query ? `?${query}` : ""}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error("Unable to delete all sessions.");
-  }
-
-  const body = (await response.json()) as { deletedCount: number };
-  return body.deletedCount;
-}
-
-async function problemMessage(response: Response, fallback: string): Promise<string> {
-  try {
-    const problem = (await response.json()) as { title?: string; detail?: string };
-    return problem.detail?.trim() || problem.title?.trim() || fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 export type DrawerPageQuery = { limit?: number; before?: string; attentionOnly?: boolean };
@@ -531,73 +195,17 @@ export function drawerPageSearch(query?: DrawerPageQuery): string {
   if (query?.attentionOnly) params.set("attentionOnly", "true");
   return params.size ? `?${params}` : "";
 }
-
-export async function listSessionAutomations(sessionId: string, query?: DrawerPageQuery): Promise<SessionAutomation[]> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/automations${drawerPageSearch(query)}`);
-  if (!response.ok) {
-    throw new Error(await problemMessage(response, "Unable to load schedules."));
-  }
-
-  const body = (await response.json()) as { items: SessionAutomation[] };
-  return body.items;
-}
-
-export async function cancelSessionAutomation(
-  sessionId: string,
-  automationId: string,
-  expectedRevision: number
-): Promise<SessionAutomation> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/automations/${automationId}/cancel`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ expectedRevision })
-  });
-  if (!response.ok) {
-    throw new Error(await problemMessage(response, "Unable to cancel the schedule."));
-  }
-
-  return (await response.json()) as SessionAutomation;
-}
-
-async function runRequest<T>(path: string, body?: unknown): Promise<T> {
-  const response = await ownerFetch(path, body === undefined ? undefined : {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
-  });
-  if (!response.ok) throw new Error(await problemMessage(response, "Unable to update background work. Refresh and try again."));
-  return await response.json() as T;
-}
-export async function listBackgroundSessions(instanceId: string, cursor?: string, limit = 20): Promise<CursorPage<BackgroundSession>> {
-  const query = new URLSearchParams({ limit: String(limit) });
-  if (cursor) query.set("cursor", cursor);
-  return runRequest(`/api/v2/agent-instances/${instanceId}/background-sessions?${query}`);
-}
-export async function getBackgroundSession(sessionId: string): Promise<BackgroundSession> {
-  return runRequest(`/api/v2/sessions/${sessionId}/background`);
-}
-export async function continueInChat(sessionId: string): Promise<{ sessionId: string }> {
-  return runRequest(`/api/v2/sessions/${sessionId}/continue-in-chat`, {});
-}
-export async function listAgentRuns(sessionId: string, cursor?: string, limit = 20): Promise<CursorPage<AgentRun>> {
-  return runRequest(`/api/v2/sessions/${sessionId}/agent-runs?${new URLSearchParams({ limit: String(limit), ...(cursor ? { before: cursor } : {}) })}`);
-}
 export type InstanceActivitySession = { session: CatalogItem; origin: string; surfaces: string[] };
-export async function getInstanceSession(instanceId: string, sessionId: string): Promise<InstanceActivitySession> {
-  return runRequest(`/api/v2/agent-instances/${instanceId}/sessions/${sessionId}`);
-}
-export async function listInstanceSessions(instanceId: string, cursor?: string): Promise<CursorPage<InstanceActivitySession>> {
-  return runRequest(`/api/v2/agent-instances/${instanceId}/sessions?${new URLSearchParams({ limit: "20", ...(cursor ? { cursor } : {}) })}`);
-}
-export async function listInstanceAgentRuns(instanceId: string, cursor?: string, limit = 20): Promise<CursorPage<AgentRun>> {
-  return runRequest(`/api/v2/agent-instances/${instanceId}/agent-runs?${new URLSearchParams({ limit: String(limit), ...(cursor ? { before: cursor } : {}) })}`);
-}
-export async function getInstanceAgentRun(instanceId: string, runId: string): Promise<AgentRun> {
-  return runRequest(`/api/v2/agent-instances/${instanceId}/agent-runs/${runId}`);
-}
-export async function cancelAgentRun(item: AgentRun): Promise<AgentRun> {
-  return runRequest(`/api/v2/sessions/${item.sessionId}/agent-runs/${item.agentRunId}/cancel`, { expectedRevision: item.revision });
-}
-export async function decideAgentRunApproval(item: AgentRun, decision: "approve" | "reject"): Promise<AgentRun> {
-  if (!item.approval) throw new Error("This run no longer needs approval. Refresh to see its current state.");
-  return runRequest(`/api/v2/sessions/${item.sessionId}/agent-runs/${item.agentRunId}/approvals/${item.approval.approvalId}/${decision}`,
-    { expectedRevision: item.revision, expectedApprovalRevision: item.approval.revision, actionHash: item.approval.actionHash });
-}
+
+export async function listChatAgentInstances(): Promise<ChatAgentInstance[]> { return (await tenantChatCandidates()).items; }
+export const listModels = (): Promise<ModelCatalog> => tenantChatModels();
+export const createSessionForInstance = (id: string, model?: SessionModelChoice | null): Promise<SessionResponse> => createTenantChat(id, model);
+export async function endSession(id: string): Promise<void> { await tenantChatMutation(id, 'complete'); }
+export const listCatalog = (options?: { cursor?: string | null; includeArchived?: boolean; limit?: number }): Promise<CatalogPage> => tenantChatCatalog(options);
+export const renameSession = (id: string, title: string): Promise<CatalogItem> => tenantChatMutation(id, 'rename', title);
+export const archiveSession = (id: string): Promise<CatalogItem> => tenantChatMutation(id, 'archive');
+export const unarchiveSession = (id: string): Promise<CatalogItem> => tenantChatMutation(id, 'restore');
+export const getSession = (id: string): Promise<SessionResponse> => tenantSessionView(id);
+export const listSessionMessages = (id: string, query: SessionHistoryQuery = {}): Promise<HistoryPage> => tenantChatHistory(id, query);
+export async function reopenSession(id: string): Promise<'reopened'> { await tenantChatMutation(id, 'resume'); return 'reopened'; }
+export const durableDeleteSession = (id: string): Promise<void> => deleteTenantChat(id);

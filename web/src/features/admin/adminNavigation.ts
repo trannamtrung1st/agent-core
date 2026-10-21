@@ -82,17 +82,6 @@ export const draftSettingGroups: Partial<Record<DraftPage, readonly string[]>> =
 };
 export const legacyDraftPages: Record<string, DraftPage> = { behavior: 'instructions', policies: 'memory-policy' };
 
-export function instancePath(id: string, page: InstancePage = 'overview') {
-  return `/admin/instances/${encodeURIComponent(id.toLowerCase())}/${instancePages.find(p => p.id === page)!.path}`;
-}
-export function definitionPath(id: string, page: DefinitionPage = 'versions') {
-  return `/admin/definitions/${encodeURIComponent(id)}/${page}`;
-}
-export function draftPath(id: string, draftId: string, page: DraftPage = 'overview') {
-  return `${definitionPath(id, 'drafts')}/${encodeURIComponent(draftId)}/${draftPages.find(p => p.id === page)!.path}`;
-}
-export function globalPath(page: AdminCollection = 'instances') { return `/admin/${globalPages.find(p => p.id === page)!.path}`; }
-
 /** Approved presentation labels only, with stable section anchors; no private content. */
 export const settingSearch = [
   { label: 'Agent instructions', page: 'instructions', anchor: 'instructions', aliases: ['agent instructions', 'prompt'] },

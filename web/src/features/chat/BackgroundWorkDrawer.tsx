@@ -1,24 +1,24 @@
-import { legacyActivitySource, type ActivitySource } from "../../services/activitySource";
-import { sessionPath } from "../../app/sessionRoute";
-import { followAppLink } from "../../app/appLink";
-import { CompletionDeliveryStatus } from "./AutomationDestination";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { Alert, Button, Collapse, Drawer, Empty, Flex, Spin, Typography, theme } from "antd";
 import { ArrowLeftOutlined, BellOutlined, CheckOutlined, MessageOutlined } from "@ant-design/icons";
+import { Alert, Button, Collapse, Drawer, Empty, Flex, Spin, Typography, theme } from "antd";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { followAppLink } from "../../app/appLink";
+import { sessionPath } from "../../app/sessionRoute";
+import { type ActivitySource } from "../../services/activitySource";
 import { type AgentRun, type BackgroundSession } from "../../services/api";
-import { openCatalogSession } from "../../services/realtime";
 import { refreshCatalog } from "../../services/catalog";
+import { openCatalogSession } from "../../services/realtime";
+import { tenantAgentPath } from '../access/accessRoute';
 import { AgentRunDetailDrawer, AgentRunDetails, AgentRunStatus, SessionRunHistory } from "./AgentRunDetails";
+import { CompletionDeliveryStatus } from "./AutomationDestination";
+import { formatChatTime } from "./chatTime";
 import { DrawerListFooter } from "./DrawerListFooter";
+import { runOriginLabel } from "./runPresentation";
+import { SessionArtifacts } from "./SessionArtifacts";
 import { useCursorPages } from "./useCursorPages";
 import { useWorkReadState } from "./workReadState";
-import { runOriginLabel } from "./runPresentation";
-import { formatChatTime } from "./chatTime";
-import { SessionArtifacts } from "./SessionArtifacts";
-import { adminInstancePath } from "../../app/appRoute";
 
-export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialSessionId, onOpenConversation, conversationHref, afterClose, onAddReference, source = legacyActivitySource }: {
-  source?: ActivitySource; instanceId: string; open: boolean; wide: boolean; onClose: () => void; initialSessionId?: string; onOpenConversation?: (sessionId: string) => void; conversationHref?: (sessionId: string) => string; afterClose?: () => void; onAddReference?: (sessionId:string,label:string)=>void;
+export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialSessionId, onOpenConversation, conversationHref, afterClose, onAddReference, source }: {
+  source: ActivitySource; instanceId: string; open: boolean; wide: boolean; onClose: () => void; initialSessionId?: string; onOpenConversation?: (sessionId: string) => void; conversationHref?: (sessionId: string) => string; afterClose?: () => void; onAddReference?: (sessionId:string,label:string)=>void;
 }) {
   const { token } = theme.useToken();
   const page = useCursorPages(`${source.scope}:${instanceId}`, open && !initialSessionId, (_scope, cursor) => source.listBackground(instanceId, cursor));
@@ -91,7 +91,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
   function select(item: BackgroundSession, control: "history") {
     historyOpener.current = { sessionId: item.session.sessionId, control }; moveFocus.current = true;
     setActionError(null);
-    if (source.tenantId) { setSelected(null); setSelectedId(item.session.sessionId); } else setSelected(item);
+    setSelected(null); setSelectedId(item.session.sessionId);
     if (item.initialRun && isUnread(item.initialRun)) {
       try { markRead([item.initialRun]); } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Unable to mark this result as read."); }
     }
@@ -103,9 +103,9 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
       const result = item.surfaces.includes("ChatList")
         ? { sessionId: item.session.sessionId } : await source.continue(item);
       if (generation !== epoch.current) return;
-      if (!source.tenantId) page.replace(rows => rows.map(row => row.session.sessionId === result.sessionId ? { ...row, surfaces: Array.from(new Set([...row.surfaces, "ChatList"])) } : row));
+
       const current = await source.getBackground(result.sessionId);
-      if (source.tenantId && !current.surfaces.includes("ChatList")) throw new Error("Chat visibility could not be confirmed. Read current background facts before another action.");
+      if (!current.surfaces.includes("ChatList")) throw new Error("Chat visibility could not be confirmed. Read current background facts before another action.");
       if (generation !== epoch.current) return;
       page.replace(rows => rows.map(row => row.session.sessionId === current.session.sessionId ? current : row));
       if (onOpenConversation) { onOpenConversation(current.session.sessionId); return; }
@@ -118,16 +118,16 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
         ? "This Session is archived. Refresh to update its availability."
         : "The chat connection could not be opened. Try opening chat again.");
     } catch (reason) {
-      if (generation === epoch.current) { setActionError(reason instanceof Error ? reason.message : "Unable to open this Session. Refresh and try again."); if (source.tenantId) setRecoveryId(item.session.sessionId); }
+      if (generation === epoch.current) { setActionError(reason instanceof Error ? reason.message : "Unable to open this Session. Refresh and try again."); setRecoveryId(item.session.sessionId); }
     } finally { if (generation === epoch.current) { actionPending.current = false; setBusy(false); } }
   }
   function automationLink(item: BackgroundSession) {
     if (!item.origin.automationId) return null;
-    const path = `${adminInstancePath(instanceId, "automations")}?automation=${encodeURIComponent(item.origin.automationId)}`;
+    const path = `${tenantAgentPath(source.tenantId, instanceId, "automations")}?automation=${encodeURIComponent(item.origin.automationId)}`;
     return <Typography.Link href={path} onClick={followAppLink}>View Automation</Typography.Link>;
   }
   function chatHref(item: BackgroundSession) {
-    return item.surfaces.includes("ChatList") ? conversationHref?.(item.session.sessionId) ?? sessionPath(item.session.sessionId) : undefined;
+    return item.surfaces.includes("ChatList") ? conversationHref?.(item.session.sessionId) ?? sessionPath(item.session.sessionId, source.tenantId) : undefined;
   }
   function followChatLink(event: MouseEvent<HTMLElement>, item: BackgroundSession) {
     if (chatHref(item)) followAppLink(event, () => void openChat(item));
@@ -175,8 +175,8 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
   function fileCount(item: BackgroundSession) {
     return item.artifactCount == null ? "File access is checked separately." : `${item.artifactCount}${item.artifactCountHasMore ? "+" : ""} ${item.artifactCount === 1 && !item.artifactCountHasMore ? "file" : "files"}`;
   }
-  const active = source.tenantId ? selected : selected ? page.items.find(row => row.session.sessionId === selected.session.sessionId) ?? selected : null;
-  const rows = source.tenantId && page.error ? [] : page.items;
+  const active = selected;
+  const rows = page.error ? [] : page.items;
   return <><Drawer title={active ? active.originalTitle ?? "Background task" : "Background work"} open={open} onClose={onClose}
     onKeyDown={event => {
       if (event.key !== "Escape") return;

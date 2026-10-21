@@ -1,11 +1,5 @@
 import { parseAccessRoute, type AccessRoute } from '../features/access/accessRoute';
 import { newChatPath, parseTenantChatRoute, tenantIdFromPath } from './sessionRoute';
-import { definitionPath, draftPath, globalPath, instancePages, instancePath, type AdminCollection, type DefinitionPage, type InstancePage } from '../features/admin/adminNavigation';
-export type { AdminCollection };
-export type AdminDefinitionTab = DefinitionPage;
-// Input compatibility for callers being migrated; parsed routes contain only canonical pages.
-export type AdminInstanceTab = 'identity' | 'skills' | 'continuity' | 'automation' | 'activity' | 'credentials' | 'effective';
-export type AdminInstanceSection = 'profile' | 'settings' | 'workspace' | 'skills' | 'resources' | 'sessions' | 'runs' | 'memory' | 'experience' | 'automations' | 'controls';
 export type AppArea = AppRoute['area'];
 export type AppRoute = { area: 'chat'; tenantId: string } | AccessRoute;
 export function parseAppRoute(pathname: string): AppRoute {
@@ -13,21 +7,6 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (chat) return { area: 'chat', tenantId: chat.tenantId };
   if (pathname === '/') return { area: 'access', view: 'account', page: 'organizations' };
   return parseAccessRoute(pathname) ?? { area: 'access', view: 'not-found' };
-}
-// These builders remain only for shared controls awaiting explicit tenant transports.
-const legacyInstance: Record<string, InstancePage> = {
-  '': 'overview', identity: 'profile', 'identity/profile': 'profile', 'identity/settings': 'instructions', behavior: 'instructions', access: 'capabilities',
-  'identity/workspace': 'workspace', 'skills/skills': 'skills', 'skills/resources': 'resources',
-  continuity: 'memory', automation: 'automations', 'automation/automations': 'automations',
-  'automation/controls': 'automations', 'automation/harness': 'self-management', activity: 'sessions', runs: 'runs',
-};
-export const adminHomePath = globalPath;
-export const adminDefinitionPath = definitionPath;
-export const adminDraftPath = draftPath;
-export function adminInstancePath(id: string, page?: InstancePage | AdminInstanceTab, section?: AdminInstanceSection): string {
-  const leaf = `${page ?? ''}${section ? `/${section}` : ''}`;
-  const canonical = (!section ? instancePages.find(p => p.id === page)?.id : undefined) ?? legacyInstance[leaf];
-  return instancePath(id, canonical ?? (page === 'activity' ? section === 'runs' ? 'runs' : 'sessions' : page === 'continuity' ? section === 'experience' ? 'experience' : 'memory' : 'overview'));
 }
 /** The root enters Account organization selection. Retired URLs never infer tenant authority. */
 export function canonicalAppUrl(path: string): string {

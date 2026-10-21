@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AdminRequestError } from "../../services/adminApi";
-import { OwnerCapabilityError } from "../../services/api";
+import { IdentityError } from "../../services/identity";
 import { describeAdminError, formatAdminLoadError, parseAdminDeletionBlockedMessage } from "./adminErrors";
 
 describe("parseAdminDeletionBlockedMessage", () => {
@@ -62,6 +62,6 @@ describe("formatAdminLoadError", () => {
       message: "Request failed."
     });
     expect(formatAdminLoadError(new Error("Admin definitions failed (500)")).diagnosticId).toBeUndefined();
-    expect(formatAdminLoadError(new OwnerCapabilityError("missing")).diagnosticId).toBeUndefined();
+    expect(formatAdminLoadError(new IdentityError(403, "access_lost")).diagnosticId).toBeUndefined();
   });
 });

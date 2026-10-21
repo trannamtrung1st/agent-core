@@ -1,16 +1,18 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { refreshCatalog } from '../../services/catalog';
+import { openCatalogSession } from '../../services/realtime';
+import { activityFixture, fixtureTenant } from './activityFixtures';
 import { AgentRunDetails } from "./AgentRunDetails";
-import { WORK_READ_STORAGE_KEY } from "./workReadState";
 import { fixtureBackground, fixtureRun } from "./agentRunFixtures";
-import { getInstanceAgentRun, cancelAgentRun, decideAgentRunApproval, continueInChat, getBackgroundSession, listAgentRuns, listBackgroundSessions } from "../../services/api";
-import { openCatalogSession } from "../../services/realtime";
-import { refreshCatalog } from "../../services/catalog";
-vi.mock("../../services/api", async original => ({ ...await original<object>(),
-  getInstanceAgentRun: vi.fn(), listBackgroundSessions: vi.fn(), listAgentRuns: vi.fn(), getBackgroundSession: vi.fn(), continueInChat: vi.fn(), cancelAgentRun: vi.fn(), decideAgentRunApproval: vi.fn()
-}));
+import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { WORK_READ_STORAGE_KEY } from "./workReadState";
+const source = activityFixture();
+const { getInstanceRun: getInstanceAgentRun, listBackground: listBackgroundSessions, listRuns: listAgentRuns, getBackground: getBackgroundSession } = source;
+const cancelAgentRun = source.actions.cancel;
+const continueInChat = vi.fn<(id: string) => Promise<{sessionId: string}>>();
+source.continue = item => continueInChat(item.session.sessionId);
 vi.mock("../../services/realtime", () => ({ openCatalogSession: vi.fn() }));
 vi.mock("../../services/catalog", () => ({ refreshCatalog: vi.fn() }));
 vi.mock("../../services/artifacts", async original => ({ ...await original<object>(), listArtifactPage: vi.fn(async () => ({ items: [], nextCursor: null, hasMore: false })) }));
@@ -18,20 +20,27 @@ beforeEach(() => {
   const storage = new Map<string, string>();
     Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() } });
-    vi.clearAllMocks(); window.localStorage.clear();
+    vi.clearAllMocks();
+    for (const fn of [listBackgroundSessions, listAgentRuns, getBackgroundSession, continueInChat, openCatalogSession, cancelAgentRun, getInstanceAgentRun]) vi.mocked(fn).mockReset();
+    window.localStorage.clear();
+  window.history.replaceState(null, "", `/t/${fixtureTenant}`);
   vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [fixtureBackground], nextCursor: null, hasMore: false });
   vi.mocked(listAgentRuns).mockResolvedValue({ items: [fixtureRun], nextCursor: null, hasMore: false });
-  vi.mocked(getBackgroundSession).mockResolvedValue({ ...fixtureBackground, surfaces: ["ChatList", "BackgroundWork"] });
+  vi.mocked(getBackgroundSession).mockImplementation(async id => {
+    const page = await vi.mocked(listBackgroundSessions).mock.results.at(-1)?.value;
+    const value = page?.items.find((row: typeof fixtureBackground) => row.session.sessionId === id) ?? fixtureBackground;
+    return { ...value, surfaces: [...new Set([...value.surfaces, "ChatList"])] };
+  });
   vi.mocked(continueInChat).mockResolvedValue({ sessionId: fixtureBackground.session.sessionId });
   vi.mocked(openCatalogSession).mockResolvedValue("ready");
 });
-const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer instanceId={instanceId} open wide onClose={() => undefined} /></App>);
+const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer source={source} instanceId={instanceId} open wide onClose={() => undefined} /></App>);
 describe("Background Sessions", () => {
   it("adds a completed background reference without continuation or navigation", async () => {
     const owned = {...fixtureBackground, canContinueInChat:false, session:{...fixtureBackground.session,agentInstanceId:"instance-1",ended:true,archived:false}};
     vi.mocked(getBackgroundSession).mockResolvedValue(owned);
     const onAddReference=vi.fn(); const onClose=vi.fn();
-    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={owned.session.sessionId} onClose={onClose} onAddReference={onAddReference}/></App>);
+    render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide initialSessionId={owned.session.sessionId} onClose={onClose} onAddReference={onAddReference}/></App>);
     fireEvent.click(await screen.findByRole("button",{name:"Add to chat"}));
     expect(onAddReference).toHaveBeenCalledWith(owned.session.sessionId,owned.originalTitle ?? "Background task");
     expect(onClose).toHaveBeenCalledOnce();
@@ -42,7 +51,7 @@ describe("Background Sessions", () => {
     const owned = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
     vi.mocked(getBackgroundSession).mockResolvedValueOnce(owned).mockRejectedValueOnce(new Error("Background refresh failed")).mockResolvedValue(owned);
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={owned.session.sessionId} onClose={vi.fn()} /></App>);
+    const view = render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide initialSessionId={owned.session.sessionId} onClose={vi.fn()} /></App>);
     try {
       expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeVisible();
       await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
@@ -55,7 +64,7 @@ describe("Background Sessions", () => {
   });
   it.each(["continuation", "metadata"])("invalidates pending %s navigation when the exact Session changes", async phase => {
     const first = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
-    const next = { ...first, originalTitle: "Next original task", session: { ...first.session, sessionId: "next-session" } };
+    const next = { ...first, surfaces: ["ChatList", "BackgroundWork"], originalTitle: "Next original task", session: { ...first.session, sessionId: "next-session" } };
     let finish!: (value: { sessionId: string } | typeof first) => void;
     const pending = new Promise<{ sessionId: string } | typeof first>(resolve => { finish = resolve; });
     let firstReads = 0;
@@ -66,22 +75,22 @@ describe("Background Sessions", () => {
     });
     vi.mocked(continueInChat).mockImplementation(async id => id === first.session.sessionId && phase === "continuation" ? await pending as { sessionId: string } : { sessionId: id });
     const onOpenConversation = vi.fn(); const onClose = vi.fn();
-    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={first.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
+    const view = render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide initialSessionId={first.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
     fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
     await waitFor(() => expect(phase === "metadata" ? firstReads : vi.mocked(continueInChat).mock.calls.length).toBe(phase === "metadata" ? 2 : 1));
-    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={next.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
+    view.rerender(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide initialSessionId={next.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
     expect(await screen.findByRole("dialog", { name: "Next original task" })).toBeVisible();
     await act(async () => { finish(phase === "metadata" ? first : { sessionId: first.session.sessionId }); });
     expect(onOpenConversation).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Continue in chat" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open chat" }));
     await waitFor(() => expect(onOpenConversation).toHaveBeenCalledWith(next.session.sessionId));
   });
   it("shows one exact-detail error without a lingering spinner and retries that Session", async () => {
     const owned = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
     vi.mocked(getBackgroundSession).mockRejectedValueOnce(new Error("Original result is unavailable"))
       .mockResolvedValueOnce(owned);
-    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={fixtureBackground.session.sessionId} onClose={vi.fn()} /></App>);
+    render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide initialSessionId={fixtureBackground.session.sessionId} onClose={vi.fn()} /></App>);
     expect(await screen.findByText("Original result is unavailable")).toBeVisible();
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.queryByLabelText("Loading background Session")).not.toBeInTheDocument();
@@ -96,8 +105,8 @@ describe("Background Sessions", () => {
     vi.mocked(getBackgroundSession).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const next = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1", sessionId: "next-session" }, originalTitle: "Next original task" };
     vi.mocked(getBackgroundSession).mockResolvedValueOnce(next);
-    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={fixtureBackground.session.sessionId} onClose={vi.fn()} /></App>);
-    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId="next-session" onClose={vi.fn()} /></App>);
+    const view = render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide initialSessionId={fixtureBackground.session.sessionId} onClose={vi.fn()} /></App>);
+    view.rerender(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide initialSessionId="next-session" onClose={vi.fn()} /></App>);
     expect(await screen.findByRole("dialog", { name: "Next original task" })).toBeVisible();
     await act(async () => { finish(fixtureBackground); });
     expect(screen.getByRole("dialog", { name: "Next original task" })).toBeVisible();
@@ -114,7 +123,7 @@ describe("Background Sessions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     await waitFor(() => expect(screen.queryByText("Unread · needs attention")).not.toBeInTheDocument());
     expect(listBackgroundSessions).toHaveBeenCalledWith("instance-1", "opaque-next", 100);
-    expect(Object.keys(JSON.parse(localStorage.getItem(WORK_READ_STORAGE_KEY)!)).sort()).toEqual(["run-1", "second-run"]);
+    expect(Object.keys(JSON.parse(localStorage.getItem(`${WORK_READ_STORAGE_KEY}:${source.readScope}`)!)).sort()).toEqual(["run-1", "second-run"]);
     expect(continueInChat).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toHaveTextContent("Read status saved in this browser.");
   });
@@ -128,7 +137,7 @@ describe("Background Sessions", () => {
     show(); await screen.findByText("Unread · needs attention");
     fireEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     expect(await screen.findByText("Unable to load next page")).toBeVisible();
-    expect(localStorage.getItem(WORK_READ_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(`${WORK_READ_STORAGE_KEY}:${source.readScope}`)).toBeNull();
     expect(screen.getByText("Unread · needs attention")).toBeVisible();
     fail = false; fireEvent.click(screen.getByRole("button", { name: "Retry mark all as read" }));
     await waitFor(() => expect(screen.queryByText("Unread · needs attention")).not.toBeInTheDocument());
@@ -151,7 +160,7 @@ describe("Background Sessions", () => {
     show(); await screen.findByText("Unread · needs attention");
     fireEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     expect(await screen.findByText("Unable to load all background results. Try marking all as read again.")).toBeVisible();
-    expect(localStorage.getItem(WORK_READ_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(`${WORK_READ_STORAGE_KEY}:${source.readScope}`)).toBeNull();
   });
   it("ignores a pending bulk-read response after the owner changes", async () => {
     const attention = { ...fixtureBackground, initialRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } };
@@ -161,9 +170,9 @@ describe("Background Sessions", () => {
     const view = show(); await screen.findByText("Unread · needs attention");
     fireEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     await waitFor(() => expect(resolve).toBeDefined());
-    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-2" open wide onClose={() => undefined} /></App>);
+    view.rerender(<App><BackgroundWorkDrawer source={source} instanceId="instance-2" open wide onClose={() => undefined} /></App>);
     await act(async () => resolve({ items: [attention], hasMore: false, nextCursor: null }));
-    expect(localStorage.getItem(WORK_READ_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(`${WORK_READ_STORAGE_KEY}:${source.readScope}`)).toBeNull();
   });
   it("previews the original result and bounded file count with its exact Automation source", async () => {
     vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, artifactCount: 50, artifactCountHasMore: true,
@@ -174,11 +183,11 @@ describe("Background Sessions", () => {
     expect(screen.getByRole("heading", { name: "Progress check", level: 5 })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Progress check" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View Automation" })).toHaveAttribute("href",
-      "/admin/instances/90000000-0000-4000-8000-000000000001/automations?automation=90000000-0000-4000-8000-000000000010");
+      "/t/11111111-1111-1111-1111-111111111111/admin/agents/90000000-0000-4000-8000-000000000001/automations?automation=90000000-0000-4000-8000-000000000010");
   });
   it("dismisses with Escape inside the drawer without reaching its parent", async () => {
     const close = vi.fn(); const parentKeyDown = vi.fn();
-    render(<div onKeyDown={parentKeyDown}><App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App></div>);
+    render(<div onKeyDown={parentKeyDown}><App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide onClose={close} /></App></div>);
     const history = await screen.findByRole("button", { name: "View original result" });
     history.focus(); fireEvent.keyDown(history, { key: "Escape" });
     expect(close).toHaveBeenCalledOnce();
@@ -186,6 +195,7 @@ describe("Background Sessions", () => {
   });
   it("opens a Session's run history and preserves bounded reading regions", async () => {
     show(); fireEvent.click(await screen.findByRole("button", { name: "View original result" }));
+    await screen.findByRole("button", { name: "All background Sessions" });
     expect(await screen.findByText("The background check finished.")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Conversation run history"));
     await waitFor(() => expect(listAgentRuns).toHaveBeenCalledWith("background-1", undefined));
@@ -213,11 +223,11 @@ describe("Background Sessions", () => {
   ] as const)("keeps a %s chat opening visible and allows recovery", async (result, message) => {
     vi.mocked(openCatalogSession).mockResolvedValueOnce(result).mockResolvedValueOnce("ready");
     const close = vi.fn();
-    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App>);
+    render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide onClose={close} /></App>);
     fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(close).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("link", { name: "Open chat" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Open chat" }));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
     expect(continueInChat).toHaveBeenCalledOnce();
     expect(screen.queryByText(message)).not.toBeInTheDocument();
@@ -225,7 +235,7 @@ describe("Background Sessions", () => {
   it("reveals the read-only chat if the Session ends while opening it", async () => {
     vi.mocked(openCatalogSession).mockResolvedValue("ended");
     const close = vi.fn();
-    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App>);
+    render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide onClose={close} /></App>);
     fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
@@ -236,16 +246,19 @@ describe("Background Sessions", () => {
     expect(await screen.findByRole("heading", { name: "Progress check" })).toBeVisible();
     expect(screen.getByText("Continued in chat")).toBeVisible();
     fireEvent.click(screen.getByRole("link", { name: "Open chat" }));
-    await waitFor(() => expect(openCatalogSession).toHaveBeenCalledWith(fixtureBackground.session));
+    await waitFor(() => expect(openCatalogSession).toHaveBeenCalledWith({...fixtureBackground.session, title: "Follow-up conversation"}));
     expect(continueInChat).not.toHaveBeenCalled();
   });
   it("does not foreground again after metadata refresh fails following successful continuation", async () => {
     vi.mocked(getBackgroundSession).mockRejectedValueOnce(new Error("Session could not be refreshed."));
     const close = vi.fn();
-    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App>);
+    render(<App><BackgroundWorkDrawer source={source} instanceId="instance-1" open wide onClose={close} /></App>);
     fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
     await screen.findByText("Session could not be refreshed.");
-    fireEvent.click(screen.getByRole("link", { name: "Open chat" }));
+    expect(screen.getByRole("button", { name: "Continue in chat" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Read current background facts" }));
+    await screen.findByText("Conversation run history");
+    fireEvent.click(await screen.findByRole("link", { name: "Open chat" }));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
     expect(continueInChat).toHaveBeenCalledOnce();
   });
@@ -262,7 +275,7 @@ describe("Background Sessions", () => {
     let finish!: (value: { sessionId: string }) => void;
     vi.mocked(continueInChat).mockReturnValue(new Promise(resolve => { finish = resolve; }));
     const view = show(); fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
-    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-2" open wide onClose={() => undefined} /></App>);
+    view.rerender(<App><BackgroundWorkDrawer source={source} instanceId="instance-2" open wide onClose={() => undefined} /></App>);
     await act(async () => finish({ sessionId: "background-1" }));
     expect(openCatalogSession).not.toHaveBeenCalled();
   });
@@ -286,7 +299,7 @@ describe("Background Sessions", () => {
     expect(await screen.findByText("No action was needed.")).toBeInTheDocument();
   });
   it("keeps partial cleanup, requested sign-out and confirmed closure independent", () => {
-    render(<App><AgentRunDetails run={{ ...fixtureRun, budget: { class: "InteractiveBrowser", source: "system",
+    render(<App><AgentRunDetails actions={source.actions} run={{ ...fixtureRun, budget: { class: "InteractiveBrowser", source: "system",
       maxSteps: 48, durationSeconds: 300, perToolSeconds: 30, stepsConsumed: 41, activeExecutionMs: 90000,
       phase: "cleanup", terminationReason: null, cleanupStatus: "partial", closureConfirmed: true,
       closureRequested: true, logoutRequested: true, logoutVerified: false, cleanupBlocked: false } }} onChange={() => undefined} /></App>);
@@ -298,7 +311,7 @@ describe("Background Sessions", () => {
   it("sends cancellation only after review and retains a stale-action error", async () => {
     const run = { ...fixtureRun, status: "running", cancellationAvailable: true };
     vi.mocked(cancelAgentRun).mockRejectedValue(new Error("Run revision is stale. Refresh and try again."));
-    render(<App><AgentRunDetails run={run} onChange={() => undefined} /></App>);
+    render(<App><AgentRunDetails actions={source.actions} run={run} onChange={() => undefined} /></App>);
     fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
     expect(cancelAgentRun).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole("button", { name: "Cancel run" })[1]);
@@ -307,47 +320,30 @@ describe("Background Sessions", () => {
   });
   it("does not submit a confirmation after switching to a different run", async () => {
     const run = { ...fixtureRun, status: "running", cancellationAvailable: true };
-    const view = render(<App><AgentRunDetails run={run} onChange={() => undefined} /></App>);
+    const view = render(<App><AgentRunDetails actions={source.actions} run={run} onChange={() => undefined} /></App>);
     fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
-    view.rerender(<App><AgentRunDetails run={{ ...run, agentRunId: "another-run" }} onChange={() => undefined} /></App>);
+    view.rerender(<App><AgentRunDetails actions={source.actions} run={{ ...run, agentRunId: "another-run" }} onChange={() => undefined} /></App>);
     fireEvent.click(screen.getAllByRole("button", { name: "Cancel run" })[1]);
     await waitFor(() => expect(screen.queryByText("Cancel this run?")).not.toBeInTheDocument());
     expect(cancelAgentRun).not.toHaveBeenCalled();
-  });
-  it("requires a fresh review if the run changes while approval confirmation is open", async () => {
-    const run = { ...fixtureRun, status: "needsApproval", approval: { approvalId: "approval-1", revision: 1,
-      actionHash: "exact-hash", toolName: "browser.act", preview: "Submit this form", expiresAt: new Date(Date.now() + 60_000).toISOString() } };
-    const view = render(<App><AgentRunDetails run={run} onChange={() => undefined} /></App>);
-    fireEvent.click(screen.getByRole("button", { name: "Approve action" }));
-    view.rerender(<App><AgentRunDetails run={{ ...run, revision: run.revision + 1 }} onChange={() => undefined} /></App>);
-    fireEvent.click(screen.getAllByRole("button", { name: "Approve action" })[1]);
-    expect(await screen.findByText("The run changed or the approval expired. Review the current details and try again.")).toBeInTheDocument();
-    expect(decideAgentRunApproval).not.toHaveBeenCalled();
-  });
-  it("makes expired approvals readable and disables both decisions", () => {
-    render(<App><AgentRunDetails run={{ ...fixtureRun, status: "needsApproval", approval: { approvalId: "approval-1", revision: 1,
-      actionHash: "exact-hash", toolName: "browser.act", preview: "Submit this form", expiresAt: new Date(Date.now() - 1000).toISOString() } }} onChange={() => undefined} /></App>);
-    expect(screen.getByRole("button", { name: "Approve action" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reject action" })).toBeDisabled();
-    expect(screen.getByText("Approval expired. Waiting for the run to update.")).toBeInTheDocument();
   });
 });
 
 
 describe("Completion accounting and wait presentation", () => {
   it("shows a typed wait separately from retry and keeps cancellation available", () => {
-    render(<App><AgentRunDetails run={{ ...fixtureRun, status: "waitingForSignal", cancellationAvailable: true,
+    render(<App><AgentRunDetails actions={source.actions} run={{ ...fixtureRun, status: "waitingForSignal", cancellationAvailable: true,
       wait: { mode: "Background", until: "All", backgroundSessionIds: ["child-session"], deadline: "2026-10-08T14:00:00Z" } }} onChange={vi.fn()} /></App>);
     expect(screen.getByLabelText("Execution wait")).toHaveTextContent("Waiting for all background results");
     expect(screen.getByRole("button", { name: "Cancel run" })).toBeEnabled();
     expect(screen.queryByText(/Retry scheduled/)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Conversation child-se/ })).toHaveAttribute("href", "/c/child-session");
+    expect(screen.getByRole("link", { name: /Conversation child-se/ })).toHaveAttribute("href", "/account/organizations");
   });
   it("opens the exact durable handling Run without rendering a completion bubble", async () => {
     vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground,
       completionDelivery: { status: "handled", targetSessionId: "parent-session", parentAgentRunId: "handling-run", reason: null } }], hasMore: false, nextCursor: null });
     vi.mocked(getInstanceAgentRun).mockResolvedValue({ ...fixtureRun, agentRunId: "handling-run" });
-    render(<App><BackgroundWorkDrawer instanceId="instance" open wide onClose={vi.fn()} /></App>);
+    render(<App><BackgroundWorkDrawer source={source} instanceId="instance" open wide onClose={vi.fn()} /></App>);
     await screen.findByText(/Handled in conversation/);
     expect(screen.queryByText(/Unread · needs attention/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "View handling run" }));
@@ -362,7 +358,7 @@ it("explains the precise response failure, bounded correction and preserved rece
   const run = { ...fixtureRun, executionDiagnostic: { remainingBudgetMs: 693634, lastTool: "web.fetch", recordedToolResults: 8,
     failedAttempts: [{ attempt: 1, code: "InvalidResponse", reason: "invalidBlocks", channel: "responseFunction", maxOutputTokens: 8192, transport: "ChatCompletions" }],
     protocolRecovery: { reason: "invalidBlocks", channel: "responseFunction", eligibility: "eligible", strategy: "completionOnly", outcome: "succeeded" } } };
-  render(<App><AgentRunDetails run={run} onChange={vi.fn()} /></App>);
+  render(<App><AgentRunDetails actions={source.actions} run={run} onChange={vi.fn()} /></App>);
   const region = screen.getByRole("region", { name: "Response recovery" });
   expect(within(region).getByText("Invalid response blocks · Response function")).toBeVisible();
   expect(within(region).getByText("Eligible for one correction · Completion only")).toBeVisible();

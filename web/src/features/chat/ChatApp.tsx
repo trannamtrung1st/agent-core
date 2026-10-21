@@ -1,74 +1,31 @@
-import { ArrowLeftOutlined,MenuOutlined,PlusOutlined,SettingOutlined } from "@ant-design/icons";
-import { Alert,App as AntApp,Button,Drawer,Flex,Layout,Tooltip,Typography } from "antd";
-import { useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode } from "react";
+import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, App as AntApp, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { appMessageConfig } from "../../app/appFeedback";
 import { followAppLink } from "../../app/appLink";
-import { adminHomePath } from "../../app/appRoute";
 import { newChatPath } from '../../app/sessionRoute';
-import { legacyActivitySource } from "../../services/activitySource";
-import { cancelSessionAutomation,getSession,listSessionAutomations,type AgentRun } from "../../services/api";
+import { getSession, type AgentRun } from "../../services/api";
 import type { TenantContext } from '../../services/identity';
-import {
-addResourceToDraft,
-applySessionModel,
-applySpeechLocale,
-beginNewChat,
-bootstrap,
-cancelRenderedResponse,
-cancelVoice,
-clearRouteNotice,
-composerSendEnabled,
-composerSendLabel,
-composerStopEnabled,
-hangUp,
-loadMoreChatAgents,
-loadOlderHistory,
-openCatalogSession,
-reloadChatAgentInstances,
-reportCommittedEntries,
-requestVoice,
-respondToApproval,
-resumeCapture,
-resumeLiveSessionForNavigation,
-resumePausedSession,
-retryConnection,
-searchChatAgents,
-selectChatIdentity,
-sendDraft,
-setDraft,
-setDraftParts,
-setMuted
-} from "../../services/realtime";
+import { applySessionModel, beginNewChat, bootstrap, cancelRenderedResponse, cancelVoice, clearRouteNotice, composerSendEnabled, composerSendLabel, composerStopEnabled, hangUp, loadMoreChatAgents, loadOlderHistory, openCatalogSession, reloadChatAgentInstances, reportCommittedEntries, requestVoice, resumeCapture, resumeLiveSessionForNavigation, resumePausedSession, retryConnection, searchChatAgents, selectChatIdentity, sendDraft, setDraft, setMuted } from "../../services/realtime";
 import { tenantActivitySource } from "../../services/tenantActivity";
-import { tenantCanCreateChat,tenantMayManageSession,tenantRunControl } from '../../services/tenantChat';
-import { clientRecognitionSupported,clientSynthesisSupported } from "../../speech/clientSpeechSupport";
+import { tenantCanCreateChat, tenantMayManageSession, tenantRunControl } from '../../services/tenantChat';
+import { clientRecognitionSupported, clientSynthesisSupported } from "../../speech/clientSpeechSupport";
 import { voiceControlEnabled } from "../../speech/voiceEnablement";
-import { isReadonlySession,isSessionModelBusy,useSessionStore } from "../../state/sessionStore";
+import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
 import { AccessError } from '../access/AccessFeedback';
-import { conversationStatusLabel,conversationStatusTone,mapAgentActivity,pausedSessionMessage } from "./activityState";
+import { conversationStatusLabel, conversationStatusTone, mapAgentActivity, pausedSessionMessage } from "./activityState";
 import { AgentPicker } from "./AgentPicker";
-import { ApprovalModal } from "./ApprovalModal";
-import { AutomationDrawer } from "./AutomationDrawer";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { ChatHeader } from "./ChatHeader";
 import { resolveNewChatIdentityPresentation } from "./chatIdentity";
 import { messageTimestamp } from "./chatTime";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
-import { EmailAccountPicker } from "./EmailAccountPicker";
 import { imageModelCompatibility } from "./imageModelCompatibility";
-import {
-ModelPicker,
-effortSelectValue,
-modelSelectValue,
-nextEffortForModel,
-selectedCatalogModel,
-wireModelSelectionKey
-} from "./ModelPicker";
+import { ModelPicker, effortSelectValue, modelSelectValue, nextEffortForModel, selectedCatalogModel, wireModelSelectionKey } from "./ModelPicker";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { SessionRail } from "./SessionRail";
-import { SpeechLocalePicker,speechLocaleSelectValue } from "./SpeechLocalePicker";
 import { TenantConversationApprovals } from './TenantConversationApprovals';
 import { TenantSessionFilesDrawer } from './TenantSessionFilesDrawer';
 import { TenantSessionSandboxDrawer } from './TenantSessionSandboxDrawer';
@@ -103,31 +60,30 @@ function useViewport() {
   return { isNarrow, siderWidth: isTablet ? 240 : 280 };
 }
 
-export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, tenantContext, tenantActions, tenantError }: { onOpenAdmin?: () => void; returnToActivity?: () => void; returnToActivityHref?: string; tenantContext?: TenantContext; tenantActions?: ReactNode; tenantError?: unknown }) {
+export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantContext: TenantContext; tenantActions?: ReactNode; tenantError?: unknown }) {
   const state = useSessionStore();
-  const organization = Boolean(tenantContext);
   const [runCanCancel, setRunCanCancel] = useState(false);
   useEffect(() => {
-    if (!organization || !state.agentRunId || !state.liveResponseId) { setRunCanCancel(false); return; }
+    if (!state.agentRunId || !state.liveResponseId) { setRunCanCancel(false); return; }
     let current = true; setRunCanCancel(false);
     void tenantRunControl(state.agentRunId).then(result => { if (current) setRunCanCancel(result.canCancel); }).catch(() => { if (current) setRunCanCancel(false); });
     return () => { current = false; };
-  }, [organization, state.agentRunId, state.liveResponseId]);
+  }, [state.agentRunId, state.liveResponseId]);
   const [profile, setProfile] = useState("");
   const [bootstrapped, setBootstrapped] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
-  const [schedulesOpen, setSchedulesOpen] = useState(false);
+
   const [workOpen, setWorkOpen] = useState(false);
   const [sandboxOpen, setSandboxOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const filesButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setFilesOpen(false); }, [state.sessionId, tenantContext?.tenant.tenantId]);
+  useEffect(() => { setFilesOpen(false); }, [state.sessionId, tenantContext.tenant.tenantId]);
   const sandboxButtonRef = useRef<HTMLButtonElement>(null);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
-  const activitySource = useMemo(() => tenantContext && backgroundInstanceId ? tenantActivitySource(tenantContext.tenant.tenantId, backgroundInstanceId, tenantContext.principalId) : legacyActivitySource, [tenantContext?.tenant.tenantId, tenantContext?.principalId, backgroundInstanceId]);
+  const activitySource = useMemo(() => backgroundInstanceId ? tenantActivitySource(tenantContext.tenant.tenantId, backgroundInstanceId, tenantContext.principalId) : null, [tenantContext.tenant.tenantId, tenantContext.principalId, backgroundInstanceId]);
   const workButtonRef = useRef<HTMLButtonElement>(null);
-  const { isUnread } = useWorkReadState(tenantContext ? `${tenantContext.tenant.tenantId}:${tenantContext.principalId}` : undefined);
+  const { isUnread } = useWorkReadState(`${tenantContext.tenant.tenantId}:${tenantContext.principalId}`);
   const attentionCount = attentionItems.filter(item => item.delivery === "pending" || item.delivery !== "handled" && isUnread(item.run)).length;
 
   useEffect(() => {
@@ -152,29 +108,20 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
         setBackgroundInstanceId(owner);
         const items: { run: AgentRun; delivery?: string }[] = []; let cursor: string | undefined;
         do {
-          const source = tenantContext ? tenantActivitySource(tenantContext.tenant.tenantId, owner, tenantContext.principalId) : legacyActivitySource;
+          const source = tenantActivitySource(tenantContext.tenant.tenantId, owner, tenantContext.principalId);
           const page = await source.listBackground(owner, cursor, 100);
           for (const item of page.items) if (item.initialRun && (item.completionDelivery?.status === "pending" || item.initialRun.outcome?.attentionRequired)) items.push({ run: item.initialRun, delivery: item.completionDelivery?.status });
           cursor = page.hasMore ? page.nextCursor ?? undefined : undefined;
         } while (current && cursor);
         if (current && request === generation) setAttentionItems(items);
-      } catch { if (tenantContext && current && request === generation) setAttentionItems([]); }
+      } catch { if (current && request === generation) setAttentionItems([]); }
     }
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5_000);
     return () => { current = false; window.clearInterval(timer); };
-  }, [state.sessionId, tenantContext?.tenant.tenantId, tenantContext?.principalId]);
-  const [scheduleEpoch, setScheduleEpoch] = useState(0);
-  const outputStateRef = useRef(state.outputState);
-  const { isNarrow, siderWidth } = useViewport();
+  }, [state.sessionId, tenantContext.tenant.tenantId, tenantContext.principalId]);
 
-  useEffect(() => {
-    const previous = outputStateRef.current;
-    outputStateRef.current = state.outputState;
-    if (schedulesOpen && previous !== "idle" && state.outputState === "idle") {
-      setScheduleEpoch((value) => value + 1);
-    }
-  }, [schedulesOpen, state.outputState]);
+  const { isNarrow, siderWidth } = useViewport();
 
   useEffect(() => {
     // Internal route changes unmount ChatApp, not its running Session transport.
@@ -196,7 +143,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
   const voiceLive = voiceInputLive;
   const canSend = composerSendEnabled();
-  const canStop = composerStopEnabled() && (!organization || runCanCancel);
+  const canStop = composerStopEnabled() && (runCanCancel);
   const sendLabel = composerSendLabel();
   const inSession = state.sessionId != null;
   const readonly = isReadonlySession(state);
@@ -234,7 +181,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
       effort
     );
   };
-  const modelPicker = organization && inSession ? <Typography.Text type="secondary">{selectedModel?.displayName || state.sessionModelDisplayName || "Conversation model"}</Typography.Text> : (
+  const modelPicker = inSession ? <Typography.Text type="secondary">{selectedModel?.displayName || state.sessionModelDisplayName || "Conversation model"}</Typography.Text> : (
     <ModelPicker
       layout="row"
       models={state.modelCatalog}
@@ -326,11 +273,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
 
   return (
     <AntApp className="antd-root" message={appMessageConfig}>
-      <ApprovalModal
-        approval={state.pendingApproval}
-        onApprove={() => void respondToApproval("approve")}
-        onReject={() => void respondToApproval("reject")}
-      />
+
       <Layout className="app-layout">
         {isNarrow ? null : (
           <Sider className="app-sider" theme="light" width={siderWidth}>
@@ -369,36 +312,9 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
                   </Typography.Text></Tooltip>
                 </Flex>
               }
-              additionalActions={tenantActions ?? (onOpenAdmin ? (
-                <Tooltip title="Admin">
-                  <Button
-                    type="text"
-                    size="small"
-                    className="chat-header-admin"
-                    icon={<SettingOutlined />}
-                    href={adminHomePath()}
-                    onClick={event => followAppLink(event, onOpenAdmin)}
-                    aria-label="Open Admin"
-                  />
-                </Tooltip>
-              ) : null)}
-              speechLocale={
-                inSession && !readonly && !organization ? (
-                  <SpeechLocalePicker
-                    layout="row"
-                    value={speechLocaleSelectValue(
-                      state.speechLocaleSource,
-                      state.speechLocaleOverride,
-                      state.pendingSpeechLocale,
-                      true
-                    )}
-                    disabled={readonly}
-                    onChange={(locale) => void applySpeechLocale(locale)}
-                  />
-                ) : null
-              }
+              additionalActions={tenantActions}
+
               sessionsToggle={<Flex gap={8}>
-                {returnToActivity ? <Tooltip title="Back to Activity"><Button type="text" aria-label="Back to Activity" icon={<ArrowLeftOutlined />} href={returnToActivityHref} onClick={event => followAppLink(event, returnToActivity)} /></Tooltip> : null}
                 {isNarrow ? (
                   <Button
                     type="text"
@@ -408,12 +324,11 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
                   />
                 ) : null}</Flex>
               }
-              inSession={inSession && !readonly && (!organization || tenantMayManageSession(state.sessionId))}
-              endDisabled={organization && state.liveResponseId != null}
-              onSchedules={!organization && inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
+              inSession={inSession && !readonly && (tenantMayManageSession(state.sessionId))}
+              endDisabled={state.liveResponseId != null}
               backgroundButtonRef={workButtonRef} onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
               filesButtonRef={filesButtonRef}
-              onFiles={tenantContext && state.sessionId ? () => setFilesOpen(true) : undefined}
+              onFiles={state.sessionId ? () => setFilesOpen(true) : undefined}
               sandboxButtonRef={sandboxButtonRef}
               onSandbox={state.sessionId ? () => setSandboxOpen(true) : undefined}
               attentionCount={attentionCount}
@@ -421,7 +336,6 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
             />
           </Header>
           <Content className="app-content">
-            {!organization && <EmailAccountPicker sessionId={state.sessionId} connected={state.connection === "ready" && !readonly} />}
             {tenantError !== undefined && <div className="conversation-column conversation-banners"><AccessError error={tenantError} /></div>}
             {state.routeNotice || state.connection === "failed" ? (
               <div className="conversation-column conversation-banners">
@@ -454,8 +368,9 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
               <div className="conversation-scroll">
                 <div className="conversation-column">
                   <Conversation
-                    tenantId={tenantContext?.tenant.tenantId}
-                afterEntries={organization && tenantContext && state.sessionId ? <TenantConversationApprovals key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} session={state.sessionId} /> : undefined}
+                    activitySource={activitySource ?? undefined}
+                    tenantId={tenantContext.tenant.tenantId}
+                afterEntries={state.sessionId ? <TenantConversationApprovals key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} session={state.sessionId} /> : undefined}
                     agentName={state.agentName}
                     sessionId={state.sessionId}
                     entries={state.entries}
@@ -473,26 +388,19 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
                             What do you want to work on?
                           </Typography.Title>
                           <AgentPicker
-                            organization={organization}
-                            onSearch={organization ? query => void searchChatAgents(query) : undefined}
-                            onLoadMore={organization ? () => void loadMoreChatAgents() : undefined}
-                            hasMore={organization && state.chatAgentHasMore}
+                            onSearch={query => void searchChatAgents(query)}
+                            onLoadMore={() => void loadMoreChatAgents()}
+                            hasMore={state.chatAgentHasMore}
                             managedInstances={state.chatAgentInstances}
                             identityKey={state.newChatIdentityKey}
                             error={state.sessionError ?? state.error}
-                            speechLocale={speechLocaleSelectValue(
-                              state.speechLocaleSource,
-                              state.speechLocaleOverride,
-                              state.pendingSpeechLocale,
-                              false
-                            )}
+
                             managedInstancesError={state.chatAgentInstancesError}
                             managedInstancesLoading={state.chatAgentInstancesLoading || !bootstrapped}
                             onIdentityChange={selectChatIdentity}
-                            onSpeechLocaleChange={(locale) => void applySpeechLocale(locale)}
                             onRetryManagedInstances={() => void reloadChatAgentInstances()}
                           />
-                          {organization && state.chatAgentInstances.length > 0 && !tenantCanCreateChat() && <Typography.Paragraph type="secondary">Ask an organization owner for permission to start a conversation.</Typography.Paragraph>}
+                          {state.chatAgentInstances.length > 0 && !tenantCanCreateChat() && <Typography.Paragraph type="secondary">Ask an organization owner for permission to start a conversation.</Typography.Paragraph>}
                         </div>
                       )
                     }
@@ -539,12 +447,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
                     </Flex>
                   ) : (
                     <Composer
-                      plainTextOnly={organization}
-                      fileAttachmentsEnabled={organization}
                       draft={state.draft}
-                      parts={state.draftParts}
-                      instanceId={inSession ? backgroundInstanceId : state.newChatIdentityKey.startsWith("managed:") ? state.newChatIdentityKey.slice(8) : null}
-                      onPartsChange={setDraftParts}
                       canSend={canSend}
                       canStop={canStop}
                       approvalPending={state.pendingApproval !== null}
@@ -587,22 +490,11 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
             </div>
           </Content>
         </Layout>
-        {backgroundInstanceId ? <BackgroundWorkDrawer source={activitySource} instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
-          onClose={() => setWorkOpen(false)} afterClose={() => workButtonRef.current?.focus()} onAddReference={!organization ? (sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label) : undefined} /> : null}
-        {tenantContext && state.sessionId && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
-        {tenantContext && state.sessionId && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
+        {backgroundInstanceId && activitySource ? <BackgroundWorkDrawer source={activitySource} instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
+          onClose={() => setWorkOpen(false)} afterClose={() => workButtonRef.current?.focus()} /> : null}
+        {state.sessionId && <TenantSessionFilesDrawer key={`files:${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={filesOpen} narrow={isNarrow} openerRef={filesButtonRef} onClose={() => setFilesOpen(false)} />}
+        {state.sessionId && <TenantSessionSandboxDrawer key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} onClose={() => setSandboxOpen(false)} />}
 
-        {!organization && state.sessionId ? (
-          <AutomationDrawer
-            sessionId={state.sessionId}
-            open={schedulesOpen}
-            wide={!isNarrow}
-            refreshKey={scheduleEpoch}
-            onClose={() => setSchedulesOpen(false)}
-            load={listSessionAutomations}
-            cancel={cancelSessionAutomation}
-          />
-        ) : null}
         {isNarrow ? (
           <Drawer
             title={<span id="session-rail-drawer-title">Chats</span>}

@@ -1,15 +1,7 @@
-import {
-  OwnerCapabilityError,
-  archiveSession,
-  deleteAllSessions,
-  durableDeleteSession,
-  listCatalog,
-  renameSession,
-  unarchiveSession,
-  type CatalogItem
-} from "./api";
 import { defaultChatIdentityKey } from "../features/chat/chatIdentity";
 import { useSessionStore, type CatalogMutationKind } from "../state/sessionStore";
+import { archiveSession, durableDeleteSession, listCatalog, renameSession, unarchiveSession, type CatalogItem } from "./api";
+import { IdentityError } from './identity';
 
 function sortCatalogItems(items: CatalogItem[]): CatalogItem[] {
   return [...items].sort((left, right) => {
@@ -76,7 +68,7 @@ export async function refreshCatalog(reset = true): Promise<void> {
       catalogError: null
     });
   } catch (error) {
-    if (error instanceof OwnerCapabilityError) {
+    if (error instanceof IdentityError && [401, 403, 404].includes(error.status)) {
       useSessionStore.setState({
         catalogItems: [],
         catalogNextCursor: null,
@@ -161,17 +153,6 @@ export async function deleteCatalogItem(item: CatalogItem): Promise<boolean> {
     await durableDeleteSession(item.sessionId);
     await refreshCatalog(true);
   });
-}
-
-export async function deleteAllCatalogItems(): Promise<number | false> {
-  let deletedCount = 0;
-  const ok = await runCatalogMutation("*", "deleteAll", async () => {
-    const includeArchived = useSessionStore.getState().catalogIncludeArchived;
-    deletedCount = await deleteAllSessions({ includeArchived });
-    await refreshCatalog(true);
-  });
-
-  return ok ? deletedCount : false;
 }
 
 function patchCatalog(item: CatalogItem): void {

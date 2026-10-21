@@ -2,11 +2,23 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { ConfigProvider } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdTheme } from "../../app/antdTheme";
+import type { TenantContext } from '../../services/identity';
+import { bootstrap, cancelRenderedResponse, resumePausedSession, sendDraft } from "../../services/realtime";
+import { tenantActivitySource } from '../../services/tenantActivity';
 import { emptySession, useSessionStore } from "../../state/sessionStore";
-import { bootstrap, sendDraft, cancelRenderedResponse, resumePausedSession } from "../../services/realtime";
-import { listBackgroundSessions, listAgentRuns } from "../../services/api";
 import { ChatApp } from "./ChatApp";
+import { activityFixture, fixtureTenant } from './activityFixtures';
 import { fixtureBackground, fixtureRun } from "./agentRunFixtures";
+const source = activityFixture();
+const { listBackground: listBackgroundSessions, listRuns: listAgentRuns } = source;
+vi.mock('../../services/tenantActivity', () => ({ tenantActivitySource: vi.fn() }));
+vi.mock('../../services/tenantChat', async original => ({ ...await original<object>(),
+  chatTenantId: '11111111-1111-1111-1111-111111111111', tenantMayManageSession: () => true,
+  tenantCanCreateChat: () => true, tenantRunControl: vi.fn(async () => ({canCancel: true}))
+}));
+vi.mock('./TenantConversationApprovals', () => ({ TenantConversationApprovals: () => null }));
+const context = { tenant: {tenantId: fixtureTenant, name: 'Test organization'}, principalId: 'person' } as TenantContext;
+vi.mocked(tenantActivitySource).mockImplementation(() => source);
 
 function stubMatchMedia(matches: (query: string) => boolean) {
   window.matchMedia = ((query: string) => ({
@@ -26,7 +38,7 @@ function stubMatchMedia(matches: (query: string) => boolean) {
 function renderChat() {
   return render(
     <ConfigProvider theme={antdTheme}>
-      <ChatApp />
+      <ChatApp tenantContext={context} />
     </ConfigProvider>
   );
 }
@@ -34,7 +46,7 @@ function renderChat() {
 function rerenderChat(view: ReturnType<typeof render>) {
   view.rerender(
     <ConfigProvider theme={antdTheme}>
-      <ChatApp />
+      <ChatApp tenantContext={context} />
     </ConfigProvider>
   );
 }
@@ -416,9 +428,9 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByText("Interrupted")).toBeInTheDocument();
     expect(screen.getByLabelText("Message")).toBeEnabled();
     expect(document.querySelector(".chat-header-time time")).toHaveAttribute("dateTime", "2026-09-15T00:00:00.000Z");
-    expect(screen.getByRole("combobox", { name: "Speech locale" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
     expect(document.querySelector(".chat-header-copy .speech-locale-picker")).toBeNull();
-    expect(document.querySelector(".chat-header-actions .speech-locale-picker")).not.toBeNull();
+    expect(document.querySelector(".chat-header-actions .speech-locale-picker")).toBeNull();
 
     fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
     expect(sendDraft).toHaveBeenCalled();
@@ -428,11 +440,11 @@ describe("ChatApp accessibility", () => {
     expect(vi.mocked(sendDraft).mock.calls.length).toBe(sendCalls);
 
     await act(async () => {
-      useSessionStore.setState({ pendingMode: null, outputState: "waitingForAgent", liveResponseId: "r2" });
+      useSessionStore.setState({ pendingMode: null, outputState: "waitingForAgent", liveResponseId: "r2", agentRunId: "run-two" });
       rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Thinking…");
-    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled());
     expect(screen.getByRole("button", { name: "Queue" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(cancelRenderedResponse).toHaveBeenCalled();
@@ -656,7 +668,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByText(/paused after repeated quiet checks/i)).toBeInTheDocument();
     expect(screen.queryByText("This conversation has ended.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Speech locale" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
     const resume = screen.getByRole("button", { name: "Resume" });
     expect(resume).toBeEnabled();
     resume.focus();
@@ -806,8 +818,8 @@ describe("ChatApp model selection", () => {
       });
       rerenderChat(view);
     });
-    expect(screen.getByRole("button", { name: "Model" }).closest("form.composer")).not.toBeNull();
-    expect(screen.queryByLabelText("Reasoning")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
+    expect(screen.getByText("Scripted Beta")).toBeVisible();
   });
 
   it("disables model editing while a response is running", async () => {
@@ -829,9 +841,8 @@ describe("ChatApp model selection", () => {
       });
     });
     await act(async () => renderChat());
-    expect(screen.getByRole("button", { name: "Model" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Model" }).closest("form.composer")).not.toBeNull();
-    expect(screen.getByLabelText("Reasoning effort")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
+    expect(screen.getByText("Scripted Alpha")).toBeVisible();
   });
 
   it("hides model controls on a paused session", async () => {
@@ -909,7 +920,7 @@ describe("ChatApp narrow session drawer", () => {
         catalogItems: [
           {
             sessionId: "s1",
-            title: "Planning notes",
+            title: "Planning notes", canManage: true,
             agentId: "examiner",
             agentVersion: 1,
             status: "paused",

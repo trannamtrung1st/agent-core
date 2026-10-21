@@ -1,25 +1,26 @@
-import { legacyActivitySource, type ActivitySource } from "../../services/activitySource";
-import { followAppLink } from "../../app/appLink";
 import { Alert, Button, Collapse, Drawer, Empty, Flex, Spin, Table, Tag, Typography, theme } from "antd";
 import { useEffect, useRef, useState } from "react";
-import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
+import { followAppLink } from "../../app/appLink";
+import { navigateToAppPath } from "../../app/appRoute";
 import { sessionPath } from "../../app/sessionRoute";
+import { type ActivitySource } from "../../services/activitySource";
 import { type InstanceActivitySession } from "../../services/api";
-import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
+import { tenantAgentPath } from '../access/accessRoute';
 import { SessionRunHistory } from "../chat/AgentRunDetails";
+import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
 import { formatChatTime } from "../chat/chatTime";
 import { DrawerListFooter } from "../chat/DrawerListFooter";
 import { runOriginLabel } from "../chat/runPresentation";
 import { SessionArtifacts } from "../chat/SessionArtifacts";
 import { useCursorPages } from "../chat/useCursorPages";
-import { useActivitySearch } from "./useActivitySearch";
 import { AdminCollectionToolbar } from "./AdminCollectionToolbar";
+import { useActivitySearch } from "./useActivitySearch";
 
 export function activitySessionTitle(row: InstanceActivitySession) {
   return row.session.title?.trim() || (row.origin === "UserChat" ? "Untitled conversation" : "Untitled background task");
 }
 
-export function InstanceSessionsSection({ instanceId, open, archived = false, source = legacyActivitySource, activityPath }: { instanceId: string; open: boolean; archived?: boolean; source?: ActivitySource; activityPath?: string }) {
+export function InstanceSessionsSection({ instanceId, open, archived = false, source, activityPath }: { instanceId: string; open: boolean; archived?: boolean; source: ActivitySource; activityPath?: string }) {
   const { token } = theme.useToken();
   const page = useCursorPages(`${source.scope}:${instanceId}`, open, (_scope, cursor) => source.listSessions(instanceId, cursor));
   const { search, setSearch } = useActivitySearch();
@@ -43,24 +44,24 @@ export function InstanceSessionsSection({ instanceId, open, archived = false, so
   if (selected) previousSelection.current = selected;
   // Keep the same drawer mounted until its closing animation restores initiating focus.
   const displayed = selected ?? (!selectedId ? previousSelection.current : null);
-  const backPath = `${activityPath ?? adminInstancePath(instanceId, "sessions")}${search ? `?${new URLSearchParams({ q: search })}` : ""}`;
+  const backPath = `${activityPath ?? tenantAgentPath(source.tenantId, instanceId, "activity-sessions")}${search ? `?${new URLSearchParams({ q: search })}` : ""}`;
   function inspect(row: InstanceActivitySession) {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const params = new URLSearchParams(window.location.search); params.set("session", row.session.sessionId);
     navigateToAppPath(`${window.location.pathname}?${params}`);
   }
   function close() { navigateToAppPath(backPath, true); }
-  const conversationHref = (id: string) => `${sessionPath(id)}?${new URLSearchParams({ returnTo: backPath })}`;
+  const conversationHref = (id: string) => `${sessionPath(id, source.tenantId)}?${new URLSearchParams({ returnTo: backPath })}`;
   function openConversation(id: string) { navigateToAppPath(conversationHref(id)); }
   const sessionHref = (id: string) => `${backPath}${search ? "&" : "?"}${new URLSearchParams({ session: id })}`;
-  const rows = [...new Map((source.tenantId && page.error ? [] : page.items).map(row => [row.session.sessionId, row])).values()].filter(row => `${activitySessionTitle(row)} ${row.session.sessionId} ${runOriginLabel(row.origin)} ${row.session.lifecycleStatus ?? row.session.status}`.toLowerCase().includes(search.toLowerCase()));
+  const rows = [...new Map((page.error ? [] : page.items).map(row => [row.session.sessionId, row])).values()].filter(row => `${activitySessionTitle(row)} ${row.session.sessionId} ${runOriginLabel(row.origin)} ${row.session.lifecycleStatus ?? row.session.status}`.toLowerCase().includes(search.toLowerCase()));
   return <Flex vertical gap={token.padding} className="activity-collection">
     <Typography.Text type="secondary">Conversations and background work, most recently active first.</Typography.Text>
     <AdminCollectionToolbar label="loaded sessions" value={search} onChange={setSearch} />
     {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
     <Table<InstanceActivitySession> aria-label="Activity sessions table" className="admin-collection-table" size="small"
       rowKey={row => row.session.sessionId} dataSource={rows} loading={page.loading} pagination={false} tableLayout="fixed" scroll={{ x: 800 }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={page.error ? "Sessions could not be loaded. Retry below." : search ? "No matching loaded sessions. Clear search or load older sessions." : source.tenantId ? "No Sessions are available with your current access." : "No sessions yet. Start a conversation or background task."} /> }}
+      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={page.error ? "Sessions could not be loaded. Retry below." : search ? "No matching loaded sessions. Clear search or load older sessions." : "No Sessions are available with your current access."} /> }}
       columns={[
         { title: "Session", key: "title", width: 320, render: (_, row) => <Flex vertical gap={token.paddingXS}>
           <Button type="link" className="admin-collection-name" title={activitySessionTitle(row)} href={sessionHref(row.session.sessionId)} onClick={event => followAppLink(event, () => inspect(row))}>{activitySessionTitle(row)}</Button>

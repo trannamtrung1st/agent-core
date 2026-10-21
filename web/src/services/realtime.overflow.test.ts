@@ -1,7 +1,13 @@
+vi.mock('./tenantChat', async original => ({ ...await original<object>(),
+ chatTenantId: '11111111-1111-1111-1111-111111111111',
+ tenantTextWitness: vi.fn(async () => ({expectedRevision: 1, expectedSessionRevision: 1})),
+ tenantCancelWitness: vi.fn(async () => ({expectedRevision: 1, expectedRunRevision: 1})),
+ tenantInterruptWitness: vi.fn(async (_session: string, run: string) => ({expectedRevision: 1, expectedSessionRevision: 1, interruptedRunId: run, expectedRunRevision: 1}))
+}));
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { capture, type CaptureHooks } from "../audio/capture";
-import { encodePcm16Le } from "../audio/pcm";
 import { MAX_QUEUED_SAMPLES } from "../audio/outputAdmission";
+import { encodePcm16Le } from "../audio/pcm";
 import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
 import { realtimeTestHooks } from "./realtime";
 

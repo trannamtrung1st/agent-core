@@ -1,5 +1,16 @@
 # Frontend Implementation Specification
 
+## Canonical core Chat and Activity client boundary
+
+`ChatApp` requires a `TenantContext`. Core HTTP helpers use only the canonical tenant Chat SDK and current Account cookie/CSRF identity. The client no longer issues, reads, stores, refreshes or sends an owner capability. Realtime connects only with exact tenant context and `AttachTenant`; text/Stop/Steer obtain current independent witnesses within the serialized dispatch fence. Conversation completion uses the canonical `/complete` HTTP command, with no Hub End fallback. A late stale Stop acknowledgement for a superseded response does not reconnect the replacement response.
+
+Activity collections, original-result drawers and Run history require an explicit `ActivitySource`, including tenant identity and current read/action owners. Session and Automation links carry tenant context; route helpers no longer parse or construct unscoped `/c` or `/admin` URLs. A lost Continue reply requires deliberate saved-fact readback before another action. Private reads do not use generic SDK defaults.
+
+The canonical composer retains text, file intake, local queue, Stop/Steer and Voice. The unreachable owner rich-editor/Skill picker, email-binding/locale/Schedule dialogs and live approval modal are retired. Durable tenant approvals remain in the conversation. This retirement does **not** establish canonical rich Skill/reference authoring, mutable conversation locale/model, draft-resource or Drive-preview parity; those requirements remain open under the original proposal. Shared rich message rendering and pure draft/part identity logic remain available.
+
+[Focused verification](reports/core-client-authority-cutover-verification-2026-10-21.md) records the observed flows, corrected race, obsolete-test inventory and limits.
+
+
 
 ## Closed tenant file-reader boundary
 

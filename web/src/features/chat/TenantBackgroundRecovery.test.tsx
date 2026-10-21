@@ -1,16 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from 'antd';
 import { expect, it, vi } from 'vitest';
+import type { ActivitySource } from '../../services/activitySource';
+import { activityFixture } from './activityFixtures';
 import { AgentRunDetails } from './AgentRunDetails';
-import { fixtureRun } from './agentRunFixtures';
+import { fixtureBackground, fixtureRun } from './agentRunFixtures';
 import { BackgroundWorkDrawer } from './BackgroundWorkDrawer';
-import { fixtureBackground } from './agentRunFixtures';
-import { legacyActivitySource, type ActivitySource } from '../../services/activitySource';
 vi.mock('../../services/artifacts', async original => ({ ...await original<object>(), listArtifactPage: vi.fn(async () => ({ items: [], nextCursor: null, hasMore: false })) }));
 it('locks continuation after a lost acknowledgement and opens saved visibility only after deliberate readback', async () => {
   const item = { ...fixtureBackground, securityRevision: 7, session: { ...fixtureBackground.session, agentInstanceId: 'agent-a' } };
   let saved = item; const next = { ...item, surfaces: ['BackgroundWork', 'ChatList'] };
-  const source: ActivitySource = { ...legacyActivitySource, scope: 'tenant-a:person-a:agent-a', tenantId: 'tenant-a', readScope: 'tenant-a:person-a',
+  const source: ActivitySource = { ...activityFixture(), scope: 'tenant-a:person-a:agent-a', tenantId: 'tenant-a', readScope: 'tenant-a:person-a',
     listBackground: vi.fn(async () => ({ items: [saved], hasMore: false, nextCursor: null })), getBackground: vi.fn(async () => saved),
     continue: vi.fn(async () => { saved = next; throw new Error('The response was lost.'); }), listRuns: vi.fn(async () => ({ items: [], hasMore: false, nextCursor: null })) };
   const open = vi.fn();
@@ -24,7 +24,7 @@ it('locks continuation after a lost acknowledgement and opens saved visibility o
 });
 it('keeps missing Run authority and original-task files unavailable without falling back to all files', async () => {
   const item = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: 'agent-a' }, origin: { ...fixtureBackground.origin, initialAgentRunId: null }, initialRun: null, canContinueInChat: false };
-  const source: ActivitySource = { ...legacyActivitySource, scope: 'tenant-b:person-b', tenantId: 'tenant-b', getBackground: vi.fn(async () => item), listRuns: vi.fn(async () => ({ items: [], hasMore: false, nextCursor: null })) };
+  const source: ActivitySource = { ...activityFixture(), scope: 'tenant-b:person-b', tenantId: 'tenant-b', getBackground: vi.fn(async () => item), listRuns: vi.fn(async () => ({ items: [], hasMore: false, nextCursor: null })) };
   render(<App><BackgroundWorkDrawer instanceId="agent-a" source={source} open wide initialSessionId={item.session.sessionId} onClose={vi.fn()} /></App>);
   expect(await screen.findByText('The original run is unavailable.')).toBeVisible(); expect(screen.getByRole('button', { name: 'Continue in chat' })).toBeDisabled();
   expect(screen.getByText('Reading original task files requires access to the original Run.')).toBeVisible();

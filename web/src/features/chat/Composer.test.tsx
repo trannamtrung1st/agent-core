@@ -1,11 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  queueComposerFiles,
-  removeComposerFile,
-  retryComposerFile,
-  steerQueuedSend
-} from "../../services/realtime";
+import { queueComposerFiles, removeComposerFile, retryComposerFile, steerQueuedSend } from "../../services/realtime";
 import type { PendingSendItem } from "../../state/sessionStore";
 import { Composer } from "./Composer";
 
@@ -264,7 +259,7 @@ describe("Composer pending-send queue", () => {
     render(
       <Composer
         {...emptyComposerProps()}
-        pendingSendQueue={[queueItem(1, "A"), queueItem(2, "B")]}
+        canStop pendingSendQueue={[queueItem(1, "A"), queueItem(2, "B")]}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Steer queued message 2" }));
@@ -437,7 +432,7 @@ describe("Composer voice toolbar", () => {
 
  it('offers only file attachment content in the plain tenant composer and accepts pasted files', async () => {
     vi.clearAllMocks();
-    render(<Composer {...emptyComposerProps()} plainTextOnly fileAttachmentsEnabled />);
+    render(<Composer {...emptyComposerProps()} fileAttachmentsEnabled />);
     fireEvent.click(screen.getByRole('button', { name: 'Add content' }));
     expect(await screen.findByText('Attach file')).toBeInTheDocument();
     expect(screen.queryByText('Use Skill')).not.toBeInTheDocument(); expect(screen.queryByText('Reference resource')).not.toBeInTheDocument();
@@ -448,10 +443,10 @@ describe("Composer voice toolbar", () => {
 
 it('offers tenant Steer only with current cancellation authority and keeps Ctrl+Enter explicit', () => {
   const onSend = vi.fn();
-  const view = render(<Composer {...emptyComposerProps()} plainTextOnly canSend draft="New objective" canStop={false} onSend={onSend} pendingSendQueue={[queueItem(1, 'Queued objective')]} />);
+  const view = render(<Composer {...emptyComposerProps()} canSend draft="New objective" canStop={false} onSend={onSend} pendingSendQueue={[queueItem(1, 'Queued objective')]} />);
   expect(screen.getByRole('button', { name: 'Steer queued message 1' })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true }); expect(onSend).not.toHaveBeenCalled();
-  view.rerender(<Composer {...emptyComposerProps()} plainTextOnly canSend draft="New objective" canStop onSend={onSend} pendingSendQueue={[queueItem(1, 'Queued objective')]} />);
+  view.rerender(<Composer {...emptyComposerProps()} canSend draft="New objective" canStop onSend={onSend} pendingSendQueue={[queueItem(1, 'Queued objective')]} />);
   expect(screen.getByRole('button', { name: 'Steer queued message 1' })).toBeEnabled();
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true }); expect(onSend).toHaveBeenLastCalledWith('interrupt');
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' }); expect(onSend).toHaveBeenLastCalledWith();
@@ -461,7 +456,7 @@ it('fences Send and form submission until the first selected file has finished c
   let complete!: () => void;
   vi.mocked(queueComposerFiles).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
   const onSend = vi.fn();
-  render(<Composer {...emptyComposerProps()} plainTextOnly fileAttachmentsEnabled canSend draft="Keep my original" onSend={onSend} />);
+  render(<Composer {...emptyComposerProps()} fileAttachmentsEnabled canSend draft="Keep my original" onSend={onSend} />);
   const form = document.querySelector('form.composer')!;
   fireEvent.drop(form, { dataTransfer: { files: asFileList([new File(['original'], 'proof.txt', { type: 'text/plain' })]) } });
   expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();

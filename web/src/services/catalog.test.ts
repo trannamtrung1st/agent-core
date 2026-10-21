@@ -1,25 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyCatalog, useSessionStore } from "../state/sessionStore";
-import {
-  archiveCatalogItem,
-  deleteAllCatalogItems,
-  deleteCatalogItem,
-  renameCatalogItem
-} from "./catalog";
-import {
-  archiveSession,
-  deleteAllSessions,
-  durableDeleteSession,
-  listCatalog,
-  renameSession
-} from "./api";
+import { archiveSession, durableDeleteSession, listCatalog, renameSession } from "./api";
+import { archiveCatalogItem, deleteCatalogItem, renameCatalogItem } from "./catalog";
 
 vi.mock("./api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./api")>();
   return {
     ...actual,
     archiveSession: vi.fn(),
-    deleteAllSessions: vi.fn(),
+
     durableDeleteSession: vi.fn(),
     listCatalog: vi.fn(),
     renameSession: vi.fn()
@@ -100,21 +89,6 @@ describe("catalog mutations", () => {
     const ok = await renameCatalogItem("s-old", "Older chat renamed");
     expect(ok).toBe(true);
     expect(useSessionStore.getState().catalogItems.map((item) => item.sessionId)).toEqual(["s-old", "s-new"]);
-  });
-
-  it("calls bulk delete and refreshes the catalog", async () => {
-    vi.mocked(deleteAllSessions).mockResolvedValue(2);
-    vi.mocked(listCatalog).mockResolvedValue({
-      items: [],
-      nextCursor: null,
-      hasMore: false
-    });
-
-    const deleted = await deleteAllCatalogItems();
-    expect(deleted).toBe(2);
-    expect(deleteAllSessions).toHaveBeenCalledWith({ includeArchived: false });
-    expect(listCatalog).toHaveBeenCalled();
-    expect(useSessionStore.getState().catalogMutation).toBeNull();
   });
 
   it("refreshes after a successful archive", async () => {

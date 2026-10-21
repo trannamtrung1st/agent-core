@@ -1,36 +1,11 @@
+import { AudioFilled, AudioMutedOutlined, AudioOutlined, DeleteOutlined, DownOutlined, PaperClipOutlined, PhoneFilled, PhoneOutlined, PlusOutlined, RightOutlined, SendOutlined, StopOutlined, UnorderedListOutlined } from "@ant-design/icons";
+import { Alert, Button, Dropdown, Flex, Input, theme, Tooltip } from "antd";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { Button, Flex, Dropdown, Tooltip, Alert, Input, theme } from "antd";
-import {
-  AudioOutlined,
-  AudioFilled,
-  AudioMutedOutlined,
-  DeleteOutlined,
-  DownOutlined,
-  PaperClipOutlined,
-  PlusOutlined,
-  CodeOutlined,
-  FolderOpenOutlined,
-  PhoneFilled,
-  PhoneOutlined,
-  RightOutlined,
-  SendOutlined,
-  StopOutlined,
-  UnorderedListOutlined
-} from "@ant-design/icons";
-import { StructuredMessageEditor, type PickerRequest } from "./StructuredMessageEditor";
-import { type MessagePart } from "../../services/messageParts";
-import { MessageParts } from "./MessageParts";
-import {
-  composerSteerEnabled,
-  queueComposerFiles,
-  removeComposerFile,
-  retryComposerFile,
-  removeQueuedSend,
-  steerQueuedSend
-} from "../../services/realtime";
-import type { PendingSendItem } from "../../state/sessionStore";
 import type { PendingAttachment } from "../../services/attachments";
+import { composerSteerEnabled, queueComposerFiles, removeComposerFile, removeQueuedSend, retryComposerFile, steerQueuedSend } from "../../services/realtime";
+import type { PendingSendItem } from "../../state/sessionStore";
 import { PendingAttachmentView } from "./AttachmentPreview";
+import { MessageParts } from "./MessageParts";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import type { SessionErrorView } from "./sessionError";
 
@@ -204,7 +179,7 @@ function ComposerActionTooltip({ suppressed, title, children }: { suppressed: bo
 }
 
 export function Composer({
-  draft, parts, instanceId, onPartsChange, plainTextOnly = false, fileAttachmentsEnabled = false,
+  draft, fileAttachmentsEnabled = true,
   canSend: suppliedCanSend,
   canStop,
   approvalPending = false,
@@ -236,11 +211,10 @@ export function Composer({
   imageIncompatibilityMessage
 }: {
   draft: string;
-  plainTextOnly?: boolean;
+
   fileAttachmentsEnabled?: boolean;
-  parts?: MessagePart[] | null;
-  instanceId?: string | null;
-  onPartsChange?: (parts: MessagePart[]) => void;
+
+
   canSend: boolean;
   canStop: boolean;
   approvalPending?: boolean;
@@ -273,9 +247,7 @@ export function Composer({
 }) {
   const { token } = theme.useToken();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [pickerRequest, setPickerRequest] = useState<PickerRequest>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [editorValid, setEditorValid] = useState(true);
   const [fileIntakes, setFileIntakes] = useState(0);
   const canSend = suppliedCanSend && fileIntakes === 0;
   const [queueExpanded, setQueueExpanded] = useState(false);
@@ -303,7 +275,7 @@ export function Composer({
   }
 
   function takeFiles(list: FileList | File[] | null) {
-    if (!list || !ready || plainTextOnly && !fileAttachmentsEnabled) {
+    if (!list || !ready || !fileAttachmentsEnabled) {
       return;
     }
 
@@ -361,7 +333,7 @@ export function Composer({
           >
             {visibleQueue.map((item) => {
               const position = pendingSendQueue.findIndex((queued) => queued.localId === item.localId) + 1;
-              const steerEnabled = composerSteerEnabled(item.localId) && (!plainTextOnly || canStop);
+              const steerEnabled = composerSteerEnabled(item.localId) && canStop;
               return (
                 <li key={item.localId} className="pending-send-queue-item">
                   <UnorderedListOutlined className="pending-send-queue-icon" aria-hidden="true" />
@@ -381,7 +353,7 @@ export function Composer({
                     ) : null}
                   </div>
                   <Flex gap={token.paddingXS} align="center" className="pending-send-queue-actions">
-                    <Tooltip title={plainTextOnly && !canStop ? "Steer requires permission to stop the current response." : "Use this message to interrupt the current response"}>
+                    <Tooltip title={!canStop ? "Steer requires permission to stop the current response." : "Use this message to interrupt the current response"}>
                       <Button
                         type="text"
                         size="small"
@@ -417,7 +389,7 @@ export function Composer({
         className="composer composer-shell"
         onSubmit={(event) => {
           event.preventDefault();
-          if (canSend && editorValid) onSend();
+          if (canSend) onSend();
         }}
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
@@ -434,7 +406,7 @@ export function Composer({
             ))}
           </ul>
         ) : null}
-        {plainTextOnly ? <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} onPaste={event => { if (fileAttachmentsEnabled && event.clipboardData.files.length) { event.preventDefault(); takeFiles(event.clipboardData.files); } }} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!canSend) return; if (event.metaKey || event.ctrlKey) { if (canStop) onSend('interrupt'); } else onSend(); } }} /> : <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>}
+        <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} onPaste={event => { if (fileAttachmentsEnabled && event.clipboardData.files.length) { event.preventDefault(); takeFiles(event.clipboardData.files); } }} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!canSend) return; if (event.metaKey || event.ctrlKey) { if (canStop) onSend('interrupt'); } else onSend(); } }} />
         <input
           ref={fileInput}
           className="attach-input"
@@ -450,7 +422,7 @@ export function Composer({
         <Flex justify="space-between" align="center" gap={token.paddingXS} wrap="wrap" className="composer-toolbar">
           <Flex gap={token.paddingXS} align="center" wrap="wrap" className="composer-toolbar-start">
             {modelControls}
-            {(!plainTextOnly || fileAttachmentsEnabled) && <Dropdown
+            {fileAttachmentsEnabled && <Dropdown
               open={addOpen}
               onOpenChange={setAddOpen}
               classNames={{ root: "composer-add-menu" }}
@@ -458,15 +430,10 @@ export function Composer({
               menu={{
                 items: [
                   { key: "attach", label: "Attach file", icon: <PaperClipOutlined /> },
-                  ...(!plainTextOnly ? [
-                    { key: "invocation", label: "Use Skill", icon: <CodeOutlined /> },
-                    { key: "homeFile", label: "Reference resource", icon: <FolderOpenOutlined /> }
-                  ] : [])
                 ],
                 onClick: ({ key }) => {
                   setAddOpen(false);
                   if (key === "attach") fileInput.current?.click();
-                  else setPickerRequest({ category: key as "invocation" | "homeFile", nonce: Date.now() });
                 }
               }}
             >
@@ -530,13 +497,13 @@ export function Composer({
                 />
               </ComposerActionTooltip>
             ) : (
-              <ComposerActionTooltip suppressed={approvalPending} title={plainTextOnly && !canStop ? `${sendLabel} (Enter)` : `${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
+              <ComposerActionTooltip suppressed={approvalPending} title={!canStop ? `${sendLabel} (Enter)` : `${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
                 <Button
                   type="primary"
                   htmlType="submit"
                   className="composer-icon composer-send"
                   aria-label={sendLabel}
-                  disabled={!canSend || !editorValid}
+                  disabled={!canSend}
                   icon={<SendOutlined />}
                 />
               </ComposerActionTooltip>

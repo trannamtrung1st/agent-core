@@ -1,22 +1,13 @@
-import { chatTenantId } from '../../services/tenantChat';
-import { newChatPath } from '../../app/sessionRoute';
-import { followAppLink } from "../../app/appLink";
-import { useState, type ReactNode } from "react";
-import { Alert, App, Button, Dropdown, Empty, Flex, Input, Tooltip, Typography } from "antd";
 import { MoreOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import type { AgentDescriptor, CatalogItem } from "../../services/api";
-import {
-  archiveCatalogItem,
-  deleteAllCatalogItems,
-  deleteCatalogItem,
-  refreshCatalog,
-  renameCatalogItem,
-  setIncludeArchived,
-  unarchiveCatalogItem
-} from "../../services/catalog";
+import { Alert, App, Button, Dropdown, Empty, Flex, Input, Tooltip, Typography } from "antd";
+import { useState, type ReactNode } from "react";
+import { followAppLink } from "../../app/appLink";
 import { confirmAction } from "../../app/confirmAction";
-import { sessionPath, sameSessionId } from "../../app/sessionRoute";
+import { newChatPath, sameSessionId, sessionPath } from '../../app/sessionRoute';
+import type { AgentDescriptor, CatalogItem } from "../../services/api";
+import { archiveCatalogItem, deleteCatalogItem, refreshCatalog, renameCatalogItem, setIncludeArchived, unarchiveCatalogItem } from "../../services/catalog";
+import { chatTenantId } from '../../services/tenantChat';
 import { useSessionStore, type CatalogMutation } from "../../state/sessionStore";
 import { formatChatTime } from "./chatTime";
 import { lifecycleOutcomeLabel } from "./sessionLifecycle";
@@ -157,52 +148,6 @@ export function SessionRail({
     }
   }
 
-  function activeSessionInBulkDeleteScope(): boolean {
-    if (activeSessionId == null) {
-      return false;
-    }
-
-    const row =
-      items.find((item) => sameSessionId(item.sessionId, activeSessionId))
-      ?? useSessionStore
-          .getState()
-          .catalogItems.find((item) => sameSessionId(item.sessionId, activeSessionId));
-    if (row == null) {
-      return false;
-    }
-
-    return includeArchived || !row.archived;
-  }
-
-  function confirmDeleteAll(): void {
-    confirmAction(modal, {
-      title: "Delete all chats?",
-      content: includeArchived
-        ? "This removes every session in your catalog, including archived chats. This cannot be undone."
-        : "This removes every visible chat in your catalog. Archived chats are kept unless you show archived first. This cannot be undone.",
-      okText: "Delete all",
-      danger: true,
-      onOk: async () => {
-        const activeInScope = activeSessionInBulkDeleteScope();
-        const deletedCount = await deleteAllCatalogItems();
-        if (deletedCount === false) {
-          await notifyMutation(false, "Chats deleted.", { rejectOnFailure: true });
-          return;
-        }
-
-        if (activeInScope) {
-          onNewChat({ urlMode: "replace" });
-        }
-
-        void message.success(
-          deletedCount === 0
-            ? "No chats to delete."
-            : `Deleted ${deletedCount} chat${deletedCount === 1 ? "" : "s"}.`
-        );
-      }
-    });
-  }
-
   function confirmDelete(item: CatalogItem): void {
     confirmAction(modal, {
       title: `Delete “${item.title}”?`,
@@ -281,13 +226,6 @@ export function SessionRail({
         void setIncludeArchived(!includeArchived);
       }
     },
-    ...(!chatTenantId ? [{
-      key: "delete-all",
-      danger: true,
-      label: "Delete all chats",
-      disabled: listActionsDisabled,
-      onClick: () => confirmDeleteAll()
-    }] : [])
   ];
 
   function refreshList(): void {
@@ -341,7 +279,7 @@ export function SessionRail({
           </div>
         </Flex>
         {capabilityLost ? (
-          <Alert type="error" showIcon title={error ?? "Local owner access is unavailable."} />
+          <Alert type="error" showIcon title={error ?? "Your access to these conversations is unavailable."} />
         ) : null}
         {!capabilityLost && error ? <Alert type="error" showIcon title={error} /> : null}
       <ul className="session-rail-list">
@@ -425,7 +363,7 @@ export function SessionRail({
                         </Typography.Text>
                       </Flex>
                     </Button>
-                    {(!chatTenantId || item.canManage) && <Dropdown menu={{ items: rowMenu(item) }} trigger={["click"]} placement="bottomRight">
+                    {(item.canManage) && <Dropdown menu={{ items: rowMenu(item) }} trigger={["click"]} placement="bottomRight">
                       <Button
                         type="text"
                         size="small"

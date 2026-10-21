@@ -1,70 +1,30 @@
-import { hasTask, messageText, snapshotParts, wireParts, type MessagePart, type ResourceReference } from "./messageParts";
-import { chatTenantId, retireTenantChatRequests, tenantCanCreateChat, tenantCancelWitness, tenantChatCandidates, tenantTextWitness, tenantInterruptWitness } from './tenantChat';
-import { newChatPath } from '../app/sessionRoute';
 import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
+import { newChatPath, parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from '../app/sessionRoute';
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { applyServerEvent, emptySession, hasControlSequenceGap, hasTextOffsetGap, isReadonlySession, isSessionModelBusy, modelFieldsFromSelection, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
+import { modelSelectValue } from "../features/chat/ModelPicker";
+import { defaultChatIdentityKey, isNewChatIdentityReady, parseChatIdentityKey, resolveNewChatIdentityPresentation } from "../features/chat/chatIdentity";
+import { IMAGE_MODEL_INCOMPATIBLE_MESSAGE, imageModelCompatibility, pendingAttachmentsIncludeImage, queuedSendIncludesImage, resolveModelVision } from "../features/chat/imageModelCompatibility";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
-import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
-import {
-  createSessionForInstance,
-  clearOwnerCapability,
-  endSession,
-  ensureOwnerCapability,
-  getHealth,
-  getSession,
-  listChatAgentInstances,
-  listModels,
-  reopenSession,
-  setSessionModel,
-  setSpeechLocale
-} from "./api";
-import {
-  defaultChatIdentityKey,
-  isNewChatIdentityReady,
-  parseChatIdentityKey,
-  resolveNewChatIdentityPresentation
-} from "../features/chat/chatIdentity";
-import {
-  loadNewestHistoryPage,
-  loadOlderHistoryPage,
-  beginSessionHistory,
-  applyReadyHistoryPaging,
-  reconcileOrphanedLiveConversation
-} from "./sessionHistory";
-import {
-  abortPendingAttachment,
-  listAttachments,
-  pendingFile,
-  releaseAllPendingFiles,
-  releasePendingFile,
-  retainPendingFile,
-  stageAttachments,
-  uploadAttachment,
-  type PendingAttachment
-} from "./attachments";
-import { catalogShell, refreshCatalog } from "./catalog";
-import { requiresExplicitResume } from "./sessionPauseSemantics";
 import { createBrowserSpeechRecognizer } from "../speech/browserSpeechRecognizer";
 import { createBrowserSpeechSynthesizer } from "../speech/browserSpeechSynthesizer";
 import { createClientSpeechPlayer, type ClientSpeechPlayer } from "../speech/clientSpeechPlayer";
 import type { ClientSpeechEvidence } from "../speech/clientSpeechRecognizer";
-import type { ClientSpeechSynthesizer } from "../speech/clientSpeechSynthesizer";
 import { clientRecognitionSupported, clientSynthesisSupported, speechTestSeam } from "../speech/clientSpeechSupport";
+import type { ClientSpeechSynthesizer } from "../speech/clientSpeechSynthesizer";
 import { ClientTranscriptLifecycle } from "../speech/clientTranscriptLifecycle";
 import { createFakeSpeechRecognizer, createFakeSpeechSynthesizer, type FakeSpeechRecognizer, type FakeSpeechSynthesizer } from "../speech/fakeSpeechAdapters";
 import { speechTransport } from "../speech/speechTransport";
 import { voiceControlEnabled } from "../speech/voiceEnablement";
-import { modelSelectValue } from "../features/chat/ModelPicker";
-import {
-  IMAGE_MODEL_INCOMPATIBLE_MESSAGE,
-  imageModelCompatibility,
-  pendingAttachmentsIncludeImage,
-  queuedSendIncludesImage,
-  resolveModelVision
-} from "../features/chat/imageModelCompatibility";
+import { applyServerEvent, emptySession, hasControlSequenceGap, hasTextOffsetGap, isReadonlySession, isSessionModelBusy, modelFieldsFromSelection, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
+import { createSessionForInstance, endSession, getHealth, getSession, listModels, reopenSession } from "./api";
+import { abortPendingAttachment, pendingFile, releaseAllPendingFiles, releasePendingFile, retainPendingFile, uploadAttachment, type PendingAttachment } from "./attachments";
+import { catalogShell, refreshCatalog } from "./catalog";
+import { hasTask, messageText, snapshotParts, wireParts, type MessagePart, type ResourceReference } from "./messageParts";
+import { applyReadyHistoryPaging, beginSessionHistory, loadNewestHistoryPage, loadOlderHistoryPage, reconcileOrphanedLiveConversation } from "./sessionHistory";
+import { requiresExplicitResume } from "./sessionPauseSemantics";
+import { chatTenantId, retireTenantChatRequests, tenantCanCreateChat, tenantCancelWitness, tenantChatCandidates, tenantInterruptWitness, tenantTextWitness } from './tenantChat';
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
@@ -235,10 +195,6 @@ function command(
   eventId: string = uuid()
 ) {
   const snapshot = useSessionStore.getState();
-  const payloadWithOwner =
-    type === "session.attach" && !chatTenantId
-      ? { ...payload, ownerCapability: window.localStorage.getItem("agent-core.owner-capability") }
-      : payload;
   return {
     protocolVersion: 1,
     sessionId: snapshot.sessionId,
@@ -248,7 +204,7 @@ function command(
     responseId,
     attachmentId: type === "session.attach" ? undefined : snapshot.attachmentId,
     type,
-    payload: payloadWithOwner
+    payload
   };
 }
 
@@ -271,6 +227,9 @@ async function invoke(
     result?: Record<string, unknown>;
   };
   if (chatTenantId && (connection !== active || connectionEpoch !== epoch)) return { accepted: false };
+  // A late Stop acknowledgement for a superseded response must not reattach the new response.
+  if (method === 'CancelResponse' && responseId && useSessionStore.getState().liveResponseId !== responseId
+    && ['StaleCommand', 'StaleAttachment', 'stale_revision'].includes(result.error?.code ?? '')) return result;
   if (chatTenantId && method !== 'AttachTenant' && ['StaleCommand', 'StaleAttachment', 'stale_revision'].includes(result.error?.code ?? '')) {
     // A retired attachment is a transport fence, including when the server reports it as
     // Authorization. Reattach without replaying this command; actual access is checked again.
@@ -700,18 +659,18 @@ function isTransientAttachError(ack: { error?: { code?: string } } | null | unde
   return code === "SessionInUse" || code === "SessionBusy";
 }
 
-async function attachWithBusyRetry(lastServerSequence: number | null): Promise<boolean> {
+async function attachWithBusyRetry(): Promise<boolean> {
   const loop = attachLoop;
   let delayIndex = 0;
-  let retriedOwnerCapability = false;
+  if (!chatTenantId) return false;
   while (loop === attachLoop && connection) {
     try {
       commandSequence = 0;
       commandDispatchChain = Promise.resolve();
       const ack = await invoke(
-        chatTenantId ? "AttachTenant" : "Attach",
+        "AttachTenant",
         "session.attach",
-        chatTenantId ? { tenantId: chatTenantId } : { lastServerSequence: lastServerSequence || null },
+        { tenantId: chatTenantId },
         0
       );
       if (loop !== attachLoop) {
@@ -721,13 +680,6 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
       if (ack?.accepted) {
         reconnectBudgetStarted = 0;
         return true;
-      }
-
-      if (!chatTenantId && ack?.error?.code === "Unauthorized" && !retriedOwnerCapability) {
-        retriedOwnerCapability = true;
-        clearOwnerCapability();
-        await ensureOwnerCapability();
-        continue;
       }
 
       if (ack?.error?.code === "NotFound") {
@@ -793,7 +745,7 @@ async function recoverFromTransientDisconnect(): Promise<void> {
 
   try {
     await connection.start();
-    const attached = await attachWithBusyRetry(snapshot.lastServerSequence || null);
+    const attached = await attachWithBusyRetry();
     if (!attached && useSessionStore.getState().connection === "reconnecting") {
       markConnectionFailed("Connection lost. Retry to continue.", { force: true });
     }
@@ -819,7 +771,7 @@ async function recoverFromSequenceGap(cause: ReconnectCause): Promise<void> {
 
   try {
     await connection.start();
-    const attached = await attachWithBusyRetry(snapshot.lastServerSequence || null);
+    const attached = await attachWithBusyRetry();
     if (!attached && useSessionStore.getState().connection === "reconnecting") {
       markConnectionFailed("Connection lost. Retry to continue.", { force: true });
     }
@@ -884,7 +836,6 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "session.ready") {
     bindSpeechTransports();
     reconcilePendingUserText(next.entries);
-    void hydrateBoundAttachments(next.sessionId);
     if (next.liveResponseId) {
       lastReceiptOffset = -1;
       lastReceiptResponseId = next.liveResponseId;
@@ -932,9 +883,6 @@ function handleEvent(raw: ServerEvent): void {
       capture.release();
       void releaseClientSpeech();
     }
-  }
-  if (raw.type === "transcript.final") {
-    void hydrateBoundAttachments(next.sessionId);
   }
   if (raw.type === "agent.response.started" && raw.responseId) {
     clearAwaitingAgentResponseStart();
@@ -1806,11 +1754,10 @@ async function startConnection(
   audioFramesSent = 0;
   audioOutputsReceived = 0;
   const epoch = ++connectionEpoch;
-  const ownerCapability = chatTenantId ? null : await ensureOwnerCapability();
+  if (!chatTenantId) throw new Error("Choose an organization before connecting Chat.");
   const builder = new HubConnectionBuilder().withUrl("/hubs/session", {
     skipNegotiation: true,
-    transport: HttpTransportType.WebSockets,
-    ...(ownerCapability ? { headers: { "X-AgentCore-Owner-Capability": ownerCapability } } : {})
+    transport: HttpTransportType.WebSockets
   });
   const selected =
     import.meta.env.VITE_AGENTCORE_REALTIME_PROTOCOL === "json"
@@ -1881,7 +1828,7 @@ async function startConnection(
   beginReconnectBudget();
   try {
     await connection.start();
-    await attachWithBusyRetry(null);
+    await attachWithBusyRetry();
     if (chatSurfaceVisible && navigationVoiceResetSessionId === sessionId
       && useSessionStore.getState().connection === "ready") {
       const resetEpoch = voiceEpoch + 1;
@@ -1906,7 +1853,7 @@ async function attachAfterReconnect(): Promise<void> {
   }
 
   dropLiveTransport("reconnecting");
-  const attached = await attachWithBusyRetry(useSessionStore.getState().lastServerSequence || null);
+  const attached = await attachWithBusyRetry();
   if (!attached && useSessionStore.getState().connection === "reconnecting") {
     markConnectionFailed("Connection lost. Retry to continue.", { force: true });
   }
@@ -1975,7 +1922,8 @@ export async function bootstrap(): Promise<string> {
 
 let candidateEpoch = 0;
 async function loadChatAgentInstances(query = '', more = false): Promise<void> {
-  if (chatTenantId) {
+  if (!chatTenantId) return;
+
     const epoch = ++candidateEpoch;
     useSessionStore.setState({ chatAgentInstancesLoading: true, chatAgentInstancesError: null });
     try {
@@ -1992,30 +1940,6 @@ async function loadChatAgentInstances(query = '', more = false): Promise<void> {
         newChatIdentityKey: '', chatAgentInstancesError: error instanceof Error ? error.message : 'Unable to load agents.' });
     }
     return;
-  }
-  useSessionStore.setState({
-    chatAgentInstancesLoading: true,
-    chatAgentInstancesError: null,
-    newChatIdentityKey: ""
-  });
-  try {
-    const chatAgentInstances = await listChatAgentInstances();
-    const newChatIdentityKey = defaultChatIdentityKey(chatAgentInstances);
-    useSessionStore.setState({
-      chatAgentInstances,
-      chatAgentInstancesError: null,
-      chatAgentInstancesLoading: false,
-      newChatIdentityKey,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Managed instances unavailable.";
-    useSessionStore.setState({
-      chatAgentInstances: [],
-      chatAgentInstancesError: message,
-      chatAgentInstancesLoading: false,
-      newChatIdentityKey: defaultChatIdentityKey([]),
-    });
-  }
 }
 
 export function reloadChatAgentInstances(): Promise<void> {
@@ -2025,6 +1949,7 @@ export function searchChatAgents(query: string): Promise<void> { return loadChat
 export function loadMoreChatAgents(): Promise<void> { return loadChatAgentInstances(useSessionStore.getState().chatAgentQuery, true); }
 
 async function bootstrapInner(): Promise<string> {
+  if (!chatTenantId) throw new Error("Choose an organization before opening Chat.");
   const requestedSession = parseSessionIdFromPath(window.location.pathname);
   const initial = useSessionStore.getState();
   if (window.location.pathname === newChatPath() && initial.sessionId) {
@@ -2198,7 +2123,7 @@ export async function startConversation(): Promise<boolean> {
         key: snapshot.pendingModelKey,
         reasoningEffort: snapshot.pendingReasoningEffort
       };
-      const created = await createSessionForInstance(identity.instanceId, "text", snapshot.pendingSpeechLocale, modelChoice);
+      const created = await createSessionForInstance(identity.instanceId, modelChoice);
       await startConnection(created.sessionId, { syncUrl: "replace" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready";
@@ -2247,100 +2172,10 @@ export function clearRouteNotice(): void {
   useSessionStore.setState({ routeNotice: null });
 }
 
-export async function applySpeechLocale(locale: string | null): Promise<void> {
-  const snapshot = useSessionStore.getState();
-  if (isReadonlySession(snapshot)) {
-    return;
-  }
-
-  if (!snapshot.sessionId) {
-    useSessionStore.setState({ pendingSpeechLocale: locale });
-    return;
-  }
-
-  try {
-    const view = await setSpeechLocale(snapshot.sessionId, locale);
-    const speech = view.speechLocale;
-    useSessionStore.setState({
-      pendingSpeechLocale: locale,
-      speechLocale: speech?.effective ?? snapshot.speechLocale,
-      speechLocaleSource: speech?.source ?? snapshot.speechLocaleSource,
-      speechLocaleOverride: speech?.override ?? null,
-      error: null,
-      sessionError: null,
-      errorFatal: false
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to update the speech locale.";
-    useSessionStore.setState({
-      error: message,
-      sessionError: sessionErrorFromMessage(message, { category: "Validation", code: "ValidationError", fatal: false }),
-      errorFatal: false
-    });
-  }
-}
-
-let modelMutationOperationSeq = 0;
-
-function isActiveModelMutation(owner: { sessionId: string; operationId: number } | null, sessionId: string, operationId: number): boolean {
-  return owner?.sessionId === sessionId && owner.operationId === operationId;
-}
-
 export async function applySessionModel(key: string, reasoningEffort: string | null): Promise<void> {
   const snapshot = useSessionStore.getState();
-  if (isReadonlySession(snapshot) || isSessionModelBusy(snapshot)) {
-    return;
-  }
-
-  if (!snapshot.sessionId) {
-    useSessionStore.setState({ pendingModelKey: key, pendingReasoningEffort: reasoningEffort });
-    return;
-  }
-
-  const targetSessionId = snapshot.sessionId;
-  const operationId = ++modelMutationOperationSeq;
-  useSessionStore.setState({
-    modelMutationPending: true,
-    modelMutationOwner: { sessionId: targetSessionId, operationId }
-  });
-  try {
-    const view = await setSessionModel(targetSessionId, { key, reasoningEffort });
-    const current = useSessionStore.getState();
-    if (!isActiveModelMutation(current.modelMutationOwner, targetSessionId, operationId)) {
-      return;
-    }
-    if (current.sessionId !== targetSessionId) {
-      useSessionStore.setState({ modelMutationPending: false, modelMutationOwner: null });
-      return;
-    }
-    useSessionStore.setState({
-      modelMutationPending: false,
-      modelMutationOwner: null,
-      pendingModelKey: key,
-      pendingReasoningEffort: reasoningEffort,
-      ...modelFieldsFromSelection(view.model),
-      error: null,
-      sessionError: null,
-      errorFatal: false
-    });
-  } catch (error) {
-    const current = useSessionStore.getState();
-    if (!isActiveModelMutation(current.modelMutationOwner, targetSessionId, operationId)) {
-      return;
-    }
-    if (current.sessionId !== targetSessionId) {
-      useSessionStore.setState({ modelMutationPending: false, modelMutationOwner: null });
-      return;
-    }
-    const message = error instanceof Error ? error.message : "Unable to update the model.";
-    useSessionStore.setState({
-      modelMutationPending: false,
-      modelMutationOwner: null,
-      error: message,
-      sessionError: sessionErrorFromMessage(message, { category: "Validation", code: "ValidationError", fatal: false }),
-      errorFatal: false
-    });
-  }
+  if (snapshot.sessionId || isReadonlySession(snapshot)) return;
+  useSessionStore.setState({ pendingModelKey: key, pendingReasoningEffort: reasoningEffort });
 }
 
 export type OpenSessionResult = "ready" | "ended" | "blocked" | "failed" | "paused";
@@ -2430,9 +2265,6 @@ export async function openCatalogSession(
   useSessionStore.setState({ routeNotice: null });
 
   try {
-    if (!chatTenantId && item.status !== "attached" && requiresExplicitResume(item.pauseReason)) {
-      await reopenSession(item.sessionId);
-    }
     await startConnection(item.sessionId, { syncUrl: "none" });
     await refreshCatalog(true);
     if (useSessionStore.getState().connection === "ready") {
@@ -2644,9 +2476,6 @@ async function showEndedSession(
     }
 
     if (view.status !== "ended") {
-      if (!chatTenantId && view.status !== "attached" && requiresExplicitResume(view.pauseReason)) {
-        await reopenSession(sessionId);
-      }
       await startConnection(sessionId, { syncUrl: "none" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready" ? "ready" : "failed";
@@ -2674,7 +2503,6 @@ async function showEndedSession(
       errorFatal: false
     });
     await loadNewestHistoryPage(sessionId, { replaceWindow: true });
-    void hydrateBoundAttachments(sessionId);
     await refreshCatalog(true);
     return "ended";
   } catch (error) {
@@ -2725,7 +2553,6 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
 
     const sequence = view.lastEntrySequence ?? 0;
     if (sequence < latest.lastServerSequence) {
-      void hydrateBoundAttachments(sessionId);
       return;
     }
 
@@ -2733,12 +2560,10 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
     const afterLoad = useSessionStore.getState();
     if (sequence === afterLoad.lastServerSequence && afterLoad.entries.length < latest.entries.length) {
       useSessionStore.setState({ entries: latest.entries });
-      void hydrateBoundAttachments(sessionId);
       return;
     }
 
     useSessionStore.setState({ lastServerSequence: sequence });
-    void hydrateBoundAttachments(sessionId);
   } catch {
     // Keep the in-memory transcript if durable history cannot be refreshed.
   }
@@ -2838,65 +2663,6 @@ function composerCanSend(
   return false;
 }
 
-async function hydrateBoundAttachments(sessionId: string | null): Promise<void> {
-  if (chatTenantId) return;
-  if (!sessionId) {
-    return;
-  }
-
-  try {
-    const records = await listAttachments(sessionId);
-    const bound = records.filter((item) => item.state === "bound" && item.entryId);
-    const byEntry = new Map<string, HistoryAttachment[]>();
-    for (const record of bound) {
-      const list = byEntry.get(record.entryId!) ?? [];
-      list.push({
-        attachmentId: record.attachmentId,
-        displayName: record.displayName,
-        contentType: record.contentType
-      });
-      byEntry.set(record.entryId!, list);
-    }
-
-    const latest = useSessionStore.getState();
-    if (!sameSessionId(latest.sessionId, sessionId)) {
-      return;
-    }
-
-    useSessionStore.setState({
-      entries: latest.entries.map((entry) => {
-        const attachments = byEntry.get(entry.entryId);
-        return attachments ? { ...entry, attachments } : entry;
-      })
-    });
-  } catch {
-    // History still shows text when attachment metadata cannot be loaded.
-  }
-}
-
-async function syncVoiceStage(): Promise<void> {
-  const snapshot = useSessionStore.getState();
-  if (snapshot.connection !== "ready" || snapshot.mode !== "voice" || !snapshot.sessionId) {
-    return;
-  }
-
-  const ids = snapshot.pendingAttachments
-    .filter((item) => item.status === "ready" && item.attachmentId)
-    .map((item) => item.attachmentId!) ;
-  if (ids.length === 0) {
-    return;
-  }
-
-  try {
-    await stageAttachments(snapshot.sessionId, ids);
-  } catch (error) {
-    useSessionStore.setState({
-      error: error instanceof Error ? error.message : "Unable to stage attachments.",
-      errorFatal: false
-    });
-  }
-}
-
 export function composerSendEnabled(): boolean {
   if (chatTenantId && !useSessionStore.getState().sessionId && !tenantCanCreateChat()) return false;
   const snapshot = useSessionStore.getState();
@@ -2992,7 +2758,6 @@ async function uploadQueued(sessionId: string, localId: string): Promise<void> {
       readable: uploaded.readable,
       error: null
     });
-    await syncVoiceStage();
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return;
@@ -3035,7 +2800,6 @@ export async function removeComposerFile(localId: string): Promise<void> {
   useSessionStore.setState({
     pendingAttachments: snapshot.pendingAttachments.filter((pending) => pending.localId !== localId)
   });
-  await syncVoiceStage();
 }
 
 function historyHasUserEvent(entries: { sourceEventId: string | null; role: string }[], eventId: string): boolean {
@@ -3307,12 +3071,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     }));
   appendOptimisticUserEntry(eventId, text, refs, snapshot.mode, message.parts);
 
-  let payload: Record<string, unknown> = {
-    text,
-    attachmentIds: readyAttachmentIds,
-    behavior,
-    ...(message.parts?.length ? { parts: wireParts(message.parts) } : {})
-  };
+  let payload: Record<string, unknown> = {};
 
   if (queueLocalId) {
     useSessionStore.setState((state) => ({
@@ -3330,7 +3089,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         dispatched = true;
         return invoke("SendText", "user.text", payload, sequence, null, eventId);
       }
-      , chatTenantId ? async () => {
+      , async () => {
         let witness: Record<string, unknown>;
         if (behavior === 'interrupt') {
           if (!interruptedRun) throw new Error('The response changed. Check the current conversation before steering.');
@@ -3342,7 +3101,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
           if (pendingUserText?.eventId === eventId) pendingUserText.interruption = { interruptedRunId: interruptedRun, expectedRunRevision: Number(witness.expectedRunRevision) };
         } else witness = await tenantTextWitness(snapshot.sessionId!);
         payload = { text, ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...witness, ...(behavior === 'interrupt' ? { behavior } : {}) };
-      } : undefined);
+      });
       if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
       if (!ack?.accepted) {
         clearAwaitingAgentResponseStart();
@@ -3671,10 +3430,10 @@ async function cancelServerResponse(responseId: string): Promise<void> {
       let payload: Record<string, unknown> = {};
       const ack = await dispatchHubCommand((dispatchSequence) =>
         invoke("CancelResponse", "agent.response.cancel", payload, dispatchSequence, responseId)
-      , chatTenantId ? async () => {
+      , async () => {
         const run = useSessionStore.getState().agentRunId; if (!run) throw new Error('Reload this conversation before stopping the response.');
         payload = await tenantCancelWitness(run);
-      } : undefined);
+      });
       const latest = useSessionStore.getState();
       if (ack?.accepted || latest.liveResponseId !== responseId || ack?.error?.code === "StaleCommand") {
         return;
@@ -3706,59 +3465,6 @@ async function cancelServerResponse(responseId: string): Promise<void> {
 
   pendingStops.set(responseId, stopPromise);
   return stopPromise;
-}
-
-export async function respondToApproval(decision: "approve" | "reject"): Promise<void> {
-  const snapshot = useSessionStore.getState();
-  const pending = snapshot.pendingApproval;
-  if (!pending || !snapshot.sessionId) {
-    return;
-  }
-
-  const isCurrent = () => {
-    const current = useSessionStore.getState();
-    return current.sessionId === snapshot.sessionId
-      && current.attachmentId === snapshot.attachmentId
-      && current.pendingApproval?.approvalId === pending.approvalId
-      && current.pendingApproval.responseId === pending.responseId;
-  };
-
-  let ack: HubCommandAck | void;
-  try {
-    ack = await dispatchHubCommand((dispatchSequence) => {
-      // A queued decision belongs to its original Session and attachment.
-      if (!isCurrent()) return Promise.resolve();
-      return invoke(
-        "RespondApproval",
-        "agent.approval.respond",
-        { approvalId: pending.approvalId, decision },
-        dispatchSequence,
-        pending.responseId
-      );
-    });
-  } catch (error) {
-    ack = { error: {
-      category: "Transport",
-      code: "ApprovalResponseFailed",
-      message: error instanceof Error ? error.message : "Approval response was not accepted.",
-      fatal: false
-    } };
-  }
-
-  // A late ACK/failure must never dismiss or annotate a replacement request.
-  if (!isCurrent()) return;
-  if (ack?.accepted || ack?.error?.code === "StaleCommand") {
-    useSessionStore.setState({ pendingApproval: null });
-    return;
-  }
-
-  const message = ack?.error?.message ?? "Approval response was not accepted.";
-  useSessionStore.setState(state => ({
-    pendingApproval: { ...state.pendingApproval!, decisionError: message },
-    error: message,
-    sessionError: sessionErrorFromWire(ack?.error, message),
-    errorFatal: false
-  }));
 }
 
 export async function requestVoice(): Promise<void> {
@@ -4047,28 +3753,11 @@ export async function setMuted(muted: boolean): Promise<void> {
 export async function hangUp(): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (snapshot.sessionId) {
-    let ended = false;
-    try {
-      const ack = chatTenantId ? undefined : await dispatchHubCommand((sequence) =>
-        invoke("EndSession", "session.end", { reason: "userEnded" }, sequence)
-      );
-      ended = Boolean(ack?.accepted);
-    } catch {
-      ended = false;
-    }
-
-    if (!ended) {
-      try {
-        await endSession(snapshot.sessionId);
-      } catch (error) {
-        const latest = useSessionStore.getState();
-        useSessionStore.setState({
-          error: error instanceof Error ? error.message : "Unable to end the session.",
-          errorFatal: false,
-          errorHoldSequence: latest.lastServerSequence
-        });
-        return;
-      }
+    try { await endSession(snapshot.sessionId); }
+    catch (error) {
+      const latest = useSessionStore.getState();
+      useSessionStore.setState({ error: error instanceof Error ? error.message : 'Unable to end the session.', errorFatal: false, errorHoldSequence: latest.lastServerSequence });
+      return;
     }
   }
 

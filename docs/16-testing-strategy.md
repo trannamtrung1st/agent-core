@@ -1,5 +1,12 @@
 # Testing Strategy
 
+## Core client authority qualification checkpoint
+
+The canonical core client cutover is qualified with focused Chat/Activity/realtime/queue/file/history/route tests and native Synthetic browser flows. Fixtures declare tenant/read/action authority instead of restoring old owner transports. Obsolete owner-only test declarations are inventoried explicitly; tests are not skipped and canonical missing parity remains open. Browser checks include a seeded obsolete local token and assert no owner header or private unscoped request.
+
+The late Stop regression holds an acknowledgement, replaces the live response, then releases a stale acknowledgement and verifies that the new response remains connected. Fresh witness acquisition is awaited at the dispatch barrier in race fixtures. See [exact results and the retired-test inventory](reports/core-client-authority-cutover-verification-2026-10-21.md). Optional CI and full milestone/proposal acceptance were not requested or run.
+
+
 
 ## Closed file-client transport verification
 

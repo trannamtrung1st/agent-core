@@ -220,3 +220,41 @@ test('selected-conversation execution preserves its destination through stale re
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });
+
+
+test('tenant Activity inspects original background facts and continues the same Session through canonical Chat', async ({ page }) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    await page.setViewportSize({width: 390, height: 844}); await signIn(page); await page.goto(f.route);
+    await page.getByRole('button', {name: 'New Automation', exact: true}).click();
+    const editor = page.getByRole('dialog', {name: 'New Automation', exact: true});
+    await editor.getByRole('textbox', {name: 'Automation name', exact: true}).fill('Activity continuation check');
+    await editor.getByRole('textbox', {name: 'Automation instructions', exact: true}).fill('synthetic-automation-attention: check requested progress');
+    await editor.getByRole('checkbox', {name: 'Enable automatic occurrences', exact: true}).check();
+    await editor.getByRole('spinbutton', {name: 'Schedule maximum occurrences', exact: true}).fill('10');
+    await editor.getByRole('button', {name: 'Save Automation', exact: true}).click(); await expect(editor).toHaveCount(0);
+    await page.getByRole('button', {name: 'Run now', exact: true}).click();
+    await page.getByRole('dialog', {name: 'Run saved Automation now?', exact: true}).getByRole('button', {name: 'Run now', exact: true}).click();
+    const runLink = page.getByRole('link', {name: 'Open the admitted Run in Activity', exact: true});
+    await expect(runLink).toBeVisible();
+    const run = new URL((await runLink.getAttribute('href'))!, 'http://localhost').searchParams.get('run')!;
+    await expect.poll(async () => (await call<{status:string}>(f.api, f.root + `/agent-runs/${run}`)).status).toBe('completed');
+    await runLink.click(); const runDetail = page.getByRole('dialog', {name:'Run details', exact:true}); await expect(runDetail).toBeVisible();
+    await expect(runDetail.getByText('Completed', {exact:true}).first()).toBeVisible();
+    await page.goto(f.route.replace('/automations', '/activity/sessions'));
+    const table = page.getByRole('table', {name:'Activity sessions table'});
+    await table.getByRole('link').first().click();
+    const details = page.getByRole('dialog'); await expect(details.getByText('Conversation run history', {exact:true})).toBeVisible();
+    const originalSession = new URL(page.url()).searchParams.get('session')!;
+    await details.getByRole('button', {name:'Continue in chat', exact:true}).click();
+    await expect(page).toHaveURL(new RegExp(`/t/${f.tenant}/c/`));
+    const session = new URL(page.url()).pathname.split('/').pop()!;
+    expect(session).toBe(originalSession);
+    const before = (await call<{items:{role:string}[]}>(f.api, f.root + `/sessions/${session}/messages`)).items.filter(x=>x.role === 'assistant').length;
+    const message = page.getByRole('textbox', {name:'Message', exact:true}); await expect(message).toBeEnabled();
+    await message.fill('Follow up in this same Session'); await page.getByRole('button', {name:'Send', exact:true}).click();
+    await expect(page.getByText('Follow up in this same Session', {exact:true})).toHaveCount(1);
+    await expect.poll(async () => (await call<{items:{role:string}[]}>(f.api, f.root + `/sessions/${session}/messages`)).items.filter(x=>x.role === 'assistant').length).toBeGreaterThan(before);
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});

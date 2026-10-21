@@ -1,5 +1,12 @@
 # HTTP API and Realtime Protocol
 
+## Browser core transport cutover checkpoint
+
+The core browser client now uses only authenticated tenant HTTP and `AttachTenant`. Owner-capability acquisition/storage/headers/refresh, old Attach/live approval/Hub End invocation, owner upload/staging and implicit Activity SDK transports are removed. Tenant text/Stop/Steer retain fresh witnesses, command sequencing, attachment/connection fences and explicit replay identity. End is the canonical HTTP completion command. Late stale cancellation acknowledgement for a response superseded locally is ignored without reconnecting the newer response; server authority is unchanged.
+
+This is browser transport qualification, not final internal/schema removal or canonical rich-input parity. Historical owner composer and locale contracts below remain unimplemented on the canonical surface and are tracked for final reconciliation. [Evidence and limits](reports/core-client-authority-cutover-verification-2026-10-21.md).
+
+
 ## Independent child and completion controls
 
 Converted Schedule/manual tasks and their exact children may use the existing explicitly enabled `background.start`, typed wait, completion list/inspect/take/acknowledge and exact authorization schemas. Public tools accept objectives or exact child identifiers only; Core derives the parent, executor, root, actual requester and child identities. They never accept a caller-selected execution origin or requester. Scheduled ancestry keeps a null requester, including protected consent; manual ancestry retains its real invoker. Completion-report Runs cannot start children.

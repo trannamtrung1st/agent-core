@@ -1,9 +1,6 @@
 const SESSION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const SESSION_PATH_PATTERN =
-  /^\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
-
 export function isSessionId(value: string): boolean {
   return SESSION_ID_PATTERN.test(value);
 }
@@ -21,19 +18,11 @@ export function sameSessionId(left: string | null | undefined, right: string | n
 }
 
 export function parseSessionIdFromPath(pathname: string): string | null {
-  const tenant = parseTenantChatRoute(pathname);
-  if (tenant) return tenant.sessionId;
-  const match = SESSION_PATH_PATTERN.exec(pathname);
-  if (!match) {
-    return null;
-  }
-
-  const sessionId = match[1];
-  return isSessionId(sessionId) ? normalizeSessionId(sessionId) : null;
+  return parseTenantChatRoute(pathname)?.sessionId ?? null;
 }
 
-export function sessionPath(sessionId: string): string {
-  return `${tenantChatRoot(tenantIdFromPath(window.location.pathname))}/c/${normalizeSessionId(sessionId)}`;
+export function sessionPath(sessionId: string, tenant = tenantIdFromPath(window.location.pathname)): string {
+  return tenant && isSessionId(tenant) && isSessionId(sessionId) ? `/t/${tenant.toLowerCase()}/c/${normalizeSessionId(sessionId)}` : '/account/organizations';
 }
 
 export function tenantIdFromPath(path: string): string | null {
@@ -44,8 +33,8 @@ export function parseTenantChatRoute(path: string): { tenantId: string; sessionI
   const match = /^\/t\/([0-9a-f-]{36})(?:\/c\/([0-9a-f-]{36}))?\/?$/i.exec(path);
   return match && isSessionId(match[1]) && (!match[2] || isSessionId(match[2])) ? { tenantId: match[1].toLowerCase(), sessionId: match[2]?.toLowerCase() ?? null } : null;
 }
-export function tenantChatRoot(tenant: string | null): string { return tenant ? `/t/${tenant}` : ''; }
-export function newChatPath(): string { return tenantChatRoot(tenantIdFromPath(window.location.pathname)) || '/'; }
+export function tenantChatRoot(tenant: string | null): string { return tenant && isSessionId(tenant) ? `/t/${tenant.toLowerCase()}` : '/account/organizations'; }
+export function newChatPath(): string { return tenantChatRoot(tenantIdFromPath(window.location.pathname)); }
 
 export function syncBrowserSessionPath(sessionId: string | null, mode: "push" | "replace" = "replace"): void {
   const next = sessionId ? sessionPath(sessionId) : newChatPath();

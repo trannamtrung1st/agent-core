@@ -1,17 +1,16 @@
-import { IdentityError } from "../../services/identity";
-import type { ActivitySource, RunActions } from "../../services/activitySource";
-import { legacyActivitySource } from "../../services/activitySource";
-import { ConversationDestination } from "./AutomationDestination";
-import { useEffect, useRef, useState } from "react";
-import { App, Alert, Button, Collapse, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, LoadingOutlined, RedoOutlined, StopOutlined } from "@ant-design/icons";
-import { cancelAgentRun, decideAgentRunApproval, type AgentRun } from "../../services/api";
-import { useCursorPages } from "./useCursorPages";
-import { DrawerListFooter } from "./DrawerListFooter";
-import { DiagnosticDetails } from "./DiagnosticDetails";
-import { runActivationLabel, runBudgetLabel, runOutcomeLabel, runStatusLabel, runRecoveryLabel } from "./runPresentation";
+import { Alert, App, Button, Collapse, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { confirmAction } from "../../app/confirmAction";
+import type { ActivitySource, RunActions } from "../../services/activitySource";
+import { type AgentRun } from "../../services/api";
+import { IdentityError } from "../../services/identity";
+import { ConversationDestination } from "./AutomationDestination";
 import { formatChatTime } from "./chatTime";
+import { DiagnosticDetails } from "./DiagnosticDetails";
+import { DrawerListFooter } from "./DrawerListFooter";
+import { runActivationLabel, runBudgetLabel, runOutcomeLabel, runRecoveryLabel, runStatusLabel } from "./runPresentation";
+import { useCursorPages } from "./useCursorPages";
 
 export function AgentRunStatus({ run }: { run: AgentRun }) {
   const status = ({ queued: { icon: <ClockCircleOutlined />, color: undefined }, running: { icon: <LoadingOutlined />, color: "processing" },
@@ -33,42 +32,35 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [restricted, setRestricted] = useState(false);
-  const [confirming, setConfirming] = useState(false); const [now, setNow] = useState(Date.now);
+  const [confirming, setConfirming] = useState(false);
   const action = useRef(false); const confirmation = useRef(false); const epoch = useRef(0);
   const latest = useRef(run); latest.current = run;
   useEffect(() => { epoch.current++; setError(null); setRecoveryRequired(false); setRestricted(false); setBusy(false); setConfirming(false); action.current = false; confirmation.current = false; return () => { epoch.current++; }; }, [run.agentRunId]);
-  useEffect(() => {
-    if (!run.approval) return;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [run.approval?.expiresAt]);
-  const approvalExpired = !!run.approval && new Date(run.approval.expiresAt).getTime() <= now;
-  async function perform(decision: "cancel" | "approve" | "reject") {
-    if (recoveryRequired || action.current || confirmation.current || (decision !== "cancel" && approvalExpired)) return;
+  async function perform() {
+    if (!actions || recoveryRequired || action.current || confirmation.current) return;
     const generation = epoch.current;
     confirmation.current = true; setConfirming(true);
     confirmAction(modal, {
-      title: decision === "cancel" ? "Cancel this run?" : decision === "approve" ? "Approve this exact action?" : "Reject this action?",
-      content: decision === "cancel" ? "The run will stop. Confirmed external effects remain recorded." : run.approval?.preview,
-      okText: decision === "cancel" ? "Cancel run" : decision === "approve" ? "Approve action" : "Reject action",
-      danger: decision !== "approve",
+      title: "Cancel this run?",
+      content: "The run will stop. Confirmed external effects remain recorded.",
+      okText: "Cancel run",
+      danger: true,
       onOk: () => {
         if (generation !== epoch.current) return;
-        if (latest.current.revision !== run.revision || (decision !== "cancel" && new Date(run.approval!.expiresAt).getTime() <= Date.now())) {
-          setError("The run changed or the approval expired. Review the current details and try again.");
+        if (latest.current.revision !== run.revision) {
+          setError("The run changed. Review the current details and try again.");
           return;
         }
-        return execute(decision);
+        return execute();
       },
       afterClose: () => { if (generation === epoch.current) { confirmation.current = false; setConfirming(false); } }
     });
   }
-  async function execute(decision: "cancel" | "approve" | "reject") {
-    if (action.current) return;
+  async function execute() {
+    if (!actions || action.current) return;
     const generation = epoch.current; action.current = true; setBusy(true); setError(null);
     try {
-      const updated = await (decision === "cancel" ? (actions?.cancel ?? cancelAgentRun)(run) : decideAgentRunApproval(run, decision));
+      const updated = await actions.cancel(run);
       if (generation === epoch.current) onChange(updated);
     } catch (reason) {
       if (generation === epoch.current) { setError(reason instanceof Error ? reason.message : "The run changed. Refresh and try again."); if (actions) { setRecoveryRequired(true); if (reason instanceof IdentityError && [401,403,404].includes(reason.status)) setRestricted(true); } }
@@ -163,18 +155,12 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false, 
       diagnosticId: run.diagnosticId, sessionId: run.sessionId, agentRunId: run.agentRunId, code: run.failureCode
     }} />} /> : null}
     {run.knownEffectSummary ? <ReadingRegion label="Confirmed effects" text={run.knownEffectSummary} /> : null}
-    {run.approval ? <Flex vertical gap={token.paddingXS}>
-      <ReadingRegion label="Action awaiting approval" text={run.approval.preview} />
-      <Typography.Text type="secondary" role={approvalExpired ? "status" : undefined}>{approvalExpired ? "Approval expired. Waiting for the run to update." : `Expires ${new Date(run.approval.expiresAt).toLocaleString()}`}</Typography.Text>
-      <Flex wrap gap={token.paddingXS}><Button type="primary" disabled={busy || confirming || approvalExpired} loading={busy} onClick={() => void perform("approve")}>Approve action</Button>
-        <Button disabled={busy || confirming || approvalExpired} onClick={() => void perform("reject")}>Reject action</Button></Flex>
-    </Flex> : null}
-    {run.cancellationAvailable ? <Button danger style={{ alignSelf: "flex-start" }} disabled={busy || confirming || recoveryRequired} onClick={() => void perform("cancel")}>Cancel run</Button> : null}
+    {actions && run.cancellationAvailable ? <Button danger style={{ alignSelf: "flex-start" }} disabled={busy || confirming || recoveryRequired} onClick={() => void perform()}>Cancel run</Button> : null}
     {run.cancellationRequested && run.status !== "cancelled" ? <Typography.Text type="secondary" role="status">Cancellation requested</Typography.Text> : null}
     {error ? <Alert type="error" showIcon title={error} description={recoveryRequired ? "Read saved Run facts before another action. Reload does not repeat cancellation." : undefined} action={recoveryRequired ? <Button disabled={busy} onClick={() => void recover()}>Reload run</Button> : undefined} /> : null}
   </Flex>;
 }
-export function SessionRunHistory({ sessionId, open, source = legacyActivitySource }: { sessionId: string; open: boolean; source?: ActivitySource }) {
+export function SessionRunHistory({ sessionId, open, source }: { sessionId: string; open: boolean; source: ActivitySource }) {
   const page = useCursorPages(`${source.scope}:${sessionId}`, open, (_scope, cursor) => source.listRuns(sessionId, cursor));
   const { token } = theme.useToken();
   return <Flex vertical gap={token.padding}>

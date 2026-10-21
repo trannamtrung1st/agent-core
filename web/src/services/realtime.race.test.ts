@@ -1,17 +1,23 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { capture } from "../audio/capture";
+import { encodePcm16Le } from "../audio/pcm";
+import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
+import { createSessionForInstance, endSession, listSessionMessages } from "./api";
+import { cancelRenderedResponse, cancelVoice, composerSendEnabled, composerStopEnabled, hangUp, realtimeTestHooks, reportCommittedEntries, requestVoice, resumeCapture, resumeLiveSessionForNavigation, sendDraft, setMuted, startConversation, suspendLiveSessionForNavigation } from "./realtime";
 
 vi.mock("./api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./api")>();
   return {
     ...actual,
-    listSessionMessages: vi.fn()
+    listSessionMessages: vi.fn(), endSession: vi.fn(), createSessionForInstance: vi.fn()
   };
 });
-import { capture } from "../audio/capture";
-import { encodePcm16Le } from "../audio/pcm";
-import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
-import { listSessionMessages } from "./api";
-import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, reportCommittedEntries, requestVoice, resumeCapture, suspendLiveSessionForNavigation, resumeLiveSessionForNavigation, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
+vi.mock('./tenantChat', async original => ({ ...await original<object>(),
+ chatTenantId: '11111111-1111-1111-1111-111111111111',
+ tenantTextWitness: vi.fn(async () => ({ expectedRevision: 1, expectedSessionRevision: 1 })),
+ tenantCancelWitness: vi.fn(async () => ({ expectedRevision: 1, expectedRunRevision: 1 })),
+ tenantInterruptWitness: vi.fn(async () => ({ expectedRevision: 1, expectedSessionRevision: 1, expectedRunRevision: 1 }))
+}));
 
 const hooks = realtimeTestHooks!;
 
@@ -20,6 +26,7 @@ function pcmFrame(samples = 480): Uint8Array {
 }
 
 describe("realtime race handling", () => {
+  beforeEach(() => { window.history.replaceState(null, "", "/t/11111111-1111-1111-1111-111111111111"); vi.mocked(endSession).mockResolvedValue(undefined); });
   it("holds prepared media when SetMode acknowledges before any pending or applied mode event", async () => {
     let prepared = false, streaming = false;
     vi.spyOn(capture, "preflight").mockImplementation(async () => { prepared = true; });
@@ -28,7 +35,7 @@ describe("realtime race handling", () => {
     const release = vi.spyOn(capture, "release").mockImplementation(() => { prepared = false; streaming = false; });
     const start = vi.spyOn(capture, "start").mockImplementation(async () => { streaming = true; });
     const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", status: "attached",
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", status: "attached",
       mode: "text", voiceAvailable: true, sttTransport: "serverAudio", ttsTransport: "serverAudio" });
     await requestVoice();
     expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "voice" } }));
@@ -44,7 +51,7 @@ describe("realtime race handling", () => {
     vi.spyOn(capture, "preflight").mockImplementation(() => new Promise<void>(done => { resolve = done; }));
     vi.spyOn(capture, "isPrepared").mockReturnValue(false);
     const invoke = vi.fn().mockResolvedValue({ accepted: true }); hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", status: "attached",
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", status: "attached",
       mode: "text", voiceAvailable: true, sttTransport: "serverAudio", ttsTransport: "serverAudio" });
     const pending = requestVoice(); await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
     useSessionStore.setState({ attachmentId: "a2" }); resolve(); await pending;
@@ -57,7 +64,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockImplementation(() => new Promise<{ accepted: boolean }>(resolve => { accept = resolve; }));
     const stop = vi.fn().mockResolvedValue(undefined);
     hooks.setConnection({ invoke, send: vi.fn(), stop, off: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1",
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1",
       status: "attached", draft: "One request", agents: [], selectedAgentId: "examiner" });
     const sending = sendDraft();
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
@@ -77,7 +84,7 @@ describe("realtime race handling", () => {
     hooks.setConnection(null);
     window.localStorage.clear();
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       agents: [],
       selectedAgentId: "examiner"
     });
@@ -141,7 +148,7 @@ describe("realtime race handling", () => {
         payload: expect.objectContaining({ textEndExclusive: 11 })
       }))
     );
-    expect(invoke.mock.calls.some(([name]) => name === "Attach")).toBe(false);
+    expect(invoke.mock.calls.some(([name]) => name === "AttachTenant")).toBe(false);
     expect(stop).not.toHaveBeenCalled();
   });
 
@@ -153,7 +160,7 @@ describe("realtime race handling", () => {
       start: vi.fn().mockResolvedValue(undefined), send: vi.fn()
     } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready", sessionId: "s1", attachmentId: "a1",
       status: "attached", mode: "voice", captureLive: true,
       lastServerSequence: 1, outputState: "idle"
@@ -204,7 +211,7 @@ describe("realtime race handling", () => {
   it("leaves server voice mode exactly once when Admin suspends playback", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1",
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1",
       attachmentId: "a1", mode: "voice", liveResponseId: "r1" });
     await suspendLiveSessionForNavigation();
     await suspendLiveSessionForNavigation();
@@ -218,7 +225,7 @@ describe("realtime race handling", () => {
     vi.spyOn(capture, "isPrepared").mockReturnValue(false);
     vi.spyOn(capture, "preflight").mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
     const release = vi.spyOn(capture, "release");
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", mode: "voice" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", mode: "voice" });
     const pending = resumeCapture();
     await suspendLiveSessionForNavigation();
     release.mockClear();
@@ -253,10 +260,10 @@ describe("realtime race handling", () => {
     let finish!: (ack: { accepted: boolean; error: { message: string } }) => void;
     const invoke = vi.fn().mockReturnValue(new Promise(resolve => { finish = resolve; }));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), sessionId: "s1", attachmentId: "a1", mode: "voice" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", sessionId: "s1", attachmentId: "a1", connection: "ready", mode: "voice" });
     const pending = cancelVoice();
     await vi.waitFor(() => expect(invoke).toHaveBeenCalled());
-    useSessionStore.setState({ ...emptySession(), sessionId: "s2", attachmentId: "a2", connection: "ready" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", sessionId: "s2", attachmentId: "a2", connection: "ready" });
     finish({ accepted: false, error: { message: "Obsolete Voice error" } });
     await pending;
     expect(useSessionStore.getState().error).toBeNull();
@@ -270,7 +277,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -299,7 +306,7 @@ describe("realtime race handling", () => {
       expect(flush).toHaveBeenCalled();
       expect(stop).toHaveBeenCalled();
       expect(start).toHaveBeenCalled();
-      expect(invoke).toHaveBeenCalledWith("Attach", expect.objectContaining({ type: "session.attach" }));
+      expect(invoke).toHaveBeenCalledWith("AttachTenant", expect.objectContaining({ type: "session.attach" }));
     });
     expect(useSessionStore.getState().liveResponseId).toBeNull();
     expect(useSessionStore.getState().connection).toBe("reconnecting");
@@ -312,7 +319,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -352,7 +359,7 @@ describe("realtime race handling", () => {
     await vi.waitFor(() => {
       expect(stop).toHaveBeenCalled();
       expect(start).toHaveBeenCalled();
-      expect(invoke).toHaveBeenCalledWith("Attach", expect.objectContaining({ type: "session.attach" }));
+      expect(invoke).toHaveBeenCalledWith("AttachTenant", expect.objectContaining({ type: "session.attach" }));
     });
     expect(useSessionStore.getState().entries[0]?.text).toBe("Hello");
     expect(useSessionStore.getState().connection).toBe("reconnecting");
@@ -364,7 +371,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Reconnect failed." } });
     hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -391,7 +398,7 @@ describe("realtime race handling", () => {
 
     hooks.handleEvent(gapEvent);
     await vi.waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("Attach", expect.objectContaining({ type: "session.attach" }));
+      expect(invoke).toHaveBeenCalledWith("AttachTenant", expect.objectContaining({ type: "session.attach" }));
     });
     expect(useSessionStore.getState().error).toBe("Reconnect failed.");
     expect(useSessionStore.getState().errorFatal).toBe(false);
@@ -410,7 +417,7 @@ describe("realtime race handling", () => {
     });
 
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -442,7 +449,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -494,7 +501,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -585,7 +592,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -620,7 +627,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -656,7 +663,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Mailbox saturated." } });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -679,7 +686,7 @@ describe("realtime race handling", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -688,7 +695,7 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     const sending = sendDraft();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     const optimistic = useSessionStore.getState().entries;
     expect(optimistic).toHaveLength(1);
     expect(optimistic[0]?.role).toBe("user");
@@ -739,7 +746,7 @@ describe("realtime race handling", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -748,7 +755,7 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     const sending = sendDraft();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     expect(useSessionStore.getState().entries).toHaveLength(1);
     rejectAck({ accepted: false, error: { message: "Mailbox saturated." } });
     await sending;
@@ -765,7 +772,7 @@ describe("realtime race handling", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -774,7 +781,7 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     const sending = sendDraft();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     useSessionStore.setState({ draft: "typed later" });
     rejectAck({ accepted: false, error: { message: "Mailbox saturated." } });
     await sending;
@@ -790,7 +797,7 @@ describe("realtime race handling", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -800,7 +807,7 @@ describe("realtime race handling", () => {
     });
     const first = sendDraft();
     const second = sendDraft();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().draft).toBe("");
     expect(useSessionStore.getState().entries).toHaveLength(1);
@@ -814,7 +821,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -831,7 +838,7 @@ describe("realtime race handling", () => {
       })
     );
     expect(invoke.mock.calls[0][1].payload).toEqual(
-      expect.objectContaining({ text: "Hello", behavior: "queue" })
+      expect.objectContaining({ text: "Hello", expectedRevision: 1, expectedSessionRevision: 1 })
     );
   });
 
@@ -844,7 +851,7 @@ describe("realtime race handling", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -855,11 +862,11 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     const first = sendDraft();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     expect(invoke).toHaveBeenCalledTimes(1);
     useSessionStore.setState({ draft: "second" });
     const second = sendDraft();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
     expect(useSessionStore.getState().pendingSendQueue[0]?.text).toBe("second");
@@ -877,7 +884,7 @@ describe("realtime race handling", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -886,7 +893,7 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     const sending = sendDraft();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     hooks.handleEvent({
       protocolVersion: 1,
       sessionId: "s1",
@@ -913,7 +920,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -933,7 +940,7 @@ describe("realtime race handling", () => {
     vi.spyOn(capture, "playbackClosed").mockReturnValue(false);
     vi.spyOn(capture, "playbackQueued").mockReturnValue(0);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       mode: "voice",
       liveResponseId: null,
@@ -951,7 +958,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -988,7 +995,7 @@ describe("realtime race handling", () => {
       attachments: []
     };
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1009,7 +1016,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1033,7 +1040,7 @@ describe("realtime race handling", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1043,13 +1050,13 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     const stopping = cancelRenderedResponse();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("CancelResponse", expect.anything()));
     expect(invoke).toHaveBeenCalledWith(
       "CancelResponse",
       expect.objectContaining({
         type: "agent.response.cancel",
         responseId: "r1",
-        payload: {}
+        payload: {expectedRevision: 1, expectedRunRevision: 1}
       })
     );
     useSessionStore.setState({
@@ -1086,7 +1093,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Mute failed." } });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1110,7 +1117,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1124,7 +1131,7 @@ describe("realtime race handling", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("falls back to HTTP end when EndSession is rejected", async () => {
+  it("ends through the tenant HTTP command without invoking a Hub EndSession method", async () => {
     window.localStorage.setItem("agent-core.owner-capability", "tok");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", fetchMock);
@@ -1132,7 +1139,7 @@ describe("realtime race handling", () => {
     const stop = vi.fn().mockResolvedValue(undefined);
     hooks.setConnection({ invoke, send: vi.fn(), stop, off: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1140,27 +1147,20 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     await hangUp();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/sessions/s1",
-      expect.objectContaining({
-        method: "DELETE",
-        headers: expect.any(Headers)
-      })
-    );
-    const deleteHeaders = fetchMock.mock.calls[0][1].headers as Headers;
-    expect(deleteHeaders.get("X-AgentCore-Owner-Capability")).toBe("tok");
+    expect(endSession).toHaveBeenCalledWith("s1");
+    expect(invoke).not.toHaveBeenCalledWith("EndSession", expect.anything());
     expect(useSessionStore.getState().sessionId).toBe("s1");
     expect(useSessionStore.getState().status).toBe("ended");
     expect(useSessionStore.getState().connection).toBe("idle");
   });
 
-  it("keeps the session when EndSession and HTTP end both fail", async () => {
+  it("keeps the session when tenant HTTP completion fails", async () => {
     window.localStorage.setItem("agent-core.owner-capability", "tok");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    vi.mocked(endSession).mockRejectedValue(new Error("Unable to end the session."));
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Persistent save failed." } });
     hooks.setConnection({ invoke, send: vi.fn(), stop: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1175,40 +1175,11 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().errorHoldSequence).toBe(0);
   });
 
-  it("refreshes owner capability and retries attach once after Unauthorized", async () => {
-    const api = await import("./api");
-    window.localStorage.setItem(api.OWNER_STORAGE_KEY, "stale-token");
-    const clearSpy = vi.spyOn(api, "clearOwnerCapability");
-    const ensureSpy = vi.spyOn(api, "ensureOwnerCapability").mockResolvedValue("fresh-token");
-    const invoke = vi
-      .fn()
-      .mockResolvedValueOnce({
-        accepted: false,
-        error: { code: "Unauthorized", message: "Owner capability is missing or invalid." }
-      })
-      .mockResolvedValueOnce({ accepted: true });
-    hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({
-      ...emptySession(),
-      connection: "reconnecting",
-      sessionId: "s1",
-      attachmentId: null,
-      lastServerSequence: 2,
-      agents: [],
-      selectedAgentId: "examiner"
-    });
-    const attached = await hooks.attachWithBusyRetry!(2);
-    expect(attached).toBe(true);
-    expect(invoke).toHaveBeenCalledTimes(2);
-    expect(clearSpy).toHaveBeenCalledTimes(1);
-    expect(ensureSpy).toHaveBeenCalledTimes(1);
-  });
-
   it("resumes client transcript after interrupted server-audio playback finishes flushing", async () => {
     vi.spyOn(capture, "flushPlayback").mockResolvedValue(120);
     hooks.setConnection({ invoke: vi.fn().mockResolvedValue({ accepted: true }), send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1231,7 +1202,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Session is attached to another connection." } });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "reconnecting",
       sessionId: "s1",
       attachmentId: null,
@@ -1242,7 +1213,7 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     await hooks.attachAfterReconnect();
-    expect(invoke).toHaveBeenCalledWith("Attach", expect.objectContaining({ type: "session.attach" }));
+    expect(invoke).toHaveBeenCalledWith("AttachTenant", expect.objectContaining({ type: "session.attach" }));
     expect(useSessionStore.getState().connection).toBe("failed");
     expect(useSessionStore.getState().error).toContain("another connection");
     expect(useSessionStore.getState().errorFatal).toBe(false);
@@ -1252,7 +1223,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Session is busy." } });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1279,7 +1250,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1310,7 +1281,7 @@ describe("realtime race handling", () => {
     vi.spyOn(capture, "isPrepared").mockReturnValue(false);
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1325,7 +1296,7 @@ describe("realtime race handling", () => {
     resolveVoiceAck?.({ accepted: true });
     await Promise.all([pending, cancel]);
 
-    const attached = await hooks.attachWithBusyRetry!(null);
+    const attached = await hooks.attachWithBusyRetry!();
     expect(attached).toBe(true);
     hooks.handleEvent({
       protocolVersion: 1,
@@ -1364,7 +1335,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1386,7 +1357,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1407,7 +1378,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1427,7 +1398,7 @@ describe("realtime race handling", () => {
     vi.spyOn(capture, "isPrepared").mockReturnValue(false);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "idle",
       sessionId: null,
       voiceAvailable: true,
@@ -1444,7 +1415,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
     hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1484,7 +1455,7 @@ describe("realtime race handling", () => {
       .mockResolvedValueOnce({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "reconnecting",
       sessionId: "s1",
       attachmentId: null,
@@ -1519,7 +1490,7 @@ describe("realtime race handling", () => {
 
   it("marks failed after the hub closes", () => {
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "reconnecting",
       sessionId: "s1",
       agents: [],
@@ -1541,7 +1512,7 @@ describe("realtime race handling", () => {
       .mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "reconnecting",
       sessionId: "s1",
       lastServerSequence: 3,
@@ -1562,7 +1533,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1593,7 +1564,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1611,7 +1582,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1674,7 +1645,7 @@ describe("realtime race handling", () => {
       .mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1718,7 +1689,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "connecting",
       sessionId: "s1",
       sttTransport: "clientTranscript",
@@ -1787,7 +1758,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1841,7 +1812,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1872,7 +1843,7 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().captureAuthorized).toBe(false);
     expect(useSessionStore.getState().mode).toBe("voice");
     await vi.waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("Attach", expect.anything());
+      expect(invoke).toHaveBeenCalledWith("AttachTenant", expect.anything());
     });
     expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
     hooks.handleEvent({
@@ -1918,7 +1889,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1950,7 +1921,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -1971,7 +1942,7 @@ describe("realtime race handling", () => {
     expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
     useSessionStore.setState({ muted: true, mode: "voice" });
     invoke.mockClear();
-    const attached = await hooks.attachWithBusyRetry!(1);
+    const attached = await hooks.attachWithBusyRetry!();
     expect(attached).toBe(true);
     hooks.handleEvent({
       protocolVersion: 1,
@@ -2008,7 +1979,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -2058,7 +2029,7 @@ describe("realtime race handling", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -2104,7 +2075,7 @@ describe("realtime race handling", () => {
     const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 451));
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "connecting",
       sessionId: "s-active",
       attachmentId: "a1",
@@ -2146,7 +2117,7 @@ describe("realtime race handling", () => {
   it("clears ghost liveResponseId from session.ready without REST polling", async () => {
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "connecting",
       sessionId: "s-active",
       attachmentId: "a1",
@@ -2198,7 +2169,7 @@ describe("realtime race handling", () => {
     const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 101));
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "connecting",
       sessionId: "s-long",
       attachmentId: "a1",
@@ -2235,7 +2206,7 @@ describe("realtime race handling", () => {
 
   it("surfaces start conversation failures", async () => {
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       agents: [
         {
           id: "examiner",
@@ -2253,16 +2224,7 @@ describe("realtime race handling", () => {
       newChatIdentityKey: "managed:019944af-00d1-7000-8000-000000000099",
       selectedAgentId: "examiner"
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo) => {
-        const url = String(input);
-        if (url.includes("owner-capability")) {
-          return { ok: true, json: async () => ({ token: "t" }) };
-        }
-        return { ok: false, status: 503 };
-      })
-    );
+    vi.mocked(createSessionForInstance).mockRejectedValue(new Error("Unable to create a session."));
     await startConversation();
     expect(useSessionStore.getState().sessionId).toBeNull();
     expect(useSessionStore.getState().error).toContain("Unable to create a session");

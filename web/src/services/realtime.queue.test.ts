@@ -1,16 +1,12 @@
-import { messageText, type MessagePart } from "./messageParts";
+vi.mock('./tenantChat', async original => ({ ...await original<object>(),
+ chatTenantId: '11111111-1111-1111-1111-111111111111',
+ tenantTextWitness: vi.fn(async () => ({expectedRevision: 1, expectedSessionRevision: 1})),
+ tenantCancelWitness: vi.fn(async () => ({expectedRevision: 1, expectedRunRevision: 1})),
+ tenantInterruptWitness: vi.fn(async (_session: string, run: string) => ({expectedRevision: 1, expectedSessionRevision: 1, interruptedRunId: run, expectedRunRevision: 1}))
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  composerSendLabel,
-  composerSteerEnabled,
-  composerStopEnabled,
-  realtimeTestHooks,
-  removeQueuedSend,
-  sendDraft,
-  steerQueuedSend,
-  cancelRenderedResponse
-} from "./realtime";
 import { emptySession, useSessionStore } from "../state/sessionStore";
+import { cancelRenderedResponse, composerSendLabel, composerSteerEnabled, composerStopEnabled, realtimeTestHooks, removeQueuedSend, sendDraft, steerQueuedSend } from "./realtime";
 
 const hooks = realtimeTestHooks!;
 
@@ -20,72 +16,18 @@ describe("Codex-style pending send queue", () => {
     hooks.resetOutput();
     useSessionStore.setState(emptySession());
   });
-
-  it("keeps structured chips in queued snapshots and restores them after a rejected steer", async () => {
-    const parts: MessagePart[] = [{kind:"invocation",invocationKind:"skill",skillKey:"definition:review",label:"Review"},{kind:"text",text:" inspect "},{kind:"reference",reference:{kind:"session",sessionId:"11111111-1111-1111-1111-111111111111"},label:"Original chat"}];
-    const invoke = vi.fn().mockResolvedValue({accepted:false,error:{message:"Selected Skill is unavailable",category:"Validation",code:"ValidationError"}});
-    hooks.setConnection({invoke,send:vi.fn()} as never);
-    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",liveResponseId:"r1",draft:messageText(parts),draftParts:parts});
-    await sendDraft(); parts[0] = {kind:"text",text:"mutated"};
-    const queued = useSessionStore.getState().pendingSendQueue[0];
-    expect(queued.parts?.[0].kind).toBe("invocation");
-    await steerQueuedSend(queued.localId);
-    expect(invoke).toHaveBeenCalledWith("SendText",expect.objectContaining({payload:expect.objectContaining({parts:[{kind:"invocation",invocationKind:"skill",skillKey:"definition:review"},{kind:"text",text:" inspect "},{kind:"reference",reference:{kind:"session",sessionId:"11111111-1111-1111-1111-111111111111"}}]})}));
-    expect(useSessionStore.getState().pendingSendQueue[0].parts).toEqual(queued.parts);
-    useSessionStore.setState({draft:queued.text,draftParts:queued.parts}); await sendDraft("interrupt");
-    expect(useSessionStore.getState().draftParts).toEqual(queued.parts);
-  });
-
-  it("replays uncertain typed input unchanged while preserving a newer typed draft", async () => {
-    const original: MessagePart[] = [{kind:"invocation",invocationKind:"skill",skillKey:"definition:review"},{kind:"text",text:" inspect"}];
-    const newer: MessagePart[] = [{kind:"reference",reference:{kind:"session",sessionId:"22222222-2222-2222-2222-222222222222"}}];
-    const invoke = vi.fn().mockRejectedValueOnce(new Error("lost ACK")).mockResolvedValue({accepted:true});
-    hooks.setConnection({invoke,send:vi.fn()} as never);
-    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",liveResponseId:"r1",draft:messageText(original),draftParts:original});
-    await sendDraft("interrupt");
-    const first = invoke.mock.calls[0][1];
-    useSessionStore.setState({connection:"ready",draft:messageText(newer),draftParts:newer});
-    hooks.handleEvent({protocolVersion:1,sessionId:"s1",attachmentId:"a2",eventId:"ready",sequence:1,timestamp:new Date().toISOString(),correlationId:"ready",causationId:null,responseId:null,type:"session.ready",payload:{history:[],mode:"text",status:"attached",outputState:"idle",activeResponseId:null}});
-    await vi.waitFor(()=>expect(invoke).toHaveBeenCalledTimes(2));
-    expect(invoke.mock.calls[1][1].eventId).toBe(first.eventId);
-    expect(invoke.mock.calls[1][1].payload.parts).toEqual(first.payload.parts);
-    expect(useSessionStore.getState().draftParts).toEqual(newer);
-  });
-
-  it("preserves a newer reference revision when history confirms a lost ACK", async () => {
-    const original: MessagePart[] = [{ kind: "reference", reference: { kind: "session", sessionId: "11111111-1111-1111-1111-111111111111", selectedRevision: 1 } }];
-    const newer: MessagePart[] = [{ kind: "reference", reference: { kind: "session", sessionId: "11111111-1111-1111-1111-111111111111", selectedRevision: 2 } }];
-    const invoke = vi.fn().mockRejectedValue(new Error("lost ACK"));
-    hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: messageText(original), draftParts: original });
-    await sendDraft("interrupt");
-    const eventId = invoke.mock.calls[0][1].eventId;
-    useSessionStore.setState({ connection: "ready", draft: messageText(newer), draftParts: newer });
-    hooks.handleEvent({ protocolVersion: 1, sessionId: "s1", attachmentId: "a2", eventId: "ready", sequence: 1, timestamp: new Date().toISOString(), correlationId: "ready", causationId: null, responseId: null, type: "session.ready", payload: { history: [{ entryId: "entry-1", sequence: 1, sourceEventId: eventId, role: "user", text: messageText(original), parts: original, status: "completed", createdAt: new Date().toISOString() }], mode: "text", status: "attached", outputState: "idle", activeResponseId: null } });
-    expect(useSessionStore.getState().draftParts).toEqual(newer);
-    expect(useSessionStore.getState().draft).toBe(messageText(newer));
-    expect(invoke).toHaveBeenCalledTimes(1);
-  });
   it("omits empty editor parts for attachment-only sends", async () => {
     const invoke=vi.fn().mockResolvedValue({accepted:true}); hooks.setConnection({invoke,send:vi.fn()} as never);
     const file={localId:"file1",displayName:"notes.txt",contentType:"text/plain",byteSize:4,status:"ready" as const,progress:100,attachmentId:"att1",error:null};
-    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",draft:"",draftParts:[],pendingAttachments:[file]});
-    await sendDraft(); expect(invoke).toHaveBeenCalledWith("SendText",expect.objectContaining({payload:{text:"",attachmentIds:["att1"],behavior:"queue"}}));
-  });
-
-  it("sends a Skill-only turn with its canonical structured identity", async () => {
-    const invoke = vi.fn().mockResolvedValue({accepted:true}); hooks.setConnection({invoke,send:vi.fn()} as never);
-    const parts: MessagePart[] = [{kind:"invocation",invocationKind:"skill",skillKey:"definition:review"}];
-    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",draft:messageText(parts),draftParts:parts});
-    await sendDraft(); expect(invoke).toHaveBeenCalledWith("SendText", expect.objectContaining({payload: expect.objectContaining({text:messageText(parts),parts})}));
-    expect(useSessionStore.getState().draftParts).toBeNull();
+    useSessionStore.setState({...emptySession(), agentRunId: "run-current",connection:"ready",sessionId:"s1",attachmentId:"a1",draft:"",draftParts:[],pendingAttachments:[file]});
+    await sendDraft(); expect(invoke).toHaveBeenCalledWith("SendText",expect.objectContaining({payload:{text:"",attachmentIds:["att1"],expectedRevision:1,expectedSessionRevision:1}}));
   });
 
   it("queues locally during a live response without SendText or history entries", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -106,7 +48,7 @@ describe("Codex-style pending send queue", () => {
   it("preserves FIFO for multiple queued sends", async () => {
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -124,7 +66,7 @@ describe("Codex-style pending send queue", () => {
   it("sends a draft immediately with interrupt semantics while preserving the local FIFO", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Later" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Later" });
     await sendDraft();
     const queue = useSessionStore.getState().pendingSendQueue;
     useSessionStore.setState({ draft: "Change direction" });
@@ -139,7 +81,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     const queue = [{ localId: "q1", eventId: "e1", text: "Later", attachmentIds: [], attachments: [] }];
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", draft: "  ", pendingSendQueue: queue });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", draft: "  ", pendingSendQueue: queue });
     await sendDraft("interrupt");
     expect(invoke).not.toHaveBeenCalled();
     expect(useSessionStore.getState().pendingSendQueue).toEqual(queue);
@@ -148,7 +90,7 @@ describe("Codex-style pending send queue", () => {
   it("restores a rejected steer draft without queueing it", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Try again", category: "Validation", code: "ValidationError" } });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Change direction" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Change direction" });
     await sendDraft("interrupt");
     expect(useSessionStore.getState().draft).toBe("Change direction");
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0);
@@ -160,7 +102,7 @@ describe("Codex-style pending send queue", () => {
     let accept!: (ack: { accepted: boolean }) => void;
     const invoke = vi.fn(() => new Promise<{ accepted: boolean }>(resolve => { accept = resolve; }));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "First" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "First" });
     const first = sendDraft("interrupt");
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
     useSessionStore.setState({ draft: "Second" });
@@ -175,14 +117,14 @@ describe("Codex-style pending send queue", () => {
   it.each(["idle", "generating"])("retries an uncertain draft steer while %s without consuming a newer draft or files", async (outputState) => {
     const invoke = vi.fn().mockRejectedValueOnce(new Error("Disconnected")).mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer now" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer now" });
     await sendDraft("interrupt");
     const original = invoke.mock.calls[0][1];
     const newFile = { localId: "newFile", displayName: "next.txt", contentType: "text/plain", byteSize: 4, status: "uploading" as const, progress: 20, attachmentId: null, error: null };
     useSessionStore.setState({ draft: "New unsent draft", pendingAttachments: [newFile] });
     hooks.handleEvent({ protocolVersion: 1, sessionId: "s1", attachmentId: "a2", eventId: "ready", sequence: 1, timestamp: new Date().toISOString(), correlationId: "ready", causationId: null, responseId: null, type: "session.ready", payload: { history: [], mode: "text", status: "attached", outputState, activeResponseId: outputState === "generating" ? "r1" : null } });
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
-    expect(invoke.mock.calls[1][1]).toMatchObject({ eventId: original.eventId, payload: { text: "Steer now", attachmentIds: [], behavior: "interrupt" } });
+    expect(invoke.mock.calls[1][1]).toMatchObject({ eventId: original.eventId, payload: { text: "Steer now", behavior: "interrupt", interruptedRunId: "run-current", expectedRunRevision: 1, expectedSessionRevision: 1, expectedRevision: 1 } });
     expect(useSessionStore.getState().draft).toBe("New unsent draft");
     expect(useSessionStore.getState().pendingAttachments).toEqual([newFile]);
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0);
@@ -195,7 +137,7 @@ describe("Codex-style pending send queue", () => {
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     const sentFile = { localId: "oldFile", displayName: "old.txt", contentType: "text/plain", byteSize: 4, status: "ready" as const, progress: 100, attachmentId: "oldId", error: null };
     const newFile = { ...sentFile, localId: "newFile", displayName: "new.txt", attachmentId: "newId" };
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer", pendingAttachments: [sentFile] });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer", pendingAttachments: [sentFile] });
     const sending = sendDraft("interrupt");
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
     useSessionStore.setState({ draft: "Next", pendingAttachments: [newFile] });
@@ -210,12 +152,12 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     const file = { localId: "file1", displayName: "notes.txt", contentType: "text/plain", byteSize: 4, status: "ready" as const, progress: 100, attachmentId: "att1", error: null };
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Later" });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Later" });
     await sendDraft();
     const queue = useSessionStore.getState().pendingSendQueue;
     useSessionStore.setState({ pendingAttachments: [file] });
     await sendDraft("interrupt");
-    expect(invoke).toHaveBeenCalledWith("SendText", expect.objectContaining({ payload: { text: "", attachmentIds: ["att1"], behavior: "interrupt" } }));
+    expect(invoke).toHaveBeenCalledWith("SendText", expect.objectContaining({ payload: expect.objectContaining({ text: "", attachmentIds: ["att1"], behavior: "interrupt", expectedRevision: 1, interruptedRunId: "run-current" }) }));
     expect(useSessionStore.getState().pendingAttachments).toHaveLength(0);
     expect(useSessionStore.getState().pendingSendQueue).toEqual(queue);
   });
@@ -224,7 +166,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockRejectedValueOnce(new Error("Disconnected")).mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     const file = { localId: "file1", displayName: "notes.txt", contentType: "text/plain", byteSize: 4, status: "ready" as const, progress: 100, attachmentId: "att1", error: null };
-    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer", pendingAttachments: [file] });
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer", pendingAttachments: [file] });
     await sendDraft("interrupt");
     expect(useSessionStore.getState().pendingAttachments).toEqual([file]);
     await sendDraft("interrupt");
@@ -237,7 +179,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -279,7 +221,7 @@ describe("Codex-style pending send queue", () => {
     expect(sendCall?.[1]).toMatchObject({
       type: "user.text",
       eventId: "e1",
-      payload: { text: "U2", attachmentIds: [] }
+      payload: { text: "U2", expectedRevision: 1, expectedSessionRevision: 1 }
     });
     expect(useSessionStore.getState().pendingSendQueue[0].text).toBe("U3");
     expect(useSessionStore.getState().entries.some((entry) => entry.role === "user" && entry.text === "U2")).toBe(true);
@@ -289,7 +231,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -328,7 +270,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -367,7 +309,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -406,7 +348,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -447,7 +389,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -473,7 +415,7 @@ describe("Codex-style pending send queue", () => {
 
   it("disables steer on other rows while any item is dispatching", () => {
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       liveResponseId: "r1",
@@ -498,7 +440,7 @@ describe("Codex-style pending send queue", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -511,7 +453,7 @@ describe("Codex-style pending send queue", () => {
       selectedAgentId: "examiner"
     });
     const first = steerQueuedSend("qa");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
     await steerQueuedSend("qb");
     expect(invoke).toHaveBeenCalledTimes(1);
     resolveSend({ accepted: true });
@@ -520,7 +462,7 @@ describe("Codex-style pending send queue", () => {
 
   it("removing a queued item releases its attachment snapshot", async () => {
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       pendingSendQueue: [
         {
           localId: "q1",
@@ -555,7 +497,7 @@ describe("Codex-style pending send queue", () => {
     );
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -564,7 +506,7 @@ describe("Codex-style pending send queue", () => {
       selectedAgentId: "examiner"
     });
     const stopping = cancelRenderedResponse();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("CancelResponse", expect.anything()));
     expect(invoke).toHaveBeenCalledWith(
       "CancelResponse",
       expect.objectContaining({ responseId: "r1", type: "agent.response.cancel" })
@@ -580,7 +522,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockRejectedValue(new Error("network"));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",
@@ -623,7 +565,7 @@ describe("Codex-style pending send queue", () => {
     const invoke = vi.fn().mockRejectedValue(new Error("network"));
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
-      ...emptySession(),
+      ...emptySession(), agentRunId: "run-current",
       connection: "ready",
       sessionId: "s1",
       attachmentId: "a1",

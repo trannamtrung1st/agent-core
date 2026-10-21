@@ -1,12 +1,12 @@
-import { listAgentRuns } from "../../services/api";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Empty, Flex, Typography } from "antd";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { ActivitySource } from "../../services/activitySource";
 import type { HistoryEntry } from "../../state/sessionStore";
-import { AgentActivity } from "./AgentActivity";
 import type { AgentActivityState } from "./activityState";
+import { AgentActivity } from "./AgentActivity";
 import { ChatMessage } from "./ChatMessage";
-import { orderConversationEntries } from "./conversationOrder";
 import { formatChatTime, messageTimestamp, statusLabel } from "./chatTime";
+import { orderConversationEntries } from "./conversationOrder";
 
 const REPLY_SPACE_RATIO = 0.5;
 const SCROLL_BOTTOM_SLACK = 2;
@@ -21,6 +21,7 @@ function isScrolledToBottom(scroll: Element): boolean {
 
 export function Conversation({
   agentName,
+  activitySource,
   sessionId,
   tenantId,
   entries,
@@ -34,6 +35,7 @@ export function Conversation({
   onLoadOlder, afterEntries
 }: {
   agentName: string;
+  activitySource?: ActivitySource;
   sessionId: string | null;
   tenantId?: string;
   entries: HistoryEntry[];
@@ -52,13 +54,13 @@ export function Conversation({
   useEffect(() => {
     let current = true;
     setCompletionSources({});
-    if (!sessionId || !settledHistoryKey) return;
+    if (!sessionId || !settledHistoryKey || !activitySource) return;
     const oldest = entries[0]?.createdAt;
     void (async () => {
       const sources: Record<string, string> = {};
       let cursor: string | undefined;
       do {
-        const page = await listAgentRuns(sessionId, cursor, 100);
+        const page = await activitySource.listRuns(sessionId, cursor, 100);
         for (const run of page.items) if (run.responseId && run.sourceBackgroundSessionId) sources[run.responseId] = run.sourceBackgroundSessionId;
         cursor = page.hasMore && page.nextCursor ? page.nextCursor : undefined;
         if (oldest && page.items.at(-1)?.createdAt && page.items.at(-1)!.createdAt < oldest) break;
@@ -66,7 +68,7 @@ export function Conversation({
       if (current) setCompletionSources(sources);
     })().catch(() => { /* Optional provenance must not prevent reading durable history. */ });
     return () => { current = false; };
-  }, [sessionId, settledHistoryKey]);
+  }, [sessionId, settledHistoryKey, activitySource]);
   const windowRef = useRef<HTMLElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
   const scrolledFor = useRef<string | null>(null);

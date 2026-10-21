@@ -37,17 +37,17 @@ describe("AgentPicker", () => {
         managedInstances={instances}
         identityKey="managed:019944af-00d1-7000-8000-000000000091"
         error={null}
-        speechLocale=""
+
         managedInstancesError={null}
         managedInstancesLoading={false}
         onIdentityChange={onSelect}
-        onSpeechLocaleChange={vi.fn()}
+
         onRetryManagedInstances={vi.fn()}
       />
     );
 
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Speech locale" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
     expect(screen.getByText("Identity")).toBeInTheDocument();
     expect(screen.getByText("Sam — Support · v3 · 00000091")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Model" })).not.toBeInTheDocument();
@@ -63,11 +63,11 @@ describe("AgentPicker", () => {
         managedInstances={instances}
         identityKey="managed:019944af-00d1-7000-8000-000000000091"
         error="Unable to list agents."
-        speechLocale=""
+
         managedInstancesError={null}
         managedInstancesLoading={false}
         onIdentityChange={vi.fn()}
-        onSpeechLocaleChange={vi.fn()}
+
         onRetryManagedInstances={vi.fn()}
       />
     );
@@ -85,9 +85,9 @@ describe("AgentPicker", () => {
         error={null}
         managedInstancesError={null}
         managedInstancesLoading={false}
-        speechLocale=""
+
         onIdentityChange={onIdentityChange}
-        onSpeechLocaleChange={vi.fn()}
+
         onRetryManagedInstances={vi.fn()}
       />
     );
@@ -105,9 +105,9 @@ describe("AgentPicker", () => {
         error={null}
         managedInstancesError={null}
         managedInstancesLoading={true}
-        speechLocale=""
+
         onIdentityChange={vi.fn()}
-        onSpeechLocaleChange={vi.fn()}
+
         onRetryManagedInstances={vi.fn()}
       />
     );
@@ -125,34 +125,34 @@ describe("AgentPicker", () => {
         error={null}
         managedInstancesError="Managed instances unavailable."
         managedInstancesLoading={false}
-        speechLocale=""
+
         onIdentityChange={vi.fn()}
-        onSpeechLocaleChange={vi.fn()}
+
         onRetryManagedInstances={onRetry}
       />
     );
 
-    expect(screen.getByText("Managed instances could not be loaded.")).toBeInTheDocument();
+    expect(screen.getByText("Agents could not be loaded.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry managed instances" }));
     expect(onRetry).toHaveBeenCalled();
   });
 
-  it("directs empty inventory to Admin and disables selection", () => {
+  it("explains empty tenant inventory and disables selection", () => {
     render(
       <AgentPicker
         managedInstances={[]}
         identityKey=""
         error={null}
-        speechLocale=""
+
         managedInstancesError={null}
         managedInstancesLoading={false}
         onIdentityChange={vi.fn()}
-        onSpeechLocaleChange={vi.fn()}
+
         onRetryManagedInstances={vi.fn()}
       />
     );
 
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeDisabled();
-    expect(screen.getByText("Create an instance in Admin to chat.")).toBeInTheDocument();
+    expect(screen.getByText("No agents are available. Try another search or ask an organization owner for Chat access.")).toBeInTheDocument();
   });
 });

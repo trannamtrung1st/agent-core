@@ -1,4 +1,4 @@
-import { OwnerCapabilityError } from "../../services/api";
+import { IdentityError } from "../../services/identity";
 
 export type AdminFailureNotice = {
   message: string;
@@ -85,9 +85,9 @@ export function parseAdminDeletionBlockedMessage(message: string): AdminDeletion
 export function formatAdminLoadError(
   error: unknown
 ): AdminFailureNotice & { unauthorized: boolean } {
-  if (error instanceof OwnerCapabilityError) {
+  if (error instanceof IdentityError && [401, 403].includes(error.status)) {
     return {
-      message: "Owner capability is missing or invalid. Refresh the page or reopen Chat to re-authorize.",
+      message: "Your current account cannot access this view. Sign in again or choose an organization you can access.",
       unauthorized: true
     };
   }
