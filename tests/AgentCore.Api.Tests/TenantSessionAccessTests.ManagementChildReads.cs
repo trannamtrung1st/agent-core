@@ -81,7 +81,7 @@ public sealed partial class TenantSessionAccessTests
                     Assert.Equal("PRIVATE-INSPECTION-RESOURCE-BYTES-SENTINEL", data.GetProperty("content").GetString());
                     Assert.False(data.GetProperty("truncated").GetBoolean());
                 }
-                var reference = Assert.Single(TenantManagementReadReferences.Read(final.Checkpoint));
+                var reference = Assert.Single(TenantManagementReadReferences.Read(final.Checkpoint), r => r.ToolName == tool);
                 var sources = TenantManagementInspectionSources.Read(reference.SourcesJson);
                 if (readable) Assert.NotEmpty(sources); else Assert.Empty(sources);
                 Assert.All(sources, s => Assert.Equal(tool == "skills.inspect" ? "skillProcedure" : tool == "skills.list" ? "skill" : "resource", s.Kind));

@@ -27,8 +27,8 @@ public static class ToolProjectionService
     }
     private static ModelToolDefinition ForContext(ModelToolDefinition tool, AgentContext? context) => context?.ExecutionContext is null ? tool
         : TenantManagementMutationContract.IsTool(tool.Name) ? TenantManagementMutationContract.ForModel(tool)
+        : tool.Name == ToolCatalog.SkillsLoad ? TenantSkillLoadContract.ForModel(tool, context)
         : TenantManagementReadContract.IsTool(tool.Name) ? TenantManagementReadContract.ForModel(tool)
-        : tool.Name == ToolCatalog.SkillsLoad ? TenantCoreProcedureContract.ForModel(tool, context)
         : TenantExperienceToolContract.IsTool(tool.Name) ? TenantExperienceToolContract.ForModel(tool)
         : TenantContinuityToolContract.IsTool(tool.Name) ? TenantContinuityToolContract.ForModel(tool, context.CurrentContinuitySettings?.ExperienceEnabled == true && context.Definition.StateIsolationPolicy?.ExperienceRecall != false)
         : TenantMemoryToolContract.IsTool(tool.Name) ? TenantMemoryToolContract.ForModel(tool)

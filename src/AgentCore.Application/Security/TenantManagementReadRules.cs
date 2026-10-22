@@ -17,6 +17,7 @@ public static class TenantManagementReadRules
     public static AccessScope Scope(TenantManagementReader reader) => AccessScope.ForResource(reader.Security.Tenant.TenantId, "agent", reader.Run.AgentInstanceId.ToString("D"));
     public static void Eligible(TenantManagementReader reader, AgentDefinition baseline, string tool)
     {
+        if (tool == ToolCatalog.SkillsLoad) { TenantSkillLoadRules.Eligible(reader); return; }
         TenantSessionRules.RequireExecutor(reader.Security, reader.Agent);
         if (reader.Root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage
             || reader.Root.Admission.OutputContract != AgentRunOutputContract.ConversationResponse || reader.Root.Admission.TaskIntent?.Source == AgentRunTaskSource.Automation)
@@ -70,7 +71,7 @@ public static class TenantManagementReadRules
             if (node is JsonObject map)
                 foreach (var key in map.Select(p => p.Key).ToArray())
                 {
-                    if (TenantManagementReadContract.IsChildTool(args.Tool) && key is "procedure" or "content") continue;
+                    if ((TenantManagementReadContract.IsChildTool(args.Tool) || args.Tool == ToolCatalog.SkillsLoad) && key is "procedure" or "content") continue;
                     if (map[key] is JsonValue value && value.TryGetValue<string>(out var text) && text.Length > 512)
                     { map[key] = TenantContinuityRules.Safe(text, 512, out _); excerpts.Add(path + "." + key); }
                     else Bound(map[key], path + "." + key);
@@ -85,7 +86,7 @@ public static class TenantManagementReadRules
         Bound(bounded, "data"); data = bounded!;
         var observation = JsonSerializer.Serialize(new { tool = args.Tool, instanceId = owner.InstanceId, instanceRevision = owner.Revision,
             definitionId = owner.DefinitionId, definitionVersion = owner.ActiveVersion, currentRunVersion = reader.Run.DefinitionVersion,
-            changesApplyTo = "nextRun", observedSnapshot = true, data, excerptFields = excerpts }, Json);
+            changesApplyTo = args.Tool == ToolCatalog.SkillsLoad ? "currentRunRead" : "nextRun", observedSnapshot = true, data, excerptFields = excerpts }, Json);
         if (Encoding.UTF8.GetByteCount(observation) > 16000) throw new AccessDeniedException("management_read_budget");
         var hash = ConfigurationHash(owner); var stable = StableConfigurationHash(owner);
         return new(reader.Run.SessionId, reader.Root.SessionId, args.Tool, args.Json, owner.Revision, hash, stable, observation,
@@ -113,6 +114,12 @@ public static class TenantManagementReadRules
                 if (sources.Count != 1 || sources[0].Key != selection.RootElement.GetProperty("key").GetString()) throw new ArgumentException("Use one exact selected child witness.");
             }
         }
+        if (value.ToolName == ToolCatalog.SkillsLoad)
+        {
+            var ids = TenantSkillLoadContract.Parse(value.ArgumentsJson);
+            if (sources.Count != ids.Count || sources.Any(s => s.Kind != "skillProcedure" || !ids.Contains(s.Key)))
+                throw new ArgumentException("Use exact pinned procedure witnesses.");
+        }
         using var doc = JsonDocument.Parse(value.ObservationJson); if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("Use an observation object.");
     }
     // The owning store has resolved these exact scopes in its current snapshot.
@@ -133,10 +140,13 @@ public static class TenantManagementReadRules
         IEnumerable<TenantOperationReceipt> receipts, Func<Guid, TenantApprovalRequest?> request)
     {
         Validate(value); TenantSessionRules.RequireExecutor(reader.Security, reader.Agent);
-        if (reader.Root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage || reader.Root.Admission.OutputContract != AgentRunOutputContract.ConversationResponse)
-            throw new AccessDeniedException("management_read_unavailable");
-        if (!TenantManagementReadContract.Allows(reader.Run) || !TenantManagementReadContract.Allows(reader.Run.Admission.Configuration!.Definition, value.ToolName))
-            throw new AccessDeniedException("management_read_unavailable");
+        if (value.ToolName == ToolCatalog.SkillsLoad) TenantSkillLoadRules.Eligible(reader);
+        else
+        {
+            if (reader.Root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage || reader.Root.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
+                || !TenantManagementReadContract.Allows(reader.Run) || !TenantManagementReadContract.Allows(reader.Run.Admission.Configuration!.Definition, value.ToolName))
+                throw new AccessDeniedException("management_read_unavailable");
+        }
         if (value.SessionId != reader.Run.SessionId || value.RootSessionId != reader.Root.SessionId) throw new AccessDeniedException("management_source_changed");
         var owner = reader.Agent.Instance;
         if (owner.Revision == value.InstanceRevision && ConfigurationHash(owner) == value.ConfigurationHash) { Eligible(reader, baseline, value.ToolName); return; }

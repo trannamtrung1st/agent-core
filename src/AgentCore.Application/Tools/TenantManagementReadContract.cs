@@ -15,22 +15,33 @@ public sealed record TenantManagementReadIntent(string Tool, string ArgumentsJso
 }
 public static class TenantManagementReadContract
 {
-    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "harness.inspect", "configuration.inspect", "management.inspect", "settings.list", "settings.inspect", "automation.preferences.inspect", "skills.list", "skills.inspect", "resources.list", "resources.inspect" });
+    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "harness.inspect", "configuration.inspect", "management.inspect", "settings.list", "settings.inspect", "automation.preferences.inspect", "skills.list", "skills.inspect", "resources.list", "resources.inspect", "skills.load" });
     public static bool IsTool(string tool) => Tools.Contains(tool);
     public static bool IsChildTool(string tool) => tool is "skills.list" or "skills.inspect" or "resources.list" or "resources.inspect";
-    public static bool Allows(AgentDefinition definition, string tool) => IsTool(tool) && (tool == HarnessChatTools.Inspect || RolePermissions.AllowsTool(definition, tool))
+    public static bool Allows(AgentDefinition definition, string tool) => tool == ToolCatalog.SkillsLoad ? true : IsTool(tool) && (tool == HarnessChatTools.Inspect || RolePermissions.AllowsTool(definition, tool))
         && definition.SelfManagement is { } policy && ManagementTools.Enabled(policy)
         && (ManagementTools.Area(tool) is not { } scope || policy.Allows(scope));
     public static bool Shape(TrustedExecutionContext? execution, AgentRunOutputContract output, AgentRunTaskIntent? intent) =>
         execution is { OriginalInitiatorPrincipalId: not null, Origin: ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation }
         && output == AgentRunOutputContract.ConversationResponse && intent?.Source != AgentRunTaskSource.Automation;
     public static bool Allows(AgentRun run) => Shape(run.Admission.ExecutionContext, run.Admission.OutputContract, run.Admission.TaskIntent);
-    public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution, Harness: { } live }
-        && execution.SessionId == context.OwnedSessionId && Shape(execution, context.OutputContract, context.RunTaskIntent)
-        ? Tools.Where(t => Allows(definition, t) && ManagementTools.Allows(t, definition, live)).ToArray() : [];
+    public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context)
+    {
+        if (context is not { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
+            || execution.SessionId != context.OwnedSessionId) return [];
+        return Tools.Where(t => t == ToolCatalog.SkillsLoad ? TenantSkillLoadContract.Allows(context)
+            : context.Harness is { } live && Shape(execution, context.OutputContract, context.RunTaskIntent)
+                && Allows(definition, t) && ManagementTools.Allows(t, definition, live)).ToArray();
+    }
     public static TenantManagementReadArguments Parse(string tool, string json)
     {
         if (!IsTool(tool) || Encoding.UTF8.GetByteCount(json) > 4096) throw new ArgumentException("Use an offered bounded management observation.");
+        if (tool == ToolCatalog.SkillsLoad)
+        {
+            var ids = TenantSkillLoadContract.Parse(json);
+            if (ids.Any(k => k.StartsWith("builtin:", StringComparison.Ordinal))) throw new ArgumentException("Core procedures do not require private read consent.");
+            return new(tool, TenantSkillLoadContract.Arguments(ids), null);
+        }
         using var doc = JsonDocument.Parse(json); var root = doc.RootElement;
         if (tool == "harness.inspect") TenantApprovalToolContract.Require(root, []);
         else ConfigurationTools.Validate(tool, root);

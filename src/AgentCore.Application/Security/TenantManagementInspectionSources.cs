@@ -12,7 +12,7 @@ namespace AgentCore.Application.Security;
 
 public static class TenantManagementInspectionSources
 {
-    public static bool IsInspection(string tool) => tool is "harness.inspect" or "configuration.inspect" || TenantManagementReadContract.IsChildTool(tool);
+    public static bool IsInspection(string tool) => tool is "harness.inspect" or "configuration.inspect" or ToolCatalog.SkillsLoad || TenantManagementReadContract.IsChildTool(tool);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public static TenantManagementInspectionCatalog Catalog(TenantManagementReader reader, TenantAgentConfigurationSnapshot snapshot,
         IReadOnlyList<AgentDefinitionPublicationResource> inherited, IReadOnlyList<TenantCredentialBinding> bindings, IReadOnlyList<TenantCredential> credentials)
@@ -80,6 +80,12 @@ public static class TenantManagementInspectionSources
     }
     public static AccessScope Scope(TenantManagementReader reader, TenantManagementChildRead value) => AccessScope.ForResource(reader.Security.Tenant.TenantId,
         value.Kind is "credential" or "binding" ? "credential" : value.Kind == "skillProcedure" ? "skill" : value.Kind, value.ResourceId);
+    public static async ValueTask RawAsync(TenantManagementReader reader, string? sources, IamAuthorizer iam, Guid human, CancellationToken ct)
+    {
+        foreach (var value in Read(sources))
+            if (!(await iam.CheckOwnedTenantAsync(reader.Security, human, PermissionCatalog.Get(Permission(value.Kind)), Scope(reader, value), ct).ConfigureAwait(false)).Allowed)
+                throw new AccessDeniedException("approval_unavailable");
+    }
     public static async ValueTask RequireAsync(TenantManagementReader reader, string? sources, IamAuthorizer iam, CancellationToken ct, Guid? human = null, IReadOnlySet<string>? deletedSources = null)
     {
         foreach (var value in Read(sources))

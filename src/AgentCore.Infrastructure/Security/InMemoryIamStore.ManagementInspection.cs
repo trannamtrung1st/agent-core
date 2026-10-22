@@ -6,6 +6,12 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
+    private TenantManagementReader ManagementSkillReader(TenantManagementReader reader, CancellationToken ct)
+    {
+        var snapshot = ReadTenantAgentConfigurationAsync(reader.Security.Tenant.TenantId, reader.Run.AgentInstanceId, ct).Result
+            ?? throw new AccessDeniedException("skill_unavailable");
+        return reader with { Inspection = new(TenantManagementInspectionSources.SkillItems(reader, snapshot.Skills)) };
+    }
     private TenantManagementReader ManagementInspectionReader(TenantManagementReader reader, CancellationToken ct)
     {
         var tenant = reader.Security.Tenant.TenantId; var owner = reader.Agent.Instance;

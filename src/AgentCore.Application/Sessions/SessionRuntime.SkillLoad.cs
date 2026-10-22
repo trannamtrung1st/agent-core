@@ -1,4 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
+using AgentCore.Application.Tools;
+using AgentCore.Domain.Security;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Events;
@@ -96,23 +101,48 @@ public sealed partial class SessionRuntime
 
         var management = await HarnessContextAsync(current, cancellationToken);
         var visibleCatalog = ManagementBuiltInSkills.Visible(current.PinnedSkillCatalog, management, initial: false);
-        if (_runtimeOwner is not null && (!AgentCore.Application.Tools.TenantCoreProcedureContract.Allows(current)
-            || requestedIds.Count > 2 || requestedIds.Distinct(StringComparer.Ordinal).Count() != requestedIds.Count
-            || requestedIds.Any(k => !visibleCatalog.Any(s => ManagementBuiltInSkills.IsBuiltIn(s) && s.Key == k
-                && ManagementBuiltInSkills.Catalog.Any(core => core.Key == k)))))
-            return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Only currently delegated Core procedures can be loaded in this execution."), "denied");
+        // The invocation ceiling depends only on this Run's public accounting.
+        // Procedure-dependent rejections still require the selected private reads.
+        if (current.SkillLoadCount >= SkillActivationLimits.MaxLoadInvocations)
+        {
+            var exhausted = SkillLoadAdmission.Plan(current.PinnedSkillCatalog, current.ActiveSkillKeys, current.SkillLoadCount, requestedIds);
+            return new(exhausted.ToToolResultJson(), current.ActiveSkillKeys, exhausted.Outcome);
+        }
+        TenantManagementReadObservation? privateRead = null;
+        if (_runtimeOwner is not null)
+        {
+            if (requestedIds.Distinct(StringComparer.Ordinal).Count() != requestedIds.Count
+                || requestedIds.Any(k => !visibleCatalog.Any(s => s.Key == k)))
+                return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Procedure is unavailable in this execution."), "denied");
+            var privateIds = requestedIds.Where(k => !k.StartsWith("builtin:", StringComparison.Ordinal)).ToArray();
+            if (requestedIds.Any(k => k.StartsWith("builtin:", StringComparison.Ordinal)) && !TenantCoreProcedureContract.Allows(current))
+                return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Core procedure delegation is unavailable."), "denied");
+            if (privateIds.Length > 0)
+            {
+                if (_runAuthority is not ITenantRunContext authority || !TenantSkillLoadContract.Allows(current))
+                    return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Private procedure loading is unavailable."), "denied");
+                (TenantManagementReadObservation Observation, OperationAuthorizationDecision Decision) prepared;
+                try { prepared = await authority.PrepareSkillLoadAsync(current, privateIds, cancellationToken).ConfigureAwait(false); }
+                catch (Exception error) when (error is AccessDeniedException or SecurityConflictException)
+                { return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Procedure is unavailable in this execution."), "denied"); }
+                privateRead = prepared.Observation; var decision = prepared.Decision;
+                if (decision.Decision != OperationDecisionKind.Allowed)
+                    return SkillLoadMailboxResult.Failed(JsonSerializer.Serialize(new {
+                        decision = decision.Decision == OperationDecisionKind.RequiresApproval ? "requiresApproval" : "denied", reasonCode = decision.ReasonCode,
+                        activated = false, read = new { tool = ToolCatalog.SkillsLoad, arguments = new { ids = privateIds } }, replayAllowed = false }), "denied");
+            }
+        }
+        string Result(SkillLoadPlan value)
+        {
+            if (privateRead is null) return value.ToToolResultJson();
+            var body = JsonNode.Parse(value.ToToolResultJson())!.AsObject();
+            body["tenantManagementRead"] = true;
+            body["managementReadSource"] = JsonSerializer.SerializeToNode(TenantManagementReadService.Reference(privateRead.Value, current.Owner.TenantId!.Value));
+            return body.ToJsonString();
+        }
         if (requestedIds.Any(k => k.StartsWith("builtin:", StringComparison.Ordinal) && !visibleCatalog.Any(s => s.Key == k)))
             return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Procedure is unavailable in this execution."), "denied");
-        var plan = SkillLoadAdmission.Plan(
-            current.PinnedSkillCatalog,
-            current.ActiveSkillKeys,
-            current.SkillLoadCount,
-            requestedIds);
-        if (!plan.IncrementInvocation)
-        {
-            return new SkillLoadMailboxResult(plan.ToToolResultJson(), current.ActiveSkillKeys, plan.Outcome);
-        }
-
+        var plan = SkillLoadAdmission.Plan(current.PinnedSkillCatalog, current.ActiveSkillKeys, current.SkillLoadCount, requestedIds);
         var updated = await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,
             new AgentRunCommand.LoadSkills(current.Revision, _time.GetUtcNow(), current.Claim!.Generation, plan.IdsToAppend),
             cancellationToken).ConfigureAwait(false);
@@ -121,7 +151,7 @@ public sealed partial class SessionRuntime
             _boundAgentRun = updated;
         }
 
-        return new SkillLoadMailboxResult(plan.ToToolResultJson(), updated.ActiveSkillKeys, plan.Outcome);
+        return new SkillLoadMailboxResult(Result(plan), updated.ActiveSkillKeys, plan.Outcome);
     }
 
     private SkillLoadMailboxResult? SkillLoadFence(SkillLoadRequested input)

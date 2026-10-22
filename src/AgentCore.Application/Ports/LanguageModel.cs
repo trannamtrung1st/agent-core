@@ -89,6 +89,7 @@ public sealed record ModelRequest(
     IReadOnlyList<ModelMessage>? Interaction = null,
     AgentCore.Application.Context.ContextManifest? ContextManifest = null)
 {
+    internal IReadOnlyList<AgentCore.Domain.Security.TenantManagementReadReference>? TenantManagementReadSources { get; init; }
     internal IReadOnlyList<TenantAttachmentContextSource>? TenantAttachmentSources { get; init; }
 }
 

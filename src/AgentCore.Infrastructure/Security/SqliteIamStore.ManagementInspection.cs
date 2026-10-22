@@ -8,6 +8,11 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
+    private async Task<TenantManagementReader> ManagementSkillReader(AgentCoreDbContext db, TenantManagementReader reader, CancellationToken ct)
+    {
+        var skills = await SqliteAgentInstanceStore.ReadSkillsAsync(db, reader.Run.AgentInstanceId, ct).ConfigureAwait(false);
+        return reader with { Inspection = new(TenantManagementInspectionSources.SkillItems(reader, skills)) };
+    }
     private async Task<TenantManagementReader> ManagementInspectionReader(AgentCoreDbContext db, TenantManagementReader reader, CancellationToken ct)
     {
         var tenant = reader.Security.Tenant.TenantId; var owner = reader.Agent.Instance;

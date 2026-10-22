@@ -6,6 +6,16 @@ namespace AgentCore.Application.Security;
 
 public sealed partial class TenantRunExecutionAuthority
 {
+    public async ValueTask<AgentCore.Application.Ports.TenantSkillProjection> CurrentSkillContextAsync(AgentRun run, CancellationToken ct = default)
+    {
+        _ = await ResolveCurrentAsync(run, ct).ConfigureAwait(false);
+        return await (sourceAuthority ?? throw new AccessDeniedException("skill_context_unavailable")).SkillContextAsync(run, ct).ConfigureAwait(false);
+    }
+    public async ValueTask<(AgentCore.Application.Ports.TenantManagementReadObservation Observation, OperationAuthorizationDecision Decision)> PrepareSkillLoadAsync(AgentRun run, IReadOnlyList<string> ids, CancellationToken ct = default)
+    {
+        _ = await ResolveCurrentAsync(run, ct).ConfigureAwait(false);
+        return await (sourceAuthority ?? throw new AccessDeniedException("skill_context_unavailable")).SkillLoadAsync(run, ids, ct).ConfigureAwait(false);
+    }
     // Eligibility metadata only. This does not read child content, authorize a
     // management effect or replace its current IAM/consent/transaction fences.
     public async ValueTask<HarnessChatContext?> CurrentHarnessContextAsync(AgentRun run, CancellationToken ct = default)

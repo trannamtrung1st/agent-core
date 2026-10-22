@@ -200,7 +200,19 @@ public sealed partial class TenantSessionAccessTests
             var source = (await host.Services.GetRequiredService<ITenantAgentStore>().ReadTenantAgentConfigurationAsync(tenant, instance))!;
             var changed = decision is "approve" or "direct" or "grant" or "direct_after_read";
             Assert.True(instanceRevision + (changed ? 1 : 0) == source.Agent.Instance.Revision, Trace());
-            var retained = TenantManagementReadReferences.Read(final.Checkpoint); if (mode is "no_read" or "read_policy") Assert.Empty(retained); else Assert.Single(retained);
+            var retained = TenantManagementReadReferences.Read(final.Checkpoint);
+            if (mode is "no_read" or "read_policy") Assert.Empty(retained);
+            else
+            {
+                Assert.Single(retained, r => r.ToolName == read);
+                Assert.All(retained.Where(r => r.ToolName != read), r => {
+                    Assert.Equal(ToolCatalog.SkillsLoad, r.ToolName);
+                    Assert.All(TenantManagementInspectionSources.Read(r.SourcesJson), source => {
+                        Assert.Equal("skillProcedure", source.Kind);
+                        Assert.Contains(final.PinnedSkillCatalog, pin => pin.Key == source.Key);
+                    });
+                });
+            }
             await host.Services.GetRequiredService<ITenantManagementStore>().RequireTenantManagementReadSourcesAsync(new(tenant, final.AgentRunId), retained, null);
             TenantOperationReceipt? receipt = request is null || mode == "read_approved" ? await ((ITenantDirectOperationStore)host.Services.GetRequiredService<IIamStore>()).FindDirectOperationReceiptAsync(tenant, final.AgentRunId, "write-skill")
                 : await host.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId);

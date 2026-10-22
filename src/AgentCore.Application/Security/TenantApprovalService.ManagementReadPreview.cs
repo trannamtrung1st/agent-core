@@ -10,10 +10,22 @@ public sealed partial class TenantApprovalService
         if (observed.SourcesChanged) return [new("Current observation", null, "The saved configuration changed or management was revoked. Current values are withheld. Cancel this request and inspect a fresh observation.", false)];
         using var document = JsonDocument.Parse(observed.Value.ObservationJson); var root = document.RootElement;
         var result = new List<TenantApprovalFieldChange> { new("Observed Agent revision", null, root.GetProperty("instanceRevision").ToString(), false),
-            new("Changes apply to", null, "The next new Run; the current Run stays pinned.", false) };
+            new(observed.Value.ToolName == AgentCore.Application.Tools.ToolCatalog.SkillsLoad ? "Run pin" : "Changes apply to", null, observed.Value.ToolName == AgentCore.Application.Tools.ToolCatalog.SkillsLoad ? "Read the saved procedures from this Run; no activation or configuration change is granted." : "The next new Run; the current Run stays pinned.", false) };
         var data = root.GetProperty("data");
         static string Text(JsonElement value) => value.ValueKind == JsonValueKind.Null ? "Inherit Agent default" : value.ValueKind == JsonValueKind.String ? value.GetString()! : value.ToString();
-        if (TenantManagementInspectionSources.IsInspection(observed.Value.ToolName)) result.AddRange(ManagementInspectionChanges(data));
+        if (observed.Value.ToolName == AgentCore.Application.Tools.ToolCatalog.SkillsLoad)
+        {
+            result.Add(new("Read boundary", null, "Only the exact saved pinned procedures are read. This decision activates no Skill and grants no capability.", false));
+            foreach (var skill in data.GetProperty("skills").EnumerateArray())
+            {
+                result.Add(new("Skill identity", null, skill.GetProperty("key").GetString(), false));
+                result.Add(new("Skill name", null, skill.GetProperty("name").GetString(), false));
+                result.Add(new("Exact Skill procedure", null, skill.GetProperty("procedure").GetString(), false));
+                result.Add(new("Required capabilities", null, skill.GetProperty("requiredCapabilities").ToString(), false));
+                result.Add(new("Pinned source revision", null, skill.GetProperty("sourceRevision").GetString(), false));
+            }
+        }
+        else if (TenantManagementInspectionSources.IsInspection(observed.Value.ToolName)) result.AddRange(ManagementInspectionChanges(data));
         else if (data.ValueKind == JsonValueKind.Array)
         {
             foreach (var section in data.EnumerateArray()) result.Add(new(section.GetProperty("section").GetString()!, null,

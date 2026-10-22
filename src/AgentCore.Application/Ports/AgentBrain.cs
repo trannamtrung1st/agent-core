@@ -66,6 +66,7 @@ public sealed record AgentContext(
     bool AgentWorkspaceAvailable = false,
     IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null, Guid? OwnedSessionId = null, AgentRunOutputContract OutputContract = AgentRunOutputContract.ConversationResponse, bool AuthoredAutomation = false, bool HasBackgroundClaim = false, ComposerRunInput? ComposerInput = null, string? ConfigurationContinuationTarget = null)
 {
+    internal IReadOnlyList<AgentCore.Domain.Security.TenantManagementReadReference>? TenantManagementReadSources { get; init; }
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 
     public string? EffectiveSpeechLocale { get; init; }

@@ -54,11 +54,14 @@ public sealed partial class SqliteIamStore : ITenantManagementStore
     private async Task<TenantManagementReadObservation> ObserveManagementRead(AgentCoreDbContext db, AgentRun run, string tool, string arguments, PreparedManagementRead? expected, Guid? human, CancellationToken ct)
     {
         var reader = await ManagementReader(db, run, human, ct).ConfigureAwait(false); var args = TenantManagementReadContract.Parse(tool, arguments); var iam = new IamAuthorizer(this);
-        if (TenantManagementInspectionSources.IsInspection(tool)) reader = await ManagementInspectionReader(db, reader, ct).ConfigureAwait(false);
+        if (tool == ToolCatalog.SkillsLoad) reader = await ManagementSkillReader(db, reader, ct).ConfigureAwait(false);
+        else if (TenantManagementInspectionSources.IsInspection(tool)) reader = await ManagementInspectionReader(db, reader, ct).ConfigureAwait(false);
+        if (tool == ToolCatalog.SkillsLoad && human is null) TenantSkillLoadRules.RequireSelection(reader, TenantSkillLoadContract.Parse(args.Json));
         var baseline = reader.Baseline; if (human is null && expected is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
         if (human is not null) { if (expected is null || !reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable"); await ValidateTenantActorAsync(db, reader.Security, human.Value, ct).ConfigureAwait(false); }
         if (human is null) await TenantManagementReadRules.RawAsync(reader, iam, ct).ConfigureAwait(false);
         if (human is not null) await TenantManagementReadRules.RawAsync(reader, iam, ct, human).ConfigureAwait(false);
+        if (human is not null && expected is not null) await TenantManagementInspectionSources.RawAsync(reader, expected.SourcesJson, iam, human.Value, ct).ConfigureAwait(false);
         if (expected is not null)
         {
             if (expected.ToolName != tool || expected.ArgumentsJson != args.Json) throw new AccessDeniedException("management_source_changed");
@@ -76,6 +79,12 @@ public sealed partial class SqliteIamStore : ITenantManagementStore
             }
             catch (AccessDeniedException error) when (human is not null && error.ReasonCode is "management_source_changed" or "management_read_unavailable") { return new(reader, expected, true); }
             return new(reader, expected, Retention: retention);
+        }
+        if (tool == ToolCatalog.SkillsLoad)
+        {
+            var value = TenantSkillLoadRules.Build(reader, args);
+            await TenantManagementInspectionSources.RequireAsync(reader, value.SourcesJson, iam, ct, human).ConfigureAwait(false);
+            return new(reader, value);
         }
         return new(reader, TenantManagementInspectionSources.IsInspection(tool)
             ? await (managementInspection?.Invoke() ?? throw new AccessDeniedException("management_inspection_unavailable")).BuildAsync(reader, args, iam, ct).ConfigureAwait(false)

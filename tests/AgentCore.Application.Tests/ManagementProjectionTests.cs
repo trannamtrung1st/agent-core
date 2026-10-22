@@ -37,7 +37,14 @@ public sealed class ManagementProjectionTests
             "background" => context with { OutputContract = AgentRunOutputContract.BackgroundOutcome },
             "no_pin" => context with { PinnedSkillCatalog = [] }, _ => throw new ArgumentException()
         };
-        Assert.DoesNotContain(ToolCatalog.For(context.Definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.SkillsLoad);
+        Assert.Empty(TenantCoreProcedureContract.Visible(context));
+        var load = ToolCatalog.For(context.Definition, context, ToolConfigurationGates.AllowAll).SingleOrDefault(t => t.Name == ToolCatalog.SkillsLoad);
+        if (boundary is "foreign_session" or "no_tools" or "background") Assert.Null(load);
+        else
+        {
+            Assert.NotNull(load); Assert.Contains("(definition|instance)", load.ParametersJson);
+            foreach (var core in ManagementBuiltInSkills.Catalog) Assert.DoesNotContain(core.Key, load.ParametersJson);
+        }
     }
     [Fact]
     public void Offered_schema_names_exact_Core_keys_and_live_choice_removes_a_single_procedure()
@@ -45,7 +52,7 @@ public sealed class ManagementProjectionTests
         var context = Context();
         var tool = Assert.Single(ToolCatalog.For(context.Definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.SkillsLoad);
         using var schema = JsonDocument.Parse(tool.ParametersJson);
-        Assert.Equal(ManagementBuiltInSkills.Catalog.Select(s => s.Key), schema.RootElement.GetProperty("properties").GetProperty("ids").GetProperty("items").GetProperty("enum").EnumerateArray().Select(s => s.GetString()));
+        Assert.Equal(ManagementBuiltInSkills.Catalog.Select(s => s.Key), schema.RootElement.GetProperty("properties").GetProperty("ids").GetProperty("items").GetProperty("anyOf")[0].GetProperty("enum").EnumerateArray().Select(s => s.GetString()));
         context = context with { Harness = context.Harness! with { Policy = context.Harness.Policy with { BuiltInSkills = new(false, true) } } };
         Assert.Equal(ManagementBuiltInSkills.HarnessKey, Assert.Single(TenantCoreProcedureContract.Visible(context)).Key);
         Assert.DoesNotContain(ToolCatalog.For(context.Definition, context, ToolConfigurationGates.AllowAll), t => t.Name == "harness.inspect");

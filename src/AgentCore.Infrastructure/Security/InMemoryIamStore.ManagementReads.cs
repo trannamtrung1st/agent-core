@@ -47,11 +47,14 @@ public sealed partial class InMemoryIamStore : ITenantManagementStore
     private TenantManagementReadObservation ObserveManagementRead(AgentRun run, string tool, string arguments, PreparedManagementRead? expected, Guid? human, CancellationToken ct)
     {
         var reader = ManagementReader(run, human, ct); var args = TenantManagementReadContract.Parse(tool, arguments); var iam = new IamAuthorizer(this);
-        if (TenantManagementInspectionSources.IsInspection(tool)) reader = ManagementInspectionReader(reader, ct);
+        if (tool == ToolCatalog.SkillsLoad) reader = ManagementSkillReader(reader, ct);
+        else if (TenantManagementInspectionSources.IsInspection(tool)) reader = ManagementInspectionReader(reader, ct);
+        if (tool == ToolCatalog.SkillsLoad && human is null) TenantSkillLoadRules.RequireSelection(reader, TenantSkillLoadContract.Parse(args.Json));
         var baseline = reader.Baseline; if (human is null && expected is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
         if (human is not null) { if (expected is null || !reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable"); ValidateAgentActor(reader.Security, human.Value); }
         if (human is null) TenantManagementReadRules.RawAsync(reader, iam, ct).AsTask().GetAwaiter().GetResult();
         if (human is not null) TenantManagementReadRules.RawAsync(reader, iam, ct, human).AsTask().GetAwaiter().GetResult();
+        if (human is not null && expected is not null) TenantManagementInspectionSources.RawAsync(reader, expected.SourcesJson, iam, human.Value, ct).AsTask().GetAwaiter().GetResult();
         if (expected is not null)
         {
             if (expected.ToolName != tool || expected.ArgumentsJson != args.Json) throw new AccessDeniedException("management_source_changed");
@@ -63,6 +66,12 @@ public sealed partial class InMemoryIamStore : ITenantManagementStore
             }
             catch (AccessDeniedException error) when (human is not null && error.ReasonCode is "management_source_changed" or "management_read_unavailable") { return new(reader, expected, true); }
             return new(reader, expected, Retention: retention);
+        }
+        if (tool == ToolCatalog.SkillsLoad)
+        {
+            var value = TenantSkillLoadRules.Build(reader, args);
+            TenantManagementInspectionSources.RequireAsync(reader, value.SourcesJson, iam, ct, human).AsTask().GetAwaiter().GetResult();
+            return new(reader, value);
         }
         return new(reader, TenantManagementInspectionSources.IsInspection(tool)
             ? (managementInspection?.Invoke() ?? throw new AccessDeniedException("management_inspection_unavailable")).BuildAsync(reader, args, iam, ct).AsTask().GetAwaiter().GetResult()

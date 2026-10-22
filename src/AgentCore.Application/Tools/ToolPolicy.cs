@@ -230,10 +230,10 @@ public static class ToolPolicy
                 && discovery.SessionId == context.OwnedSessionId && definition.Environment?.Capabilities is not null && TenantTaskExecutionContract.Allows(context);
         if (context?.ExecutionContext is not null && TenantManagementMutationContract.IsTool(descriptor.Name))
             return TenantManagementMutationContract.Allowed(definition, context).Contains(descriptor.Name);
+        if (context?.ExecutionContext is not null && descriptor.Name == ToolCatalog.SkillsLoad)
+            return TenantSkillLoadContract.Allows(context) || TenantCoreProcedureContract.Visible(context).Count > 0;
         if (context?.ExecutionContext is not null && TenantManagementReadContract.IsTool(descriptor.Name))
             return TenantManagementReadContract.Allowed(definition, context).Contains(descriptor.Name);
-        if (context?.ExecutionContext is not null && descriptor.Name == ToolCatalog.SkillsLoad)
-            return TenantCoreProcedureContract.Visible(context).Count > 0;
         if (context?.ExecutionContext is { } authoring && TenantAutomationMutationContract.IsTool(descriptor.Name))
             return authoring.SessionId == context.OwnedSessionId && TenantAutomationMutationContract.Allowed(definition, context).Contains(descriptor.Name);
         if (context?.ExecutionContext is { } automation && TenantAutomationReadContract.IsTool(descriptor.Name))

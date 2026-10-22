@@ -18,17 +18,17 @@ public sealed class TenantManagementSkillMigrationTests
             {
                 var migrations = db.GetService<IMigrator>(); await migrations.MigrateAsync("20261022100000_TenantManagementChildReads");
                 var guards = await Definitions(db, "trigger"); Assert.Equal(117, guards.Count); var indexes = await Definitions(db, "index");
-                await migrations.MigrateAsync();
+                await migrations.MigrateAsync("20261022110000_TenantManagementSkillAuthoring");
                 var upgraded = await Definitions(db, "trigger"); Assert.Equal(119, upgraded.Count);
                 foreach (var guard in guards)
                     Assert.Equal(guard.Key == "TR_TenantOperationReceipts_ManagementMutation_INSERT"
                         ? guard.Value.Replace("WHEN NEW.ReasonCode='management_mutation_completed' AND (NEW.Outcome", "WHEN NEW.ReasonCode='management_mutation_completed' AND NEW.ManagementSkillJson IS NULL AND (NEW.Outcome") : guard.Value,
                         upgraded[guard.Key]);
-                Assert.Equal(indexes, await Definitions(db, "index")); Assert.False(db.Database.HasPendingModelChanges());
+                Assert.Equal(indexes, await Definitions(db, "index"));
                 await migrations.MigrateAsync("20261022100000_TenantManagementChildReads");
                 Assert.Equal(guards, await Definitions(db, "trigger")); Assert.Equal(indexes, await Definitions(db, "index"));
-                await migrations.MigrateAsync(); Assert.Equal(upgraded, await Definitions(db, "trigger"));
-                Assert.False(db.Database.HasPendingModelChanges());
+                await migrations.MigrateAsync("20261022110000_TenantManagementSkillAuthoring"); Assert.Equal(upgraded, await Definitions(db, "trigger"));
+                await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             }
             await using var reopened = new AgentCoreDbContext(options);
             Assert.False(reopened.Database.HasPendingModelChanges());

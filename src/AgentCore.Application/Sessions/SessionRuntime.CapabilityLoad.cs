@@ -23,10 +23,11 @@ public sealed partial class SessionRuntime
         var tenantFiles = _runtimeOwner is not null && _boundAgentRun is { } run
             ? await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment binding is required."))
                 .PrepareAsync(run, _snapshot, model.Capabilities.Vision, ct, processCurrentContents: false).ConfigureAwait(false) : null;
+        var tenantSkills = await SkillContextAsync(_boundAgentRun, catalog, ct).ConfigureAwait(false);
         return new(ExecutionDefinition, tenantFiles?.History ?? _snapshot.Entries, _snapshot.Summary, _profile, _snapshot.Mode, _snapshot.PendingTopic,
             false, null, trigger, SessionAttachments: tenantFiles?.Manifest ?? await BuildSessionAttachmentManifestAsync(ct),
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
-            PinnedSkillCatalog: catalog, ActiveSkillKeys: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
+            PinnedSkillCatalog: tenantSkills.Catalog, ActiveSkillKeys: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
             DetachedExecution: IsInitialBackgroundRun, OwnedSessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId,
             ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun),
             OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
@@ -38,7 +39,7 @@ public sealed partial class SessionRuntime
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
             ContinuityContext: _runtimeOwner is not null ? null : await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
-            { ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
+            { TenantManagementReadSources = tenantSkills.Sources, ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
                 Configuration = _boundAgentRun?.Admission.Configuration, CurrentContinuitySettings = await CurrentContinuitySettingsAsync(_boundAgentRun, ct).ConfigureAwait(false), RunTaskIntent = _boundAgentRun?.Admission.TaskIntent };
     }
 

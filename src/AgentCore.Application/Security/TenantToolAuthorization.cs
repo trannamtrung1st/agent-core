@@ -51,7 +51,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
             }
             if (TenantManagementReadContract.IsTool(tool))
             {
-                var allowedRead = TenantManagementReadContract.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
+                var allowedRead = (tool == ToolCatalog.SkillsLoad ? TenantSkillLoadContract.Allows(run) || TenantCoreProcedureContract.Allows(run) : TenantManagementReadContract.Allows(run)) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
                     && run.Claim?.Generation == admission.AgentRunGeneration;
                 return new(true, allowedRead, reference, allowedRead ? "allowed" : "management_read_unavailable");
             }

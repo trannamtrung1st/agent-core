@@ -8,7 +8,7 @@ Canonical conversational model reads currently support `harness.inspect({})`, `c
 {"operation":"inspect_management","read":{"tool":"settings.inspect","arguments":{"section":"conversationPolicy"}}}
 ```
 
-HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. Harness authoring, child writes, private Skill activation and remedy execution retain their separate conversion boundary. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
+HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. Resource/Harness content authoring and typed remedy execution retain their separate conversion boundary. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
 
 Compound Harness/configuration reads use that same intent, for example:
 
@@ -19,6 +19,16 @@ Compound Harness/configuration reads use that same intent, for example:
 Prepared read/reference payloads add optional canonical child-source witnesses; models cannot supply them. Child raw-read and independent Review rules remain current. The shared Harness/configuration saved-read presentation labels versions, delegated areas, individual setting/source facts, child metadata, diagnosis and exact possible remedies without embedding procedures, bytes or secrets. Exact remedy replacement values are complete or withheld. Canonical setup links use `/t/{tenant}/admin/agents/{instance}/settings`. Rephrasing the same diagnosis does not create a new semantic read root; the saved action hash still remains exact. [Compound contract](04-backend-interfaces.md#compound-harness-and-configuration-observations).
 
 Exact child reads use the same `inspect_management` intent with a canonical origin-qualified `key`. Lists accept only `{}` and return at most 12 readable metadata records. Skill inspection returns a complete bounded procedure as data, without activation. Resource inspection returns hash-verified supported UTF-8 text up to 2048 bytes, with `contentProvided`/`truncated`; unsupported binary formats return metadata only. Secret values and private dependency names remain absent. [Child read contract](04-backend-interfaces.md#canonical-skill-and-resource-observations).
+
+## Canonical private procedure read consent
+
+Ordinary `skills.load` keeps `{ids:[canonicalKey,...]}` and the incumbent mailbox activation result/accounting. Private Definition/Instance procedures require current independent parent/child reads even when management is Disabled/Frozen. When read Review is required, the offered existing authorization intent accepts:
+
+```json
+{"operation":"inspect_management","read":{"tool":"skills.load","arguments":{"ids":["instance:check-totals","definition:browser.record.lookup"]}}}
+```
+
+The private read selector is a normalized set of one to four distinct owned pinned keys. Consent returns the saved complete bounded procedures as read data and creates no grant or activation. The separate loader call applies existing activation limits; requirements grant no tool/resource authority. Current sources and reviewers remain mandatory through continuation and retained use. Immutable Core procedure loading keeps its separate management delegation and does not use this private-read variant. No HTTP endpoint or SignalR envelope is added. [Backend boundary and qualification](04-backend-interfaces.md#unified-self-management-application-owners).
 
 ## Tenant model configuration change consent
 

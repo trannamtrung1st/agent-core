@@ -2555,6 +2555,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     capturedSnapshot.AgentInstanceId).ConfigureAwait(false);
                 var skillCatalog = capturedRun is { } execution && execution.ResponseId == responseId
                     ? execution.PinnedSkillCatalog : resolved!.Skills;
+                var tenantSkills = await SkillContextAsync(capturedRun, skillCatalog, evaluationToken).ConfigureAwait(false);
                 var context = new AgentContext(
                     executionDefinition,
                     promptHistory,
@@ -2592,7 +2593,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ActiveSkillKeys: capturedRun?.ActiveSkillKeys ?? skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
                     ComposerInput: capturedRun?.Admission.ComposerInput,
                     ConfigurationContinuationTarget: ContinuationTarget(capturedRun),
-                    PinnedSkillCatalog: skillCatalog,
+                    PinnedSkillCatalog: tenantSkills.Catalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
                     CredentialMetadataAvailable: capturedRun?.Owner.TenantId is not null ? capturedRun.Admission.Configuration?.CredentialBindings.Count > 0
                         : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
@@ -2602,6 +2603,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ExperienceContext: executionDefinition.StateIsolationPolicy?.ExperienceRecall != false ? await RunExperienceContextAsync(evaluationToken) : null,
                     ContinuityContext: _runtimeOwner is not null ? null : await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, executionDefinition, evaluationToken))
                 {
+                    TenantManagementReadSources = tenantSkills.Sources,
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
                     Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
                     CurrentContinuitySettings = await CurrentContinuitySettingsAsync(capturedRun, evaluationToken).ConfigureAwait(false),
@@ -2620,6 +2622,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         ? new Speak(ContextAssembler.Create(responseId, new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)], purpose: ContextPurpose.Platform)))
                         : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false)
                             ?? throw AgentCoreErrors.Validation("The agent did not prepare a decision.");
+                    if (decision is Speak skillPrepared) decision = skillPrepared with { Request = skillPrepared.Request with { TenantManagementReadSources = tenantSkills.Sources } };
                     if (tenantFiles is not null && decision is Speak prepared)
                         decision = prepared with { Request = prepared.Request with { TenantAttachmentSources = tenantFiles.Sources } };
                 }
@@ -2774,7 +2777,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var historicalSources = TenantHistoricalReferences.Read(checkpoint);
         var experienceSourceReads = TenantExperienceReferences.Sources(checkpoint);
         var experienceFacts = TenantExperienceReferences.Facts(checkpoint);
-        var managementReadSources = TenantManagementReadReferences.Read(checkpoint);
+        var managementReadSources = TenantManagementReadReferences.Merge(TenantManagementReadReferences.Read(checkpoint), request.TenantManagementReadSources);
         var automationReadSources = TenantAutomationReadReferences.Read(checkpoint);
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
@@ -2932,11 +2935,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var restrictedDefinition = await ProjectionDefinitionAsync(ExecutionDefinition, _boundAgentRun, _snapshot.AgentInstanceId, generateToken).ConfigureAwait(false);
                 var projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
                 projectionContext = projectionContext with { Definition = restrictedDefinition };
+                managementReadSources = TenantManagementReadReferences.Merge(managementReadSources, projectionContext.TenantManagementReadSources);
                 authorizedTools = _tools.ProjectTools(restrictedDefinition, projectionContext);
-                var visibleCatalog = ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness, initial: false);
+                var visibleCatalog = ManagementBuiltInSkills.Visible(projectionContext.PinnedSkillCatalog ?? [], projectionContext.Harness, initial: false);
                 var visibleKeys = pinnedSkills.Where(k => visibleCatalog.Any(s => s.Key == k)).ToArray();
                 var sections = PromptContextBuilder.WithSkills(request.Context ?? throw new InvalidOperationException("Typed context is required."), visibleCatalog, visibleKeys,
-                    ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness, initial: !loadedCapabilities.Any(ManagementTools.IsManagement)));
+                    ManagementBuiltInSkills.Visible(projectionContext.PinnedSkillCatalog ?? [], projectionContext.Harness, initial: !loadedCapabilities.Any(ManagementTools.IsManagement)));
                 sections = await RestrictContinuityContextAsync(sections, restrictedDefinition, generateToken);
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
                 if (inRepair) sections = sections.Upsert(ContextSection.ProtocolRepair(repairReason!));
