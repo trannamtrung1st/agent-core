@@ -18,7 +18,7 @@ Remaining implementation and acceptance:
 
 1. Finish canonical Harness/Self-Management observations, authoring, private Skill loading and typed remediation through the approved owners. Live eligibility, immutable Core procedure activation and six canonical management observations and four exact management commands now have the scoped evidence above. Reconcile remaining Automation combinations during final acceptance against their scoped reports.
 2. Review mandatory approval defaults for properly authorized autonomous Agents, preserving explicit tenant review and operation-specific controls.
-3. Consolidate excessive approval dependencies, repeated documentation and transitional migrations where safe; finish the internal/schema cutover with no legacy authority path.
+3. Consolidate excessive approval dependencies, repeated documentation and transitional migrations where safe; finish the internal/schema cutover with no legacy authority path. [Frozen target-model metadata consolidation](tenant-migration-metadata-verification-2026-10-22.md) reduces repeated historical constraint literals while preserving installed migration history and exact schema behavior; broader dependency/schema cleanup remains open.
 4. Complete the original proposal's security, isolation, functional and UI acceptance matrix using the existing design system. Reconcile the boundary inventory's historical broken file references and the observed event-review rejection retry stall. Scoped evidence and optional unrun CI do not imply complete proposal acceptance.
 
 ## Historical delivery checkpoints
