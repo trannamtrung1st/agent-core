@@ -24,45 +24,75 @@ public static class PermissionCatalog
 
     private static IReadOnlyList<PermissionDefinition> Build()
     {
+        // Risk is an explicit Core decision for every catalog entry, never inferred from a name.
         var result = new List<PermissionDefinition>();
-        void Add(string family, string resource, string actions, bool human = false, bool system = false, bool delegatable = true)
+        void Add(string family, string resource, string actions, PermissionApprovalClass classification, bool human = false, bool system = false, bool delegatable = true)
         {
             foreach (var action in actions.Split(' '))
-                result.Add(new($"{family}.{action}", resource, human, delegatable && !human, system,
-                    action == "read" ? PermissionApprovalClass.ReadOnly
-                        : action is "delete" or "send" or "execute" || family is "credentials" or "browser" or "sandbox"
-                            ? PermissionApprovalClass.Sensitive : PermissionApprovalClass.Mutation));
+                result.Add(new($"{family}.{action}", resource, human, delegatable && !human, system, classification));
         }
-        Add("system.tenants", "tenant", "create read manage", true, true);
-        Add("system.accounts", "account", "manage", true, true);
-        Add("system.governance", "system", "manage", true, true);
-        Add("members", "member", "read");
-        Add("members", "member", "invite update remove", true);
-        Add("iam.roles", "role", "read");
-        Add("iam.roles", "role", "manage assign", true);
-        Add("agents", "agent", "read chat create update delete");
-        Add("agent-definitions", "definition", "read create update publish delete");
-        Add("agent-runs", "agent-run", "read create cancel");
-        Add("sessions", "session", "read create manage delete");
-        Add("credentials", "credential", "read bind use manage");
-        Add("resources", "resource", "read manage delete");
-        Add("skills", "skill", "read manage");
-        Add("automations", "automation", "read create update delete run");
-        Add("core-events", "event", "read manage");
-        Add("webhooks", "webhook", "read manage");
-        Add("memory", "agent", "read manage");
-        Add("workspaces", "workspace", "read write delete");
-        Add("artifacts", "artifact", "read create delete");
-        Add("attachments", "attachment", "read create delete");
-        Add("email", "credential", "read draft send");
-        Add("drive", "credential", "read write delete");
-        Add("browser", "agent", "read use manage", delegatable: false);
-        Add("sandbox", "agent", "read execute manage", delegatable: false);
-        Add("approvals", "approval", "read cancel");
-        Add("approvals", "approval", "approve grant_exception", true);
-        Add("security.audit", "tenant", "read", true);
-        Add("tenant.governance", "tenant", "read");
-        Add("tenant.governance", "tenant", "manage", true);
+        Add("system.tenants", "tenant", "create", PermissionApprovalClass.Mutation, true, true);
+        Add("system.tenants", "tenant", "read", PermissionApprovalClass.ReadOnly, true, true);
+        Add("system.tenants", "tenant", "manage", PermissionApprovalClass.Mutation, true, true);
+        Add("system.accounts", "account", "manage", PermissionApprovalClass.Mutation, true, true);
+        Add("system.governance", "system", "manage", PermissionApprovalClass.Mutation, true, true);
+        Add("members", "member", "read", PermissionApprovalClass.ReadOnly);
+        Add("members", "member", "invite update remove", PermissionApprovalClass.Mutation, true);
+        Add("iam.roles", "role", "read", PermissionApprovalClass.ReadOnly);
+        Add("iam.roles", "role", "manage assign", PermissionApprovalClass.Mutation, true);
+        Add("agents", "agent", "read", PermissionApprovalClass.ReadOnly);
+        Add("agents", "agent", "chat create update", PermissionApprovalClass.Mutation);
+        Add("agents", "agent", "delete", PermissionApprovalClass.Sensitive);
+        Add("agent-definitions", "definition", "read", PermissionApprovalClass.ReadOnly);
+        Add("agent-definitions", "definition", "create update publish", PermissionApprovalClass.Mutation);
+        Add("agent-definitions", "definition", "delete", PermissionApprovalClass.Sensitive);
+        Add("agent-runs", "agent-run", "read", PermissionApprovalClass.ReadOnly);
+        Add("agent-runs", "agent-run", "create cancel", PermissionApprovalClass.Mutation);
+        Add("sessions", "session", "read", PermissionApprovalClass.ReadOnly);
+        Add("sessions", "session", "create manage", PermissionApprovalClass.Mutation);
+        Add("sessions", "session", "delete", PermissionApprovalClass.Sensitive);
+        Add("credentials", "credential", "read", PermissionApprovalClass.ReadOnly);
+        Add("credentials", "credential", "bind use manage", PermissionApprovalClass.Sensitive);
+        Add("resources", "resource", "read", PermissionApprovalClass.ReadOnly);
+        Add("resources", "resource", "manage", PermissionApprovalClass.Mutation);
+        Add("resources", "resource", "delete", PermissionApprovalClass.Sensitive);
+        Add("skills", "skill", "read", PermissionApprovalClass.ReadOnly);
+        Add("skills", "skill", "manage", PermissionApprovalClass.Mutation);
+        Add("automations", "automation", "read", PermissionApprovalClass.ReadOnly);
+        Add("automations", "automation", "create update", PermissionApprovalClass.Mutation);
+        Add("automations", "automation", "delete", PermissionApprovalClass.Sensitive);
+        Add("automations", "automation", "run", PermissionApprovalClass.Mutation);
+        Add("core-events", "event", "read", PermissionApprovalClass.ReadOnly);
+        Add("core-events", "event", "manage", PermissionApprovalClass.Mutation);
+        Add("webhooks", "webhook", "read", PermissionApprovalClass.ReadOnly);
+        Add("webhooks", "webhook", "manage", PermissionApprovalClass.Mutation);
+        Add("memory", "agent", "read", PermissionApprovalClass.ReadOnly);
+        Add("memory", "agent", "manage", PermissionApprovalClass.Mutation);
+        Add("workspaces", "workspace", "read", PermissionApprovalClass.ReadOnly);
+        Add("workspaces", "workspace", "write", PermissionApprovalClass.Mutation);
+        Add("workspaces", "workspace", "delete", PermissionApprovalClass.Sensitive);
+        Add("artifacts", "artifact", "read", PermissionApprovalClass.ReadOnly);
+        Add("artifacts", "artifact", "create", PermissionApprovalClass.Mutation);
+        Add("artifacts", "artifact", "delete", PermissionApprovalClass.Sensitive);
+        Add("attachments", "attachment", "read", PermissionApprovalClass.ReadOnly);
+        Add("attachments", "attachment", "create", PermissionApprovalClass.Mutation);
+        Add("attachments", "attachment", "delete", PermissionApprovalClass.Sensitive);
+        Add("email", "credential", "read", PermissionApprovalClass.ReadOnly);
+        Add("email", "credential", "draft", PermissionApprovalClass.Mutation);
+        Add("email", "credential", "send", PermissionApprovalClass.Sensitive);
+        Add("drive", "credential", "read", PermissionApprovalClass.ReadOnly);
+        Add("drive", "credential", "write", PermissionApprovalClass.Mutation);
+        Add("drive", "credential", "delete", PermissionApprovalClass.Sensitive);
+        Add("browser", "agent", "read", PermissionApprovalClass.ReadOnly, delegatable: false);
+        Add("browser", "agent", "use manage", PermissionApprovalClass.Sensitive, delegatable: false);
+        Add("sandbox", "agent", "read", PermissionApprovalClass.ReadOnly, delegatable: false);
+        Add("sandbox", "agent", "execute manage", PermissionApprovalClass.Sensitive, delegatable: false);
+        Add("approvals", "approval", "read", PermissionApprovalClass.ReadOnly);
+        Add("approvals", "approval", "cancel", PermissionApprovalClass.Mutation);
+        Add("approvals", "approval", "approve grant_exception", PermissionApprovalClass.Mutation, true);
+        Add("security.audit", "tenant", "read", PermissionApprovalClass.ReadOnly, true);
+        Add("tenant.governance", "tenant", "read", PermissionApprovalClass.ReadOnly);
+        Add("tenant.governance", "tenant", "manage", PermissionApprovalClass.Mutation, true);
         return result.AsReadOnly();
     }
 }
