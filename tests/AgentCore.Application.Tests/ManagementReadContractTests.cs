@@ -64,7 +64,9 @@ public sealed class ManagementReadContractTests
             "background" => context with { OutputContract = AgentRunOutputContract.BackgroundOutcome }, _ => throw new ArgumentException()
         };
         var reads = TenantManagementReadContract.Allowed(context.Definition, context);
-        if (boundary == "scope") Assert.Equal(["management.inspect"], reads); else Assert.Empty(reads);
+        if (boundary == "scope") Assert.Equal(["harness.inspect", "configuration.inspect", "management.inspect"], reads);
+        else if (boundary == "capability") Assert.Equal(["harness.inspect"], reads); // Harness inspection uses trusted delegation, separately from Definition selection.
+        else Assert.Empty(reads);
     }
     [Fact]
     public void Source_codec_ignores_user_claims_deduplicates_and_bounds_retained_references()

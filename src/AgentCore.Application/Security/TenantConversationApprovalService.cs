@@ -19,7 +19,7 @@ public sealed class TenantConversationApprovalService(TenantConversationService 
         var query = new TenantApprovalQuery(page, pageSize, SessionId: session); query.Validate();
         var before = await conversations.AuthorizeRecipientAsync(tenant, session, human, ct).ConfigureAwait(false);
         var automationVisibility = await review.AutomationReadVisibilityAsync(tenant, human, ct).ConfigureAwait(false);
-        var saved = await approvals.ListApprovalsAsync(tenant, null, null, query, ct, automationVisibility: automationVisibility, memoryVisibility: await review.MemoryVisibilityAsync(tenant, human, ct).ConfigureAwait(false), continuityVisibility: await review.ContinuityVisibilityAsync(tenant, human, ct).ConfigureAwait(false), managementVisibility: new(automationVisibility.Agents)).ConfigureAwait(false);
+        var saved = await approvals.ListApprovalsAsync(tenant, null, null, query, ct, automationVisibility: automationVisibility, memoryVisibility: await review.MemoryVisibilityAsync(tenant, human, ct).ConfigureAwait(false), continuityVisibility: await review.ContinuityVisibilityAsync(tenant, human, ct).ConfigureAwait(false), managementVisibility: await review.ManagementVisibilityAsync(tenant, human, ct).ConfigureAwait(false)).ConfigureAwait(false);
         var items = new List<TenantConversationApproval>(saved.Items.Count);
         foreach (var request in saved.Items)
         {

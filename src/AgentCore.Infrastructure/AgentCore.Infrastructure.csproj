@@ -63,4 +63,12 @@
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261022080000_TenantManagementMutations.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022080000_TenantManagementMutations.Down.sql" />
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261022080000_TenantManagementMutations.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022080000_TenantManagementMutations.Check.sql" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022090000_TenantManagementInspections.Up.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022090000_TenantManagementInspections.Up.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022090000_TenantManagementInspections.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022090000_TenantManagementInspections.Down.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022090000_TenantManagementInspections.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022090000_TenantManagementInspections.Check.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261021214545_TenantExperienceConsent.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261021214545_TenantExperienceConsent.Check.sql" />
+  </ItemGroup>
 </Project>

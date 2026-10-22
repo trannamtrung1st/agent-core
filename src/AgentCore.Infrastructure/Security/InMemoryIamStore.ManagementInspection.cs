@@ -1,0 +1,25 @@
+using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
+using AgentCore.Domain.Definitions;
+
+namespace AgentCore.Infrastructure.Security;
+
+public sealed partial class InMemoryIamStore
+{
+    private TenantManagementReader ManagementInspectionReader(TenantManagementReader reader, CancellationToken ct)
+    {
+        var tenant = reader.Security.Tenant.TenantId; var owner = reader.Agent.Instance;
+        var snapshot = ReadTenantAgentConfigurationAsync(tenant, owner.InstanceId, ct).Result ?? throw new AccessDeniedException("management_source_unavailable");
+        IReadOnlyList<AgentDefinitionPublicationResource> inherited = Guid.TryParse(owner.DefinitionId, out var id)
+            ? definitions.TenantPublicationResources(tenant, id, owner.ActiveVersion)
+            : inheritedResources?.ListAsync(reader.Baseline, ct).GetAwaiter().GetResult() ?? [];
+        var bindings = ReadTenantCredentialBindingsAsync(tenant, owner.InstanceId, ct).Result?.Bindings ?? [];
+        var values = new List<TenantCredential>();
+        for (var page = 0; ; page++)
+        {
+            var items = ListTenantCredentialsAsync(tenant, null, page, 100, ct).Result;
+            values.AddRange(items.Items); if ((long)(page + 1) * 100 >= items.Total) break;
+        }
+        return reader with { Inspection = TenantManagementInspectionSources.Catalog(reader, snapshot, inherited, bindings, values) };
+    }
+}

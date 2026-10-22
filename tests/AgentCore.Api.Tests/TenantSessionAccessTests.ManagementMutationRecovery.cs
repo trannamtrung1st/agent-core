@@ -35,6 +35,7 @@ public sealed partial class TenantSessionAccessTests
                 var pending = await AwaitManagementRun(first.Services.GetRequiredService<ITenantRunStore>(), tenant, runId, true); Assert.Equal(AgentRunStatus.WaitingForApproval, pending.Status); Assert.Null(pending.Claim); requestId = pending.ApprovalRequestId!.Value;
                 await using var db = await first.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261022070000_TenantManagementReadConsent"));
+                await db.GetService<IMigrator>().MigrateAsync();
                 Assert.Equal(TenantApprovalStatus.Pending, (await first.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, requestId))!.Status);
                 Assert.Single(TenantManagementReadReferences.Read(pending.Checkpoint));
             }

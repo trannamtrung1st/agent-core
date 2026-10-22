@@ -33,8 +33,8 @@ public static class TenantManagementReadReferences
         return Merge([], values);
     }
     public static PreparedManagementRead Shape(TenantManagementReadReference source, Guid session, Guid rootSession) => new(session, rootSession, source.ToolName, source.ArgumentsJson,
-        source.InstanceRevision, source.ConfigurationHash, source.StableConfigurationHash, "{}", TenantManagementReadRules.Hash(source.ToolName, source.ArgumentsJson, source.InstanceRevision, source.ConfigurationHash, source.StableConfigurationHash, "{}"));
+        source.InstanceRevision, source.ConfigurationHash, source.StableConfigurationHash, "{}", TenantManagementReadRules.Hash(source.ToolName, source.ArgumentsJson, source.InstanceRevision, source.ConfigurationHash, source.StableConfigurationHash, "{}", source.SourcesJson), source.SourcesJson);
     public static void ValidateShape(TenantManagementReadReference source) => TenantManagementReadRules.Validate(Shape(source, new Guid("00000000-0000-0000-0000-000000000001"), new Guid("00000000-0000-0000-0000-000000000001")));
     public static bool Matches(PreparedManagementRead value, TenantManagementReadReference source) => value.ToolName == source.ToolName && value.ArgumentsJson == source.ArgumentsJson
-        && value.InstanceRevision == source.InstanceRevision && value.ConfigurationHash == source.ConfigurationHash && value.StableConfigurationHash == source.StableConfigurationHash && value.ObservationHash == source.ObservationHash;
+        && value.InstanceRevision == source.InstanceRevision && value.ConfigurationHash == source.ConfigurationHash && value.StableConfigurationHash == source.StableConfigurationHash && value.ObservationHash == source.ObservationHash && value.SourcesJson == source.SourcesJson;
 }

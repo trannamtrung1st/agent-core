@@ -6,17 +6,19 @@ using AgentCore.Application.Tools;
 using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
-public sealed class TenantManagementReadService(ITenantManagementStore store, TenantOperationAuthorizer operations)
+public sealed class TenantManagementReadService(ITenantManagementStore store, TenantOperationAuthorizer operations, IIamStore? security = null)
 {
     public ValueTask<TenantManagementReadObservation> PrepareAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         CancellationToken ct, PreparedManagementRead? expected = null) => store.ObserveTenantManagementReadAsync(reference, generation, tool, arguments, expected, ct: ct);
     public ValueTask<bool> IndependentAsync(TenantApprovalRequest request, TenantManagementReadObservation observed, IamAuthorizer iam, CancellationToken ct)
-        => ValueTask.FromResult(TenantOperationPolicyService.Effective(observed.Reader.Security, PermissionCatalog.Get("agents.read")).IndependentReview);
+        => ValueTask.FromResult(TenantManagementInspectionSources.Independent(observed.Reader, observed.Value.SourcesJson));
     public async ValueTask<OperationAuthorizationDecision> DecisionAsync(TenantManagementReadObservation observed, CancellationToken ct)
     {
         var reader = observed.Reader; var scope = TenantManagementReadRules.Scope(reader);
         var decision = await operations.Check(reader.Security, reader.Run, "agents.read", scope, ct).ConfigureAwait(false);
         if (decision.ApprovalKind == ApprovalKind.ExceptionalGrant) return new(OperationDecisionKind.Denied, "management_read_required", "agents.read", scope);
+        if (decision.Decision == OperationDecisionKind.Allowed && observed.Value.SourcesJson is not null && await TenantManagementInspectionSources.ReviewAsync(reader, observed.Value.SourcesJson, new IamAuthorizer(security ?? throw new AccessDeniedException("management_inspection_unavailable")), ct).ConfigureAwait(false))
+            decision = new(OperationDecisionKind.RequiresApproval, "compound_management_read_review", "agents.read", scope, ApprovalKind.Review);
         if (decision.Decision == OperationDecisionKind.RequiresApproval)
         {
             try { await store.RequireTenantManagementReadSourcesAsync(new(reader.Security.Tenant.TenantId, reader.Run.AgentRunId), [Reference(observed.Value, reader.Security.Tenant.TenantId)], reader.Run.Claim?.Generation, ct).ConfigureAwait(false);
@@ -37,7 +39,7 @@ public sealed class TenantManagementReadService(ITenantManagementStore store, Te
         return Serialize(after.Value, reference.TenantId, budget);
     }
     public static TenantManagementReadReference Reference(PreparedManagementRead value, Guid tenant) => new(tenant, value.ToolName, value.ArgumentsJson,
-        value.InstanceRevision, value.ConfigurationHash, value.StableConfigurationHash, value.ObservationHash);
+        value.InstanceRevision, value.ConfigurationHash, value.StableConfigurationHash, value.ObservationHash, value.SourcesJson);
     public static string Serialize(PreparedManagementRead value, Guid tenant, int budget)
     {
         var body = new JsonObject { ["observation"] = JsonNode.Parse(value.ObservationJson), ["boundedObservation"] = true, ["untrustedConfiguration"] = true,
@@ -51,7 +53,8 @@ public sealed class TenantManagementReadService(ITenantManagementStore store, Te
     {
         if (request.Kind != ApprovalKind.Review) throw new AccessDeniedException("approver_unqualified");
         await TenantManagementReadRules.RawAsync(observed.Reader, iam, ct, human).ConfigureAwait(false);
-        if (TenantOperationPolicyService.Effective(observed.Reader.Security, PermissionCatalog.Get("agents.read")).IndependentReview && request.OriginalInitiatorPrincipalId == human)
+        await TenantManagementInspectionSources.RequireAsync(observed.Reader, observed.Value.SourcesJson, iam, ct, human).ConfigureAwait(false);
+        if (TenantManagementInspectionSources.Independent(observed.Reader, observed.Value.SourcesJson) && request.OriginalInitiatorPrincipalId == human)
             throw new AccessDeniedException("independent_reviewer_required");
         if (!(await iam.CheckOwnedTenantAsync(observed.Reader.Security, human, PermissionCatalog.Get("approvals.approve"), TenantManagementReadRules.Scope(observed.Reader), ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("approver_unqualified");

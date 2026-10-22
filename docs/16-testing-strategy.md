@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Compound management inspection qualification
+
+`TenantSessionAccessTests.ManagementInspection*` covers actual owned metadata, missing child reads, child-only Review, private-content withholding, exact scope filtering before Inbox/conversation counts, source/permission races, targeted diagnosis, refusal correlation and SQLite host recreation. Contract tests protect strict arguments, optional-witness compatibility and exact action versus semantic selection. Migration tests preserve all 117 guards/indexes/foreign keys and the original historical target-model SQL hash. `tenant-management-inspections.spec.ts` runs both inspections with approve/reject at desktop/phone widths through visible Chat and shared review controls. [Measured results and limits](reports/tenant-management-inspection-verification-2026-10-22.md) are scoped local evidence; whole-proposal acceptance remains open.
+
 ## Canonical management command qualification
 
 `TenantSessionAccessTests.ManagementMutation*`, `ManagementMutationContractTests`, `TenantManagementMutationMigrationTests` and `web/e2e/tenant-management-mutations.spec.ts` exercise exact four-command consent, all settings sections, shared scheduling reconciliation, verified Sandbox selection, current source/authority refusal, primary-only grants, retained observation chains and original Run pins. Actual SQLite host recreation checks pending consent and no duplicate effect; frozen-schema tests check 114→117 guard preservation, foreign keys and lossy-downgrade refusal. The shared inspector and native Synthetic desktop/narrow journeys verify escaped exact fields, explicit confirmation, actual approve/reject and canonical readback. [Exact results and limits](reports/tenant-management-mutation-verification-2026-10-22.md) remain scoped evidence rather than whole-proposal acceptance.

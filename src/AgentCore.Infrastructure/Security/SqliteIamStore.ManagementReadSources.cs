@@ -24,8 +24,7 @@ public sealed partial class SqliteIamStore
         {
             var shape = TenantManagementReadReferences.Shape(source, run.SessionId, reader.Root.SessionId);
             var observed = await ObserveManagementRead(db, run, source.ToolName, source.ArgumentsJson, shape, null, ct).ConfigureAwait(false); var review = false;
-            review = await TenantSandboxReadOperationRules.NeedsReviewAsync(reader.Security, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId,
-                "agents.read", TenantManagementReadRules.Scope(reader), iam, ct).ConfigureAwait(false);
+            review = await TenantManagementInspectionSources.ReviewAsync(observed.Reader, source.SourcesJson, iam, ct).ConfigureAwait(false);
             if (review && !await ManagementReadConsented(db, reader, source, ct).ConfigureAwait(false)) throw new AccessDeniedException("management_read_review_required");
         }
     }

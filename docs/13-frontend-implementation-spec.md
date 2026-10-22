@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Compound management saved-read presentation
+
+Harness and configuration observations retain the existing **Inspect exact Agent configuration** title, saved-read inspector and read-only confirmation. Saved facts have distinct version/delegation, instruction, setting/source, Skill/resource/connection metadata, diagnosis and exact remedy rows. Script-like names/instructions render literally; procedures, bytes and secrets remain absent. The existing Ant Design drawer owns wrapping, scrolling and the reachable action footer at desktop/phone widths. Approve/reject resolves the actual saved read; only a factual completed receipt says **Read authorized**, and Agent configuration stays unchanged. [Contract](14-api-and-realtime-protocol.md#tenant-model-configuration-read-consent) and [native qualification](reports/tenant-management-inspection-verification-2026-10-22.md).
+
 ## Exact Agent configuration change presentation
 
 `mutate_management` reuses the shared Chat/Approval inspector, escaped saved Before/After rows and existing responsive Ant Design controls. Labels humanize setting fields and show explicit **None** for empty management choices. Confirmation explains exact once-only consent, current source/reviewer checks, the unchanged current Run pin, immediate authority removal/freeze and future settings/grants. A grant supplies only the primary update permission. Factual results use **Configuration updated** or **Configuration not changed**; decision and effect remain separate. [Contract](14-api-and-realtime-protocol.md#tenant-model-configuration-change-consent) and [desktop/narrow qualification](reports/tenant-management-mutation-verification-2026-10-22.md).

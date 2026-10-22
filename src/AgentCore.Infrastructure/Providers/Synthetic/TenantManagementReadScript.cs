@@ -12,9 +12,9 @@ internal static class TenantManagementReadScript
         var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text;
         if (prompt is null) return null;
         var selected = prompt[prefix.Length..].Trim();
-        var tool = selected switch { "policy" => "management.inspect", "sections" => "settings.list", "preferences" => "automation.preferences.inspect", _ => "settings.inspect" };
-        var section = selected is "policy" or "sections" or "preferences" ? null : selected;
-        if (section is not null && !AgentCore.Application.Agents.InstanceSettingsResolver.Sections.Contains(section)) return Finish("Select one exact setting section, policy, sections or preferences.");
+        var tool = selected switch { "harness" => "harness.inspect", "configuration" => "configuration.inspect", "policy" => "management.inspect", "sections" => "settings.list", "preferences" => "automation.preferences.inspect", _ => "settings.inspect" };
+        var section = selected is "harness" or "configuration" or "policy" or "sections" or "preferences" ? null : selected;
+        if (section is not null && !AgentCore.Application.Agents.InstanceSettingsResolver.Sections.Contains(section)) return Finish("Select one exact setting section, harness, configuration, policy, sections or preferences.");
         object arguments = section is null ? new { } : new { section };
         var consent = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization);
         if (consent is not null)

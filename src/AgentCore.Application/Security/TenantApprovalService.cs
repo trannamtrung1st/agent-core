@@ -216,7 +216,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         IReadOnlyList<Guid>? emailSourceIds = emailSources.Length == 0 ? null : emailSources.Skip(1).Aggregate(emailSources[0].AsEnumerable(), (ids, next) => ids.Intersect(next)).ToArray();
         var memoryAgents = await VisibleIds(before, human.PrincipalId, "memory.read", "agent", ct).ConfigureAwait(false);
         memoryAgents = memoryAgents is null ? homeAgents : homeAgents is null ? memoryAgents : memoryAgents.Intersect(homeAgents).ToArray();
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions, emailRead, driveRead, emailDraft, emailSend, driveWrite, driveDelete), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeAgents, sandboxSessions, resourceScopes), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeAgents, sandboxSessions), new(attachmentReadIds, sandboxSessions), creationRead, new(reportCreate, sandboxSessions, reportRuns), new(creationRead, homeAgents, automationReads, automationRuns, webhookSources, coreEvents, emailSourceIds, reportCreate, sandboxSessions, automationChatAgents), new(human.PrincipalId, memoryAgents, sandboxSessions), new(human.PrincipalId, homeAgents, automationChatAgents, sandboxSessions, memoryAgents), new(homeAgents)).ConfigureAwait(false);
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions, controlIds, controlReadIds), new(browserRead, browserUse, sandboxSessions), new(credentialRead, sandboxSessions, emailRead, driveRead, emailDraft, emailSend, driveWrite, driveDelete), artifactCreate, new(artifactReadIds, sandboxSessions), new(workspaceScopes, homeAgents, sandboxSessions, resourceScopes), new(workspaceScopes, workspaceWrites, workspaceDeletes, homeAgents, sandboxSessions), new(attachmentReadIds, sandboxSessions), creationRead, new(reportCreate, sandboxSessions, reportRuns), new(creationRead, homeAgents, automationReads, automationRuns, webhookSources, coreEvents, emailSourceIds, reportCreate, sandboxSessions, automationChatAgents), new(human.PrincipalId, memoryAgents, sandboxSessions), new(human.PrincipalId, homeAgents, automationChatAgents, sandboxSessions, memoryAgents), await ManagementVisibility(before, human.PrincipalId, ct).ConfigureAwait(false)).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -253,14 +253,14 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         return new(request, 0, receipt, decision, AccountResult: accountResult);
     }
 
-    private async ValueTask<IReadOnlyList<string>?> VisibleResourceReadScopes(TenantSecurityState state, Guid human, CancellationToken ct)
+    private async ValueTask<IReadOnlyList<string>?> VisibleResourceReadScopes(TenantSecurityState state, Guid human, CancellationToken ct, string permissionKey = "resources.read", string resourceType = "resource")
     {
-        var permission = PermissionCatalog.Get("resources.read");
+        var permission = PermissionCatalog.Get(permissionKey);
         var inherited = await authorizer.CheckTenantAsync(state, human, permission, AccessScope.ForTenant(state.Tenant.TenantId), ct).ConfigureAwait(false);
         if (inherited.Allowed) return null;
         if (inherited.ReasonCode != "permission_denied") throw new AccessDeniedException(inherited.ReasonCode);
         var result = new List<string>();
-        foreach (var scope in state.Assignments.Where(a => a.PrincipalId == human && a.Scope.ResourceType == "resource").Select(a => a.Scope).Distinct())
+        foreach (var scope in state.Assignments.Where(a => a.PrincipalId == human && a.Scope.ResourceType == resourceType).Select(a => a.Scope).Distinct())
             if (TenantAgentChildScopes.TryParse(scope, out _, out _) && (await authorizer.CheckOwnedTenantAsync(state, human, permission, scope, ct).ConfigureAwait(false)).Allowed) result.Add(scope.ResourceId!);
         return result;
     }

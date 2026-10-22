@@ -223,7 +223,7 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
         TenantOperationKind.AutomationMutation => JsonSerializer.Serialize(new { operation = AutomationMutation!.ToolName, AutomationMutation.SessionId, AutomationMutation.ArgumentsJson, AutomationMutation.IntentHash }),
         TenantOperationKind.ManagementMutation => JsonSerializer.Serialize(new { operation = ManagementMutation!.ToolName, ManagementMutation.SessionId,
             arguments = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(ManagementMutation.ArgumentsJson)!.Where(p => p.Key != "expectedInstanceRevision").ToDictionary(p => p.Key, p => p.Value) }),
-        TenantOperationKind.ManagementRead => JsonSerializer.Serialize(new { operation = ManagementRead!.ToolName, ManagementRead.SessionId, ManagementRead.ArgumentsJson }),
+        TenantOperationKind.ManagementRead => JsonSerializer.Serialize(new { operation = ManagementRead!.ToolName, ManagementRead.SessionId, ArgumentsJson = TenantManagementReadSelection.SemanticArguments(ManagementRead.ToolName, ManagementRead.ArgumentsJson) }),
         TenantOperationKind.AutomationRead => JsonSerializer.Serialize(new { operation = AutomationRead!.ToolName, AutomationRead.SessionId, AutomationRead.ArgumentsJson }),
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")
     };

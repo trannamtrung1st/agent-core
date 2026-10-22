@@ -30,7 +30,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<IIamStore>(provider => provider.GetRequiredService<PersistenceOptions>().Provider.ToUpperInvariant() switch
         {
             "SQLITE" => new SqliteIamStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetService<IDefinitionResourceContentStore>(),
-                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>(), provider.GetService<SqliteArtifactStore>(), provider.GetService<SqliteAttachmentStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>()),
+                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>(), provider.GetService<SqliteArtifactStore>(), provider.GetService<SqliteAttachmentStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), managementInspection: () => provider.GetRequiredService<TenantManagementInspectionProjection>()),
             "INMEMORY" => CreateInMemoryStore(provider),
             _ => throw new InvalidOperationException("Identity storage must explicitly select Sqlite or InMemory.")
         });
@@ -65,6 +65,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAutomationReadService>();
         services.TryAddSingleton<ITenantManagementStore>(p => (ITenantManagementStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantManagementReadService>();
+        services.TryAddSingleton<TenantManagementInspectionProjection>();
         services.TryAddSingleton<TenantManagementOperationTarget>();
         services.TryAddSingleton<ITenantAutomationMutationStore>(p => (ITenantAutomationMutationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAutomationMutationService>();
@@ -208,6 +209,6 @@ public static class IdentityRegistration
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
             provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>(),
-            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(), provider.GetService<IEmailStore>() as InMemoryEmailStore, provider.GetRequiredService<InMemoryTriggerStore>(), provider.GetRequiredService<IExternalEventStore>() as InMemoryExternalEventStore, provider.GetService<IEmailWatchStore>() as InMemoryEmailWatchStore, (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>());
+            (InMemorySandboxStore)provider.GetRequiredService<ISandboxStore>(), provider.GetService<InMemoryArtifactStore>(), provider.GetService<InMemoryAttachmentStore>(), (InMemoryBrowserPrivacyStore)provider.GetRequiredService<IBrowserPrivacyStore>(), provider.GetRequiredService<BrowserPrivacyAuthority>(), (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(), provider.GetService<IEmailStore>() as InMemoryEmailStore, provider.GetRequiredService<InMemoryTriggerStore>(), provider.GetRequiredService<IExternalEventStore>() as InMemoryExternalEventStore, provider.GetService<IEmailWatchStore>() as InMemoryEmailWatchStore, (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(), () => provider.GetRequiredService<TenantManagementInspectionProjection>());
     }
 }

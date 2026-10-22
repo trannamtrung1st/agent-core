@@ -13,7 +13,8 @@ public sealed partial class TenantApprovalService
             new("Changes apply to", null, "The next new Run; the current Run stays pinned.", false) };
         var data = root.GetProperty("data");
         static string Text(JsonElement value) => value.ValueKind == JsonValueKind.Null ? "Inherit Agent default" : value.ValueKind == JsonValueKind.String ? value.GetString()! : value.ToString();
-        if (data.ValueKind == JsonValueKind.Array)
+        if (TenantManagementInspectionSources.IsInspection(observed.Value.ToolName)) result.AddRange(ManagementInspectionChanges(data));
+        else if (data.ValueKind == JsonValueKind.Array)
         {
             foreach (var section in data.EnumerateArray()) result.Add(new(section.GetProperty("section").GetString()!, null,
                 section.GetProperty("hasOverrides").GetBoolean() ? "Instance overrides present" : "Inherits Definition defaults", false));

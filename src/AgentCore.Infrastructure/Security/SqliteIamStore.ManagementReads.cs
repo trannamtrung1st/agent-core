@@ -54,6 +54,7 @@ public sealed partial class SqliteIamStore : ITenantManagementStore
     private async Task<TenantManagementReadObservation> ObserveManagementRead(AgentCoreDbContext db, AgentRun run, string tool, string arguments, PreparedManagementRead? expected, Guid? human, CancellationToken ct)
     {
         var reader = await ManagementReader(db, run, human, ct).ConfigureAwait(false); var args = TenantManagementReadContract.Parse(tool, arguments); var iam = new IamAuthorizer(this);
+        if (TenantManagementInspectionSources.IsInspection(tool)) reader = await ManagementInspectionReader(db, reader, ct).ConfigureAwait(false);
         var baseline = reader.Baseline; if (human is null && expected is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
         if (human is not null) { if (expected is null || !reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable"); await ValidateTenantActorAsync(db, reader.Security, human.Value, ct).ConfigureAwait(false); }
         if (human is null) await TenantManagementReadRules.RawAsync(reader, iam, ct).ConfigureAwait(false);
@@ -66,10 +67,15 @@ public sealed partial class SqliteIamStore : ITenantManagementStore
             var requestIds = rows.Where(r => r.RequestId != null).Select(r => r.RequestId!).ToArray();
             var requests = await db.Set<TenantApprovalRecord>().AsNoTracking().Where(r => r.TenantId == reader.Security.Tenant.TenantId && requestIds.Contains(r.RequestId)).ToArrayAsync(ct).ConfigureAwait(false);
             var mapped = requests.Select(r => r.Domain()).ToDictionary(r => r.RequestId);
-            try { TenantManagementReadRules.ValidateCurrent(reader, baseline, expected, rows.Select(r => r.Domain()), id => mapped.GetValueOrDefault(id)); }
+            try {
+                await TenantManagementInspectionSources.RequireAsync(reader, expected.SourcesJson, iam, ct, human).ConfigureAwait(false);
+                TenantManagementReadRules.ValidateCurrent(reader, baseline, expected, rows.Select(r => r.Domain()), id => mapped.GetValueOrDefault(id));
+            }
             catch (AccessDeniedException error) when (human is not null && error.ReasonCode is "management_source_changed" or "management_read_unavailable") { return new(reader, expected, true); }
             return new(reader, expected);
         }
-        return new(reader, TenantManagementReadRules.Build(reader, baseline, args));
+        return new(reader, TenantManagementInspectionSources.IsInspection(tool)
+            ? await (managementInspection?.Invoke() ?? throw new AccessDeniedException("management_inspection_unavailable")).BuildAsync(reader, args, iam, ct).ConfigureAwait(false)
+            : TenantManagementReadRules.Build(reader, baseline, args));
     }
 }

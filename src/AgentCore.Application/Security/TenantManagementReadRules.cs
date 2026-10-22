@@ -36,11 +36,12 @@ public static class TenantManagementReadRules
         foreach (var key in settings.Where(p => p.Value is null).Select(p => p.Key).ToArray()) settings.Remove(key);
         body["SettingsOverrides"] = settings; return TenantMemoryOperationRules.Hash(body.ToJsonString());
     }
-    public static PreparedManagementRead Build(TenantManagementReader reader, AgentDefinition baseline, TenantManagementReadArguments args)
+    public static PreparedManagementRead Build(TenantManagementReader reader, AgentDefinition baseline, TenantManagementReadArguments args, object? inspection = null, string? sources = null)
     {
         var owner = reader.Agent.Instance; object data;
         var excerpts = new List<string>();
-        if (args.Tool == "management.inspect") data = SelfManagementService.View(owner, baseline);
+        if (TenantManagementInspectionSources.IsInspection(args.Tool)) data = inspection ?? throw new AccessDeniedException("management_inspection_unavailable");
+        else if (args.Tool == "management.inspect") data = SelfManagementService.View(owner, baseline);
         else if (args.Tool == "automation.preferences.inspect") data = new { owner.UnattendedModelCatalogKey, owner.UnattendedReasoningEffort };
         else if (args.Tool == "settings.list") data = InstanceSettingsResolver.Sections.Select(section => new { section,
             hasOverrides = InstanceSettingsResolver.Overrides(owner.SettingsOverrides ?? new(), section).Count > 0 });
@@ -64,6 +65,8 @@ public static class TenantManagementReadRules
         var bounded = JsonSerializer.SerializeToNode(data, Json);
         void Bound(JsonNode? node, string path)
         {
+            // A displayed remedy is an exact replacement set, never an excerpt.
+            if (TenantManagementInspectionSources.IsInspection(args.Tool) && path.StartsWith("data.remediationOptions", StringComparison.Ordinal)) return;
             if (node is JsonObject map)
                 foreach (var key in map.Select(p => p.Key).ToArray())
                 {
@@ -85,17 +88,20 @@ public static class TenantManagementReadRules
         if (Encoding.UTF8.GetByteCount(observation) > 16000) throw new AccessDeniedException("management_read_budget");
         var hash = ConfigurationHash(owner); var stable = StableConfigurationHash(owner);
         return new(reader.Run.SessionId, reader.Root.SessionId, args.Tool, args.Json, owner.Revision, hash, stable, observation,
-            Hash(args.Tool, args.Json, owner.Revision, hash, stable, observation));
+            Hash(args.Tool, args.Json, owner.Revision, hash, stable, observation, sources), sources);
     }
-    public static string Hash(string tool, string args, long revision, string configuration, string stable, string observation) =>
-        TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { tool, args, revision, configuration, stable, observation }));
+    public static string Hash(string tool, string args, long revision, string configuration, string stable, string observation, string? sources = null) =>
+        TenantMemoryOperationRules.Hash(sources is null ? JsonSerializer.Serialize(new { tool, args, revision, configuration, stable, observation })
+            : JsonSerializer.Serialize(new { tool, args, revision, configuration, stable, observation, sources }));
     public static void Validate(PreparedManagementRead value)
     {
         var args = TenantManagementReadContract.Parse(value.ToolName, value.ArgumentsJson);
         if (value.SessionId == Guid.Empty || value.RootSessionId == Guid.Empty || args.Json != value.ArgumentsJson || value.InstanceRevision < 1
             || !TenantMemoryOperationRules.ValidHash(value.ConfigurationHash) || !TenantMemoryOperationRules.ValidHash(value.StableConfigurationHash)
-            || Encoding.UTF8.GetByteCount(value.ObservationJson) > 16000 || value.ObservationHash != Hash(value.ToolName, value.ArgumentsJson, value.InstanceRevision, value.ConfigurationHash, value.StableConfigurationHash, value.ObservationJson))
+            || Encoding.UTF8.GetByteCount(value.ObservationJson) > 16000 || value.ObservationHash != Hash(value.ToolName, value.ArgumentsJson, value.InstanceRevision, value.ConfigurationHash, value.StableConfigurationHash, value.ObservationJson, value.SourcesJson))
             throw new ArgumentException("Use an exact bounded management observation.");
+        if (TenantManagementInspectionSources.IsInspection(value.ToolName) != (value.SourcesJson is not null)) throw new ArgumentException("Use exact compound management sources.");
+        _ = TenantManagementInspectionSources.Read(value.SourcesJson);
         using var doc = JsonDocument.Parse(value.ObservationJson); if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("Use an observation object.");
     }
     public static async ValueTask RawAsync(TenantManagementReader reader, IamAuthorizer iam, CancellationToken ct, Guid? human = null)

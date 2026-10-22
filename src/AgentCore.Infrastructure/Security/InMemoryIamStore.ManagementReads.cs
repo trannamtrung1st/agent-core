@@ -47,6 +47,7 @@ public sealed partial class InMemoryIamStore : ITenantManagementStore
     private TenantManagementReadObservation ObserveManagementRead(AgentRun run, string tool, string arguments, PreparedManagementRead? expected, Guid? human, CancellationToken ct)
     {
         var reader = ManagementReader(run, human, ct); var args = TenantManagementReadContract.Parse(tool, arguments); var iam = new IamAuthorizer(this);
+        if (TenantManagementInspectionSources.IsInspection(tool)) reader = ManagementInspectionReader(reader, ct);
         var baseline = reader.Baseline; if (human is null && expected is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
         if (human is not null) { if (expected is null || !reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable"); ValidateAgentActor(reader.Security, human.Value); }
         if (human is null) TenantManagementReadRules.RawAsync(reader, iam, ct).AsTask().GetAwaiter().GetResult();
@@ -54,10 +55,15 @@ public sealed partial class InMemoryIamStore : ITenantManagementStore
         if (expected is not null)
         {
             if (expected.ToolName != tool || expected.ArgumentsJson != args.Json) throw new AccessDeniedException("management_source_changed");
-            try { TenantManagementReadRules.ValidateCurrent(reader, baseline, expected, _operationReceipts.Values, id => _approvals.GetValueOrDefault(id)); }
+            try {
+                TenantManagementInspectionSources.RequireAsync(reader, expected.SourcesJson, iam, ct, human).AsTask().GetAwaiter().GetResult();
+                TenantManagementReadRules.ValidateCurrent(reader, baseline, expected, _operationReceipts.Values, id => _approvals.GetValueOrDefault(id));
+            }
             catch (AccessDeniedException error) when (human is not null && error.ReasonCode is "management_source_changed" or "management_read_unavailable") { return new(reader, expected, true); }
             return new(reader, expected);
         }
-        return new(reader, TenantManagementReadRules.Build(reader, baseline, args));
+        return new(reader, TenantManagementInspectionSources.IsInspection(tool)
+            ? (managementInspection?.Invoke() ?? throw new AccessDeniedException("management_inspection_unavailable")).BuildAsync(reader, args, iam, ct).AsTask().GetAwaiter().GetResult()
+            : TenantManagementReadRules.Build(reader, baseline, args));
     }
 }

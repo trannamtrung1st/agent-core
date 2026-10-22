@@ -24,7 +24,17 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ManagementMutation is { } managementMutation ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ManagementRead is { ToolName: "configuration.inspect" }
+        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
+            AND json_extract(PayloadJson,'$.Operation.ManagementRead.SessionId') = {operation.ManagementRead.SessionId.ToString("D")}
+            AND json_extract(PayloadJson,'$.Operation.ManagementRead.ToolName') = 'configuration.inspect'
+            AND (CASE WHEN json_type(json_extract(PayloadJson,'$.Operation.ManagementRead.ObservationJson'),'$.data.blocker')='object' THEN 1 ELSE 0 END)
+                = {TenantManagementReadSelection.SemanticArguments("configuration.inspect",operation.ManagementRead.ArgumentsJson) != "{}"}
+            AND json_extract(json_extract(PayloadJson,'$.Operation.ManagementRead.ObservationJson'),'$.data.blocker.target')
+                IS {TenantManagementReadSelection.Target(operation.ManagementRead.ArgumentsJson)}
+            """)
+        : operation.ManagementMutation is { } managementMutation ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.ManagementMutation.SessionId') = {managementMutation.SessionId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.ManagementMutation.ToolName') = {managementMutation.ToolName}
@@ -413,6 +423,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         if (managementVisibility is null) query = query.Where(r => r.Permission != "agents.read" && !managementWrites.Any(m => m.RequestId == r.RequestId));
         else if (managementVisibility.Agents is { } managementAgents)
         { var ids = managementAgents.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "agents.read" && !managementWrites.Any(m => m.RequestId == r.RequestId) || ids.Contains(r.InstanceId)); }
+        if (managementVisibility is not null)
+        {
+            var hiddenManagement = HiddenManagementChildren(db, managementVisibility);
+            query = query.Where(r => !hiddenManagement.Any(hidden => hidden.RequestId == r.RequestId));
+        }
         if (page.SessionId is { } session)
         {
             var id = session.ToString("D");

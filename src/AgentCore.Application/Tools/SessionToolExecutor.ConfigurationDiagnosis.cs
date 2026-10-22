@@ -15,16 +15,7 @@ public sealed partial class SessionToolExecutor
         IReadOnlyDictionary<string, JsonElement> Set, IReadOnlyList<string> Clear, string Target, string Goal,
         long ExpectedInstanceRevision);
 
-    private static string? DiagnosisTarget(JsonElement args)
-    {
-        if (args.TryGetProperty("target", out var target)) return target.GetString();
-        if (!args.TryGetProperty("goal", out var goal)) return null;
-        var text = goal.GetString()!.ToLowerInvariant();
-        return text.Contains("email") ? ToolCatalog.EmailSend : text.Contains("sign in") ? ToolCatalog.BrowserFillCredential
-            : text.Contains("browser") || text.Contains("look up") ? "browser.navigate"
-            : text.Contains("brief") || text.Contains("concise") ? "settings.patch"
-            : text.Contains("reminder") || text.Contains("automation") ? ToolCatalog.AutomationCreate : null;
-    }
+    private static string? DiagnosisTarget(JsonElement args) => AgentCore.Domain.Security.TenantManagementReadSelection.Target(args);
 
     private static string DiagnosisOption(Guid id, ManagementPolicyView policy, string target, string goal,
         string section, IReadOnlyDictionary<string, JsonElement> set) => Convert.ToHexStringLower(SHA256.HashData(

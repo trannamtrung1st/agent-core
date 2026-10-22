@@ -22,8 +22,7 @@ public sealed partial class InMemoryIamStore
         {
             var shape = TenantManagementReadReferences.Shape(source, run.SessionId, reader.Root.SessionId);
             var observed = ObserveManagementRead(run, source.ToolName, source.ArgumentsJson, shape, null, ct);
-            var review = TenantSandboxReadOperationRules.NeedsReviewAsync(reader.Security, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId,
-                "agents.read", TenantManagementReadRules.Scope(reader), iam, ct).AsTask().GetAwaiter().GetResult();
+            var review = TenantManagementInspectionSources.ReviewAsync(observed.Reader, source.SourcesJson, iam, ct).AsTask().GetAwaiter().GetResult();
             if (review && !ManagementReadConsented(reader, source, ct)) throw new AccessDeniedException("management_read_review_required");
         }
     }

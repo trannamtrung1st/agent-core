@@ -12,7 +12,9 @@ public sealed record TenantCredentialReadApprovalVisibility(IReadOnlyList<Guid>?
 public sealed record TenantBackgroundReportApprovalVisibility(bool CanCreate, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? Runs);
 public sealed record TenantAutomationApprovalVisibility(bool CanCreate, IReadOnlyList<Guid>? Agents, IReadOnlyList<Guid>? ReadAutomations, IReadOnlyList<Guid>? RunAutomations, IReadOnlyList<Guid>? WebhookSources = null, IReadOnlyList<Guid>? CoreEvents = null, IReadOnlyList<Guid>? EmailAccounts = null, bool CanCreateRuns = true, IReadOnlyList<Guid>? ConversationSessions = null, IReadOnlyList<Guid>? ChatAgents = null, bool IncludeOccurrenceReservations = true);
 public sealed record TenantContinuityApprovalVisibility(Guid HumanPrincipalId, IReadOnlyList<Guid>? Agents, IReadOnlyList<Guid>? ChatAgents, IReadOnlyList<Guid>? Sessions, IReadOnlyList<Guid>? MemoryAgents, IReadOnlyList<Guid>? Runs = null);
-public sealed record TenantManagementApprovalVisibility(IReadOnlyList<Guid>? Agents);
+public sealed record TenantManagementChildVisibility(IReadOnlyList<Guid>? Agents, IReadOnlyList<string>? Children);
+public sealed record TenantManagementApprovalVisibility(IReadOnlyList<Guid>? Agents, TenantManagementChildVisibility? Skills = null,
+    TenantManagementChildVisibility? Resources = null, IReadOnlyList<Guid>? Credentials = null);
 public sealed record TenantMemoryApprovalVisibility(Guid HumanPrincipalId, IReadOnlyList<Guid>? Agents, IReadOnlyList<Guid>? Sessions);
 public sealed record TenantApprovalContinuationIds(Guid ActivationId, Guid RunId);
 public sealed record TenantApprovalQuery(int Page = 0, int PageSize = 20, TenantApprovalStatus? Status = null, ApprovalKind? Kind = null, Guid? SessionId = null)

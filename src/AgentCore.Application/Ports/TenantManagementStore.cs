@@ -4,7 +4,8 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Conversation;
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantManagementReader(AgentRun Run, AgentRun Root, TenantSecurityState Security, TenantAgent Agent, AgentDefinition Baseline, AgentDefinition Current);
+public sealed record TenantManagementReader(AgentRun Run, AgentRun Root, TenantSecurityState Security, TenantAgent Agent, AgentDefinition Baseline, AgentDefinition Current,
+    TenantManagementInspectionCatalog? Inspection = null);
 public sealed record TenantManagementSource(TenantManagementReader Reader, TenantAgentConfigurationSnapshot Snapshot);
 public sealed record TenantManagementReadObservation(TenantManagementReader Reader, PreparedManagementRead Value, bool SourcesChanged = false);
 // Management facet of the existing tenant Instance/IAM/Run aggregate, not another configuration owner.
