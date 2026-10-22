@@ -15,6 +15,8 @@ public sealed partial class SessionRuntime
             throw AgentCoreErrors.Forbidden("Tenant projection authority is unavailable.");
         var current = await context.CurrentProjectionDefinitionAsync(run, ct).ConfigureAwait(false)
             ?? throw AgentCoreErrors.Forbidden("Tenant execution authority is unavailable.");
-        return StateIsolationAccess.RestrictDefinition(admitted, current);
+        return StateIsolationAccess.RestrictDefinition(admitted, current) with {
+            SelfManagement = ManagementPolicyResolver.Restrict(admitted.SelfManagement, current.SelfManagement)
+        };
     }
 }

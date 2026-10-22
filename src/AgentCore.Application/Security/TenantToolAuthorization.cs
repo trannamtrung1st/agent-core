@@ -44,6 +44,12 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
+            if (tool == ToolCatalog.SkillsLoad)
+            {
+                var allowedProcedure = TenantCoreProcedureContract.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
+                    && run.Claim?.Generation == admission.AgentRunGeneration;
+                return new(true, allowedProcedure, reference, allowedProcedure ? "allowed" : "procedure_load_unavailable");
+            }
             if (TenantBackgroundToolContract.IsTool(tool))
             {
                 var background = TenantBackgroundToolContract.Allows(run, tool) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
@@ -108,6 +114,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
             return Error("forbidden", boundary.Reason);
         }
         if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
+        if (call.Name == ToolCatalog.SkillsLoad) return Error("invalid", "procedure_load_requires_runtime");
         try
         {
             if (TenantAutomationMutationContract.IsTool(call.Name))

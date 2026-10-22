@@ -2596,7 +2596,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     AgentInstanceId: _snapshot.AgentInstanceId,
                     CredentialMetadataAvailable: capturedRun?.Owner.TenantId is not null ? capturedRun.Admission.Configuration?.CredentialBindings.Count > 0
                         : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
-                    Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
+                    Harness: trigger.Kind == TriggerKind.UserTurn ? await HarnessContextAsync(capturedRun, evaluationToken) : null,
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
                     AllowAgentConsolidation: _runtimeOwner is not null ? (await CurrentContinuitySettingsAsync(capturedRun, evaluationToken).ConfigureAwait(false))?.AllowMaintenance == true : await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
                     ExperienceContext: executionDefinition.StateIsolationPolicy?.ExperienceRecall != false ? await RunExperienceContextAsync(evaluationToken) : null,
@@ -3627,7 +3627,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     trigger.Kind,
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
-                                    Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
+                                    Harness: await HarnessContextAsync(_boundAgentRun, overallCts.Token),
                                     SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings, ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun), AgentRunId: _boundAgentRun?.AgentRunId, TenantId: _boundAgentRun?.Owner.TenantId, AgentRunGeneration: _boundAgentRun?.Claim?.Generation), overallCts.Token);
                             if (_runAuthority is not null && _boundAgentRun is { } authorizedRun)
                             {

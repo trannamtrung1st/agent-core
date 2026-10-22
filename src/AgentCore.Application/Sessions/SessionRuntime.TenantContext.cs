@@ -1,12 +1,21 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
+using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
     private readonly TenantAttachmentRuntimeContextService? _tenantAttachments;
+    private async ValueTask<HarnessChatContext?> HarnessContextAsync(AgentRun? run, CancellationToken ct)
+    {
+        if (_runtimeOwner is null) return await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct).ConfigureAwait(false);
+        if (run is null || run.Owner != _runtimeOwner || _runAuthority is not ITenantRunContext source)
+            throw AgentCoreErrors.Forbidden("Tenant management context is unavailable.");
+        return await source.CurrentHarnessContextAsync(run, ct).ConfigureAwait(false);
+    }
+
     private async ValueTask RequireTenantAttachmentSourcesAsync(AgentRun? run, IReadOnlyList<TenantAttachmentContextSource>? sources, CancellationToken ct)
     {
         if (_runtimeOwner is null || sources is not { Count: > 0 }) return;

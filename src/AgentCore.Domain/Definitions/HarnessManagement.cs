@@ -88,6 +88,27 @@ public sealed record HarnessManagementState(
 
 public static class ManagementPolicyResolver
 {
+    // A live Run may lose delegated management, but a later policy edit cannot add
+    // authority to its immutable admission. Settings and instructions stay pinned.
+    public static HarnessManagementPolicy Restrict(HarnessManagementPolicy? admitted, HarnessManagementPolicy? current)
+    {
+        var pin = admitted ?? HarnessManagementPolicy.Disabled;
+        var live = current ?? HarnessManagementPolicy.Disabled;
+        return pin with {
+            Mode = pin.Mode == HarnessManagementMode.Disabled || live.Mode == HarnessManagementMode.Disabled
+                ? HarnessManagementMode.Disabled
+                : pin.Mode == HarnessManagementMode.Managed && live.Mode == HarnessManagementMode.Managed
+                    ? HarnessManagementMode.Managed : HarnessManagementMode.Assisted,
+            Frozen = pin.Frozen || live.Frozen,
+            Scopes = pin.Scopes.Intersect(live.Scopes).ToArray(),
+            Sources = pin.Sources.Intersect(live.Sources, StringComparer.Ordinal).ToArray(),
+            EligibleTools = pin.EligibleTools.Intersect(live.EligibleTools, StringComparer.Ordinal).ToArray(),
+            ManagedAutoApply = (pin.ManagedAutoApply ?? []).Intersect(live.ManagedAutoApply ?? []).ToArray(),
+            BuiltInSkills = new((pin.BuiltInSkills?.ConfigurationAssistance ?? true) && (live.BuiltInSkills?.ConfigurationAssistance ?? true),
+                (pin.BuiltInSkills?.HarnessAuthoring ?? true) && (live.BuiltInSkills?.HarnessAuthoring ?? true))
+        };
+    }
+
     public static HarnessManagementPolicy Resolve(AgentDefinition definition, AgentInstance instance)
     {
         var defaults = definition.SelfManagement ?? HarnessManagementPolicy.Disabled;

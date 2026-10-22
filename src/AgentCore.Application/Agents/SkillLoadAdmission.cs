@@ -65,7 +65,7 @@ public static class SkillLoadAdmission
             sawIds = true;
         }
 
-        if (!sawIds || args.GetProperty("ids").ValueKind != JsonValueKind.Array)
+        if (!sawIds || args.EnumerateObject().Count() != 1 || args.GetProperty("ids").ValueKind != JsonValueKind.Array)
         {
             errorJson = Error("invalid", "Skill load requires an ids array.");
             return false;

@@ -8,6 +8,8 @@ public interface ITenantRunContext
 {
     // Projection may refresh an owned Profile witness before the ordinary source/effect fence.
     ValueTask<AgentCore.Domain.Definitions.AgentDefinition?> CurrentProjectionDefinitionAsync(AgentRun run, CancellationToken ct = default);
+    ValueTask<AgentCore.Application.Tools.HarnessChatContext?> CurrentHarnessContextAsync(AgentRun run, CancellationToken ct = default)
+        => ValueTask.FromResult<AgentCore.Application.Tools.HarnessChatContext?>(null);
     ValueTask<AgentRunContinuitySettings?> CurrentContinuitySettingsAsync(AgentRun run, CancellationToken ct = default) => ValueTask.FromResult<AgentRunContinuitySettings?>(null);
     ValueTask<TenantRequesterContext> CurrentRequesterAsync(AgentRun run, CancellationToken ct = default);
 }

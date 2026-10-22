@@ -34,7 +34,7 @@ public sealed partial class SessionRuntime
             HasBackgroundClaim: _boundAgentRun is { Claim: { } claim } bound && await _agentRuns.HasCompletionClaimAsync(bound.Owner, bound.AgentRunId, claim.Generation, _time.GetUtcNow(), ct),
             CredentialMetadataAvailable: _boundAgentRun?.Owner.TenantId is not null ? _boundAgentRun.Admission.Configuration?.CredentialBindings.Count > 0
                 : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
-            Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct),
+            Harness: await HarnessContextAsync(_boundAgentRun, ct),
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
             ContinuityContext: _runtimeOwner is not null ? null : await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
@@ -73,23 +73,27 @@ public sealed partial class SessionRuntime
                 || current.CancellationRequested || current.Status != AgentRunStatus.Running) return;
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
             using var json = JsonDocument.Parse(input.ArgumentsJson);
-            var context = input.ProjectionContext with { Definition = ExecutionDefinition, LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog };
+            var context = input.ProjectionContext with {
+                Definition = await ProjectionDefinitionAsync(ExecutionDefinition, current, _snapshot.AgentInstanceId, linked.Token).ConfigureAwait(false),
+                Harness = await HarnessContextAsync(current, linked.Token).ConfigureAwait(false),
+                LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog
+            };
             CapabilityLoadResult plan;
             if (input.DialogRecovery)
             {
-                if (!ToolCatalog.Eligible(ExecutionDefinition, context, _tools.ConfigurationGate).Any(t => t.Name == ToolCatalog.BrowserDialog)
+                if (!ToolCatalog.Eligible(context.Definition, context, _tools.ConfigurationGate).Any(t => t.Name == ToolCatalog.BrowserDialog)
                     || current.LoadedCapabilityIds.Contains(ToolCatalog.BrowserDialog)) return;
                 // One exact registered recovery capability, with unchanged authorization/provider/trigger gates.
                 plan = new([ToolCatalog.BrowserDialog], [], "load_matched");
             }
             else
             {
-                if (!ToolPolicy.IsOffered(ExecutionDefinition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate))
+                if (!ToolPolicy.IsOffered(context.Definition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate))
                 {
                     result = new(CapabilityLoadResult.Failure("forbidden", "load_unavailable", "Discovery is not eligible in this execution. Use offered tools or report the restriction."), null, "load_unavailable");
                     return;
                 }
-                plan = CapabilityDiscoveryMatcher.Load(ExecutionDefinition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
+                plan = CapabilityDiscoveryMatcher.Load(context.Definition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
             }
             matches = plan.Loaded.Count;
             var updated = plan.Outcome == "load_over_budget" ? current : await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,

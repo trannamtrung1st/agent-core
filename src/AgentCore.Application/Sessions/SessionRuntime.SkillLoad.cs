@@ -94,8 +94,13 @@ public sealed partial class SessionRuntime
             return SkillLoadMailboxResult.Failed(errorJson, "denied");
         }
 
-        var management = await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, cancellationToken);
+        var management = await HarnessContextAsync(current, cancellationToken);
         var visibleCatalog = ManagementBuiltInSkills.Visible(current.PinnedSkillCatalog, management, initial: false);
+        if (_runtimeOwner is not null && (!AgentCore.Application.Tools.TenantCoreProcedureContract.Allows(current)
+            || requestedIds.Count > 2 || requestedIds.Distinct(StringComparer.Ordinal).Count() != requestedIds.Count
+            || requestedIds.Any(k => !visibleCatalog.Any(s => ManagementBuiltInSkills.IsBuiltIn(s) && s.Key == k
+                && ManagementBuiltInSkills.Catalog.Any(core => core.Key == k)))))
+            return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Only currently delegated Core procedures can be loaded in this execution."), "denied");
         if (requestedIds.Any(k => k.StartsWith("builtin:", StringComparison.Ordinal) && !visibleCatalog.Any(s => s.Key == k)))
             return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Procedure is unavailable in this execution."), "denied");
         var plan = SkillLoadAdmission.Plan(

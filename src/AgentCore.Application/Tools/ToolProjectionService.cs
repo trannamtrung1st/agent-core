@@ -26,6 +26,7 @@ public static class ToolProjectionService
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }
     private static ModelToolDefinition ForContext(ModelToolDefinition tool, AgentContext? context) => context?.ExecutionContext is null ? tool
+        : tool.Name == ToolCatalog.SkillsLoad ? TenantCoreProcedureContract.ForModel(tool, context)
         : TenantExperienceToolContract.IsTool(tool.Name) ? TenantExperienceToolContract.ForModel(tool)
         : TenantContinuityToolContract.IsTool(tool.Name) ? TenantContinuityToolContract.ForModel(tool, context.CurrentContinuitySettings?.ExperienceEnabled == true && context.Definition.StateIsolationPolicy?.ExperienceRecall != false)
         : TenantMemoryToolContract.IsTool(tool.Name) ? TenantMemoryToolContract.ForModel(tool)
