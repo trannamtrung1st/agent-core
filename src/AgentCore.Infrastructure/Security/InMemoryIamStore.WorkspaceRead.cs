@@ -9,17 +9,30 @@ public sealed partial class InMemoryIamStore
 {
     private void RequireWorkspaceReadOperation(TenantApprovalRequest request, AgentRun run, TenantAgent agent)
     {
-        var value = request.Operation.WorkspaceRead!;
-        var session = sessionBacking.ReadTenantSession(request.TenantId, value.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
+        RequireWorkspaceReadSource(request.TenantId, request.Operation.WorkspaceRead!, run, agent);
+    }
+    private void RequireWorkspaceReadSource(Guid tenant, PreparedWorkspaceRead value, AgentRun run, TenantAgent agent)
+    {
+        var session = sessionBacking.ReadTenantSession(tenant, value.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
         var current = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
         TenantWorkspaceReadOperationRules.Require(value, run, agent, current, session);
         if (value.AttachmentMembersJson is not null) foreach (var member in TenantApprovalRules.AttachmentReadMembers(value))
         {
-            var item = attachmentBacking?.RetainedTenant(request.TenantId, value.SessionId, member.AttachmentId);
+            var item = attachmentBacking?.RetainedTenant(tenant, value.SessionId, member.AttachmentId);
             if (item is not { State: AttachmentState.Bound } || item.EntryId != member.EntryId || item.Sha256Hex != member.Sha256Hex) throw new SecurityConflictException("attachment_source_changed");
         }
-        if (value.ResourceKey is not null || value.ResourceMembersJson is not null) TenantWorkspaceReadOperationRules.RequireResourceRevision(value, run, agent, instances.ReadTenantResourcesAsync(agent.Instance.InstanceId).Result);
-        TenantWorkspaceReadOperationRules.PermissionsAsync(_tenants[request.TenantId], agent.Instance.InstanceId, value, agent.PrincipalId, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
+        if (value.ResourceKey is not null || value.ResourceMembersJson is not null)
+        {
+            var inputs = HasResourcePinChanges(run) ? ResourcePinInputs(ManagementReader(run, null, CancellationToken.None), CancellationToken.None) : null;
+            var resources = inputs?.Snapshot.Resources ?? instances.ReadTenantResourcesAsync(agent.Instance.InstanceId).Result;
+            var members = value.ResourceMembersJson is null ? new[] { new PreparedResourceReadMember(value.ResourceKey!, value.ResourceRevision!.Value) } : TenantApprovalRules.ResourceReadMembers(value);
+            foreach (var member in members)
+            {
+                var pinned = run.Admission.Configuration!.Resources.SingleOrDefault(r => r.Key == member.Key);
+                TenantResourceRevisionRules.Require(member.Key, member.Revision, run, agent, resources, inputs is null || pinned is null ? null : RetainedResourcePin(inputs, pinned));
+            }
+        }
+        TenantWorkspaceReadOperationRules.PermissionsAsync(_tenants[tenant], agent.Instance.InstanceId, value, agent.PrincipalId, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
     }
     private bool WorkspaceApprovalVisible(TenantApprovalRequest request, TenantWorkspaceReadApprovalVisibility? visible, TenantAttachmentReadApprovalVisibility? attachmentVisible)
     {

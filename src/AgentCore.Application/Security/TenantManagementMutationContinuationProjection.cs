@@ -15,7 +15,8 @@ public static class TenantManagementMutationContinuationProjection
             skill = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill is { } skill ? TenantManagementSkillRules.SkillMetadata(skill.Result) : null,
             instanceSkill = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill is { } local ? TenantManagementSkillRules.SkillMetadata(local.Result, true) : null,
             definitionSkill = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill is { } inherited ? TenantManagementSkillRules.DefinitionMetadata(inherited.Result) : null,
-            deletedKey = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill?.Result.Deleted == true ? value.Skill.Result.Key : null,
+            resource = receipt?.Outcome == TenantOperationOutcome.Completed && value.Resource is { } resource ? TenantManagementResourceRules.Metadata(resource.Result) : null,
+            deletedKey = receipt?.Outcome == TenantOperationOutcome.Completed ? value.Skill?.Result.Deleted == true ? value.Skill.Result.Key : value.Resource?.Result.Deleted == true ? value.Resource.Result.Key : null : null,
             instanceRevision = receipt?.InstanceRevision, tool = value.ToolName, changesApplyTo = value.ToolName == "management.freeze" ? "immediateRevocation" : "nextRun",
             revocationsApplyTo = value.ToolName is "management.freeze" or "management.policy.update" ? "immediate" : null,
             replayAllowed = false, currentRunConfigurationUnchanged = true }));

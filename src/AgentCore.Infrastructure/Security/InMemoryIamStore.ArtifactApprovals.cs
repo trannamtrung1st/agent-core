@@ -14,8 +14,7 @@ public sealed partial class InMemoryIamStore
         var session = sessionBacking.ReadTenantSession(request.TenantId, request.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
         var args = TenantArtifactReviewRules.Require(request, run, agent, TenantAgentDefinitionBaseline(agent), session, source);
         TenantArtifactReviewRules.ExecutorAsync(_tenants[request.TenantId], request, new IamAuthorizer(this), CancellationToken.None).GetAwaiter().GetResult();
-        if (request.Operation.ArtifactPublication?.Source is { ResourceKey: { } key } saved) TenantResourceRevisionRules.Require(key, saved.ResourceRevision, run, agent,
-            instances.ReadTenantResourcesAsync(agent.Instance.InstanceId).Result);
+        if (request.Operation.ArtifactPublication?.Source is { ResourceKey: { } key } saved) RequireResourcePin(key, saved.ResourceRevision, run, agent, CancellationToken.None);
         if (request.Operation.ArtifactPublication?.Source is { AttachmentId: { } attachmentId } attachmentSource)
             TenantAttachmentArtifactRules.Require(attachmentSource, session.Owner, attachmentBacking?.RetainedTenant(run.Owner.TenantId!.Value, run.SessionId, attachmentId));
         return args;

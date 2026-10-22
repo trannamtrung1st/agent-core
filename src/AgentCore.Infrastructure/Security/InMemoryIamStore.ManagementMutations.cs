@@ -29,13 +29,27 @@ public sealed partial class InMemoryIamStore
         if (!ManagementReadConsented(reader, TenantManagementReadService.Reference(observed.Value, reader.Security.Tenant.TenantId), ct))
             throw new AccessDeniedException("skill_source_read_review_required");
     }
-    private (TenantManagementReader Reader, TenantAgentConfigurationChange Change) RequireManagementMutation(TenantApprovalRequest request, AgentRun run, CancellationToken ct)
+    private (TenantManagementReader Reader, TenantAgentConfigurationChange Change) RequireManagementMutation(TenantApprovalRequest request, AgentRun run, CancellationToken ct, bool requireStagedContent = false)
     {
         var value = request.Operation.ManagementMutation ?? throw new AccessDeniedException("management_unavailable");
         var reader = ManagementReader(run, null, ct); var iam = new IamAuthorizer(this);
         TenantManagementReadRules.RawAsync(reader, iam, ct).AsTask().GetAwaiter().GetResult();
         TenantManagementMutationRules.SecondaryAsync(reader, value, iam, reader.Agent.PrincipalId, ct).AsTask().GetAwaiter().GetResult();
         TenantManagementMutationRules.PrimaryAsync(request, reader, iam, ct).AsTask().GetAwaiter().GetResult();
+        if (value.Resource is { } resource)
+        {
+            var context = ManagementResourceContext(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
+            if (JsonSerializer.Serialize(context.Material) != JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
+            byte[]? bytes = null;
+            if (resource.InstanceResource is { } binding && (value.ToolName == "resources.copy" || requireStagedContent))
+            {
+                try { bytes = AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(
+                    definitions.ResourceStore?.TenantContent ?? throw new AccessDeniedException("resource_content_unavailable"),
+                    binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).GetAwaiter().GetResult(); }
+                catch (AgentCore.Application.Sessions.AgentCoreException) { throw new AccessDeniedException("resource_content_unavailable"); }
+            }
+            return (reader, TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published, value.ToolName == "resources.copy" ? bytes : null));
+        }
         if (value.Skill is not null) RequireManagementSkillSources(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
         return (reader, TenantManagementMutationRules.Change(reader, value, value.Skill is null ? null : ReadTenantAgentConfigurationAsync(request.TenantId, run.AgentInstanceId, ct).Result));
     }

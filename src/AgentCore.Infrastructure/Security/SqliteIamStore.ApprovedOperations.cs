@@ -134,7 +134,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementMutation is not null)
         {
             try {
-                var managementState = await RequireManagementMutation(db, request, run, ct).ConfigureAwait(false);
+                var managementState = await RequireManagementMutation(db, request, run, ct, requireStagedContent: true).ConfigureAwait(false);
                 await TenantManagementMutationRules.ReviewerAsync(request, managementState.Reader, request.Operation.ManagementMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
                 managementChange = managementState.Change;
             } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
@@ -212,6 +212,11 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
         }
+        if (request.Operation.ManagementMutation?.Resource is not null)
+        {
+            at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
+        }
         TenantSessionRoot? childRoot = null;
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.BackgroundStart is not null)
         {
@@ -240,6 +245,11 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
                 {
                     next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, await ChildCatalogAsync(db, next.Tenant.TenantId, run.AgentInstanceId, managementChange, ct).ConfigureAwait(false));
                     await SqliteAgentInstanceStore.StageSkillsAsync(db, skillChange, null, ct).ConfigureAwait(false);
+                }
+                if (managementChange.Resource is { } resourceChange)
+                {
+                    next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, await ChildCatalogAsync(db, next.Tenant.TenantId, run.AgentInstanceId, managementChange, ct).ConfigureAwait(false));
+                    await SqliteAgentInstanceStore.StageResourcesAsync(db, resourceChange, null, ct).ConfigureAwait(false);
                 }
                 owned.Instance.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 owned.Instance.UnattendedModelCatalogKey = updated.UnattendedModelCatalogKey; owned.Instance.UnattendedReasoningEffort = updated.UnattendedReasoningEffort;
@@ -285,6 +295,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
+                ManagementResource: complete && request.Operation.ManagementMutation is { Resource: not null } resourceEvidence ? TenantManagementResourceRules.Evidence(resourceEvidence, target.Instance.Revision) : null,
                 ManagementSkill: complete && request.Operation.ManagementMutation is { Skill: not null } skillEvidence ? TenantManagementSkillRules.Evidence(skillEvidence, target.Instance.Revision) : null,
                 AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
             if (commit.Outcome == TenantOperationOutcome.Completed)

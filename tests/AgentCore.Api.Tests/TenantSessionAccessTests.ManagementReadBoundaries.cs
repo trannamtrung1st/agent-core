@@ -20,8 +20,12 @@ public sealed partial class TenantSessionAccessTests
     }
     private sealed class ManagementReadHook(ITenantManagementStore inner, ManagementReadRace race) : ITenantManagementStore
     {
-        public ValueTask<TenantOperationReceipt?> TryCommitManagementSkillAsync(TenantSecurityState next, long expectedSecurityRevision, TenantManagementSkillCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
-            => inner.TryCommitManagementSkillAsync(next, expectedSecurityRevision, commit, audit, ct);
+        public ValueTask<TenantResourcePinRetention?> ReadRetainedResourcePinAsync(TenantRunReference reference, AgentCore.Domain.Definitions.EffectiveAgentResource resource, CancellationToken ct = default) =>
+            inner.ReadRetainedResourcePinAsync(reference, resource, ct);
+        public ValueTask<TenantManagementResourceContext> ReadTenantManagementResourceContextAsync(TenantRunReference reference, Guid? generation, string tool, string arguments, Guid? inspectionHuman = null, CancellationToken ct = default) =>
+            inner.ReadTenantManagementResourceContextAsync(reference, generation, tool, arguments, inspectionHuman, ct);
+        public ValueTask<TenantOperationReceipt?> TryCommitManagementCommandAsync(TenantSecurityState next, long expectedSecurityRevision, TenantManagementCommandCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+            => inner.TryCommitManagementCommandAsync(next, expectedSecurityRevision, commit, audit, ct);
         public ValueTask RequireTenantManagementSkillSourcesAsync(TenantRunReference reference, Guid? generation, string tool, string arguments, Guid? inspectionHuman = null, CancellationToken ct = default)
             => inner.RequireTenantManagementSkillSourcesAsync(reference, generation, tool, arguments, inspectionHuman, ct);
         public ValueTask<TenantManagementSource> ReadTenantManagementSourceAsync(TenantRunReference reference, Guid? generation, Guid? inspectionHuman = null, CancellationToken ct = default)

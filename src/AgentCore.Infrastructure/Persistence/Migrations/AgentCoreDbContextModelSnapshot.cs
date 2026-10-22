@@ -3545,7 +3545,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantApprovalRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", TenantPrivateSkillActivation.ValuesConstraint);
+                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", TenantManagementResourceAuthoring.ValuesConstraint);
                         });
                 });
 
@@ -3912,6 +3912,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("InstanceRevision")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ManagementResourceJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ManagementSkillJson")
                         .HasColumnType("TEXT");
 
@@ -3978,6 +3981,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_TenantOperationReceipt_AutomationMutation", "AutomationMutationJson IS NULL OR COALESCE((Outcome=0 AND ReasonCode='automation_mutation_completed' AND length(CAST(AutomationMutationJson AS BLOB)) BETWEEN 2 AND 1024 AND json_valid(AutomationMutationJson) AND json_type(AutomationMutationJson)='object' AND json_type(AutomationMutationJson,'$.AutomationId')='text' AND length(json_extract(AutomationMutationJson,'$.AutomationId'))=36 AND json_type(AutomationMutationJson,'$.ExpectedRevision')='integer' AND json_type(AutomationMutationJson,'$.Revision')='integer' AND json_extract(AutomationMutationJson,'$.ExpectedRevision')>=0 AND json_extract(AutomationMutationJson,'$.Revision')=json_extract(AutomationMutationJson,'$.ExpectedRevision')+1 AND json_extract(AutomationMutationJson,'$.ToolName') IN ('automation.create','automation.update','automation.enable','automation.disable','automation.delete','automation.run') AND json_type(AutomationMutationJson,'$.AfterHash')='text' AND length(json_extract(AutomationMutationJson,'$.AfterHash'))=64 AND json_extract(AutomationMutationJson,'$.AfterHash') NOT GLOB '*[^0-9a-f]*' AND (json_extract(AutomationMutationJson,'$.ExpectedRevision')=0 AND json_extract(AutomationMutationJson,'$.BeforeHash') IS NULL OR json_extract(AutomationMutationJson,'$.ExpectedRevision')>0 AND length(json_extract(AutomationMutationJson,'$.BeforeHash'))=64) AND (json_extract(AutomationMutationJson,'$.ToolName')='automation.run' AND json_type(AutomationMutationJson,'$.InvocationOccurrenceId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationOccurrenceId'))=36 AND json_type(AutomationMutationJson,'$.InvocationSessionId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationSessionId'))=36 AND json_type(AutomationMutationJson,'$.InvocationRunId')='text' AND length(json_extract(AutomationMutationJson,'$.InvocationRunId'))=36 OR json_extract(AutomationMutationJson,'$.ToolName')<>'automation.run' AND json_extract(AutomationMutationJson,'$.InvocationOccurrenceId') IS NULL AND json_extract(AutomationMutationJson,'$.InvocationSessionId') IS NULL AND json_extract(AutomationMutationJson,'$.InvocationRunId') IS NULL)),0)");
 
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Source", "(RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL) OR (RequestId IS NULL AND SourceCallId IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200 AND ParametersHash IS NOT NULL AND length(ParametersHash) = 64)");
+
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementResource", TenantManagementResourceAuthoring.ReceiptConstraint);
 
                             t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementSkill", FrozenMigrationMetadata.Read("94192fc9a38177213655bd729b57d1f1ad53e9206893cb0b77352672caee773d"));
 

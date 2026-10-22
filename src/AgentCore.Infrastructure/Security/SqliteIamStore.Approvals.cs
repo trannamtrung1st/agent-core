@@ -38,7 +38,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.ManagementMutation.SessionId') = {managementMutation.SessionId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.ManagementMutation.ToolName') = {managementMutation.ToolName}
-            AND json_remove(json_extract(PayloadJson, '$.Operation.ManagementMutation.ArgumentsJson'), '$.expectedInstanceRevision', '$.expectedRevision') = {AgentCore.Application.Tools.TenantManagementMutationContract.SemanticArguments(managementMutation.ArgumentsJson)}
+            AND json_remove(json_extract(PayloadJson, '$.Operation.ManagementMutation.ArgumentsJson'), '$.expectedInstanceRevision', '$.expectedRevision', '$.expectedResourceRevision') = {AgentCore.Application.Tools.TenantManagementMutationContract.SemanticArguments(managementMutation.ArgumentsJson)}
             """) : operation.ManagementRead is { } management ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.ManagementRead.SessionId') = {management.SessionId.ToString("D")}
@@ -427,7 +427,9 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         {
             var hiddenManagement = HiddenManagementChildren(db, managementVisibility);
             var hiddenSkillChanges = HiddenManagementSkillChanges(db, managementVisibility);
-            query = query.Where(r => !hiddenManagement.Any(hidden => hidden.RequestId == r.RequestId) && !hiddenSkillChanges.Any(hidden => hidden.RequestId == r.RequestId));
+            var hiddenResourceChanges = HiddenManagementResourceChanges(db, managementVisibility, workspaceReadVisibility, attachmentReadVisibility, browserVisibility);
+            query = query.Where(r => !hiddenManagement.Any(hidden => hidden.RequestId == r.RequestId) && !hiddenSkillChanges.Any(hidden => hidden.RequestId == r.RequestId)
+                && !hiddenResourceChanges.Any(hidden => hidden.RequestId == r.RequestId));
         }
         if (page.SessionId is { } session)
         {

@@ -16,9 +16,7 @@ public sealed partial class InMemoryIamStore
     {
         var tenant = reader.Security.Tenant.TenantId; var owner = reader.Agent.Instance;
         var snapshot = ReadTenantAgentConfigurationAsync(tenant, owner.InstanceId, ct).Result ?? throw new AccessDeniedException("management_source_unavailable");
-        IReadOnlyList<AgentDefinitionPublicationResource> inherited = Guid.TryParse(owner.DefinitionId, out var id)
-            ? definitions.TenantPublicationResources(tenant, id, owner.ActiveVersion)
-            : inheritedResources?.ListAsync(reader.Baseline, ct).GetAwaiter().GetResult() ?? [];
+        var inherited = ManagementPublishedResources(reader, ct);
         var bindings = ReadTenantCredentialBindingsAsync(tenant, owner.InstanceId, ct).Result?.Bindings ?? [];
         var values = new List<TenantCredential>();
         for (var page = 0; ; page++)

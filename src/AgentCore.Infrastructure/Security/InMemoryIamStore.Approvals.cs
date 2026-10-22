@@ -28,6 +28,8 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && TenantManagementInspectionSources.Visible(r.Operation.ManagementRead, managementVisibility)
                 && (r.Operation.ManagementMutation?.Skill is null || TenantManagementSkillRules.Visible(r, managementVisibility,
                     instances.FindTenantBackingAsync(r.Operation.InstanceId, ct).Result?.Revision, _operationReceipts.GetValueOrDefault(r.Operation.OperationId)))
+                && (r.Operation.ManagementMutation?.Resource is null || ManagementResourceVisible(r, managementVisibility,
+                    workspaceReadVisibility, attachmentReadVisibility, browserVisibility, ct))
                 && (automationVisibility?.IncludeOccurrenceReservations != false || r.Operation.AutomationAdmission is null)
                 && (r.Operation.AutomationAdmission is not { } admission || (admission.Conversation is null ? automationVisibility?.CanCreate ?? true
                     : (automationVisibility?.CanCreateRuns ?? true)

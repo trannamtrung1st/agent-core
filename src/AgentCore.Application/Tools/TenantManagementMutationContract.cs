@@ -18,7 +18,7 @@ public sealed record TenantManagementMutationIntent(string Tool, string Argument
 }
 public static class TenantManagementMutationContract
 {
-    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "settings.patch", "management.policy.update", "management.freeze", "automation.preferences.patch", "skills.create", "skills.update", "skills.set_enabled", "skills.reset_enabled", "skills.delete", "skills.customize" });
+    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "settings.patch", "management.policy.update", "management.freeze", "automation.preferences.patch", "skills.create", "skills.update", "skills.set_enabled", "skills.reset_enabled", "skills.delete", "skills.customize", "resources.upsert", "resources.copy", "resources.set_enabled", "resources.delete" });
     public static bool IsTool(string name) => Tools.Contains(name);
     public static bool Allows(AgentDefinition definition, string tool) => IsTool(tool) && RolePermissions.AllowsTool(definition, tool)
         && definition.SelfManagement is { } policy && ManagementTools.Enabled(policy)
@@ -28,7 +28,7 @@ public static class TenantManagementMutationContract
         ? Tools.Where(tool => Allows(definition, tool) && ManagementTools.Allows(tool, definition, live)).ToArray() : [];
     public static TenantManagementMutationArguments Parse(string tool, string json)
     {
-        if (!IsTool(tool) || Encoding.UTF8.GetByteCount(json) > 24000) throw new ArgumentException("Use an offered bounded exact management command.");
+        if (!IsTool(tool) || Encoding.UTF8.GetByteCount(json) > (TenantManagementResourceRules.IsTool(tool) ? 262144 : 24000)) throw new ArgumentException("Use an offered bounded exact management command.");
         using var doc = JsonDocument.Parse(json); if (TenantManagementSkillRules.IsTool(tool))
         {
             var root = doc.RootElement;
@@ -56,7 +56,22 @@ public static class TenantManagementMutationContract
                 _ = InstanceSkillTools.ReadInput(root);
             }
         }
-        else ConfigurationTools.Validate(tool, doc.RootElement);
+        else
+        {
+            ConfigurationTools.Validate(tool, doc.RootElement);
+            if (TenantManagementResourceRules.IsTool(tool))
+            {
+                var root = doc.RootElement;
+                if (root.TryGetProperty("key", out var key))
+                {
+                    var parsed = AgentCore.Application.Admin.AgentInstanceResourceService.ParseKey(key.GetString()!);
+                    if (tool is "resources.upsert" or "resources.delete" && parsed.Origin != "instance"
+                        || tool == "resources.copy" && parsed.Origin != "definition") throw new ArgumentException("Use the offered Resource origin.");
+                }
+                if (tool == "resources.upsert" && root.TryGetProperty("key", out _) != root.TryGetProperty("expectedResourceRevision", out _))
+                    throw new ArgumentException("Resource replacement requires its exact current child revision.");
+            }
+        }
         if (tool == "settings.patch")
         {
             var set = doc.RootElement.GetProperty("set").EnumerateObject().Select(p => p.Name).ToArray(); var clear = doc.RootElement.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray();
@@ -73,7 +88,7 @@ public static class TenantManagementMutationContract
     }
     public static string SemanticArguments(string arguments)
     {
-        var body = JsonNode.Parse(arguments)!.AsObject(); body.Remove("expectedInstanceRevision"); body.Remove("expectedRevision"); return body.ToJsonString();
+        var body = JsonNode.Parse(arguments)!.AsObject(); body.Remove("expectedInstanceRevision"); body.Remove("expectedRevision"); body.Remove("expectedResourceRevision"); return body.ToJsonString();
     }
     public static TenantPreferencePatch? Preference(string tool, string arguments)
     {
@@ -84,6 +99,7 @@ public static class TenantManagementMutationContract
         catch (ArgumentException) { return null; }
     }
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with { Description = tool.Name switch {
+        _ when TenantManagementResourceRules.IsTool(tool.Name) => "Change only this Agent's Resource through its existing configuration owner. Inspect current item and Instance revisions first. Upsert retains a reviewed literal text draft and evidence of actual current-task material; source names alone grant no authority. Definition copy verifies original bytes and keeps independent provenance. Enable accepts null only to reset inheritance. Writes require mutate_management exact consent, independent source reads and current typed Resource permissions; deletion requires resources.delete. Changes affect future Runs and grant no read, capability or execution authority.",
         _ when TenantManagementSkillRules.IsTool(tool.Name) => "Change only this Agent’s exact Skill through its existing configuration owner. Inspect first and use current item and Instance revisions. Definition/Built-in procedures are immutable; customization retains source provenance. Managed eligible Skill changes can apply under current Allowed policy; deletion, customization and Assisted changes require mutate_management exact consent. Changes affect future Runs and grant no capability, source read or execution authority.",
         "settings.patch" => "Patch only this Agent's exact inspected setting section with expectedInstanceRevision, set and clear. Core validates Definition/host constraints. Only the three Managed conversation preferences may auto-apply under current Allowed policy. Other changes require mutate_management exact consent. Cleared fields restore Definition defaults. Changes apply to new Runs; no tool effect is replayed.",
         "management.freeze" => "Propose freezing this Agent's active management with its exact inspected Instance revision. Requires mutate_management exact consent and current authority. Management revokes immediately; ordinary tasks and retained content remain. This tool cannot unfreeze or enable management.",

@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    private async ValueTask RequireBrowserOperation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run, TenantAgent agent, CancellationToken ct)
+    private async ValueTask RequireBrowserOperation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run, TenantAgent agent, CancellationToken ct, bool retainedObservation = false)
     {
         var value = request.Operation.BrowserCommand!;
         var session = await ReadSandboxSession(db, request.TenantId, value.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
@@ -32,7 +32,7 @@ public sealed partial class SqliteIamStore
         }
         if (request.Status == TenantApprovalStatus.Pending && value.Artifacts is not null)
             await RequireBrowserArtifactBudget(db, request, ct).ConfigureAwait(false);
-        if (request.Snapshot != TenantBrowserOperationRules.Snapshot(agent, value)) throw new SecurityConflictException("browser_target_changed");
+        if (!retainedObservation && request.Snapshot != TenantBrowserOperationRules.Snapshot(agent, value)) throw new SecurityConflictException("browser_target_changed");
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!;
         await TenantBrowserOperationRules.RequirePermissionsAsync(state, agent.Instance.InstanceId, value, request.ExecutorPrincipalId, new IamAuthorizer(this), ct,
             request.Kind == ApprovalKind.ExceptionalGrant).ConfigureAwait(false);

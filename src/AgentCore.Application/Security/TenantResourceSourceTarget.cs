@@ -23,7 +23,7 @@ public sealed class TenantResourceSource
 // Resolve only an exact admitted resource through the actual current tenant/Instance binding.
 // Workspace readers and durable read consent consume this source without taking over its authority checks.
 public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operations, ITenantSessionStore sessions,
-    TenantRunConfigurationResolver configurations, ITenantResourceSourceContentStore content, IamAuthorizer iam, TimeProvider time)
+    TenantRunConfigurationResolver configurations, ITenantResourceSourceContentStore content, IamAuthorizer iam, TimeProvider time, ITenantManagementStore? management = null)
 {
     internal sealed record Source(AgentRun Run, TenantSecurityState Security, TenantSession Session, TenantAgent Agent,
         TenantResourceSourceObservation Observation);
@@ -97,9 +97,12 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             throw new AccessDeniedException("capability_unavailable");
         var admitted = run.Admission.Configuration.Resources.Where(r => r.VirtualPath == path).Take(2).ToArray();
         var resource = admitted.Length == 1 ? admitted[0] : throw new AccessDeniedException("resource_unavailable");
+        var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
+        var retained = management is null ? null : await management.ReadRetainedResourcePinAsync(new(tenant, run.AgentRunId), resource, ct).ConfigureAwait(false);
+        if (retained is not null && retained.InstanceRevision != current.Snapshot.Agent.Instance.Revision) throw new SecurityConflictException("resource_source_changed");
         var targets = new[] { ("sessions.read", TenantSessionRules.Scope(tenant, run.SessionId)),
             ("agents.read", AccessScope.ForResource(tenant, "agent", run.AgentInstanceId.ToString("D"))),
-            ("resources.read", TenantAgentChildScopes.Scope(tenant, run.AgentInstanceId, "resource", resource.Key)) };
+            ("resources.read", retained?.Deleted == true ? AccessScope.ForTenant(tenant) : TenantAgentChildScopes.Scope(tenant, run.AgentInstanceId, "resource", resource.Key)) };
         foreach (var (permission, scope) in targets)
         {
             if (!(await iam.CheckOwnedTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed)
@@ -110,22 +113,21 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
             if (decision.Decision == OperationDecisionKind.RequiresApproval) throw new AccessDeniedException("resource_read_review_required");
             if (decision.Decision != OperationDecisionKind.Allowed) throw new AccessDeniedException(decision.ReasonCode);
         }
-        var current = await configurations.CurrentResourcesAsync(tenant, run.AgentInstanceId, ct).ConfigureAwait(false);
         if (current.Snapshot.Agent.PrincipalId != run.Owner.ExecutorPrincipalId || !TenantTaskExecutionContract.Allows(run, current.Definition) || !Allows(current.Definition))
             throw new AccessDeniedException("capability_unavailable");
         if (tool == ToolCatalog.KnowledgeRetrieve)
         {
             var pinned = TenantKnowledgeReadContract.Resolve(run.Admission.Configuration.Definition, run.Admission.Configuration.Resources, knowledgeIdentity!);
-            var liveSource = TenantKnowledgeReadContract.Resolve(current.Definition, current.Resources, knowledgeIdentity!);
+            var liveSource = TenantKnowledgeReadContract.Resolve(current.Definition, retained is null ? current.Resources : run.Admission.Configuration.Resources, knowledgeIdentity!);
             if (pinned.Resource != resource || liveSource.Resource != resource || pinned.Source != liveSource.Source) throw new SecurityConflictException("knowledge_source_changed");
         }
         var actual = current.Resources.SingleOrDefault(r => r.Key == resource.Key);
-        if (actual != resource || resource.Key.StartsWith("definition:", StringComparison.Ordinal)
+        if (retained is null && actual != resource || resource.Key.StartsWith("definition:", StringComparison.Ordinal)
             && (current.Snapshot.Agent.Instance.DefinitionId != run.DefinitionId || current.Snapshot.Agent.Instance.ActiveVersion != run.DefinitionVersion))
             throw new SecurityConflictException("resource_source_changed");
-        var revision = resource.Key.StartsWith("instance:", StringComparison.Ordinal)
+        var revision = retained?.ResourceRevision ?? (resource.Key.StartsWith("instance:", StringComparison.Ordinal)
             ? current.Snapshot.Resources.InstanceResources.Single(r => "instance:" + r.ResourceId.ToString("D") == resource.Key).Revision
-            : current.Snapshot.Resources.DefinitionStates.SingleOrDefault(r => "definition:" + r.ResourceId.ToString("D") == resource.Key)?.Revision ?? 0;
+            : current.Snapshot.Resources.DefinitionStates.SingleOrDefault(r => "definition:" + r.ResourceId.ToString("D") == resource.Key)?.Revision ?? 0);
         return new(run, state, session, current.Snapshot.Agent,
             new(tenant, run.AgentInstanceId, run.SessionId, resource, run.DefinitionId, run.DefinitionVersion, revision));
     }

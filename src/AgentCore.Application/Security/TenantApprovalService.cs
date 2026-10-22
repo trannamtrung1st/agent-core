@@ -527,7 +527,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             _ = await (automationAdmissions ?? throw new AccessDeniedException("approval_unavailable")).Mutations.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.ManagementMutation is not null)
         {
-            if (request.Status == TenantApprovalStatus.Approved && request.Operation.ManagementMutation.Skill is not null && recorded is null && effects is not null)
+            if (request.Status == TenantApprovalStatus.Approved && (request.Operation.ManagementMutation.Skill is not null || request.Operation.ManagementMutation.Resource is not null) && recorded is null && effects is not null)
                 recorded = await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
             _ = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(request, human, ct, recorded).ConfigureAwait(false);
         }
@@ -616,6 +616,16 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                 // tenant-wide readers/managers may inspect it after its grant was retired.
                 actionScope = AccessScope.ForTenant(request.TenantId);
                 if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("skills.read"), actionScope, ct).ConfigureAwait(false)).Allowed)
+                    throw new AccessDeniedException("approval_unavailable");
+            }
+        }
+        if (request is { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation.Resource.Result.Deleted: true })
+        {
+            recorded ??= effects is null ? null : await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
+            if (TenantManagementResourceRules.CompletedDeletion(request, recorded))
+            {
+                actionScope = AccessScope.ForTenant(request.TenantId);
+                if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("resources.read"), actionScope, ct).ConfigureAwait(false)).Allowed)
                     throw new AccessDeniedException("approval_unavailable");
             }
         }

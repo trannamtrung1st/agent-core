@@ -5,11 +5,29 @@ using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
 public sealed partial class TenantAgentConfigurationService
 {
+    internal async ValueTask<byte[]?> ManagementResourceCopyBytesAsync(TenantManagementResourceContext context, TenantManagementMutationArguments args, CancellationToken ct)
+    {
+        if (args.Tool != "resources.copy") return null;
+        var key = args.Value.GetProperty("key").GetString()!;
+        var view = AgentInstanceResourceService.Views(EffectiveChildDefinition(context.Source.Snapshot, context.Source.Reader.Baseline), context.Published,
+            context.Source.Snapshot.Resources, context.Source.Snapshot.Skills).SingleOrDefault(r => r.Key == key) ?? throw new AccessDeniedException("resource_unavailable");
+        return await Content(view, ct).ConfigureAwait(false);
+    }
+    internal async ValueTask StageManagementResourceAsync(PreparedManagementMutation value, CancellationToken ct)
+    {
+        if (value is not { ToolName: "resources.upsert", Resource: { Changed: true, InstanceResource: { } resource } }) return;
+        var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(args.Value.GetProperty("content").GetString()!);
+        AgentInstanceResourceService.Verify(resource.ContentSha256, resource.ByteLength, bytes);
+        try { await (content ?? throw new AccessDeniedException("resource_content_unavailable")).StoreVerifiedAsync(resource.ContentSha256, bytes, ct).ConfigureAwait(false); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new AccessDeniedException("resource_content_unavailable"); }
+    }
     internal async ValueTask ValidateManagementSkillAsync(TenantManagementSource source, TenantManagementMutationArguments args, DateTimeOffset at, CancellationToken ct)
     {
         var prepared = TenantManagementSkillRules.Prepare(source, args, at);

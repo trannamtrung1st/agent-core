@@ -20,6 +20,10 @@ public sealed partial class TenantSessionAccessTests
 {
     private sealed class SkillSourceTrace(ITenantManagementStore inner, ConcurrentQueue<string> stages) : ITenantManagementStore, ITenantDirectOperationStore
     {
+        public ValueTask<TenantResourcePinRetention?> ReadRetainedResourcePinAsync(TenantRunReference reference, AgentCore.Domain.Definitions.EffectiveAgentResource resource, CancellationToken ct = default) =>
+            inner.ReadRetainedResourcePinAsync(reference, resource, ct);
+        public ValueTask<TenantManagementResourceContext> ReadTenantManagementResourceContextAsync(TenantRunReference reference, Guid? generation, string tool, string arguments, Guid? inspectionHuman = null, CancellationToken ct = default) =>
+            inner.ReadTenantManagementResourceContextAsync(reference, generation, tool, arguments, inspectionHuman, ct);
         public async ValueTask<TenantManagementSource> ReadTenantManagementSourceAsync(TenantRunReference reference, Guid? generation, Guid? inspectionHuman = null, CancellationToken ct = default)
         { stages.Enqueue("source.start"); var value = await inner.ReadTenantManagementSourceAsync(reference, generation, inspectionHuman, ct); stages.Enqueue("source.end"); return value; }
         public async ValueTask RequireTenantManagementSkillSourcesAsync(TenantRunReference reference, Guid? generation, string tool, string arguments, Guid? inspectionHuman = null, CancellationToken ct = default)
@@ -28,15 +32,15 @@ public sealed partial class TenantSessionAccessTests
             => inner.ObserveTenantManagementReadAsync(reference, generation, tool, arguments, expected, inspectionHuman, ct);
         public ValueTask RequireTenantManagementReadSourcesAsync(TenantRunReference reference, IReadOnlyList<TenantManagementReadReference> sources, Guid? generation, CancellationToken ct = default)
             => inner.RequireTenantManagementReadSourcesAsync(reference, sources, generation, ct);
-        public async ValueTask<TenantOperationReceipt?> TryCommitManagementSkillAsync(TenantSecurityState next, long revision, TenantManagementSkillCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
-        { stages.Enqueue("commit.start"); var receipt = await inner.TryCommitManagementSkillAsync(next, revision, commit, audit, ct); stages.Enqueue("commit.end"); return receipt; }
+        public async ValueTask<TenantOperationReceipt?> TryCommitManagementCommandAsync(TenantSecurityState next, long revision, TenantManagementCommandCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+        { stages.Enqueue("commit.start"); var receipt = await inner.TryCommitManagementCommandAsync(next, revision, commit, audit, ct); stages.Enqueue("commit.end"); return receipt; }
         public ValueTask<TenantOperationReceipt?> FindDirectOperationReceiptAsync(Guid tenant, Guid run, string call, CancellationToken ct = default)
             => ((ITenantDirectOperationStore)inner).FindDirectOperationReceiptAsync(tenant, run, call, ct);
     }
     private sealed class SkillAuthoringModel(string tool, string read, string readArguments) : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new AgentCore.Infrastructure.Providers.Synthetic.ScriptedLanguageModel().Capabilities;
-        public string Arguments = "{}"; public bool SuppressConsent; public bool ReadConsent;
+        public string ReadArguments = readArguments; public string Arguments = "{}"; public bool SuppressConsent; public bool ReadConsent; public ModelToolCall? AfterCommandRead;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
@@ -49,11 +53,11 @@ public sealed partial class TenantSessionAccessTests
             using var readBody = JsonDocument.Parse(readMessage?.Text ?? "{}");
             var readReview = readBody.RootElement.TryGetProperty("decision", out var readDecision) && readDecision.GetString() == "requiresApproval";
             var readApproved = messages.Any(m => m.Name == ToolCatalog.RequestAuthorization && m.ToolCallId == "approve-skill-read" && m.Text.Contains("\"managementReadObservation\"", StringComparison.Ordinal));
-            if (readMessage is null) next = Offered(read, readArguments, "read-skill-source");
+            if (readMessage is null) next = Offered(read, ReadArguments, "read-skill-source");
             else if (ReadConsent && readReview && !readApproved)
             {
                 if (!messages.Any(m => m.ToolCallId == "approve-skill-read")) next = new("approve-skill-read", ToolCatalog.RequestAuthorization,
-                    JsonSerializer.Serialize(new { operation = "inspect_management", read = new { tool = read, arguments = JsonSerializer.Deserialize<JsonElement>(readArguments) } }));
+                    JsonSerializer.Serialize(new { operation = "inspect_management", read = new { tool = read, arguments = JsonSerializer.Deserialize<JsonElement>(ReadArguments) } }));
             }
             else if (!messages.Any(m => m.Name == tool)) next = Offered(tool, Arguments, "write-skill");
             else if (!SuppressConsent && !messages.Any(m => m.Name == ToolCatalog.RequestAuthorization))
@@ -62,6 +66,9 @@ public sealed partial class TenantSessionAccessTests
                 if (body.RootElement.TryGetProperty("decision", out var decision) && decision.GetString() == "requiresApproval")
                     next = new("approve-skill", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "mutate_management", change = new { tool, arguments = JsonSerializer.Deserialize<JsonElement>(Arguments) } }));
             }
+            if (next is null && AfterCommandRead is { } extra && !messages.Any(m => m.ToolCallId == extra.Id)
+                && messages.Any(m => m.ToolCallId == "approve-skill" && m.Text.Contains("\"outcome\":\"completed\"", StringComparison.Ordinal)))
+                next = Offered(extra.Name, extra.ArgumentsJson, extra.Id);
             if (next is not null) { yield return new ModelToolCallEvent(next); yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break; }
             yield return new ModelTextDelta("The exact Skill operation has its recorded outcome; this Run retained its original procedures.");
             yield return new ModelCompleted(ModelStopReason.Completed);

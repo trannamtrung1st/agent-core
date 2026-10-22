@@ -8,7 +8,7 @@ Canonical conversational model reads currently support `harness.inspect({})`, `c
 {"operation":"inspect_management","read":{"tool":"settings.inspect","arguments":{"section":"conversationPolicy"}}}
 ```
 
-HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. Resource/Harness content authoring and typed remedy execution retain their separate conversion boundary. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
+HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. Canonical Resource commands use the exact mutation intent below; Harness content authoring and typed remedy execution retain their separate conversion boundary. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
 
 Compound Harness/configuration reads use that same intent, for example:
 
@@ -38,7 +38,15 @@ The existing authorization tool accepts one exact canonical management command:
 {"operation":"mutate_management","change":{"tool":"settings.patch","arguments":{"expectedInstanceRevision":3,"section":"instructions","set":{"agentInstructions":"Use this exact instruction in future Runs."},"clear":[]}}}
 ```
 
-Supported commands are `settings.patch`, `management.policy.update`, `management.freeze` and `automation.preferences.patch`. Strict typed arguments select only the executing Agent. Sandbox settings accept only `profileId`. The canonical operation summary is **Change exact Agent configuration**; the shared inspector shows escaped saved field changes, source/default changes and the effect boundary. Confirmation authorizes that exact saved change once, rechecks source/reviewer authority, preserves the current Run pin and distinguishes immediate revocation from future settings/grants. Only a completed factual receipt displays **Configuration updated**; refusal displays **Configuration not changed**. The original authorization/continuation/receipt wire owner is unchanged. [Backend contract](04-backend-interfaces.md#tenant-model-management-commands).
+General settings/policy commands are `settings.patch`, `management.policy.update`, `management.freeze` and `automation.preferences.patch`. Strict typed arguments select only the executing Agent. Sandbox settings accept only `profileId`. The canonical operation summary is **Change exact Agent configuration**; the shared inspector shows escaped saved field changes, source/default changes and the effect boundary. Confirmation authorizes that exact saved change once, rechecks source/reviewer authority, preserves the current Run pin and distinguishes immediate revocation from future settings/grants. Only a completed factual receipt displays **Configuration updated**; refusal displays **Configuration not changed**. The original authorization/continuation/receipt wire owner is unchanged. [Backend contract](04-backend-interfaces.md#tenant-model-management-commands).
+
+Canonical Resource writes use that same `mutate_management` intent, for example:
+
+```json
+{"operation":"mutate_management","change":{"tool":"resources.upsert","arguments":{"expectedInstanceRevision":4,"logicalPath":"reviewed.txt","kind":"Reference","mediaType":"text/plain","content":"Reviewed literal draft.","source":"conversation:user"}}}
+```
+
+Replacement additionally supplies the exact local `key` and `expectedResourceRevision`. Copy supplies an inherited `key` and destination `logicalPath`; enable/reset and delete supply their exact key/revision, with `enabled:null` for reset. New text alone may use explicit Managed `TextResources` delegation under Allowed policy. Every other change keeps exact consent. Source strings resolve actual root inputs or paired successful observations, with independent current source rights and read consent. Review labels distinguish derived literal drafts from verified byte copies. Committed results expose body-free Resource metadata/deleted keys and `changesApplyTo:nextRun`; they do not refresh the admitted Run. [Backend contract](04-backend-interfaces.md#canonical-model-resource-authoring).
 
 ## Owner credential contract retirement
 

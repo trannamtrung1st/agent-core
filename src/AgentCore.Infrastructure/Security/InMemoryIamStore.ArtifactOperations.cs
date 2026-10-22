@@ -34,8 +34,7 @@ public sealed partial class InMemoryIamStore : ITenantArtifactOperationStore
             {
                 var session = sessionBacking.ReadTenantSession(before.Tenant.TenantId, run.SessionId) ?? throw new AccessDeniedException("resource_unavailable");
                 TenantArtifactSourceRules.Require(run, target, definition, session, path, commit.Source);
-                if (commit.Source?.ResourceKey is { } sourceKey) TenantResourceRevisionRules.Require(sourceKey, commit.Source.ResourceRevision, run, target,
-                    instances.ReadTenantResourcesAsync(target.Instance.InstanceId, ct).Result);
+                if (commit.Source?.ResourceKey is { } sourceKey) RequireResourcePin(sourceKey, commit.Source.ResourceRevision, run, target, ct);
                 if (commit.Source is { AttachmentId: { } attachmentId } attachmentSource)
                     TenantAttachmentArtifactRules.Require(attachmentSource, session.Owner, attachmentBacking?.RetainedTenant(run.Owner.TenantId!.Value, run.SessionId, attachmentId));
                 TenantArtifactSourceRules.RequireAuthorityAsync(before, run, path, new IamAuthorizer(this), false, ct).GetAwaiter().GetResult();

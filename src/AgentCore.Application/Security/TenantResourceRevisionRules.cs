@@ -6,8 +6,14 @@ namespace AgentCore.Application.Security;
 
 public static class TenantResourceRevisionRules
 {
-    public static void Require(string key, long? revision, AgentRun run, TenantAgent agent, InstanceResourceSnapshot resources)
+    public static void Require(string key, long? revision, AgentRun run, TenantAgent agent, InstanceResourceSnapshot resources, TenantResourcePinRetention? retained = null)
     {
+        if (retained is not null)
+        {
+            if (retained.InstanceRevision != agent.Instance.Revision || retained.ResourceRevision != revision
+                || run.Admission.Configuration!.Resources.SingleOrDefault(r => r.Key == key) is null) throw new SecurityConflictException("resource_source_changed");
+            return;
+        }
         if (key.StartsWith("instance:", StringComparison.Ordinal))
         {
             var current = resources.InstanceResources.SingleOrDefault(r => "instance:" + r.ResourceId.ToString("D") == key);

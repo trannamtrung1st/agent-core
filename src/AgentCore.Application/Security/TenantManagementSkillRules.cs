@@ -37,30 +37,6 @@ public static class TenantManagementSkillRules
         ? null : new { key = result.Key, revision = result.Revision, enabled = result.Enabled };
     public static object? DefinitionMetadata(TenantManagementSkillResult result) => result.SourceKey is null ? null
         : new { key = result.SourceKey, revision = result.SourceRevision, enabled = result.SourceEnabled };
-    public static string ParametersHash(string tool, string arguments) => TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { tool, arguments }));
-    public static void Transaction(TenantSecurityState next, long expected, TenantManagementReader reader, TenantManagementSkillCommit commit, AuthorizationAudit audit, DateTimeOffset at)
-    {
-        var run = reader.Run; var value = commit.Operation.ManagementMutation ?? throw new SecurityConflictException("operation_mismatch");
-        TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
-        if (run.AgentRunId != commit.RunId || run.Revision != commit.ExpectedRunRevision || commit.Operation.InstanceId != run.AgentInstanceId
-            || commit.Operation.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200
-            || value.Skill is not { Changed: true } || !AutoApplies(reader, value.ToolName)
-            || commit.ParametersHash != ParametersHash(value.ToolName, value.ArgumentsJson)
-            || next.Tenant.TenantId != run.Owner.TenantId || next.Tenant.Revision != checked(expected + 1)
-            || audit.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != run.Owner.ExecutorPrincipalId
-            || audit.Action != "operations.skills.apply" || audit.Target != run.AgentInstanceId.ToString("D")
-            || audit.Decision != "allowed" || audit.ReasonCode != TenantManagementMutationRules.Completed)
-            throw new SecurityConflictException("operation_mismatch");
-        var rebuilt = TenantApprovalRules.PrepareManagementMutation(commit.Operation.OperationId, run.AgentInstanceId, value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
-        if (rebuilt.ActionHash != commit.Operation.ActionHash) throw new SecurityConflictException("operation_mismatch");
-    }
-    public static async ValueTask DirectAuthorityAsync(TenantManagementReader reader, PreparedManagementMutation value, IamAuthorizer iam, CancellationToken ct)
-    {
-        var scope = Scope(reader, value);
-        if (!(await iam.CheckOwnedTenantAsync(reader.Security, reader.Agent.PrincipalId, PermissionCatalog.Get("skills.manage"), scope, ct).ConfigureAwait(false)).Allowed
-            || await TenantManagementReadRules.NeedsReviewOwnedAsync(reader, "skills.manage", scope, iam, ct).ConfigureAwait(false))
-            throw new AccessDeniedException("operation_authority_changed");
-    }
     public static bool Visible(TenantApprovalRequest request, TenantManagementApprovalVisibility? visibility, long? currentInstanceRevision, TenantOperationReceipt? recorded)
     {
         if (request.Operation.ManagementMutation?.Skill is not { } plan) return true;

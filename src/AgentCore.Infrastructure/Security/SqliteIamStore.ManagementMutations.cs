@@ -34,13 +34,26 @@ public sealed partial class SqliteIamStore
         if (!await ManagementReadConsented(db, reader, TenantManagementReadService.Reference(observed.Value, reader.Security.Tenant.TenantId), ct).ConfigureAwait(false))
             throw new AccessDeniedException("skill_source_read_review_required");
     }
-    private async ValueTask<(TenantManagementReader Reader, TenantAgentConfigurationChange Change)> RequireManagementMutation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run, CancellationToken ct)
+    private async ValueTask<(TenantManagementReader Reader, TenantAgentConfigurationChange Change)> RequireManagementMutation(AgentCoreDbContext db, TenantApprovalRequest request, AgentRun run, CancellationToken ct, bool requireStagedContent = false)
     {
         var value = request.Operation.ManagementMutation ?? throw new AccessDeniedException("management_unavailable");
         var reader = await ManagementReader(db, run, null, ct).ConfigureAwait(false); var iam = new IamAuthorizer(this);
         await TenantManagementReadRules.RawAsync(reader, iam, ct).ConfigureAwait(false);
         await TenantManagementMutationRules.SecondaryAsync(reader, value, iam, reader.Agent.PrincipalId, ct).ConfigureAwait(false);
         await TenantManagementMutationRules.PrimaryAsync(request, reader, iam, ct).ConfigureAwait(false);
+        if (value.Resource is { } resource)
+        {
+            var context = await ManagementResourceContext(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+            if (JsonSerializer.Serialize(context.Material) != JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
+            byte[]? bytes = null;
+            if (resource.InstanceResource is { } binding && (value.ToolName == "resources.copy" || requireStagedContent))
+            {
+                try { bytes = await AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(
+                    definitionContent ?? throw new AccessDeniedException("resource_content_unavailable"), binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).ConfigureAwait(false); }
+                catch (AgentCore.Application.Sessions.AgentCoreException) { throw new AccessDeniedException("resource_content_unavailable"); }
+            }
+            return (reader, TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published, value.ToolName == "resources.copy" ? bytes : null));
+        }
         TenantAgentConfigurationSnapshot? snapshot = null;
         if (value.Skill is not null)
         {

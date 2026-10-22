@@ -22,6 +22,7 @@ public sealed partial class TenantApprovedOperationService
                 var eligibility = await managementTargets.DecisionAsync(observed, ct).ConfigureAwait(false);
                 if (eligibility.Decision != OperationDecisionKind.RequiresApproval || eligibility.ApprovalKind != request.Kind) throw new AccessDeniedException("operation_authority_changed");
                 await TenantManagementOperationTarget.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(security), ct).ConfigureAwait(false);
+                await managementTargets.StageResourceAsync(observed, ct).ConfigureAwait(false);
             }
             catch (AccessDeniedException error) { reason = error.ReasonCode; }
             catch (SecurityConflictException error) { reason = error.ReasonCode; }

@@ -7,8 +7,8 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
-    public ValueTask<TenantOperationReceipt?> TryCommitManagementSkillAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantManagementSkillCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+    public ValueTask<TenantOperationReceipt?> TryCommitManagementCommandAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantManagementCommandCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (isolationBacking.IsolationGate)
@@ -21,13 +21,23 @@ public sealed partial class InMemoryIamStore
             ValidateAgentActor(before, reader.Agent.PrincipalId);
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human) ValidateAgentActor(before, human);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
-            TenantManagementSkillRules.Transaction(next, expectedSecurityRevision, reader, commit, audit, at);
-            RequireManagementSkillSources(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
-            TenantManagementSkillRules.DirectAuthorityAsync(reader, value, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+            TenantManagementDirectRules.Transaction(next, expectedSecurityRevision, reader, commit, audit, at);
+            if (value.Skill is not null) RequireManagementSkillSources(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
+            TenantManagementDirectRules.AuthorityAsync(reader, value, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             var previous = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, commit.Operation.OperationFingerprint);
             if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous));
             var source = ReadTenantAgentConfigurationAsync(before.Tenant.TenantId, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("management_unavailable");
-            var change = TenantManagementMutationRules.Change(reader, value, source);
+            TenantAgentConfigurationChange change;
+            if (value.Resource is { } resource)
+            {
+                var context = ManagementResourceContext(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
+                if (System.Text.Json.JsonSerializer.Serialize(context.Material) != System.Text.Json.JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
+                var binding = resource.InstanceResource ?? throw new AccessDeniedException("resource_unavailable");
+                _ = AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitions.ResourceStore!.TenantContent,
+                    binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).GetAwaiter().GetResult();
+                change = TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published);
+            }
+            else change = TenantManagementMutationRules.Change(reader, value, source);
             var candidate = TenantAgentConfigurationRules.Apply(reader.Agent.Instance, change, at);
             next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, ChildCatalog(before.Tenant.TenantId, run.AgentInstanceId, change, ct));
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
@@ -35,11 +45,13 @@ public sealed partial class InMemoryIamStore
             var receipt = new TenantOperationReceipt(commit.Operation.OperationId, null, before.Tenant.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, run.AgentInstanceId, commit.Operation.ActionHash,
                 TenantOperationOutcome.Completed, TenantManagementMutationRules.Completed, candidate.Revision, candidate.PersonaRevision,
-                DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()), commit.SourceCallId, commit.ParametersHash, ManagementSkill: TenantManagementSkillRules.Evidence(value, reader.Agent.Instance.Revision));
+                DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()), commit.SourceCallId, commit.ParametersHash, ManagementSkill: value.Skill is null ? null : TenantManagementSkillRules.Evidence(value, reader.Agent.Instance.Revision),
+                ManagementResource: value.Resource is null ? null : TenantManagementResourceRules.Evidence(value, reader.Agent.Instance.Revision));
             if (_operationReceipts.ContainsKey(receipt.OperationId)) throw new SecurityConflictException("identity_conflict");
             TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, (clock ?? TimeProvider.System).GetUtcNow());
             ct.ThrowIfCancellationRequested();
-            if (change.Skill is { } skill) instances.MutateTenantSkillsAsync(skill, at, ct).GetAwaiter().GetResult();
+            if (change.Resource is { } resourceChange) instances.MutateTenantResourcesAsync(resourceChange, at, ct).GetAwaiter().GetResult();
+            else if (change.Skill is { } skill) instances.MutateTenantSkillsAsync(skill, at, ct).GetAwaiter().GetResult();
             else _ = instances.ChangeTenantConfigurationAsync(new(run.AgentInstanceId, reader.Agent.Instance.Revision, HarnessManagement: change.HarnessManagement), at, ct).Result;
             foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(reader.Agent.Instance, candidate,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(before.Tenant.TenantId, run.AgentInstanceId, reader.Agent.PrincipalId))) AppendTenantCore(fact);

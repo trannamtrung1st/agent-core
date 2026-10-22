@@ -120,7 +120,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementMutation is not null)
             {
                 try {
-                    var managementState = RequireManagementMutation(request, run, ct);
+                    var managementState = RequireManagementMutation(request, run, ct, requireStagedContent: true);
                     TenantManagementMutationRules.ReviewerAsync(request, managementState.Reader, request.Operation.ManagementMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
                     managementChange = managementState.Change;
                 } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
@@ -195,6 +195,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
             }
+            if (request.Operation.ManagementMutation?.Resource is not null)
+            {
+                at = (clock ?? TimeProvider.System).GetUtcNow(); commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
+            }
             TenantSessionRoot? childRoot = null;
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.BackgroundStart is not null)
             {
@@ -216,6 +221,12 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 instances.MutateTenantSkillsAsync(skillChange, at, ct).GetAwaiter().GetResult();
                 updated = instances.FindTenantBackingAsync(run.AgentInstanceId, ct).Result!;
             }
+            else if (configure && change!.Resource is { } resourceChange)
+            {
+                next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, ChildCatalog(next.Tenant.TenantId, run.AgentInstanceId, change, ct));
+                instances.MutateTenantResourcesAsync(resourceChange, at, ct).GetAwaiter().GetResult();
+                updated = instances.FindTenantBackingAsync(run.AgentInstanceId, ct).Result!;
+            }
             else
             {
                 updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
@@ -231,6 +242,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
+                ManagementResource: complete && request.Operation.ManagementMutation is { Resource: not null } resourceEvidence ? TenantManagementResourceRules.Evidence(resourceEvidence, target.Instance.Revision) : null,
                 ManagementSkill: complete && request.Operation.ManagementMutation is { Skill: not null } skillEvidence ? TenantManagementSkillRules.Evidence(skillEvidence, target.Instance.Revision) : null,
                 AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
             SandboxLease? pending = null; SandboxExecution? stopped = null;

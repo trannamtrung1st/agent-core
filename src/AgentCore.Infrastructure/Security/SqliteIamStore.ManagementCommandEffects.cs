@@ -10,8 +10,8 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    public async ValueTask<TenantOperationReceipt?> TryCommitManagementSkillAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantManagementSkillCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+    public async ValueTask<TenantOperationReceipt?> TryCommitManagementCommandAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantManagementCommandCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -27,19 +27,30 @@ public sealed partial class SqliteIamStore
         await ValidateTenantActorAsync(db, before, reader.Agent.PrincipalId, ct).ConfigureAwait(false);
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human) await ValidateTenantActorAsync(db, before, human, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow();
-        TenantManagementSkillRules.Transaction(next, expectedSecurityRevision, reader, commit, audit, at);
-        await RequireManagementSkillSources(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
-        await TenantManagementSkillRules.DirectAuthorityAsync(reader, value, new IamAuthorizer(this), ct).ConfigureAwait(false);
+        TenantManagementDirectRules.Transaction(next, expectedSecurityRevision, reader, commit, audit, at);
+        if (value.Skill is not null) await RequireManagementSkillSources(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+        await TenantManagementDirectRules.AuthorityAsync(reader, value, new IamAuthorizer(this), ct).ConfigureAwait(false);
         var previous = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), reader.Agent.PrincipalId, commit.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous.Domain()));
         var source = new TenantAgentConfigurationSnapshot(reader.Agent, await SqliteAgentInstanceStore.ReadSkillsAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false),
             await SqliteAgentInstanceStore.ReadResourcesAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false), await ReadIsolationMetadataAsync(db, run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false));
-        var change = TenantManagementMutationRules.Change(reader, value, source);
+        TenantAgentConfigurationChange change;
+        if (value.Resource is { } resource)
+        {
+            var context = await ManagementResourceContext(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+            if (JsonSerializer.Serialize(context.Material) != JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
+            var binding = resource.InstanceResource ?? throw new AccessDeniedException("resource_unavailable");
+            _ = await AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitionContent ?? throw new AccessDeniedException("resource_content_unavailable"),
+                binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).ConfigureAwait(false);
+            change = TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published);
+        }
+        else change = TenantManagementMutationRules.Change(reader, value, source);
         var candidate = TenantAgentConfigurationRules.Apply(reader.Agent.Instance, change, at);
         next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, await ChildCatalogAsync(db, next.Tenant.TenantId, run.AgentInstanceId, change, ct).ConfigureAwait(false));
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         var owned = await OwnedAgents(db, tenant.TenantId).SingleAsync(a => a.Instance.InstanceId == row.AgentInstanceId, ct).ConfigureAwait(false);
         db.Attach(owned.Instance);
+        if (change.Resource is { } resourceChange) await SqliteAgentInstanceStore.StageResourcesAsync(db, resourceChange, null, ct).ConfigureAwait(false);
         if (change.Skill is { } skill) await SqliteAgentInstanceStore.StageSkillsAsync(db, skill, null, ct).ConfigureAwait(false);
         owned.Instance.HarnessManagementJson = candidate.HarnessManagement is null ? null : JsonSerializer.Serialize(candidate.HarnessManagement, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         owned.Instance.Revision = candidate.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
@@ -50,7 +61,8 @@ public sealed partial class SqliteIamStore
         var receipt = new TenantOperationReceipt(commit.Operation.OperationId, null, tenant.TenantId, run.AgentRunId, run.SessionId,
             run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, run.AgentInstanceId, commit.Operation.ActionHash,
             TenantOperationOutcome.Completed, TenantManagementMutationRules.Completed, candidate.Revision, candidate.PersonaRevision,
-            DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()), commit.SourceCallId, commit.ParametersHash, ManagementSkill: TenantManagementSkillRules.Evidence(value, reader.Agent.Instance.Revision));
+            DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()), commit.SourceCallId, commit.ParametersHash, ManagementSkill: value.Skill is null ? null : TenantManagementSkillRules.Evidence(value, reader.Agent.Instance.Revision),
+                ManagementResource: value.Resource is null ? null : TenantManagementResourceRules.Evidence(value, reader.Agent.Instance.Revision));
         db.Add(TenantOperationReceiptRecord.From(receipt)); db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
         await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false);
         db.Add(TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, receipt.OperationId) with { At = at });

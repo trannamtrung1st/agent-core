@@ -158,9 +158,9 @@ public static class TenantManagementReadRules
         var stable = value.StableConfigurationHash;
         for (var revision = value.InstanceRevision + 1; revision <= owner.Revision; revision++)
         {
-            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Management(r, request, stable) is not null || Skill(r, request, stable) is not null)).ToArray();
+            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Management(r, request, stable) is not null || Child(r, request, stable) is not null)).ToArray();
             if (candidates.Length != 1) throw new AccessDeniedException("management_source_changed");
-            if (Skill(candidates[0], request, stable) is { } skill) stable = skill.AfterStableHash;
+            if (Child(candidates[0], request, stable) is { } child) stable = child.AfterHash;
             else if (Management(candidates[0], request, stable) is { } mutation) stable = mutation.AfterStableHash;
         }
         if (StableConfigurationHash(owner) != stable) throw new AccessDeniedException("management_source_changed");
@@ -186,6 +186,25 @@ public static class TenantManagementReadRules
         else if (receipt.SourceCallId is not { Length: > 0 } || receipt.ParametersHash is not { } parameters || !TenantMemoryOperationRules.ValidHash(parameters)) return null;
         return value;
     }
+    private static (IReadOnlyList<TenantManagementChildRead> Before, IReadOnlyList<TenantManagementChildRead> After, string AfterHash)? Child(
+        TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request, string before)
+    {
+        if (Skill(receipt, request, before) is { } skill) return (skill.BeforeSources, skill.AfterSources, skill.AfterStableHash);
+        if (receipt.ManagementResource is not { } resource || resource.BeforeStableHash != before
+            || receipt.Outcome != TenantOperationOutcome.Completed || receipt.ReasonCode != TenantManagementMutationRules.Completed
+            || resource.BeforeInstanceRevision != receipt.InstanceRevision - 1) return null;
+        if (receipt.RequestId is { } id)
+        {
+            if (request(id) is not { } approved || !TenantManagementResourceRules.CompletedChange(approved, receipt)) return null;
+        }
+        else if (receipt.SourceCallId is not { Length: > 0 } || receipt.ParametersHash is not { } parameters || !TenantMemoryOperationRules.ValidHash(parameters)
+            || resource.ToolName != "resources.upsert" || resource.BeforeSources.Count != 0 || resource.AfterSources.Count != 1
+            || resource.Result.Revision != 1 || !resource.Result.Key.StartsWith("instance:", StringComparison.Ordinal)) return null;
+        _ = TenantManagementResourceRules.ReadEvidence(JsonSerializer.Serialize(resource));
+        if (resource.BeforeSources.Concat(resource.AfterSources).Any(s => s.Kind != "resource"
+            || s.ResourceId != receipt.InstanceId.ToString("D") + ":" + s.Key)) return null;
+        return (resource.BeforeSources, resource.AfterSources, resource.AfterStableHash);
+    }
     public static TenantManagementSourceRetention RetainedSources(TenantManagementReader reader, PreparedManagementRead value,
         IEnumerable<TenantOperationReceipt> receipts, Func<Guid, TenantApprovalRequest?> request)
     {
@@ -195,27 +214,77 @@ public static class TenantManagementReadRules
         {
             var rows = receipts.Where(r => r.TenantId == reader.Security.Tenant.TenantId && r.InstanceId == reader.Agent.Instance.InstanceId && r.ExecutorPrincipalId == reader.Agent.PrincipalId
                 && r.SessionId == reader.Run.SessionId && r.RootActivationId == reader.Run.Admission.Activation.RootActivationId && r.Outcome == TenantOperationOutcome.Completed && r.InstanceRevision == revision).ToArray();
-            var row = rows.Single(r => Preference(r, request) || Management(r, request, stable) is not null || Skill(r, request, stable) is not null);
-            if (Skill(row, request, stable) is { } skill)
+            var row = rows.Single(r => Preference(r, request) || Management(r, request, stable) is not null || Child(r, request, stable) is not null);
+            if (Child(row, request, stable) is { } child)
             {
-                foreach (var old in skill.BeforeSources)
+                foreach (var old in child.Before)
                 {
                     var index = sources.FindIndex(s => s.Kind == old.Kind && s.Key == old.Key);
                     if (index < 0) continue;
                     if (deleted.Contains(old.Kind + ":" + old.Key)) continue;
                     if (sources[index] != old) throw new AccessDeniedException("management_source_changed");
-                    var next = skill.AfterSources.SingleOrDefault(s => s.Kind == old.Kind && s.Key == old.Key);
+                    var next = child.After.SingleOrDefault(s => s.Kind == old.Kind && s.Key == old.Key);
                     if (next is null) deleted.Add(old.Kind + ":" + old.Key); else sources[index] = next;
                 }
-                stable = skill.AfterStableHash;
+                stable = child.AfterHash;
             }
             else if (Management(row, request, stable) is { } mutation) stable = mutation.AfterStableHash;
         }
         return new(value.SourcesJson is null ? null : JsonSerializer.Serialize(sources), deleted);
     }
+    public static TenantResourcePinRetention? RetainedResourcePin(TenantManagementReader reader, EffectiveAgentResource resource,
+        TenantAgentConfigurationSnapshot snapshot, IReadOnlyList<AgentDefinitionPublicationResource> published,
+        IEnumerable<TenantOperationReceipt> receipts, Func<Guid, TenantApprovalRequest?> request)
+    {
+        var pin = reader.Run.Admission.Configuration ?? throw new AccessDeniedException("resource_source_changed");
+        var owner = reader.Agent.Instance;
+        if (!pin.Resources.Contains(resource) || owner.Revision <= pin.InstanceRevision) return null;
+        var rows = receipts.Where(r => r.TenantId == reader.Security.Tenant.TenantId && r.InstanceId == owner.InstanceId && r.ExecutorPrincipalId == reader.Agent.PrincipalId
+            && r.SessionId == reader.Run.SessionId && r.RootActivationId == reader.Run.Admission.Activation.RootActivationId && r.Outcome == TenantOperationOutcome.Completed
+            && r.InstanceRevision > pin.InstanceRevision && r.InstanceRevision <= owner.Revision).ToArray();
+        if (!rows.Any(r => r.ManagementResource is { } change && change.BeforeSources.Any(s => s.Key == resource.Key
+            && change.AfterSources.SingleOrDefault(next => next.Kind == s.Kind && next.Key == s.Key) != s))) return null;
+        if (owner.Revision - pin.InstanceRevision > 1024 || owner.DefinitionId != reader.Run.DefinitionId || owner.ActiveVersion != reader.Run.DefinitionVersion)
+            throw new AccessDeniedException("resource_source_changed");
+        var stable = rows.OrderBy(r => r.InstanceRevision).Select(r => r.ManagementResource?.BeforeStableHash ?? r.ManagementSkill?.BeforeStableHash
+            ?? (r.RequestId is { } id ? request(id)?.Operation.ManagementMutation?.BeforeStableHash : null)).FirstOrDefault(s => s is not null)
+            ?? throw new AccessDeniedException("resource_source_changed");
+        TenantManagementChildRead? witness = null; long? originalRevision = null; var deleted = false;
+        for (var revision = pin.InstanceRevision + 1; revision <= owner.Revision; revision++)
+        {
+            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Child(r, request, stable) is not null || Management(r, request, stable) is not null)).ToArray();
+            if (candidates.Length != 1) throw new AccessDeniedException("resource_source_changed");
+            var receipt = candidates[0];
+            if (Child(receipt, request, stable) is { } child)
+            {
+                if (receipt.ManagementResource is not null && receipt.RequestId is { } id && request(id)?.Operation.ManagementMutation?.Resource is { } plan
+                    && (plan.Before?.Key == resource.Key || plan.Result.Key == resource.Key))
+                {
+                    if (deleted || plan.Before is not { } before) throw new AccessDeniedException("resource_source_changed");
+                    var old = child.Before.SingleOrDefault(s => s.Kind == "resource" && s.Key == resource.Key) ?? throw new AccessDeniedException("resource_source_changed");
+                    if (originalRevision is null)
+                    {
+                        if (!before.Enabled || before.LogicalPath != resource.LogicalPath || before.Kind != resource.Kind || before.MediaType != resource.MediaType
+                            || before.ContentSha256 != resource.ContentSha256 || before.ByteLength != resource.ByteLength) throw new AccessDeniedException("resource_source_changed");
+                        originalRevision = before.Revision;
+                    }
+                    if (witness is not null && witness != old) throw new AccessDeniedException("resource_source_changed");
+                    witness = child.After.SingleOrDefault(s => s.Kind == "resource" && s.Key == resource.Key); deleted = witness is null;
+                }
+                stable = child.AfterHash;
+            }
+            else if (Management(receipt, request, stable) is { } mutation) stable = mutation.AfterStableHash;
+        }
+        if (originalRevision is null || stable != StableConfigurationHash(owner)) throw new AccessDeniedException("resource_source_changed");
+        var current = TenantManagementInspectionSources.ResourceItems(reader, published, snapshot.Resources, snapshot.Skills).SingleOrDefault(s => s.Key == resource.Key);
+        if (deleted ? current is not null : current is null || witness is null || current.Fingerprint != witness.Fingerprint || current.Scope.ResourceId != witness.ResourceId)
+            throw new AccessDeniedException("resource_source_changed");
+        return new(originalRevision.Value, deleted, owner.Revision);
+    }
     private static PreparedManagementMutation? Management(TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request, string before)
     {
         if (receipt.RequestId is not { } id || request(id) is not { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation: { } value } approved
+            || value.Skill is not null || value.Resource is not null
             || receipt.ReasonCode != TenantManagementMutationRules.Completed || approved.Operation.ActionHash != receipt.ActionHash
             || approved.Operation.ExpectedInstanceRevision != receipt.InstanceRevision - 1 || value.BeforeStableHash != before) return null;
         TenantManagementMutationRules.Validate(value); return value;

@@ -20,14 +20,7 @@ public sealed partial class SqliteIamStore
             await SqliteAgentInstanceStore.ReadSkillsAsync(db, owner.InstanceId, ct).ConfigureAwait(false),
             await SqliteAgentInstanceStore.ReadResourcesAsync(db, owner.InstanceId, ct).ConfigureAwait(false),
             await ReadIsolationMetadataAsync(db, owner.InstanceId.ToString("D"), ct).ConfigureAwait(false));
-        IReadOnlyList<AgentDefinitionPublicationResource> inherited;
-        if (Guid.TryParse(owner.DefinitionId, out _))
-        {
-            var rows = await db.AgentDefinitionPublicationResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DefinitionId == owner.DefinitionId && r.Version == owner.ActiveVersion
-                && db.Set<TenantDefinitionRecord>().Any(d => d.TenantId == tenant && d.DeletedAt == null && d.DefinitionId == r.DefinitionId)).ToArrayAsync(ct).ConfigureAwait(false);
-            inherited = rows.Select(DefinitionResourcePersistence.MapPublicationResource).ToArray();
-        }
-        else inherited = inheritedResources is null ? [] : await inheritedResources.ListAsync(reader.Baseline, ct).ConfigureAwait(false);
+        var inherited = await ManagementPublishedResources(db, reader, ct).ConfigureAwait(false);
         var credentials = new List<TenantCredential>();
         foreach (var row in await OwnedCredentials(db, tenant).Include(c => c.EmailAccount).Include(c => c.DriveAccount).AsNoTracking().ToArrayAsync(ct).ConfigureAwait(false))
             if (await CredentialView(db, tenant, row, ct).ConfigureAwait(false) is { } value) credentials.Add(value);

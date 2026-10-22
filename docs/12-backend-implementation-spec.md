@@ -1,5 +1,7 @@
 # Backend Implementation Specification
 
+Canonical model Resource authoring shares the human Resource planner and the existing consent/local-effect owner. The four commands retain independent primary and source reads, actual root/checkpoint provenance, complete exact plans and immutable body-free receipts. New explicitly delegated Managed text creation shares the direct command transaction with Skill changes; other Resource effects keep exact consent. Exact own-effect receipt chains can retain original Run bytes without substituting future content. [Contract and scoped evidence](04-backend-interfaces.md#canonical-model-resource-authoring).
+
 ## Tenant runtime host composition checkpoint
 
 Startup registers a single `TenantSessionRuntimeHost` and maps tenant dispatcher/control ports to that instance. Shared capacity lives in `TenantRuntimeCapacity`; old SessionHost/owner connection, occurrence, profile notifier and unowned Run dispatch components are removed. Canonical shutdown stops admission and awaits a cached generation/Voice drain. Hosted Run, Automation/event and email-watch work uses tenant services exclusively. Retained-content cleanup uses the existing canonical ownership-checked cleanup services; duplicate old Attachment TTL and owner Session/working cleanup hosted paths are removed.

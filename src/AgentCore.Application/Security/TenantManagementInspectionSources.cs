@@ -17,16 +17,12 @@ public static class TenantManagementInspectionSources
     public static TenantManagementInspectionCatalog Catalog(TenantManagementReader reader, TenantAgentConfigurationSnapshot snapshot,
         IReadOnlyList<AgentDefinitionPublicationResource> inherited, IReadOnlyList<TenantCredentialBinding> bindings, IReadOnlyList<TenantCredential> credentials)
     {
-        var owner = reader.Agent.Instance; var tenant = reader.Security.Tenant.TenantId;
-        var definition = reader.Current with { SelfManagement = ManagementPolicyResolver.Resolve(reader.Baseline, owner) };
+        var tenant = reader.Security.Tenant.TenantId;
         var items = new List<TenantManagementInspectionItem>();
         void Add(string kind, string key, AccessScope scope, object identity, object metadata) => items.Add(new(kind, key,
             TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(identity)), scope, JsonSerializer.SerializeToElement(metadata, Json)));
         items.AddRange(SkillItems(reader, snapshot.Skills));
-        foreach (var resource in AgentInstanceResourceService.Views(definition, inherited, snapshot.Resources, snapshot.Skills))
-            Add("resource", resource.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "resource", resource.Key),
-                new { resource.Key, resource.Origin, resource.LogicalPath, resource.Kind, resource.MediaType, resource.ContentSha256, resource.ByteLength, resource.EnabledOverride, resource.Revision },
-                new { resource.Key, resource.Origin, resource.LogicalPath, kind = resource.Kind.ToString(), resource.MediaType, resource.ContentSha256, resource.ByteLength, resource.Enabled, resource.Revision, resource.VirtualPath });
+        items.AddRange(ResourceItems(reader, inherited, snapshot.Resources, snapshot.Skills));
         foreach (var credential in credentials.Where(c => c.Value.Status == CredentialStatus.Active))
             Add("credential", credential.Value.CredentialId.ToString("D"), TenantCredentialRules.Scope(tenant, credential.Value.CredentialId),
                 new { credential.Value.CredentialId, credential.Value.Revision, credential.Value.DisplayName, credential.Value.Kind, credential.Value.Status, credential.Value.Purpose },
@@ -36,6 +32,19 @@ public static class TenantManagementInspectionSources
                 new { binding.Binding, binding.Credential.Value.CredentialId, binding.Credential.Value.Revision, binding.Credential.Value.DisplayName, binding.Credential.Value.Kind, binding.Credential.Value.Status },
                 new { binding.Binding.BindingId, binding.Binding.Reference, binding.Binding.CredentialId, binding.Binding.Revision, binding.Credential.Value.DisplayName, kind = binding.Credential.Value.Kind.ToString(), purpose = binding.Credential.Value.Purpose.ToString() });
         return new(items.OrderBy(i => i.Kind, StringComparer.Ordinal).ThenBy(i => i.Key, StringComparer.Ordinal).ToArray());
+    }
+    public static IReadOnlyList<TenantManagementInspectionItem> ResourceItems(TenantManagementReader reader,
+        IReadOnlyList<AgentDefinitionPublicationResource> inherited, InstanceResourceSnapshot resources, InstanceSkillSnapshot skills)
+    {
+        var owner = reader.Agent.Instance;
+        var definition = reader.Current with { SelfManagement = ManagementPolicyResolver.Resolve(reader.Baseline, owner) };
+        return AgentInstanceResourceService.Views(definition, inherited, resources, skills).Select(resource => new TenantManagementInspectionItem(
+            "resource", resource.Key, TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new {
+                resource.Key, resource.Origin, resource.LogicalPath, resource.Kind, resource.MediaType, resource.ContentSha256,
+                resource.ByteLength, resource.EnabledOverride, resource.Revision })),
+            TenantAgentChildScopes.Scope(reader.Security.Tenant.TenantId, owner.InstanceId, "resource", resource.Key),
+            JsonSerializer.SerializeToElement(new { resource.Key, resource.Origin, resource.LogicalPath, kind = resource.Kind.ToString(),
+                resource.MediaType, resource.ContentSha256, resource.ByteLength, resource.Enabled, resource.Revision, resource.VirtualPath }, Json))).ToArray();
     }
     public static IReadOnlyList<TenantManagementInspectionItem> SkillItems(TenantManagementReader reader, InstanceSkillSnapshot skills)
     {

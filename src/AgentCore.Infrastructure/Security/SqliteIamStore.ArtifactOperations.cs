@@ -37,8 +37,7 @@ public sealed partial class SqliteIamStore : ITenantArtifactOperationStore
         {
             var session = await ReadSandboxSession(db, before.Tenant.TenantId, run.SessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             TenantArtifactSourceRules.Require(run, target, definition, session, path, commit.Source);
-            if (commit.Source?.ResourceKey is { } sourceKey) TenantResourceRevisionRules.Require(sourceKey, commit.Source.ResourceRevision, run, target,
-                await SqliteAgentInstanceStore.ReadResourcesAsync(db, target.Instance.InstanceId, ct).ConfigureAwait(false));
+            if (commit.Source?.ResourceKey is { } sourceKey) await RequireResourcePin(db, sourceKey, commit.Source.ResourceRevision, run, target, ct).ConfigureAwait(false);
             if (commit.Source is { AttachmentId: { } attachmentId } attachmentSource)
             {
                 var attachment = await SqliteAttachmentStore.Owned(db, run.Owner.TenantId!.Value, run.SessionId).SingleOrDefaultAsync(a => a.AttachmentId == attachmentId.ToString("D") && a.ContentDeletedAtUtc == null, ct).ConfigureAwait(false);
