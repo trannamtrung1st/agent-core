@@ -38,16 +38,7 @@ public sealed partial class SqliteIamStore
             var parent = await OwnedAgents(db, next.Tenant.TenantId).AsTracking().SingleOrDefaultAsync(item => item.Instance.InstanceId == binding.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
             if (parent is null || parent.Instance.Revision != expectedInstanceRevision) return false;
             if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_archived");
-            var credential = await OwnedCredentials(db, next.Tenant.TenantId).Include(c => c.EmailAccount).Include(c => c.DriveAccount)
-                .SingleOrDefaultAsync(c => c.CredentialId == binding.CredentialId.ToString("D"), ct).ConfigureAwait(false);
-            if (credential is null || credential.Revision != expectedCredentialRevision) return false;
-            TenantCredentialBindingRules.Bindable(SqliteCredentialStore.Map(credential));
-            if (await db.AgentCredentialBindings.AnyAsync(b => b.BindingId == binding.BindingId.ToString("D") || b.AgentInstanceId == binding.AgentInstanceId.ToString("D")
-                && (b.Reference == binding.Reference || b.CredentialId == binding.CredentialId.ToString("D")), ct).ConfigureAwait(false))
-                throw new SecurityConflictException("credential_binding_conflict");
-            db.AgentCredentialBindings.Add(new() { TenantId = next.Tenant.TenantId, BindingId = binding.BindingId.ToString("D"), AgentInstanceId = binding.AgentInstanceId.ToString("D"),
-                CredentialId = binding.CredentialId.ToString("D"), Reference = binding.Reference, Revision = binding.Revision,
-                CreatedAtUtc = binding.CreatedAtUtc.ToUnixTimeMilliseconds(), UpdatedAtUtc = binding.UpdatedAtUtc.ToUnixTimeMilliseconds() });
+            if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, binding, false, expectedCredentialRevision, ct).ConfigureAwait(false)) return false;
             parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = binding.UpdatedAtUtc.ToUnixTimeMilliseconds(); result = Owned(parent); return true;
         }, ct).ConfigureAwait(false);
         return saved ? result : null;
@@ -65,10 +56,33 @@ public sealed partial class SqliteIamStore
             if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_archived");
             var binding = await OwnedCredentialBindings(db, next.Tenant.TenantId, instanceId).SingleOrDefaultAsync(b => b.BindingId == bindingId.ToString("D"), ct).ConfigureAwait(false);
             if (binding is null || binding.Revision != expectedBindingRevision) return false;
-            db.AgentCredentialBindings.Remove(binding); parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
+            if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, MapBinding(binding), true, 0, ct).ConfigureAwait(false)) return false;
+            parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
             result = Owned(parent); return true;
         }, ct).ConfigureAwait(false);
         return saved ? result : null;
+    }
+    // Human binding commands and model exact-operation commits share this association mutation.
+    private async Task<bool> StageTenantCredentialBinding(AgentCoreDbContext db, Guid tenant, AgentCredentialBinding value,
+        bool remove, long expectedCredentialRevision, CancellationToken ct)
+    {
+        if (remove)
+        {
+            var row = await OwnedCredentialBindings(db, tenant, value.AgentInstanceId).SingleOrDefaultAsync(b => b.BindingId == value.BindingId.ToString("D"), ct).ConfigureAwait(false);
+            if (row is null || row.Revision != value.Revision || row.CredentialId != value.CredentialId.ToString("D") || row.Reference != value.Reference) return false;
+            db.AgentCredentialBindings.Remove(row); return true;
+        }
+        TenantCredentialBindingRules.NewBinding(value);
+        var credential = await OwnedCredentials(db, tenant).Include(c => c.EmailAccount).Include(c => c.DriveAccount)
+            .SingleOrDefaultAsync(c => c.CredentialId == value.CredentialId.ToString("D"), ct).ConfigureAwait(false);
+        if (credential is null || credential.Revision != expectedCredentialRevision) return false;
+        TenantCredentialBindingRules.Bindable(SqliteCredentialStore.Map(credential));
+        if (await db.AgentCredentialBindings.AnyAsync(b => b.BindingId == value.BindingId.ToString("D") || b.AgentInstanceId == value.AgentInstanceId.ToString("D")
+            && (b.Reference == value.Reference || b.CredentialId == value.CredentialId.ToString("D")), ct).ConfigureAwait(false)) throw new SecurityConflictException("credential_binding_conflict");
+        db.AgentCredentialBindings.Add(new() { TenantId = tenant, BindingId = value.BindingId.ToString("D"), AgentInstanceId = value.AgentInstanceId.ToString("D"),
+            CredentialId = value.CredentialId.ToString("D"), Reference = value.Reference, Revision = value.Revision,
+            CreatedAtUtc = value.CreatedAtUtc.ToUnixTimeMilliseconds(), UpdatedAtUtc = value.UpdatedAtUtc.ToUnixTimeMilliseconds() });
+        return true;
     }
     private static IQueryable<AgentCredentialBindingRecord> OwnedCredentialBindings(AgentCoreDbContext db, Guid tenant, Guid instance) => db.AgentCredentialBindings
         .Where(b => b.TenantId == tenant && b.AgentInstanceId == instance.ToString("D")

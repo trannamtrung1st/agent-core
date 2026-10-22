@@ -189,6 +189,11 @@ public static class TenantManagementReadRules
     private static (IReadOnlyList<TenantManagementChildRead> Before, IReadOnlyList<TenantManagementChildRead> After, string AfterHash)? Child(
         TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request, string before)
     {
+        if (receipt.RequestId is { } bindingRequestId && request(bindingRequestId) is { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation.Binding: { } binding } bindingRequest
+            && receipt.Outcome == TenantOperationOutcome.Completed && receipt.ReasonCode == TenantManagementMutationRules.Completed
+            && bindingRequest.Operation.ActionHash == receipt.ActionHash && bindingRequest.Operation.ExpectedInstanceRevision == receipt.InstanceRevision - 1
+            && bindingRequest.Operation.ManagementMutation.BeforeStableHash == before)
+            return (binding.BeforeSources, binding.AfterSources, bindingRequest.Operation.ManagementMutation.AfterStableHash);
         if (Skill(receipt, request, before) is { } skill) return (skill.BeforeSources, skill.AfterSources, skill.AfterStableHash);
         if (receipt.ManagementResource is not { } resource || resource.BeforeStableHash != before
             || receipt.Outcome != TenantOperationOutcome.Completed || receipt.ReasonCode != TenantManagementMutationRules.Completed

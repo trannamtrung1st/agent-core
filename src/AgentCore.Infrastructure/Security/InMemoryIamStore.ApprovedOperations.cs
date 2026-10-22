@@ -213,6 +213,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var configure = complete && (request.Operation.IsLocalConfiguration || request.Operation.ManagementMutation is not null);
             var change = configure ? managementChange ?? TenantLocalEffectRules.Change(request, target.Instance) : null;
             var preparedConfiguration = configure ? TenantAgentConfigurationRules.Apply(target.Instance, change!, at) : target.Instance;
+            Action? applyBinding = null;
+            if (configure && change!.Binding is { } bindingPlan)
+                applyBinding = bindingPlan.Remove ? CredentialBacking().PrepareTenantUnbind(request.TenantId, run.AgentInstanceId, bindingPlan.Value.BindingId, bindingPlan.Value.Revision)
+                    : CredentialBacking().PrepareTenantBind(request.TenantId, bindingPlan.Value, bindingPlan.CredentialRevision);
+            if (configure && change!.Binding is not null && applyBinding is null) throw new SecurityConflictException("management_source_changed");
             ct.ThrowIfCancellationRequested();
             AgentInstance updated;
             if (configure && change!.Skill is { } skillChange)
@@ -234,6 +239,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges,
                 HarnessManagement: preparedConfiguration.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey, UnattendedReasoningEffort: change.UnattendedReasoningEffort), at, ct).Result : target.Instance;
             }
+            applyBinding?.Invoke();
             if (complete && automationMutation is not null)
             {
                 if (commit.AutomationInvocationAdmission is { } admitted) { StageTenantAutomationGraph(admitted); automationBacking.CommitTenantOccurrence(admitted.Next, admitted.Occurrence); }

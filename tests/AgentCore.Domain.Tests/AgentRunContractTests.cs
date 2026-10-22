@@ -19,6 +19,25 @@ public sealed class AgentRunContractTests
     private const string ToolCallId = "tool-call-a";
     private const string OtherToolCallId = "tool-call-b";
 
+    [Theory]
+    [InlineData("valid", true)] [InlineData("ordinary", false)] [InlineData("missing_target", false)]
+    [InlineData("negative_boundary", false)] [InlineData("text_boundary", false)] [InlineData("no_requester", false)]
+    public void Input_free_approval_resume_requires_structural_configuration_boundary(string scenario, bool accepted)
+    {
+        var session = Guid.NewGuid(); var root = Guid.NewGuid();
+        var values = new Dictionary<string, object?> { ["EnvironmentKind"] = scenario == "ordinary" ? "approval" : "configuration",
+            ["ContinuationTarget"] = scenario == "missing_target" ? "" : "workspace.write",
+            ["InputBoundarySequence"] = scenario == "text_boundary" ? "7" : scenario == "negative_boundary" ? -1L : 7L };
+        var activation = new Activation(GenerationA, session, ActivationKind.ApprovalContinuation, [], Guid.NewGuid(), null, session, SourceId,
+            "approval-continuation:" + ApprovalId.ToString("D"), Now, root, GenerationB, JsonSerializer.Serialize(values));
+        var context = new TrustedExecutionContext(Guid.NewGuid(), Guid.NewGuid(), scenario == "no_requester" ? null : Guid.NewGuid(), session,
+            AgentRunId, GenerationA, root, SourceId, GenerationB, ExecutionOrigin.ApprovalContinuation);
+        AgentRunAdmission Build() => new(activation, "general-assistant", 1, NewItem().PinnedPersona, Guid.NewGuid(), AgentRunOutputContract.ConversationResponse,
+            executionContext: context, approvalResume: new(SourceId, ApprovalId, Guid.NewGuid(), ActionHash, []));
+        if (accepted) Assert.Empty(Build().ApprovalResume!.SourceInputEntryIds);
+        else Assert.Throws<ArgumentException>(Build);
+    }
+
     [Fact]
     public void Owner_requires_instance_and_profile()
     {

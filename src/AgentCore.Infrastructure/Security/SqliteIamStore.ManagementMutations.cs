@@ -41,6 +41,12 @@ public sealed partial class SqliteIamStore
         await TenantManagementReadRules.RawAsync(reader, iam, ct).ConfigureAwait(false);
         await TenantManagementMutationRules.SecondaryAsync(reader, value, iam, reader.Agent.PrincipalId, ct).ConfigureAwait(false);
         await TenantManagementMutationRules.PrimaryAsync(request, reader, iam, ct).ConfigureAwait(false);
+        await RequireManagementRemedy(db, reader, value, ct).ConfigureAwait(false);
+        if (value.Binding is not null)
+        {
+            var context = await ManagementBindingContext(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+            return (reader, TenantManagementMutationRules.Change(reader, value, bindingContext: context));
+        }
         if (value.Resource is { } resource)
         {
             var context = await ManagementResourceContext(db, reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct).ConfigureAwait(false);

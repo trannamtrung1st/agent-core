@@ -12,7 +12,7 @@ public static class TenantAgentConfigurationRules
         var operations = (change.Persona is null ? 0 : 1) + (change.ActiveVersion is null ? 0 : 1)
             + (change.SetSettingsOverrides ? 1 : 0) + (change.SetExecutionBudgets ? 1 : 0)
             + (change.SetUnattendedModel ? 1 : 0) + (change.HarnessManagement is null ? 0 : 1)
-            + (change.Skill is null ? 0 : 1) + (change.Resource is null ? 0 : 1);
+            + (change.Skill is null ? 0 : 1) + (change.Resource is null ? 0 : 1) + (change.Binding is null ? 0 : 1);
         if (current.InstanceId != change.InstanceId || change.ExpectedInstanceRevision < 1 || operations != 1
             || change.Persona is not null && change.ExpectedPersonaRevision is null
             || change.Persona is null && change.ExpectedPersonaRevision is not null
@@ -36,6 +36,8 @@ public static class TenantAgentConfigurationRules
             || change.Resource is { } resourceChange && (resourceChange.Resource is null ? 0 : 1)
                 + (resourceChange.DefinitionState is null ? 0 : 1) + (resourceChange.DeleteResourceId is null ? 0 : 1) != 1)
             throw new ArgumentException("One child operation is required; only Skill customization combines a source choice and a local copy.");
+        if (change.Binding is { } binding && (binding.Value.AgentInstanceId != current.InstanceId || !binding.Changed))
+            throw new ArgumentException("Use one exact changed binding for this Instance.");
         if (current.Revision != change.ExpectedInstanceRevision || change.Persona is not null && current.PersonaRevision != change.ExpectedPersonaRevision)
             throw new SecurityConflictException("stale_revision");
         if (change.Persona is { } persona) AgentDefinitionValidator.ValidateIdentity(persona);

@@ -17,7 +17,7 @@ public static class TenantManagementMutationContinuationProjection
             definitionSkill = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill is { } inherited ? TenantManagementSkillRules.DefinitionMetadata(inherited.Result) : null,
             resource = receipt?.Outcome == TenantOperationOutcome.Completed && value.Resource is { } resource ? TenantManagementResourceRules.Metadata(resource.Result) : null,
             deletedKey = receipt?.Outcome == TenantOperationOutcome.Completed ? value.Skill?.Result.Deleted == true ? value.Skill.Result.Key : value.Resource?.Result.Deleted == true ? value.Resource.Result.Key : null : null,
-            instanceRevision = receipt?.InstanceRevision, tool = value.Harness?.ToolName ?? value.ToolName,
+            instanceRevision = receipt?.InstanceRevision, tool = value.Harness?.ToolName ?? (value.Remedy is not null ? "configuration.propose" : value.ToolName),
             changesApplyTo = value.ToolName == "management.freeze" ? "immediateRevocation" : "nextRun",
             revocationsApplyTo = value.ToolName is "management.freeze" or "management.policy.update" ? "immediate" : null,
             replayAllowed = false, currentRunConfigurationUnchanged = true })!;
@@ -27,6 +27,19 @@ public static class TenantManagementMutationContinuationProjection
             body["saved"] = saved; body["changed"] = saved;
             body["verification"] = saved ? "partiallyVerified" : null;
             body["assessmentId"] = saved ? harness.Assessment.OperationId : null;
+        }
+        if (receipt?.Outcome == TenantOperationOutcome.Completed && value.Binding is { } binding)
+        {
+            body["binding"] = binding.Remove ? null : JsonSerializer.SerializeToNode(new { binding.Value.BindingId, binding.Value.CredentialId, binding.Value.Reference, binding.Value.Revision });
+            body["removedBindingId"] = binding.Remove ? binding.Value.BindingId : null;
+            body["currentRunConfigurationUnchanged"] = true;
+        }
+        if (receipt?.Outcome == TenantOperationOutcome.Completed && value.Remedy is { } remedy)
+        {
+            using var original = JsonDocument.Parse(remedy.ArgumentsJson);
+            var target = original.RootElement.GetProperty("target").GetString()!;
+            if (!AgentCore.Application.Tools.ManagementTools.IsManagement(target)) body["pendingTask"] = JsonSerializer.SerializeToNode(new ConfigurationPendingTask(receipt.RunId,
+                target, original.RootElement.GetProperty("goal").GetString()!, receipt.InstanceRevision), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         }
         return AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, call, body.ToJsonString());
     }

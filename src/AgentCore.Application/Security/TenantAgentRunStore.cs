@@ -80,7 +80,11 @@ public sealed class TenantAgentRunStore(ITenantRuntimeStore storage, ITenantRunS
     {
         Scope(owner, snapshot.SessionId, agentRunId);
         if (frame is null) throw new AccessDeniedException("tenant_runtime_scope_mismatch");
-        try { return await storage.CommitTenantOutcomeAsync(frame, snapshot, expectedSessionRevision, completion, draftEntryId, ids.NewId(), cancellationToken).ConfigureAwait(false); }
+        try
+        {
+            var continuation = authority is null ? null : await authority.PrepareConfigurationContinuationAsync(frame, snapshot, completion, ids, cancellationToken).ConfigureAwait(false);
+            return await storage.CommitTenantOutcomeAsync(frame, snapshot, expectedSessionRevision, completion, draftEntryId, ids.NewId(), cancellationToken, continuation).ConfigureAwait(false);
+        }
         catch (AccessDeniedException e) when (authority is not null && (e.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)))
         {
             if (e.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)) await authority.RecordMemoryOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false);

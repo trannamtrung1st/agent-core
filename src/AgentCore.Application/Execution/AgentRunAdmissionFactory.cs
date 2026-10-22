@@ -38,10 +38,12 @@ public static class AgentRunAdmissionFactory
             + "\nUse this accountRef for the email task. It is a selection hint only; Core still requires admitted bindings and live account authorization.";
         var activation = new Activation(activationId, snapshot.SessionId, ActivationKind.ConfigurationContinuation,
             [], source.ActivationId, null, snapshot.SessionId, source.AgentRunId,
-            $"configuration-continuation:{source.AgentRunId:D}", now, source.Admission.Activation.RootActivationId, source.ActivationId, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = emailContinuation ? "email-account" : "configuration", ContinuationTarget = task.Target, SelectedAccountId = emailSelection?.SelectedAccountId, SelectedAccountRef = emailSelection?.SelectedAccountRef }));
+            $"configuration-continuation:{source.AgentRunId:D}", now, source.Admission.Activation.RootActivationId, source.ActivationId, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = emailContinuation ? "email-account" : "configuration", ContinuationTarget = task.Target, InputBoundarySequence = snapshot.DurableLastEntrySequence, SelectedAccountId = emailSelection?.SelectedAccountId, SelectedAccountRef = emailSelection?.SelectedAccountRef }));
         var selection = snapshot.ModelSelection ?? throw AgentCoreErrors.Validation("Continuation requires a resolved model.");
+        var context = source.Admission.ExecutionContext is { } previous ? new TrustedExecutionContext(previous.TenantId, previous.AgentPrincipalId,
+            previous.OriginalInitiatorPrincipalId, source.SessionId, runId, activationId, previous.RootActivationId, source.AgentRunId, source.ActivationId, ExecutionOrigin.ConfigurationContinuation) : null;
         return AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
-            snapshot.PinnedPersona!, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration),
+            snapshot.PinnedPersona!, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration, executionContext: context),
             new(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort),
             1, now, catalog, catalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
     }

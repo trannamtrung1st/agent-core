@@ -75,7 +75,7 @@ public sealed partial class TenantSessionAccessTests
 
         if (tool == "harness.inspect") { Assert.Equal(6, data.GetProperty("instanceRevision").GetInt64()); Assert.True(data.GetProperty("changesApplyToNextRun").GetBoolean()); }
         else { Assert.Equal(12, data.GetProperty("settings").GetArrayLength()); Assert.Equal("nextRun", data.GetProperty("changesApplyTo").GetString()); }
-        var source = Assert.Single(TenantManagementReadReferences.Read(final.Checkpoint)); if (childReads) Assert.NotEmpty(TenantManagementInspectionSources.Read(source.SourcesJson)); else Assert.Empty(TenantManagementInspectionSources.Read(source.SourcesJson));
+        var source = Assert.Single(TenantManagementReadReferences.Read(final.Checkpoint), reference => reference.ToolName == tool); if (childReads) Assert.NotEmpty(TenantManagementInspectionSources.Read(source.SourcesJson)); else Assert.Empty(TenantManagementInspectionSources.Read(source.SourcesJson));
         await host.Services.GetRequiredService<ITenantManagementStore>().RequireTenantManagementReadSourcesAsync(new(tenant, runId), [source], null);
         Assert.Equal(6, (await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance.Revision);
         Assert.Empty((await host.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(0,100))).Items);

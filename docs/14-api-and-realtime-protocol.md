@@ -1545,6 +1545,8 @@ Registered tool names: `configuration.inspect/propose`, `management.inspect/poli
 
 Run inspection may report `activationKind: "ConfigurationContinuation"` for a bounded fresh admission following a committed diagnosed remedy. It uses a new Run/response identity, existing Chat events and fresh immutable pins; the original user entry is not duplicated. Its source task receipt remains private checkpoint evidence.
 
+Canonical `credentials.binding.propose` accepts `{expectedInstanceRevision,credentialId,reference}`; `credentials.binding.remove` accepts `{expectedInstanceRevision,bindingId,expectedBindingRevision}`. Both operate only on the executing Agent and an independently readable existing credential/association. Exact `mutate_management` consent covers primary `credentials.bind`; raw Agent read/update and credential read remain independent. Results identify the safe association/removal and future-Run revision without exposing protected values or granting credential use. Readable inactive associations may be removed. No-op proposals do not create a request, effect or revision.
+
 Settings preview preparation checks the same Definition and host constraints as the commit. Invalid selections do not produce a confirmation. Policy-update receipts expose `changesApplyTo: "nextRun"` and `revocationsApplyTo: "immediate"`; approval copy distinguishes immediate authority removal from fresh-Run grants. The Admin Built-in catalog includes Core procedures with `missingCapabilities` even when runtime resolution excludes them.
 
 ## Account-scoped Email contracts

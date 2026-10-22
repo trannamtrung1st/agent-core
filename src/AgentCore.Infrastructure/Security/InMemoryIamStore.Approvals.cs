@@ -26,6 +26,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
                 && (r.Operation.ManagementRead is null && r.Operation.ManagementMutation is null || managementVisibility is not null && (managementVisibility.Agents is null || managementVisibility.Agents.Contains(r.Operation.InstanceId)))
                 && TenantManagementInspectionSources.Visible(r.Operation.ManagementRead, managementVisibility)
+                && (r.Operation.ManagementMutation?.Binding is not { } bindingChange || managementVisibility?.Bindings is { } bindingVisibility
+                    && (bindingVisibility.Agents is null || bindingVisibility.Agents.Contains(r.Operation.InstanceId))
+                    && (bindingVisibility.Credentials is null || bindingVisibility.Credentials.Contains(bindingChange.Value.CredentialId))
+                    && (managementVisibility.Credentials is null || managementVisibility.Credentials.Contains(bindingChange.Value.CredentialId))
+                    && FindTenantCredentialAsync(tenantId, bindingChange.Value.CredentialId, ct).Result is not null)
                 && (r.Operation.ManagementMutation?.Skill is null || TenantManagementSkillRules.Visible(r, managementVisibility,
                     instances.FindTenantBackingAsync(r.Operation.InstanceId, ct).Result?.Revision, _operationReceipts.GetValueOrDefault(r.Operation.OperationId)))
                 && (r.Operation.ManagementMutation?.Resource is null || ManagementResourceVisible(r, managementVisibility,
@@ -113,7 +118,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && (r.Operation.CredentialRead is null || (credentialReadVisibility?.Sessions is null || credentialReadVisibility.Sessions.Contains(r.SessionId))
                     && (credentialReadVisibility?.Credentials is null || TenantApprovalRules.CredentialReadReferences(r.Operation.CredentialRead).All(c => credentialReadVisibility.Credentials.Contains(c.CredentialId)))
                     && CredentialFamilyApprovalVisible(r.Operation.CredentialRead, credentialReadVisibility))
-                && (r.Operation.CredentialRead is not null || r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(Guid.Parse(r.ResourceId)))
+                && (r.Operation.CredentialRead is not null || r.Operation.ManagementMutation?.Binding is not null || r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(Guid.Parse(r.ResourceId)))
                 && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();
             return ValueTask.FromResult(new TenantApprovalPage(rows.OrderByDescending(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId)
                 .Skip(page.Page * page.PageSize).Take(page.PageSize).ToArray(), rows.Length, page.Page, page.PageSize));

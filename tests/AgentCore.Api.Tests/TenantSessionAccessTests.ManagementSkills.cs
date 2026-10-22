@@ -40,6 +40,7 @@ public sealed partial class TenantSessionAccessTests
     private sealed class SkillAuthoringModel(string tool, string read, string readArguments) : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new AgentCore.Infrastructure.Providers.Synthetic.ScriptedLanguageModel().Capabilities;
+        public Func<ModelRequest, string>? PrepareArguments;
         public string ReadArguments = readArguments; public string Arguments = "{}"; public bool SuppressConsent; public bool ReadConsent; public ModelToolCall? AfterCommandRead;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
@@ -59,7 +60,7 @@ public sealed partial class TenantSessionAccessTests
                 if (!messages.Any(m => m.ToolCallId == "approve-skill-read")) next = new("approve-skill-read", ToolCatalog.RequestAuthorization,
                     JsonSerializer.Serialize(new { operation = "inspect_management", read = new { tool = read, arguments = JsonSerializer.Deserialize<JsonElement>(ReadArguments) } }));
             }
-            else if (!messages.Any(m => m.Name == tool)) next = Offered(tool, Arguments, "write-skill");
+            else if (!messages.Any(m => m.Name == tool)) next = Offered(tool, Arguments = PrepareArguments?.Invoke(request) ?? Arguments, "write-skill");
             else if (!SuppressConsent && !messages.Any(m => m.Name == ToolCatalog.RequestAuthorization))
             {
                 using var body = JsonDocument.Parse(messages.Last(m => m.Name == tool).Text);

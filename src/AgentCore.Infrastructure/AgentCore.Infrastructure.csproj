@@ -91,5 +91,6 @@
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261022120000_TenantPrivateSkillActivation.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022120000_TenantPrivateSkillActivation.Check.sql" />
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261023100000_TenantManagementResourceAuthoring.*.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261023120000_TenantHarnessCommandAuthoring.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261023140000_TenantConfigurationRemedyAuthoring.*" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

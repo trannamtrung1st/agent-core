@@ -7,6 +7,7 @@ public static class TenantAutomationMutationCommitRules
 {
     public static PreparedTenantOperation Require(TenantAutomationMutationObservation source, TenantAutomationMutationCommit commit, DateTimeOffset now)
     {
+        TenantConfigurationContinuationRules.RequireDirectWrite(source.Reader.Run);
         TenantLocalEffectRules.RequireDirectRun(source.Reader.Run, commit.Generation, now);
         TenantAutomationMutationRules.Validate(source, commit.Prepared);
         var op = TenantApprovalRules.PrepareAutomationMutation(commit.OperationId, source.Reader.Run.AgentInstanceId, commit.Prepared, source.Reader.Agent.Instance.Revision, source.Reader.Agent.Instance.PersonaRevision);

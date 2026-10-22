@@ -6,7 +6,7 @@ public sealed partial class TenantApprovalService
     public async ValueTask<TenantApprovalPreparationResult> PrepareManagementMutationAsync(TenantRunReference reference, string tool, string arguments,
         long expectedRunRevision, Guid generation, CancellationToken ct = default)
     {
-        var permission = TenantHarnessCommandRules.IsResource(tool) ? "resources.manage" : TenantManagementResourceRules.IsTool(tool) ? TenantManagementResourceRules.Permission(tool)
+        var permission = TenantManagementBindingRules.IsTool(tool) ? "credentials.bind" : TenantHarnessCommandRules.IsResource(tool) ? "resources.manage" : TenantManagementResourceRules.IsTool(tool) ? TenantManagementResourceRules.Permission(tool)
             : AgentCore.Application.Tools.TenantManagementMutationContract.IsTool(tool) && TenantManagementSkillRules.IsTool(tool) ? "skills.manage" : "agents.update";
         try
         {
@@ -19,7 +19,7 @@ public sealed partial class TenantApprovalService
             var prior = await approvals.FindRootApprovalAsync(reference.TenantId, reader.Run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, op, ct).ConfigureAwait(false);
             if (prior is not null) return await DuplicateOutcome(reader.Security, reader.Run, prior, ct).ConfigureAwait(false);
             var decision = await target.DecisionAsync(observed, ct).ConfigureAwait(false);
-            if ((observed.Value.Harness?.Changed == false || observed.Value.Skill?.Changed == false || observed.Value.Resource?.Changed == false) && decision.Decision != OperationDecisionKind.Denied)
+            if ((observed.Value.Binding?.Changed == false || observed.Value.Harness?.Changed == false || observed.Value.Skill?.Changed == false || observed.Value.Resource?.Changed == false) && decision.Decision != OperationDecisionKind.Denied)
                 return await PreparationOutcome(reader.Security, reader.Run, op, OperationDecisionKind.Allowed, "operation_unchanged", null, ct).ConfigureAwait(false);
             if (decision.Decision != OperationDecisionKind.RequiresApproval)
                 return await PreparationOutcome(reader.Security, reader.Run, op, decision.Decision, decision.ReasonCode, null, ct).ConfigureAwait(false);

@@ -11,6 +11,7 @@ public static class TenantPreferenceOperationRules
 {
     public static AgentInstance Apply(AgentRun run, TenantAgent target, TenantPreferenceCommit commit, DateTimeOffset at)
     {
+        TenantConfigurationContinuationRules.RequireDirectWrite(run);
         TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
         if (run.AgentRunId != commit.RunId || run.Revision != commit.ExpectedRunRevision || target.TenantId != run.Owner.TenantId
             || target.Instance.InstanceId != run.AgentInstanceId || target.PrincipalId != run.Owner.ExecutorPrincipalId

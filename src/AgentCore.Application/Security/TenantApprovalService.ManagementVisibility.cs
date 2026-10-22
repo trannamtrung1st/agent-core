@@ -15,5 +15,6 @@ public sealed partial class TenantApprovalService
         await VisibleIds(state, human, "credentials.read", "credential", ct).ConfigureAwait(false),
         new(await VisibleIds(state, human, "skills.manage", "agent", ct).ConfigureAwait(false), await VisibleResourceReadScopes(state, human, ct, "skills.manage", "skill").ConfigureAwait(false)),
         new(await VisibleIds(state, human, "resources.manage", "agent", ct).ConfigureAwait(false), await VisibleResourceReadScopes(state, human, ct, "resources.manage", "resource").ConfigureAwait(false)),
-        new(await VisibleIds(state, human, "resources.delete", "agent", ct).ConfigureAwait(false), await VisibleResourceReadScopes(state, human, ct, "resources.delete", "resource").ConfigureAwait(false)));
+        new(await VisibleIds(state, human, "resources.delete", "agent", ct).ConfigureAwait(false), await VisibleResourceReadScopes(state, human, ct, "resources.delete", "resource").ConfigureAwait(false)),
+        new(await VisibleIds(state, human, "agents.update", "agent", ct).ConfigureAwait(false), await VisibleIds(state, human, "credentials.bind", "credential", ct).ConfigureAwait(false)));
 }

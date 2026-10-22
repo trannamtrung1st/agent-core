@@ -11,6 +11,7 @@ public static class TenantExperienceCommitRules
     public static PreparedTenantOperation Require(TenantExperienceOperationObservation observed, TenantExperienceCommit commit, DateTimeOffset at)
     {
         var run = observed.Reader.Run; var target = observed.Reader.Agent;
+        TenantConfigurationContinuationRules.RequireDirectWrite(run);
         TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
         var prepared = TenantApprovalRules.PrepareExperience(commit.OperationId, run.AgentInstanceId, observed.Value, target.Instance.Revision, target.Instance.PersonaRevision);
         if (observed.Arguments.Tool != TenantExperienceToolContract.Record || commit.RunId != run.AgentRunId || commit.ExpectedRunRevision != run.Revision

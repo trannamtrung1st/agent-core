@@ -24,15 +24,14 @@ public sealed class TenantHarnessCommandMigrationTests
             using (var rows = await command.ExecuteReaderAsync()) while (await rows.ReadAsync()) schema.Add(rows.GetString(0) + ":" + rows.GetString(1), rows.GetString(2));
             Assert.Equal(124, schema.Count(i => i.Key.StartsWith("trigger:", StringComparison.Ordinal)));
             var before = new Dictionary<string,string>(schema);
-            await db.GetService<IMigrator>().MigrateAsync();
-            Assert.False(db.Database.HasPendingModelChanges());
+            await db.GetService<IMigrator>().MigrateAsync("20261023120000_TenantHarnessCommandAuthoring");
             var after = await Schema(db); Assert.Equal(127, after.Count(i => i.Key.StartsWith("trigger:", StringComparison.Ordinal)));
             foreach (var guard in before.Where(i => i.Key.StartsWith("trigger:", StringComparison.Ordinal)))
                 if (guard.Key != "trigger:TR_TenantOperationReceipts_ManagementResource_INSERT") Assert.Equal(guard.Value, after[guard.Key]);
             Assert.Equal(before.Where(i => i.Key.StartsWith("index:")).OrderBy(i => i.Key), after.Where(i => i.Key.StartsWith("index:")).OrderBy(i => i.Key));
             await db.GetService<IMigrator>().MigrateAsync("20261023100000_TenantManagementResourceAuthoring");
             Assert.Equal(before.OrderBy(i => i.Key), (await Schema(db)).OrderBy(i => i.Key));
-            await db.GetService<IMigrator>().MigrateAsync(); Assert.Equal(after.OrderBy(i => i.Key), (await Schema(db)).OrderBy(i => i.Key));
+            await db.GetService<IMigrator>().MigrateAsync("20261023120000_TenantHarnessCommandAuthoring"); Assert.Equal(after.OrderBy(i => i.Key), (await Schema(db)).OrderBy(i => i.Key));
             using var check = db.Database.GetDbConnection().CreateCommand(); check.CommandText = "PRAGMA foreign_key_check";
             using var violations = await check.ExecuteReaderAsync(); Assert.False(await violations.ReadAsync());
         }

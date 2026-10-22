@@ -90,7 +90,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
     internal async ValueTask<OperationAuthorizationDecision> Check(TenantSecurityState state, AgentRun run, string key, AccessScope target, CancellationToken ct,
         bool managementReviewRequired = false, ExecutionAuthorizationPurpose purpose = ExecutionAuthorizationPurpose.EffectEligibility)
     {
-        var decision = await Evaluate(state, run.Admission.ExecutionContext!, key, target, ct, managementReviewRequired).ConfigureAwait(false);
+        var decision = await Evaluate(state, run.Admission.ExecutionContext!, key, target, ct, managementReviewRequired || TenantConfigurationContinuationRules.Target(run) is not null && PermissionCatalog.TryGet(key, out var continuationPermission) && continuationPermission.ApprovalClass != PermissionApprovalClass.ReadOnly).ConfigureAwait(false);
         await audit.RecordAsync(state, run, decision, purpose, ct).ConfigureAwait(false); return decision;
     }
     internal ValueTask RecordAsync(TenantSecurityState state, AgentRun run, OperationAuthorizationDecision decision,
@@ -110,7 +110,7 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             if (!permission.Delegatable) return Deny("nondelegatable");
             kind = ApprovalKind.ExceptionalGrant;
         }
-        else if (policy.Mode == OperationApprovalMode.Always || managementReviewRequired) kind = ApprovalKind.Review;
+        else if (policy.Mode == OperationApprovalMode.Always || managementReviewRequired || context.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.ConfigurationContinuation && permission.ApprovalClass != PermissionApprovalClass.ReadOnly) kind = ApprovalKind.Review;
         else if (policy.Mode == OperationApprovalMode.WhenRequesterLacksPermission && context.OriginalInitiatorPrincipalId is { } requester
             && !(await authorizer.CheckTenantAsync(state, requester, permission, target, ct).ConfigureAwait(false)).Allowed) kind = ApprovalKind.Review;
         if (kind is null) return new(OperationDecisionKind.Allowed, "allowed", key, target);

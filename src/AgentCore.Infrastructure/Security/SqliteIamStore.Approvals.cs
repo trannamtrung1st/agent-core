@@ -431,6 +431,18 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             query = query.Where(r => !hiddenManagement.Any(hidden => hidden.RequestId == r.RequestId) && !hiddenSkillChanges.Any(hidden => hidden.RequestId == r.RequestId)
                 && !hiddenResourceChanges.Any(hidden => hidden.RequestId == r.RequestId));
         }
+        var bindingWrites = db.Set<TenantApprovalRecord>().FromSqlRaw("SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson,'$.Operation.ManagementMutation.Binding')='object'");
+        if (managementVisibility?.Bindings is not { } bindingVisibility) query = query.Where(r => !bindingWrites.Any(b => b.RequestId == r.RequestId));
+        else
+        {
+            var bindingAgents = bindingVisibility.Agents?.Select(id => id.ToString("D")).ToArray();
+            var bindingCredentials = bindingVisibility.Credentials?.Select(id => id.ToString("D")).ToArray();
+            var readCredentials = managementVisibility.Credentials?.Select(id => id.ToString("D")).ToArray();
+            var currentCredentials = OwnedCredentials(db, tenantId);
+            query = query.Where(r => !bindingWrites.Any(b => b.RequestId == r.RequestId) ||
+                (bindingAgents == null || bindingAgents.Contains(r.InstanceId)) && (bindingCredentials == null || bindingCredentials.Contains(r.ResourceId))
+                && (readCredentials == null || readCredentials.Contains(r.ResourceId)) && currentCredentials.Any(c => c.CredentialId == r.ResourceId));
+        }
         if (page.SessionId is { } session)
         {
             var id = session.ToString("D");
@@ -451,7 +463,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         if (sandboxVisibility?.Sessions is not null)
         { var ids = sandboxVisibility.Sessions.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => (r.Permission != "sandbox.execute" && r.Permission != "sandbox.manage" && r.Permission != "sandbox.read") || ids.Contains(r.SessionId)); }
         if (allowedCredentials is not null)
-        { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission == "credentials.read" || r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
+        { var ids = allowedCredentials.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission == "credentials.read" || r.Permission == "credentials.bind" || r.ResourceType != "credential" || ids.Contains(r.ResourceId)); }
         if (reportVisibility?.Sessions is not null || reportVisibility?.Runs is not null)
         {
             var visibleAccountSources = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""

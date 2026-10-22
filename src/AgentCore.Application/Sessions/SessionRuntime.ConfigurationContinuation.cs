@@ -8,8 +8,9 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
-    private static string? ContinuationTarget(AgentRun? run) => run?.Admission.Activation.Kind == ActivationKind.ConfigurationContinuation
-        ? ConfigurationPendingTask.ReadTarget(run.Admission.Activation.EvidenceJson) : null;
+    private static string? ContinuationTarget(AgentRun? run) => run is null ? null : run.Owner.TenantId is not null
+        ? AgentCore.Application.Security.TenantConfigurationContinuationRules.Target(run) : run.Admission.Activation.Kind == ActivationKind.ConfigurationContinuation
+            ? ConfigurationPendingTask.ReadTarget(run.Admission.Activation.EvidenceJson) : null;
 
     private async Task<bool> TryStartConfigurationContinuationAsync(EventContext cause, CancellationToken ct)
     {

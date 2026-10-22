@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
+using AgentCore.Domain.Credentials;
 
 namespace AgentCore.Domain.Security;
 
@@ -13,7 +14,9 @@ public sealed record PreparedManagementMutation(Guid SessionId, Guid RootSession
     string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementSkill? Skill = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementResource? Resource = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedHarnessCommand? Harness = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedHarnessCommand? Harness = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedConfigurationRemedy? Remedy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementBinding? Binding = null)
 {
     public bool Equals(PreparedManagementMutation? other) => other is not null && JsonSerializer.Serialize(this) == JsonSerializer.Serialize(other);
     public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(JsonSerializer.Serialize(this));
@@ -55,3 +58,11 @@ public sealed record TenantManagementResourceReceipt(string ToolName, long Befor
 
 // The actual contextual Harness command and server-owned assessment identity; not another effect owner.
 public sealed record PreparedHarnessCommand(string ToolName, string ArgumentsJson, HarnessInstanceChange Assessment, bool Changed = true);
+
+// The exact inspected remedy; the ordinary settings owner still performs the change.
+public sealed record PreparedConfigurationRemedy(string ArgumentsJson, TenantManagementReadReference Inspection);
+
+// Safe binding identity and metadata witnesses only; protected Credential payloads never enter a plan.
+public sealed record PreparedManagementBinding(AgentCredentialBinding Value, bool Remove, long CredentialRevision,
+    string CredentialFingerprint, string DisplayName, string CredentialKind, string CredentialPurpose, bool Changed,
+    IReadOnlyList<TenantManagementChildRead> BeforeSources, IReadOnlyList<TenantManagementChildRead> AfterSources);

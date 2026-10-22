@@ -10,6 +10,7 @@ public static class TenantArtifactOperationRules
     public const string AuditAction = "operations.artifact.publish";
     public static TenantArtifactPublicationArguments Validate(AgentRun run, TenantAgent target, TenantArtifactCommit commit, DateTimeOffset at)
     {
+        TenantConfigurationContinuationRules.RequireDirectWrite(run);
         TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
         TenantArtifactReviewRules.RequireTask(run);
         if (commit.OperationId == Guid.Empty || run.AgentRunId != commit.RunId || run.Revision != commit.ExpectedRunRevision

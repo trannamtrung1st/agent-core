@@ -32,7 +32,7 @@ public sealed partial class SqliteIamStore
         }
     }
     public async ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
-        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default)
+        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default, TenantConfigurationContinuationAdmission? configurationContinuation = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -44,10 +44,17 @@ public sealed partial class SqliteIamStore
         AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft is null ? null : SqliteMemoryStore.ToEntry(draft));
         AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
+        var admitConfiguration = await RequireConfigurationContinuation(db, next, snapshot, configurationContinuation, ct).ConfigureAwait(false);
         await new SqliteMemoryStore(contexts, clock ?? TimeProvider.System).StageTenantRuntimeSaveAsync(db, frame, snapshot, expectedRevision, ct).ConfigureAwait(false);
         await StageLearningCommit(db, frame, snapshot, completion.Learning, ct).ConfigureAwait(false);
         if (draft is not null) db.Entries.Remove(draft);
         AgentRunStoreMapping.Apply(row, next); await TenantCoreEventProduction.StageRunAsync(db, run, next, ct).ConfigureAwait(false); await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
+        if (admitConfiguration)
+        {
+            // The child insertion guards see the actual completed source and saved response inside this same transaction.
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await StageConfigurationContinuation(db, snapshot, configurationContinuation!, ct).ConfigureAwait(false);
+        }
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }
         catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Stale Run or Session revision."); }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { throw AgentCoreErrors.Conflict("Outcome ownership changed."); }

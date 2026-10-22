@@ -37,7 +37,7 @@ public sealed class TenantApprovalRecord
         RootActivationId = r.RootActivationId.ToString("D"), ExecutorPrincipalId = r.ExecutorPrincipalId, OriginalInitiatorPrincipalId = r.OriginalInitiatorPrincipalId,
         // This legacy column is the exact grant/receipt FK witness, not semantic root correlation.
         OperationId = r.Operation.OperationId, Fingerprint = r.Operation.ActionHash, Permission = r.Permission,
-        ResourceType = r.ResourceType, ResourceId = r.ResourceId, SandboxProfileId = (r.Operation.SandboxCommand?.ProfileId ?? r.Operation.SandboxControl?.ProfileId), SandboxProfileRevision = (r.Operation.SandboxCommand?.ProfileRevision ?? r.Operation.SandboxControl?.ProfileRevision), CredentialId = (r.Operation.AccountAction?.Credential.CredentialId ?? r.Operation.AccountRead?.Credential.CredentialId ?? r.Operation.CredentialCheck?.CredentialId ?? r.Operation.BrowserCommand?.Credential?.CredentialId ?? r.Operation.CredentialRead?.CredentialId)?.ToString("D"), Kind = (int)r.Kind, Status = (int)r.Status, Revision = r.Revision,
+        ResourceType = r.ResourceType, ResourceId = r.ResourceId, SandboxProfileId = (r.Operation.SandboxCommand?.ProfileId ?? r.Operation.SandboxControl?.ProfileId), SandboxProfileRevision = (r.Operation.SandboxCommand?.ProfileRevision ?? r.Operation.SandboxControl?.ProfileRevision), CredentialId = (r.Operation.ManagementMutation?.Binding?.Value.CredentialId ?? r.Operation.AccountAction?.Credential.CredentialId ?? r.Operation.AccountRead?.Credential.CredentialId ?? r.Operation.CredentialCheck?.CredentialId ?? r.Operation.BrowserCommand?.Credential?.CredentialId ?? r.Operation.CredentialRead?.CredentialId)?.ToString("D"), Kind = (int)r.Kind, Status = (int)r.Status, Revision = r.Revision,
         CreatedAt = r.CreatedAt.ToUnixTimeMilliseconds(), ExpiresAt = r.ExpiresAt.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(r)
     };
 
@@ -68,7 +68,7 @@ public sealed class TenantApprovalRecord
         run.HasAlternateKey(r => new { r.AgentRunId, r.RootActivationId });
         var e = model.Entity<TenantApprovalRecord>();
         e.ToTable("TenantApprovalRequests", t => t.HasCheckConstraint("CK_TenantApprovalRequest_Values",
-            AgentCore.Infrastructure.Persistence.Migrations.TenantHarnessCommandAuthoring.ValuesConstraint));
+            AgentCore.Infrastructure.Persistence.Migrations.TenantConfigurationRemedyAuthoring.ValuesConstraint));
         e.HasKey(r => r.RequestId); e.HasAlternateKey(r => new { r.TenantId, r.RequestId });
         e.HasAlternateKey(r => new { r.TenantId, r.RequestId, r.ExecutorPrincipalId, r.OperationId, r.Fingerprint });
         e.HasIndex(r => new { r.TenantId, r.RootActivationId, r.ExecutorPrincipalId, r.Fingerprint }).IsUnique();

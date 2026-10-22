@@ -13,6 +13,7 @@ public static class TenantManagementDirectRules
     public static void Transaction(TenantSecurityState next, long expected, TenantManagementReader reader, TenantManagementCommandCommit commit, AuthorizationAudit audit, DateTimeOffset at)
     {
         var run = reader.Run; var value = commit.Operation.ManagementMutation ?? throw new SecurityConflictException("operation_mismatch");
+        TenantConfigurationContinuationRules.RequireDirectWrite(run);
         TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, at);
         if (run.AgentRunId != commit.RunId || run.Revision != commit.ExpectedRunRevision || commit.Operation.InstanceId != run.AgentInstanceId
             || commit.Operation.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(commit.SourceCallId) || commit.SourceCallId.Length > 200

@@ -62,6 +62,7 @@ public static class TenantWorkspaceEffectRules
     }
     public static async ValueTask RequireAuthority(TenantSecurityState state, AgentRun run, TenantWorkspaceMutationArguments args, IamAuthorizer iam, CancellationToken ct)
     {
+        TenantConfigurationContinuationRules.RequireDirectWrite(run);
         foreach (var (key, scope) in Targets(run, args))
         {
             if (!(await iam.CheckOwnedTenantAsync(state, run.Owner.ExecutorPrincipalId!.Value, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)

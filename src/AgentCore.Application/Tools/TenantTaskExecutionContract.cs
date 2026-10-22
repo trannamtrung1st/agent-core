@@ -43,7 +43,7 @@ public static class TenantTaskExecutionContract
         output is AgentRunOutputContract.BackgroundOutcome or AgentRunOutputContract.ConversationResponse && IndependentSource(execution, intent) is not null
         || output == AgentRunOutputContract.BackgroundOutcome && (Child(execution, intent) || AgentCore.Application.Security.TenantExperienceReviewRules.Selected(execution, instance, intent) is not null)
         || execution?.OriginalInitiatorPrincipalId is not null
-            && (output == AgentRunOutputContract.ConversationResponse && execution.Origin is ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation
+            && (output == AgentRunOutputContract.ConversationResponse && execution.Origin is ExecutionOrigin.UserMessage or ExecutionOrigin.ApprovalContinuation or ExecutionOrigin.ConfigurationContinuation
                 || output == AgentRunOutputContract.BackgroundOutcome && execution.Origin is ExecutionOrigin.ImmediateBackground or ExecutionOrigin.ApprovalContinuation);
     public static bool Allows(AgentRun run) => Shape(run.Admission.ExecutionContext, run.Admission.OutputContract, run.Admission.TaskIntent, run.AgentInstanceId);
     public static bool Allows(AgentRun run, AgentDefinition current) => Allows(run)

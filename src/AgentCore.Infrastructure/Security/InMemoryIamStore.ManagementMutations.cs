@@ -36,6 +36,13 @@ public sealed partial class InMemoryIamStore
         TenantManagementReadRules.RawAsync(reader, iam, ct).AsTask().GetAwaiter().GetResult();
         TenantManagementMutationRules.SecondaryAsync(reader, value, iam, reader.Agent.PrincipalId, ct).AsTask().GetAwaiter().GetResult();
         TenantManagementMutationRules.PrimaryAsync(request, reader, iam, ct).AsTask().GetAwaiter().GetResult();
+        RequireManagementRemedy(reader, value, ct);
+        if (value.Binding is not null)
+        {
+            var context = ManagementBindingContext(new(reader, ReadTenantAgentConfigurationAsync(request.TenantId, run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("management_unavailable")),
+                TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
+            return (reader, TenantManagementMutationRules.Change(reader, value, bindingContext: context));
+        }
         if (value.Resource is { } resource)
         {
             var context = ManagementResourceContext(reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct);

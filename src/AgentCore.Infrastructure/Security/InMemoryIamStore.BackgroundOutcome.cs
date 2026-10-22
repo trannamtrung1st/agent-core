@@ -23,7 +23,7 @@ public sealed partial class InMemoryIamStore
         }
     }
     public ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision,
-        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default)
+        AgentRunCommand.Complete completion, Guid? draftEntryId, Guid diagnosticId, CancellationToken ct = default, TenantConfigurationContinuationAdmission? configurationContinuation = null)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
         {
@@ -37,10 +37,12 @@ public sealed partial class InMemoryIamStore
             AgentRunStoreMapping.ValidateOutcome(snapshot, run, completion, draft);
             AgentRun next; try { next = completion.Apply(run, () => diagnosticId); }
             catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
+            var admitConfiguration = PrepareConfigurationContinuation(next, snapshot, configurationContinuation, ct);
             SaveTenantRuntimeState(frame, snapshot, expectedRevision, (clock ?? TimeProvider.System).GetUtcNow());
             applyLearning();
             if (draftEntryId is { } removed) sessionBacking.RemoveResponseDraft(run.SessionId, removed);
             sessionBacking.SaveTenantOperationRun(next, run.Revision); AppendTenantCoreRun(run, next); SettleTenantCompletion(next, run.Claim?.Generation);
+            admitConfiguration?.Invoke();
             return ValueTask.FromResult(next);
         }
     }

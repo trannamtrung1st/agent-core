@@ -10,6 +10,8 @@ public sealed record TenantManagementReader(AgentRun Run, AgentRun Root, TenantS
 public sealed record TenantManagementSource(TenantManagementReader Reader, TenantAgentConfigurationSnapshot Snapshot);
 public sealed record TenantManagementResourceContext(TenantManagementSource Source,
     IReadOnlyList<AgentDefinitionPublicationResource> Published, TenantManagementResourceSource? Material, TenantManagementMutationArguments? Arguments = null);
+public sealed record TenantManagementBindingContext(TenantManagementSource Source, TenantCredential Credential,
+    IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding> Bindings);
 public sealed record TenantResourcePinRetention(long ResourceRevision, bool Deleted, long InstanceRevision);
 public sealed record TenantManagementSourceRetention(string? CurrentSourcesJson, IReadOnlySet<string> DeletedSources);
 public sealed record TenantManagementReadObservation(TenantManagementReader Reader, PreparedManagementRead Value, bool SourcesChanged = false,
@@ -19,6 +21,8 @@ public sealed record TenantManagementCommandCommit(PreparedTenantOperation Opera
 // Management facet of the existing tenant Instance/IAM/Run aggregate, not another configuration owner.
 public interface ITenantManagementStore
 {
+    ValueTask<TenantManagementBindingContext> ReadTenantManagementBindingContextAsync(TenantRunReference reference, Guid? generation,
+        string tool, string arguments, Guid? inspectionHuman = null, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantResourcePinRetention?> ReadRetainedResourcePinAsync(TenantRunReference reference, EffectiveAgentResource resource, CancellationToken ct = default);
     ValueTask<TenantManagementResourceContext> ReadTenantManagementResourceContextAsync(TenantRunReference reference, Guid? generation,
         string tool, string arguments, Guid? inspectionHuman = null, CancellationToken ct = default);

@@ -27,10 +27,10 @@ public static class TenantManagementInspectionSources
             Add("credential", credential.Value.CredentialId.ToString("D"), TenantCredentialRules.Scope(tenant, credential.Value.CredentialId),
                 new { credential.Value.CredentialId, credential.Value.Revision, credential.Value.DisplayName, credential.Value.Kind, credential.Value.Status, credential.Value.Purpose },
                 new { credential.Value.CredentialId, credential.Value.DisplayName, kind = credential.Value.Kind.ToString(), purpose = credential.Value.Purpose.ToString(), credential.Value.Revision });
-        foreach (var binding in bindings.Where(b => b.Credential.Value.Status == CredentialStatus.Active))
+        foreach (var binding in bindings)
             Add("binding", binding.Binding.BindingId.ToString("D"), TenantCredentialRules.Scope(tenant, binding.Credential.Value.CredentialId),
                 new { binding.Binding, binding.Credential.Value.CredentialId, binding.Credential.Value.Revision, binding.Credential.Value.DisplayName, binding.Credential.Value.Kind, binding.Credential.Value.Status },
-                new { binding.Binding.BindingId, binding.Binding.Reference, binding.Binding.CredentialId, binding.Binding.Revision, binding.Credential.Value.DisplayName, kind = binding.Credential.Value.Kind.ToString(), purpose = binding.Credential.Value.Purpose.ToString() });
+                new { binding.Binding.BindingId, binding.Binding.Reference, binding.Binding.CredentialId, binding.Binding.Revision, binding.Credential.Value.DisplayName, kind = binding.Credential.Value.Kind.ToString(), purpose = binding.Credential.Value.Purpose.ToString(), status = binding.Credential.Value.Status.ToString() });
         return new(items.OrderBy(i => i.Kind, StringComparer.Ordinal).ThenBy(i => i.Key, StringComparer.Ordinal).ToArray());
     }
     public static IReadOnlyList<TenantManagementInspectionItem> ResourceItems(TenantManagementReader reader,

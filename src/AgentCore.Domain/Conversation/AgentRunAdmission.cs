@@ -42,7 +42,8 @@ public sealed class AgentRunAdmission
             || approvalResume is not null && (new[] { approvalResume.SourceRunId, approvalResume.RequestId, approvalResume.OperationId }.Any(id => id == Guid.Empty)
                 || approvalResume.SourceRunId != activation.SourceAgentRunId || executionContext?.Origin != ExecutionOrigin.ApprovalContinuation
                 || approvalResume.ActionHash.Length != AgentRunLimits.ActionHashCharacters || responseId is null
-                || (approvalResume.SourceInputEntryIds.Count == 0 && outputContract != AgentRunOutputContract.CompletionReport && taskIntent?.Source != AgentRunTaskSource.Automation || approvalResume.SourceInputEntryIds.Count > Activation.MaxSourceEntries)
+                || (approvalResume.SourceInputEntryIds.Count == 0 && outputContract != AgentRunOutputContract.CompletionReport && taskIntent?.Source != AgentRunTaskSource.Automation
+                    && !(outputContract == AgentRunOutputContract.ConversationResponse && executionContext?.OriginalInitiatorPrincipalId is not null && HasConfigurationBoundary(activation)) || approvalResume.SourceInputEntryIds.Count > Activation.MaxSourceEntries)
                 || approvalResume.SourceInputEntryIds.Any(id => id == Guid.Empty) || approvalResume.SourceInputEntryIds.Distinct().Count() != approvalResume.SourceInputEntryIds.Count))
             throw new ArgumentException("Approval continuation requires its exact trusted operation and original input references.");
         ApprovalResume = approvalResume is null ? null : approvalResume with { SourceInputEntryIds = Array.AsReadOnly(approvalResume.SourceInputEntryIds.ToArray()) };
@@ -56,6 +57,15 @@ public sealed class AgentRunAdmission
         ResponseId = responseId;
     }
 
+    // Structural allowance for an input-free bounded continuation. Current source/receipt authority is checked by its owning transaction.
+    private static bool HasConfigurationBoundary(Activation activation)
+    {
+        if (activation.EvidenceJson is not { } evidence) return false;
+        using var document = System.Text.Json.JsonDocument.Parse(evidence); var value = document.RootElement;
+        return value.TryGetProperty("EnvironmentKind", out var kind) && kind.ValueKind == System.Text.Json.JsonValueKind.String && kind.GetString() == "configuration"
+            && value.TryGetProperty("ContinuationTarget", out var target) && target.ValueKind == System.Text.Json.JsonValueKind.String && target.GetString() is { Length: > 0 and <= 64 }
+            && value.TryGetProperty("InputBoundarySequence", out var boundary) && boundary.ValueKind == System.Text.Json.JsonValueKind.Number && boundary.TryGetInt64(out var sequence) && sequence >= 0;
+    }
     public AgentRunTaskIntent? TaskIntent { get; }
     public TenantApprovalResume? ApprovalResume { get; }
     public TrustedExecutionContext? ExecutionContext { get; }
