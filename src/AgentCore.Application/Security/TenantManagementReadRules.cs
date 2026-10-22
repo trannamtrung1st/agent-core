@@ -115,6 +115,15 @@ public static class TenantManagementReadRules
         }
         using var doc = JsonDocument.Parse(value.ObservationJson); if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("Use an observation object.");
     }
+    // The owning store has resolved these exact scopes in its current snapshot.
+    // Do not open a second ownership transaction from inside the effect transaction.
+    public static async ValueTask<bool> NeedsReviewOwnedAsync(TenantManagementReader reader, string permission, AccessScope scope, IamAuthorizer iam, CancellationToken ct)
+    {
+        var policy = TenantOperationPolicyService.Effective(reader.Security, PermissionCatalog.Get(permission));
+        return policy.Mode == OperationApprovalMode.Always || policy.Mode == OperationApprovalMode.WhenRequesterLacksPermission
+            && reader.Run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human
+            && !(await iam.CheckOwnedTenantAsync(reader.Security, human, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false)).Allowed;
+    }
     public static async ValueTask RawAsync(TenantManagementReader reader, IamAuthorizer iam, CancellationToken ct, Guid? human = null)
     {
         if (!(await iam.CheckOwnedTenantAsync(reader.Security, human ?? reader.Agent.PrincipalId, PermissionCatalog.Get("agents.read"), Scope(reader), ct).ConfigureAwait(false)).Allowed)
@@ -139,14 +148,60 @@ public static class TenantManagementReadRules
         var stable = value.StableConfigurationHash;
         for (var revision = value.InstanceRevision + 1; revision <= owner.Revision; revision++)
         {
-            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Management(r, request, stable) is not null)).ToArray();
+            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Management(r, request, stable) is not null || Skill(r, request, stable) is not null)).ToArray();
             if (candidates.Length != 1) throw new AccessDeniedException("management_source_changed");
-            if (Management(candidates[0], request, stable) is { } mutation) stable = mutation.AfterStableHash;
+            if (Skill(candidates[0], request, stable) is { } skill) stable = skill.AfterStableHash;
+            else if (Management(candidates[0], request, stable) is { } mutation) stable = mutation.AfterStableHash;
         }
         if (StableConfigurationHash(owner) != stable) throw new AccessDeniedException("management_source_changed");
         // A completed exact self-change may remove its own tool/delegation. It does
         // not erase the task's already observed historical snapshot or add new read authority.
         // External edits still need an unbroken receipt for every Instance revision.
+    }
+    private static TenantManagementSkillReceipt? Skill(TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request, string before)
+    {
+        if (receipt.ManagementSkill is not { } value || receipt.Outcome != TenantOperationOutcome.Completed || receipt.ReasonCode != TenantManagementMutationRules.Completed
+            || !TenantManagementSkillRules.IsTool(value.ToolName) || value.BeforeStableHash != before || value.BeforeInstanceRevision != receipt.InstanceRevision - 1
+            || !TenantMemoryOperationRules.ValidHash(value.AfterStableHash) || value.BeforeSources is null || value.AfterSources is null) return null;
+        var beforeSources = TenantManagementInspectionSources.Read(JsonSerializer.Serialize(value.BeforeSources));
+        var afterSources = TenantManagementInspectionSources.Read(JsonSerializer.Serialize(value.AfterSources));
+        if (beforeSources.Count > 4 || afterSources.Count > 4 || beforeSources.Concat(afterSources).Any(s => s.Kind is not ("skill" or "skillProcedure")
+            || !s.ResourceId.StartsWith(receipt.InstanceId.ToString("D") + ":", StringComparison.Ordinal))) return null;
+        if (receipt.RequestId is { } id)
+        {
+            if (request(id) is not { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation: { Skill: not null } mutation } approved
+                || approved.Operation.ActionHash != receipt.ActionHash || approved.Operation.ExpectedInstanceRevision != value.BeforeInstanceRevision
+                || JsonSerializer.Serialize(TenantManagementSkillRules.Evidence(mutation, value.BeforeInstanceRevision)) != JsonSerializer.Serialize(value)) return null;
+        }
+        else if (receipt.SourceCallId is not { Length: > 0 } || receipt.ParametersHash is not { } parameters || !TenantMemoryOperationRules.ValidHash(parameters)) return null;
+        return value;
+    }
+    public static TenantManagementSourceRetention RetainedSources(TenantManagementReader reader, PreparedManagementRead value,
+        IEnumerable<TenantOperationReceipt> receipts, Func<Guid, TenantApprovalRequest?> request)
+    {
+        var sources = TenantManagementInspectionSources.Read(value.SourcesJson).ToList(); var deleted = new HashSet<string>(StringComparer.Ordinal);
+        var stable = value.StableConfigurationHash;
+        foreach (var revision in Enumerable.Range(1, checked((int)(reader.Agent.Instance.Revision - value.InstanceRevision))).Select(offset => value.InstanceRevision + offset))
+        {
+            var rows = receipts.Where(r => r.TenantId == reader.Security.Tenant.TenantId && r.InstanceId == reader.Agent.Instance.InstanceId && r.ExecutorPrincipalId == reader.Agent.PrincipalId
+                && r.SessionId == reader.Run.SessionId && r.RootActivationId == reader.Run.Admission.Activation.RootActivationId && r.Outcome == TenantOperationOutcome.Completed && r.InstanceRevision == revision).ToArray();
+            var row = rows.Single(r => Preference(r, request) || Management(r, request, stable) is not null || Skill(r, request, stable) is not null);
+            if (Skill(row, request, stable) is { } skill)
+            {
+                foreach (var old in skill.BeforeSources)
+                {
+                    var index = sources.FindIndex(s => s.Kind == old.Kind && s.Key == old.Key);
+                    if (index < 0) continue;
+                    if (deleted.Contains(old.Kind + ":" + old.Key)) continue;
+                    if (sources[index] != old) throw new AccessDeniedException("management_source_changed");
+                    var next = skill.AfterSources.SingleOrDefault(s => s.Kind == old.Kind && s.Key == old.Key);
+                    if (next is null) deleted.Add(old.Kind + ":" + old.Key); else sources[index] = next;
+                }
+                stable = skill.AfterStableHash;
+            }
+            else if (Management(row, request, stable) is { } mutation) stable = mutation.AfterStableHash;
+        }
+        return new(value.SourcesJson is null ? null : JsonSerializer.Serialize(sources), deleted);
     }
     private static PreparedManagementMutation? Management(TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request, string before)
     {

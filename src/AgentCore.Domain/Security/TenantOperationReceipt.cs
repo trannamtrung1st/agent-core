@@ -9,4 +9,5 @@ public sealed record TenantOperationReceipt(Guid OperationId, Guid? RequestId, G
     Guid ExecutorPrincipalId, Guid InstanceId, string ActionHash, TenantOperationOutcome Outcome, string ReasonCode,
     long InstanceRevision, long PersonaRevision, DateTimeOffset RecordedAt, string? SourceCallId = null, string? ParametersHash = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BrowserArtifactsJson = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantAutomationMutationReceipt? AutomationMutation = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantAutomationMutationReceipt? AutomationMutation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantManagementSkillReceipt? ManagementSkill = null);

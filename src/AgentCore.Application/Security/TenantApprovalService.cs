@@ -165,7 +165,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var metadata = await Metadata(request, ct).ConfigureAwait(false); request = metadata.Request;
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
-        await RequireRead(state, human.PrincipalId, request, ct).ConfigureAwait(false);
+        await RequireRead(state, human.PrincipalId, request, ct, metadata.OperationResult).ConfigureAwait(false);
         var review = await ReviewAsync(metadata, state, human, ct).ConfigureAwait(false);
         await RequireUnchangedAuthority(state, human, ct).ConfigureAwait(false);
         return metadata with { SecurityRevision = state.Tenant.Revision, Review = review };
@@ -226,7 +226,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         {
             try
             {
-                await RequireRead(state, human.PrincipalId, view.Request, ct).ConfigureAwait(false);
+                await RequireRead(state, human.PrincipalId, view.Request, ct, view.OperationResult).ConfigureAwait(false);
                 result.Add(view with { SecurityRevision = state.Tenant.Revision, Review = await ReviewAsync(view, state, human, ct).ConfigureAwait(false) });
             }
             catch (AccessDeniedException) { }
@@ -514,7 +514,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         return count;
     }
 
-    private async ValueTask RequireRead(TenantSecurityState state, Guid human, TenantApprovalRequest request, CancellationToken ct)
+    private async ValueTask RequireRead(TenantSecurityState state, Guid human, TenantApprovalRequest request, CancellationToken ct, TenantOperationReceipt? recorded = null)
     {
         if (request.Operation.ArtifactPublication is not null)
             await TenantArtifactReviewRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
@@ -526,7 +526,11 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         if (request.Operation.AutomationMutation is not null)
             _ = await (automationAdmissions ?? throw new AccessDeniedException("approval_unavailable")).Mutations.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.ManagementMutation is not null)
-            _ = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(request, human, ct).ConfigureAwait(false);
+        {
+            if (request.Status == TenantApprovalStatus.Approved && request.Operation.ManagementMutation.Skill is not null && recorded is null && effects is not null)
+                recorded = await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
+            _ = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(request, human, ct, recorded).ConfigureAwait(false);
+        }
         if (request.Operation.ManagementRead is not null)
             _ = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).Reads.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.AutomationRead is not null)
@@ -602,8 +606,21 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         if (request.Operation.AutomationAdmission is not null) await TenantAutomationAdmissionApprovalRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
         if (request.Operation.BackgroundReport is not null) await TenantBackgroundReportRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
         if (request.Operation.BackgroundStart is not null) await TenantBackgroundCreationRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false);
+        var actionScope = TenantApprovalRules.Scope(request.TenantId, request.Operation);
+        if (request is { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation.Skill.Result.Deleted: true })
+        {
+            recorded ??= effects is null ? null : await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
+            if (TenantManagementSkillRules.CompletedDeletion(request, recorded))
+            {
+                // The immutable receipt proves the old child address. Only current
+                // tenant-wide readers/managers may inspect it after its grant was retired.
+                actionScope = AccessScope.ForTenant(request.TenantId);
+                if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("skills.read"), actionScope, ct).ConfigureAwait(false)).Allowed)
+                    throw new AccessDeniedException("approval_unavailable");
+            }
+        }
         foreach (var pair in new[] { ("approvals.read", AccessScope.ForResource(request.TenantId, "approval", request.RequestId.ToString("D"))),
-            (request.Permission, TenantApprovalRules.Scope(request.TenantId, request.Operation)) })
+            (request.Permission, actionScope) })
         {
             var decision = await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get(pair.Item1), pair.Item2, ct).ConfigureAwait(false);
             if (!decision.Allowed) throw new AccessDeniedException("approval_unavailable");

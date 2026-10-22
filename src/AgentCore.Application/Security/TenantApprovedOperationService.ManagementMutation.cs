@@ -19,7 +19,7 @@ public sealed partial class TenantApprovedOperationService
             {
                 var value = request.Operation.ManagementMutation!;
                 var observed = await (managementTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(reference, generation, value.ToolName, value.ArgumentsJson, ct, value).ConfigureAwait(false);
-                var eligibility = await operations.Check(observed.Source.Reader.Security, observed.Source.Reader.Run, "agents.update", TenantManagementReadRules.Scope(observed.Source.Reader), ct, managementReviewRequired: true).ConfigureAwait(false);
+                var eligibility = await managementTargets.DecisionAsync(observed, ct).ConfigureAwait(false);
                 if (eligibility.Decision != OperationDecisionKind.RequiresApproval || eligibility.ApprovalKind != request.Kind) throw new AccessDeniedException("operation_authority_changed");
                 await TenantManagementOperationTarget.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(security), ct).ConfigureAwait(false);
             }

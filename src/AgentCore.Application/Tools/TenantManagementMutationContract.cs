@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Security;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 
@@ -17,7 +18,7 @@ public sealed record TenantManagementMutationIntent(string Tool, string Argument
 }
 public static class TenantManagementMutationContract
 {
-    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "settings.patch", "management.policy.update", "management.freeze", "automation.preferences.patch" });
+    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "settings.patch", "management.policy.update", "management.freeze", "automation.preferences.patch", "skills.create", "skills.update", "skills.set_enabled", "skills.reset_enabled", "skills.delete", "skills.customize" });
     public static bool IsTool(string name) => Tools.Contains(name);
     public static bool Allows(AgentDefinition definition, string tool) => IsTool(tool) && RolePermissions.AllowsTool(definition, tool)
         && definition.SelfManagement is { } policy && ManagementTools.Enabled(policy)
@@ -28,7 +29,34 @@ public static class TenantManagementMutationContract
     public static TenantManagementMutationArguments Parse(string tool, string json)
     {
         if (!IsTool(tool) || Encoding.UTF8.GetByteCount(json) > 24000) throw new ArgumentException("Use an offered bounded exact management command.");
-        using var doc = JsonDocument.Parse(json); ConfigurationTools.Validate(tool, doc.RootElement);
+        using var doc = JsonDocument.Parse(json); if (TenantManagementSkillRules.IsTool(tool))
+        {
+            var root = doc.RootElement;
+            using var schema = JsonDocument.Parse(ToolRegistry.Get(tool).ModelDefinition.ParametersJson);
+            var allowed = schema.RootElement.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() != root.EnumerateObject().Count()
+                || root.EnumerateObject().Any(p => !allowed.Contains(p.Name))) throw new ArgumentException("Use exact Skill fields.");
+            foreach (var field in schema.RootElement.GetProperty("required").EnumerateArray())
+                if (!root.TryGetProperty(field.GetString()!, out _)) throw new ArgumentException("A required Skill field is missing.");
+            if (root.TryGetProperty("key", out var key) && (key.ValueKind != JsonValueKind.String || !SkillKeys.IsValid(key.GetString()!))) throw new ArgumentException("Use an origin-qualified Skill key.");
+            if (root.GetProperty("expectedInstanceRevision").ValueKind != JsonValueKind.Number || !root.GetProperty("expectedInstanceRevision").TryGetInt64(out var revision) || revision < 1
+                || root.TryGetProperty("expectedRevision", out var childRevision) && (childRevision.ValueKind != JsonValueKind.Number || !childRevision.TryGetInt64(out var number) || number < 1)) throw new ArgumentException("Use current positive revisions.");
+            if (root.TryGetProperty("enabled", out var enabled) && enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw new ArgumentException("Use a boolean choice.");
+            if (tool is "skills.create" or "skills.update")
+            {
+                foreach (var (field, limit) in new[] { ("name", 80), ("description", 240), ("procedure", 4000) })
+                    if (root.GetProperty(field).ValueKind != JsonValueKind.String || root.GetProperty(field).GetString() is not { Length: > 0 } text || text.Length > limit)
+                        throw new ArgumentException("Use bounded Skill text fields.");
+                var caps = root.GetProperty("requiredCapabilities");
+                if (caps.ValueKind != JsonValueKind.Array || caps.GetArrayLength() > 8 || caps.EnumerateArray().Any(c => c.ValueKind != JsonValueKind.String || c.GetString() is not { Length: > 0 and <= 64 })
+                    || caps.EnumerateArray().Select(c => c.GetString()).Distinct(StringComparer.Ordinal).Count() != caps.GetArrayLength()) throw new ArgumentException("Use distinct bounded capability names.");
+                if (root.TryGetProperty("id", out var id) && (id.ValueKind != JsonValueKind.String || id.GetString()!.Length > 64)) throw new ArgumentException("Use a bounded Skill identity.");
+                var projection = root.GetProperty("projection");
+                if (projection.ValueKind != JsonValueKind.String || projection.GetString() is not ("Always" or "OnDemand")) throw new ArgumentException("Use an offered Skill projection.");
+                _ = InstanceSkillTools.ReadInput(root);
+            }
+        }
+        else ConfigurationTools.Validate(tool, doc.RootElement);
         if (tool == "settings.patch")
         {
             var set = doc.RootElement.GetProperty("set").EnumerateObject().Select(p => p.Name).ToArray(); var clear = doc.RootElement.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray();
@@ -45,7 +73,7 @@ public static class TenantManagementMutationContract
     }
     public static string SemanticArguments(string arguments)
     {
-        var body = JsonNode.Parse(arguments)!.AsObject(); body.Remove("expectedInstanceRevision"); return body.ToJsonString();
+        var body = JsonNode.Parse(arguments)!.AsObject(); body.Remove("expectedInstanceRevision"); body.Remove("expectedRevision"); return body.ToJsonString();
     }
     public static TenantPreferencePatch? Preference(string tool, string arguments)
     {
@@ -56,6 +84,7 @@ public static class TenantManagementMutationContract
         catch (ArgumentException) { return null; }
     }
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with { Description = tool.Name switch {
+        _ when TenantManagementSkillRules.IsTool(tool.Name) => "Change only this Agent’s exact Skill through its existing configuration owner. Inspect first and use current item and Instance revisions. Definition/Built-in procedures are immutable; customization retains source provenance. Managed eligible Skill changes can apply under current Allowed policy; deletion, customization and Assisted changes require mutate_management exact consent. Changes affect future Runs and grant no capability, source read or execution authority.",
         "settings.patch" => "Patch only this Agent's exact inspected setting section with expectedInstanceRevision, set and clear. Core validates Definition/host constraints. Only the three Managed conversation preferences may auto-apply under current Allowed policy. Other changes require mutate_management exact consent. Cleared fields restore Definition defaults. Changes apply to new Runs; no tool effect is replayed.",
         "management.freeze" => "Propose freezing this Agent's active management with its exact inspected Instance revision. Requires mutate_management exact consent and current authority. Management revokes immediately; ordinary tasks and retained content remain. This tool cannot unfreeze or enable management.",
         "management.policy.update" => "Propose exact mode, scopes and Managed allowances for this Agent's inspected revision through mutate_management. Always requires exact qualified review. Cannot enable management from Off or unfreeze. New grants apply to new Runs; removals revoke immediately. No IAM permission is granted.",

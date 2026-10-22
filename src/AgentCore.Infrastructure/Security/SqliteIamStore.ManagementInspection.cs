@@ -31,6 +31,27 @@ public sealed partial class SqliteIamStore
             .Where(b => byId.ContainsKey(Guid.Parse(b.CredentialId))).Select(b => new TenantCredentialBinding(MapBinding(b), byId[Guid.Parse(b.CredentialId)])).ToArray();
         return reader with { Inspection = TenantManagementInspectionSources.Catalog(reader, snapshot, inherited, bindings, credentials) };
     }
+    private static IQueryable<TenantApprovalRecord> HiddenManagementSkillChanges(AgentCoreDbContext db, TenantManagementApprovalVisibility visibility)
+    {
+        var readAll = visibility.Skills is { Agents: null }; var writeAll = visibility.SkillChanges is { Agents: null };
+        var readAgents = System.Text.Json.JsonSerializer.Serialize(visibility.Skills?.Agents?.Select(id => id.ToString("D")) ?? []);
+        var writeAgents = System.Text.Json.JsonSerializer.Serialize(visibility.SkillChanges?.Agents?.Select(id => id.ToString("D")) ?? []);
+        var readChildren = System.Text.Json.JsonSerializer.Serialize(visibility.Skills?.Children ?? []);
+        var writeChildren = System.Text.Json.JsonSerializer.Serialize(visibility.SkillChanges?.Children ?? []);
+        return db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson,'$.Operation.ManagementMutation.Skill')='object'
+            AND (NOT ({readAll} AND {writeAll}) AND NOT EXISTS (
+             SELECT 1 FROM AgentInstances owner WHERE owner.InstanceId=TenantApprovalRequests.InstanceId AND
+              (owner.Revision=json_extract(TenantApprovalRequests.PayloadJson,'$.Operation.ExpectedInstanceRevision') OR EXISTS (
+               SELECT 1 FROM TenantOperationReceipts receipt WHERE TenantApprovalRequests.Status=1 AND receipt.RequestId=TenantApprovalRequests.RequestId
+                AND receipt.TenantId=TenantApprovalRequests.TenantId AND receipt.InstanceId=TenantApprovalRequests.InstanceId
+                AND receipt.ActionHash=TenantApprovalRequests.Fingerprint AND receipt.Outcome=0 AND receipt.ReasonCode='management_mutation_completed'
+                AND receipt.ManagementSkillJson IS NOT NULL AND receipt.InstanceRevision=owner.Revision)))
+             OR NOT (CASE WHEN json_extract(PayloadJson,'$.Operation.ManagementMutation.Skill.CreateScope')=1 THEN {readAll} AND {writeAll}
+             ELSE ({readAll} OR InstanceId IN (SELECT value FROM json_each({readAgents})) OR ResourceId IN (SELECT value FROM json_each({readChildren})))
+              AND ({writeAll} OR InstanceId IN (SELECT value FROM json_each({writeAgents})) OR ResourceId IN (SELECT value FROM json_each({writeChildren}))) END))
+            """);
+    }
     private static IQueryable<TenantApprovalRecord> HiddenManagementChildren(AgentCoreDbContext db, TenantManagementApprovalVisibility visibility)
     {
         var skillAll = visibility.Skills is { Agents: null }; var resourceAll = visibility.Resources is { Agents: null };

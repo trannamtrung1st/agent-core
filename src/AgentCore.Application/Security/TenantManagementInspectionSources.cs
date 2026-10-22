@@ -22,23 +22,7 @@ public static class TenantManagementInspectionSources
         var items = new List<TenantManagementInspectionItem>();
         void Add(string kind, string key, AccessScope scope, object identity, object metadata) => items.Add(new(kind, key,
             TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(identity)), scope, JsonSerializer.SerializeToElement(metadata, Json)));
-        foreach (var skill in AgentInstanceSkillService.Views(definition, snapshot.Skills).Concat(AgentInstanceSkillService.BuiltIns(definition, definition.SelfManagement!, owner)))
-        {
-            object identity = skill.Origin switch {
-                SkillOrigin.Instance => new { skill.Key, skill.Name, skill.Description, skill.Projection, skill.EnabledChoice, skill.Revision },
-                SkillOrigin.Definition => new { owner.DefinitionId, owner.ActiveVersion, skill.Key, skill.Name, skill.Description, skill.Projection,
-                    state = snapshot.Skills.DefinitionStates.Single(s => "definition:" + s.DefinitionSkillId == skill.Key) },
-                _ => new { skill.Key, skill.Name, skill.Description, skill.Projection, version = ManagementBuiltInSkills.Catalog.Single(s => s.Key == skill.Key).SourceRevision } };
-            Add("skill", skill.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "skill", skill.Key), identity,
-                new { skill.Key, skill.Name, skill.Description, origin = skill.Origin.ToString(), projection = skill.Projection.ToString(), skill.Enabled, skill.EnabledChoice, skill.Revision, skill.MissingCapabilities });
-            // Procedure observations use a distinct witness; metadata-only observations
-            // never acquire a dependency on unshown private text or requirements.
-            Add("skillProcedure", skill.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "skill", skill.Key),
-                new { identity, skill.Procedure, skill.RequiredCapabilities },
-                new { skill.Key, skill.Name, skill.Description, origin = skill.Origin.ToString(), projection = skill.Projection.ToString(),
-                    skill.Enabled, skill.EnabledChoice, skill.Revision, skill.MissingCapabilities, skill.Procedure, skill.RequiredCapabilities,
-                    skill.DefinitionVersion, skill.SourceDefinitionId, skill.SourceDefinitionVersion, skill.SourceDefinitionSkillId });
-        }
+        items.AddRange(SkillItems(reader, snapshot.Skills));
         foreach (var resource in AgentInstanceResourceService.Views(definition, inherited, snapshot.Resources, snapshot.Skills))
             Add("resource", resource.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "resource", resource.Key),
                 new { resource.Key, resource.Origin, resource.LogicalPath, resource.Kind, resource.MediaType, resource.ContentSha256, resource.ByteLength, resource.EnabledOverride, resource.Revision },
@@ -52,6 +36,32 @@ public static class TenantManagementInspectionSources
                 new { binding.Binding, binding.Credential.Value.CredentialId, binding.Credential.Value.Revision, binding.Credential.Value.DisplayName, binding.Credential.Value.Kind, binding.Credential.Value.Status },
                 new { binding.Binding.BindingId, binding.Binding.Reference, binding.Binding.CredentialId, binding.Binding.Revision, binding.Credential.Value.DisplayName, kind = binding.Credential.Value.Kind.ToString(), purpose = binding.Credential.Value.Purpose.ToString() });
         return new(items.OrderBy(i => i.Kind, StringComparer.Ordinal).ThenBy(i => i.Key, StringComparer.Ordinal).ToArray());
+    }
+    public static IReadOnlyList<TenantManagementInspectionItem> SkillItems(TenantManagementReader reader, InstanceSkillSnapshot skills)
+    {
+        var owner = reader.Agent.Instance; var tenant = reader.Security.Tenant.TenantId;
+        var definition = reader.Current with { SelfManagement = ManagementPolicyResolver.Resolve(reader.Baseline, owner) };
+        var items = new List<TenantManagementInspectionItem>();
+        void Add(string kind, string key, AccessScope scope, object identity, object metadata) => items.Add(new(kind, key,
+            TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(identity)), scope, JsonSerializer.SerializeToElement(metadata, Json)));
+        foreach (var skill in AgentInstanceSkillService.Views(definition, skills).Concat(AgentInstanceSkillService.BuiltIns(definition, definition.SelfManagement!, owner)))
+        {
+            object identity = skill.Origin switch {
+                SkillOrigin.Instance => new { skill.Key, skill.Name, skill.Description, skill.Projection, skill.EnabledChoice, skill.Revision },
+                SkillOrigin.Definition => new { owner.DefinitionId, owner.ActiveVersion, skill.Key, skill.Name, skill.Description, skill.Projection,
+                    state = skills.DefinitionStates.Single(s => "definition:" + s.DefinitionSkillId == skill.Key) },
+                _ => new { skill.Key, skill.Name, skill.Description, skill.Projection, version = ManagementBuiltInSkills.Catalog.Single(s => s.Key == skill.Key).SourceRevision } };
+            Add("skill", skill.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "skill", skill.Key), identity,
+                new { skill.Key, skill.Name, skill.Description, origin = skill.Origin.ToString(), projection = skill.Projection.ToString(), skill.Enabled, skill.EnabledChoice, skill.Revision, skill.MissingCapabilities });
+            // Procedure observations use a distinct witness; metadata-only observations
+            // never acquire a dependency on unshown private text or requirements.
+            Add("skillProcedure", skill.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "skill", skill.Key),
+                new { identity, skill.Procedure, skill.RequiredCapabilities },
+                new { skill.Key, skill.Name, skill.Description, origin = skill.Origin.ToString(), projection = skill.Projection.ToString(),
+                    skill.Enabled, skill.EnabledChoice, skill.Revision, skill.MissingCapabilities, skill.Procedure, skill.RequiredCapabilities,
+                    skill.DefinitionVersion, skill.SourceDefinitionId, skill.SourceDefinitionVersion, skill.SourceDefinitionSkillId });
+        }
+        return items;
     }
     public static string Permission(string kind) => kind switch { "skill" or "skillProcedure" => "skills.read", "resource" => "resources.read", "credential" or "binding" => "credentials.read", _ => throw new AccessDeniedException("management_source_unavailable") };
     public static IReadOnlyList<TenantManagementChildRead> Read(string? json)
@@ -70,13 +80,15 @@ public static class TenantManagementInspectionSources
     }
     public static AccessScope Scope(TenantManagementReader reader, TenantManagementChildRead value) => AccessScope.ForResource(reader.Security.Tenant.TenantId,
         value.Kind is "credential" or "binding" ? "credential" : value.Kind == "skillProcedure" ? "skill" : value.Kind, value.ResourceId);
-    public static async ValueTask RequireAsync(TenantManagementReader reader, string? sources, IamAuthorizer iam, CancellationToken ct, Guid? human = null)
+    public static async ValueTask RequireAsync(TenantManagementReader reader, string? sources, IamAuthorizer iam, CancellationToken ct, Guid? human = null, IReadOnlySet<string>? deletedSources = null)
     {
         foreach (var value in Read(sources))
         {
-            var scope = Scope(reader, value);
+            var retired = deletedSources?.Contains(value.Kind + ":" + value.Key) == true;
+            var scope = retired ? AccessScope.ForTenant(reader.Security.Tenant.TenantId) : Scope(reader, value);
             if (!(await iam.CheckOwnedTenantAsync(reader.Security, human ?? reader.Agent.PrincipalId, PermissionCatalog.Get(Permission(value.Kind)), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException(human is null ? "management_source_changed" : "approval_unavailable");
+            if (retired) continue;
             var current = reader.Inspection?.Items.SingleOrDefault(i => i.Kind == value.Kind && i.Key == value.Key);
             if (current is null || current.Fingerprint != value.Fingerprint || current.Scope != scope) throw new AccessDeniedException("management_source_changed");
         }
@@ -89,7 +101,7 @@ public static class TenantManagementInspectionSources
     public static async ValueTask<bool> ReviewAsync(TenantManagementReader reader, string? sources, IamAuthorizer iam, CancellationToken ct)
     {
         foreach (var (permission, scope) in Targets(reader, sources))
-            if (await TenantSandboxReadOperationRules.NeedsReviewAsync(reader.Security, reader.Run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, permission, scope, iam, ct).ConfigureAwait(false)) return true;
+            if (await TenantManagementReadRules.NeedsReviewOwnedAsync(reader, permission, scope, iam, ct).ConfigureAwait(false)) return true;
         return false;
     }
     public static bool Independent(TenantManagementReader reader, string? sources) => Targets(reader, sources).Any(t => TenantOperationPolicyService.Effective(reader.Security, PermissionCatalog.Get(t.Permission)).IndependentReview);

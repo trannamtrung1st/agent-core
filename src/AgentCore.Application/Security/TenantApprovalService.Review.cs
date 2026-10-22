@@ -242,8 +242,15 @@ public sealed partial class TenantApprovalService
         var changes = Changes(op, snapshot);
         if (op.ManagementMutation is not null)
         {
-            var observed = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
-            if (observed.SourcesChanged) changes = [..changes, new("Current configuration", null, "The saved source changed or management was revoked. No replacement values are adopted. Cancel and inspect a fresh exact change.", false)];
+            var observed = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(r, human.PrincipalId, ct, view.OperationResult).ConfigureAwait(false);
+            if (observed.SourcesChanged)
+            {
+                var ownSkillChange = TenantManagementSkillRules.CompletedChange(r, view.OperationResult) && observed.Source.Reader.Agent.Instance.Revision == view.OperationResult!.InstanceRevision;
+                changes = [..changes, new(ownSkillChange ? "Recorded Skill change" : "Current configuration", null,
+                    ownSkillChange ? "These historical values describe the exact recorded Skill change. Inspect current state before another change."
+                    : op.ManagementMutation?.Skill is not null && r.Status != TenantApprovalStatus.Pending ? "The saved Skill source changed. These are historical proposal values; inspect current state before another change."
+                    : "The saved source changed or management was revoked. No replacement values are adopted. Cancel and inspect a fresh exact change.", false)];
+            }
         }
         if (op.ManagementRead is not null)
         {

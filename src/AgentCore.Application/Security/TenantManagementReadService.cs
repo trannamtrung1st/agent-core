@@ -53,7 +53,7 @@ public sealed class TenantManagementReadService(ITenantManagementStore store, Te
     {
         if (request.Kind != ApprovalKind.Review) throw new AccessDeniedException("approver_unqualified");
         await TenantManagementReadRules.RawAsync(observed.Reader, iam, ct, human).ConfigureAwait(false);
-        await TenantManagementInspectionSources.RequireAsync(observed.Reader, observed.Value.SourcesJson, iam, ct, human).ConfigureAwait(false);
+        await TenantManagementInspectionSources.RequireAsync(observed.Reader, observed.Retention?.CurrentSourcesJson ?? observed.Value.SourcesJson, iam, ct, human, observed.Retention?.DeletedSources).ConfigureAwait(false);
         if (TenantManagementInspectionSources.Independent(observed.Reader, observed.Value.SourcesJson) && request.OriginalInitiatorPrincipalId == human)
             throw new AccessDeniedException("independent_reviewer_required");
         if (!(await iam.CheckOwnedTenantAsync(observed.Reader.Security, human, PermissionCatalog.Get("approvals.approve"), TenantManagementReadRules.Scope(observed.Reader), ct).ConfigureAwait(false)).Allowed)

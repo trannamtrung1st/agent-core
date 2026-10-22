@@ -27,7 +27,7 @@ public static class TenantManagementMutationRules
     }
     public static PreparedManagementMutation Build(TenantManagementSource source, TenantManagementMutationArguments args,
         TenantAgentConfigurationChange change, DateTimeOffset at)
-        => Build(source.Reader, args, change, at);
+        => TenantManagementSkillRules.IsTool(args.Tool) ? TenantManagementSkillRules.Build(source, args, at) : Build(source.Reader, args, change, at);
     private static PreparedManagementMutation Build(TenantManagementReader reader, TenantManagementMutationArguments args,
         TenantAgentConfigurationChange change, DateTimeOffset at)
     {
@@ -78,6 +78,9 @@ public static class TenantManagementMutationRules
         var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
         if (args.Json != value.ArgumentsJson || value.SessionId == Guid.Empty || value.RootSessionId == Guid.Empty
             || !TenantMemoryOperationRules.ValidHash(value.ConfigurationHash) || !TenantMemoryOperationRules.ValidHash(value.BeforeStableHash) || !TenantMemoryOperationRules.ValidHash(value.AfterStableHash)
+            || TenantManagementSkillRules.IsTool(value.ToolName) != (value.Skill is not null)
+            || value.Skill is { } skill && (skill.TenantId == Guid.Empty || skill.Result is null || !SkillKeys.IsValid(skill.Result.Key) || skill.Result.Revision < 1 || skill.Result.Deleted != (value.ToolName == "skills.delete") || !TenantMemoryOperationRules.ValidHash(skill.SnapshotHash) || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null
+                || skill.CreateScope != (value.ToolName is "skills.create" or "skills.customize") || skill.TargetKey != (args.Value.TryGetProperty("key", out var target) ? target.GetString() : null))
             || Encoding.UTF8.GetByteCount(value.ChangesJson) > 48000 || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(value)) > 98000
             || value.ToolName == "settings.patch" && (value.Settings is null || value.AutomationChanges is null || value.Management is not null || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null)
             || value.ToolName is "management.freeze" or "management.policy.update" && (value.Management is null || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null)
@@ -85,13 +88,18 @@ public static class TenantManagementMutationRules
             throw new ArgumentException("Use one exact bounded management plan.");
         using var changes = JsonDocument.Parse(value.ChangesJson); if (changes.RootElement.ValueKind != JsonValueKind.Array) throw new ArgumentException("Use exact saved change rows.");
     }
-    public static TenantAgentConfigurationChange Change(TenantManagementReader reader, PreparedManagementMutation value)
+    public static TenantAgentConfigurationChange Change(TenantManagementReader reader, PreparedManagementMutation value, TenantAgentConfigurationSnapshot? snapshot = null)
     {
         Validate(value); Eligible(reader, value.ToolName);
         var owner = reader.Agent.Instance; var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
         if (args.ExpectedInstanceRevision != owner.Revision || value.SessionId != reader.Run.SessionId || value.RootSessionId != reader.Root.SessionId
             || value.ConfigurationHash != TenantManagementReadRules.ConfigurationHash(owner) || value.BeforeStableHash != TenantManagementReadRules.StableConfigurationHash(owner))
             throw new AccessDeniedException("management_source_changed");
+        if (value.Skill is not null)
+        {
+            if (snapshot is null || snapshot.Agent.TenantId != reader.Agent.TenantId || snapshot.Agent.PrincipalId != reader.Agent.PrincipalId || snapshot.Agent.Instance.InstanceId != owner.InstanceId || snapshot.Agent.Instance.Revision != owner.Revision) throw new AccessDeniedException("management_source_changed");
+            return TenantManagementSkillRules.Change(new(reader, snapshot), value) ?? throw new AccessDeniedException("operation_unchanged");
+        }
         TenantAgentConfigurationChange change;
         if (value.ToolName == "settings.patch")
         {
@@ -133,12 +141,14 @@ public static class TenantManagementMutationRules
     }
     public static async ValueTask PrimaryAsync(TenantApprovalRequest request, TenantManagementReader reader, IamAuthorizer iam, CancellationToken ct)
     {
-        if (request.Kind == ApprovalKind.Review && !(await iam.CheckOwnedTenantAsync(reader.Security, reader.Agent.PrincipalId, PermissionCatalog.Get("agents.update"), TenantManagementReadRules.Scope(reader), ct).ConfigureAwait(false)).Allowed)
+        if (request.Kind == ApprovalKind.Review && !(await iam.CheckOwnedTenantAsync(reader.Security, reader.Agent.PrincipalId, PermissionCatalog.Get(request.Operation.Permission), request.Operation.SkillScope(reader), ct).ConfigureAwait(false)).Allowed)
             throw new AccessDeniedException("operation_authority_changed");
     }
     public static async ValueTask SecondaryAsync(TenantManagementReader reader, PreparedManagementMutation value, IamAuthorizer iam, Guid actor, CancellationToken ct)
     {
-        var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson).Value;
+        var parsed = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
+        if (value.Skill is not null) { await TenantManagementSkillRules.RawAsync(reader, parsed, iam, actor, ct).ConfigureAwait(false); return; }
+        var args = parsed.Value;
         if (value.ToolName != "settings.patch" || args.GetProperty("section").GetString() != "sandboxPolicy") return;
         foreach (var key in new[] { "sandbox.read", "sandbox.manage" })
             if (!(await iam.CheckOwnedTenantAsync(reader.Security, actor, PermissionCatalog.Get(key), TenantManagementReadRules.Scope(reader), ct).ConfigureAwait(false)).Allowed)
@@ -155,14 +165,17 @@ public static class TenantManagementMutationRules
     {
         if (!reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approver_unqualified");
         await TenantManagementReadRules.RawAsync(reader, iam, ct, human).ConfigureAwait(false);
-        var permission = PermissionCatalog.Get("agents.update"); var state = reader.Security;
-        foreach (var key in request.Kind == ApprovalKind.ExceptionalGrant ? new[] { "agents.update", "approvals.approve", "approvals.grant_exception" } : new[] { "agents.update", "approvals.approve" })
-            if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), TenantManagementReadRules.Scope(reader), ct).ConfigureAwait(false)).Allowed)
+        var permission = PermissionCatalog.Get(request.Operation.Permission); var state = reader.Security;
+        var scope = request.Operation.SkillScope(reader);
+        foreach (var key in request.Kind == ApprovalKind.ExceptionalGrant ? new[] { request.Operation.Permission, "approvals.approve", "approvals.grant_exception" } : new[] { request.Operation.Permission, "approvals.approve" })
+            if (!(await iam.CheckOwnedTenantAsync(state, human, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("approver_unqualified");
         if (TenantOperationPolicyService.Effective(state, permission).IndependentReview && request.OriginalInitiatorPrincipalId == human)
             throw new AccessDeniedException("independent_reviewer_required");
         await SecondaryAsync(reader, value, iam, human, ct).ConfigureAwait(false);
     }
+    public static AccessScope SkillScope(this PreparedTenantOperation operation, TenantManagementReader reader) => operation.ManagementMutation?.Skill is not null
+        ? TenantManagementSkillRules.Scope(reader, operation.ManagementMutation) : TenantManagementReadRules.Scope(reader);
     public static bool Matches(PreparedManagementMutation expected, PreparedManagementMutation current) => JsonSerializer.Serialize(expected) == JsonSerializer.Serialize(current);
     public static void ValidateEffect(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant, AgentRun run, TenantOperationCommit commit, AgentRun? source)
     {

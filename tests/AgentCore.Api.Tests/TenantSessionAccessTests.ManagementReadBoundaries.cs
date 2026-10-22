@@ -20,6 +20,10 @@ public sealed partial class TenantSessionAccessTests
     }
     private sealed class ManagementReadHook(ITenantManagementStore inner, ManagementReadRace race) : ITenantManagementStore
     {
+        public ValueTask<TenantOperationReceipt?> TryCommitManagementSkillAsync(TenantSecurityState next, long expectedSecurityRevision, TenantManagementSkillCommit commit, AuthorizationAudit audit, CancellationToken ct = default)
+            => inner.TryCommitManagementSkillAsync(next, expectedSecurityRevision, commit, audit, ct);
+        public ValueTask RequireTenantManagementSkillSourcesAsync(TenantRunReference reference, Guid? generation, string tool, string arguments, Guid? inspectionHuman = null, CancellationToken ct = default)
+            => inner.RequireTenantManagementSkillSourcesAsync(reference, generation, tool, arguments, inspectionHuman, ct);
         public ValueTask<TenantManagementSource> ReadTenantManagementSourceAsync(TenantRunReference reference, Guid? generation, Guid? inspectionHuman = null, CancellationToken ct = default)
             => inner.ReadTenantManagementSourceAsync(reference, generation, inspectionHuman, ct);
         public async ValueTask<TenantManagementReadObservation> ObserveTenantManagementReadAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,

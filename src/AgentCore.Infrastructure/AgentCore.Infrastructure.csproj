@@ -77,4 +77,12 @@
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261022100000_TenantManagementChildReads.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022100000_TenantManagementChildReads.Down.sql" />
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261022100000_TenantManagementChildReads.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022100000_TenantManagementChildReads.Check.sql" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022110000_TenantManagementSkillAuthoring.Up.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022110000_TenantManagementSkillAuthoring.Up.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022110000_TenantManagementSkillAuthoring.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022110000_TenantManagementSkillAuthoring.Down.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022110000_TenantManagementSkillAuthoring.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022110000_TenantManagementSkillAuthoring.Check.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022110000_TenantManagementSkillAuthoring.Guards.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022110000_TenantManagementSkillAuthoring.Guards.sql" />
+  </ItemGroup>
 </Project>

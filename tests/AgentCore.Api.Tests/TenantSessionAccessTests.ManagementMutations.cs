@@ -127,6 +127,10 @@ public sealed partial class TenantSessionAccessTests
                 await using var db = await host.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
                 await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.ManagementMutation.ChangesJson','[]') WHERE RequestId={request.RequestId}"));
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261022070000_TenantManagementReadConsent"));
+                // Compatible earlier Down steps may commit before a lower refusal.
+                // Restore the running binary's schema before resuming its pending task.
+                await db.GetService<IMigrator>().MigrateAsync();
+                Assert.False(db.Database.HasPendingModelChanges());
                 Assert.Equal(TenantApprovalStatus.Pending, (await approvals.FindApprovalAsync(tenant, request.RequestId))!.Status);
             }
             var decided = await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision, actionHash = request.Operation.ActionHash, expectedRevision = await Revision(owner, tenant), expectedRequestRevision = request.Revision });

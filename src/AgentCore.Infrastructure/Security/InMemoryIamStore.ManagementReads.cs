@@ -55,12 +55,14 @@ public sealed partial class InMemoryIamStore : ITenantManagementStore
         if (expected is not null)
         {
             if (expected.ToolName != tool || expected.ArgumentsJson != args.Json) throw new AccessDeniedException("management_source_changed");
+            TenantManagementSourceRetention? retention = null;
             try {
-                TenantManagementInspectionSources.RequireAsync(reader, expected.SourcesJson, iam, ct, human).AsTask().GetAwaiter().GetResult();
                 TenantManagementReadRules.ValidateCurrent(reader, baseline, expected, _operationReceipts.Values, id => _approvals.GetValueOrDefault(id));
+                retention = TenantManagementReadRules.RetainedSources(reader, expected, _operationReceipts.Values, id => _approvals.GetValueOrDefault(id));
+                TenantManagementInspectionSources.RequireAsync(reader, retention.CurrentSourcesJson, iam, ct, human, retention.DeletedSources).AsTask().GetAwaiter().GetResult();
             }
             catch (AccessDeniedException error) when (human is not null && error.ReasonCode is "management_source_changed" or "management_read_unavailable") { return new(reader, expected, true); }
-            return new(reader, expected);
+            return new(reader, expected, Retention: retention);
         }
         return new(reader, TenantManagementInspectionSources.IsInspection(tool)
             ? (managementInspection?.Invoke() ?? throw new AccessDeniedException("management_inspection_unavailable")).BuildAsync(reader, args, iam, ct).AsTask().GetAwaiter().GetResult()

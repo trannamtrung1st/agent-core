@@ -6,9 +6,10 @@ public sealed partial class TenantApprovalService
     public async ValueTask<TenantApprovalPreparationResult> PrepareManagementMutationAsync(TenantRunReference reference, string tool, string arguments,
         long expectedRunRevision, Guid generation, CancellationToken ct = default)
     {
+        var permission = AgentCore.Application.Tools.TenantManagementMutationContract.IsTool(tool) && TenantManagementSkillRules.IsTool(tool) ? "skills.manage" : "agents.update";
         try
         {
-            await operations.ResolveForDecisionAsync(reference, "agents.update", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
+            await operations.ResolveForDecisionAsync(reference, permission, ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
             var target = managementTargets ?? throw new AccessDeniedException("tenant_effect_unavailable");
             var observed = await target.PrepareAsync(reference, generation, tool, arguments, ct).ConfigureAwait(false); var reader = observed.Source.Reader;
             if (reader.Run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
@@ -16,6 +17,8 @@ public sealed partial class TenantApprovalService
             var prior = await approvals.FindRootApprovalAsync(reference.TenantId, reader.Run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, op, ct).ConfigureAwait(false);
             if (prior is not null) return await DuplicateOutcome(reader.Security, reader.Run, prior, ct).ConfigureAwait(false);
             var decision = await target.DecisionAsync(observed, ct).ConfigureAwait(false);
+            if (observed.Value.Skill?.Changed == false && decision.Decision != OperationDecisionKind.Denied)
+                return await PreparationOutcome(reader.Security, reader.Run, op, OperationDecisionKind.Allowed, "operation_unchanged", null, ct).ConfigureAwait(false);
             if (decision.Decision != OperationDecisionKind.RequiresApproval)
                 return await PreparationOutcome(reader.Security, reader.Run, op, decision.Decision, decision.ReasonCode, null, ct).ConfigureAwait(false);
             var at = time.GetUtcNow(); var request = new TenantApprovalRequest(ids.NewId(), reference.TenantId, reader.Run.AgentRunId, reader.Run.SessionId,
@@ -32,7 +35,7 @@ public sealed partial class TenantApprovalService
         }
         catch (Exception error) when (error is AccessDeniedException or SecurityConflictException)
         {
-            await operations.RecordFailureAsync(reference, "agents.update", error is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)error).ReasonCode,
+            await operations.RecordFailureAsync(reference, permission, error is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)error).ReasonCode,
                 ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false); throw;
         }
     }

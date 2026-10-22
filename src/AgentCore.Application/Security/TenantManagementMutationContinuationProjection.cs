@@ -12,6 +12,10 @@ public static class TenantManagementMutationContinuationProjection
         return AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, call, JsonSerializer.Serialize(new {
             approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
             reasonCode = outcome.ReasonCode, requestId = request.RequestId, operationId = request.Operation.OperationId, applied = receipt?.Outcome == TenantOperationOutcome.Completed,
+            skill = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill is { } skill ? TenantManagementSkillRules.SkillMetadata(skill.Result) : null,
+            instanceSkill = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill is { } local ? TenantManagementSkillRules.SkillMetadata(local.Result, true) : null,
+            definitionSkill = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill is { } inherited ? TenantManagementSkillRules.DefinitionMetadata(inherited.Result) : null,
+            deletedKey = receipt?.Outcome == TenantOperationOutcome.Completed && value.Skill?.Result.Deleted == true ? value.Skill.Result.Key : null,
             instanceRevision = receipt?.InstanceRevision, tool = value.ToolName, changesApplyTo = value.ToolName == "management.freeze" ? "immediateRevocation" : "nextRun",
             revocationsApplyTo = value.ToolName is "management.freeze" or "management.policy.update" ? "immediate" : null,
             replayAllowed = false, currentRunConfigurationUnchanged = true }));

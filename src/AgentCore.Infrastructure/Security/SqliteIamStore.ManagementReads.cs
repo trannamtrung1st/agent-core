@@ -67,12 +67,15 @@ public sealed partial class SqliteIamStore : ITenantManagementStore
             var requestIds = rows.Where(r => r.RequestId != null).Select(r => r.RequestId!).ToArray();
             var requests = await db.Set<TenantApprovalRecord>().AsNoTracking().Where(r => r.TenantId == reader.Security.Tenant.TenantId && requestIds.Contains(r.RequestId)).ToArrayAsync(ct).ConfigureAwait(false);
             var mapped = requests.Select(r => r.Domain()).ToDictionary(r => r.RequestId);
+            TenantManagementSourceRetention? retention = null;
+            var receipts = rows.Select(r => r.Domain()).ToArray();
             try {
-                await TenantManagementInspectionSources.RequireAsync(reader, expected.SourcesJson, iam, ct, human).ConfigureAwait(false);
-                TenantManagementReadRules.ValidateCurrent(reader, baseline, expected, rows.Select(r => r.Domain()), id => mapped.GetValueOrDefault(id));
+                TenantManagementReadRules.ValidateCurrent(reader, baseline, expected, receipts, id => mapped.GetValueOrDefault(id));
+                retention = TenantManagementReadRules.RetainedSources(reader, expected, receipts, id => mapped.GetValueOrDefault(id));
+                await TenantManagementInspectionSources.RequireAsync(reader, retention.CurrentSourcesJson, iam, ct, human, retention.DeletedSources).ConfigureAwait(false);
             }
             catch (AccessDeniedException error) when (human is not null && error.ReasonCode is "management_source_changed" or "management_read_unavailable") { return new(reader, expected, true); }
-            return new(reader, expected);
+            return new(reader, expected, Retention: retention);
         }
         return new(reader, TenantManagementInspectionSources.IsInspection(tool)
             ? await (managementInspection?.Invoke() ?? throw new AccessDeniedException("management_inspection_unavailable")).BuildAsync(reader, args, iam, ct).ConfigureAwait(false)

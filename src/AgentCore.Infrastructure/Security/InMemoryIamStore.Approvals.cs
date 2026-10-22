@@ -26,6 +26,8 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
                 && (r.Operation.ManagementRead is null && r.Operation.ManagementMutation is null || managementVisibility is not null && (managementVisibility.Agents is null || managementVisibility.Agents.Contains(r.Operation.InstanceId)))
                 && TenantManagementInspectionSources.Visible(r.Operation.ManagementRead, managementVisibility)
+                && (r.Operation.ManagementMutation?.Skill is null || TenantManagementSkillRules.Visible(r, managementVisibility,
+                    instances.FindTenantBackingAsync(r.Operation.InstanceId, ct).Result?.Revision, _operationReceipts.GetValueOrDefault(r.Operation.OperationId)))
                 && (automationVisibility?.IncludeOccurrenceReservations != false || r.Operation.AutomationAdmission is null)
                 && (r.Operation.AutomationAdmission is not { } admission || (admission.Conversation is null ? automationVisibility?.CanCreate ?? true
                     : (automationVisibility?.CanCreateRuns ?? true)

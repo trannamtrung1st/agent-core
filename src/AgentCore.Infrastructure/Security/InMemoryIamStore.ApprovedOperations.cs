@@ -2,6 +2,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Security;
 
@@ -208,10 +209,20 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var change = configure ? managementChange ?? TenantLocalEffectRules.Change(request, target.Instance) : null;
             if (configure) _ = TenantAgentConfigurationRules.Apply(target.Instance, change!, at);
             ct.ThrowIfCancellationRequested();
-            var updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
+            AgentInstance updated;
+            if (configure && change!.Skill is { } skillChange)
+            {
+                next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, ChildCatalog(next.Tenant.TenantId, run.AgentInstanceId, change, ct));
+                instances.MutateTenantSkillsAsync(skillChange, at, ct).GetAwaiter().GetResult();
+                updated = instances.FindTenantBackingAsync(run.AgentInstanceId, ct).Result!;
+            }
+            else
+            {
+                updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
                 Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges,
                 HarnessManagement: change.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey, UnattendedReasoningEffort: change.UnattendedReasoningEffort), at, ct).Result : target.Instance;
+            }
             if (complete && automationMutation is not null)
             {
                 if (commit.AutomationInvocationAdmission is { } admitted) { StageTenantAutomationGraph(admitted); automationBacking.CommitTenantOccurrence(admitted.Next, admitted.Occurrence); }
@@ -220,6 +231,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
+                ManagementSkill: complete && request.Operation.ManagementMutation is { Skill: not null } skillEvidence ? TenantManagementSkillRules.Evidence(skillEvidence, target.Instance.Revision) : null,
                 AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
             SandboxLease? pending = null; SandboxExecution? stopped = null;
             if (complete && control is { } current)

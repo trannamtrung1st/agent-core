@@ -1,0 +1,14 @@
+(ManagementSkillJson IS NULL OR COALESCE((Outcome=0 AND ReasonCode='management_mutation_completed'
+AND AutomationMutationJson IS NULL AND BrowserArtifactsJson IS NULL AND length(CAST(ManagementSkillJson AS BLOB)) BETWEEN 2 AND 12000
+AND json_valid(ManagementSkillJson) AND json_type(ManagementSkillJson)='object'
+AND json_extract(ManagementSkillJson,'$.ToolName') IN ('skills.create','skills.update','skills.set_enabled','skills.reset_enabled','skills.delete','skills.customize')
+AND json_type(ManagementSkillJson,'$.BeforeInstanceRevision')='integer' AND json_extract(ManagementSkillJson,'$.BeforeInstanceRevision')=InstanceRevision-1
+AND json_type(ManagementSkillJson,'$.BeforeStableHash')='text' AND length(json_extract(ManagementSkillJson,'$.BeforeStableHash'))=64 AND json_extract(ManagementSkillJson,'$.BeforeStableHash') NOT GLOB '*[^0-9a-f]*'
+AND json_type(ManagementSkillJson,'$.AfterStableHash')='text' AND length(json_extract(ManagementSkillJson,'$.AfterStableHash'))=64 AND json_extract(ManagementSkillJson,'$.AfterStableHash') NOT GLOB '*[^0-9a-f]*'
+AND json_type(ManagementSkillJson,'$.BeforeSources')='array' AND json_array_length(ManagementSkillJson,'$.BeforeSources')<=4
+AND json_type(ManagementSkillJson,'$.AfterSources')='array' AND json_array_length(ManagementSkillJson,'$.AfterSources')<=4),0)) AND (ManagementSkillJson IS NULL OR COALESCE((json_type(ManagementSkillJson,'$.Result')='object' AND json_type(ManagementSkillJson,'$.Result.Key')='text' AND length(json_extract(ManagementSkillJson,'$.Result.Key')) BETWEEN 10 AND 75
+AND json_type(ManagementSkillJson,'$.Result.Revision')='integer' AND json_extract(ManagementSkillJson,'$.Result.Revision')>=1 AND json_type(ManagementSkillJson,'$.Result.Enabled') IN ('true','false')
+AND json_type(ManagementSkillJson,'$.Result.Deleted') IN ('true','false') AND json_extract(ManagementSkillJson,'$.Result.Deleted')=CASE WHEN json_extract(ManagementSkillJson,'$.ToolName')='skills.delete' THEN 1 ELSE 0 END
+AND ((json_extract(ManagementSkillJson,'$.ToolName')='skills.customize' AND json_type(ManagementSkillJson,'$.Result.SourceKey')='text' AND json_extract(ManagementSkillJson,'$.Result.SourceKey') LIKE 'definition:%'
+ AND json_type(ManagementSkillJson,'$.Result.SourceRevision')='integer' AND json_extract(ManagementSkillJson,'$.Result.SourceRevision')>=1 AND json_type(ManagementSkillJson,'$.Result.SourceEnabled')='false')
+ OR (json_extract(ManagementSkillJson,'$.ToolName')<>'skills.customize' AND json_extract(ManagementSkillJson,'$.Result.SourceKey') IS NULL AND json_extract(ManagementSkillJson,'$.Result.SourceRevision') IS NULL AND json_extract(ManagementSkillJson,'$.Result.SourceEnabled') IS NULL))),0))

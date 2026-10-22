@@ -10,6 +10,13 @@ namespace AgentCore.Application.Security;
 
 public sealed partial class TenantAgentConfigurationService
 {
+    internal async ValueTask ValidateManagementSkillAsync(TenantManagementSource source, TenantManagementMutationArguments args, DateTimeOffset at, CancellationToken ct)
+    {
+        var prepared = TenantManagementSkillRules.Prepare(source, args, at);
+        var definition = EffectiveChildDefinition(source.Snapshot, source.Reader.Baseline);
+        _ = AgentInstanceResourceService.Resolve(definition, await Resources(source.Reader.Security.Tenant.TenantId, source.Reader.Baseline, ct).ConfigureAwait(false),
+            source.Snapshot.Resources, prepared.Next);
+    }
     // Human HTTP and model exact-operation preparation use the same validation and reconciliation.
     internal async ValueTask<TenantAgentConfigurationChange> PrepareSettingsChangeAsync(Guid actor, Guid tenant,
         TenantAgentConfigurationSnapshot snapshot, AgentDefinition definition, string section,

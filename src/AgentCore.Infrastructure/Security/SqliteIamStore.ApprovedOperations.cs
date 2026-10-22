@@ -236,6 +236,11 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             else owned.Instance.SettingsOverridesJson = JsonSerializer.Serialize(updated.SettingsOverrides, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             if (managementChange is not null)
             {
+                if (managementChange.Skill is { } skillChange)
+                {
+                    next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, await ChildCatalogAsync(db, next.Tenant.TenantId, run.AgentInstanceId, managementChange, ct).ConfigureAwait(false));
+                    await SqliteAgentInstanceStore.StageSkillsAsync(db, skillChange, null, ct).ConfigureAwait(false);
+                }
                 owned.Instance.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 owned.Instance.UnattendedModelCatalogKey = updated.UnattendedModelCatalogKey; owned.Instance.UnattendedReasoningEffort = updated.UnattendedReasoningEffort;
                 await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(updated.InstanceId, target.Instance.Revision, AutomationPolicyChanges: managementChange.AutomationPolicyChanges), at, ct, request.TenantId).ConfigureAwait(false);
@@ -280,6 +285,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
+                ManagementSkill: complete && request.Operation.ManagementMutation is { Skill: not null } skillEvidence ? TenantManagementSkillRules.Evidence(skillEvidence, target.Instance.Revision) : null,
                 AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
             if (commit.Outcome == TenantOperationOutcome.Completed)
                 foreach (var value in experienceValues)
