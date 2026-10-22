@@ -152,12 +152,14 @@ public sealed partial class InMemoryIamStore : ITenantLearnedMemoryStore
     }
     private void RequireStoredMemorySources(AgentRun run, CancellationToken ct)
     {
+        RequireAutomationReadSources(run, TenantAutomationReadReferences.Read(run.Checkpoint), ct);
         RequireExperienceSources(run, TenantExperienceReferences.Sources(run.Checkpoint), TenantExperienceReferences.Facts(run.Checkpoint), ct);
         if (TenantHistoricalReferences.Read(run.Checkpoint) is { Count: > 0 } history) RequireHistoricalSources(run, history, ct);
         if (TenantMemoryOperationReferences.Read(run.Checkpoint) is { Count: > 0 } sources) RequireMemorySources(run, sources, ct);
     }
     private void RequireMemoryCheckpoint(AgentRun run, AgentRunCheckpoint checkpoint, CancellationToken ct)
     {
+        RequireAutomationReadCheckpoint(run, checkpoint, ct);
         RequireExperienceCheckpoint(run, checkpoint, ct);
         var oldHistory = TenantHistoricalReferences.Read(run.Checkpoint); var nextHistory = TenantHistoricalReferences.Read(checkpoint);
         if (oldHistory.Except(nextHistory).Any()) throw new AccessDeniedException("continuity_source_unavailable");

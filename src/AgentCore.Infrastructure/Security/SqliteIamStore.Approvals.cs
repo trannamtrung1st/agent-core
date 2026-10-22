@@ -538,6 +538,30 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 && db.Automations.IgnoreQueryFilters().Any(a => a.AutomationId == r.AutomationId && a.TenantId == r.TenantId
                     && a.AgentInstanceId == r.InstanceId && a.ExecutorPrincipalId == r.ExecutorPrincipalId));
         }
+        if (automationVisibility is null)
+            query = query.Where(r => db.Set<TenantApprovalRecord>().FromSqlRaw("SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson,'$.Operation.AutomationRead') IS NOT 'object'").Any(v => v.RequestId == r.RequestId));
+        else
+        {
+            var agents = System.Text.Json.JsonSerializer.Serialize(automationVisibility.Agents?.Select(id => id.ToString("D")));
+            var parents = System.Text.Json.JsonSerializer.Serialize(automationVisibility.ReadAutomations?.Select(id => id.ToString("D")));
+            var core = System.Text.Json.JsonSerializer.Serialize(automationVisibility.CoreEvents?.Select(id => id.ToString("D")));
+            var webhooks = System.Text.Json.JsonSerializer.Serialize(automationVisibility.WebhookSources?.Select(id => id.ToString("D")));
+            var email = System.Text.Json.JsonSerializer.Serialize(automationVisibility.EmailAccounts?.Select(id => id.ToString("D")));
+            var visible = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+                SELECT * FROM TenantApprovalRequests request WHERE json_type(PayloadJson,'$.Operation.AutomationRead') IS NOT 'object'
+                OR ((json_type({agents})='null' OR InstanceId IN (SELECT value FROM json_each({agents})))
+                    AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson,'$.Operation.AutomationRead.SourcesJson')) source
+                        WHERE (json_type({parents})<>'null' AND json_extract(source.value,'$.AutomationId') NOT IN (SELECT value FROM json_each({parents})))
+                        OR NOT EXISTS (SELECT 1 FROM Automations owner WHERE owner.TenantId=request.TenantId AND owner.AgentInstanceId=request.InstanceId
+                            AND owner.ExecutorPrincipalId=request.ExecutorPrincipalId AND owner.AutomationId=json_extract(source.value,'$.AutomationId')))
+                    AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(PayloadJson,'$.Operation.AutomationRead.EventSourcesJson')) source
+                        WHERE (json_extract(source.value,'$.Kind')=3 AND json_type({core})<>'null' AND json_extract(source.value,'$.EventId') NOT IN (SELECT value FROM json_each({core})))
+                            OR (json_extract(source.value,'$.Kind')=1 AND json_type({webhooks})<>'null' AND json_extract(source.value,'$.ResourceId') NOT IN (SELECT value FROM json_each({webhooks})))
+                            OR (json_type(source.value,'$.EmailAccountId')='text' AND ((json_type({email})<>'null' AND json_extract(source.value,'$.EmailAccountId') NOT IN (SELECT value FROM json_each({email})))
+                                OR NOT EXISTS (SELECT 1 FROM TenantCredentials account WHERE account.TenantId=request.TenantId AND account.DeletedAt IS NULL AND account.CredentialId=json_extract(source.value,'$.EmailAccountId'))))))
+                """);
+            query = query.Where(r => visible.Any(v => v.RequestId == r.RequestId));
+        }
         if (page.Status is { } status) query = query.Where(r => r.Status == (int)status);
         if (page.Kind is { } kind) query = query.Where(r => r.Kind == (int)kind);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -572,6 +596,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.BackgroundStart is not null) await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.AutomationRead is { } automationRead) _ = await ObserveAutomationRead(db, run, automationRead.ToolName, automationRead.ArgumentsJson, automationRead, null, ct).ConfigureAwait(false);
             if (request.Operation.ExperienceOperation is not null) _ = await RequireExperienceApproval(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.ContinuityRead is not null) _ = await RequireContinuityOperation(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.MemoryOperation is not null) _ = await RequireMemoryOperation(db, request, run, ct).ConfigureAwait(false);
@@ -680,6 +705,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 await RequireWorkspaceMutationOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.AutomationRead is { } automationRead)
+            {
+                var observed = await ObserveAutomationRead(db, run, automationRead.ToolName, automationRead.ArgumentsJson, automationRead, null, ct).ConfigureAwait(false);
+                await TenantAutomationReadService.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.ExperienceOperation is not null)
             {

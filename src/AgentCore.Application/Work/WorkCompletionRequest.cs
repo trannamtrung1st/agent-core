@@ -42,9 +42,21 @@ public static class WorkCompletionRequest
                 root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(error.GetString())
                 || root.TryGetProperty("saved", out var saved) && saved.ValueKind == JsonValueKind.False
                 || root.TryGetProperty("changed", out var changed) && changed.ValueKind == JsonValueKind.False
-                || ExperienceNotApplied(tool, root));
+                || AutomationReadNotApplied(tool, root) || ExperienceNotApplied(tool, root));
         }
         catch (JsonException) { return false; }
+    }
+    private static bool AutomationReadNotApplied(string tool, JsonElement result)
+    {
+        if (tool != ToolCatalog.RequestAuthorization || !result.TryGetProperty("applied", out var applied) || applied.ValueKind != JsonValueKind.False
+            || !result.TryGetProperty("replayAllowed", out var replay) || replay.ValueKind != JsonValueKind.False
+            || !result.TryGetProperty("requestId", out var request) || request.ValueKind != JsonValueKind.String || !request.TryGetGuid(out var requestId) || requestId == Guid.Empty
+            || !result.TryGetProperty("operationId", out var operation) || operation.ValueKind != JsonValueKind.String || !operation.TryGetGuid(out var operationId) || operationId == Guid.Empty
+            || !result.TryGetProperty("automationReadObservation", out var observation) || observation.ValueKind is not (JsonValueKind.Object or JsonValueKind.Null)
+            || !result.TryGetProperty("outcome", out var outcome) || outcome.ValueKind != JsonValueKind.String
+            || !result.TryGetProperty("readAuthorized", out var authorized)) return false;
+        return outcome.GetString() == "completed" && authorized.ValueKind == JsonValueKind.True
+            || outcome.GetString() == "denied" && authorized.ValueKind == JsonValueKind.False;
     }
     private static bool ExperienceNotApplied(string tool, JsonElement result)
     {

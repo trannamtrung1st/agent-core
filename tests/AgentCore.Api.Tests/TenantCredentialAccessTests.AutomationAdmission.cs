@@ -130,7 +130,7 @@ public sealed partial class TenantCredentialAccessTests
             if (mode == "transaction-revoked")
             {
                 var approved = (await approvals.FindApprovalAsync(tenant, requestId))!;
-                var target = await factory.Services.GetRequiredService<TenantAutomationAdmissionTarget>().RequireAsync(approved, CancellationToken.None);
+                var target = await factory.Services.GetRequiredService<TenantAutomationOperationTarget>().RequireAsync(approved, CancellationToken.None);
                 captured = TenantAutomationAdmissionApprovalRules.Build(approved, target.Agent, target.Configuration, clock.GetUtcNow());
                 capturedSignal = Assert.Single(await approvals.PendingApprovalSignalsAsync(100));
             }

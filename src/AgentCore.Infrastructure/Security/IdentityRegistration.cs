@@ -61,6 +61,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantExperienceManagementService>();
         services.TryAddSingleton<TenantExperienceService>();
         services.TryAddSingleton<TenantExperienceOperationService>();
+        services.TryAddSingleton<ITenantAutomationReadStore>(p => (ITenantAutomationReadStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantAutomationReadService>();
+        services.TryAddSingleton<TenantRunSourceAuthority>();
         services.TryAddSingleton<TenantMemoryOperationService>();
         services.TryAddSingleton<TenantContinuityReadService>();
         services.TryAddSingleton<ITenantContinuityStore>(sp => (ITenantContinuityStore)sp.GetRequiredService<IIamStore>());
@@ -183,7 +186,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantWebhookService>();
         services.TryAddSingleton<ITenantEmailWatchStore>(p => (ITenantEmailWatchStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantEmailMonitoringService>();
-        services.TryAddSingleton<TenantAutomationAdmissionTarget>();
+        services.TryAddSingleton<TenantAutomationOperationTarget>();
         services.TryAddSingleton<TenantSessionService>();
         services.TryAddSingleton<ITenantVoiceModeStore>(p => (ITenantVoiceModeStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantVoiceService>();

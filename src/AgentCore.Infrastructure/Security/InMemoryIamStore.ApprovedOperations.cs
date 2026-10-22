@@ -115,6 +115,15 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
             }
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AutomationRead is { } automationRead)
+            {
+                try {
+                    var observed = ObserveAutomationRead(run, automationRead.ToolName, automationRead.ArgumentsJson, automationRead, null, ct);
+                    TenantAutomationReadService.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+                } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             IReadOnlyList<AgentCore.Domain.Experience.TenantExperience> experienceValues = [];
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ExperienceOperation is not null)
             {

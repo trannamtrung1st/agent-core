@@ -132,6 +132,11 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             foreach (var item in handoffEvents) yield return item;
             yield break;
         }
+        if (TenantAutomationReadScript.Generate(request) is { } automationReadEvents)
+        {
+            foreach (var item in automationReadEvents) yield return item;
+            yield break;
+        }
         if (TenantExperienceScript.Generate(request) is { } experienceEvents)
         {
             foreach (var item in experienceEvents) yield return item;

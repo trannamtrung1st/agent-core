@@ -46,6 +46,7 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.AutomationRead => PrepareAutomationRead(op.OperationId, op.InstanceId, op.AutomationRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ExperienceOperation => PrepareExperience(op.OperationId, op.InstanceId, op.ExperienceOperation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ContinuityRead => PrepareContinuity(op.OperationId, op.InstanceId, op.ContinuityRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.MemoryOperation => PrepareMemory(op.OperationId, op.InstanceId, op.MemoryOperation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -80,6 +81,7 @@ public static partial class TenantApprovalRules
         if (op.ReportSourceRead is not null) TenantReportSourceReadRules.Source(request, run);
         else if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
         else TenantApprovalContinuationRules.Require(request, run, source);
+        if (op.AutomationRead is { } automationRead && automationRead.SessionId != request.SessionId) throw new ArgumentException("Use the actual Automation read Session.");
         if (op.ExperienceOperation is { } experience && experience.SessionId != request.SessionId
             || op.ContinuityRead is { } continuity && continuity.SessionId != request.SessionId
             || op.MemoryOperation is { } memory && memory.SessionId != request.SessionId
@@ -95,7 +97,7 @@ public static partial class TenantApprovalRules
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || op.InstanceId != run.AgentInstanceId
             || target.TenantId != request.TenantId || target.Instance.InstanceId != op.InstanceId || target.PrincipalId != context.AgentPrincipalId
-            || !Enum.IsDefined(request.Kind) || (request.Operation.ExperienceOperation is { ToolName: "experience.source" } || request.Operation.ContinuityRead is not null || (request.Operation.MemoryOperation is { } memoryOperation && AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(memoryOperation.ToolName)) || request.Operation.ReportSourceRead is not null || request.Operation.CompletionRead is not null || request.Operation.AttachmentRead is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
+            || !Enum.IsDefined(request.Kind) || (request.Operation.AutomationRead is not null || request.Operation.ExperienceOperation is { ToolName: "experience.source" } || request.Operation.ContinuityRead is not null || (request.Operation.MemoryOperation is { } memoryOperation && AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(memoryOperation.ToolName)) || request.Operation.ReportSourceRead is not null || request.Operation.CompletionRead is not null || request.Operation.AttachmentRead is not null || request.Operation.WorkspaceRead is not null || request.Operation.ArtifactVerification is not null || request.Operation.SandboxCommand is not null || request.Operation.SandboxControl is not null || request.Operation.SandboxRead is not null || request.Operation.CredentialRead is not null || request.Operation.BrowserCommand is { Credential: null }) && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
             || request.CreatedAt.Offset != TimeSpan.Zero || request.ExpiresAt.Offset != TimeSpan.Zero
             || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
             || Rebuild(op) != op)

@@ -34,6 +34,9 @@
     <!-- Versioned frozen SQL keeps SQLite guards without consuming the CLR string heap. -->
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261021214545_TenantExperienceConsent.Up.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261021214545_TenantExperienceConsent.Up.sql" />
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261021214545_TenantExperienceConsent.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261021214545_TenantExperienceConsent.Down.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022020346_TenantAutomationReadConsent.Up.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022020346_TenantAutomationReadConsent.Up.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022020346_TenantAutomationReadConsent.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022020346_TenantAutomationReadConsent.Down.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022020346_TenantAutomationReadConsent.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022020346_TenantAutomationReadConsent.Check.sql" />
   </ItemGroup>
 
   <ItemGroup>

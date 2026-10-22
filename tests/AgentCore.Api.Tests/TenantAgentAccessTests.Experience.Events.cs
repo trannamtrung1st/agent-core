@@ -69,7 +69,7 @@ public sealed partial class TenantAgentAccessTests
         // This fixture drives the actual durable processors explicitly. A fake-time
         // jump must not race a hosted dispatch before the scripted review is configured.
         foreach (var host in factory.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
-        var (tenant, instance) = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: true); await MemoryExecutor(owner, tenant, instance, operations: true, runRead: mode != "source-denied");
+        var (tenant, instance) = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: true, automationReads: mode == "source-only"); await MemoryExecutor(owner, tenant, instance, operations: true, runRead: mode != "source-denied");
         await ExperienceAutomationRights(owner, tenant, instance); var revision = await ExperienceOptIn(owner, tenant, instance, true);
         var api = $"/api/v2/tenants/{tenant}"; var route = api + $"/agents/{instance}/automations";
         var principal = (await Json(await owner.GetAsync(api + $"/agents/{instance}"))).GetProperty("principalId").GetGuid();
@@ -128,6 +128,24 @@ public sealed partial class TenantAgentAccessTests
         {
             Assert.True(model.Observed.Task.IsCompleted); observed = (await runs.FindTenantRunAsync(tenant, runId))!; Assert.Equal(AgentRunStatus.Running, observed.Status);
             Assert.Single((await Json(await owner.GetAsync(coverage))).GetProperty("items").EnumerateArray());
+            var metadataRole = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Owned Automation metadata", permissions = new[] { "automations.read" }, expectedRevision = await Revision(owner, tenant) }));
+            await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = principal, roleId = metadataRole.GetProperty("roleId").GetGuid(), resourceType = "automation", resourceId = automation, expectedRevision = await Revision(owner, tenant) }));
+            var reads = factory.Services.GetRequiredService<TenantAutomationReadService>(); var readReference = new TenantRunReference(tenant, runId);
+            var readCall = new ModelToolCall("owned-event-metadata", ToolCatalog.AutomationInspect, JsonSerializer.Serialize(new { automationId = automation }));
+            var frame = new TenantRuntimeFrame(observed.Owner, observed.SessionId, runId, observed.Claim!.Generation);
+            var metadata = await reads.PrepareAsync(readReference, frame.Generation, readCall.Name, readCall.ArgumentsJson, CancellationToken.None);
+            var eventSource = Assert.Single(TenantAutomationReadRules.Events(metadata.Value)); Assert.Equal(TriggerSourceKind.CoreEvent, eventSource.Kind);
+            using var savedMetadata = JsonDocument.Parse(metadata.Value.ObservationJson);
+            Assert.Equal(second.Run.AgentRunId, Assert.Single(savedMetadata.RootElement.GetProperty("coverage").GetProperty("items").EnumerateArray()).GetProperty("sourceRunId").GetGuid());
+            var proof = TenantAutomationReadService.Reference(metadata.Value, tenant);
+            await factory.Services.GetRequiredService<ITenantAutomationReadStore>().RequireTenantAutomationReadSourcesAsync(readReference, [proof], frame.Generation);
+            Assert.DoesNotContain("automationReadSource", await reads.ExecuteAsync(frame, readCall, 512, CancellationToken.None));
+            Assert.Single((await Json(await owner.GetAsync(coverage))).GetProperty("items").EnumerateArray());
+            Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(api + $"/role-assignments/{assignment.GetProperty("assignmentId").GetGuid()}?expectedRevision={await Revision(owner, tenant)}")).StatusCode);
+            await Assert.ThrowsAsync<AccessDeniedException>(() => factory.Services.GetRequiredService<ITenantAutomationReadStore>().RequireTenantAutomationReadSourcesAsync(readReference, [proof], null).AsTask());
+            await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = principal, roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
+            await Json(await owner.PutAsJsonAsync(api + "/operation-policies/automations.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 }));
+            var withheld = await reads.ExecuteAsync(frame, readCall, 16000, CancellationToken.None); Assert.Contains("requiresApproval", withheld); Assert.DoesNotContain("sourceRunId", withheld);
             var remainingWitness = TenantExperienceSourceProjection.RunEvidence(second.Run, null).Witness;
             var proposedSources = TenantExperienceReferences.Sources(observed.Checkpoint).Append(new(tenant, remainingWitness)).ToArray();
             var staleCheckpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([], executionState: new(TenantExperienceSourceReads: proposedSources)), 2, 100, 1000);

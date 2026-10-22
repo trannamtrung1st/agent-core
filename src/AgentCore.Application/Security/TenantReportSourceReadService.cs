@@ -6,30 +6,14 @@ namespace AgentCore.Application.Security;
 
 // Stateless proof checks. Requests, decisions, receipts and scheduling remain with their incumbent owners.
 public sealed class TenantReportSourceReadService(ITenantRuntimeStore runtime, ITenantRunStore runs, IIamStore security,
-    ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantRunConfigurationResolver configurations, IamAuthorizer iam, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null, TenantContinuityReadService? continuitySources = null)
+    ITenantApprovalStore approvals, ITenantApprovedOperationStore effects, TenantRunConfigurationResolver configurations, IamAuthorizer iam, TenantRunSourceAuthority? sourceAuthority = null)
 {
     private async ValueTask RequirePrivateSourcesAsync(AgentRun child, CancellationToken ct)
     {
-        var state = AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(child.Checkpoint);
-        if (state.TenantProfileSource is { } source)
+        if (TenantRunSourceAuthority.HasSources(child))
         {
-            if (profiles is null) throw new AccessDeniedException("profile_context_unavailable");
-            await profiles.RequireAsync(child, source, ct).ConfigureAwait(false);
-        }
-        if (TenantMemoryOperationReferences.Read(child.Checkpoint) is { Count: > 0 } learned)
-        {
-            if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
-            await memories.RequireAsync(child, learned, ct).ConfigureAwait(false);
-        }
-        if (TenantExperienceReferences.Sources(child.Checkpoint).Count > 0 || TenantExperienceReferences.Facts(child.Checkpoint).Count > 0)
-        {
-            if (continuitySources is null) throw new AccessDeniedException("experience_unavailable");
-            await continuitySources.RequireExperienceAsync(child, ct).ConfigureAwait(false);
-        }
-        if (TenantHistoricalReferences.Read(child.Checkpoint) is { Count: > 0 } historical)
-        {
-            if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");
-            await continuitySources.RequireAsync(child, historical, null, ct).ConfigureAwait(false);
+            if (sourceAuthority is null) throw new AccessDeniedException("source_context_unavailable");
+            await sourceAuthority.RequireAsync(child, ct).ConfigureAwait(false);
         }
     }
     public async ValueTask<(TenantBackgroundCompletion Source, TenantSecurityState State, TenantAgent Agent)> ResolveAsync(TenantBackgroundCompletion source, CancellationToken ct)

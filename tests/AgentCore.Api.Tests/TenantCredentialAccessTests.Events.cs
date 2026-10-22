@@ -226,7 +226,7 @@ public sealed partial class TenantCredentialAccessTests
             if (mode == "rotate")
             {
                 Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/webhooks/{source}/rotate", new { expectedRevision = await Revision(owner, tenant), expectedSourceRevision = 1 })).StatusCode);
-                await Assert.ThrowsAsync<SecurityConflictException>(() => factory.Services.GetRequiredService<TenantAutomationAdmissionTarget>().RequireAsync(request, CancellationToken.None).AsTask()); return;
+                await Assert.ThrowsAsync<SecurityConflictException>(() => factory.Services.GetRequiredService<TenantAutomationOperationTarget>().RequireAsync(request, CancellationToken.None).AsTask()); return;
             }
             using var decision = await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = "approve", actionHash = request.Operation.ActionHash, expectedRevision = await Revision(owner, tenant), expectedRequestRevision = request.Revision });
             Assert.True(decision.IsSuccessStatusCode, await decision.Content.ReadAsStringAsync()); await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();

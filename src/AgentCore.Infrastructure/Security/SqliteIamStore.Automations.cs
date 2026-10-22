@@ -24,10 +24,11 @@ public sealed partial class SqliteIamStore : ITenantAutomationStore
             .SingleOrDefaultAsync(o => o.TenantId == tenant && o.OccurrenceId == occurrence.ToString("D"), ct);
         return row is null ? null : TriggerStoreMapping.ToOccurrence(row);
     }
-    public async ValueTask<TenantAutomationPage> ListTenantAutomationsAsync(Guid tenant, Guid instance, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
+    public async ValueTask<TenantAutomationPage> ListTenantAutomationsAsync(Guid tenant, Guid instance, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default, AutomationStatus? status = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct); var query = OwnedAutomations(db, tenant).AsNoTracking().Where(a => a.AgentInstanceId == instance.ToString("D"));
         if (allowed is not null) { var ids = allowed.Select(id => id.ToString("D")).ToArray(); query = query.Where(a => ids.Contains(a.AutomationId)); }
+        if (status is { } selected) query = query.Where(a => a.Status == (int)selected);
         var total = await query.CountAsync(ct); var rows = await query.OrderBy(a => a.AutomationId).Skip(page * pageSize).Take(pageSize).ToArrayAsync(ct);
         return new(rows.Select(TriggerStoreMapping.ToRegistration).ToArray(), total, page, pageSize);
     }

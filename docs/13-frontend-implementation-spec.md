@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Exact Automation read presentation
+
+Chat and the shared Approval inspector label `inspect_automations` as “Inspect exact Automation metadata.” Reuse the existing saved-read presentation and plain-text rendering for labeled Automation, instruction, model, destination, trigger and source facts from the exact bounded observation. Confirmation explains current raw source/reviewer checks and the absence of mutation, execution or future read authority. A completed receipt displays “Read authorized”; refusal displays “Read not authorized.” Source changes require a fresh read, with ordinary cancellation/recovery available. The existing Ant Design layout and responsive inspector remain the presentation owners.
+
 ## Canonical core Chat and Activity client boundary
 
 `ChatApp` requires a `TenantContext`. Core HTTP helpers use only the canonical tenant Chat SDK and current Account cookie/CSRF identity. The client no longer issues, reads, stores, refreshes or sends an owner capability. Realtime connects only with exact tenant context and `AttachTenant`; text/Stop/Steer obtain current independent witnesses within the serialized dispatch fence. Conversation completion uses the canonical `/complete` HTTP command, with no Hub End fallback. A late stale Stop acknowledgement for a superseded response does not reconnect the replacement response.

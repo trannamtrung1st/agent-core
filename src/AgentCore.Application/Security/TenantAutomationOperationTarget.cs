@@ -11,9 +11,11 @@ namespace AgentCore.Application.Security;
 public sealed record TenantAutomationAdmissionState(TenantSecurityState State, TenantAgent Agent, ResolvedAgentRunConfiguration Configuration,
     Automation Automation, TriggerOccurrence Occurrence, TenantSession? Conversation = null);
 
-public sealed class TenantAutomationAdmissionTarget(IIamStore security, ITenantAutomationStore store, TenantRunConfigurationResolver configuration,
-    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null)
+public sealed class TenantAutomationOperationTarget(IIamStore security, ITenantAutomationStore store, TenantRunConfigurationResolver configuration,
+    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, TenantAutomationReadService? reads = null)
 {
+    internal ITenantAutomationStore Store => store;
+    internal TenantAutomationReadService Reads => reads ?? throw new AccessDeniedException("tenant_effect_unavailable");
     public async ValueTask<TenantAutomationAdmissionState> RequireAsync(TenantApprovalRequest request, CancellationToken ct)
     {
         var p = request.Operation.AutomationAdmission ?? throw new ArgumentException("Automation admission source required.");

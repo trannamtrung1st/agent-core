@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
-    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunProfileService? profileSources = null, TenantMemoryService? memorySources = null, TenantContinuityReadService? continuitySources = null) : IAgentRunAuthority, ITenantRunContext
+    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null) : IAgentRunAuthority, ITenantRunContext
 {
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, reason == "account_metadata_unavailable" ? "credentials.read" : "credentials.use", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
@@ -77,25 +77,10 @@ public sealed class TenantRunExecutionAuthority(TenantOperationAuthorizer operat
                         || AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryRead(after.Run.Checkpoint, out var attachmentMessages)
                             && attachmentMessages!.Any(TenantAttachmentRuntimeContextService.HasReadObservation))
                         throw new AccessDeniedException("attachment_context_unavailable");
-                    if (checkProfile && AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(after.Run.Checkpoint).TenantProfileSource is { } profile)
+                    if (TenantRunSourceAuthority.HasSources(after.Run, checkProfile))
                     {
-                        if (profileSources is null) throw new AccessDeniedException("profile_context_unavailable");
-                        await profileSources.RequireAsync(after.Run, profile, cancellationToken).ConfigureAwait(false);
-                    }
-                    if (TenantMemoryOperationReferences.Read(after.Run.Checkpoint) is { Count: > 0 } learned)
-                    {
-                        if (memorySources is null) throw new AccessDeniedException("memory_context_unavailable");
-                        await memorySources.RequireAsync(after.Run, learned, cancellationToken).ConfigureAwait(false);
-                    }
-                    if (TenantExperienceReferences.Sources(after.Run.Checkpoint).Count > 0 || TenantExperienceReferences.Facts(after.Run.Checkpoint).Count > 0)
-                    {
-                        if (continuitySources is null) throw new AccessDeniedException("experience_unavailable");
-                        await continuitySources.RequireExperienceAsync(after.Run, cancellationToken).ConfigureAwait(false);
-                    }
-                    if (TenantHistoricalReferences.Read(after.Run.Checkpoint) is { Count: > 0 } historical)
-                    {
-                        if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");
-                        await continuitySources.RequireAsync(after.Run, historical, null, cancellationToken).ConfigureAwait(false);
+                        if (sourceAuthority is null) throw new AccessDeniedException("source_context_unavailable");
+                        await sourceAuthority.RequireAsync(after.Run, cancellationToken, checkProfile).ConfigureAwait(false);
                     }
                     return current.Definition;
                 }

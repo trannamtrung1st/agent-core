@@ -173,7 +173,7 @@ public sealed partial class TenantCredentialAccessTests
             if (mode == "pending-off")
             {
                 await Configure(false);
-                await Assert.ThrowsAsync<AccessDeniedException>(() => factory.Services.GetRequiredService<TenantAutomationAdmissionTarget>().RequireAsync(request, CancellationToken.None).AsTask());
+                await Assert.ThrowsAsync<AccessDeniedException>(() => factory.Services.GetRequiredService<TenantAutomationOperationTarget>().RequireAsync(request, CancellationToken.None).AsTask());
                 Assert.Empty((await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(s.Tenant, null, null, 0, 100, instanceId: s.Instance)).Items); return;
             }
             using var consent = await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = "approve", actionHash = request.Operation.ActionHash,

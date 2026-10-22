@@ -14,11 +14,11 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
     { ct.ThrowIfCancellationRequested(); lock (_gate) lock (automationBacking.AdmissionGate) return ValueTask.FromResult(automationBacking.ReadTenantAutomation(tenant, automation)); }
     public ValueTask<TriggerOccurrence?> FindTenantOccurrenceAsync(Guid tenant, Guid occurrence, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) lock (automationBacking.AdmissionGate) return ValueTask.FromResult(automationBacking.ReadTenantOccurrence(tenant, occurrence)); }
-    public ValueTask<TenantAutomationPage> ListTenantAutomationsAsync(Guid tenant, Guid instance, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
+    public ValueTask<TenantAutomationPage> ListTenantAutomationsAsync(Guid tenant, Guid instance, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default, AutomationStatus? status = null)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (automationBacking.AdmissionGate) lock (webhookBacking.TenantGate) lock (sessionBacking.CoreEvents.TenantGate)
         {
-            var rows = automationBacking.TenantAutomations(tenant).Where(a => a.Owner.AgentInstanceId == instance && (allowed is null || allowed.Contains(a.AutomationId)))
+            var rows = automationBacking.TenantAutomations(tenant).Where(a => a.Owner.AgentInstanceId == instance && (status is null || a.Status == status) && (allowed is null || allowed.Contains(a.AutomationId)))
                 .OrderBy(a => a.AutomationId.ToString("D"), StringComparer.Ordinal).ToArray();
             return ValueTask.FromResult(new TenantAutomationPage(rows.Skip(page * pageSize).Take(pageSize).ToArray(), rows.Length, page, pageSize));
         }

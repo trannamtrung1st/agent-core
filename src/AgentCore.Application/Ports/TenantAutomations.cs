@@ -14,7 +14,7 @@ public sealed record TenantAutomationAdmissionResult(bool Created, TriggerOccurr
 public interface ITenantAutomationStore
 {
     ValueTask<Automation?> FindTenantAutomationAsync(Guid tenant, Guid automation, CancellationToken ct = default);
-    ValueTask<TenantAutomationPage> ListTenantAutomationsAsync(Guid tenant, Guid instance, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default);
+    ValueTask<TenantAutomationPage> ListTenantAutomationsAsync(Guid tenant, Guid instance, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default, AutomationStatus? status = null);
     ValueTask<IReadOnlyList<Automation>> ListDueTenantAutomationsAsync(DateTimeOffset at, int limit, CancellationToken ct = default, string? afterId = null);
     ValueTask<IReadOnlyList<Automation>> ListFutureTenantAutomationsAsync(Guid tenant, Guid instance, int limit, CancellationToken ct = default);
     ValueTask<bool> TrySaveTenantAutomationAsync(TenantSecurityState next, long expectedSecurityRevision, Automation proposed, long expectedAutomationRevision,

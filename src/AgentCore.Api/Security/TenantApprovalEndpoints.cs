@@ -46,6 +46,7 @@ public static class TenantApprovalEndpoints
         var r = view.Request; var op = r.Operation;
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
+            TenantOperationKind.AutomationRead => ("Inspect exact Automation metadata", "inspect_automations"),
             TenantOperationKind.AutomationAdmission => ("Admit exact Automation occurrence", "admit_automation_occurrence"),
             TenantOperationKind.ReportSourceRead => ("Read exact background report source", "inspect_background_report_source"),
             TenantOperationKind.CompletionRead => ("Read exact background result", "inspect_background_completion"),

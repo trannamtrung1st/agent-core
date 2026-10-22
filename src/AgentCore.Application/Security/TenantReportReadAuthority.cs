@@ -61,7 +61,7 @@ public static class TenantReportReadRules
     }
 }
 
-public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITenantRunStore runs, IIamStore security, IamAuthorizer iam, TenantReportSourceReadService? sourceReads = null, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null, TenantContinuityReadService? continuitySources = null)
+public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITenantRunStore runs, IIamStore security, IamAuthorizer iam, TenantReportSourceReadService? sourceReads = null, TenantRunSourceAuthority? sourceAuthority = null)
 {
     public async ValueTask RequireAsync(AgentRun report, CancellationToken ct)
     {
@@ -69,25 +69,10 @@ public sealed class TenantReportReadAuthority(ITenantRuntimeStore storage, ITena
         var tenant = report.Owner.TenantId!.Value;
         var source = await TenantReportReadRules.SourceAsync(report, (id, token) => runs.FindTenantRunAsync(tenant, id, token),
             (id, token) => storage.ReadTenantBackgroundCompletionAsync(report.Owner, id, token), ct).ConfigureAwait(false);
-        if (AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(source.Child.Checkpoint).TenantProfileSource is { } profile)
+        if (TenantRunSourceAuthority.HasSources(source.Child))
         {
-            if (profiles is null) throw new AccessDeniedException("profile_context_unavailable");
-            await profiles.RequireAsync(source.Child, profile, ct).ConfigureAwait(false);
-        }
-        if (TenantMemoryOperationReferences.Read(source.Child.Checkpoint) is { Count: > 0 } learned)
-        {
-            if (memories is null) throw new AccessDeniedException("memory_context_unavailable");
-            await memories.RequireAsync(source.Child, learned, ct).ConfigureAwait(false);
-        }
-        if (TenantExperienceReferences.Sources(source.Child.Checkpoint).Count > 0 || TenantExperienceReferences.Facts(source.Child.Checkpoint).Count > 0)
-        {
-            if (continuitySources is null) throw new AccessDeniedException("experience_unavailable");
-            await continuitySources.RequireExperienceAsync(source.Child, ct).ConfigureAwait(false);
-        }
-        if (TenantHistoricalReferences.Read(source.Child.Checkpoint) is { Count: > 0 } historical)
-        {
-            if (continuitySources is null) throw new AccessDeniedException("continuity_unavailable");
-            await continuitySources.RequireAsync(source.Child, historical, null, ct).ConfigureAwait(false);
+            if (sourceAuthority is null) throw new AccessDeniedException("source_context_unavailable");
+            await sourceAuthority.RequireAsync(source.Child, ct).ConfigureAwait(false);
         }
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         if (sourceReads is not null)

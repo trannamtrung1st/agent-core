@@ -24,6 +24,18 @@ The existing protected-operation tools and tenant Approval HTTP endpoints also s
 
 No new operation endpoint or authority-bearing model field is added. Approval successors remain in the same owned task and Session. Scope predicates still run before count/pagination and detail. Admitted Schedule/manual tasks and exact approval successors may use the existing `execution.wait` duration contract, with the same limits, checkpoint, cancellation and recovery semantics. Independent inbox/child controls remain withheld until their owning conversion is complete. [Independent wait evidence](reports/tenant-independent-wait-verification-2026-10-20.md) covers same-Run resumption, Stop, current authority and host recreation. Independent completion does not imply report delivery or recipient read access. [Independent-task evidence](reports/tenant-independent-task-verification-2026-10-20.md) separates runtime, storage, native-peer and UI evidence.
 
+## Model Automation read intent
+
+Tenant `automation.list` accepts optional `status`, `page` (0–10000) and `pageSize` (1–8, default 8). `automation.inspect` requires `automationId`, with optional `triggerCursor` (0–31) and bounded `coverageCursor`. Both reject extra/duplicate fields and return only the actual executing Agent's currently readable configuration. Inspect returns up to two trigger excerpts and four readable unreviewed event-source metadata items; source Run content requires separate inspection authority. Follow returned cursors for additional windows. Responses label bounded excerpts and untrusted configuration.
+
+A policy-required read withholds configuration and returns `requiresApproval`. The model may explicitly request the exact read through the existing authorization tool:
+
+```json
+{"operation":"inspect_automations","read":{"tool":"automation.list","arguments":{"status":"disabled","page":0,"pageSize":8}}}
+```
+
+The saved request is Review only. Its shared inspector displays the bounded exact observation; it cannot add raw read authority. Successful continuation returns `applied:false`, `replayAllowed:false`, and an `automationReadObservation` only while current source/reviewer checks pass. Refusal, source loss and output limits carry no source witness. This adds no HTTP mutation route or alternate scheduler.
+
 ## Tenant schedule Automation HTTP foundation
 
 The authenticated `/api/v2/tenants/{tenantId}/agents/{instanceId}/automations` family supports GET bounded list, POST create, GET/PUT/DELETE `/{automationId}`, and POST `/{automationId}/run`. It uses the original live human session, current `agents.read`, and independent Automation operation permission; updates, cancellation and manual invocation also require exact Automation read access. Qualified `automation` resource scopes identify an owned registration. Filtering precedes ordering, count and pagination. A registration from another Agent cannot be reached through the route.

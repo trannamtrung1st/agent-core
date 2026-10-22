@@ -95,4 +95,20 @@ public sealed class WorkCompletionRequestTests
         Assert.Equal(accepted, WorkCompletionRequest.TryParse(args,
             [new(ModelRole.Tool, payload, ToolCallId: "source-consent", Name: ToolCatalog.RequestAuthorization)], out _, out _, out _));
     }
+
+    [Theory]
+    [InlineData("completed", true, false, false, true)]
+    [InlineData("denied", false, false, false, true)]
+    [InlineData("completed", false, false, false, false)]
+    [InlineData("denied", true, false, false, false)]
+    [InlineData("completed", true, true, false, false)]
+    [InlineData("completed", true, false, true, false)]
+    [InlineData("unknown", false, false, false, false)]
+    public void NoAction_accepts_exact_Automation_read_receipts_without_treating_them_as_mutations(string outcome, bool readAuthorized, bool applied, bool replayAllowed, bool accepted)
+    {
+        var args = JsonSerializer.SerializeToElement(new { outcome = "NoAction", summary = "Inspection found no work to perform", attentionRequired = false });
+        var payload = JsonSerializer.Serialize(new { outcome, applied, readAuthorized, replayAllowed, requestId = Guid.NewGuid(), operationId = Guid.NewGuid(), automationReadObservation = (object?)null });
+        Assert.Equal(accepted, WorkCompletionRequest.TryParse(args,
+            [new(ModelRole.Tool, payload, ToolCallId: "read-consent", Name: ToolCatalog.RequestAuthorization)], out _, out _, out _));
+    }
 }

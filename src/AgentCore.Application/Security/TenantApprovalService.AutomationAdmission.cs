@@ -32,7 +32,7 @@ public sealed partial class TenantApprovalService
 
     private async ValueTask<bool> ProcessAutomationAdmissionAsync(ApprovalProcessedSignal signal, TenantApprovalRequest request, CancellationToken ct)
     {
-        var store = automationStore ?? throw new AccessDeniedException("tenant_effect_unavailable");
+        var store = automationAdmissions?.Store ?? throw new AccessDeniedException("tenant_effect_unavailable");
         var state = await security.ReadTenantAsync(request.TenantId, ct).ConfigureAwait(false); if (state is null) return false;
         TenantAutomationAdmission? admission = null; string? refusal = null;
         if (request.Status == TenantApprovalStatus.Approved)
@@ -58,7 +58,7 @@ public sealed partial class TenantApprovalService
     {
         var r = view.Request; var p = r.Operation.AutomationAdmission!; var at = time.GetUtcNow();
         var target = await agents.FindTenantAgentAsync(r.TenantId, r.Operation.InstanceId, ct).ConfigureAwait(false);
-        var occurrence = automationStore is null ? null : await automationStore.FindTenantOccurrenceAsync(r.TenantId, p.Occurrence.OccurrenceId, ct).ConfigureAwait(false);
+        var occurrence = automationAdmissions?.Store is null ? null : await automationAdmissions!.Store.FindTenantOccurrenceAsync(r.TenantId, p.Occurrence.OccurrenceId, ct).ConfigureAwait(false);
         var cancel = r.Status == TenantApprovalStatus.Pending && at < r.ExpiresAt
             && (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("approvals.cancel"), AccessScope.ForResource(r.TenantId, "approval", r.RequestId.ToString("D")), ct).ConfigureAwait(false)).Allowed;
         string? unavailable = r.Status != TenantApprovalStatus.Pending ? "request_terminal" : at >= r.ExpiresAt ? "approval_expired" : null;
