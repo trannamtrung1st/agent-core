@@ -89,7 +89,7 @@ public static class TenantAutomationRules
             _ => throw new ArgumentException("Use a supported exact schedule.")
         };
     }
-    public static void Configuration(Automation value, AgentDefinition definition, DateTimeOffset at, bool validateSchedulePolicy = true, TriggerSourceKind? sourceKind = null)
+    public static void Configuration(Automation value, AgentDefinition definition, DateTimeOffset at, bool validateSchedulePolicy = true, TriggerSourceKind? sourceKind = null, Automation? current = null)
     {
         if (value.Status == AutomationStatus.Active && !value.Triggers.Any(t => t.Enabled))
             throw new ArgumentException("Enable at least one subscription before automatic occurrences.");
@@ -107,7 +107,15 @@ public static class TenantAutomationRules
         {
             var policy = definition.TriggerPolicy ?? throw new AccessDeniedException("scheduling_unavailable");
             if (!TriggerDurableSchedulingPolicy.AllowsScheduledOccurrence(definition)) throw new AccessDeniedException("scheduling_unavailable");
-            try { ScheduleDefinitionPolicy.Validate(((ScheduleTrigger)value.Trigger!).Schedule, policy, at, value.Instructions); }
+            try
+            {
+                var timing = ((ScheduleTrigger)value.Trigger!).Schedule;
+                if (current?.Status == AutomationStatus.Active && current.IsSchedule && current.AutomationId == value.AutomationId
+                    && current.Owner == value.Owner && current.NextOccurrenceAtUtc == value.NextOccurrenceAtUtc
+                    && current.Triggers[0].Configuration.SemanticEquals(value.Trigger!))
+                    ScheduleDefinitionPolicy.ValidatePreserved(timing, policy, at, value.Instructions);
+                else ScheduleDefinitionPolicy.Validate(timing, policy, at, value.Instructions);
+            }
             catch (TriggerScheduleCommandException e) { throw new ArgumentException(e.Message); }
         }
     }

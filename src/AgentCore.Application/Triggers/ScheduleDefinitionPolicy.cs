@@ -7,13 +7,19 @@ namespace AgentCore.Application.Triggers;
 public static class ScheduleDefinitionPolicy
 {
     public static void Validate(TriggerSchedule schedule, TriggerPolicy policy, DateTimeOffset now, string intent = "")
+        => Validate(schedule, policy, now, intent, preserveDueOneShot: false);
+
+    internal static void ValidatePreserved(TriggerSchedule schedule, TriggerPolicy policy, DateTimeOffset now, string intent)
+        => Validate(schedule, policy, now, intent, preserveDueOneShot: true);
+
+    private static void Validate(TriggerSchedule schedule, TriggerPolicy policy, DateTimeOffset now, string intent, bool preserveDueOneShot)
     {
         if (!policy.Enabled) throw new ArgumentException("Scheduling is disabled for this agent.");
         switch (schedule)
         {
             case OneShotSchedule once:
                 if (!policy.AllowOneShot) throw new ArgumentException("One-shot schedules are not enabled.");
-                if (once.AtUtc <= now || once.AtUtc > now.AddDays(policy.OneShotHorizonDays))
+                if (!preserveDueOneShot && once.AtUtc <= now || once.AtUtc > now.AddDays(policy.OneShotHorizonDays))
                     throw new ArgumentException("One-shot time must be in the future and inside the scheduling horizon.");
                 break;
             case DailySchedule daily:

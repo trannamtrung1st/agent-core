@@ -53,21 +53,8 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         var (agent, policy) = await configurations.CurrentPolicyAsync(tenant, instance, ct);
         if (agent.Instance.Revision != instanceRevision || state.Tenant.Revision != securityRevision || (current?.Revision ?? 0) != automationRevision) throw new SecurityConflictException("stale_revision");
         if (current is not null) TenantAutomationRules.Owner(current, agent);
-        if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
-        if (current?.Status is AutomationStatus.Cancelled or AutomationStatus.Completed or AutomationStatus.Expired) throw new ArgumentException("A terminal Automation cannot be re-authored.");
-        if (change.Enabled || current is null || current.ModelOverrideCatalogKey != change.ModelKey || current.ModelOverrideReasoningEffort != change.ReasoningEffort)
-            ExecutionModelPolicy.RequireSelectable(models, change.ModelKey, change.ReasoningEffort);
         var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
-        var children = Children(current, change);
-        var isSchedule = children.Count == 1 && children[0].Configuration is ScheduleTrigger;
-        var proposed = new Automation(current?.AutomationId ?? ids.NewId(), TriggerOwner.ForTenant(tenant, instance, agent.PrincipalId),
-            change.Enabled ? AutomationStatus.Active : AutomationStatus.Disabled, change.Instructions,
-            children,
-            isSchedule ? change.Enabled ? TriggerScheduleCalculator.InitialNext(((ScheduleTrigger)children[0].Configuration).Schedule, at) : current?.IsSchedule == true ? current.NextOccurrenceAtUtc : null : null, current?.ExpiresAtUtc, current?.OccurrenceCount ?? 0,
-            automationRevision + 1, children.Max(t => t.Revision),
-            TenantAutomationPresetRules.Provenance(current, change, at), null, change.ModelKey, change.ReasoningEffort,
-            change.RequiresVision, change.Name, change.TargetSessionId is { } targetId ? AutomationExecutionTarget.Existing(targetId) : AutomationExecutionTarget.Background, change.ReportToSessionId is { } destination ? AutomationCompletionDelivery.ToSession(destination) : AutomationCompletionDelivery.None, change.RequiresTools);
-        TenantAutomationRules.Configuration(proposed, policy, at);
+        var proposed = TenantAutomationAuthoring.Build(agent, policy, current, change, TenantAutomationPresetRules.Provenance(current, change, at), at, models, ids, filters);
         await TenantAutomationRules.HumanSourcesAsync(state, human.PrincipalId, proposed, iam, ct);
         await TenantCompletionDestinationRules.AuthoringAsync(state, human.PrincipalId, proposed,
             proposed.CompletionDelivery.SessionId is { } reportTo && sessions is not null ? await sessions.FindTenantSessionAsync(tenant, reportTo, ct) : null, iam, ct);

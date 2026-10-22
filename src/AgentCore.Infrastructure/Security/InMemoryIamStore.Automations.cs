@@ -53,7 +53,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationStore
             var policy = InstanceSettingsResolver.Resolve(TenantAgentDefinitionBaseline(agent), agent.Instance.SettingsOverrides);
             if (current?.Status is AutomationStatus.Completed or AutomationStatus.Expired && proposed.Status != AutomationStatus.Cancelled) throw new AccessDeniedException("automation_terminal");
             TenantAutomationPresetRules.ValidateNew(current, proposed);
-            AutomationRules.ValidateSave(current, proposed, expectedAutomationRevision); TenantAutomationRules.Configuration(proposed, policy, audit.At);
+            TenantAutomationAuthoring.ValidateTransition(current, proposed, expectedAutomationRevision, permission, audit.At); TenantAutomationRules.Configuration(proposed, policy, audit.At, current: current);
             RequireAutomationHuman(before, human.PrincipalId, agent, proposed.AutomationId, permission, current is null, ct);
             if (permission is "automations.create" or "automations.update") TenantAutomationRules.HumanSourcesAsync(before, human.PrincipalId, proposed, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
             if (permission is "automations.create" or "automations.update")
