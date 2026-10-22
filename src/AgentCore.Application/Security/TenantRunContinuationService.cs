@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantCompletionReadService? completionReads = null, TenantMemoryOperationService? memoryOperations = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantAutomationOperationTarget? automationTargets = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantCompletionReadService? completionReads = null, TenantMemoryOperationService? memoryOperations = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantAutomationOperationTarget? automationTargets = null, TenantManagementReadService? managementReads = null)
 {
     public ValueTask<List<ModelMessage>> RehydrateBrowserImagesAsync(AgentRun run, List<ModelMessage> messages, bool vision, CancellationToken ct) =>
         browserEffects is null ? ValueTask.FromResult(messages) : browserEffects.RehydrateCapturesAsync(run, messages, vision, ct);
@@ -133,6 +133,12 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                         : await sandboxResults.ReadResultAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ct).ConfigureAwait(false)
                     : null;
                 string? inspection = null; string? readUnavailable = null;
+                if (request.Operation.ManagementRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
+                {
+                    try { inspection = await (managementReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
+                    catch (AccessDeniedException error) { readUnavailable = error.ReasonCode; }
+                    catch (SecurityConflictException error) { readUnavailable = error.ReasonCode; }
+                }
                 if (request.Operation.AutomationRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
                 {
                     try { inspection = await (automationTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads.InspectApprovedAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
@@ -236,6 +242,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
                         request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched", receipt)
                     : request.Operation.AutomationMutation is not null ? TenantAutomationMutationContinuationProjection.Complete(paused, pending[0], request, outcome)
+                    : request.Operation.ManagementRead is not null ? TenantManagementReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.AutomationRead is not null ? TenantAutomationReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ExperienceOperation is not null ? TenantExperienceContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ContinuityRead is not null ? TenantContinuityContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)

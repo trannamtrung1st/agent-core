@@ -2774,6 +2774,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var historicalSources = TenantHistoricalReferences.Read(checkpoint);
         var experienceSourceReads = TenantExperienceReferences.Sources(checkpoint);
         var experienceFacts = TenantExperienceReferences.Facts(checkpoint);
+        var managementReadSources = TenantManagementReadReferences.Read(checkpoint);
         var automationReadSources = TenantAutomationReadReferences.Read(checkpoint);
         if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
             throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
@@ -2840,11 +2841,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             historicalSources = TenantHistoricalReferences.Merge(historicalSources, TenantHistoricalReferences.Read(messages));
             experienceSourceReads = TenantExperienceReferences.Merge(experienceSourceReads, TenantExperienceReferences.Sources(messages));
             experienceFacts = TenantExperienceReferences.Merge(experienceFacts, TenantExperienceReferences.Facts(messages));
+            managementReadSources = TenantManagementReadReferences.Merge(managementReadSources, TenantManagementReadReferences.Read(messages));
             automationReadSources = TenantAutomationReadReferences.Merge(automationReadSources, TenantAutomationReadReferences.Read(messages));
             return new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
             finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery,
             attachmentSources.Count == 0 ? null : attachmentSources, profileSource, memorySources.Count == 0 ? null : memorySources,
-            historicalSources.Count == 0 ? null : historicalSources, experienceSourceReads.Count == 0 ? null : experienceSourceReads, experienceFacts.Count == 0 ? null : experienceFacts, automationReadSources.Count == 0 ? null : automationReadSources);
+            historicalSources.Count == 0 ? null : historicalSources, experienceSourceReads.Count == 0 ? null : experienceSourceReads, experienceFacts.Count == 0 ? null : experienceFacts, automationReadSources.Count == 0 ? null : automationReadSources, managementReadSources.Count == 0 ? null : managementReadSources);
         }
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
@@ -3058,7 +3060,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
-                if (profileSource is not null || memorySources.Count > 0 || historicalSources.Count > 0 || experienceSourceReads.Count > 0 || experienceFacts.Count > 0 || automationReadSources.Count > 0)
+                if (profileSource is not null || memorySources.Count > 0 || historicalSources.Count > 0 || experienceSourceReads.Count > 0 || experienceFacts.Count > 0 || automationReadSources.Count > 0 || managementReadSources.Count > 0)
                     await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                         overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId

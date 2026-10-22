@@ -879,7 +879,7 @@ it('presents exact Automation metadata as read consent and reports authorization
   view({ ...request, kind: 'review', summary: 'Inspect exact Automation metadata', preparedAction: { ...request.preparedAction, operation: 'inspect_automations' },
     review: { ...request.review, changes: [{ field: 'Exact Automation observation', before: null, after: 'Saved <script>literal</script> configuration', beforeAvailable: false, afterAvailable: true, restoresDefault: false }] } });
   const dialog = await screen.findByRole('dialog'); const read = await within(dialog).findByRole('region', { name: 'Exact saved read' });
-  expect(within(read).getByText('Exact Automation observation')).toBeVisible(); expect(within(read).getByText('Saved <script>literal</script> configuration')).toBeVisible(); expect(read.querySelector('script')).toBeNull();
+  expect(within(read).getByText('Exact Automation observation')).toBeVisible(); expect(within(read).getByText('Saved <script>literal</script> configuration')).toBeVisible(); expect(read.querySelector('script')).toBeNull(); expect(within(read).queryByText('Saved field', { exact: true })).not.toBeInTheDocument();
   await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled());
   fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' })); const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
   await waitFor(() => expect(within(confirm).getByText(/This grants no Automation mutation, execution or future read authority/)).toBeVisible());
@@ -908,4 +908,16 @@ it('reviews manual Automation admission without presenting approval as completed
   await waitFor(() => expect(within(confirmation).getByText(/Admission does not confirm execution completion/)).toBeVisible());
   expect(within(confirmation).getByText(/future tools require their own authority/)).toBeVisible();
   fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});
+
+it('presents exact management settings as read consent without implying configuration changes', async () => {
+  view({ ...request, kind: 'review', summary: 'Inspect exact Agent configuration', preparedAction: { ...request.preparedAction, operation: 'inspect_management' },
+    review: { ...request.review, changes: [{ field: 'language', before: null, after: 'Saved <script>literal</script> language', beforeAvailable: false, afterAvailable: true, restoresDefault: false }] } });
+  const dialog = await screen.findByRole('dialog'); const read = await within(dialog).findByRole('region', { name: 'Exact saved read' });
+  expect(within(read).getByText('Language')).toBeVisible(); expect(within(read).getByText('Saved <script>literal</script> language')).toBeVisible(); expect(read.querySelector('script')).toBeNull(); expect(within(read).queryByText('Saved field', { exact: true })).not.toBeInTheDocument();
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled());
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirm = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirm).getByText(/This grants no write, raw permission or future read/)).toBeVisible());
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(0);
 });

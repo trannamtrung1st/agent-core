@@ -22,7 +22,8 @@ public sealed record ToolLoopExecutionState(RunPhase Phase = RunPhase.Work, stri
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantHistoricalSource>? TenantHistoricalSources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantExperienceSourceReference>? TenantExperienceSourceReads = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TenantExperienceFactSource>? TenantExperienceSources = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AgentCore.Domain.Security.TenantAutomationReadReference>? TenantAutomationReadSources = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AgentCore.Domain.Security.TenantAutomationReadReference>? TenantAutomationReadSources = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AgentCore.Domain.Security.TenantManagementReadReference>? TenantManagementReadSources = null);
 
 public static class AgentRunToolCallCheckpoint
 {

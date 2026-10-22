@@ -130,6 +130,15 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
         }
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementRead is { } managementRead)
+        {
+            try {
+                var observed = await ObserveManagementRead(db, run, managementRead.ToolName, managementRead.ArgumentsJson, managementRead, null, ct).ConfigureAwait(false);
+                await TenantManagementReadService.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+        }
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AutomationRead is { } automationRead)
         {
             try {

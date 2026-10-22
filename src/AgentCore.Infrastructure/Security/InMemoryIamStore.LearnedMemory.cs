@@ -152,6 +152,7 @@ public sealed partial class InMemoryIamStore : ITenantLearnedMemoryStore
     }
     private void RequireStoredMemorySources(AgentRun run, CancellationToken ct)
     {
+        RequireManagementReadSources(run, TenantManagementReadReferences.Read(run.Checkpoint), ct);
         RequireAutomationReadSources(run, TenantAutomationReadReferences.Read(run.Checkpoint), ct);
         RequireExperienceSources(run, TenantExperienceReferences.Sources(run.Checkpoint), TenantExperienceReferences.Facts(run.Checkpoint), ct);
         if (TenantHistoricalReferences.Read(run.Checkpoint) is { Count: > 0 } history) RequireHistoricalSources(run, history, ct);
@@ -159,6 +160,7 @@ public sealed partial class InMemoryIamStore : ITenantLearnedMemoryStore
     }
     private void RequireMemoryCheckpoint(AgentRun run, AgentRunCheckpoint checkpoint, CancellationToken ct)
     {
+        RequireManagementReadCheckpoint(run, checkpoint, ct);
         RequireAutomationReadCheckpoint(run, checkpoint, ct);
         RequireExperienceCheckpoint(run, checkpoint, ct);
         var oldHistory = TenantHistoricalReferences.Read(run.Checkpoint); var nextHistory = TenantHistoricalReferences.Read(checkpoint);

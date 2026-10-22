@@ -1,5 +1,15 @@
 # HTTP API and Realtime Protocol
 
+## Tenant model configuration read consent
+
+Canonical conversational model reads currently support `management.inspect({})`, `settings.list({})`, `settings.inspect({section})` and `automation.preferences.inspect({})`, lazily discovered through the incumbent `capabilities.load`. Strict arguments select only the executing Agent; settings require one existing exact section. Both admission/current delegated policy and current raw Agent read remain required. A required Review withholds values and accepts this exact existing authorization-tool intent:
+
+```json
+{"operation":"inspect_management","read":{"tool":"settings.inspect","arguments":{"section":"conversationPolicy"}}}
+```
+
+HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. This module does not enable other registered Harness/configuration tools. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
+
 ## Owner credential contract retirement
 
 Contracts no longer defines `OwnerCapabilityHeaders`, `OwnerCapabilityResponse` or the unscoped `AttachPayload`/`ownerCapability` field. No issuance/validation/store API remains. Canonical `TenantAttachPayload` and authenticated tenant HTTP/Hub commands retain their existing current-user checks. Old headers and RPC payloads are adversarial inputs only; they never select an identity or restore a route. HTTP route inventory and actual JSON/MessagePack refusal are requalified after removal. [Evidence](reports/owner-credential-retirement-verification-2026-10-21.md).

@@ -47,6 +47,7 @@ public static class TenantApprovalEndpoints
         var p = op.Persona; var pref = op.Preferences; var review = view.Review;
         var (summary, operation) = op.Kind switch {
             TenantOperationKind.AutomationMutation => op.AutomationMutation!.Invocation is not null ? ("Admit exact Automation occurrence", "invoke_automation") : ("Review exact Automation change", "mutate_automation"),
+            TenantOperationKind.ManagementRead => ("Inspect exact Agent configuration", "inspect_management"),
             TenantOperationKind.AutomationRead => ("Inspect exact Automation metadata", "inspect_automations"),
             TenantOperationKind.AutomationAdmission => ("Admit exact Automation occurrence", "admit_automation_occurrence"),
             TenantOperationKind.ReportSourceRead => ("Read exact background report source", "inspect_background_report_source"),

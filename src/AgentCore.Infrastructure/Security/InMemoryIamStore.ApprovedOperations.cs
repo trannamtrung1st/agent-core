@@ -115,6 +115,15 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
             }
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementRead is { } managementRead)
+            {
+                try {
+                    var observed = ObserveManagementRead(run, managementRead.ToolName, managementRead.ArgumentsJson, managementRead, null, ct);
+                    TenantManagementReadService.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+                } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AutomationRead is { } automationRead)
             {
                 try {

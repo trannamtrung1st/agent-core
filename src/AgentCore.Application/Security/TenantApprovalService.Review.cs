@@ -109,6 +109,13 @@ public sealed partial class TenantApprovalService
                     independent = await AutomationMutationIndependentAsync(r, observed.Source, ct).ConfigureAwait(false);
                     await TenantAutomationMutationRules.ReviewerAsync(r, observed.Source, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
+                else if (op.ManagementRead is { } managementRead)
+                {
+                    var service = (managementReads ?? throw new AccessDeniedException("tenant_effect_unavailable"));
+                    var observed = await service.PrepareAsync(new(r.TenantId, run.AgentRunId), null, managementRead.ToolName, managementRead.ArgumentsJson, ct, managementRead).ConfigureAwait(false);
+                    independent = await service.IndependentAsync(r, observed, authorizer, ct).ConfigureAwait(false);
+                    await TenantManagementReadService.ReviewerAsync(r, observed, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
                 else if (op.AutomationRead is { } automationRead)
                 {
                     var service = (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads;
@@ -228,6 +235,11 @@ public sealed partial class TenantApprovalService
         var execution = view.OperationResult is not null ? "recorded" : r.Status == TenantApprovalStatus.Pending ? "waitingDecision"
             : r.Status != TenantApprovalStatus.Approved ? "notAuthorized" : "unrecorded";
         var changes = Changes(op, snapshot);
+        if (op.ManagementRead is not null)
+        {
+            var observed = await (managementReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
+            changes = [..changes, ..ManagementReadObservationChanges(observed)];
+        }
         if (op.AutomationRead is not null)
         {
             var observed = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads.InspectionAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
@@ -276,6 +288,8 @@ public sealed partial class TenantApprovalService
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),
                 new("workspaceMutationPartialEffects", null, "Copies and ordered batches are coarse filesystem operations. Earlier or partial effects can remain on failure; there is no atomic rollback and uncertain work must not be repeated.", false)];
         if (op.AutomationMutation is { } automationMutation) return AutomationMutationChanges(automationMutation);
+        if (op.ManagementRead is { } managementRead) return [new("Management observation", null, managementRead.ToolName, false), new("Exact selection", null, managementRead.ArgumentsJson, false),
+            new("Authorization", null, "Read this saved bounded configuration snapshot. No write, raw permission or future read is granted.", false)];
         if (op.AutomationRead is { } automationRead) return [new("Automation read", null, automationRead.ToolName == AgentCore.Application.Tools.ToolCatalog.AutomationList ? "List readable Automations" : "Inspect selected Automation", false), new("Exact query", null, automationRead.ArgumentsJson, false),
             new("Read scope", null, "Review only this saved bounded observation in this task. No Automation write, source Run content, role or future execution authority is granted.", false)];
         if (op.ExperienceOperation is { } experience) return [new("Experience operation", null, experience.ToolName, false),

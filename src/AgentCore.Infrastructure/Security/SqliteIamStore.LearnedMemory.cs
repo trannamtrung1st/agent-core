@@ -158,6 +158,7 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
     }
     private async Task RequireStoredMemorySources(AgentCoreDbContext db, AgentRun run, CancellationToken ct)
     {
+        await RequireManagementReadSources(db, run, TenantManagementReadReferences.Read(run.Checkpoint), ct).ConfigureAwait(false);
         await RequireAutomationReadSources(db, run, TenantAutomationReadReferences.Read(run.Checkpoint), ct).ConfigureAwait(false);
         await RequireExperienceSources(db, run, TenantExperienceReferences.Sources(run.Checkpoint), TenantExperienceReferences.Facts(run.Checkpoint), ct).ConfigureAwait(false);
         if (TenantHistoricalReferences.Read(run.Checkpoint) is { Count: > 0 } history) await RequireHistoricalSources(db, run, history, ct).ConfigureAwait(false);
@@ -166,6 +167,7 @@ public sealed partial class SqliteIamStore : ITenantLearnedMemoryStore
     }
     private async Task RequireMemoryCheckpoint(AgentCoreDbContext db, AgentRun run, AgentRunCheckpoint checkpoint, CancellationToken ct)
     {
+        await RequireManagementReadCheckpoint(db, run, checkpoint, ct).ConfigureAwait(false);
         await RequireAutomationReadCheckpoint(db, run, checkpoint, ct).ConfigureAwait(false);
         await RequireExperienceCheckpoint(db, run, checkpoint, ct).ConfigureAwait(false);
         var oldHistory = TenantHistoricalReferences.Read(run.Checkpoint); var nextHistory = TenantHistoricalReferences.Read(checkpoint);
