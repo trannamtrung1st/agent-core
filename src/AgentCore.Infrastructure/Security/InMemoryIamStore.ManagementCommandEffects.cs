@@ -22,7 +22,7 @@ public sealed partial class InMemoryIamStore
             if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human) ValidateAgentActor(before, human);
             var at = (clock ?? TimeProvider.System).GetUtcNow();
             TenantManagementDirectRules.Transaction(next, expectedSecurityRevision, reader, commit, audit, at);
-            if (value.Skill is not null) RequireManagementSkillSources(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
+            if (value.Skill is not null) RequireManagementSkillSources(reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct);
             TenantManagementDirectRules.AuthorityAsync(reader, value, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             var previous = RootApproval(before.Tenant.TenantId, run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, commit.Operation.OperationFingerprint);
             if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous));
@@ -30,10 +30,9 @@ public sealed partial class InMemoryIamStore
             TenantAgentConfigurationChange change;
             if (value.Resource is { } resource)
             {
-                var context = ManagementResourceContext(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
+                var context = ManagementResourceContext(reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct);
                 if (System.Text.Json.JsonSerializer.Serialize(context.Material) != System.Text.Json.JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
-                var binding = resource.InstanceResource ?? throw new AccessDeniedException("resource_unavailable");
-                _ = AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitions.ResourceStore!.TenantContent,
+                if (resource.InstanceResource is { } binding) _ = AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitions.ResourceStore!.TenantContent,
                     binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).GetAwaiter().GetResult();
                 change = TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published);
             }
@@ -50,7 +49,7 @@ public sealed partial class InMemoryIamStore
             if (_operationReceipts.ContainsKey(receipt.OperationId)) throw new SecurityConflictException("identity_conflict");
             TenantLocalEffectRules.RequireDirectRun(run, commit.Generation, (clock ?? TimeProvider.System).GetUtcNow());
             ct.ThrowIfCancellationRequested();
-            if (change.Resource is { } resourceChange) instances.MutateTenantResourcesAsync(resourceChange, at, ct).GetAwaiter().GetResult();
+            if (change.Resource is { } resourceChange) instances.MutateTenantResourcesAsync(resourceChange with { HarnessManagement = value.Harness is null ? null : candidate.HarnessManagement }, at, ct).GetAwaiter().GetResult();
             else if (change.Skill is { } skill) instances.MutateTenantSkillsAsync(skill, at, ct).GetAwaiter().GetResult();
             else _ = instances.ChangeTenantConfigurationAsync(new(run.AgentInstanceId, reader.Agent.Instance.Revision, HarnessManagement: change.HarnessManagement), at, ct).Result;
             foreach (var fact in AgentCore.Infrastructure.Persistence.CoreEventPersistence.Instance(reader.Agent.Instance, candidate,

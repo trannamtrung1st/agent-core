@@ -1,6 +1,6 @@
 # Implementation Plan
 
-The IAM cutover remains active. Current scoped evidence and remaining integration gates belong to the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). Canonical model Automation inspection, authoring and exact manual invocation have scoped qualification. Finish Harness/Self-Management, review autonomous approval defaults, consolidate internal/schema ownership safely, and complete proposal-wide security, isolation, functional and UI acceptance. Historical module reports below qualify their original versions; earlier “pending” statements do not override a verified successor.
+The IAM cutover remains active. Current scoped evidence and remaining integration gates belong to the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). Canonical model Automation inspection, authoring and exact manual invocation have scoped qualification. Canonical contextual Harness content commands now have scoped qualification in that ledger. Finish typed remedies, binding proposals and fresh configuration continuation, review autonomous approval defaults, consolidate internal/schema ownership safely, and complete proposal-wide security, isolation, functional and UI acceptance. Historical module reports below qualify their original versions; earlier “pending” statements do not override a verified successor.
 
 ## Tenant workspace read Review checkpoint — 2026-10-19
 

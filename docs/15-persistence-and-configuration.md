@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Canonical contextual Harness persistence
+
+`20261023120000_TenantHarnessCommandAuthoring` extends the existing closed management plan with the original Harness command and factual partial assessment. Existing settings/Resource state and Instance-local `HarnessManagementState.InstanceChanges` commit in the incumbent transaction. Optional Resource receipt `HarnessChangeId` and bounded `Before` metadata contain no content bytes; old receipts omit both fields unchanged. No new table or effect owner is introduced.
+
+The migration freezes the actual preceding table/index/trigger definitions and verifies their source checksum. It preserves all 124 predecessor guards (123 byte-identical, the Resource receipt insertion guard refined for factual Harness knowledge effects) and adds three guards binding the closed original command to its derived plan, the actual committed assessment and immutable receipt fields. The current schema therefore has 127 guards. Existing immutable request/receipt updates remain protected. Safe Down restores the exact prior schema/indexes/124 guards; Down refuses retained Harness requests or receipts instead of discarding their evidence. Disposable SQLite upgrade/down/up, foreign-key and actual application-host recreation evidence belongs to the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md#canonical-contextual-harness-commands).
+
 ## Owner credential store retirement
 
 The active DbContext, current model snapshot and registered stores contain no OwnerCapability entity/store. Migration `20261021102840_RetireOwnerCapabilityStore` drops only `OwnerCapabilities`; no Account, tenant, role, Run, conversation, receipt, resource or credential table is rewritten. Its historical Down recreates an empty table and cannot recover dropped credentials. No runtime issuer/validator is restored by that DDL.

@@ -11,7 +11,7 @@ namespace AgentCore.Application.Security;
 
 public static class TenantManagementResourceRules
 {
-    public static bool AutoApplies(TenantManagementReader reader, PreparedManagementMutation value) => value.ToolName == "resources.upsert" && value.Resource is { TargetKey: null, CreateScope: true }
+    public static bool AutoApplies(TenantManagementReader reader, PreparedManagementMutation value) => value.Harness is null && value.ToolName == "resources.upsert" && value.Resource is { TargetKey: null, CreateScope: true }
         && reader.Run.Admission.Configuration!.Definition.SelfManagement?.AutoApplies(ManagementAutoApply.TextResources) == true
         && ManagementPolicyResolver.Resolve(reader.Baseline, reader.Agent.Instance).AutoApplies(ManagementAutoApply.TextResources);
     public static bool IsTool(string tool) => tool is "resources.upsert" or "resources.copy" or "resources.set_enabled" or "resources.delete";
@@ -32,6 +32,7 @@ public static class TenantManagementResourceRules
             || plan.TargetKey != (args.Value.TryGetProperty("key", out var selected) ? selected.GetString() : null)
             || value.Settings is not null || value.Management is not null || value.AutomationChanges is not null || value.Skill is not null
             || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null
+            || value.Harness is { } harness && harness.Changed != plan.Changed
             || (args.Tool == "resources.copy") != (plan.CopiedSource is not null) || (args.Tool == "resources.upsert") != (plan.Source is not null)
             || plan.Changed != (new[] { plan.DefinitionState is not null, plan.InstanceResource is not null, plan.DeleteResourceId is not null }.Count(b => b) == 1)
             || !plan.Changed && (plan.DefinitionState is not null || plan.InstanceResource is not null || plan.DeleteResourceId is not null
@@ -70,7 +71,7 @@ public static class TenantManagementResourceRules
     public static TenantManagementResourceReceipt Evidence(PreparedManagementMutation value, long beforeRevision)
     {
         var plan = value.Resource ?? throw new ArgumentException("Use a Resource effect.");
-        return new(value.ToolName, beforeRevision, value.BeforeStableHash, value.AfterStableHash, plan.BeforeSources, plan.AfterSources, plan.Result);
+        return new(value.ToolName, beforeRevision, value.BeforeStableHash, value.AfterStableHash, plan.BeforeSources, plan.AfterSources, plan.Result, value.Harness?.Assessment.OperationId, value.Harness is null ? null : plan.Before);
     }
     public static TenantManagementResourceReceipt ReadEvidence(string json)
     {
@@ -82,6 +83,13 @@ public static class TenantManagementResourceRules
             || value.Result is null || value.Result.Deleted != (value.ToolName == "resources.delete")) throw new ArgumentException("Use exact Resource effect evidence.");
         var parsed = AgentInstanceResourceService.ParseKey(value.Result.Key);
         if (value.Result.Revision < (parsed.Origin == "definition" ? 0 : 1)) throw new ArgumentException("Use an exact Resource revision.");
+        if (value.HarnessChangeId is { } harnessId && (harnessId == Guid.Empty || value.Result.Kind != AgentDefinitionResourceKind.Knowledge)
+            || value.HarnessChangeId is null && value.Before is not null) throw new ArgumentException("Use the exact Harness Resource evidence.");
+        if (value.Before is { } old)
+        {
+            ValidateResult(old);
+            if (old.Key != value.Result.Key || value.BeforeSources.SingleOrDefault(s => s.Key == old.Key)?.Fingerprint != Fingerprint(old)) throw new ArgumentException("Use the exact Harness before witness.");
+        }
         ValidateResult(value.Result);
         if (!value.Result.Deleted && value.AfterSources.SingleOrDefault(s => s.Key == value.Result.Key)?.Fingerprint != Fingerprint(value.Result)) throw new ArgumentException("Use the exact Resource result witness.");
         foreach (var sources in new[] { value.BeforeSources, value.AfterSources })
@@ -140,11 +148,15 @@ public static class TenantManagementResourceRules
         IReadOnlyList<AgentDefinitionPublicationResource> published, Guid allocated, DateTimeOffset at, byte[]? copiedBytes = null)
     {
         var reader = source.Reader; var owner = reader.Agent.Instance; var value = args.Value;
+        var area = TenantHarnessCommandRules.IsResource(args.AuthorityTool) ? HarnessManagementScope.KnowledgeResources : HarnessManagementScope.Resources;
+        if (area == HarnessManagementScope.KnowledgeResources && value.TryGetProperty("key", out var selectedKey)
+            && AgentInstanceResourceService.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills).Single(r => r.Key == selectedKey.GetString()).Kind != AgentDefinitionResourceKind.Knowledge)
+            throw new AccessDeniedException("resource_unavailable");
         if (args.Tool is "resources.set_enabled" or "resources.delete")
             return TenantAgentResourcePreparation.Choice(owner, reader.Baseline, source.Snapshot.Resources, source.Snapshot.Skills, published,
                 value.GetProperty("key").GetString()!, args.Tool == "resources.delete",
                 args.Tool == "resources.delete" || value.GetProperty("enabled").ValueKind == JsonValueKind.Null ? null : value.GetProperty("enabled").GetBoolean(),
-                value.GetProperty("expectedResourceRevision").GetInt64(), SkillAuthor.Agent, at);
+                value.GetProperty("expectedResourceRevision").GetInt64(), SkillAuthor.Agent, at, scope: area);
         if (args.Tool == "resources.copy")
         {
             var key = AgentInstanceResourceService.ParseKey(value.GetProperty("key").GetString()!);
@@ -157,18 +169,19 @@ public static class TenantManagementResourceRules
         return TenantAgentResourcePreparation.Upsert(owner, reader.Baseline, source.Snapshot.Resources, source.Snapshot.Skills, published,
             new(parsed, parsed is null ? null : value.GetProperty("expectedResourceRevision").GetInt64(), value.GetProperty("logicalPath").GetString()!,
                 Enum.Parse<AgentDefinitionResourceKind>(value.GetProperty("kind").GetString()!, false), value.GetProperty("mediaType").GetString()!, null),
-            Encoding.UTF8.GetBytes(value.GetProperty("content").GetString()!), SkillAuthor.Agent, allocated, at);
+            Encoding.UTF8.GetBytes(value.GetProperty("content").GetString()!), SkillAuthor.Agent, allocated, at, scope: area);
     }
 
     public static PreparedManagementMutation Build(TenantManagementSource source, TenantManagementMutationArguments args,
         IReadOnlyList<AgentDefinitionPublicationResource> published, Guid allocated, DateTimeOffset at, TenantManagementResourceSource? material, byte[]? copiedBytes = null)
     {
         var reader = source.Reader; var owner = reader.Agent.Instance;
-        TenantManagementMutationRules.Eligible(reader, args.Tool);
+        TenantManagementMutationRules.Eligible(reader, args.AuthorityTool);
         if (!IsTool(args.Tool) || args.ExpectedInstanceRevision != owner.Revision) throw new SecurityConflictException("stale_revision");
         if ((args.Tool == "resources.upsert") != (material is not null)) throw new AccessDeniedException("resource_source_required");
         var prepared = Prepare(source, args, published, allocated, at, copiedBytes); var mutation = prepared.Change?.Resource;
-        var after = prepared.Change is null ? owner : TenantAgentConfigurationRules.Apply(owner, prepared.Change, at);
+        args = TenantHarnessCommandRules.Mark(args, reader, prepared.Change);
+        var after = prepared.Change is null ? owner : TenantAgentConfigurationRules.Apply(owner, TenantHarnessCommandRules.Attach(args, reader, prepared.Change), at);
         var key = args.Value.TryGetProperty("key", out var selected) ? selected.GetString() : null;
         var views = AgentInstanceResourceService.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills);
         var before = key is null ? null : views.Single(r => r.Key == key);
@@ -189,11 +202,12 @@ public static class TenantManagementResourceRules
             rows.Add(new("Observed source", null, new { material.Name, material.RootRunId, material.MaterialHash, material.ToolName, material.ToolCallId,
                 meaning = "This is a reviewed literal draft derived from the actual input or observation; no exact byte-copy claim is made." }));
         }
+        rows.AddRange(TenantHarnessCommandRules.Review(args.Harness));
         rows.Add(new("Effect boundary", "Current Run remains pinned", "Only this Instance changes for future Runs. Resource changes grant no read, capability or execution authority."));
         var changes = JsonSerializer.Serialize(rows, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         DefinitionResourcePolicies.RejectSecretsInTextualContent("text/plain", Encoding.UTF8.GetBytes(changes));
         var value = new PreparedManagementMutation(reader.Run.SessionId, reader.Root.SessionId, args.Tool, args.Json,
-            TenantManagementReadRules.ConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(after), changes, Resource: plan);
+            TenantManagementReadRules.ConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(after), changes, Resource: plan, Harness: args.Harness);
         TenantManagementMutationRules.Validate(value); return value;
     }
 
@@ -204,9 +218,11 @@ public static class TenantManagementResourceRules
     public static TenantAgentConfigurationChange? Change(TenantManagementSource source, PreparedManagementMutation value, IReadOnlyList<AgentDefinitionPublicationResource> published, byte[]? copiedBytes = null)
     {
         var plan = value.Resource ?? throw new AccessDeniedException("management_source_changed");
-        var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
+        var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson, value.Harness);
+        TenantHarnessCommandRules.Revalidate(source, value, published);
         if (!TenantManagementMutationRules.Matches(value, Build(source, args, published, plan.AllocatedId, plan.PreparedAt, plan.Source, copiedBytes)))
             throw new AccessDeniedException("management_source_changed");
-        return Prepare(source, args, published, plan.AllocatedId, plan.PreparedAt, copiedBytes).Change;
+        var change = Prepare(source, args, published, plan.AllocatedId, plan.PreparedAt, copiedBytes).Change;
+        return change is null ? null : TenantHarnessCommandRules.Attach(args, source.Reader, change);
     }
 }

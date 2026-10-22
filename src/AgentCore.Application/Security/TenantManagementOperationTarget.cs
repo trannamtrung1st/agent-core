@@ -10,13 +10,34 @@ public sealed record TenantManagementMutationObservation(TenantManagementSource 
 
 // Existing Instance configuration preparation plus management observations; no separate effect owner.
 public sealed class TenantManagementOperationTarget(ITenantManagementStore store, TenantAgentConfigurationService configuration,
-    TenantOperationAuthorizer operations, TenantPreferenceOperationService preferences, TimeProvider time, TenantManagementReadService reads, IIdGenerator ids, IamAuthorizer iam)
+    TenantOperationAuthorizer operations, TenantPreferenceOperationService preferences, TimeProvider time, TenantManagementReadService reads, IIdGenerator ids, IamAuthorizer iam, IToolConfigurationGate tools)
 {
     public TenantManagementReadService Reads { get; } = reads;
     public async ValueTask<TenantManagementMutationObservation> PrepareAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         CancellationToken ct, PreparedManagementMutation? expected = null, Guid? inspectionHuman = null, long? committedSkillRevision = null)
     {
-        var args = TenantManagementMutationContract.Parse(tool, arguments);
+        TenantManagementMutationArguments args;
+        if (expected?.Harness is { } saved) args = TenantManagementMutationContract.Parse(expected.ToolName, expected.ArgumentsJson, saved);
+        else if (TenantHarnessCommandRules.IsTool(tool))
+        {
+            var requested = TenantManagementMutationContract.Parse(tool, arguments);
+            var source = await store.ReadTenantManagementSourceAsync(reference, generation, inspectionHuman, ct).ConfigureAwait(false);
+            var at = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
+            var harness = new PreparedHarnessCommand(tool, requested.Json, TenantHarnessCommandRules.Assessment(source.Reader, requested, ids.NewId(), at));
+            if (TenantHarnessCommandRules.IsResource(tool))
+            {
+                var context = await store.ReadTenantManagementResourceContextAsync(reference, generation, tool, requested.Json, inspectionHuman, ct).ConfigureAwait(false);
+                args = (context.Arguments ?? throw new AccessDeniedException("management_unavailable")) with { Harness = harness };
+            }
+            else args = TenantHarnessCommandRules.Compile(source, requested, [], harness);
+        }
+        else args = TenantManagementMutationContract.Parse(tool, arguments);
+        return await PrepareCoreAsync(reference, generation, args, ct, expected, inspectionHuman, committedSkillRevision).ConfigureAwait(false);
+    }
+    private async ValueTask<TenantManagementMutationObservation> PrepareCoreAsync(TenantRunReference reference, Guid? generation, TenantManagementMutationArguments args,
+        CancellationToken ct, PreparedManagementMutation? expected = null, Guid? inspectionHuman = null, long? committedSkillRevision = null)
+    {
+        var tool = args.Tool;
         var before = await store.ReadTenantManagementSourceAsync(reference, generation, inspectionHuman, ct).ConfigureAwait(false);
         if (inspectionHuman is not null && TenantManagementSkillRules.IsTool(tool))
             await store.RequireTenantManagementSkillSourcesAsync(reference, generation, tool, args.Json, inspectionHuman, ct).ConfigureAwait(false);
@@ -27,7 +48,10 @@ public sealed class TenantManagementOperationTarget(ITenantManagementStore store
         }
         try
         {
-            TenantManagementMutationRules.Eligible(before.Reader, tool);
+            TenantManagementMutationRules.Eligible(before.Reader, args.AuthorityTool);
+            if (args.Harness is { ToolName: "harness.tool.select" or "harness.tool.configure" } command
+                && !tools.IsConfigured(TenantManagementMutationContract.Parse(command.ToolName, command.ArgumentsJson).Value.GetProperty("id").GetString()!))
+                throw new AccessDeniedException("tool_configuration_unavailable");
             if (inspectionHuman is null && TenantManagementSkillRules.IsTool(tool))
                 await store.RequireTenantManagementSkillSourcesAsync(reference, generation, tool, args.Json, inspectionHuman, ct).ConfigureAwait(false);
             if (expected is not null && expected.Skill?.Changed != false && expected.Resource is null) _ = TenantManagementMutationRules.Change(before.Reader, expected, before.Snapshot);
@@ -40,13 +64,13 @@ public sealed class TenantManagementOperationTarget(ITenantManagementStore store
             }
             else if (TenantManagementResourceRules.IsTool(tool))
             {
-                var context = await store.ReadTenantManagementResourceContextAsync(reference, generation, tool, args.Json, inspectionHuman, ct).ConfigureAwait(false);
+                var context = await store.ReadTenantManagementResourceContextAsync(reference, generation, args.Harness?.ToolName ?? tool, args.Harness?.ArgumentsJson ?? args.Json, inspectionHuman, ct).ConfigureAwait(false);
                 if (context.Source.Reader.Security.Tenant.Revision != before.Reader.Security.Tenant.Revision || context.Source.Reader.Run.Revision != before.Reader.Run.Revision
                     || context.Source.Reader.Agent.Instance.Revision != before.Reader.Agent.Instance.Revision) throw new SecurityConflictException("management_source_changed");
-                var at = DateTimeOffset.FromUnixTimeMilliseconds((expected?.Resource?.PreparedAt ?? time.GetUtcNow()).ToUnixTimeMilliseconds());
+                var at = DateTimeOffset.FromUnixTimeMilliseconds((expected?.Resource?.PreparedAt ?? args.Harness?.Assessment.SavedAt ?? time.GetUtcNow()).ToUnixTimeMilliseconds());
                 var bytes = await configuration.ManagementResourceCopyBytesAsync(context, args, ct).ConfigureAwait(false);
                 value = TenantManagementResourceRules.Build(context.Source, args, context.Published, expected?.Resource?.AllocatedId ?? ids.NewId(), at, context.Material, bytes);
-                var checkedContext = await store.ReadTenantManagementResourceContextAsync(reference, generation, tool, args.Json, inspectionHuman, ct).ConfigureAwait(false);
+                var checkedContext = await store.ReadTenantManagementResourceContextAsync(reference, generation, args.Harness?.ToolName ?? tool, args.Harness?.ArgumentsJson ?? args.Json, inspectionHuman, ct).ConfigureAwait(false);
                 if (checkedContext.Source.Reader.Security.Tenant.Revision != context.Source.Reader.Security.Tenant.Revision
                     || checkedContext.Source.Reader.Run.Revision != context.Source.Reader.Run.Revision
                     || JsonSerializer.Serialize(checkedContext.Material) != JsonSerializer.Serialize(context.Material)
@@ -86,7 +110,7 @@ public sealed class TenantManagementOperationTarget(ITenantManagementStore store
     public async ValueTask<string> ExecuteAsync(TenantRuntimeFrame frame, ModelToolCall call, int budget, CancellationToken ct)
     {
         if (budget < 768) return AgentCore.Application.Execution.AgentRunToolCallCheckpoint.FinishRequiredResult(budget);
-        if ((TenantManagementSkillRules.IsTool(call.Name) || TenantManagementResourceRules.IsTool(call.Name)) && store is ITenantDirectOperationStore direct)
+        if ((TenantManagementSkillRules.IsTool(call.Name) || TenantManagementResourceRules.IsTool(call.Name) || TenantHarnessCommandRules.IsTool(call.Name)) && store is ITenantDirectOperationStore direct)
         {
             var reference = new TenantRunReference(frame.Owner.TenantId!.Value, frame.RunId);
             if (await direct.FindDirectOperationReceiptAsync(reference.TenantId, reference.RunId, call.Id, ct).ConfigureAwait(false) is { } saved)
@@ -115,6 +139,9 @@ public sealed class TenantManagementOperationTarget(ITenantManagementStore store
         }
         var observed = await PrepareAsync(new(frame.Owner.TenantId!.Value, frame.RunId), frame.Generation, call.Name, call.ArgumentsJson, ct).ConfigureAwait(false);
         var decision = await DecisionAsync(observed, ct).ConfigureAwait(false);
+        if (observed.Value.Harness is { Changed: false } && decision.Decision != OperationDecisionKind.Denied)
+            return JsonSerializer.Serialize(new { decision = "allowed", reasonCode = "operation_unchanged", applied = false, unchanged = true, saved = true, changed = false,
+                instanceRevision = observed.Source.Reader.Agent.Instance.Revision, changesApplyTo = "nextRun", currentRunUnchanged = true, replayAllowed = false });
         if (observed.Value.Resource is { Changed: false } resource && decision.Decision != OperationDecisionKind.Denied)
             return JsonSerializer.Serialize(new { decision = "allowed", reasonCode = "operation_unchanged", applied = false, unchanged = true,
                 instanceRevision = observed.Source.Reader.Agent.Instance.Revision, resource = TenantManagementResourceRules.Metadata(resource.Result), changesApplyTo = "nextRun", replayAllowed = false });
@@ -125,7 +152,7 @@ public sealed class TenantManagementOperationTarget(ITenantManagementStore store
             var reader = observed.Source.Reader;
             var operation = TenantApprovalRules.PrepareManagementMutation(ids.NewId(), reader.Run.AgentInstanceId, observed.Value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);
             var commit = new TenantManagementCommandCommit(operation, frame.RunId, frame.Generation, reader.Run.Revision, call.Id,
-                TenantManagementDirectRules.ParametersHash(call.Name, observed.Value.ArgumentsJson));
+                TenantManagementDirectRules.ParametersHash(observed.Value.Harness?.ToolName ?? call.Name, observed.Value.Harness?.ArgumentsJson ?? observed.Value.ArgumentsJson));
             var audit = new AuthorizationAudit(ids.NewId(), reader.Security.Tenant.TenantId, reader.Agent.PrincipalId,
                 observed.Value.Resource is null ? "operations.skills.apply" : "operations.resources.apply", reader.Run.AgentInstanceId.ToString("D"), "allowed", TenantManagementMutationRules.Completed, time.GetUtcNow());
             await configuration.StageManagementResourceAsync(observed.Value, ct).ConfigureAwait(false);
@@ -136,10 +163,19 @@ public sealed class TenantManagementOperationTarget(ITenantManagementStore store
         return JsonSerializer.Serialize(new { decision = decision.Decision == OperationDecisionKind.RequiresApproval ? "requiresApproval" : "denied", reasonCode = decision.ReasonCode,
             applied = false, operation = "mutate_management", replayAllowed = false });
     }
-    private static string CommandResult(TenantOperationReceipt receipt) => receipt.ManagementResource is { } resource
-        ? JsonSerializer.Serialize(new { decision = "allowed", reasonCode = receipt.ReasonCode, applied = receipt.Outcome == TenantOperationOutcome.Completed,
+    private static string CommandResult(TenantOperationReceipt receipt)
+    {
+        if (receipt.ManagementResource is not { } resource) return SkillResult(receipt);
+        var body = JsonSerializer.SerializeToNode(new { decision = "allowed", reasonCode = receipt.ReasonCode, applied = receipt.Outcome == TenantOperationOutcome.Completed,
             instanceRevision = receipt.InstanceRevision, operationId = receipt.OperationId, resource = TenantManagementResourceRules.Metadata(resource.Result),
-            changesApplyTo = "nextRun", replayAllowed = false }) : SkillResult(receipt);
+            changesApplyTo = "nextRun", replayAllowed = false })!;
+        if (resource.HarnessChangeId is { } assessment)
+        {
+            body["saved"] = receipt.Outcome == TenantOperationOutcome.Completed; body["changed"] = receipt.Outcome == TenantOperationOutcome.Completed;
+            body["verification"] = "partiallyVerified"; body["assessmentId"] = assessment; body["currentRunUnchanged"] = true;
+        }
+        return body.ToJsonString();
+    }
     private static string SkillResult(TenantOperationReceipt? receipt, TenantManagementSkillResult? unchanged = null, long? unchangedInstanceRevision = null)
     {
         var result = unchanged ?? receipt!.ManagementSkill!.Result;

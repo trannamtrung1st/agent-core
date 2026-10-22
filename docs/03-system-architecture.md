@@ -1,5 +1,9 @@
 # System Architecture
 
+## Canonical contextual Harness ownership
+
+Canonical tenant Harness knowledge, instruction and tool commands compile to the incumbent Resource/settings planners and use the same exact-consent and local-effect transaction as other configuration changes. Original Harness delegation and arguments remain bound to the derived effect. Content/settings and partial Instance-local assessment history commit atomically; no shared Definition publication or unscoped authoring fallback occurs. Existing admission pins and current independent source/IAM reads remain effective. [Application contract](04-backend-interfaces.md#canonical-contextual-harness-commands) and [durable evidence](15-persistence-and-configuration.md#canonical-contextual-harness-persistence) own the detailed rules. Typed configuration remedies and fresh configuration continuation remain separate integration work.
+
 ## Canonical learned Memory ownership
 
 Human retention management extends the same scoped fact owner through actual live tenant User identity, independent current raw reads/manage and atomic tombstone/security/audit writes. It does not grant a model operation or source conversation access. Human inspection remains available when Runtime recall is disabled. [Management contract](04-backend-interfaces.md#human-learned-memory-management).

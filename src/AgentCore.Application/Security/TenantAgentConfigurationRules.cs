@@ -40,6 +40,18 @@ public static class TenantAgentConfigurationRules
             throw new SecurityConflictException("stale_revision");
         if (change.Persona is { } persona) AgentDefinitionValidator.ValidateIdentity(persona);
         if (change.SetExecutionBudgets) change.ExecutionBudgets?.Validate();
+        if (change.HarnessAssessment is { } assessmentState)
+        {
+            var assessment = assessmentState.InstanceChanges?.LastOrDefault();
+            if (change.HarnessManagement is not null || !(change.SetSettingsOverrides || change.Resource is not null)
+                || assessment is null || assessment.InstanceRevision != current.Revision + 1 || assessment.OperationId == Guid.Empty
+                || assessment.PolicyRevision != (current.HarnessManagement?.PolicyRevision ?? 1) || assessment.DefinitionVersion != current.ActiveVersion
+                || assessment.ApprovalId is not null || assessment.Evidence.Status != HarnessEvidenceStatus.PartiallyVerified
+                || current.HarnessManagement is { } old && System.Text.Json.JsonSerializer.Serialize(assessmentState with { InstanceChanges = old.InstanceChanges }) != System.Text.Json.JsonSerializer.Serialize(old)
+                || current.HarnessManagement is null && (assessmentState.Preparation is not null || assessmentState.Overrides != new ManagementPolicyOverrides())
+                || System.Text.Json.JsonSerializer.Serialize(assessmentState.InstanceChanges) != System.Text.Json.JsonSerializer.Serialize((current.HarnessManagement?.InstanceChanges ?? []).TakeLast(63).Append(assessment).ToArray()))
+                throw new ArgumentException("Use one factual local Harness assessment without changing delegated authority.");
+        }
         if (change.HarnessManagement?.Overrides is { } overrides) Admin.SelfManagementService.Validate(overrides);
         return current with { Persona = change.Persona ?? current.Persona, ActiveVersion = change.ActiveVersion ?? current.ActiveVersion,
             PersonaRevision = current.PersonaRevision + (change.Persona is not null && change.Persona != current.Persona ? 1 : 0),
@@ -48,7 +60,7 @@ public static class TenantAgentConfigurationRules
             ExecutionBudgets = change.SetExecutionBudgets ? change.ExecutionBudgets : current.ExecutionBudgets,
             UnattendedModelCatalogKey = change.SetUnattendedModel ? Normalize(change.UnattendedModelCatalogKey) : current.UnattendedModelCatalogKey,
             UnattendedReasoningEffort = change.SetUnattendedModel ? Normalize(change.UnattendedReasoningEffort) : current.UnattendedReasoningEffort,
-            HarnessManagement = change.HarnessManagement ?? current.HarnessManagement };
+            HarnessManagement = change.HarnessAssessment ?? change.HarnessManagement ?? current.HarnessManagement };
     }
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

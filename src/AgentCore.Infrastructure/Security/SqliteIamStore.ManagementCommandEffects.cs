@@ -28,7 +28,7 @@ public sealed partial class SqliteIamStore
         if (run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId is { } human) await ValidateTenantActorAsync(db, before, human, ct).ConfigureAwait(false);
         var at = (clock ?? TimeProvider.System).GetUtcNow();
         TenantManagementDirectRules.Transaction(next, expectedSecurityRevision, reader, commit, audit, at);
-        if (value.Skill is not null) await RequireManagementSkillSources(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+        if (value.Skill is not null) await RequireManagementSkillSources(db, reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct).ConfigureAwait(false);
         await TenantManagementDirectRules.AuthorityAsync(reader, value, new IamAuthorizer(this), ct).ConfigureAwait(false);
         var previous = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), reader.Agent.PrincipalId, commit.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous.Domain()));
@@ -37,10 +37,9 @@ public sealed partial class SqliteIamStore
         TenantAgentConfigurationChange change;
         if (value.Resource is { } resource)
         {
-            var context = await ManagementResourceContext(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+            var context = await ManagementResourceContext(db, reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct).ConfigureAwait(false);
             if (JsonSerializer.Serialize(context.Material) != JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
-            var binding = resource.InstanceResource ?? throw new AccessDeniedException("resource_unavailable");
-            _ = await AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitionContent ?? throw new AccessDeniedException("resource_content_unavailable"),
+            if (resource.InstanceResource is { } binding) _ = await AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitionContent ?? throw new AccessDeniedException("resource_content_unavailable"),
                 binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).ConfigureAwait(false);
             change = TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published);
         }

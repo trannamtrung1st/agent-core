@@ -1,3 +1,4 @@
+using AgentCore.Application.Tools;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
 using AgentCore.Domain.Definitions;
@@ -8,7 +9,7 @@ public sealed record TenantManagementReader(AgentRun Run, AgentRun Root, TenantS
     TenantManagementInspectionCatalog? Inspection = null);
 public sealed record TenantManagementSource(TenantManagementReader Reader, TenantAgentConfigurationSnapshot Snapshot);
 public sealed record TenantManagementResourceContext(TenantManagementSource Source,
-    IReadOnlyList<AgentDefinitionPublicationResource> Published, TenantManagementResourceSource? Material);
+    IReadOnlyList<AgentDefinitionPublicationResource> Published, TenantManagementResourceSource? Material, TenantManagementMutationArguments? Arguments = null);
 public sealed record TenantResourcePinRetention(long ResourceRevision, bool Deleted, long InstanceRevision);
 public sealed record TenantManagementSourceRetention(string? CurrentSourcesJson, IReadOnlySet<string> DeletedSources);
 public sealed record TenantManagementReadObservation(TenantManagementReader Reader, PreparedManagementRead Value, bool SourcesChanged = false,

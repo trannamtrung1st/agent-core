@@ -69,11 +69,13 @@ public sealed partial class SqliteIamStore
     private async ValueTask<TenantManagementResourceContext> ManagementResourceContext(AgentCoreDbContext db, TenantManagementReader reader,
         TenantManagementMutationArguments args, Guid? human, CancellationToken ct)
     {
-        TenantManagementMutationRules.Eligible(reader, args.Tool); var iam = new IamAuthorizer(this); var actor = human ?? reader.Agent.PrincipalId;
-        await TenantManagementResourceRules.RawAsync(reader, args, iam, actor, ct).ConfigureAwait(false);
         var tenant = reader.Security.Tenant.TenantId; var run = reader.Run;
         var snapshot = new TenantAgentConfigurationSnapshot(reader.Agent, await SqliteAgentInstanceStore.ReadSkillsAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false),
             await SqliteAgentInstanceStore.ReadResourcesAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false), await ReadIsolationMetadataAsync(db, run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false));
+        var published = await ManagementPublishedResources(db, reader, ct).ConfigureAwait(false);
+        if (TenantHarnessCommandRules.IsTool(args.Tool)) args = TenantHarnessCommandRules.Compile(new(reader, snapshot), args, published);
+        TenantManagementMutationRules.Eligible(reader, args.AuthorityTool); var iam = new IamAuthorizer(this); var actor = human ?? reader.Agent.PrincipalId;
+        await TenantManagementResourceRules.RawAsync(reader, args, iam, actor, ct).ConfigureAwait(false);
         var ids = reader.Root.Admission.Activation.SourceEntryIds.Select(id => id.ToString("D")).ToArray();
         var entries = args.Tool == "resources.upsert" && args.Value.GetProperty("source").GetString() == "conversation:user"
             ? (await db.Entries.AsNoTracking().Where(e => e.SessionId == reader.Root.SessionId.ToString("D") && ids.Contains(e.EntryId)).ToArrayAsync(ct).ConfigureAwait(false)).Select(SqliteMemoryStore.ToEntry).ToArray() : [];
@@ -101,7 +103,7 @@ public sealed partial class SqliteIamStore
             await TenantManagementResourceSources.ConsentAsync(reader, material, request, decision, receipt, grant, iam, ct).ConfigureAwait(false);
         }
         if (human is null) await RequireResourceTargetReadConsent(db, reader, args, iam, ct).ConfigureAwait(false);
-        return new(new(reader, snapshot), await ManagementPublishedResources(db, reader, ct).ConfigureAwait(false), material);
+        return new(new(reader, snapshot), published, material, args);
     }
     private async ValueTask RequireResourceTargetReadConsent(AgentCoreDbContext db, TenantManagementReader reader, TenantManagementMutationArguments args, IamAuthorizer iam, CancellationToken ct)
     {
@@ -111,6 +113,9 @@ public sealed partial class SqliteIamStore
             TenantAgentChildScopes.Scope(reader.Security.Tenant.TenantId, reader.Run.AgentInstanceId, "resource", key), iam, ct).ConfigureAwait(false);
         if (!need) return;
         var tool = key is null ? "management.inspect" : "resources.inspect"; var arguments = key is null ? "{}" : JsonSerializer.Serialize(new { key });
+        if (args.AuthorityTool.StartsWith("harness.", StringComparison.Ordinal))
+            foreach (var inspected in TenantManagementReadReferences.Read(reader.Run.Checkpoint).Where(s => s.ToolName == "harness.inspect" && (key is null || TenantManagementInspectionSources.Read(s.SourcesJson).Any(item => item.Kind == "resource" && item.Key == key))))
+                if (await ManagementReadConsented(db, reader, inspected, ct).ConfigureAwait(false)) return;
         foreach (var source in TenantManagementReadReferences.Read(reader.Run.Checkpoint).Where(source => source.ToolName == tool && source.ArgumentsJson == arguments))
             if (await ManagementReadConsented(db, reader, source, ct).ConfigureAwait(false)) return;
         throw new AccessDeniedException("resource_source_read_review_required");

@@ -71,9 +71,11 @@ public sealed partial class InMemoryIamStore
     }
     private TenantManagementResourceContext ManagementResourceContext(TenantManagementReader reader, TenantManagementMutationArguments args, Guid? human, CancellationToken ct)
     {
-        TenantManagementMutationRules.Eligible(reader, args.Tool); var iam = new IamAuthorizer(this); var actor = human ?? reader.Agent.PrincipalId;
-        TenantManagementResourceRules.RawAsync(reader, args, iam, actor, ct).GetAwaiter().GetResult();
         var snapshot = ReadTenantAgentConfigurationAsync(reader.Security.Tenant.TenantId, reader.Run.AgentInstanceId, ct).Result ?? throw new AccessDeniedException("resource_unavailable");
+        var published = ManagementPublishedResources(reader, ct);
+        if (TenantHarnessCommandRules.IsTool(args.Tool)) args = TenantHarnessCommandRules.Compile(new(reader, snapshot), args, published);
+        TenantManagementMutationRules.Eligible(reader, args.AuthorityTool); var iam = new IamAuthorizer(this); var actor = human ?? reader.Agent.PrincipalId;
+        TenantManagementResourceRules.RawAsync(reader, args, iam, actor, ct).GetAwaiter().GetResult();
         var entries = args.Tool == "resources.upsert" && args.Value.GetProperty("source").GetString() == "conversation:user"
             ? reader.Root.Admission.Activation.SourceEntryIds.Select(id => sessionBacking.FindEntry(reader.Root.SessionId, id)
                 ?? throw new AccessDeniedException("resource_source_unavailable")).ToArray() : [];
@@ -98,7 +100,7 @@ public sealed partial class InMemoryIamStore
                 request is null ? null : _operationGrants.GetValueOrDefault(request.RequestId), iam, ct).GetAwaiter().GetResult();
         }
         if (human is null) RequireResourceTargetReadConsent(reader, args, iam, ct);
-        return new(new(reader, snapshot), ManagementPublishedResources(reader, ct), material);
+        return new(new(reader, snapshot), published, material, args);
     }
     private void RequireResourceTargetReadConsent(TenantManagementReader reader, TenantManagementMutationArguments args, IamAuthorizer iam, CancellationToken ct)
     {
@@ -108,6 +110,8 @@ public sealed partial class InMemoryIamStore
             TenantAgentChildScopes.Scope(reader.Security.Tenant.TenantId, reader.Run.AgentInstanceId, "resource", key), iam, ct).AsTask().GetAwaiter().GetResult();
         if (!need) return;
         var tool = key is null ? "management.inspect" : "resources.inspect"; var arguments = key is null ? "{}" : JsonSerializer.Serialize(new { key });
+        if (args.AuthorityTool.StartsWith("harness.", StringComparison.Ordinal) && TenantManagementReadReferences.Read(reader.Run.Checkpoint).Any(source => source.ToolName == "harness.inspect"
+            && (key is null || TenantManagementInspectionSources.Read(source.SourcesJson).Any(s => s.Kind == "resource" && s.Key == key)) && ManagementReadConsented(reader, source, ct))) return;
         if (!TenantManagementReadReferences.Read(reader.Run.Checkpoint).Any(source => source.ToolName == tool && source.ArgumentsJson == arguments && ManagementReadConsented(reader, source, ct)))
             throw new AccessDeniedException("resource_source_read_review_required");
     }

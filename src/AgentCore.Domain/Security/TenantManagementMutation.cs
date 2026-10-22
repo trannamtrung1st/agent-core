@@ -12,7 +12,8 @@ public sealed record PreparedManagementMutation(Guid SessionId, Guid RootSession
     IReadOnlyList<InstanceAutomationPolicyChange>? AutomationChanges = null,
     string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementSkill? Skill = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementResource? Resource = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedManagementResource? Resource = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PreparedHarnessCommand? Harness = null)
 {
     public bool Equals(PreparedManagementMutation? other) => other is not null && JsonSerializer.Serialize(this) == JsonSerializer.Serialize(other);
     public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(JsonSerializer.Serialize(this));
@@ -48,4 +49,9 @@ public sealed record TenantManagementResourceResult(string Key, long Revision, b
     string? SourceDefinitionId = null, int? SourceDefinitionVersion = null, Guid? SourceDefinitionResourceId = null);
 
 public sealed record TenantManagementResourceReceipt(string ToolName, long BeforeInstanceRevision, string BeforeStableHash, string AfterStableHash,
-    IReadOnlyList<TenantManagementChildRead> BeforeSources, IReadOnlyList<TenantManagementChildRead> AfterSources, TenantManagementResourceResult Result);
+    IReadOnlyList<TenantManagementChildRead> BeforeSources, IReadOnlyList<TenantManagementChildRead> AfterSources, TenantManagementResourceResult Result,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? HarnessChangeId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantManagementResourceResult? Before = null);
+
+// The actual contextual Harness command and server-owned assessment identity; not another effect owner.
+public sealed record PreparedHarnessCommand(string ToolName, string ArgumentsJson, HarnessInstanceChange Assessment, bool Changed = true);

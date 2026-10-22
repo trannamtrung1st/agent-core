@@ -9,27 +9,33 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Tools;
 
-public sealed record TenantManagementMutationArguments(string Tool, string Json, long ExpectedInstanceRevision, JsonElement Value);
+public sealed record TenantManagementMutationArguments(string Tool, string Json, long ExpectedInstanceRevision, JsonElement Value, PreparedHarnessCommand? Harness = null, TenantManagementMutationIntent? Requested = null)
+{ public string AuthorityTool => Harness?.ToolName ?? Requested?.Tool ?? Tool; }
 public sealed record TenantManagementMutationIntent(string Tool, string ArgumentsJson)
 {
-    public bool Matches(PreparedTenantOperation operation) => operation.ManagementMutation is { } change && change.ToolName == Tool && change.ArgumentsJson == ArgumentsJson
+    public bool Matches(PreparedTenantOperation operation) => operation.ManagementMutation is { } change && (change.Harness is { } harness ? harness.ToolName == Tool && harness.ArgumentsJson == ArgumentsJson : change.ToolName == Tool && change.ArgumentsJson == ArgumentsJson)
         || operation.Preferences is { } preferences && TenantManagementMutationContract.Preference(Tool, ArgumentsJson) is { } patch
             && TenantPreferenceToolContract.Parameters(patch) == preferences && TenantManagementMutationContract.Parse(Tool, ArgumentsJson).ExpectedInstanceRevision == operation.ExpectedInstanceRevision;
 }
 public static class TenantManagementMutationContract
 {
-    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "settings.patch", "management.policy.update", "management.freeze", "automation.preferences.patch", "skills.create", "skills.update", "skills.set_enabled", "skills.reset_enabled", "skills.delete", "skills.customize", "resources.upsert", "resources.copy", "resources.set_enabled", "resources.delete" });
+    public static readonly IReadOnlyList<string> Tools = Array.AsReadOnly(new[] { "settings.patch", "management.policy.update", "management.freeze", "automation.preferences.patch", "skills.create", "skills.update", "skills.set_enabled", "skills.reset_enabled", "skills.delete", "skills.customize", "resources.upsert", "resources.copy", "resources.set_enabled", "resources.delete", "harness.knowledge.upsert", "harness.knowledge.remove", "harness.instructions.update", "harness.tool.select", "harness.tool.configure" });
     public static bool IsTool(string name) => Tools.Contains(name);
-    public static bool Allows(AgentDefinition definition, string tool) => IsTool(tool) && RolePermissions.AllowsTool(definition, tool)
+    public static bool Allows(AgentDefinition definition, string tool) => IsTool(tool) && (HarnessChatTools.Operations.ContainsKey(tool) || RolePermissions.AllowsTool(definition, tool))
         && definition.SelfManagement is { } policy && ManagementTools.Enabled(policy)
         && (ManagementTools.Area(tool) is not { } scope || policy.Allows(scope));
     public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution, Harness: { } live }
         && execution.SessionId == context.OwnedSessionId && TenantManagementReadContract.Shape(execution, context.OutputContract, context.RunTaskIntent)
         ? Tools.Where(tool => Allows(definition, tool) && ManagementTools.Allows(tool, definition, live)).ToArray() : [];
-    public static TenantManagementMutationArguments Parse(string tool, string json)
+    public static TenantManagementMutationArguments Parse(string tool, string json, PreparedHarnessCommand? harness = null, string? authorityTool = null)
     {
-        if (!IsTool(tool) || Encoding.UTF8.GetByteCount(json) > (TenantManagementResourceRules.IsTool(tool) ? 262144 : 24000)) throw new ArgumentException("Use an offered bounded exact management command.");
-        using var doc = JsonDocument.Parse(json); if (TenantManagementSkillRules.IsTool(tool))
+        if (!IsTool(tool) || Encoding.UTF8.GetByteCount(json) > (harness is not null || authorityTool is not null || TenantManagementResourceRules.IsTool(tool) || HarnessChatTools.Operations.ContainsKey(tool) ? 262144 : 24000)) throw new ArgumentException("Use an offered bounded exact management command.");
+        using var doc = JsonDocument.Parse(json); if (HarnessChatTools.Operations.ContainsKey(tool))
+        {
+            ConfigurationTools.Validate(tool, doc.RootElement);
+            TenantHarnessCommandRules.ValidateArguments(tool, doc.RootElement);
+        }
+        else if (TenantManagementSkillRules.IsTool(tool))
         {
             var root = doc.RootElement;
             using var schema = JsonDocument.Parse(ToolRegistry.Get(tool).ModelDefinition.ParametersJson);
@@ -84,7 +90,7 @@ public static class TenantManagementMutationContract
             JsonValueKind.Object => new JsonObject(value.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => new KeyValuePair<string,JsonNode?>(p.Name,Canonical(p.Value)))),
             JsonValueKind.Array => new JsonArray(value.EnumerateArray().Select(Canonical).ToArray()), _ => JsonNode.Parse(value.GetRawText()) };
         var canonical = Canonical(doc.RootElement)!.ToJsonString();
-        return new(tool, canonical, doc.RootElement.GetProperty("expectedInstanceRevision").GetInt64(), doc.RootElement.Clone());
+        return new(tool, canonical, doc.RootElement.GetProperty("expectedInstanceRevision").GetInt64(), doc.RootElement.Clone(), Harness: harness);
     }
     public static string SemanticArguments(string arguments)
     {
@@ -99,6 +105,7 @@ public static class TenantManagementMutationContract
         catch (ArgumentException) { return null; }
     }
     public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with { Description = tool.Name switch {
+        _ when TenantHarnessCommandRules.IsTool(tool.Name) => "Customize only this Agent through its existing Resource/settings owners under the admitted and current Harness areas. Use harness.inspect version, policyRevision and Instance revision. Preserve complete intended instructions and tool selection. expected/observed/limitation are an Agent assessment, never proof of execution. Knowledge requires actual current-task material and independent Resource/source reads. Managed knowledge can apply only under current Allowed IAM/policy; Assisted knowledge, instructions and all tool changes require mutate_management exact consent. Current Runs remain pinned; no shared Definition publication or authority is granted.",
         _ when TenantManagementResourceRules.IsTool(tool.Name) => "Change only this Agent's Resource through its existing configuration owner. Inspect current item and Instance revisions first. Upsert retains a reviewed literal text draft and evidence of actual current-task material; source names alone grant no authority. Definition copy verifies original bytes and keeps independent provenance. Enable accepts null only to reset inheritance. Writes require mutate_management exact consent, independent source reads and current typed Resource permissions; deletion requires resources.delete. Changes affect future Runs and grant no read, capability or execution authority.",
         _ when TenantManagementSkillRules.IsTool(tool.Name) => "Change only this Agent’s exact Skill through its existing configuration owner. Inspect first and use current item and Instance revisions. Definition/Built-in procedures are immutable; customization retains source provenance. Managed eligible Skill changes can apply under current Allowed policy; deletion, customization and Assisted changes require mutate_management exact consent. Changes affect future Runs and grant no capability, source read or execution authority.",
         "settings.patch" => "Patch only this Agent's exact inspected setting section with expectedInstanceRevision, set and clear. Core validates Definition/host constraints. Only the three Managed conversation preferences may auto-apply under current Allowed policy. Other changes require mutate_management exact consent. Cleared fields restore Definition defaults. Changes apply to new Runs; no tool effect is replayed.",

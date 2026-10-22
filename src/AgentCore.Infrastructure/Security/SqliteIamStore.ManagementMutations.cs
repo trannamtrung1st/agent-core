@@ -43,7 +43,7 @@ public sealed partial class SqliteIamStore
         await TenantManagementMutationRules.PrimaryAsync(request, reader, iam, ct).ConfigureAwait(false);
         if (value.Resource is { } resource)
         {
-            var context = await ManagementResourceContext(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+            var context = await ManagementResourceContext(db, reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct).ConfigureAwait(false);
             if (JsonSerializer.Serialize(context.Material) != JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
             byte[]? bytes = null;
             if (resource.InstanceResource is { } binding && (value.ToolName == "resources.copy" || requireStagedContent))
@@ -55,9 +55,9 @@ public sealed partial class SqliteIamStore
             return (reader, TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published, value.ToolName == "resources.copy" ? bytes : null));
         }
         TenantAgentConfigurationSnapshot? snapshot = null;
-        if (value.Skill is not null)
+        if (value.Skill is not null || value.Harness is not null)
         {
-            await RequireManagementSkillSources(db, reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct).ConfigureAwait(false);
+            if (value.Skill is not null) await RequireManagementSkillSources(db, reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct).ConfigureAwait(false);
             snapshot = new(reader.Agent, await SqliteAgentInstanceStore.ReadSkillsAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false),
                 await SqliteAgentInstanceStore.ReadResourcesAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false), await ReadIsolationMetadataAsync(db, run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false));
         }

@@ -38,7 +38,7 @@ public sealed partial class InMemoryIamStore
         TenantManagementMutationRules.PrimaryAsync(request, reader, iam, ct).AsTask().GetAwaiter().GetResult();
         if (value.Resource is { } resource)
         {
-            var context = ManagementResourceContext(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
+            var context = ManagementResourceContext(reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct);
             if (JsonSerializer.Serialize(context.Material) != JsonSerializer.Serialize(resource.Source)) throw new AccessDeniedException("resource_source_changed");
             byte[]? bytes = null;
             if (resource.InstanceResource is { } binding && (value.ToolName == "resources.copy" || requireStagedContent))
@@ -50,7 +50,7 @@ public sealed partial class InMemoryIamStore
             }
             return (reader, TenantManagementMutationRules.Change(reader, value, context.Source.Snapshot, context.Published, value.ToolName == "resources.copy" ? bytes : null));
         }
-        if (value.Skill is not null) RequireManagementSkillSources(reader, TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson), null, ct);
-        return (reader, TenantManagementMutationRules.Change(reader, value, value.Skill is null ? null : ReadTenantAgentConfigurationAsync(request.TenantId, run.AgentInstanceId, ct).Result));
+        if (value.Skill is not null) RequireManagementSkillSources(reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct);
+        return (reader, TenantManagementMutationRules.Change(reader, value, value.Skill is null && value.Harness is null ? null : ReadTenantAgentConfigurationAsync(request.TenantId, run.AgentInstanceId, ct).Result));
     }
 }

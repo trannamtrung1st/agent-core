@@ -3545,7 +3545,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantApprovalRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", TenantManagementResourceAuthoring.ValuesConstraint);
+                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", TenantHarnessCommandAuthoring.ValuesConstraint);
                         });
                 });
 
@@ -3982,7 +3982,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_TenantOperationReceipt_Source", "(RequestId IS NOT NULL AND SourceCallId IS NULL AND ParametersHash IS NULL) OR (RequestId IS NULL AND SourceCallId IS NOT NULL AND length(SourceCallId) BETWEEN 1 AND 200 AND ParametersHash IS NOT NULL AND length(ParametersHash) = 64)");
 
-                            t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementResource", TenantManagementResourceAuthoring.ReceiptConstraint);
+                            t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementResource", TenantHarnessCommandAuthoring.ReceiptConstraint);
 
                             t.HasCheckConstraint("CK_TenantOperationReceipt_ManagementSkill", FrozenMigrationMetadata.Read("94192fc9a38177213655bd729b57d1f1ad53e9206893cb0b77352672caee773d"));
 

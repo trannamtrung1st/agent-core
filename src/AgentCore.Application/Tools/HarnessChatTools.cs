@@ -80,7 +80,7 @@ public static class HarnessChatTools
                     Add("source", Text(2048, "Source actually read this turn, or conversation:user."));
                 }
                 break;
-            case "instructions.update": Add("content", Text(32000, "Complete replacement operating instructions.")); break;
+            case "instructions.update": Add("content", Text(8000, "Complete replacement operating instructions.")); break;
             case "tool.select":
                 Add("id", Text(64, "Eligible configured tool, excluding attachments.read.", identifier));
                 Add("enabled", new JsonObject { ["type"] = "boolean" });

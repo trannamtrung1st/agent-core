@@ -18,16 +18,16 @@ public sealed class TenantManagementResourceMigrationTests
             {
                 var migrator = db.GetService<IMigrator>(); await migrator.MigrateAsync("20261022120000_TenantPrivateSkillActivation");
                 var before = await Definitions(db, "trigger"); var indexes = await Definitions(db, "index"); Assert.Equal(121, before.Count);
-                await migrator.MigrateAsync(); var after = await Definitions(db, "trigger"); Assert.Equal(124, after.Count);
+                await migrator.MigrateAsync("20261023100000_TenantManagementResourceAuthoring"); var after = await Definitions(db, "trigger"); Assert.Equal(124, after.Count);
                 foreach (var guard in before) Assert.Equal(guard.Key == "TR_TenantOperationReceipts_ManagementMutation_INSERT"
                     ? guard.Value.Replace("AND NEW.ManagementSkillJson IS NULL AND (NEW.Outcome", "AND NEW.ManagementSkillJson IS NULL AND NEW.ManagementResourceJson IS NULL AND (NEW.Outcome")
                     : guard.Value, after[guard.Key]);
                 Assert.Equal(indexes, await Definitions(db, "index")); Assert.False(db.Database.HasPendingModelChanges());
                 await migrator.MigrateAsync("20261022120000_TenantPrivateSkillActivation");
                 Assert.Equal(before, await Definitions(db, "trigger")); Assert.Equal(indexes, await Definitions(db, "index"));
-                await migrator.MigrateAsync(); Assert.Equal(after, await Definitions(db, "trigger")); Assert.False(db.Database.HasPendingModelChanges());
+                await migrator.MigrateAsync("20261023100000_TenantManagementResourceAuthoring"); Assert.Equal(after, await Definitions(db, "trigger")); Assert.False(db.Database.HasPendingModelChanges());
             }
-            await using var reopened = new AgentCoreDbContext(options); Assert.False(reopened.Database.HasPendingModelChanges());
+            await using var reopened = new AgentCoreDbContext(options); await reopened.Database.MigrateAsync(); Assert.False(reopened.Database.HasPendingModelChanges());
             await reopened.Database.OpenConnectionAsync(); using var check = reopened.Database.GetDbConnection().CreateCommand();
             check.CommandText = "PRAGMA foreign_key_check"; using var rows = await check.ExecuteReaderAsync(); Assert.False(await rows.ReadAsync());
         }

@@ -212,7 +212,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
             var configure = complete && (request.Operation.IsLocalConfiguration || request.Operation.ManagementMutation is not null);
             var change = configure ? managementChange ?? TenantLocalEffectRules.Change(request, target.Instance) : null;
-            if (configure) _ = TenantAgentConfigurationRules.Apply(target.Instance, change!, at);
+            var preparedConfiguration = configure ? TenantAgentConfigurationRules.Apply(target.Instance, change!, at) : target.Instance;
             ct.ThrowIfCancellationRequested();
             AgentInstance updated;
             if (configure && change!.Skill is { } skillChange)
@@ -224,7 +224,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             else if (configure && change!.Resource is { } resourceChange)
             {
                 next = TenantAgentChildScopes.RetainAvailable(next, run.AgentInstanceId, ChildCatalog(next.Tenant.TenantId, run.AgentInstanceId, change, ct));
-                instances.MutateTenantResourcesAsync(resourceChange, at, ct).GetAwaiter().GetResult();
+                instances.MutateTenantResourcesAsync(resourceChange with { HarnessManagement = change.HarnessAssessment is null ? null : change.HarnessAssessment }, at, ct).GetAwaiter().GetResult();
                 updated = instances.FindTenantBackingAsync(run.AgentInstanceId, ct).Result!;
             }
             else
@@ -232,7 +232,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
                 Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges,
-                HarnessManagement: change.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey, UnattendedReasoningEffort: change.UnattendedReasoningEffort), at, ct).Result : target.Instance;
+                HarnessManagement: preparedConfiguration.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey, UnattendedReasoningEffort: change.UnattendedReasoningEffort), at, ct).Result : target.Instance;
             }
             if (complete && automationMutation is not null)
             {

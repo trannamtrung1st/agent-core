@@ -198,8 +198,8 @@ public static class TenantManagementReadRules
             if (request(id) is not { } approved || !TenantManagementResourceRules.CompletedChange(approved, receipt)) return null;
         }
         else if (receipt.SourceCallId is not { Length: > 0 } || receipt.ParametersHash is not { } parameters || !TenantMemoryOperationRules.ValidHash(parameters)
-            || resource.ToolName != "resources.upsert" || resource.BeforeSources.Count != 0 || resource.AfterSources.Count != 1
-            || resource.Result.Revision != 1 || !resource.Result.Key.StartsWith("instance:", StringComparison.Ordinal)) return null;
+            || resource.HarnessChangeId is null && (resource.ToolName != "resources.upsert" || resource.BeforeSources.Count != 0 || resource.AfterSources.Count != 1
+                || resource.Result.Revision != 1 || !resource.Result.Key.StartsWith("instance:", StringComparison.Ordinal))) return null;
         _ = TenantManagementResourceRules.ReadEvidence(JsonSerializer.Serialize(resource));
         if (resource.BeforeSources.Concat(resource.AfterSources).Any(s => s.Kind != "resource"
             || s.ResourceId != receipt.InstanceId.ToString("D") + ":" + s.Key)) return null;
@@ -257,10 +257,10 @@ public static class TenantManagementReadRules
             var receipt = candidates[0];
             if (Child(receipt, request, stable) is { } child)
             {
-                if (receipt.ManagementResource is not null && receipt.RequestId is { } id && request(id)?.Operation.ManagementMutation?.Resource is { } plan
-                    && (plan.Before?.Key == resource.Key || plan.Result.Key == resource.Key))
+                var beforeResource = receipt.RequestId is { } id ? request(id)?.Operation.ManagementMutation?.Resource?.Before : receipt.ManagementResource?.Before;
+                if (receipt.ManagementResource is { } resourceChange && (beforeResource?.Key == resource.Key || resourceChange.Result.Key == resource.Key))
                 {
-                    if (deleted || plan.Before is not { } before) throw new AccessDeniedException("resource_source_changed");
+                    if (deleted || beforeResource is not { } before) throw new AccessDeniedException("resource_source_changed");
                     var old = child.Before.SingleOrDefault(s => s.Kind == "resource" && s.Key == resource.Key) ?? throw new AccessDeniedException("resource_source_changed");
                     if (originalRevision is null)
                     {

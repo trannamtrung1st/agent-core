@@ -15,7 +15,7 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
     bool SetUnattendedModel = false, string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null,
-    HumanSessionReference? Initiator = null, TenantIsolationMutation? Isolation = null);
+    HumanSessionReference? Initiator = null, TenantIsolationMutation? Isolation = null, HarnessManagementState? HarnessAssessment = null);
 
 public sealed record TenantIsolationMetadata(long ExperienceRevision, bool ExperienceEnabled, long MaintenanceRevision, bool AllowMaintenance);
 public sealed record TenantIsolationMutation(IsolationOwnerRevisions Expected, bool ExperienceEnabled, bool AllowMaintenance);

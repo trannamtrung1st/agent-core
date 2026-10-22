@@ -12,14 +12,14 @@ internal sealed record TenantPreparedResourceChange(TenantAgentConfigurationChan
 
 internal static class TenantAgentResourcePreparation
 {
-    private static AgentDefinition Definition(AgentInstance owner, AgentDefinition baseline, SkillAuthor actor)
+    private static AgentDefinition Definition(AgentInstance owner, AgentDefinition baseline, SkillAuthor actor, HarnessManagementScope scope)
     {
         if (owner.Lifecycle != AgentInstanceLifecycle.Active)
             throw AgentCoreErrors.Validation("Archived instances are read-only.");
         var definition = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with {
             SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner)
         };
-        if (actor == SkillAuthor.Agent && !definition.SelfManagement!.Allows(HarnessManagementScope.Resources))
+        if (actor == SkillAuthor.Agent && !definition.SelfManagement!.Allows(scope))
             throw AgentCoreErrors.Forbidden("Resource administration is outside the effective self-management grant.");
         return definition;
     }
@@ -27,9 +27,9 @@ internal static class TenantAgentResourcePreparation
     internal static TenantPreparedResourceChange Upsert(AgentInstance owner, AgentDefinition baseline,
         InstanceResourceSnapshot snapshot, InstanceSkillSnapshot skills, IReadOnlyList<AgentDefinitionPublicationResource> published,
         TenantAgentResourceInput input, byte[] bytes, SkillAuthor actor, Guid allocatedId, DateTimeOffset at,
-        AgentDefinitionPublicationResource? source = null)
+        AgentDefinitionPublicationResource? source = null, HarnessManagementScope scope = HarnessManagementScope.Resources)
     {
-        var definition = Definition(owner, baseline, actor);
+        var definition = Definition(owner, baseline, actor, scope);
         if (source is not null)
         {
             // Copy provenance denotes the actual immutable published bytes, never a model-supplied label.
@@ -50,9 +50,9 @@ internal static class TenantAgentResourcePreparation
 
     internal static TenantPreparedResourceChange Choice(AgentInstance owner, AgentDefinition baseline,
         InstanceResourceSnapshot snapshot, InstanceSkillSnapshot skills, IReadOnlyList<AgentDefinitionPublicationResource> published,
-        string key, bool delete, bool? enabled, long expectedRevision, SkillAuthor actor, DateTimeOffset at)
+        string key, bool delete, bool? enabled, long expectedRevision, SkillAuthor actor, DateTimeOffset at, HarnessManagementScope scope = HarnessManagementScope.Resources)
     {
-        var definition = Definition(owner, baseline, actor);
+        var definition = Definition(owner, baseline, actor, scope);
         var view = View(definition, published, snapshot, skills, key);
         if (view.Revision != expectedRevision) throw new SecurityConflictException("stale_revision");
         var parsed = AgentInstanceResourceService.ParseKey(key); InstanceResourceMutation mutation;

@@ -31,9 +31,11 @@ public static class TenantManagementMutationRules
     private static PreparedManagementMutation Build(TenantManagementReader reader, TenantManagementMutationArguments args,
         TenantAgentConfigurationChange change, DateTimeOffset at)
     {
-        var owner = reader.Agent.Instance; Eligible(reader, args.Tool);
+        var owner = reader.Agent.Instance; Eligible(reader, args.AuthorityTool);
         if (args.ExpectedInstanceRevision != owner.Revision || change.ExpectedInstanceRevision != owner.Revision || change.InstanceId != owner.InstanceId)
             throw new SecurityConflictException("stale_revision");
+        args = TenantHarnessCommandRules.Mark(args, reader, change);
+        change = TenantHarnessCommandRules.Attach(args, reader, change);
         var after = TenantAgentConfigurationRules.Apply(owner, change, at);
         var rows = new List<TenantApprovalFieldChange>();
         if (args.Tool == "settings.patch")
@@ -66,35 +68,37 @@ public static class TenantManagementMutationRules
             ? "Management revokes immediately. Ordinary tasks and retained content remain; only an authorized person can unfreeze."
             : args.Tool == "management.policy.update" ? "New grants apply to the next new Run; authority removals revoke immediately. No IAM is granted."
             : "Changes apply to the next new Run. No task effect is replayed."));
+        rows.AddRange(TenantHarnessCommandRules.Review(args.Harness));
         var changes = JsonSerializer.Serialize(rows, Json);
         DefinitionResourcePolicies.RejectSecretsInTextualContent("text/plain", Encoding.UTF8.GetBytes(changes));
         var result = new PreparedManagementMutation(reader.Run.SessionId, reader.Root.SessionId, args.Tool, args.Json,
             TenantManagementReadRules.ConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(owner), TenantManagementReadRules.StableConfigurationHash(after), changes,
-            change.SettingsOverrides, change.HarnessManagement, change.AutomationPolicyChanges, change.UnattendedModelCatalogKey, change.UnattendedReasoningEffort);
+            change.SettingsOverrides, change.HarnessManagement, change.AutomationPolicyChanges, change.UnattendedModelCatalogKey, change.UnattendedReasoningEffort, Harness: args.Harness);
         Validate(result); return result;
     }
     public static void Validate(PreparedManagementMutation value)
     {
-        var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
+        var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson, value.Harness);
         if (args.Json != value.ArgumentsJson || value.SessionId == Guid.Empty || value.RootSessionId == Guid.Empty
             || !TenantMemoryOperationRules.ValidHash(value.ConfigurationHash) || !TenantMemoryOperationRules.ValidHash(value.BeforeStableHash) || !TenantMemoryOperationRules.ValidHash(value.AfterStableHash)
             || TenantManagementSkillRules.IsTool(value.ToolName) != (value.Skill is not null)
             || TenantManagementResourceRules.IsTool(value.ToolName) != (value.Resource is not null)
             || value.Skill is { } skill && (skill.TenantId == Guid.Empty || skill.Result is null || !SkillKeys.IsValid(skill.Result.Key) || skill.Result.Revision < 1 || skill.Result.Deleted != (value.ToolName == "skills.delete") || !TenantMemoryOperationRules.ValidHash(skill.SnapshotHash) || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null
                 || skill.CreateScope != (value.ToolName is "skills.create" or "skills.customize") || skill.TargetKey != (args.Value.TryGetProperty("key", out var target) ? target.GetString() : null))
-            || Encoding.UTF8.GetByteCount(value.ChangesJson) > (value.Resource is null ? 48000 : 262144) || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(value)) > (value.Resource is null ? 98000 : 524288)
+            || Encoding.UTF8.GetByteCount(value.ChangesJson) > (value.Resource is null && value.Harness is null ? 48000 : 262144) || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(value)) > (value.Resource is null && value.Harness is null ? 98000 : 524288)
             || value.ToolName == "settings.patch" && (value.Settings is null || value.AutomationChanges is null || value.Management is not null || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null)
             || value.ToolName is "management.freeze" or "management.policy.update" && (value.Management is null || value.Settings is not null || value.AutomationChanges is not null || value.UnattendedModelCatalogKey is not null || value.UnattendedReasoningEffort is not null)
             || value.ToolName == "automation.preferences.patch" && (value.Settings is not null || value.Management is not null || value.AutomationChanges is not null))
             throw new ArgumentException("Use one exact bounded management plan.");
+        TenantHarnessCommandRules.Validate(value);
         if (value.Resource is not null) TenantManagementResourceRules.Validate(value, args);
         using var changes = JsonDocument.Parse(value.ChangesJson); if (changes.RootElement.ValueKind != JsonValueKind.Array) throw new ArgumentException("Use exact saved change rows.");
     }
     public static TenantAgentConfigurationChange Change(TenantManagementReader reader, PreparedManagementMutation value, TenantAgentConfigurationSnapshot? snapshot = null,
         IReadOnlyList<AgentDefinitionPublicationResource>? published = null, byte[]? copiedBytes = null)
     {
-        Validate(value); Eligible(reader, value.ToolName);
-        var owner = reader.Agent.Instance; var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
+        Validate(value); Eligible(reader, value.Harness?.ToolName ?? value.ToolName);
+        var owner = reader.Agent.Instance; var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson, value.Harness);
         if (args.ExpectedInstanceRevision != owner.Revision || value.SessionId != reader.Run.SessionId || value.RootSessionId != reader.Root.SessionId
             || value.ConfigurationHash != TenantManagementReadRules.ConfigurationHash(owner) || value.BeforeStableHash != TenantManagementReadRules.StableConfigurationHash(owner))
             throw new AccessDeniedException("management_source_changed");
@@ -109,6 +113,7 @@ public static class TenantManagementMutationRules
                 || snapshot.Agent.Instance.InstanceId != owner.InstanceId || snapshot.Agent.Instance.Revision != owner.Revision) throw new AccessDeniedException("management_source_changed");
             return TenantManagementResourceRules.Change(new(reader, snapshot), value, published, copiedBytes) ?? throw new AccessDeniedException("operation_unchanged");
         }
+        if (value.Harness is not null) TenantHarnessCommandRules.Revalidate(new(reader, snapshot ?? throw new AccessDeniedException("management_source_changed")), value, published ?? []);
         TenantAgentConfigurationChange change;
         if (value.ToolName == "settings.patch")
         {
@@ -129,6 +134,7 @@ public static class TenantManagementMutationRules
             if (JsonSerializer.Serialize(policy) != JsonSerializer.Serialize(value.Management)) throw new AccessDeniedException("management_source_changed");
             change = new(owner.InstanceId, owner.Revision, HarnessManagement: policy);
         }
+        change = TenantHarnessCommandRules.Attach(args, reader, change);
         var after = TenantAgentConfigurationRules.Apply(owner, change, DateTimeOffset.UnixEpoch);
         if (TenantManagementReadRules.StableConfigurationHash(after) != value.AfterStableHash) throw new AccessDeniedException("management_source_changed");
         var rebuilt = Build(reader, args, change, DateTimeOffset.UnixEpoch);
@@ -155,7 +161,7 @@ public static class TenantManagementMutationRules
     }
     public static async ValueTask SecondaryAsync(TenantManagementReader reader, PreparedManagementMutation value, IamAuthorizer iam, Guid actor, CancellationToken ct)
     {
-        var parsed = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
+        var parsed = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson, value.Harness);
         if (value.Skill is not null) { await TenantManagementSkillRules.RawAsync(reader, parsed, iam, actor, ct).ConfigureAwait(false); return; }
         if (value.Resource is not null) {
             await TenantManagementResourceRules.RawAsync(reader, parsed, iam, actor, ct).ConfigureAwait(false);
