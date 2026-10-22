@@ -50,4 +50,49 @@ public sealed class WorkCompletionRequestTests
         Assert.Equal(accepted, WorkCompletionRequest.TryParse(args.RootElement,
             [new(ModelRole.Tool, payload, ToolCallId: "write", Name: ToolCatalog.WorkspaceWrite)], out _, out _, out _));
     }
+
+    [Theory]
+    [InlineData(TenantExperienceToolContract.Consolidate, "requiresApproval", false, true)]
+    [InlineData(TenantExperienceToolContract.Consolidate, "denied", false, true)]
+    [InlineData(TenantExperienceToolContract.Record, "denied", false, true)]
+    [InlineData(TenantExperienceToolContract.Consolidate, "allowed", true, false)]
+    [InlineData(TenantExperienceToolContract.Consolidate, "allowed", false, false)]
+    [InlineData(TenantExperienceToolContract.Consolidate, "requiresApproval", true, false)]
+    [InlineData(ToolCatalog.WorkspaceWrite, "denied", false, false)]
+    public void NoAction_requires_a_typed_unapplied_Experience_refusal_not_just_an_applied_flag(string tool, string decision, bool applied, bool accepted)
+    {
+        var args = JsonSerializer.SerializeToElement(new { outcome = "NoAction", summary = "No mutation was applied", attentionRequired = false });
+        Assert.Equal(accepted, WorkCompletionRequest.TryParse(args,
+            [new(ModelRole.Tool, JsonSerializer.Serialize(new { decision, applied }), ToolCallId: "effect", Name: tool)], out _, out _, out _));
+    }
+
+    [Theory]
+    [InlineData("denied", false, true, true)]
+    [InlineData("unknown", false, true, false)]
+    [InlineData("completed", true, true, false)]
+    [InlineData("completed", false, true, false)]
+    [InlineData("denied", true, true, false)]
+    [InlineData("denied", false, false, false)]
+    public void NoAction_accepts_only_a_factual_denied_Experience_mutation_receipt(string outcome, bool applied, bool experience, bool accepted)
+    {
+        var args = JsonSerializer.SerializeToElement(new { outcome = "NoAction", summary = "No mutation was applied", attentionRequired = false });
+        var payload = JsonSerializer.Serialize(new { outcome, applied, experienceId = experience ? "11111111-1111-1111-1111-111111111111" : null });
+        Assert.Equal(accepted, WorkCompletionRequest.TryParse(args,
+            [new(ModelRole.Tool, payload, ToolCallId: "consent", Name: ToolCatalog.RequestAuthorization)], out _, out _, out _));
+    }
+
+    [Theory]
+    [InlineData("completed", true, false, true)]
+    [InlineData("denied", false, false, true)]
+    [InlineData("unknown", false, false, false)]
+    [InlineData("denied", true, false, false)]
+    [InlineData("completed", false, false, false)]
+    [InlineData("completed", true, true, false)]
+    public void NoAction_treats_typed_Experience_source_consent_as_a_read_only_result(string outcome, bool readAuthorized, bool applied, bool accepted)
+    {
+        var args = JsonSerializer.SerializeToElement(new { outcome = "NoAction", summary = "Nothing useful to record", attentionRequired = false });
+        var payload = JsonSerializer.Serialize(new { outcome, applied, readAuthorized, experienceId = (string?)null, experienceSourceObservation = (object?)null });
+        Assert.Equal(accepted, WorkCompletionRequest.TryParse(args,
+            [new(ModelRole.Tool, payload, ToolCallId: "source-consent", Name: ToolCatalog.RequestAuthorization)], out _, out _, out _));
+    }
 }

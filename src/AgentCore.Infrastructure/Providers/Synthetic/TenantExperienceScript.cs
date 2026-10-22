@@ -15,7 +15,8 @@ internal static class TenantExperienceScript
             ? Call(ToolCatalog.WorkComplete, new { outcome = changed ? "Response" : "NoAction", summary = text, attentionRequired = false })
             : [new ModelTextDelta(text), new ModelCompleted(ModelStopReason.Completed)];
         const string prefix = "synthetic-tenant-experience: ";
-        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text ?? SyntheticTaskContext.Text(request);
+        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text
+            ?? request.Context?.Sections.FirstOrDefault(s => s.Id == ContextSectionId.RunTask)?.Message.Text ?? SyntheticTaskContext.Text(request);
         var sourceKind = "Session";
         string[] parts;
         if (prompt.StartsWith(prefix, StringComparison.Ordinal)) parts = prompt[prefix.Length..].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -32,6 +33,7 @@ internal static class TenantExperienceScript
                 sourceKind = kind.GetString()!; parts = ["record", selected.GetString()!];
             }
         }
+        if (parts is ["consolidate"]) return Consolidate(request);
         if (parts.Length != 2 || !Guid.TryParseExact(parts[1], "D", out var id) || id == Guid.Empty) return Finish("Select one exact source or Experience observation.");
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
         JsonElement? Payload(ModelMessage? message) { if (message is null) return null; using var json = JsonDocument.Parse(message.Text); return json.RootElement.Clone(); }
@@ -62,6 +64,44 @@ internal static class TenantExperienceScript
         if (recorded is null) return Call(TenantExperienceToolContract.Record, recordArgs);
         if (RequiresApproval(recorded.Value)) return Consent(TenantExperienceToolContract.Record, recordArgs);
         return recorded.Value.TryGetProperty("alreadyCompleted", out _) ? Finish("The exact Experience observation is retained with source provenance.", true) : Finish("Experience recording was unavailable. No change was repeated.");
+    }
+    private static IReadOnlyList<ModelGenerationEvent> Consolidate(ModelRequest request)
+    {
+        IReadOnlyList<ModelGenerationEvent> Finish(string text, bool changed = false) => request.Tools?.Any(t => t.Name == ToolCatalog.WorkComplete) == true
+            ? Call(ToolCatalog.WorkComplete, new { outcome = changed ? "Response" : "NoAction", summary = text, attentionRequired = false })
+            : [new ModelTextDelta(text), new ModelCompleted(ModelStopReason.Completed)];
+        if (request.Tools?.Any(t => t.Name == ToolCatalog.WorkComplete) != true || request.Tools.Any(t => t.Name == TenantExperienceToolContract.Consolidate) != true)
+            return Finish("Experience maintenance is unavailable for this task. No change was made.");
+        var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
+        var authorization = results.LastOrDefault(m => m.Name == ToolCatalog.RequestAuthorization);
+        if (authorization is not null)
+        {
+            using var saved = JsonDocument.Parse(authorization.Text); var value = saved.RootElement;
+            if (value.TryGetProperty("applied", out var applied) && applied.ValueKind == JsonValueKind.True)
+                return Finish("The exact Experience consolidation completed with retained source lineage.", true);
+            if (value.TryGetProperty("outcome", out _)) return Finish("The saved Experience consolidation was not applied. It will not be repeated.");
+        }
+        var previous = request.Messages.SelectMany(m => m.ToolCalls ?? []).LastOrDefault(c => c.Name == TenantExperienceToolContract.Consolidate);
+        if (previous is not null)
+        {
+            var result = results.LastOrDefault(m => m.Name == TenantExperienceToolContract.Consolidate);
+            if (result is null) return Finish("The Experience maintenance result is unavailable. It will not be repeated.");
+            using var json = JsonDocument.Parse(result.Text);
+            if (RequiresApproval(json.RootElement)) return Consent(TenantExperienceToolContract.Consolidate, JsonSerializer.Deserialize<JsonElement>(previous.ArgumentsJson));
+            return Finish("Experience maintenance was refused. No change was made.");
+        }
+        var evidence = request.Context?.Sections.FirstOrDefault(s => s.Id == ContextSectionId.Experience)?.Message.Text;
+        const string begin = "BEGIN_TENANT_EXPERIENCE_JSON\n", end = "\nEND_TENANT_EXPERIENCE_JSON";
+        var start = evidence?.IndexOf(begin, StringComparison.Ordinal) ?? -1; var finish = evidence?.IndexOf(end, StringComparison.Ordinal) ?? -1;
+        if (start < 0 || finish < start + begin.Length) return Finish("No readable Experience candidates were observed. No change was made.");
+        using var items = JsonDocument.Parse(evidence![(start + begin.Length)..finish]);
+        var candidates = items.RootElement.EnumerateArray().Where(i => i.GetProperty("provenance").GetProperty("scope").GetString() == "Instance")
+            .Select(i => i.GetProperty("id").GetGuid()).Distinct().Take(2).ToArray();
+        if (candidates.Length != 2) return Finish("There are fewer than two owned Instance observations. No change was made.");
+        return Call(TenantExperienceToolContract.Consolidate, new { sourceExperienceIds = candidates, goal = "Consolidated evidence grouping",
+            attempts = new[] { "Compared the exact owned Instance observations" }, decisions = new[] { "Retain one bounded observation with immediate source lineage" },
+            outcomes = new[] { "One exact consolidation proposed for human review" }, corrections = Array.Empty<string>(), unresolved = Array.Empty<string>(), difficulties = Array.Empty<string>(),
+            lessons = new[] { "Keep source qualifications and provenance explicit." } });
     }
     private static bool RequiresApproval(JsonElement value) => value.TryGetProperty("decision", out var decision) && decision.GetString() == "requiresApproval";
     private static IReadOnlyList<ModelGenerationEvent> Consent(string tool, object arguments) => Call(ToolCatalog.RequestAuthorization, new { operation = TenantExperienceToolContract.OperationName(tool), experience = new { tool, arguments } });

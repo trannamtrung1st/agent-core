@@ -27,12 +27,12 @@ public static class WorkCompletionRequest
         { rejection = "attentionRequired must be true only for NeedsAttention, and false for Response or NoAction."; return false; }
         if (kind == "NoAction" && messages.Where(m => m.Role == ModelRole.Tool)
             .Any(m => m.Name is { } name && ToolRegistry.TryGet(name, out var descriptor)
-                && descriptor.Effect != ToolEffect.ReadOnly && !IsRejectedToolResult(m.Text)))
+                && descriptor.Effect != ToolEffect.ReadOnly && !IsRejectedToolResult(name, m.Text)))
         { rejection = "A Run that performed an action cannot report NoAction."; return false; }
         result = JsonSerializer.Serialize(new { outcome = kind, summary = text.Trim() });
         return true;
     }
-    private static bool IsRejectedToolResult(string text)
+    private static bool IsRejectedToolResult(string tool, string text)
     {
         try
         {
@@ -41,9 +41,25 @@ public static class WorkCompletionRequest
             return root.ValueKind == JsonValueKind.Object && (
                 root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(error.GetString())
                 || root.TryGetProperty("saved", out var saved) && saved.ValueKind == JsonValueKind.False
-                || root.TryGetProperty("changed", out var changed) && changed.ValueKind == JsonValueKind.False);
+                || root.TryGetProperty("changed", out var changed) && changed.ValueKind == JsonValueKind.False
+                || ExperienceNotApplied(tool, root));
         }
         catch (JsonException) { return false; }
+    }
+    private static bool ExperienceNotApplied(string tool, JsonElement result)
+    {
+        if (!result.TryGetProperty("applied", out var applied) || applied.ValueKind != JsonValueKind.False) return false;
+        if (tool is TenantExperienceToolContract.Record or TenantExperienceToolContract.Consolidate)
+            return result.TryGetProperty("decision", out var decision) && decision.ValueKind == JsonValueKind.String
+                && decision.GetString() is "denied" or "requiresApproval";
+        if (tool != ToolCatalog.RequestAuthorization || !result.TryGetProperty("experienceId", out var id)
+            || !result.TryGetProperty("outcome", out var outcome) || outcome.ValueKind != JsonValueKind.String) return false;
+        // Typed mutation denial and source-read receipts are distinct from arbitrary tool data.
+        if (id.ValueKind == JsonValueKind.String && id.TryGetGuid(out var value) && value != Guid.Empty) return outcome.GetString() == "denied";
+        return id.ValueKind == JsonValueKind.Null && result.TryGetProperty("experienceSourceObservation", out var observation)
+            && observation.ValueKind is JsonValueKind.Null or JsonValueKind.Object && result.TryGetProperty("readAuthorized", out var authorized)
+            && (outcome.GetString() == "denied" && authorized.ValueKind == JsonValueKind.False
+                || outcome.GetString() == "completed" && authorized.ValueKind == JsonValueKind.True);
     }
     public static string Outcome(string text)
     { try { using var d = JsonDocument.Parse(text); return d.RootElement.GetProperty("outcome").GetString() ?? "Failed"; } catch { return "Failed"; } }

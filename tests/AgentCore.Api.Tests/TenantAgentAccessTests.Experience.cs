@@ -18,7 +18,7 @@ public sealed partial class TenantAgentAccessTests
     {
         public ModelCapabilities Capabilities => new(true, true, true);
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
-        public Guid Source; public bool Hold; public bool Followup;
+        public Guid Source; public bool Hold; public bool Followup; public bool AllowMaintenance;
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
@@ -26,7 +26,7 @@ public sealed partial class TenantAgentAccessTests
             Requests.Enqueue(request);
             if (Source != Guid.Empty)
             {
-                Assert.DoesNotContain(request.Tools ?? [], t => t.Name == TenantExperienceToolContract.Consolidate);
+                if (!AllowMaintenance) Assert.DoesNotContain(request.Tools ?? [], t => t.Name == TenantExperienceToolContract.Consolidate);
                 var inspected = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == TenantExperienceToolContract.Source);
                 if (inspected is null) { Assert.Contains(request.Tools!, t => t.Name == TenantExperienceToolContract.Source && t.ParametersJson.Contains("sourceKind", StringComparison.Ordinal)); yield return new ModelToolCallEvent(new("inspect-experience", TenantExperienceToolContract.Source, JsonSerializer.Serialize(new { sourceKind = "AgentRun", sourceId = Source }))); yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break; }
                 using var json = JsonDocument.Parse(inspected.Text); Assert.True(json.RootElement.GetProperty("tenantExperienceSourceRead").GetBoolean());
@@ -59,10 +59,10 @@ public sealed partial class TenantAgentAccessTests
             yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
-    private static async Task<long> ExperienceOptIn(HttpClient owner, Guid tenant, Guid agent, bool enabled)
+    private static async Task<long> ExperienceOptIn(HttpClient owner, Guid tenant, Guid agent, bool enabled, bool maintenance = false)
     {
         var root = $"/api/v2/tenants/{tenant}/agents/{agent}/state-isolation";
-        var preview = await Json(await owner.PostAsJsonAsync(root + "/preview", new { settings = Array.Empty<object>(), experienceEnabled = enabled, allowMaintenance = false }));
+        var preview = await Json(await owner.PostAsJsonAsync(root + "/preview", new { settings = Array.Empty<object>(), experienceEnabled = enabled, allowMaintenance = maintenance }));
         Assert.Equal(HttpStatusCode.OK, (await ApplyIsolation(owner, root, preview)).StatusCode);
         return (await Json(await owner.GetAsync(root))).GetProperty("configuration").GetProperty("revisions").GetProperty("instance").GetInt64();
     }

@@ -20,10 +20,10 @@ public sealed partial class TenantAgentAccessTests
         await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = actor, roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
     }
     private static async Task<AgentRun> ExperienceAutomation(RuntimeStateFactory factory, HttpClient owner, FakeTimeProvider clock,
-        Guid tenant, Guid instance, long instanceRevision, bool scheduled = false)
+        Guid tenant, Guid instance, long instanceRevision, bool scheduled = false, string? instructions = null, bool waitForApproval = false)
     {
         var route = $"/api/v2/tenants/{tenant}/agents/{instance}/automations";
-        var value = await Json(await owner.PostAsJsonAsync(route, new { enabled = true, name = "Review owned evidence", instructions = "Inspect and retain only owned evidence, then finish.",
+        var value = await Json(await owner.PostAsJsonAsync(route, new { enabled = true, name = "Review owned evidence", instructions = instructions ?? "Inspect and retain only owned evidence, then finish.",
             schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = clock.GetUtcNow().AddMinutes(30).ToString("O") }, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision, requiresTools = true }));
         var automation = value.GetProperty("automationId").GetGuid(); Guid run;
         if (scheduled)
@@ -41,6 +41,16 @@ public sealed partial class TenantAgentAccessTests
             run = admitted.GetProperty("runId").GetGuid();
         }
         await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
+        if (waitForApproval)
+        {
+            for (var pass = 0; pass < 500; pass++)
+            {
+                var observed = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, run))!;
+                if (observed.IsTerminal || observed.Status == AgentRunStatus.WaitingForApproval) return observed;
+                await Task.Delay(25);
+            }
+            throw new TimeoutException("The actual Experience Automation did not finish or request approval.");
+        }
         return await ProfileTerminal(factory, tenant, run);
     }
 
