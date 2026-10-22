@@ -5,7 +5,7 @@ namespace AgentCore.Application.Security;
 
 public static partial class TenantApprovalRules
 {
-    public static AccessScope Scope(Guid tenant, PreparedTenantOperation operation) => (operation.AutomationAdmission is { Permission: "sessions.create" or "agent-runs.create" } || operation.BackgroundStart is not null || operation.BackgroundReport is not null)
+    public static AccessScope Scope(Guid tenant, PreparedTenantOperation operation) => (operation.AutomationMutation is { Current: null } || operation.AutomationAdmission is { Permission: "sessions.create" or "agent-runs.create" } || operation.BackgroundStart is not null || operation.BackgroundReport is not null)
         ? AccessScope.ForTenant(tenant) : AccessScope.ForResource(tenant, operation.ResourceType, operation.ResourceId);
     public static PreparedTenantOperation PrepareBackgroundStart(Guid operation, Guid instance, PreparedBackgroundStart value, long revision, long personaRevision)
     {

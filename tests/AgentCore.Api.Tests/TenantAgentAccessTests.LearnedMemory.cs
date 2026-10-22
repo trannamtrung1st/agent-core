@@ -42,7 +42,7 @@ public sealed partial class TenantAgentAccessTests
     }
     private static MemoryProposal Learn(string value = "PRIVATE_CUSTOMER_EVIDENCE", MemoryProposalOperation operation = MemoryProposalOperation.Upsert,
         string subject = "Evidence workflow") => new(operation, MemoryKind.Preference, subject, value, MemoryScopeHint.User, MemoryProposalSource.UserExplicit);
-    private static async Task<(Guid Tenant, Guid Agent)> OwnedMemoryAgent(HttpClient owner, Guid? existingTenant = null, bool enabled = true, bool automation = false, bool events = false, bool automationReads = false)
+    private static async Task<(Guid Tenant, Guid Agent)> OwnedMemoryAgent(HttpClient owner, Guid? existingTenant = null, bool enabled = true, bool automation = false, bool events = false, bool automationReads = false, bool automationMutations = false)
     {
         Guid tenant;
         if (existingTenant is { } selected) tenant = selected;
@@ -54,8 +54,8 @@ public sealed partial class TenantAgentAccessTests
         if (automation) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(new TriggerPolicy(true, true, true, false, false, false, 20, 30, 1, events ? ["schedule", "coreEvent"] : ["schedule"]), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         candidate["stateIsolationPolicy"] = JsonSerializer.SerializeToNode(new StateIsolationPolicy(AgentStateVisibility: AgentStateVisibility.InstanceSummary,
             MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary), new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
-        candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(), capabilities = new { mode = "Selected", resolvedCapabilities = automationReads ? new[] { "agent.state.inspect", "automation.inspect", "automation.list" } : new[] { "agent.state.inspect" } },
-            projection = new { alwaysCapabilities = automationReads ? new[] { "agent.state.inspect", "automation.inspect", "automation.list" } : new[] { "agent.state.inspect" } } });
+        candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(), capabilities = new { mode = "Selected", resolvedCapabilities = automationMutations ? new[] { "agent.state.inspect", "automation.inspect", "automation.list", "automation.create", "automation.update", "automation.enable", "automation.disable", "automation.delete" } : automationReads ? new[] { "agent.state.inspect", "automation.inspect", "automation.list" } : new[] { "agent.state.inspect" } },
+            projection = new { alwaysCapabilities = automationMutations ? new[] { "agent.state.inspect", "automation.inspect", "automation.list", "automation.create", "automation.update", "automation.enable", "automation.disable", "automation.delete" } : automationReads ? new[] { "agent.state.inspect", "automation.inspect", "automation.list" } : new[] { "agent.state.inspect" } } });
         var id = draft.GetProperty("draftId").GetGuid();
         var changed = await Json(await owner.PutAsJsonAsync(api + $"/definition-drafts/{id}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 }));
         Assert.True(changed.TryGetProperty("revision", out _), changed.GetRawText());

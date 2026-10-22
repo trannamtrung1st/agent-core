@@ -885,3 +885,15 @@ it('presents exact Automation metadata as read consent and reports authorization
   await waitFor(() => expect(within(confirm).getByText(/This grants no Automation mutation, execution or future read authority/)).toBeVisible());
   fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(0);
 });
+
+it('reviews exact Automation Before/After as a one-time configuration change without granting recurring execution', async () => {
+  view({ ...request, kind: 'review', summary: 'Review exact Automation change', preparedAction: { ...request.preparedAction, operation: 'mutate_automation' },
+    review: { ...request.review, changes: [{ field: 'Instructions', before: 'No existing Automation', after: 'Literal <script>task</script> instructions', beforeAvailable: true, afterAvailable: true, restoresDefault: false }] } });
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved changes' });
+  expect(within(saved).getByText('Instructions')).toBeVisible(); expect(within(saved).getByText('No existing Automation')).toBeVisible();
+  expect(within(saved).getByText('Literal <script>task</script> instructions')).toBeVisible(); expect(saved.querySelector('script')).toBeNull();
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()); fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirmation = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirmation).getByText(/Future occurrences and their tools require their own current permissions and admission checks/)).toBeVisible());
+  fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});

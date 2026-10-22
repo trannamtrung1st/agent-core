@@ -310,7 +310,7 @@ public static partial class TriggerScheduleCommands
         return RegistrationJson(created);
     }
 
-    private static IReadOnlyList<AutomationTriggerRecord> ReadTriggerCollection(JsonElement args)
+    private static IReadOnlyList<AutomationTriggerRecord> ReadTriggerCollection(JsonElement args, IIdGenerator? ids = null)
     {
         var rows = args.GetProperty("triggers");
         if (rows.ValueKind != JsonValueKind.Array) throw new ArgumentException("Triggers must be a collection.");
@@ -347,7 +347,7 @@ public static partial class TriggerScheduleCommands
             { "everyMatch" => new EventDispatch(), "coalesceLatest" => new EventDispatch(EventDispatchMode.CoalesceLatest, d.GetProperty("windowSeconds").GetInt32()), _ => throw new ArgumentException("Dispatch is invalid.") } : new EventDispatch();
                 config = source.Kind == "builtin" ? new CoreEventTrigger(source.Key!, filter, dispatch) : new EventTrigger(source.EventId!.Value, filter, dispatch);
             }
-            return new AutomationTriggerRecord(t.TryGetProperty("triggerId", out var id) ? Guid.Parse(id.GetString() ?? "") : Guid.NewGuid(), config,
+            return new AutomationTriggerRecord(t.TryGetProperty("triggerId", out var id) ? Guid.Parse(id.GetString() ?? "") : ids?.NewId() ?? Guid.NewGuid(), config,
                 !t.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean(), t.TryGetProperty("revision", out var rev) ? rev.GetInt64() : 1);
         }).ToArray();
     }

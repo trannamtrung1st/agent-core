@@ -538,6 +538,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 && db.Automations.IgnoreQueryFilters().Any(a => a.AutomationId == r.AutomationId && a.TenantId == r.TenantId
                     && a.AgentInstanceId == r.InstanceId && a.ExecutorPrincipalId == r.ExecutorPrincipalId));
         }
+        query = AutomationMutationVisible(db, query, automationVisibility);
         if (automationVisibility is null)
             query = query.Where(r => db.Set<TenantApprovalRecord>().FromSqlRaw("SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson,'$.Operation.AutomationRead') IS NOT 'object'").Any(v => v.RequestId == r.RequestId));
         else
@@ -596,6 +597,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.BackgroundStart is not null) await RequireBackgroundCreationOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if (request.Operation.AutomationMutation is not null) _ = await RequireAutomationMutationApproval(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.AutomationRead is { } automationRead) _ = await ObserveAutomationRead(db, run, automationRead.ToolName, automationRead.ArgumentsJson, automationRead, null, ct).ConfigureAwait(false);
             if (request.Operation.ExperienceOperation is not null) _ = await RequireExperienceApproval(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.ContinuityRead is not null) _ = await RequireContinuityOperation(db, request, run, ct).ConfigureAwait(false);
@@ -705,6 +707,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 await RequireWorkspaceMutationOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.AutomationMutation is not null)
+            {
+                var mutationSource = await RequireAutomationMutationApproval(db, request, run, ct).ConfigureAwait(false);
+                await TenantAutomationMutationRules.ReviewerAsync(request, mutationSource, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.AutomationRead is { } automationRead)
             {

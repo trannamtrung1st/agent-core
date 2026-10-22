@@ -69,6 +69,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
                 && (r.Operation.MemoryOperation is null || MemoryApprovalVisible(r, memoryVisibility))
                 && (r.Operation.ContinuityRead is null || ContinuityApprovalVisible(r, continuityVisibility))
                 && (r.Operation.AutomationRead is null || AutomationReadApprovalVisible(r, automationVisibility))
+                && (r.Operation.AutomationMutation is null || AutomationMutationApprovalVisible(r, automationVisibility))
                 && (r.Operation.ExperienceOperation is null || ExperienceApprovalVisible(r, continuityVisibility))
                 && (r.Operation.WorkspaceRead is null || WorkspaceApprovalVisible(r, workspaceReadVisibility, attachmentReadVisibility))
                 && (r.Operation.WorkspaceMutation is null || WorkspaceMutationApprovalVisible(r, workspaceMutationVisibility))
@@ -136,6 +137,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (request.Operation.ArtifactPublication is not null) RequireArtifactOperation(request, run, agent);
             if (request.Operation.BrowserCommand is not null) RequireBrowserOperation(request, run, agent);
             if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
+            if (request.Operation.AutomationMutation is not null) _ = RequireAutomationMutationApproval(request, run, ct);
             if (request.Operation.AutomationRead is { } automationRead) _ = ObserveAutomationRead(run, automationRead.ToolName, automationRead.ArgumentsJson, automationRead, null, ct);
             if (request.Operation.ExperienceOperation is not null) _ = RequireExperienceApproval(request, run, ct);
             if (request.Operation.ContinuityRead is not null) _ = RequireContinuityOperation(request, run, ct);
@@ -242,6 +244,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             {
                 RequireWorkspaceMutationOperation(request, run, agent);
                 TenantWorkspaceMutationOperationRules.ReviewerAsync(before, request, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            if (request.Operation.AutomationMutation is not null && request.Status != TenantApprovalStatus.Cancelled)
+            {
+                var mutationSource = RequireAutomationMutationApproval(request, run, ct);
+                TenantAutomationMutationRules.ReviewerAsync(request, mutationSource, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             }
             if (request.Operation.AutomationRead is { } automationRead && request.Status != TenantApprovalStatus.Cancelled)
             {

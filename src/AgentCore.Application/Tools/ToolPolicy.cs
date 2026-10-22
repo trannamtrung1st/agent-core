@@ -17,6 +17,8 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && TenantAutomationMutationContract.IsTool(toolName))
+            return TenantAutomationMutationContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantAutomationReadContract.IsTool(toolName))
             return TenantAutomationReadContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantExperienceToolContract.IsTool(toolName))
@@ -216,6 +218,8 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is { } authoring && TenantAutomationMutationContract.IsTool(descriptor.Name))
+            return authoring.SessionId == context.OwnedSessionId && TenantAutomationMutationContract.Allowed(definition, context).Contains(descriptor.Name);
         if (context?.ExecutionContext is { } automation && TenantAutomationReadContract.IsTool(descriptor.Name))
             return automation.SessionId == context.OwnedSessionId && TenantAutomationReadContract.Allowed(definition, context).Contains(descriptor.Name);
         if (context?.ExecutionContext is { } experience && TenantExperienceToolContract.IsTool(descriptor.Name))

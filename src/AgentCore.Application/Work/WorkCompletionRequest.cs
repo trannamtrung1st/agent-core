@@ -42,9 +42,18 @@ public static class WorkCompletionRequest
                 root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(error.GetString())
                 || root.TryGetProperty("saved", out var saved) && saved.ValueKind == JsonValueKind.False
                 || root.TryGetProperty("changed", out var changed) && changed.ValueKind == JsonValueKind.False
-                || AutomationReadNotApplied(tool, root) || ExperienceNotApplied(tool, root));
+                || AutomationMutationNotApplied(tool, root) || AutomationReadNotApplied(tool, root) || ExperienceNotApplied(tool, root));
         }
         catch (JsonException) { return false; }
+    }
+    private static bool AutomationMutationNotApplied(string tool, JsonElement result)
+    {
+        if (!result.TryGetProperty("applied", out var applied) || applied.ValueKind != JsonValueKind.False) return false;
+        if (TenantAutomationMutationContract.IsTool(tool)) return result.TryGetProperty("decision", out var decision) && decision.ValueKind == JsonValueKind.String && decision.GetString() is "denied" or "requiresApproval";
+        return tool == ToolCatalog.RequestAuthorization && result.TryGetProperty("outcome", out var outcome) && outcome.ValueKind == JsonValueKind.String && outcome.GetString() == "denied"
+            && result.TryGetProperty("automationId", out var target) && target.TryGetGuid(out var id) && id != Guid.Empty
+            && result.TryGetProperty("revision", out var revision) && revision.ValueKind == JsonValueKind.Null
+            && result.TryGetProperty("replayAllowed", out var replay) && replay.ValueKind == JsonValueKind.False;
     }
     private static bool AutomationReadNotApplied(string tool, JsonElement result)
     {

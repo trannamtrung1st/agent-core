@@ -22,7 +22,7 @@ public static class TenantSessionEndpoints
             var actor = IdentityHttp.TenantContext(http);
             var result = await service.ListAsync(actor.TenantId, sessionId, Initiator(http, actor), page ?? 0, pageSize ?? 20, ct).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(item => new { item.RequestId, item.RunId, item.ResponseId,
-                operation = item.Operation switch { AgentCore.Domain.Security.TenantOperationKind.AutomationRead => "inspect_automations", AgentCore.Domain.Security.TenantOperationKind.ContinuityRead => "inspect_continuity", AgentCore.Domain.Security.TenantOperationKind.MemoryOperation => item.MemoryRead == true ? "inspect_memory" : "manage_memory", AgentCore.Domain.Security.TenantOperationKind.Persona => "update_persona",
+                operation = item.Operation switch { AgentCore.Domain.Security.TenantOperationKind.AutomationMutation => "mutate_automation", AgentCore.Domain.Security.TenantOperationKind.AutomationRead => "inspect_automations", AgentCore.Domain.Security.TenantOperationKind.ContinuityRead => "inspect_continuity", AgentCore.Domain.Security.TenantOperationKind.MemoryOperation => item.MemoryRead == true ? "inspect_memory" : "manage_memory", AgentCore.Domain.Security.TenantOperationKind.Persona => "update_persona",
                     AgentCore.Domain.Security.TenantOperationKind.ExperienceOperation => AgentCore.Application.Tools.TenantExperienceToolContract.OperationName(item.ExperienceTool!),
                     AgentCore.Domain.Security.TenantOperationKind.ReportSourceRead => "inspect_background_report_source",
                     AgentCore.Domain.Security.TenantOperationKind.CompletionRead => "inspect_background_completion",

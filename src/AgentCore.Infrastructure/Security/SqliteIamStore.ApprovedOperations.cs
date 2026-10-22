@@ -139,6 +139,16 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
         }
+        TenantAutomationMutationObservation? automationMutation = null;
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AutomationMutation is not null)
+        {
+            try {
+                automationMutation = await RequireAutomationMutationApproval(db, request, run, ct).ConfigureAwait(false);
+                await TenantAutomationMutationRules.ReviewerAsync(request, automationMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+        }
         IReadOnlyList<AgentCore.Domain.Experience.TenantExperience> experienceValues = [];
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ExperienceOperation is not null)
         {
@@ -229,20 +239,29 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         }
         AgentRunStoreMapping.Apply(row, savedRun);
         if (grant is not null) db.Entry(grant).CurrentValues.SetValues(grant with { Status = complete ? OperationGrantStatus.Consumed : OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
-        var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
-            run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
-            updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()));
-        if (commit.Outcome == TenantOperationOutcome.Completed)
-            foreach (var value in experienceValues)
-            {
-                var previousExperience = await db.Set<TenantExperienceRecord>().SingleOrDefaultAsync(i => i.TenantId == value.TenantId && i.ExperienceId == value.ExperienceId, ct).ConfigureAwait(false);
-                if (previousExperience is null) db.Add(TenantExperienceRecord.Row(value));
-                else db.Entry(previousExperience).CurrentValues.SetValues(TenantExperienceRecord.Row(value));
-            }
-        db.Add(TenantOperationReceiptRecord.From(receipt)); db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
-        await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
-        if (complete && memoryEffect is not null) await StageMemoryEffect(db, memoryEffect, at, ct).ConfigureAwait(false);
-        try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return receipt; }
+        if (complete && automationMutation is not null) {
+            var parent = await OwnedAutomations(db, request.TenantId).SingleOrDefaultAsync(a => a.AutomationId == request.Operation.AutomationMutation!.Proposed.AutomationId.ToString("D"), ct).ConfigureAwait(false);
+            StageAutomation(db, parent, request.Operation.AutomationMutation!.Proposed);
+        }
+        try
+        {
+            if (complete && automationMutation is not null) await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
+                run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
+                updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
+                AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
+            if (commit.Outcome == TenantOperationOutcome.Completed)
+                foreach (var value in experienceValues)
+                {
+                    var previousExperience = await db.Set<TenantExperienceRecord>().SingleOrDefaultAsync(i => i.TenantId == value.TenantId && i.ExperienceId == value.ExperienceId, ct).ConfigureAwait(false);
+                    if (previousExperience is null) db.Add(TenantExperienceRecord.Row(value));
+                    else db.Entry(previousExperience).CurrentValues.SetValues(TenantExperienceRecord.Row(value));
+                }
+            db.Add(TenantOperationReceiptRecord.From(receipt)); db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
+            await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
+            if (complete && memoryEffect is not null) await StageMemoryEffect(db, memoryEffect, at, ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return receipt;
+        }
         catch (DbUpdateConcurrencyException) { return null; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
     }

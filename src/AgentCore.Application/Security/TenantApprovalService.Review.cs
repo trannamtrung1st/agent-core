@@ -103,6 +103,12 @@ public sealed partial class TenantApprovalService
                     await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(r, run, ct).ConfigureAwait(false);
                     await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, r, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
+                else if (op.AutomationMutation is { } automationMutation)
+                {
+                    var observed = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).Mutations.PrepareAsync(new(r.TenantId, run.AgentRunId), null, automationMutation.ToolName, automationMutation.ArgumentsJson, ct, automationMutation).ConfigureAwait(false);
+                    independent = await AutomationMutationIndependentAsync(r, observed.Source, ct).ConfigureAwait(false);
+                    await TenantAutomationMutationRules.ReviewerAsync(r, observed.Source, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+                }
                 else if (op.AutomationRead is { } automationRead)
                 {
                     var service = (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads;
@@ -269,6 +275,7 @@ public sealed partial class TenantApprovalService
             return [new("workspaceMutationTool", null, mutation.ToolName, false), new("workspaceMutationArguments", null, mutation.ArgumentsJson, false),
                 new("workspaceMutationDisclosure", null, "Authorize only these exact saved workspace changes once. Current source changes require fresh review. No role, file read, recipient download or later mutation authority is granted.", false),
                 new("workspaceMutationPartialEffects", null, "Copies and ordered batches are coarse filesystem operations. Earlier or partial effects can remain on failure; there is no atomic rollback and uncertain work must not be repeated.", false)];
+        if (op.AutomationMutation is { } automationMutation) return AutomationMutationChanges(automationMutation);
         if (op.AutomationRead is { } automationRead) return [new("Automation read", null, automationRead.ToolName == AgentCore.Application.Tools.ToolCatalog.AutomationList ? "List readable Automations" : "Inspect selected Automation", false), new("Exact query", null, automationRead.ArgumentsJson, false),
             new("Read scope", null, "Review only this saved bounded observation in this task. No Automation write, source Run content, role or future execution authority is granted.", false)];
         if (op.ExperienceOperation is { } experience) return [new("Experience operation", null, experience.ToolName, false),

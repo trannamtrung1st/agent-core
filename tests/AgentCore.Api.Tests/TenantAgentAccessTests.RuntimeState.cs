@@ -118,7 +118,7 @@ public sealed partial class TenantAgentAccessTests
             return Pending is { } pending ? await pending : new("browser", "available", "isolated", DateTimeOffset.UtcNow, LiveContexts: 0, OpenPages: CountPages ? Calls : 0);
         }
     }
-    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, ILanguageModel? model = null, string? root = null, IModelCatalog? catalog = null) : AgentCoreApiFactory
+    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, ILanguageModel? model = null, string? root = null, IModelCatalog? catalog = null, AgentCore.Application.Triggers.ITriggerCommandAuthorizer? semantic = null) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => model is not null;
         public RuntimeBrowserProbe Browser { get; } = new(); public string Root { get; } = root ?? Path.Combine(Path.GetTempPath(), "tenant-runtime-state-" + Guid.NewGuid().ToString("N"));
@@ -136,6 +136,7 @@ public sealed partial class TenantAgentAccessTests
                         (descriptor.ImplementationInstance ?? descriptor.ImplementationFactory?.Invoke(provider) ?? ActivatorUtilities.CreateInstance(provider, descriptor.ImplementationType!)))));
                 }
                 services.Replace(ServiceDescriptor.Singleton<ITenantBrowserStateReader>(Browser));
+                if (semantic is not null) services.Replace(ServiceDescriptor.Singleton(semantic));
                 if (catalog is not null) services.Replace(ServiceDescriptor.Singleton<IModelCatalog>(catalog));
                 if (clock is not null) services.Replace(ServiceDescriptor.Singleton(clock));
             });

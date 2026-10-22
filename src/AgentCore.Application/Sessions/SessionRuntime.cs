@@ -3748,7 +3748,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             {
                                 var automationCommand = TriggerCommand(trigger) with { ResponseId = request.ResponseId };
                                 AutomationCommandPreparation? automationPrepared = null;
-                                if (ToolResources.IsTriggerWrite(call.Name))
+                                if (ToolResources.IsTriggerWrite(call.Name) && !(_boundAgentRun?.Owner.TenantId is not null && TenantAutomationMutationContract.IsTool(call.Name)))
                                 {
                                     automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, false, overallCts.Token);
                                     if (automationPrepared.Request is { } proposed)
@@ -3916,8 +3916,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     else
                                     {
                                     if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
-                                    // Tenant Workspace mutations and Artifact publication own their durable Run/effect receipts.
-                                    effectFenced = !(_runtimeOwner is not null && (TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace))
+                                    // Canonical local mutations and Artifact publication own their durable Run/effect receipts.
+                                    effectFenced = !(_runtimeOwner is not null && (TenantAutomationMutationContract.IsTool(call.Name) || TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace))
                                         && (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
                                     effectHash = actionHash;
                                     var skipDispatch = false;

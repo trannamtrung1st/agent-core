@@ -120,7 +120,7 @@ public static class TenantAutomationReadRules
     public static async ValueTask ValidateCurrentAsync(TenantMemoryReader reader, PreparedAutomationRead value,
         Func<Guid, CancellationToken, ValueTask<Automation?>> parentReader,
         Func<TriggerSourceKind, Guid, Guid, CancellationToken, ValueTask<TenantEventDelivery?>> eventReader,
-        IamAuthorizer iam, CancellationToken ct, Guid? human = null)
+        IamAuthorizer iam, CancellationToken ct, Guid? human = null, Func<TenantAutomationReadSource, Automation, CancellationToken, ValueTask<bool>>? ownMutation = null)
     {
         Validate(value); Eligible(reader, value.ToolName);
         if (value.SessionId != reader.Run.SessionId || value.RootSessionId != reader.Root.SessionId) throw new AccessDeniedException("automation_source_changed");
@@ -128,7 +128,8 @@ public static class TenantAutomationReadRules
         {
             var current = await parentReader(source.AutomationId, ct).ConfigureAwait(false);
             if (current is null || current.Owner != TriggerOwner.ForTenant(reader.Security.Tenant.TenantId, reader.Run.AgentInstanceId, reader.Agent.PrincipalId)
-                || current.Revision != source.Revision || ConfigurationHash(current) != source.ConfigurationHash) throw new AccessDeniedException("automation_source_changed");
+                || (current.Revision != source.Revision || ConfigurationHash(current) != source.ConfigurationHash)
+                    && (ownMutation is null || !await ownMutation(source, current, ct).ConfigureAwait(false))) throw new AccessDeniedException("automation_source_changed");
         }
         foreach (var source in Events(value))
         {

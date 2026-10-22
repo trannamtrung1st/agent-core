@@ -27,6 +27,14 @@ Downgrade refuses retained child graphs rooted in a background task or consent r
 
 ## Tagged tenant Automation ownership
 
+### Model authoring consent and receipts
+
+`20261022041619_TenantAutomationMutations` extends the existing closed approval payload with exact `PreparedAutomationMutation` and adds nullable `AutomationMutationJson` to existing operation receipts. It creates no execution owner or new table. Typed receipt metadata binds the Automation/tool, before/after hashes and continuous revisions; no instructions or configuration body are copied to receipts. The owning transaction flushes the applied parent before its receipt guard while retaining one atomic commit.
+
+The frozen rebuild preserves all 106 incumbent trigger definitions and indexes and adds four guards: current owned-parent/fresh creation identity, immutable mutation payload, applied receipt-parent correspondence and immutable receipt metadata (110 total). Historical migrations remain unchanged. Strict bounded receipt shape and current model metadata share the frozen constraint resource. Empty-data downgrade/re-upgrade preserves guards/indexes and foreign keys. Downgrade refuses retained mutation requests, typed receipts or canonical `AgentTask`-origin Automations before lossy conversion; it never rewrites their provenance.
+
+### Existing ownership schema
+
 `20261020180000_TenantAutonomousAutomation` extends the existing `Automations` and `TriggerOccurrences` rows with nullable tenant/executor identity and nullable legacy profile. Checks require either the legacy profile variant or a concrete tenant/Instance/executor variant; the latter has no profile. Composite ownership foreign keys bind canonical rows to the actual SystemIdentity. Canonical queries use explicit ownership; legacy trigger queries filter out tenant rows. Tenant due scans use a bounded stable ID cursor, so a blocked prefix does not permanently hide later jobs. A technical schedule expiry/completion advances only exact registration state, without a Session or Run.
 
 Occurrence admission commits current registration CAS, immutable accepted occurrence, fresh Session/activation/Run, tenant security revision and canonical audit together. Schedule calculations, model pins and the existing Session/Run coordinator remain the owners. Configuration adoption observes bounded future owned registrations and commits their policy CAS with the Instance change. Decommission reference counting includes owned retained rows.

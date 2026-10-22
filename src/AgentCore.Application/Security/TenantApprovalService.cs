@@ -395,6 +395,11 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                 await (workspaceMutations ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(request, run, ct).ConfigureAwait(false);
                 await TenantWorkspaceMutationOperationRules.ReviewerAsync(state, request, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
             }
+            if (request.Operation.AutomationMutation is { } automationMutation)
+            {
+                var observed = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).Mutations.PrepareAsync(new(tenant, run.AgentRunId), null, automationMutation.ToolName, automationMutation.ArgumentsJson, ct, automationMutation).ConfigureAwait(false);
+                await TenantAutomationMutationRules.ReviewerAsync(request, observed.Source, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+            }
             if (request.Operation.AutomationRead is { } automationRead)
             {
                 var observed = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads.PrepareAsync(new(tenant, run.AgentRunId), null, automationRead.ToolName, automationRead.ArgumentsJson, ct, automationRead).ConfigureAwait(false);
@@ -507,6 +512,8 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             try { await TenantWorkspaceMutationOperationRules.ReadAsync(state, request, human, authorizer, ct).ConfigureAwait(false); }
             catch (AccessDeniedException) { throw new AccessDeniedException("approval_unavailable"); }
         }
+        if (request.Operation.AutomationMutation is not null)
+            _ = await (automationAdmissions ?? throw new AccessDeniedException("approval_unavailable")).Mutations.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.AutomationRead is not null)
             _ = await (automationAdmissions ?? throw new AccessDeniedException("approval_unavailable")).Reads.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.ExperienceOperation is not null)

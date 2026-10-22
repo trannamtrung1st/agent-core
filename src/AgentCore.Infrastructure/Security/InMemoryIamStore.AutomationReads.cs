@@ -27,7 +27,7 @@ public sealed partial class InMemoryIamStore : ITenantAutomationReadStore
             if (expected.ToolName != tool || expected.ArgumentsJson != args.Json) throw new AccessDeniedException("automation_source_changed");
             TenantAutomationReadRules.ValidateCurrentAsync(reader, expected,
                 (id, _) => ValueTask.FromResult(automationBacking.ReadTenantAutomation(reader.Security.Tenant.TenantId, id)),
-                (kind, id, trigger, _) => ValueTask.FromResult(TenantEvent(reader.Security.Tenant.TenantId, kind, id, trigger)), iam, ct, human).AsTask().GetAwaiter().GetResult();
+                (kind, id, trigger, _) => ValueTask.FromResult(TenantEvent(reader.Security.Tenant.TenantId, kind, id, trigger)), iam, ct, human, (source, current, _) => ValueTask.FromResult(TenantAutomationMutationEvidence.Explains(reader, source, current, _operationReceipts.Values))).AsTask().GetAwaiter().GetResult();
             return new(reader, expected);
         }
         var allowed = TenantAutomationReadRules.VisibleAsync(reader, iam, ct).AsTask().GetAwaiter().GetResult();

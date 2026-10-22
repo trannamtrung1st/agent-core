@@ -235,6 +235,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     : request.Operation.BrowserCommand is not null
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
                         request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched", receipt)
+                    : request.Operation.AutomationMutation is not null ? TenantAutomationMutationContinuationProjection.Complete(paused, pending[0], request, outcome)
                     : request.Operation.AutomationRead is not null ? TenantAutomationReadContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ExperienceOperation is not null ? TenantExperienceContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)
                     : request.Operation.ContinuityRead is not null ? TenantContinuityContinuationProjection.Complete(paused, pending[0], request, outcome, inspection, readUnavailable)

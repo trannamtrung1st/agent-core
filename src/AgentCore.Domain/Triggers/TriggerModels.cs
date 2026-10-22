@@ -55,7 +55,8 @@ public enum TriggerAuthorizationOrigin
 {
     CurrentUserTurn = 0,
     AdminOwner = 2,
-    ApplicationEvent = 3
+    ApplicationEvent = 3,
+    AgentTask = 4
 }
 
 public enum OccurrenceRoutingDisposition

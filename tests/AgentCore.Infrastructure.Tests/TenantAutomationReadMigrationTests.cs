@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class TenantAutomationReadMigrationTests
 {
     [Fact]
-    public async Task Automation_read_migration_preserves_all_incumbent_guards_indexes_and_current_model_on_roundtrip()
+    public async Task Automation_read_migration_preserves_all_incumbent_guards_indexes_on_its_own_roundtrip()
     {
         var path = Path.Combine(Path.GetTempPath(), "automation-read-migration-" + Guid.NewGuid().ToString("N") + ".db");
         try
@@ -16,11 +16,11 @@ public sealed class TenantAutomationReadMigrationTests
             await using var db = new AgentCoreDbContext(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path + ";Foreign Keys=True").Options);
             var migrations = db.GetService<IMigrator>(); await migrations.MigrateAsync("20261021214545_TenantExperienceConsent");
             var guards = await Definitions(db, "trigger"); Assert.Equal(104, guards.Count); var indexes = await Definitions(db, "index");
-            await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+            await migrations.MigrateAsync("20261022020346_TenantAutomationReadConsent");
             var upgraded = await Definitions(db, "trigger"); Assert.Equal(106, upgraded.Count); foreach (var guard in guards) Assert.Equal(guard.Value, upgraded[guard.Key]);
             Assert.Equal(indexes, await Definitions(db, "index"));
             await migrations.MigrateAsync("20261021214545_TenantExperienceConsent"); Assert.Equal(guards, await Definitions(db, "trigger"));
-            await migrations.MigrateAsync(); Assert.Equal(upgraded, await Definitions(db, "trigger")); Assert.False(db.Database.HasPendingModelChanges());
+            await migrations.MigrateAsync("20261022020346_TenantAutomationReadConsent"); Assert.Equal(upgraded, await Definitions(db, "trigger"));
             using var check = db.Database.GetDbConnection().CreateCommand(); check.CommandText = "PRAGMA foreign_key_check";
             using var result = await check.ExecuteReaderAsync(); Assert.False(await result.ReadAsync());
         }

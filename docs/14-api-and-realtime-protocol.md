@@ -38,6 +38,20 @@ The saved request is Review only. Its shared inspector displays the bounded exac
 
 ## Tenant schedule Automation HTTP foundation
 
+### Canonical model authoring
+
+Tenant `automation.create`, `automation.update`, `automation.enable`, `automation.disable` and `automation.delete` use the canonical authoring owner. Create requires explicit `executionTarget: currentSession|backgroundSession`; existing-resource tools require `automationId` and `expectedRevision`. Canonical arguments are bounded to 16 KiB and reject extra/duplicate ownership fields. Create/update retain incumbent schedule and typed Event argument forms, exact child revisions, disabled preset versioning and current-session-only destination selection. No arbitrary tenant, owner, requester or recipient selector is accepted.
+
+When required, the model requests exact authorization through the existing tool:
+
+```json
+{"operation":"mutate_automation","automation":{"tool":"automation.create","arguments":{"enabled":false,"name":"Check later","instructions":"Inspect the accepted task later.","relativeDelaySeconds":3600,"executionTarget":"backgroundSession","requiresTools":false}}}
+```
+
+The inspector displays the actual saved Before/After, timing/sources, requirements, destination and semantic-review reason. A successful local change returns only safe operation/Automation IDs, revision and factual `applied`/`alreadyCompleted` status. Approval authorizes this exact saved configuration change once; future occurrences and their tools retain their own current permissions and admission checks. Rejection/changed source/revocation cannot create work. The result is distinct from a future occurrence's execution. `automation.run` is not converted by this authoring module.
+
+### Human schedule endpoints
+
 The authenticated `/api/v2/tenants/{tenantId}/agents/{instanceId}/automations` family supports GET bounded list, POST create, GET/PUT/DELETE `/{automationId}`, and POST `/{automationId}/run`. It uses the original live human session, current `agents.read`, and independent Automation operation permission; updates, cancellation and manual invocation also require exact Automation read access. Qualified `automation` resource scopes identify an owned registration. Filtering precedes ordering, count and pagination. A registration from another Agent cannot be reached through the route.
 
 Create/update accept `enabled`, `name`, `instructions`, existing `AutomationTiming` schedule, optional model/reasoning selection, tool/vision requirements, and `expectedRevision`, `expectedInstanceRevision`, `expectedAutomationRevision` witnesses. The server derives tenant, executor and trigger ownership. Run accepts only those three revision witnesses; delete carries them as query parameters. Saved projections contain registration/trigger facts and safe schedule/model fields, with no global profile or caller-controlled execution context. Missing authority is 403, stale witnesses are 409 and invalid input is 400.

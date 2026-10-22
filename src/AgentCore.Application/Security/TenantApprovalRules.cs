@@ -46,6 +46,7 @@ public static partial class TenantApprovalRules
 
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
+        TenantOperationKind.AutomationMutation => PrepareAutomationMutation(op.OperationId, op.InstanceId, op.AutomationMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.AutomationRead => PrepareAutomationRead(op.OperationId, op.InstanceId, op.AutomationRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ExperienceOperation => PrepareExperience(op.OperationId, op.InstanceId, op.ExperienceOperation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ContinuityRead => PrepareContinuity(op.OperationId, op.InstanceId, op.ContinuityRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -81,6 +82,7 @@ public static partial class TenantApprovalRules
         if (op.ReportSourceRead is not null) TenantReportSourceReadRules.Source(request, run);
         else if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
         else TenantApprovalContinuationRules.Require(request, run, source);
+        if (op.AutomationMutation is { } automationMutation && automationMutation.SessionId != request.SessionId) throw new ArgumentException("Use the actual Automation authoring Session.");
         if (op.AutomationRead is { } automationRead && automationRead.SessionId != request.SessionId) throw new ArgumentException("Use the actual Automation read Session.");
         if (op.ExperienceOperation is { } experience && experience.SessionId != request.SessionId
             || op.ContinuityRead is { } continuity && continuity.SessionId != request.SessionId

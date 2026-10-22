@@ -10,7 +10,8 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
 {
     private sealed record Timing(TriggerScheduleKind Kind, string TimeZoneId, DateTimeOffset? AtUtc = null, int Interval = 1,
         TimeOnly? LocalTime = null, IReadOnlyList<DayOfWeek>? Weekdays = null, DateOnly? StartDate = null, DateOnly? EndDate = null,
-        int? MaxOccurrences = null, DateTimeOffset? AnchorAtUtc = null, DateTimeOffset? EndAtUtc = null);
+        int? MaxOccurrences = null, DateTimeOffset? AnchorAtUtc = null, DateTimeOffset? EndAtUtc = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? LocalDate = null);
     private sealed record Saved(Guid AutomationId, TriggerOwner Owner, AutomationStatus Status, string Name, string Instructions,
         Guid TriggerId, bool TriggerEnabled, long ChildRevision, Timing Timing, DateTimeOffset? NextOccurrenceAtUtc, DateTimeOffset? ExpiresAtUtc,
         int OccurrenceCount, long Revision, long TriggerRevision, TriggerProvenance Provenance, string? SuspensionReason,
@@ -28,13 +29,13 @@ public sealed class PreparedAutomationJsonConverter : JsonConverter<Automation>
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TargetSessionId = null);
 
     private static TriggerSchedule Schedule(Timing t) => (t ?? throw new JsonException("Consent timing is missing.")).Kind switch {
-        TriggerScheduleKind.OneShot when t.AtUtc is { } at => new OneShotSchedule(at, t.TimeZoneId),
+        TriggerScheduleKind.OneShot when t.AtUtc is { } at => new OneShotSchedule(at, t.TimeZoneId, t.LocalDate, t.LocalTime),
         TriggerScheduleKind.Daily when t.LocalTime is { } local => new DailySchedule(t.Interval, local, t.TimeZoneId, t.StartDate, t.EndDate, t.MaxOccurrences),
         TriggerScheduleKind.Weekly when t.LocalTime is { } local && t.Weekdays is { } days => new WeeklySchedule(t.Interval, days, local, t.TimeZoneId, t.StartDate, t.EndDate, t.MaxOccurrences),
         TriggerScheduleKind.FixedInterval when t.AnchorAtUtc is { } anchor => new FixedIntervalSchedule(t.Interval, anchor, t.EndAtUtc, t.MaxOccurrences),
         _ => throw new JsonException("An exact supported consent schedule is required.") };
     private static Timing TimingOf(TriggerSchedule t) => t switch {
-        OneShotSchedule s => new Timing(t.Kind, s.TimeZoneId, s.AtUtc),
+        OneShotSchedule s => new Timing(t.Kind, s.TimeZoneId, s.AtUtc, LocalTime: s.LocalTime, LocalDate: s.LocalDate),
         DailySchedule s => new Timing(t.Kind, s.TimeZoneId, Interval: s.IntervalDays, LocalTime: s.LocalTime, StartDate: s.StartDate, EndDate: s.EndDate, MaxOccurrences: s.MaxOccurrences),
         WeeklySchedule s => new Timing(t.Kind, s.TimeZoneId, Interval: s.IntervalWeeks, LocalTime: s.LocalTime, Weekdays: s.Weekdays, StartDate: s.StartDate, EndDate: s.EndDate, MaxOccurrences: s.MaxOccurrences),
         FixedIntervalSchedule s => new Timing(t.Kind, "UTC", Interval: s.IntervalSeconds, MaxOccurrences: s.MaxOccurrences, AnchorAtUtc: s.AnchorAtUtc, EndAtUtc: s.EndAtUtc),

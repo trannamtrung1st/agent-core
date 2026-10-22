@@ -16,7 +16,7 @@ public sealed partial class TenantApprovalService
         return new(false, await VisibleIds(state, human.PrincipalId, "agents.read", "agent", ct).ConfigureAwait(false),
             await VisibleIds(state, human.PrincipalId, "automations.read", "automation", ct).ConfigureAwait(false), [],
             await VisibleIds(state, human.PrincipalId, "webhooks.read", "webhook", ct).ConfigureAwait(false),
-            await VisibleIds(state, human.PrincipalId, "core-events.read", "event", ct).ConfigureAwait(false), accounts, false, [], []);
+            await VisibleIds(state, human.PrincipalId, "core-events.read", "event", ct).ConfigureAwait(false), accounts, false, await VisibleIds(state, human.PrincipalId, "sessions.read", "session", ct).ConfigureAwait(false), await VisibleIds(state, human.PrincipalId, "agents.chat", "agent", ct).ConfigureAwait(false));
     }
 
     private static IReadOnlyList<TenantApprovalFieldChange> AutomationReadObservationChanges(PreparedAutomationRead read)

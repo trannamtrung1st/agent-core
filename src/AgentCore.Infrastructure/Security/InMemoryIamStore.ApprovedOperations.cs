@@ -124,6 +124,16 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
             }
+            TenantAutomationMutationObservation? automationMutation = null;
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.AutomationMutation is not null)
+            {
+                try {
+                    automationMutation = RequireAutomationMutationApproval(request, run, ct);
+                    TenantAutomationMutationRules.ReviewerAsync(request, automationMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+                } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             IReadOnlyList<AgentCore.Domain.Experience.TenantExperience> experienceValues = [];
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ExperienceOperation is not null)
             {
@@ -180,9 +190,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
                 Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).Result : target.Instance;
+            if (complete && automationMutation is not null) automationBacking.SaveTenantAutomation(request.Operation.AutomationMutation!.Proposed);
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
-                updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()));
+                updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),
+                AutomationMutation: complete && request.Operation.AutomationMutation is { } mutationEvidence ? TenantAutomationMutationCommitRules.Evidence(mutationEvidence) : null);
             SandboxLease? pending = null; SandboxExecution? stopped = null;
             if (complete && control is { } current)
             {

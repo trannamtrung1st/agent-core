@@ -29,7 +29,11 @@ public sealed partial class SqliteIamStore : ITenantAutomationReadStore
             if (expected.ToolName != tool || expected.ArgumentsJson != args.Json) throw new AccessDeniedException("automation_source_changed");
             await TenantAutomationReadRules.ValidateCurrentAsync(reader, expected,
                 async (id, token) => { var row = await OwnedAutomations(db, reader.Security.Tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(a => a.AutomationId == id.ToString("D"), token).ConfigureAwait(false); return row is null ? null : TriggerStoreMapping.ToRegistration(row); },
-                (kind, id, trigger, token) => new(TenantEvent(db, reader.Security.Tenant.TenantId, kind, id, trigger, token)), iam, ct, human).ConfigureAwait(false);
+                (kind, id, trigger, token) => new(TenantEvent(db, reader.Security.Tenant.TenantId, kind, id, trigger, token)), iam, ct, human, async (source, current, token) => {
+                    var session = reader.Run.SessionId.ToString("D"); var root = reader.Run.Admission.Activation.RootActivationId.ToString("D");
+                    var receipts = await db.Set<TenantOperationReceiptRecord>().AsNoTracking().Where(r => r.TenantId == reader.Security.Tenant.TenantId && r.SessionId == session && r.RootActivationId == root && r.AutomationMutationJson != null).Take(1025).ToArrayAsync(token).ConfigureAwait(false);
+                    return TenantAutomationMutationEvidence.Explains(reader, source, current, receipts.Select(r => r.Domain()));
+                }).ConfigureAwait(false);
             return new(reader, expected);
         }
         var allowed = await TenantAutomationReadRules.VisibleAsync(reader, iam, ct).ConfigureAwait(false);

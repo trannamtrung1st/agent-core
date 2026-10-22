@@ -21,7 +21,7 @@ public sealed record TriggerCommandAuthorizationVerdict(TriggerCommandAuthorizat
 
 public sealed record AutomationAuthorizationRequest(string CurrentUserText, TriggerCommandAction Action,
     string ToolName, JsonElement ProposedAction, string ActionHash,
-    ScheduleConversationContext? ScheduleContext = null, ScheduleDraftContext? ScheduleDraft = null, string? ConversationEvidenceJson = null);
+    ScheduleConversationContext? ScheduleContext = null, ScheduleDraftContext? ScheduleDraft = null, string? ConversationEvidenceJson = null, bool AdmittedTask = false);
 
 public interface ITriggerCommandAuthorizer
 {
@@ -60,7 +60,7 @@ public sealed class ModelTriggerCommandAuthorizer(
         var request = ContextAssembler.Create(Guid.Empty, new EffectiveContextSnapshot([
             ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.TriggerAuthorization),
             ContextSection.Runtime(ContextSectionId.RunTask, ContextSourceKind.AgentRun,
-                $"Proposed operation: {requestedAction}; exact action fingerprint: {proposed.ActionHash}.", semantics: ContextSemantics.TrustedFact),
+                $"Intent source: {(proposed.AdmittedTask ? "actual admitted task" : "current human request")}. Proposed operation: {requestedAction}; exact action fingerprint: {proposed.ActionHash}.", semantics: ContextSemantics.TrustedFact),
             ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, string.Join('\n',
                 (proposed.ScheduleContext?.ToPromptLines() ?? []).Concat(proposed.ScheduleDraft?.ToPromptLines() ?? [])
                     .Append(proposed.ConversationEvidenceJson ?? "[]"))),

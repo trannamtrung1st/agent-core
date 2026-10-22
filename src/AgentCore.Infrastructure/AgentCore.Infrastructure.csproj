@@ -43,6 +43,9 @@
     <InternalsVisibleTo Include="AgentCore.Infrastructure.Tests" />
     <InternalsVisibleTo Include="AgentCore.Api.Tests" />
     <InternalsVisibleTo Include="AgentCore.Application.Tests" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022041619_TenantAutomationMutations.Up.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022041619_TenantAutomationMutations.Up.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022041619_TenantAutomationMutations.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022041619_TenantAutomationMutations.Down.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022041619_TenantAutomationMutations.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022041619_TenantAutomationMutations.Check.sql" />
   </ItemGroup>
 
 </Project>

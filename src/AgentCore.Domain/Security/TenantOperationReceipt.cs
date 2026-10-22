@@ -8,4 +8,5 @@ public enum TenantOperationOutcome { Completed, Denied, Indeterminate }
 public sealed record TenantOperationReceipt(Guid OperationId, Guid? RequestId, Guid TenantId, Guid RunId, Guid SessionId, Guid RootActivationId,
     Guid ExecutorPrincipalId, Guid InstanceId, string ActionHash, TenantOperationOutcome Outcome, string ReasonCode,
     long InstanceRevision, long PersonaRevision, DateTimeOffset RecordedAt, string? SourceCallId = null, string? ParametersHash = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BrowserArtifactsJson = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BrowserArtifactsJson = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantAutomationMutationReceipt? AutomationMutation = null);

@@ -12,9 +12,10 @@ public sealed record TenantAutomationAdmissionState(TenantSecurityState State, T
     Automation Automation, TriggerOccurrence Occurrence, TenantSession? Conversation = null);
 
 public sealed class TenantAutomationOperationTarget(IIamStore security, ITenantAutomationStore store, TenantRunConfigurationResolver configuration,
-    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, TenantAutomationReadService? reads = null)
+    IamAuthorizer iam, IModelCatalog models, ITenantEventStore? events = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null, TenantAutomationReadService? reads = null, TenantAutomationMutationService? mutations = null)
 {
     internal ITenantAutomationStore Store => store;
+    internal TenantAutomationMutationService Mutations => mutations ?? throw new AccessDeniedException("tenant_effect_unavailable");
     internal TenantAutomationReadService Reads => reads ?? throw new AccessDeniedException("tenant_effect_unavailable");
     public async ValueTask<TenantAutomationAdmissionState> RequireAsync(TenantApprovalRequest request, CancellationToken ct)
     {
