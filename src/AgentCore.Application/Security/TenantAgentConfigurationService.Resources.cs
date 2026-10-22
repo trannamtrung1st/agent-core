@@ -78,32 +78,14 @@ public sealed partial class TenantAgentConfigurationService
     {
         var state = await ChildChangeState(actor, tenant, id, delete ? "resources.delete" : "resources.manage", "resources.read", securityRevision, token, key).ConfigureAwait(false);
         var (snapshot, baseline) = await ResourceWritable(actor, tenant, id, instanceRevision, state, token).ConfigureAwait(false);
-        var published = await Resources(tenant, baseline, token).ConfigureAwait(false); var definition = EffectiveChildDefinition(snapshot, baseline);
-        var view = AgentInstanceResourceService.Views(definition, published, snapshot.Resources, snapshot.Skills).SingleOrDefault(r => r.Key == key)
-            ?? throw new AccessDeniedException("resource_unavailable");
-        if (view.Revision != expectedResourceRevision) throw new SecurityConflictException("stale_revision");
-        var parsed = AgentInstanceResourceService.ParseKey(key); InstanceResourceMutation mutation;
-        if (delete)
-        {
-            if (parsed.Origin != "instance") throw AgentCoreErrors.Validation("Inherited resource bytes are read-only.");
-            mutation = new(id, instanceRevision, DeleteResourceId: parsed.Id, ExpectedResourceRevision: expectedResourceRevision);
-        }
-        else if (parsed.Origin == "instance")
-        {
-            if (enabled is null) throw AgentCoreErrors.Validation("Instance resources do not inherit enabled state.");
-            var previous = snapshot.Resources.InstanceResources.Single(r => r.ResourceId == parsed.Id);
-            mutation = new(id, instanceRevision, Resource: previous with { Enabled = enabled.Value, Revision = checked(previous.Revision + 1), UpdatedAt = time.GetUtcNow() }, ExpectedResourceRevision: previous.Revision);
-        }
-        else
-        {
-            var previous = snapshot.Resources.DefinitionStates.SingleOrDefault(r => r.ResourceId == parsed.Id);
-            mutation = new(id, instanceRevision, DefinitionState: new(id, parsed.Id, enabled, (previous?.Revision ?? 0) + 1, time.GetUtcNow()), ExpectedStateRevision: previous?.Revision);
-        }
-        var next = ResourceAfter(snapshot.Resources, mutation);
-        _ = AgentInstanceResourceService.Resolve(definition, published, next, snapshot.Skills);
-        var saved = await Commit(actor, tenant, state, new(id, instanceRevision, Resource: mutation), delete ? "resources.delete" : "resources.choice.update", token, initiator).ConfigureAwait(false);
-        var result = delete ? null : (await SafeResourceViews(state, actor, tenant, id,
-            [AgentInstanceResourceService.Views(definition, published, next, snapshot.Skills).Single(r => r.Key == key)], token).ConfigureAwait(false)).Single();
+        var published = await Resources(tenant, baseline, token).ConfigureAwait(false);
+        var actorKind = state.Principals.Single(p => p.PrincipalId == actor).Kind == PrincipalKind.SystemIdentity ? SkillAuthor.Agent : SkillAuthor.Admin;
+        var prepared = TenantAgentResourcePreparation.Choice(snapshot.Agent.Instance, baseline, snapshot.Resources, snapshot.Skills,
+            published, key, delete, enabled, expectedResourceRevision, actorKind, time.GetUtcNow());
+        if (prepared.Change is null)
+            return await UnchangedResource(actor, tenant, state, snapshot, prepared.Resource!, token, initiator).ConfigureAwait(false);
+        var saved = await Commit(actor, tenant, state, prepared.Change, delete ? "resources.delete" : "resources.choice.update", token, initiator).ConfigureAwait(false);
+        var result = prepared.Resource is null ? null : (await SafeResourceViews(state, actor, tenant, id, [prepared.Resource], token).ConfigureAwait(false)).Single();
         return new(result, saved.Instance.Revision, state.Tenant.Revision + 1);
     }, ct);
 
@@ -120,18 +102,25 @@ public sealed partial class TenantAgentConfigurationService
                 old.MediaType, old.ContentSha256, old.ByteLength, old.Enabled, null, old.Revision, "", []), ct).ConfigureAwait(false);
         }
         var owner = snapshot.Agent.Instance;
-        var previous = snapshot.Resources.InstanceResources.SingleOrDefault(r => r.ResourceId == input.ResourceId);
-        var resource = AgentInstanceResourceService.PrepareUpsert(owner, snapshot.Resources, input.ResourceId, input.ExpectedResourceRevision,
-            input.LogicalPath, input.Kind, input.MediaType, bytes, input.Enabled ?? previous?.Enabled ?? true,
-            state.Principals.Single(p => p.PrincipalId == actor).Kind == PrincipalKind.SystemIdentity ? SkillAuthor.Agent : SkillAuthor.Admin,
-            ids.NewId(), time.GetUtcNow(), source);
-        var mutation = new InstanceResourceMutation(owner.InstanceId, owner.Revision, Resource: resource, ExpectedResourceRevision: input.ExpectedResourceRevision);
-        var next = ResourceAfter(snapshot.Resources, mutation); var definition = EffectiveChildDefinition(snapshot, baseline);
         var published = await Resources(tenant, baseline, ct).ConfigureAwait(false);
-        _ = AgentInstanceResourceService.Resolve(definition, published, next, snapshot.Skills);
+        var actorKind = state.Principals.Single(p => p.PrincipalId == actor).Kind == PrincipalKind.SystemIdentity ? SkillAuthor.Agent : SkillAuthor.Admin;
+        var prepared = TenantAgentResourcePreparation.Upsert(owner, baseline, snapshot.Resources, snapshot.Skills, published,
+            input, bytes, actorKind, ids.NewId(), time.GetUtcNow(), source);
+        if (prepared.Change is null)
+            return await UnchangedResource(actor, tenant, state, snapshot, prepared.Resource!, ct, initiator).ConfigureAwait(false);
+        var resource = prepared.Change.Resource!.Resource!;
         await (content ?? throw new AccessDeniedException("resource_content_unavailable")).StoreVerifiedAsync(resource.ContentSha256, bytes, ct).ConfigureAwait(false);
-        var saved = await Commit(actor, tenant, state, new(owner.InstanceId, owner.Revision, Resource: mutation), "resources.upsert", ct, initiator).ConfigureAwait(false);
-        return new(AgentInstanceResourceService.Views(definition, published, next, snapshot.Skills).Single(r => r.Key == "instance:" + resource.ResourceId.ToString("D")), saved.Instance.Revision, state.Tenant.Revision + 1);
+        var saved = await Commit(actor, tenant, state, prepared.Change, "resources.upsert", ct, initiator).ConfigureAwait(false);
+        return new(prepared.Resource, saved.Instance.Revision, state.Tenant.Revision + 1);
+    }
+    private async ValueTask<TenantAgentResourceSaved> UnchangedResource(Guid actor, Guid tenant, TenantSecurityState state,
+        TenantAgentConfigurationSnapshot snapshot, InstanceResourceView resource, CancellationToken ct, HumanSessionReference? initiator)
+    {
+        var id = snapshot.Agent.Instance.InstanceId;
+        var current = await ChildChangeState(actor, tenant, id, "resources.manage", "resources.read", state.Tenant.Revision, ct, resource.Key).ConfigureAwait(false);
+        var visible = (await SafeResourceViews(current, actor, tenant, id, [resource], ct).ConfigureAwait(false)).Single();
+        await RequireOriginalHuman(actor, tenant, initiator, ct).ConfigureAwait(false);
+        return new(visible, snapshot.Agent.Instance.Revision, state.Tenant.Revision);
     }
     private async ValueTask<(TenantAgentConfigurationSnapshot Snapshot, AgentDefinition Definition)> ResourceWritable(Guid actor, Guid tenant, Guid id, long revision, TenantSecurityState state, CancellationToken ct)
     {
@@ -150,7 +139,4 @@ public sealed partial class TenantAgentConfigurationService
     }
     private static AgentDefinition EffectiveChildDefinition(TenantAgentConfigurationSnapshot snapshot, AgentDefinition baseline) =>
         InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };
-    private static InstanceResourceSnapshot ResourceAfter(InstanceResourceSnapshot current, InstanceResourceMutation mutation) => new(
-        current.DefinitionStates.Where(r => r.ResourceId != mutation.DefinitionState?.ResourceId).Concat(mutation.DefinitionState is null ? [] : new[] { mutation.DefinitionState }).ToArray(),
-        current.InstanceResources.Where(r => r.ResourceId != mutation.DeleteResourceId && r.ResourceId != mutation.Resource?.ResourceId).Concat(mutation.Resource is null ? [] : new[] { mutation.Resource }).ToArray());
 }

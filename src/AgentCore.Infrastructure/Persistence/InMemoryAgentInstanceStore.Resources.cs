@@ -46,7 +46,7 @@ public sealed partial class InMemoryAgentInstanceStore
                 resources[resource.ResourceId] = resource;
             }
             if (m.DeleteResourceId is Guid deleted && !resources.Remove(deleted)) throw AgentCoreErrors.NotFound("Instance resource was not found.");
-            ValidateResourceCollection(resources.Values);
+            AgentCore.Application.Admin.AgentInstanceResourceService.ValidateCollection(resources.Values);
             if (m.DefinitionState is { } state)
             {
                 if (state.InstanceId != m.InstanceId || state.ResourceId == Guid.Empty) throw AgentCoreErrors.Validation("Resource state owner/identity is invalid.");
@@ -58,13 +58,5 @@ public sealed partial class InMemoryAgentInstanceStore
             _instances[m.InstanceId] = owner with { Revision = owner.Revision + 1, UpdatedAt = at ?? m.History?.OccurredAt ?? owner.UpdatedAt, HarnessManagement = CopyManagement(m.HarnessManagement ?? owner.HarnessManagement) };
         }
         return ValueTask.CompletedTask;
-    }
-    internal static void ValidateResourceCollection(IEnumerable<AgentInstanceResource> resources)
-    {
-        var items = resources.ToArray();
-        if (items.Length > AgentResourceLimits.MaxItemsPerDraft || items.Sum(r => r.ByteLength) > AgentResourceLimits.MaxAggregateBytes)
-            throw AgentCoreErrors.Validation("Instance resource quota exceeded.");
-        if (items.Select(r => r.LogicalPath).Distinct(StringComparer.Ordinal).Count() != items.Length)
-            throw AgentCoreErrors.Conflict("Resource logical path is already occupied in this Instance.");
     }
 }

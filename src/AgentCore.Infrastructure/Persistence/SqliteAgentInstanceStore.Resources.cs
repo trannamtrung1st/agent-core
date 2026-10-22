@@ -52,7 +52,7 @@ public sealed partial class SqliteAgentInstanceStore
         if (m.Resource is { } resource)
         {
             if (resource.InstanceId != m.InstanceId || resource.ResourceId == Guid.Empty) throw AgentCoreErrors.Validation("Resource owner/identity is invalid.");
-            InMemoryAgentInstanceStore.ValidateResourceCollection(collection.Where(r => r.ResourceId != resource.ResourceId.ToString("D")).Select(MapResource).Append(resource));
+            AgentCore.Application.Admin.AgentInstanceResourceService.ValidateCollection(collection.Where(r => r.ResourceId != resource.ResourceId.ToString("D")).Select(MapResource).Append(resource));
             if (row is null) { row = new() { InstanceId = id, ResourceId = resource.ResourceId.ToString("D") }; db.AgentInstanceResources.Add(row); }
             row.LogicalPath = resource.LogicalPath; row.Revision = resource.Revision; row.PayloadJson = JsonSerializer.Serialize(resource, Json);
         }

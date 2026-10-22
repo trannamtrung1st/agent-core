@@ -159,6 +159,14 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         return views.Where(r => r.Enabled).Select(r => new EffectiveAgentResource(r.Key, r.LogicalPath, r.Kind, r.MediaType,
             r.ContentSha256, r.ByteLength, r.VirtualPath)).ToArray();
     }
+    public static void ValidateCollection(IEnumerable<AgentInstanceResource> resources)
+    {
+        var items = resources.ToArray();
+        if (items.Length > AgentResourceLimits.MaxItemsPerDraft || items.Sum(r => r.ByteLength) > AgentResourceLimits.MaxAggregateBytes)
+            throw AgentCoreErrors.Validation("Instance resource quota exceeded.");
+        if (items.Select(r => r.LogicalPath).Distinct(StringComparer.Ordinal).Count() != items.Length)
+            throw AgentCoreErrors.Conflict("Resource logical path is already occupied in this Instance.");
+    }
     public static (string Origin, Guid Id) ParseKey(string key)
     {
         var parts = key.Split(':');
