@@ -6,7 +6,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
-public sealed class TenantManagementReadService(ITenantManagementReadStore store, TenantOperationAuthorizer operations)
+public sealed class TenantManagementReadService(ITenantManagementStore store, TenantOperationAuthorizer operations)
 {
     public ValueTask<TenantManagementReadObservation> PrepareAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         CancellationToken ct, PreparedManagementRead? expected = null) => store.ObserveTenantManagementReadAsync(reference, generation, tool, arguments, expected, ct: ct);

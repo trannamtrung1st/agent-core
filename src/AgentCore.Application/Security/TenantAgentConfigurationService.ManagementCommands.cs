@@ -1,0 +1,59 @@
+using System.Text.Json;
+using AgentCore.Application.Admin;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Models;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
+using AgentCore.Domain.Definitions;
+
+namespace AgentCore.Application.Security;
+
+public sealed partial class TenantAgentConfigurationService
+{
+    // Human HTTP and model exact-operation preparation use the same validation and reconciliation.
+    internal async ValueTask<TenantAgentConfigurationChange> PrepareSettingsChangeAsync(Guid actor, Guid tenant,
+        TenantAgentConfigurationSnapshot snapshot, AgentDefinition definition, string section,
+        IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(set); ArgumentNullException.ThrowIfNull(clear);
+        var current = snapshot.Agent.Instance;
+        if (section == "sandboxPolicy")
+        {
+            foreach (var key in new[] { "sandbox.read", "sandbox.manage" })
+                await authorizer.RequireAsync(actor, key, Scope(tenant, current.InstanceId), ct).ConfigureAwait(false);
+            definition = await PrepareSandboxPatch(actor, tenant, current, definition, set, clear, ct).ConfigureAwait(false);
+        }
+        if (aliases is null) throw Sessions.AgentCoreErrors.Validation("Configured provider choices are unavailable.");
+        var (next, effective) = AgentInstanceSettingsService.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
+        AgentInstanceSettingsService.ValidateBrowser(effective, browser);
+        _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
+        _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, definition, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
+        var plan = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), current, effective, time.GetUtcNow(), ct).ConfigureAwait(false);
+        return new(current.InstanceId, current.Revision, SetSettingsOverrides: true, SettingsOverrides: next, AutomationPolicyChanges: plan);
+    }
+
+    internal async ValueTask<TenantAgentConfigurationChange> PrepareManagementCommandAsync(TenantManagementSource source,
+        TenantManagementMutationArguments arguments, CancellationToken ct)
+    {
+        var reader = source.Reader; var owner = reader.Agent.Instance; var args = arguments.Value;
+        RequireWritable(owner, arguments.ExpectedInstanceRevision);
+        if (arguments.Tool == "settings.patch")
+            return await PrepareSettingsChangeAsync(reader.Agent.PrincipalId, reader.Security.Tenant.TenantId, source.Snapshot, reader.Baseline,
+                args.GetProperty("section").GetString()!, args.GetProperty("set").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone()),
+                args.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray(), ct).ConfigureAwait(false);
+        if (arguments.Tool == "automation.preferences.patch")
+        {
+            var model = args.GetProperty("catalogKey").GetString(); var effort = args.GetProperty("reasoningEffort").GetString();
+            ExecutionModelPolicy.RequireSelectable(models, model, effort);
+            return new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedModelCatalogKey: model, UnattendedReasoningEffort: effort);
+        }
+        if (arguments.Tool == "management.freeze")
+            return new(owner.InstanceId, owner.Revision, HarnessManagement: SelfManagementService.PrepareFreeze(owner, reader.Baseline));
+        var view = SelfManagementService.View(owner, reader.Baseline);
+        var overrides = view.Overrides ?? (view.Source == "instance" ? ManagementPolicyOverrides.FromLegacy(view.Effective) : new());
+        overrides = overrides with { Mode = new(Enum.Parse<HarnessManagementMode>(args.GetProperty("mode").GetString()!, false)),
+            Scopes = new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
+            AutoApply = new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()) };
+        return new(owner.InstanceId, owner.Revision, HarnessManagement: SelfManagementService.Prepare(owner, reader.Baseline, overrides, null, agent: true));
+    }
+}

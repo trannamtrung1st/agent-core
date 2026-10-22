@@ -76,6 +76,11 @@ public static class ConfigurationTools
 
     private static JsonObject SettingSchema(string field)
     {
+        var choices = field switch {
+            "conversationContextScope" => Enum.GetNames<ConversationContextScope>(), "homeAccess" => Enum.GetNames<HomeAccess>(),
+            "workingCleanup" => Enum.GetNames<WorkingCleanup>(), "browserIsolation" => Enum.GetNames<BrowserIsolation>(),
+            "agentStateVisibility" => Enum.GetNames<AgentStateVisibility>(), _ => null };
+        if (choices is not null) return new() { ["type"] = "string", ["enum"] = new JsonArray(choices.Select(value => (JsonNode?)JsonValue.Create(value)).ToArray()) };
         if (field == "profileId") return new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 64 };
         if (field is "triggers" or "selected" or "always" or "allowedSourceKinds")
             return new() { ["type"] = "array", ["maxItems"] = 256, ["uniqueItems"] = true, ["items"] = new JsonObject { ["type"] = "string", ["maxLength"] = 128 } };

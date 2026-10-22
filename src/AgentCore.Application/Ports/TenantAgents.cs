@@ -1,3 +1,4 @@
+using AgentCore.Domain.Triggers;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 
@@ -9,7 +10,7 @@ public sealed record TenantAgentConfigurationSnapshot(TenantAgent Agent, Instanc
 public sealed record TenantAgentConfigurationChange(Guid InstanceId, long ExpectedInstanceRevision,
     AgentIdentity? Persona = null, long? ExpectedPersonaRevision = null, int? ActiveVersion = null,
     long? ExpectedPublicationRevision = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,
-    IReadOnlyList<Triggers.InstanceAutomationPolicyChange>? AutomationPolicyChanges = null,
+    IReadOnlyList<InstanceAutomationPolicyChange>? AutomationPolicyChanges = null,
     bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
     bool SetUnattendedModel = false, string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,

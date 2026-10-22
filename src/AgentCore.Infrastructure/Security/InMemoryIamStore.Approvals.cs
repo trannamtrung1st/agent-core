@@ -24,7 +24,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
         lock (_gate)
         {
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
-                && (r.Operation.ManagementRead is null || managementVisibility is not null && (managementVisibility.Agents is null || managementVisibility.Agents.Contains(r.Operation.InstanceId)))
+                && (r.Operation.ManagementRead is null && r.Operation.ManagementMutation is null || managementVisibility is not null && (managementVisibility.Agents is null || managementVisibility.Agents.Contains(r.Operation.InstanceId)))
                 && (automationVisibility?.IncludeOccurrenceReservations != false || r.Operation.AutomationAdmission is null)
                 && (r.Operation.AutomationAdmission is not { } admission || (admission.Conversation is null ? automationVisibility?.CanCreate ?? true
                     : (automationVisibility?.CanCreateRuns ?? true)
@@ -140,6 +140,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (request.Operation.BrowserCommand is not null) RequireBrowserOperation(request, run, agent);
             if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
             if (request.Operation.AutomationMutation is not null) _ = RequireAutomationMutationApproval(request, run, ct);
+            if (request.Operation.ManagementMutation is not null) _ = RequireManagementMutation(request, run, ct);
             if (request.Operation.ManagementRead is { } managementRead) _ = ObserveManagementRead(run, managementRead.ToolName, managementRead.ArgumentsJson, managementRead, null, ct);
             if (request.Operation.AutomationRead is { } automationRead) _ = ObserveAutomationRead(run, automationRead.ToolName, automationRead.ArgumentsJson, automationRead, null, ct);
             if (request.Operation.ExperienceOperation is not null) _ = RequireExperienceApproval(request, run, ct);
@@ -252,6 +253,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             {
                 var mutationSource = RequireAutomationMutationApproval(request, run, ct);
                 TenantAutomationMutationRules.ReviewerAsync(request, mutationSource, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+            }
+            if (request.Operation.ManagementMutation is not null && request.Status != TenantApprovalStatus.Cancelled)
+            {
+                var managementState = RequireManagementMutation(request, run, ct);
+                TenantManagementMutationRules.ReviewerAsync(request, managementState.Reader, request.Operation.ManagementMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
             }
             if (request.Operation.ManagementRead is { } managementRead && request.Status != TenantApprovalStatus.Cancelled)
             {

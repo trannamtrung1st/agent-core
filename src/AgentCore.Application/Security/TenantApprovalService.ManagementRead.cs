@@ -11,7 +11,7 @@ public sealed partial class TenantApprovalService
         try
         {
             await operations.ResolveForDecisionAsync(reference, "agents.read", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
-            var service = (managementReads ?? throw new AccessDeniedException("tenant_effect_unavailable"));
+            var service = (managementTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads;
             var observed = await service.PrepareAsync(reference, generation, call.Name, call.ArgumentsJson, ct).ConfigureAwait(false); var reader = observed.Reader;
             if (reader.Run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
             var op = TenantApprovalRules.PrepareManagementRead(ids.NewId(), reader.Run.AgentInstanceId, observed.Value, reader.Agent.Instance.Revision, reader.Agent.Instance.PersonaRevision);

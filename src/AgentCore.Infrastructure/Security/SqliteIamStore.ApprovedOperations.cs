@@ -130,6 +130,17 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
             catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
         }
+        TenantAgentConfigurationChange? managementChange = null;
+        if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementMutation is not null)
+        {
+            try {
+                var managementState = await RequireManagementMutation(db, request, run, ct).ConfigureAwait(false);
+                await TenantManagementMutationRules.ReviewerAsync(request, managementState.Reader, request.Operation.ManagementMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+                managementChange = managementState.Change;
+            } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+            audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+        }
         if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementRead is { } managementRead)
         {
             try {
@@ -210,9 +221,9 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         }
         audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
-        var configure = complete && request.Operation.IsLocalConfiguration;
+        var configure = complete && (request.Operation.IsLocalConfiguration || request.Operation.ManagementMutation is not null);
         var updated = configure ? TenantAgentConfigurationRules.Apply(target.Instance,
-            TenantLocalEffectRules.Change(request, target.Instance), at) : target.Instance;
+            managementChange ?? TenantLocalEffectRules.Change(request, target.Instance), at) : target.Instance;
         var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
         if (configure)
         {
@@ -223,6 +234,12 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
                 owned.Instance.PersonaRevision = updated.PersonaRevision;
             }
             else owned.Instance.SettingsOverridesJson = JsonSerializer.Serialize(updated.SettingsOverrides, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if (managementChange is not null)
+            {
+                owned.Instance.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                owned.Instance.UnattendedModelCatalogKey = updated.UnattendedModelCatalogKey; owned.Instance.UnattendedReasoningEffort = updated.UnattendedReasoningEffort;
+                await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(updated.InstanceId, target.Instance.Revision, AutomationPolicyChanges: managementChange.AutomationPolicyChanges), at, ct, request.TenantId).ConfigureAwait(false);
+            }
             owned.Instance.Revision = updated.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
             foreach (var fact in CoreEventPersistence.Instance(target.Instance, updated,
                 AgentCore.Domain.Triggers.TriggerOwner.ForTenant(request.TenantId, updated.InstanceId, target.PrincipalId)))
@@ -255,7 +272,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         }
         try
         {
-            if (complete && automationMutation is not null)
+            if (complete && (automationMutation is not null || managementChange is not null))
             {
                 if (commit.AutomationInvocationAdmission is { } admitted) { await StageTenantAutomationGraph(db, admitted, ct).ConfigureAwait(false); db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(admitted.Occurrence)); }
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);

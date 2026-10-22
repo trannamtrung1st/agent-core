@@ -18,8 +18,10 @@ public sealed partial class TenantSessionAccessTests
         public Func<Task>? AfterObservation;
         public int Applied;
     }
-    private sealed class ManagementReadHook(ITenantManagementReadStore inner, ManagementReadRace race) : ITenantManagementReadStore
+    private sealed class ManagementReadHook(ITenantManagementStore inner, ManagementReadRace race) : ITenantManagementStore
     {
+        public ValueTask<TenantManagementSource> ReadTenantManagementSourceAsync(TenantRunReference reference, Guid? generation, Guid? inspectionHuman = null, CancellationToken ct = default)
+            => inner.ReadTenantManagementSourceAsync(reference, generation, inspectionHuman, ct);
         public async ValueTask<TenantManagementReadObservation> ObserveTenantManagementReadAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
             PreparedManagementRead? expected = null, Guid? inspectionHuman = null, CancellationToken ct = default)
         {
@@ -44,7 +46,7 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> factory = sqlite ? new TenantApprovalSqliteFactory(root, model) : new ApprovalExecutionFactory();
             await using var host = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s => {
                 s.Replace(ServiceDescriptor.Singleton<ILanguageModel>(model));
-                s.Replace(ServiceDescriptor.Singleton<ITenantManagementReadStore>(p => new ManagementReadHook((ITenantManagementReadStore)p.GetRequiredService<IIamStore>(), race)));
+                s.Replace(ServiceDescriptor.Singleton<ITenantManagementStore>(p => new ManagementReadHook((ITenantManagementStore)p.GetRequiredService<IIamStore>(), race)));
             }));
             using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var (tenant, instance) = await SetupManagementRead(host, owner, false); var api = $"/api/v2/tenants/{tenant}";

@@ -74,6 +74,10 @@ public sealed partial class TenantSessionAccessTests
                 var pending = await AwaitManagementRun(first.Services.GetRequiredService<ITenantRunStore>(), tenant, runId, true); Assert.Equal(AgentRunStatus.WaitingForApproval, pending.Status); Assert.Null(pending.Claim); requestId = pending.ApprovalRequestId!.Value;
                 await using var db = await first.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261022060000_TenantAutomationInvocations"));
+                // Newer migrations may have reverted before the read guard refuses.
+                // Explicitly restore the current schema; startup must never auto-adopt a partial downgrade.
+                await db.GetService<IMigrator>().MigrateAsync();
+                Assert.False(db.Database.HasPendingModelChanges());
                 Assert.Equal(TenantApprovalStatus.Pending, (await first.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, requestId))!.Status);
                 Assert.Empty(TenantManagementReadReferences.Read(pending.Checkpoint));
             }

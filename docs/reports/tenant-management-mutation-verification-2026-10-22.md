@@ -1,0 +1,56 @@
+# Tenant management commands — 2026-10-22
+
+This module extends `d29e0adf` with canonical `settings.patch`, `management.policy.update`, `management.freeze` and `automation.preferences.patch`. The original IAM goal stays active. General Harness/configuration and resource/Skill operations, private Skill loading, typed remediation, autonomous approval-default review, final internal/schema consolidation and proposal-wide acceptance remain open.
+
+## Delivered boundary
+
+The existing claimed Runtime lazily discovers these tools through `capabilities.load`. Strict canonical arguments select only the executing Agent and exact Instance revision. The actual root must be a human conversational request. Both admitted/current capability and Self-Management ceilings, current raw Agent read, current requester/executor and exact sources remain required. General management writes always prepare exact `mutate_management` Review or a primary-only exceptional grant. They cannot grant themselves a role, raw read, secondary Sandbox rights or task execution authority.
+
+`TenantManagementOperationTarget` reuses `TenantAgentConfigurationService`, `TenantManagementReadService` and the incumbent preference owner. Human HTTP and model settings share all typed constraints, Definition/model/provider/browser/resource/Skill validation and exact observed Automation reconciliation. All 12 settings sections are exercised. Sandbox selection uses only a tenant-owned previously verified `profileId`; host setup/scripts/limits are unavailable to this tool. Scheduling restriction suspends the existing future registration atomically without changing its task or occurrence time and without executing it. Preview disclosure contains no private Automation identity or count.
+
+Only the incumbent three conversation preferences use the existing direct receipt path when both policies and current operation rules allow it. Exact Review uses their existing preference operation shape. General settings, policy/freeze and unattended model preferences do not inherit that exception. The Runtime excludes these canonical local operations from its generic native-effect fence, leaving exactly one durable effect owner.
+
+The saved plan contains exact configuration/stable hashes, typed changes and escaped Before/After/source/default rows. Both stores reconstruct and compare the entire plan and preview before accepting decisions/effects. Source edits, freeze, revoked read/write, missing scope, wider fields, stale revision and absent independent reviewer withhold mutation and preserve qualified cancellation. Current human raw read also filters approval visibility before totals/paging. One exact exceptional grant is consumed once and leaves standing IAM unchanged.
+
+The existing local-effect transaction applies Instance and observed Automation changes together with Run, receipt, grant settlement, security revision, audit and Core events. Current Run configuration/model pins remain unchanged. New settings/grants apply to new Runs; authority removal/freeze is immediate. Freeze works without ManagementPolicy scope, cannot enable Disabled management and cannot unfreeze. A contiguous same-task completed preference/management receipt chain retains historical read observations across its own changes; unrelated external changes fail closed. Fresh tools still require live authority.
+
+## Persistence and recovery
+
+`20261022080000_TenantManagementMutations` extends only the existing closed approval payload. No table, column, permission, transport or execution engine is added. The frozen rebuild preserves all 114 incumbent guards/indexes and adds three (117 total): exact current Instance/original human root insertion, immutable prepared mutation, and factual completed receipt bound to its approved request and advanced Instance. SQLite stages the configuration/Run before guarded receipt insertion within the same transaction. GUID comparison accepts the casing difference between EF text and JSON identity. Existing migration files remain unchanged.
+
+Empty-data upgrade/downgrade/re-upgrade verifies every preserved guard definition, indexes, foreign keys and current model. Retained pending mutation plans and completed mutation receipts block lossy downgrade. A real SQLite API host recreation retains pending exact consent; the new host authenticates, decides and completes it once, retaining the original Run pin and historical read source. Repeating the decision cannot produce another configuration revision or receipt.
+
+## Presentation and runtime evidence
+
+Chat and Inbox reuse the shared Ant Design inspector and confirmation. Saved values render as literal text, fields use human labels, empty policy choices say **None**, and the confirmation distinguishes exact once-only consent, current source/reviewer checks, immediate revocation and future settings. Factual results say **Configuration updated** or **Configuration not changed**, separately from the decision. [Desktop](assets/tenant-management-mutation-2026-10-22/settings-desktop.png) and [phone](assets/tenant-management-mutation-2026-10-22/settings-narrow.png) screenshots show the final-build inspector. No CSS or second UI kit is added.
+
+Native CLI journeys use actual Synthetic login and visible Chat/review/decision controls for all four commands, approve/reject, at 1440×1000 and 390×844. Canonical settings/policy/Instance readback verifies actual changes or unchanged revisions. Script-like text stays escaped, the action footer stays reachable, document width does not overflow, and captured page/non-aborted request failures remain absent. Playwright MCP independently exercised a freeze request with only Settings scope: saved Assisted/Settings stayed intact, Frozen changed No→Yes, Instance advanced once and the factual reply completed. It recorded zero console errors; failed requests were navigation/refresh aborts.
+
+## Executed checks
+
+**464 distinct focused cases passed, plus 16 native browser journeys.** These combine successful identities across grouped runs and focused repair rechecks; no full CI suite was run.
+
+| Check | Observed result |
+| --- | --- |
+| Serial solution build and final affected regression-project build | Pass, zero warnings/errors. `dotnet build ... --no-restore --nologo -m:1 -nodeReuse:false -p:UseSharedCompilation=false`. |
+| Complete management command API/Runtime/store module | **69 passed**: 46 four-command consent/authority/preference/grant cases, 20 additional setting-section cases, 2 verified Sandbox selection cases and 1 actual SQLite host recreation case. Both stores; no skipped cases. |
+| Adjacent API/Runtime regressions | **99 distinct passed**: 98 in the grouped run plus the repaired read-recovery case. Canonical management reads/source retention/visibility/refusal, immutable Core procedures and direct/approved preference continuation paths remain intact. |
+| Application contracts/projection | **49 passed**: `ManagementMutationContractTests`, `ManagementReadContractTests`, `ManagementProjectionTests`. Strict schemas, closed payload/intent, serialized value equality, canonical semantic/action hashes and admitted/current offering. |
+| Infrastructure migration/preference regressions | **117 distinct cases passed** across the grouped run (114) and four repaired fixture rechecks (one overlap). `TenantManagementMutationMigrationTests` and `TenantPreferenceOperationTests`: exact receipts, current authority, reviewer/target, root dedupe, cross-Run consent, queue ordering, concurrent effects, schema and migration preservation. |
+| Shared inspector | **130 passed**: `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run src/features/access/TenantApprovals.test.tsx`. Existing Ant Design test-only NaN-height warning remains. |
+| Frontend build | `pnpm run build` passed; existing large-bundle warning remains. |
+| Final native Synthetic CLI | **16 passed** in 1.3 minutes: every command, approve/reject, desktop/phone, actual canonical readback. Temporary single-worker configuration used the owned 5096/5186 hosts; no retries. The retained Chat configuration discovers the same 16 cases. |
+| Playwright MCP | Actual exact freeze without ManagementPolicy scope completed; canonical readback showed revision 3 and Frozen true with Assisted/Settings preserved. Zero console errors, only aborted navigation/refresh requests. |
+| Documentation | Changed Markdown links exist, fences balance and new exact-consent JSON parses. |
+
+The existing `playwright.tenant-chat.config.ts` includes the new browser file for repeatable local use: `pnpm exec playwright test -c playwright.tenant-chat.config.ts tenant-management-mutations.spec.ts` starts its own disposable Synthetic hosts.
+
+The adjacent API filter selected `Canonical_management_reads_`, `Canonical_management_read_Review`, `Management_read_`, `Tenant_Core_procedures_use_claimed`, `Model_managed_preferences_use_current` and `Model_preference_authorization_persists`; only the repaired read-recovery case was repeated.
+
+The API module filter selected `Canonical_management_commands`, `Management_command_changed`, `Management_settings_preference_wrapper`, `Management_commands_with_missing`, `Management_exact_exceptional`, `Management_settings_sections_use_shared_constraints`, `Management_Sandbox_profile_selection` and `Management_mutation_pending`. All .NET tests used `--no-build --no-restore --nologo` and disposable Synthetic stores. Counts exclude repaired failures and repeated case identities. Temporary browser configuration was removed, the MCP tab closed, and only the owned API/Vite listeners were stopped.
+
+## Repairs and limits
+
+Qualification repaired nested-record value comparison after SQLite deserialization, guarded receipt ordering and GUID casing, the generic Runtime effect fence on the direct preference wrapper, and the five State & Isolation enum schemas. Preview reconstruction now rejects misleading saved review rows. An unscoped test-only Run inventory assertion was corrected to supply the exact Agent. Adjacent historical preference fixtures now inspect retained receipt facts with scalar SQL while intentionally downgraded, restore the current schema before current-model queries, and verify that saved queue order admits only the first eligible input before releasing the continuation. The incumbent production queue ordering is unchanged. The previous read-recovery fixture explicitly restores the current schema after a refused downgrade traverses the newer mutation migration; startup still correctly rejects a partial older schema. Browser qualification corrected sparse metadata readback to use the canonical settings/policy views and reused one actual login session instead of hitting the real login limiter. These are repaired findings, not ignored failures.
+
+This is focused local module qualification. CI, live-provider UAT, physical Sandbox execution and full proposal/milestone acceptance were not requested or run. The Sandbox prerequisite uses the existing Synthetic readiness/verifier owner; selecting a verified profile never invokes a Sandbox SDK. Remaining Harness/resource/Skill/remediation and authority/schema gaps stay recorded in the [delivery ledger](multitenant-iam-delivery-2026-10-16.md).

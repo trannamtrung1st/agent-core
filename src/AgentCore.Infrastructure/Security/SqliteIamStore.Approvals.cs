@@ -24,7 +24,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ManagementRead is { } management ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ManagementMutation is { } managementMutation ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
+            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.ManagementMutation.SessionId') = {managementMutation.SessionId.ToString("D")}
+            AND json_extract(PayloadJson, '$.Operation.ManagementMutation.ToolName') = {managementMutation.ToolName}
+            AND json_remove(json_extract(PayloadJson, '$.Operation.ManagementMutation.ArgumentsJson'), '$.expectedInstanceRevision') = {AgentCore.Application.Tools.TenantManagementMutationContract.SemanticArguments(managementMutation.ArgumentsJson)}
+            """) : operation.ManagementRead is { } management ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.ManagementRead.SessionId') = {management.SessionId.ToString("D")}
             AND json_extract(PayloadJson, '$.Operation.ManagementRead.ToolName') = {management.ToolName}
@@ -404,10 +409,10 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                                     AND source.SessionId = a.SessionId AND source.AttachmentId = a.SourceAttachmentId))))))
             """);
         var query = source.AsNoTracking().Where(r => r.TenantId == tenantId);
-        // The closed persistence contract reserves agents.read approvals for ManagementRead.
-        if (managementVisibility is null) query = query.Where(r => r.Permission != "agents.read");
+        var managementWrites = db.Set<TenantApprovalRecord>().FromSqlRaw("SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson,'$.Operation.ManagementMutation') IS 'object'");
+        if (managementVisibility is null) query = query.Where(r => r.Permission != "agents.read" && !managementWrites.Any(m => m.RequestId == r.RequestId));
         else if (managementVisibility.Agents is { } managementAgents)
-        { var ids = managementAgents.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "agents.read" || ids.Contains(r.InstanceId)); }
+        { var ids = managementAgents.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "agents.read" && !managementWrites.Any(m => m.RequestId == r.RequestId) || ids.Contains(r.InstanceId)); }
         if (page.SessionId is { } session)
         {
             var id = session.ToString("D");
@@ -608,6 +613,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.ArtifactPublication is not null) await RequireArtifactOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.BrowserCommand is not null) await RequireBrowserOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.AutomationMutation is not null) _ = await RequireAutomationMutationApproval(db, request, run, ct).ConfigureAwait(false);
+            if (request.Operation.ManagementMutation is not null) _ = await RequireManagementMutation(db, request, run, ct).ConfigureAwait(false);
             if (request.Operation.ManagementRead is { } managementRead) _ = await ObserveManagementRead(db, run, managementRead.ToolName, managementRead.ArgumentsJson, managementRead, null, ct).ConfigureAwait(false);
             if (request.Operation.AutomationRead is { } automationRead) _ = await ObserveAutomationRead(db, run, automationRead.ToolName, automationRead.ArgumentsJson, automationRead, null, ct).ConfigureAwait(false);
             if (request.Operation.ExperienceOperation is not null) _ = await RequireExperienceApproval(db, request, run, ct).ConfigureAwait(false);
@@ -723,6 +729,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 var mutationSource = await RequireAutomationMutationApproval(db, request, run, ct).ConfigureAwait(false);
                 await TenantAutomationMutationRules.ReviewerAsync(request, mutationSource, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if (request.Operation.ManagementMutation is not null)
+            {
+                var managementState = await RequireManagementMutation(db, request, run, ct).ConfigureAwait(false);
+                await TenantManagementMutationRules.ReviewerAsync(request, managementState.Reader, request.Operation.ManagementMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             }
             if (request.Operation.ManagementRead is { } managementRead)
             {

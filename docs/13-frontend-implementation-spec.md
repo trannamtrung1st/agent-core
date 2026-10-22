@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Exact Agent configuration change presentation
+
+`mutate_management` reuses the shared Chat/Approval inspector, escaped saved Before/After rows and existing responsive Ant Design controls. Labels humanize setting fields and show explicit **None** for empty management choices. Confirmation explains exact once-only consent, current source/reviewer checks, the unchanged current Run pin, immediate authority removal/freeze and future settings/grants. A grant supplies only the primary update permission. Factual results use **Configuration updated** or **Configuration not changed**; decision and effect remain separate. [Contract](14-api-and-realtime-protocol.md#tenant-model-configuration-change-consent) and [desktop/narrow qualification](reports/tenant-management-mutation-verification-2026-10-22.md).
+
 ## Exact Automation read presentation
 
 Chat and the shared Approval inspector label `inspect_automations` as “Inspect exact Automation metadata.” Reuse the existing saved-read presentation and plain-text rendering for labeled Automation, instruction, model, destination, trigger and source facts from the exact bounded observation. Confirmation explains current raw source/reviewer checks and the absence of mutation, execution or future read authority. A completed receipt displays “Read authorized”; refusal displays “Read not authorized.” Source changes require a fresh read, with ordinary cancellation/recovery available. The existing Ant Design layout and responsive inspector remain the presentation owners.

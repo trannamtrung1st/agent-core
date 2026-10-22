@@ -4,10 +4,6 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Triggers;
 
-/// <summary>Every observed registration participates in CAS, including unchanged ones.</summary>
-public sealed record InstanceAutomationPolicyChange(Guid AutomationId, long ExpectedRevision, AutomationStatus Status,
-    DateTimeOffset? NextOccurrenceAtUtc, string? SuspensionReason);
-
 public sealed class InstanceAutomationPolicy(ITriggerStore triggers, IMemoryStore profiles)
 {
     public async ValueTask<IReadOnlyList<InstanceAutomationPolicyChange>> PlanTenantAsync(Guid tenant, ITenantAutomationStore store, AgentInstance instance,

@@ -921,3 +921,22 @@ it('presents exact management settings as read consent without implying configur
   await waitFor(() => expect(within(confirm).getByText(/This grants no write, raw permission or future read/)).toBeVisible());
   fireEvent.click(within(confirm).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(0);
 });
+
+
+it.each([
+  ['agentInstructions', 'Saved instruction', 'New <script>literal instruction</script>', false],
+  ['Frozen', false, true, false],
+  ['Unattended model', 'Selected model', 'Inherit Agent default', true],
+])('reviews exact management change %s with its effect boundary and no future execution authority', async (field, before, after, restoresDefault) => {
+  view({ ...request, kind: 'review', summary: 'Change exact Agent configuration', preparedAction: { ...request.preparedAction, operation: 'mutate_management' },
+    review: { ...request.review, changes: [{ field: field as string, before, after, beforeAvailable: true, afterAvailable: true, restoresDefault: restoresDefault as boolean },
+      { field: 'Effect boundary', before: 'Current Run stays pinned', after: 'New grants apply to new Runs; freeze revokes management immediately.', beforeAvailable: true, afterAvailable: true, restoresDefault: false }] } });
+  const dialog = await screen.findByRole('dialog'); const saved = await within(dialog).findByRole('region', { name: 'Exact saved changes' });
+  expect(within(saved).queryByText('Saved field', { exact: true })).not.toBeInTheDocument(); expect(saved.querySelector('script')).toBeNull();
+  expect(within(saved).getByText('New grants apply to new Runs; freeze revokes management immediately.')).toBeVisible();
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()); fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  const confirmation = (await screen.findAllByText('Approve?'))[0].closest('[role="dialog"]') as HTMLElement;
+  await waitFor(() => expect(within(confirmation).getByText(/only this exact saved Agent configuration change once/)).toBeVisible());
+  expect(within(confirmation).getByText(/no role or task execution authority is granted/)).toBeVisible();
+  fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+});

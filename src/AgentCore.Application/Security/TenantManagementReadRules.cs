@@ -18,6 +18,9 @@ public static class TenantManagementReadRules
     public static void Eligible(TenantManagementReader reader, AgentDefinition baseline, string tool)
     {
         TenantSessionRules.RequireExecutor(reader.Security, reader.Agent);
+        if (reader.Root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage
+            || reader.Root.Admission.OutputContract != AgentRunOutputContract.ConversationResponse || reader.Root.Admission.TaskIntent?.Source == AgentRunTaskSource.Automation)
+            throw new AccessDeniedException("management_unavailable");
         var current = reader.Current with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, reader.Agent.Instance) };
         if (!TenantManagementReadContract.Allows(reader.Run) || !TenantManagementReadContract.Allows(current, tool)
             || !TenantManagementReadContract.Allows(reader.Run.Admission.Configuration!.Definition, tool)) throw new AccessDeniedException("management_read_unavailable");
@@ -103,21 +106,39 @@ public static class TenantManagementReadRules
     public static void ValidateCurrent(TenantManagementReader reader, AgentDefinition baseline, PreparedManagementRead value,
         IEnumerable<TenantOperationReceipt> receipts, Func<Guid, TenantApprovalRequest?> request)
     {
-        Validate(value); Eligible(reader, baseline, value.ToolName);
+        Validate(value); TenantSessionRules.RequireExecutor(reader.Security, reader.Agent);
+        if (reader.Root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage || reader.Root.Admission.OutputContract != AgentRunOutputContract.ConversationResponse)
+            throw new AccessDeniedException("management_read_unavailable");
+        if (!TenantManagementReadContract.Allows(reader.Run) || !TenantManagementReadContract.Allows(reader.Run.Admission.Configuration!.Definition, value.ToolName))
+            throw new AccessDeniedException("management_read_unavailable");
         if (value.SessionId != reader.Run.SessionId || value.RootSessionId != reader.Root.SessionId) throw new AccessDeniedException("management_source_changed");
         var owner = reader.Agent.Instance;
-        if (owner.Revision == value.InstanceRevision && ConfigurationHash(owner) == value.ConfigurationHash) return;
-        if (owner.Revision <= value.InstanceRevision || StableConfigurationHash(owner) != value.StableConfigurationHash) throw new AccessDeniedException("management_source_changed");
+        if (owner.Revision == value.InstanceRevision && ConfigurationHash(owner) == value.ConfigurationHash) { Eligible(reader, baseline, value.ToolName); return; }
+        if (owner.Revision <= value.InstanceRevision || owner.Revision - value.InstanceRevision > 1024) throw new AccessDeniedException("management_source_changed");
         var rows = receipts.Where(r => r.TenantId == reader.Security.Tenant.TenantId && r.InstanceId == owner.InstanceId && r.ExecutorPrincipalId == reader.Agent.PrincipalId
             && r.SessionId == reader.Run.SessionId && r.RootActivationId == reader.Run.Admission.Activation.RootActivationId && r.Outcome == TenantOperationOutcome.Completed
             && r.InstanceRevision > value.InstanceRevision && r.InstanceRevision <= owner.Revision).ToArray();
-        if (rows.Length > 1024 || owner.Revision - value.InstanceRevision > 1024) throw new AccessDeniedException("management_source_changed");
+        if (rows.Length > 1024) throw new AccessDeniedException("management_source_changed");
+        var stable = value.StableConfigurationHash;
         for (var revision = value.InstanceRevision + 1; revision <= owner.Revision; revision++)
         {
-            var matching = rows.Where(r => r.InstanceRevision == revision && Preference(r, request)).ToArray();
-            if (matching.Length != 1) throw new AccessDeniedException("management_source_changed");
+            var candidates = rows.Where(r => r.InstanceRevision == revision && (Preference(r, request) || Management(r, request, stable) is not null)).ToArray();
+            if (candidates.Length != 1) throw new AccessDeniedException("management_source_changed");
+            if (Management(candidates[0], request, stable) is { } mutation) stable = mutation.AfterStableHash;
         }
+        if (StableConfigurationHash(owner) != stable) throw new AccessDeniedException("management_source_changed");
+        // A completed exact self-change may remove its own tool/delegation. It does
+        // not erase the task's already observed historical snapshot or add new read authority.
+        // External edits still need an unbroken receipt for every Instance revision.
     }
+    private static PreparedManagementMutation? Management(TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request, string before)
+    {
+        if (receipt.RequestId is not { } id || request(id) is not { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation: { } value } approved
+            || receipt.ReasonCode != TenantManagementMutationRules.Completed || approved.Operation.ActionHash != receipt.ActionHash
+            || approved.Operation.ExpectedInstanceRevision != receipt.InstanceRevision - 1 || value.BeforeStableHash != before) return null;
+        TenantManagementMutationRules.Validate(value); return value;
+    }
+
     private static bool Preference(TenantOperationReceipt receipt, Func<Guid, TenantApprovalRequest?> request)
     {
         if (receipt.RequestId is { } id)

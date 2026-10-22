@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Canonical management command qualification
+
+`TenantSessionAccessTests.ManagementMutation*`, `ManagementMutationContractTests`, `TenantManagementMutationMigrationTests` and `web/e2e/tenant-management-mutations.spec.ts` exercise exact four-command consent, all settings sections, shared scheduling reconciliation, verified Sandbox selection, current source/authority refusal, primary-only grants, retained observation chains and original Run pins. Actual SQLite host recreation checks pending consent and no duplicate effect; frozen-schema tests check 114→117 guard preservation, foreign keys and lossy-downgrade refusal. The shared inspector and native Synthetic desktop/narrow journeys verify escaped exact fields, explicit confirmation, actual approve/reject and canonical readback. [Exact results and limits](reports/tenant-management-mutation-verification-2026-10-22.md) remain scoped evidence rather than whole-proposal acceptance.
+
 ## Canonical learned Memory qualification
 
 `TenantAgentAccessTests.LearnedMemory`, `TenantDefinitionIntegrationTests.LearnedMemory*` and the canonical `web/e2e/memory-semantics.spec.ts` exercise actual requester/scoped ownership, independent raw read/manage policy, passive Review withholding, live/admitted restrictions, atomic response failure rollback, immutable source/value identity, SQLite guards and host recreation, private receipt delivery and Session deletion versus promoted copies. Native desktop/narrow Chat sends through visible controls, refuses an unapproved delete, resolves a remembered task and reloads its retained receipt without changing report bytes. [Exact commands, results, corrections and limits](reports/tenant-learned-memory-verification-2026-10-22.md) distinguish these passing paths from pending forgetting/consolidation tools, human management and broader continuity/Experience/Harness qualification.

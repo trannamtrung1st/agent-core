@@ -27,23 +27,12 @@ public sealed partial class TenantAgentConfigurationService
     public ValueTask<TenantAgent> PatchSettingsAsync(Guid actor, Guid tenant, Guid id, string section,
         long securityRevision, long instanceRevision, IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
     {
-        if (section == "sandboxPolicy")
-            foreach (var key in new[] { "sandbox.read", "sandbox.manage" })
-                await authorizer.RequireAsync(actor, key, Scope(tenant, id), token).ConfigureAwait(false);
         var state = await ChangeState(actor, tenant, id, securityRevision, token).ConfigureAwait(false);
-        ArgumentNullException.ThrowIfNull(set); ArgumentNullException.ThrowIfNull(clear);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
         RequireWritable(current, instanceRevision);
         var (definition, _, _) = await Definition(tenant, current.DefinitionId, current.ActiveVersion, token).ConfigureAwait(false);
-        if (section == "sandboxPolicy") definition = await PrepareSandboxPatch(actor, tenant, current, definition, set, clear, token).ConfigureAwait(false);
-        if (aliases is null) throw AgentCoreErrors.Validation("Configured provider choices are unavailable.");
-        var (next, effective) = AgentInstanceSettingsService.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
-        AgentInstanceSettingsService.ValidateBrowser(effective, browser);
-        _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
-        _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, definition, token).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
-        var plan = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), current, effective, time.GetUtcNow(), token).ConfigureAwait(false);
-        var updated = await Commit(actor, tenant, state, new(id, instanceRevision, SetSettingsOverrides: true,
-            SettingsOverrides: next, AutomationPolicyChanges: plan), "agents.settings.update", token, initiator).ConfigureAwait(false);
+        var change = await PrepareSettingsChangeAsync(actor, tenant, snapshot, definition, section, set, clear, token).ConfigureAwait(false);
+        var updated = await Commit(actor, tenant, state, change, "agents.settings.update", token, initiator).ConfigureAwait(false);
         if (sandbox is not null) await sandbox.EnforceAsync(id, token).ConfigureAwait(false);
         return updated;
     }, ct);

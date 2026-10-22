@@ -17,21 +17,22 @@ public sealed record TenantApprovalView(TenantApprovalRequest Request, long Secu
 public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantBackgroundCreationTarget? backgroundCreations = null, TenantBackgroundReportTarget? backgroundReports = null, ITenantRuntimeStore? reportRuntime = null, TenantCompletionReadService? completionReads = null, TenantReportSourceReadService? reportSourceReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountActionTarget? accountActions = null, ITenantRunStore? accountRuns = null, TenantAutomationOperationTarget? automationAdmissions = null, TenantMemoryOperationService? memoryOperations = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantManagementReadService? managementReads = null)
+    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantBackgroundCreationTarget? backgroundCreations = null, TenantBackgroundReportTarget? backgroundReports = null, ITenantRuntimeStore? reportRuntime = null, TenantCompletionReadService? completionReads = null, TenantReportSourceReadService? reportSourceReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountActionTarget? accountActions = null, ITenantRunStore? accountRuns = null, TenantAutomationOperationTarget? automationAdmissions = null, TenantMemoryOperationService? memoryOperations = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantManagementOperationTarget? managementTargets = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
         long expectedRunRevision, Guid? generation = null, CancellationToken ct = default) => PrepareAsync(reference, persona, null, expectedRunRevision, generation, ct);
 
     public ValueTask<TenantApprovalPreparationResult> PreparePreferencesAsync(TenantRunReference reference, PreparedConversationPreferences preferences,
-        long expectedRunRevision, Guid? generation = null, CancellationToken ct = default) => PrepareAsync(reference, null, preferences, expectedRunRevision, generation, ct);
+        long expectedRunRevision, Guid? generation = null, CancellationToken ct = default, long? expectedInstanceRevision = null) => PrepareAsync(reference, null, preferences, expectedRunRevision, generation, ct, expectedInstanceRevision);
 
     private async ValueTask<TenantApprovalPreparationResult> PrepareAsync(TenantRunReference reference, AgentIdentity? persona, PreparedConversationPreferences? preferences,
-        long expectedRunRevision, Guid? generation, CancellationToken ct)
+        long expectedRunRevision, Guid? generation, CancellationToken ct, long? expectedInstanceRevision = null)
     {
         var (run, state) = await operations.ResolveForDecisionAsync(reference, "agents.update", ExecutionAuthorizationPurpose.ApprovalPreparation, ct).ConfigureAwait(false);
         var agent = await agents.FindTenantAgentAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("executor_unavailable");
+        if (expectedInstanceRevision is { } expected && agent.Instance.Revision != expected) throw new SecurityConflictException("stale_revision");
         var operation = preferences is null ? TenantApprovalRules.Prepare(ids.NewId(), agent.Instance.InstanceId, persona ?? throw new ArgumentException("Missing operation."), agent.Instance.Revision, agent.Instance.PersonaRevision)
             : TenantApprovalRules.PreparePreferences(ids.NewId(), agent.Instance.InstanceId, preferences, agent.Instance.Revision, agent.Instance.PersonaRevision);
         var pinned = run.Admission.Configuration!.Definition;
@@ -400,9 +401,14 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                 var observed = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).Mutations.PrepareAsync(new(tenant, run.AgentRunId), null, automationMutation.ToolName, automationMutation.ArgumentsJson, ct, automationMutation).ConfigureAwait(false);
                 await TenantAutomationMutationRules.ReviewerAsync(request, observed.Source, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
             }
+            if (request.Operation.ManagementMutation is { } managementMutation)
+            {
+                var observed = await (managementTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(new(tenant, run.AgentRunId), null, managementMutation.ToolName, managementMutation.ArgumentsJson, ct, managementMutation).ConfigureAwait(false);
+                await TenantManagementOperationTarget.ReviewerAsync(request, observed, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
+            }
             if (request.Operation.ManagementRead is { } managementRead)
             {
-                var observed = await (managementReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(new(tenant, run.AgentRunId), null, managementRead.ToolName, managementRead.ArgumentsJson, ct, managementRead).ConfigureAwait(false);
+                var observed = await (managementTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads.PrepareAsync(new(tenant, run.AgentRunId), null, managementRead.ToolName, managementRead.ArgumentsJson, ct, managementRead).ConfigureAwait(false);
                 await TenantManagementReadService.ReviewerAsync(request, observed, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
             }
             if (request.Operation.AutomationRead is { } automationRead)
@@ -519,8 +525,10 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         }
         if (request.Operation.AutomationMutation is not null)
             _ = await (automationAdmissions ?? throw new AccessDeniedException("approval_unavailable")).Mutations.InspectionAsync(request, human, ct).ConfigureAwait(false);
+        if (request.Operation.ManagementMutation is not null)
+            _ = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.ManagementRead is not null)
-            _ = await (managementReads ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(request, human, ct).ConfigureAwait(false);
+            _ = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).Reads.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.AutomationRead is not null)
             _ = await (automationAdmissions ?? throw new AccessDeniedException("approval_unavailable")).Reads.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.ExperienceOperation is not null)

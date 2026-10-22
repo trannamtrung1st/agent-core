@@ -11,12 +11,12 @@ public sealed record TenantPreferenceResult(OperationDecisionKind Decision, stri
 public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationStore effects, TenantOperationAuthorizer operations,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases, IIdGenerator ids, TimeProvider time, ITenantApprovalStore approvals)
 {
-    public async ValueTask<TenantPreferenceResult> ExecuteAsync(TenantRunReference reference, Guid generation, string callId, string arguments, CancellationToken ct = default)
+    public async ValueTask<TenantPreferenceResult> ExecuteAsync(TenantRunReference reference, Guid generation, string callId, string arguments, CancellationToken ct = default, long? expectedInstanceRevision = null)
     {
         if (string.IsNullOrWhiteSpace(callId) || callId.Length > 200) throw new ArgumentException("Invalid trusted call identity.");
         var patch = TenantPreferenceToolContract.Parse(arguments);
         var (run, state) = await operations.ResolveForDecisionAsync(reference, TenantPreferenceToolContract.Permission, ExecutionAuthorizationPurpose.EffectEligibility, ct).ConfigureAwait(false);
-        try { return await ExecuteCoreAsync(reference, generation, callId, patch, run, state, ct).ConfigureAwait(false); }
+        try { return await ExecuteCoreAsync(reference, generation, callId, patch, run, state, expectedInstanceRevision, ct).ConfigureAwait(false); }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
         {
             var reason = ex is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)ex).ReasonCode;
@@ -25,7 +25,7 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
         }
     }
     private async ValueTask<TenantPreferenceResult> ExecuteCoreAsync(TenantRunReference reference, Guid generation, string callId,
-        TenantPreferencePatch patch, AgentRun run, TenantSecurityState state, CancellationToken ct)
+        TenantPreferencePatch patch, AgentRun run, TenantSecurityState state, long? expectedInstanceRevision, CancellationToken ct)
     {
         TenantLocalEffectRules.RequireDirectRun(run, generation, time.GetUtcNow());
         var saved = await effects.FindDirectOperationReceiptAsync(reference.TenantId, run.AgentRunId, callId, ct).ConfigureAwait(false);
@@ -39,6 +39,7 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
         var decision = await operations.Check(state, run, TenantPreferenceToolContract.Permission, scope, ct).ConfigureAwait(false);
         if (decision.Decision != OperationDecisionKind.Allowed) return new(decision.Decision, decision.ReasonCode);
         var (target, baseline) = await configuration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
+        if (expectedInstanceRevision is { } expected && target.Instance.Revision != expected) throw new SecurityConflictException("stale_revision");
         var prepared = TenantApprovalRules.PreparePreferences(ids.NewId(), run.AgentInstanceId, TenantPreferenceToolContract.Parameters(patch),
             target.Instance.Revision, target.Instance.PersonaRevision);
         var previous = await approvals.FindRootApprovalAsync(reference.TenantId, run.Admission.Activation.RootActivationId,

@@ -115,6 +115,17 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
                 catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
                 audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
             }
+            TenantAgentConfigurationChange? managementChange = null;
+            if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementMutation is not null)
+            {
+                try {
+                    var managementState = RequireManagementMutation(request, run, ct);
+                    TenantManagementMutationRules.ReviewerAsync(request, managementState.Reader, request.Operation.ManagementMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+                    managementChange = managementState.Change;
+                } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
+                audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode };
+            }
             if (commit.Outcome == TenantOperationOutcome.Completed && request.Operation.ManagementRead is { } managementRead)
             {
                 try {
@@ -193,13 +204,14 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             audit = TenantOperationAuditRules.WithEffectResult(audit, before, run, request, grant?.GrantId);
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
-            var configure = complete && request.Operation.IsLocalConfiguration;
-            var change = configure ? TenantLocalEffectRules.Change(request, target.Instance) : null;
+            var configure = complete && (request.Operation.IsLocalConfiguration || request.Operation.ManagementMutation is not null);
+            var change = configure ? managementChange ?? TenantLocalEffectRules.Change(request, target.Instance) : null;
             if (configure) _ = TenantAgentConfigurationRules.Apply(target.Instance, change!, at);
             ct.ThrowIfCancellationRequested();
             var updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
                 Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
-                SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).Result : target.Instance;
+                SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges,
+                HarnessManagement: change.HarnessManagement, SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey, UnattendedReasoningEffort: change.UnattendedReasoningEffort), at, ct).Result : target.Instance;
             if (complete && automationMutation is not null)
             {
                 if (commit.AutomationInvocationAdmission is { } admitted) { StageTenantAutomationGraph(admitted); automationBacking.CommitTenantOccurrence(admitted.Next, admitted.Occurrence); }

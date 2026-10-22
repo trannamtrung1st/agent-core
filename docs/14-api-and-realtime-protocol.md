@@ -8,7 +8,17 @@ Canonical conversational model reads currently support `management.inspect({})`,
 {"operation":"inspect_management","read":{"tool":"settings.inspect","arguments":{"section":"conversationPolicy"}}}
 ```
 
-HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. This module does not enable other registered Harness/configuration tools. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
+HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. Other registered Harness/configuration tools retain their separate conversion boundary. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
+
+## Tenant model configuration change consent
+
+The existing authorization tool accepts one exact canonical management command:
+
+```json
+{"operation":"mutate_management","change":{"tool":"settings.patch","arguments":{"expectedInstanceRevision":3,"section":"instructions","set":{"agentInstructions":"Use this exact instruction in future Runs."},"clear":[]}}}
+```
+
+Supported commands are `settings.patch`, `management.policy.update`, `management.freeze` and `automation.preferences.patch`. Strict typed arguments select only the executing Agent. Sandbox settings accept only `profileId`. The canonical operation summary is **Change exact Agent configuration**; the shared inspector shows escaped saved field changes, source/default changes and the effect boundary. Confirmation authorizes that exact saved change once, rechecks source/reviewer authority, preserves the current Run pin and distinguishes immediate revocation from future settings/grants. Only a completed factual receipt displays **Configuration updated**; refusal displays **Configuration not changed**. The original authorization/continuation/receipt wire owner is unchanged. [Backend contract](04-backend-interfaces.md#tenant-model-management-commands).
 
 ## Owner credential contract retirement
 

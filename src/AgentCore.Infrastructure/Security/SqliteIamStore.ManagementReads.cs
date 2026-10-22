@@ -8,8 +8,28 @@ using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 namespace AgentCore.Infrastructure.Security;
 
-public sealed partial class SqliteIamStore : ITenantManagementReadStore
+public sealed partial class SqliteIamStore : ITenantManagementStore
 {
+    public async ValueTask<TenantManagementSource> ReadTenantManagementSourceAsync(TenantRunReference reference, Guid? generation, Guid? inspectionHuman = null, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var row = await OwnedRuns(db, reference.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == reference.RunId.ToString("D"), ct).ConfigureAwait(false)
+            ?? throw new AccessDeniedException("management_unavailable"); var run = AgentRunStoreMapping.ToDomain(row);
+        if (generation is { } claim) _ = await RequireRuntimeFrame(db, new(run.Owner, run.SessionId, run.AgentRunId, claim), ct).ConfigureAwait(false);
+        var reader = await ManagementReader(db, run, inspectionHuman, ct).ConfigureAwait(false);
+        if (inspectionHuman is { } human)
+        {
+            if (!reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable");
+            await ValidateTenantActorAsync(db, reader.Security, human, ct).ConfigureAwait(false);
+        }
+        await TenantManagementReadRules.RawAsync(reader, new IamAuthorizer(this), ct, inspectionHuman).ConfigureAwait(false);
+        var snapshot = new TenantAgentConfigurationSnapshot(reader.Agent,
+            await SqliteAgentInstanceStore.ReadSkillsAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false),
+            await SqliteAgentInstanceStore.ReadResourcesAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false),
+            await ReadIsolationMetadataAsync(db, run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false));
+        return new(reader, snapshot);
+    }
     public async ValueTask<TenantManagementReadObservation> ObserveTenantManagementReadAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         PreparedManagementRead? expected = null, Guid? inspectionHuman = null, CancellationToken ct = default)
     {
@@ -34,7 +54,7 @@ public sealed partial class SqliteIamStore : ITenantManagementReadStore
     private async Task<TenantManagementReadObservation> ObserveManagementRead(AgentCoreDbContext db, AgentRun run, string tool, string arguments, PreparedManagementRead? expected, Guid? human, CancellationToken ct)
     {
         var reader = await ManagementReader(db, run, human, ct).ConfigureAwait(false); var args = TenantManagementReadContract.Parse(tool, arguments); var iam = new IamAuthorizer(this);
-        var baseline = reader.Baseline; if (human is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
+        var baseline = reader.Baseline; if (human is null && expected is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
         if (human is not null) { if (expected is null || !reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable"); await ValidateTenantActorAsync(db, reader.Security, human.Value, ct).ConfigureAwait(false); }
         if (human is null) await TenantManagementReadRules.RawAsync(reader, iam, ct).ConfigureAwait(false);
         if (human is not null) await TenantManagementReadRules.RawAsync(reader, iam, ct, human).ConfigureAwait(false);

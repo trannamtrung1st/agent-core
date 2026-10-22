@@ -50,8 +50,12 @@ public sealed partial class TenantPreferenceOperationTests
         {
             var error = await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync(previous));
             Assert.Equal(19, error.SqliteErrorCode);
-            Assert.Single(await db.Set<TenantOperationReceiptRecord>().AsNoTracking().ToArrayAsync());
+            // Later migrations may already have reverted before the direct-receipt guard refuses.
+            // Inspect the retained fact without assuming current-model columns still exist.
+            Assert.Equal(1, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM TenantOperationReceipts").SingleAsync());
             Assert.Contains("20261017052609_TenantDirectLocalOperationReceipts", await db.Database.GetAppliedMigrationsAsync());
+            await migrator.MigrateAsync();
+            Assert.Single(await db.Set<TenantOperationReceiptRecord>().AsNoTracking().ToArrayAsync());
         }
         else
         {

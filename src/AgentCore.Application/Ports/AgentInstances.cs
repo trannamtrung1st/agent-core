@@ -1,3 +1,4 @@
+using AgentCore.Domain.Triggers;
 using AgentCore.Application.Admin;
 using AgentCore.Domain.Definitions;
 
@@ -74,7 +75,7 @@ public sealed record AgentInstanceRevisionUpdate(
     AdminEventAppend? History = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
     bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
-    IReadOnlyList<Triggers.InstanceAutomationPolicyChange>? AutomationPolicyChanges = null);
+    IReadOnlyList<InstanceAutomationPolicyChange>? AutomationPolicyChanges = null);
 
 public interface IAgentInstanceService
 {

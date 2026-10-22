@@ -198,7 +198,15 @@ public sealed partial class TenantPreferenceOperationTests
         var ids = new TenantApprovalContinuationIds(f.Ids.NewId(), f.Ids.NewId());
         Assert.True(await ((ITenantApprovalStore)f.Iam).TryResumeApprovalAsync(setup.Signal, clock.GetUtcNow(), continuation: ids));
         var queued = await ((ITenantRuntimeStore)f.Iam).ListRunnableTenantRunsAsync(clock.GetUtcNow(), 100);
-        Assert.Equal(new[] { later.RunId, ids.RunId }, queued.Select(r => r.AgentRunId));
+        // Admission preserves both facts; only the first queued input may own the Session.
+        Assert.Equal(new[] { later.RunId }, queued.Select(r => r.AgentRunId));
+        var runs = (ITenantRunStore)f.Iam;
+        var first = (await runs.FindTenantRunAsync(tenant, later.RunId))!;
+        await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(first.Owner, first.AgentRunId,
+            new AgentRunCommand.RequestCancellation(first.Revision, clock.GetUtcNow(), null), f.Ids.NewId());
+        var successor = (await runs.FindTenantRunAsync(tenant, ids.RunId))!;
+        Assert.Empty(successor.Admission.Activation.SourceEntryIds);
+        Assert.Equal(new[] { ids.RunId }, (await ((ITenantRuntimeStore)f.Iam).ListRunnableTenantRunsAsync(clock.GetUtcNow(), 100)).Select(r => r.AgentRunId));
     }
 
     [Theory]

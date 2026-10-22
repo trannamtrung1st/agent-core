@@ -3545,7 +3545,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantApprovalRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", TenantManagementReadConsent.ValuesConstraint);
+                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", TenantManagementMutations.ValuesConstraint);
                         });
                 });
 

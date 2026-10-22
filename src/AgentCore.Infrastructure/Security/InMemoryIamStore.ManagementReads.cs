@@ -6,8 +6,24 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 namespace AgentCore.Infrastructure.Security;
 
-public sealed partial class InMemoryIamStore : ITenantManagementReadStore
+public sealed partial class InMemoryIamStore : ITenantManagementStore
 {
+    public ValueTask<TenantManagementSource> ReadTenantManagementSourceAsync(TenantRunReference reference, Guid? generation, Guid? inspectionHuman = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested(); return ValueTask.FromResult(WithTenantEvents(() => {
+            var run = sessionBacking.ReadRetainedTenantOperationRun(reference.TenantId, reference.RunId) ?? throw new AccessDeniedException("management_unavailable");
+            if (generation is { } claim) _ = RequireMemoryFrame(new(run.Owner, run.SessionId, run.AgentRunId, claim));
+            var reader = ManagementReader(run, inspectionHuman, ct);
+            if (inspectionHuman is { } human)
+            {
+                if (!reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable");
+                ValidateAgentActor(reader.Security, human);
+            }
+            TenantManagementReadRules.RawAsync(reader, new IamAuthorizer(this), ct, inspectionHuman).AsTask().GetAwaiter().GetResult();
+            return new TenantManagementSource(reader, ReadTenantAgentConfigurationAsync(reference.TenantId, run.AgentInstanceId, ct).Result
+                ?? throw new AccessDeniedException("management_unavailable"));
+        }));
+    }
     public ValueTask<TenantManagementReadObservation> ObserveTenantManagementReadAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         PreparedManagementRead? expected = null, Guid? inspectionHuman = null, CancellationToken ct = default)
     {
@@ -31,7 +47,7 @@ public sealed partial class InMemoryIamStore : ITenantManagementReadStore
     private TenantManagementReadObservation ObserveManagementRead(AgentRun run, string tool, string arguments, PreparedManagementRead? expected, Guid? human, CancellationToken ct)
     {
         var reader = ManagementReader(run, human, ct); var args = TenantManagementReadContract.Parse(tool, arguments); var iam = new IamAuthorizer(this);
-        var baseline = reader.Baseline; if (human is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
+        var baseline = reader.Baseline; if (human is null && expected is null) TenantManagementReadRules.Eligible(reader, baseline, tool);
         if (human is not null) { if (expected is null || !reader.Security.Users.Any(u => u.PrincipalId == human && u.Status == IdentityStatus.Active)) throw new AccessDeniedException("approval_unavailable"); ValidateAgentActor(reader.Security, human.Value); }
         if (human is null) TenantManagementReadRules.RawAsync(reader, iam, ct).AsTask().GetAwaiter().GetResult();
         if (human is not null) TenantManagementReadRules.RawAsync(reader, iam, ct, human).AsTask().GetAwaiter().GetResult();

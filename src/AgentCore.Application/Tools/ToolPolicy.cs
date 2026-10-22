@@ -17,6 +17,8 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (admission?.TenantId is not null && TenantManagementMutationContract.IsTool(toolName))
+            return TenantManagementMutationContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && TenantManagementReadContract.IsTool(toolName))
             return TenantManagementReadContract.Allows(definition, toolName) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (admission?.TenantId is not null && toolName is ToolCatalog.SkillsLoad or ToolCatalog.CapabilitiesLoad)
@@ -226,6 +228,8 @@ public static class ToolPolicy
         if (context?.ExecutionContext is { } discovery && descriptor.Name == ToolCatalog.CapabilitiesLoad)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && discovery.SessionId == context.OwnedSessionId && definition.Environment?.Capabilities is not null && TenantTaskExecutionContract.Allows(context);
+        if (context?.ExecutionContext is not null && TenantManagementMutationContract.IsTool(descriptor.Name))
+            return TenantManagementMutationContract.Allowed(definition, context).Contains(descriptor.Name);
         if (context?.ExecutionContext is not null && TenantManagementReadContract.IsTool(descriptor.Name))
             return TenantManagementReadContract.Allowed(definition, context).Contains(descriptor.Name);
         if (context?.ExecutionContext is not null && descriptor.Name == ToolCatalog.SkillsLoad)

@@ -16,7 +16,7 @@ public sealed partial class TenantApprovedOperationService
         if (reason is null)
         {
             try {
-                var service = (managementReads ?? throw new AccessDeniedException("tenant_effect_unavailable")); var value = request.Operation.ManagementRead!;
+                var service = (managementTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads; var value = request.Operation.ManagementRead!;
                 var observed = await service.PrepareAsync(reference, generation, value.ToolName, value.ArgumentsJson, ct, value).ConfigureAwait(false);
                 await TenantManagementReadService.ReviewerAsync(request, observed, decision.HumanPrincipalId, new IamAuthorizer(security), ct).ConfigureAwait(false);
             } catch (AccessDeniedException error) { reason = error.ReasonCode; }
