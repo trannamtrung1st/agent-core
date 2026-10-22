@@ -12,12 +12,13 @@ public sealed record TenantConfigurationRemedy(string Option, string Operation, 
     IReadOnlyDictionary<string, JsonElement> Set, IReadOnlyList<string> Clear, string Target, string Goal, long ExpectedInstanceRevision);
 
 // Projects the incumbent owned configuration. It neither reads secret payloads nor executes a remedy.
-public sealed class TenantManagementInspectionProjection(IToolConfigurationGate tools)
+public sealed partial class TenantManagementInspectionProjection(IToolConfigurationGate tools, IDefinitionResourceContentStore? content = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public async ValueTask<PreparedManagementRead> BuildAsync(TenantManagementReader reader, TenantManagementReadArguments args,
         IamAuthorizer iam, CancellationToken ct)
     {
+        if (TenantManagementReadContract.IsChildTool(args.Tool)) return await BuildChildrenAsync(reader, args, iam, ct).ConfigureAwait(false);
         var catalog = reader.Inspection ?? throw new AccessDeniedException("management_inspection_unavailable");
         using var document = JsonDocument.Parse(args.Json); var arguments = document.RootElement;
         var owner = reader.Agent.Instance; var current = reader.Current; var policy = ManagementPolicyResolver.Resolve(reader.Baseline, owner);

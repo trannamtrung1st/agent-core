@@ -12,10 +12,14 @@ internal static class TenantManagementReadScript
         var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User && m.Text.StartsWith(prefix, StringComparison.Ordinal))?.Text;
         if (prompt is null) return null;
         var selected = prompt[prefix.Length..].Trim();
-        var tool = selected switch { "harness" => "harness.inspect", "configuration" => "configuration.inspect", "policy" => "management.inspect", "sections" => "settings.list", "preferences" => "automation.preferences.inspect", _ => "settings.inspect" };
-        var section = selected is "harness" or "configuration" or "policy" or "sections" or "preferences" ? null : selected;
+        var childSelection = selected.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        var child = childSelection.Length > 0 && TenantManagementReadContract.IsChildTool(childSelection[0]);
+        var tool = child ? childSelection[0] : selected switch { "harness" => "harness.inspect", "configuration" => "configuration.inspect", "policy" => "management.inspect", "sections" => "settings.list", "preferences" => "automation.preferences.inspect", _ => "settings.inspect" };
+        var section = child || selected is "harness" or "configuration" or "policy" or "sections" or "preferences" ? null : selected;
         if (section is not null && !AgentCore.Application.Agents.InstanceSettingsResolver.Sections.Contains(section)) return Finish("Select one exact setting section, harness, configuration, policy, sections or preferences.");
-        object arguments = section is null ? new { } : new { section };
+        object arguments = child && tool.EndsWith(".inspect", StringComparison.Ordinal) ? new { key = childSelection.Length > 1 ? childSelection[1] : "" }
+            : section is null ? new { } : new { section };
+        if (child) { try { _ = TenantManagementReadContract.Parse(tool, JsonSerializer.Serialize(arguments)); } catch (ArgumentException) { return Finish("Select an exact origin-qualified child key for inspection."); } }
         var consent = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization);
         if (consent is not null)
         {

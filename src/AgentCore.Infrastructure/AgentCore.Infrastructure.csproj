@@ -72,4 +72,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Persistence/Migrations/Sql/20261021214545_TenantExperienceConsent.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261021214545_TenantExperienceConsent.Check.sql" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022100000_TenantManagementChildReads.Up.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022100000_TenantManagementChildReads.Up.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022100000_TenantManagementChildReads.Down.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022100000_TenantManagementChildReads.Down.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/Sql/20261022100000_TenantManagementChildReads.Check.sql" LogicalName="AgentCore.Infrastructure.Persistence.Migrations.Sql.20261022100000_TenantManagementChildReads.Check.sql" />
+  </ItemGroup>
 </Project>

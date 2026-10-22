@@ -36,6 +36,17 @@ public sealed partial class TenantApprovalService
             foreach (var item in bindings.EnumerateArray())
                 Add("Connection · " + item.GetProperty("reference").GetString(), item.GetProperty("displayName").GetString() + "\nKind: " + item.GetProperty("kind").GetString()
                     + "\nPurpose: " + item.GetProperty("purpose").GetString() + "\nRevision: " + item.GetProperty("revision"));
+        if (data.TryGetProperty("skill", out var inspectedSkill))
+        {
+            Add("Skill identity", inspectedSkill.GetProperty("key").GetString()!);
+            foreach (var name in new[] { "name", "description", "origin", "projection", "enabled", "revision", "requiredCapabilities", "missingCapabilities" })
+                Add("Skill · " + Label(name), Text(inspectedSkill.GetProperty(name)));
+            Add("Exact Skill procedure", inspectedSkill.GetProperty("procedure").GetString()!);
+        }
+        if (data.TryGetProperty("resource", out var inspectedResource))
+            foreach (var field in inspectedResource.EnumerateObject()) Add("Resource · " + Label(field.Name), Text(field.Value));
+        if (data.TryGetProperty("content", out var resourceText)) Add("Resource text", resourceText.ValueKind == JsonValueKind.Null ? "Not provided" : Text(resourceText));
+        Field("truncated", "Resource text is an excerpt"); Field("contentProvided", "Resource text provided");
         if (data.TryGetProperty("eligibleCredentials", out var credentials))
             foreach (var item in credentials.EnumerateArray())
                 Add("Readable Credential · " + item.GetProperty("credentialId").GetString(), item.GetProperty("displayName").GetString() + "\nKind: " + item.GetProperty("kind").GetString()

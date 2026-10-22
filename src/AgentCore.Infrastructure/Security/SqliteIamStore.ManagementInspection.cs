@@ -46,6 +46,8 @@ public sealed partial class SqliteIamStore
              WHERE CASE json_extract(source.value,'$.Kind')
              WHEN 'skill' THEN NOT ({skillAll} OR substr(json_extract(source.value,'$.ResourceId'),1,36) IN (SELECT value FROM json_each({skillAgents}))
                 OR json_extract(source.value,'$.ResourceId') IN (SELECT value FROM json_each({skillChildren})))
+             WHEN 'skillProcedure' THEN NOT ({skillAll} OR substr(json_extract(source.value,'$.ResourceId'),1,36) IN (SELECT value FROM json_each({skillAgents}))
+                OR json_extract(source.value,'$.ResourceId') IN (SELECT value FROM json_each({skillChildren})))
              WHEN 'resource' THEN NOT ({resourceAll} OR substr(json_extract(source.value,'$.ResourceId'),1,36) IN (SELECT value FROM json_each({resourceAgents}))
                 OR json_extract(source.value,'$.ResourceId') IN (SELECT value FROM json_each({resourceChildren})))
              WHEN 'credential' THEN NOT ({credentialAll} OR json_extract(source.value,'$.ResourceId') IN (SELECT value FROM json_each({credentials})))

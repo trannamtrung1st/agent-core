@@ -3,6 +3,7 @@ using System.Text.Json;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Credentials;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
@@ -11,7 +12,7 @@ namespace AgentCore.Application.Security;
 
 public static class TenantManagementInspectionSources
 {
-    public static bool IsInspection(string tool) => tool is "harness.inspect" or "configuration.inspect";
+    public static bool IsInspection(string tool) => tool is "harness.inspect" or "configuration.inspect" || TenantManagementReadContract.IsChildTool(tool);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public static TenantManagementInspectionCatalog Catalog(TenantManagementReader reader, TenantAgentConfigurationSnapshot snapshot,
         IReadOnlyList<AgentDefinitionPublicationResource> inherited, IReadOnlyList<TenantCredentialBinding> bindings, IReadOnlyList<TenantCredential> credentials)
@@ -30,6 +31,13 @@ public static class TenantManagementInspectionSources
                 _ => new { skill.Key, skill.Name, skill.Description, skill.Projection, version = ManagementBuiltInSkills.Catalog.Single(s => s.Key == skill.Key).SourceRevision } };
             Add("skill", skill.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "skill", skill.Key), identity,
                 new { skill.Key, skill.Name, skill.Description, origin = skill.Origin.ToString(), projection = skill.Projection.ToString(), skill.Enabled, skill.EnabledChoice, skill.Revision, skill.MissingCapabilities });
+            // Procedure observations use a distinct witness; metadata-only observations
+            // never acquire a dependency on unshown private text or requirements.
+            Add("skillProcedure", skill.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "skill", skill.Key),
+                new { identity, skill.Procedure, skill.RequiredCapabilities },
+                new { skill.Key, skill.Name, skill.Description, origin = skill.Origin.ToString(), projection = skill.Projection.ToString(),
+                    skill.Enabled, skill.EnabledChoice, skill.Revision, skill.MissingCapabilities, skill.Procedure, skill.RequiredCapabilities,
+                    skill.DefinitionVersion, skill.SourceDefinitionId, skill.SourceDefinitionVersion, skill.SourceDefinitionSkillId });
         }
         foreach (var resource in AgentInstanceResourceService.Views(definition, inherited, snapshot.Resources, snapshot.Skills))
             Add("resource", resource.Key, TenantAgentChildScopes.Scope(tenant, owner.InstanceId, "resource", resource.Key),
@@ -45,7 +53,7 @@ public static class TenantManagementInspectionSources
                 new { binding.Binding.BindingId, binding.Binding.Reference, binding.Binding.CredentialId, binding.Binding.Revision, binding.Credential.Value.DisplayName, kind = binding.Credential.Value.Kind.ToString(), purpose = binding.Credential.Value.Purpose.ToString() });
         return new(items.OrderBy(i => i.Kind, StringComparer.Ordinal).ThenBy(i => i.Key, StringComparer.Ordinal).ToArray());
     }
-    public static string Permission(string kind) => kind switch { "skill" => "skills.read", "resource" => "resources.read", "credential" or "binding" => "credentials.read", _ => throw new AccessDeniedException("management_source_unavailable") };
+    public static string Permission(string kind) => kind switch { "skill" or "skillProcedure" => "skills.read", "resource" => "resources.read", "credential" or "binding" => "credentials.read", _ => throw new AccessDeniedException("management_source_unavailable") };
     public static IReadOnlyList<TenantManagementChildRead> Read(string? json)
     {
         if (json is null) return [];
@@ -57,11 +65,11 @@ public static class TenantManagementInspectionSources
         if (JsonSerializer.Serialize(items) != json || items.Length > 64 || items.Select(i => (i.Kind, i.Key)).Distinct().Count() != items.Length) throw new AccessDeniedException("management_source_budget");
         foreach (var item in items)
             if (!TenantMemoryOperationRules.ValidHash(item.Fingerprint) || item.Key is not { Length: >= 1 and <= 100 } || item.ResourceId is not { Length: >= 1 and <= 160 }
-                || item.Kind is not ("skill" or "resource" or "credential" or "binding")) throw new AccessDeniedException("management_source_unavailable");
+                || item.Kind is not ("skill" or "skillProcedure" or "resource" or "credential" or "binding")) throw new AccessDeniedException("management_source_unavailable");
         return items;
     }
     public static AccessScope Scope(TenantManagementReader reader, TenantManagementChildRead value) => AccessScope.ForResource(reader.Security.Tenant.TenantId,
-        value.Kind is "credential" or "binding" ? "credential" : value.Kind, value.ResourceId);
+        value.Kind is "credential" or "binding" ? "credential" : value.Kind == "skillProcedure" ? "skill" : value.Kind, value.ResourceId);
     public static async ValueTask RequireAsync(TenantManagementReader reader, string? sources, IamAuthorizer iam, CancellationToken ct, Guid? human = null)
     {
         foreach (var value in Read(sources))
@@ -96,7 +104,7 @@ public static class TenantManagementInspectionSources
             }
             else
             {
-                var allowed = source.Kind == "skill" ? visibility.Skills : visibility.Resources;
+                var allowed = source.Kind is "skill" or "skillProcedure" ? visibility.Skills : visibility.Resources;
                 if (allowed is null || allowed.Agents is { } agents && (!Guid.TryParse(source.ResourceId.AsSpan(0, Math.Min(36, source.ResourceId.Length)), out var parent) || !agents.Contains(parent))
                     && allowed.Children?.Contains(source.ResourceId) != true) return false;
             }

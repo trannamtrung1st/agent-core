@@ -70,6 +70,7 @@ public static class TenantManagementReadRules
             if (node is JsonObject map)
                 foreach (var key in map.Select(p => p.Key).ToArray())
                 {
+                    if (TenantManagementReadContract.IsChildTool(args.Tool) && key is "procedure" or "content") continue;
                     if (map[key] is JsonValue value && value.TryGetValue<string>(out var text) && text.Length > 512)
                     { map[key] = TenantContinuityRules.Safe(text, 512, out _); excerpts.Add(path + "." + key); }
                     else Bound(map[key], path + "." + key);
@@ -101,7 +102,17 @@ public static class TenantManagementReadRules
             || Encoding.UTF8.GetByteCount(value.ObservationJson) > 16000 || value.ObservationHash != Hash(value.ToolName, value.ArgumentsJson, value.InstanceRevision, value.ConfigurationHash, value.StableConfigurationHash, value.ObservationJson, value.SourcesJson))
             throw new ArgumentException("Use an exact bounded management observation.");
         if (TenantManagementInspectionSources.IsInspection(value.ToolName) != (value.SourcesJson is not null)) throw new ArgumentException("Use exact compound management sources.");
-        _ = TenantManagementInspectionSources.Read(value.SourcesJson);
+        var sources = TenantManagementInspectionSources.Read(value.SourcesJson);
+        if (TenantManagementReadContract.IsChildTool(value.ToolName))
+        {
+            var expectedKind = value.ToolName == "skills.inspect" ? "skillProcedure" : value.ToolName == "skills.list" ? "skill" : "resource";
+            if (sources.Count > 12 || sources.Any(s => s.Kind != expectedKind)) throw new ArgumentException("Use exact child read witnesses.");
+            if (value.ToolName.EndsWith(".inspect", StringComparison.Ordinal))
+            {
+                using var selection = JsonDocument.Parse(args.Json);
+                if (sources.Count != 1 || sources[0].Key != selection.RootElement.GetProperty("key").GetString()) throw new ArgumentException("Use one exact selected child witness.");
+            }
+        }
         using var doc = JsonDocument.Parse(value.ObservationJson); if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("Use an observation object.");
     }
     public static async ValueTask RawAsync(TenantManagementReader reader, IamAuthorizer iam, CancellationToken ct, Guid? human = null)

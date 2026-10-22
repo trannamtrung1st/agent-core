@@ -2,13 +2,13 @@
 
 ## Tenant model configuration read consent
 
-Canonical conversational model reads currently support `harness.inspect({})`, `configuration.inspect({goal?,target?})`, `management.inspect({})`, `settings.list({})`, `settings.inspect({section})` and `automation.preferences.inspect({})`, discovered through the incumbent `capabilities.load`. Strict arguments select only the executing Agent; settings require one existing exact section. Both admission/current delegated policy and current raw Agent read remain required. A required Review withholds values and accepts this exact existing authorization-tool intent:
+Canonical conversational model reads currently support `harness.inspect({})`, `configuration.inspect({goal?,target?})`, `management.inspect({})`, `settings.list({})`, `settings.inspect({section})`, `automation.preferences.inspect({})`, `skills.list({})`, `skills.inspect({key})`, `resources.list({})` and `resources.inspect({key})`, discovered through the incumbent `capabilities.load`. Strict arguments select only the executing Agent; settings require one existing exact section. Both admission/current delegated policy and current raw Agent read remain required. A required Review withholds values and accepts this exact existing authorization-tool intent:
 
 ```json
 {"operation":"inspect_management","read":{"tool":"settings.inspect","arguments":{"section":"conversationPolicy"}}}
 ```
 
-HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. Harness authoring, child read/write tools, private Skill loading and remedy execution retain their separate conversion boundary. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
+HTTP/Chat approval presentation also uses `inspect_management`, titled **Inspect exact Agent configuration**, with **Exact saved read** and explicit no-write/no-future-read confirmation. Approve/reject resumes the saved task through the existing successor. Only a completed exact receipt reports **Read authorized**; authorization is separate from observation availability. Source changes withhold current replacement values and require a fresh observation; the authorized human can still cancel. Harness authoring, child writes, private Skill activation and remedy execution retain their separate conversion boundary. [Backend contract](04-backend-interfaces.md#tenant-model-management-observations).
 
 Compound Harness/configuration reads use that same intent, for example:
 
@@ -16,7 +16,9 @@ Compound Harness/configuration reads use that same intent, for example:
 {"operation":"inspect_management","read":{"tool":"configuration.inspect","arguments":{"goal":"Use concise responses"}}}
 ```
 
-Prepared read/reference payloads add optional canonical child-source witnesses; models cannot supply them. Child raw-read and independent Review rules remain current. The shared saved-read presentation labels versions, delegated areas, individual setting/source facts, child metadata, diagnosis and exact possible remedies without embedding procedures, bytes or secrets. Exact remedy replacement values are complete or withheld. Canonical setup links use `/t/{tenant}/admin/agents/{instance}/settings`. Rephrasing the same diagnosis does not create a new semantic read root; the saved action hash still remains exact. [Compound contract](04-backend-interfaces.md#compound-harness-and-configuration-observations).
+Prepared read/reference payloads add optional canonical child-source witnesses; models cannot supply them. Child raw-read and independent Review rules remain current. The shared Harness/configuration saved-read presentation labels versions, delegated areas, individual setting/source facts, child metadata, diagnosis and exact possible remedies without embedding procedures, bytes or secrets. Exact remedy replacement values are complete or withheld. Canonical setup links use `/t/{tenant}/admin/agents/{instance}/settings`. Rephrasing the same diagnosis does not create a new semantic read root; the saved action hash still remains exact. [Compound contract](04-backend-interfaces.md#compound-harness-and-configuration-observations).
+
+Exact child reads use the same `inspect_management` intent with a canonical origin-qualified `key`. Lists accept only `{}` and return at most 12 readable metadata records. Skill inspection returns a complete bounded procedure as data, without activation. Resource inspection returns hash-verified supported UTF-8 text up to 2048 bytes, with `contentProvided`/`truncated`; unsupported binary formats return metadata only. Secret values and private dependency names remain absent. [Child read contract](04-backend-interfaces.md#canonical-skill-and-resource-observations).
 
 ## Tenant model configuration change consent
 

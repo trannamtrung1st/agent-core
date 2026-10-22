@@ -21,7 +21,7 @@ public sealed class TenantManagementInspectionMigrationTests
             Assert.Equal(indexes, await Definitions(db, "index"));
             await migrations.MigrateAsync("20261022080000_TenantManagementMutations"); Assert.Equal(guards, await Definitions(db, "trigger"));
             await migrations.MigrateAsync("20261022090000_TenantManagementInspections"); Assert.Equal(upgraded, await Definitions(db, "trigger"));
-            Assert.False(db.Database.HasPendingModelChanges());
+            await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             using var check = db.Database.GetDbConnection().CreateCommand(); check.CommandText = "PRAGMA foreign_key_check";
             using var result = await check.ExecuteReaderAsync(); Assert.False(await result.ReadAsync());
         }
