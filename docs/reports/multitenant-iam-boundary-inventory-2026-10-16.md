@@ -1,5 +1,7 @@
 # Multi-tenant IAM boundary inventory — 2026-10-16
 
+Canonical event Experience review now has [focused source-to-checkpoint coverage qualification](tenant-event-experience-verification-2026-10-22.md): actual Core-event roots, protected inspection/recording, exact read Review, partial unreviewed-source retention and SQLite reopen. This supersedes event Experience source/coverage-pending notes below only. Canonical model Automation discovery/authoring, Harness, remaining internal/schema consolidation and exhaustive proposal qualification stay open; the full goal remains active.
+
 Canonical tenant Schedule management now has [focused UI and current-access qualification](tenant-automation-ui-verification-2026-10-21.md): scoped paged collection, shared timing/model editor, exact create/edit/enable/cancel/manual Run commands, retained stale drafts, uncertain-outcome replay fences and factual Activity links. This supersedes tenant Schedule-UI-pending notes below only. Admission Review, event/webhook/watch ingress, remaining destinations/UI, voice, System/audit and final authority/schema/security/design audit remain open; the original full proposal goal stays active.
 
 Canonical tenant text/file input now supports exact explicit Interrupt/Steer through the existing human admission transaction and Runtime mailbox: current independent cancellation authority, a fresh actual-human root, atomic interrupted prefix and new input graph, no late output, exact replay and supervised caller-disconnect completion. [Focused qualification](tenant-input-interruption-verification-2026-10-21.md) records both stores, controlled races, autonomous/background sources, SQLite recreation and desktop/narrow Chat. This supersedes tenant text-interruption-pending notes below only. Voice, remaining Automation ingress/admission/destinations/UI, System/audit, final authority/schema removal and the exhaustive original-proposal audit remain open; the full goal stays active.
@@ -604,3 +606,11 @@ Baseline source counts: 231 HTTP/Hub mapping sites, 42 DbSets, 101 primary catal
 ## Human tenant Attachment storage successor — 2026-10-19
 
 Actual owned human intake, reads/download/Office preview, pending abort and retained-expiry/deleted-Session cleanup now have canonical Attachment/IAM/file owners. [Qualification](tenant-attachment-storage-verification-2026-10-19.md) supersedes human Attachment storage/cleanup pending notes only. Tenant message binding, attachment processing/model tools, composer and Attachment-based Artifact publication remain unconverted. Other resource/Browser adapters, autonomous/transport families and final obsolete-authority/schema cutover remain open. Historical baseline rows remain obligations rather than blanket acceptance.
+
+## Canonical tenant event coverage read
+
+| Method and canonical route | Current boundary | Evidence |
+| --- | --- | --- |
+| GET `/api/v2/tenants/{tenantId}/agents/{instanceId}/automations/{automationId}/unreviewed-sources` | Original Account session/tenant User, current Agent and Automation read, independent current Core/Webhook/Email-account source filtering, post-I/O original-login/security fence; bounded metadata only | [Focused source/coverage qualification](tenant-event-experience-verification-2026-10-22.md); actual HTTP unauthenticated/foreign tenant/Instance refusal, source-filtered store parity and shared scoped Event Activity read regressions |
+
+This row extends the current canonical inventory. Historical pending/retired route tables above remain baseline evidence; this entry does not establish the exhaustive proposal cutover audit.

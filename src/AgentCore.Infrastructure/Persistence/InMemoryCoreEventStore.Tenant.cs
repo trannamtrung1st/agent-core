@@ -16,6 +16,8 @@ public sealed partial class InMemoryCoreEventStore
     internal IReadOnlyList<CoreEventReceipt> TenantReceipts(Guid tenant, Guid instance, string key) => receipts.Values.Where(r => r.Event.Owner.TenantId == tenant && r.Event.Owner.AgentInstanceId == instance && r.Event.Key == key).ToArray();
     internal CoreEventBucket? TenantBucket(Guid tenant, Guid id) => buckets.GetValueOrDefault(id) is { } row && row.Subscription.Owner.TenantId == tenant ? row : null;
     internal IReadOnlyList<CoreEventBucket> TenantBuckets() => buckets.Values.Where(b => b.Subscription.Owner.TenantId is not null).ToArray();
+    internal IReadOnlyCollection<Guid> TenantInspected(Guid bucket) => inspected.Where(i => i.BucketId == bucket).Select(i => i.SourceId).ToArray();
+    internal void AcknowledgeTenant(Guid bucket, IReadOnlyList<Guid> sources) { foreach (var source in sources) inspected.Add((bucket, source)); }
     internal void PutTenantDelivery(CoreEventDelivery delivery) => deliveries[(delivery.EventId, delivery.Subscription.TriggerId)] = delivery;
     internal void PutTenantBucket(CoreEventBucket bucket) => buckets[bucket.BucketId] = bucket with { Sources = Array.AsReadOnly(bucket.Sources.ToArray()) };
     // Caller holds the source/IAM/Automation locks and derives subscriptions from

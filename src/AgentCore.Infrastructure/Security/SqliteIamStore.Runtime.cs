@@ -171,6 +171,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         catch (Exception ex) when (ex is AgentRunTransitionException or ArgumentException) { throw AgentRunStoreMapping.Map(ex); }
         if (command is AgentRunCommand.Fail { Code: "protected-output-unavailable" })
             await SettleRefusedTenantOutput(db, run, next, ct).ConfigureAwait(false);
+        if (command is AgentRunCommand.Checkpoint coverageCheckpoint) await AcknowledgeTenantExperienceCoverage(db, run, coverageCheckpoint.Value, ct).ConfigureAwait(false);
         AgentRunStoreMapping.Apply(row, next); await TenantCoreEventProduction.StageRunAsync(db, run, next, ct).ConfigureAwait(false);
         await SettleTenantCompletion(db, next, run.Claim?.Generation, ct).ConfigureAwait(false);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return next; }

@@ -42,7 +42,7 @@ public sealed partial class TenantAgentAccessTests
     }
     private static MemoryProposal Learn(string value = "PRIVATE_CUSTOMER_EVIDENCE", MemoryProposalOperation operation = MemoryProposalOperation.Upsert,
         string subject = "Evidence workflow") => new(operation, MemoryKind.Preference, subject, value, MemoryScopeHint.User, MemoryProposalSource.UserExplicit);
-    private static async Task<(Guid Tenant, Guid Agent)> OwnedMemoryAgent(HttpClient owner, Guid? existingTenant = null, bool enabled = true, bool automation = false)
+    private static async Task<(Guid Tenant, Guid Agent)> OwnedMemoryAgent(HttpClient owner, Guid? existingTenant = null, bool enabled = true, bool automation = false, bool events = false)
     {
         Guid tenant;
         if (existingTenant is { } selected) tenant = selected;
@@ -51,7 +51,7 @@ public sealed partial class TenantAgentAccessTests
         var draft = await Json(await owner.PostAsJsonAsync(api + "/agent-definitions", new { name = "Owned learned memory", expectedRevision = await Revision(owner, tenant) }));
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
         candidate["memoryPolicy"] = JsonSerializer.SerializeToNode(new MemoryPolicy(enabled, enabled, enabled, enabled, enabled), new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        if (automation) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(new TriggerPolicy(true, true, true, false, false, false, 20, 30, 1, ["schedule"]), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if (automation) candidate["triggerPolicy"] = JsonSerializer.SerializeToNode(new TriggerPolicy(true, true, true, false, false, false, 20, 30, 1, events ? ["schedule", "coreEvent"] : ["schedule"]), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         candidate["stateIsolationPolicy"] = JsonSerializer.SerializeToNode(new StateIsolationPolicy(AgentStateVisibility: AgentStateVisibility.InstanceSummary,
             MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary), new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
         candidate["environment"] = JsonSerializer.SerializeToNode(new { harness = Array.Empty<string>(), knowledgeSources = Array.Empty<string>(), toolAllowlist = Array.Empty<string>(), capabilities = new { mode = "Selected", resolvedCapabilities = new[] { "agent.state.inspect" } },
@@ -63,10 +63,10 @@ public sealed partial class TenantAgentAccessTests
         var agent = await Json(await owner.PostAsJsonAsync(api + "/agents/from-publication", new { definitionId = draft.GetProperty("definitionId").GetString(), version = 1, expectedRevision = await Revision(owner, tenant) }));
         return (tenant, agent.GetProperty("instance").GetProperty("instanceId").GetGuid());
     }
-    private static async Task MemoryExecutor(HttpClient owner, Guid tenant, Guid instance, bool read = true, bool manage = true, bool operations = false)
+    private static async Task MemoryExecutor(HttpClient owner, Guid tenant, Guid instance, bool read = true, bool manage = true, bool operations = false, bool runRead = true)
     {
         var api = $"/api/v2/tenants/{tenant}"; var actor = (await Json(await owner.GetAsync(api + $"/agents/{instance}"))).GetProperty("principalId").GetGuid();
-        var permissions = new List<string> { "agents.chat", "sessions.read", "agent-runs.read" }; if (operations) permissions.Add("agents.read"); if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
+        var permissions = new List<string> { "agents.chat", "sessions.read" }; if (runRead) permissions.Add("agent-runs.read"); if (operations) permissions.Add("agents.read"); if (read) permissions.Add("memory.read"); if (manage) permissions.Add("memory.manage");
         var role = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Memory executor " + instance.ToString("N"), permissions, expectedRevision = await Revision(owner, tenant) }));
         await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = actor, roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
     }

@@ -24,6 +24,8 @@ public sealed record TenantCoreEventPage(IReadOnlyList<CoreEventReceipt> Items, 
 // and matching subscriptions with their own commit; callers cannot submit events.
 public interface ITenantEventStore
 {
+    ValueTask<EventCoveragePage> ListTenantEventCoverageAsync(Guid tenant, Guid instance, Guid automation,
+        TenantEventReadVisibility visibility, string? cursor, int limit, CancellationToken ct = default);
     ValueTask<TenantEventActivityPage> ListTenantEventActivityAsync(Guid tenant, Guid instance, Guid automation,
         TenantEventReadVisibility visibility, int page, int pageSize, CancellationToken ct = default);
     ValueTask<TenantEventDelivery?> FindTenantEventDeliveryAsync(Guid tenant, TriggerSourceKind kind, Guid eventId, Guid triggerId, CancellationToken ct = default);

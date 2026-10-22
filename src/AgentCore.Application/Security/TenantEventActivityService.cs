@@ -9,6 +9,7 @@ namespace AgentCore.Application.Security;
 public sealed record TenantEventActivityItem(Guid EventId, Guid TriggerId, long TriggerRevision, string SourceKind, string SourceKey,
     DateTimeOffset ReceivedAtUtc, DateTimeOffset OccurredAtUtc, string Status, string? Code, string? Decision, bool BatchReadable,
     Guid? BucketId, int? BatchCount, Guid? OccurrenceId, Guid? RunId, Guid? SessionId, string? RunStatus, Guid? ApprovalRequestId, JsonElement Data);
+public sealed record TenantEventCoverageView(IReadOnlyList<EventSourceCoverage> Items, string? NextCursor, long SecurityRevision);
 public sealed record TenantEventActivityView(IReadOnlyList<TenantEventActivityItem> Items, int Total, int Page, int PageSize, long SecurityRevision);
 
 public sealed class TenantEventActivityService(IIamStore security, ITenantEventStore events, TenantAutomationService automations,
@@ -21,7 +22,7 @@ public sealed class TenantEventActivityService(IIamStore security, ITenantEventS
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var parent = await automations.ReadAsync(tenant, automation, human, ct).ConfigureAwait(false);
         if (parent.Owner.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable");
-        var visibility = new TenantEventReadVisibility(await Ids("core-events.read", "event"), await Ids("webhooks.read", "webhook"), await TenantEmailWatchRules.VisibleAccountsAsync(state, human.PrincipalId, iam, ct).ConfigureAwait(false));
+        var visibility = await Visibility(state, human.PrincipalId, ct).ConfigureAwait(false);
         var result = await events.ListTenantEventActivityAsync(tenant, instance, automation, visibility, page, pageSize, ct).ConfigureAwait(false);
         var items = new List<TenantEventActivityItem>();
         foreach (var row in result.Items)
@@ -68,13 +69,29 @@ public sealed class TenantEventActivityService(IIamStore security, ITenantEventS
         return new(items, result.Total, result.Page, result.PageSize, current.Tenant.Revision);
 
         async ValueTask<bool> Can(string key, AccessScope scope) => (await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed;
+    }
+    public async ValueTask<TenantEventCoverageView> CoverageAsync(Guid tenant, Guid instance, Guid automation, HumanSessionReference human,
+        string? cursor, int limit = 8, CancellationToken ct = default)
+    {
+        if (limit is < 1 or > 24) throw new ArgumentException("Coverage limit must be between 1 and 24.");
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        var parent = await automations.ReadAsync(tenant, automation, human, ct).ConfigureAwait(false);
+        if (parent.Owner.AgentInstanceId != instance) throw new AccessDeniedException("resource_unavailable");
+        var result = await events.ListTenantEventCoverageAsync(tenant, instance, automation, await Visibility(state, human.PrincipalId, ct).ConfigureAwait(false), cursor, limit, ct).ConfigureAwait(false);
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
+        return new(result.Items, result.NextCursor, current.Tenant.Revision);
+    }
+    private async ValueTask<TenantEventReadVisibility> Visibility(TenantSecurityState state, Guid principal, CancellationToken ct)
+    {
+        return new(await Ids("core-events.read", "event"), await Ids("webhooks.read", "webhook"), await TenantEmailWatchRules.VisibleAccountsAsync(state, principal, iam, ct).ConfigureAwait(false));
         async ValueTask<IReadOnlyList<Guid>?> Ids(string key, string type)
         {
-            if ((await iam.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get(key), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)).Allowed) return null;
+            if ((await iam.CheckTenantAsync(state, principal, PermissionCatalog.Get(key), AccessScope.ForTenant(state.Tenant.TenantId), ct).ConfigureAwait(false)).Allowed) return null;
             var ids = new List<Guid>();
-            foreach (var scope in state.Assignments.Where(a => a.PrincipalId == human.PrincipalId && a.TenantId == tenant
+            foreach (var scope in state.Assignments.Where(a => a.PrincipalId == principal && a.TenantId == state.Tenant.TenantId
                 && a.Scope.ResourceType == type && state.Roles.Any(r => r.RoleId == a.RoleId && r.Permissions.Contains(key))).Select(a => a.Scope).Distinct())
-                if (Guid.TryParseExact(scope.ResourceId, "D", out var id) && await Can(key, scope)) ids.Add(id);
+                if (Guid.TryParseExact(scope.ResourceId, "D", out var id) && (await iam.CheckOwnedTenantAsync(state, principal, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) ids.Add(id);
             return ids;
         }
     }

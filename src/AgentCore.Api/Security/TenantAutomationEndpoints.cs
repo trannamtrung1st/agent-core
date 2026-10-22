@@ -19,6 +19,11 @@ public static class TenantAutomationEndpoints
                 var actor = IdentityHttp.TenantContext(http);
                 return Results.Json(await service.ListAsync(actor.TenantId, instanceId, automationId, Human(http, actor.AccountId, actor.PrincipalId), page ?? 0, pageSize ?? 10, ct));
             }));
+        group.MapGet("/{automationId:guid}/unreviewed-sources", (Guid instanceId, Guid automationId, string? cursor, int? limit, HttpContext http,
+            TenantEventActivityService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
+                var actor = IdentityHttp.TenantContext(http);
+                return Results.Json(await service.CoverageAsync(actor.TenantId, instanceId, automationId, Human(http, actor.AccountId, actor.PrincipalId), cursor, limit ?? 8, ct));
+            }));
         group.MapPost("/filter-test", (Guid instanceId, Guid? automationId, AutomationFilterTestRequest body, HttpContext http,
             TenantAutomationService service, CancellationToken ct) => IdentityHttp.Respond(async () => {
                 var actor = IdentityHttp.TenantContext(http);

@@ -24,8 +24,12 @@ public sealed class TenantEventMigrationTests
             var instance = Guid.NewGuid(); var profile = Guid.NewGuid(); var id = Guid.NewGuid();
             var fact = new CoreEventOccurrence(id, "legacy-retained", new TriggerOwner(instance, profile), "run.completed", at, "{}");
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO CoreEvents (EventId,DedupeKey,AgentInstanceId,ProfileId,ReceivedAtUtc,PayloadJson,Snapshotted) VALUES ({id.ToString("D")},{fact.DedupeKey},{instance.ToString("D")},{profile.ToString("D")},{at.ToUnixTimeMilliseconds()},{JsonSerializer.Serialize(fact)},0)");
+            await db.GetService<IMigrator>().MigrateAsync("20261021030000_TenantEventOwnership");
+            // This frozen upgrade declares 68 guards. Later migrations may add
+            // guards, but neither upgrade nor a roundtrip may drop these owners.
+            var converted = await Guards(db); Assert.Equal(68, converted.Length); Assert.All(previous, name => Assert.Contains(name, converted));
             await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); var latest = await Guards(db);
-            Assert.Equal(83, latest.Length); Assert.All(previous, name => Assert.Contains(name, latest));
+            Assert.All(converted, name => Assert.Contains(name, latest));
             Assert.Contains("TR_TenantCore_Fact_Insert", latest); Assert.Contains("TR_TenantEvent_Occurrence_Insert", latest);
             Assert.Equal(fact.EventId.ToString("D"), (await db.CoreEvents.AsNoTracking().SingleAsync()).EventId);
             var tagged = JsonSerializer.Serialize(fact with { EventId = Guid.NewGuid(), DedupeKey = "legacy-concealed", Owner = TriggerOwner.ForTenant(Guid.NewGuid(), instance, Guid.NewGuid()) });
