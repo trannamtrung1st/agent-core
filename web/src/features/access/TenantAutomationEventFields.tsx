@@ -19,7 +19,7 @@ export function TenantAutomationEventFields({ tenant, instance, automation, even
   const focusChild = (key: string) => requestAnimationFrame(() => { const group = root.current?.querySelector<HTMLElement>(`[data-event-key="${key}"]`); group?.scrollIntoView({ block: 'nearest' }); group?.querySelector<HTMLInputElement>('input[role=combobox]')?.focus(); });
   const builtins = useIdentityQuery<{ items: Builtin[] }>(tenantApi(tenant, '/events/builtin'), reloadKey);
   const webhooks = useIdentityQuery<TenantWebhookPage>(tenantWebhookApi(tenant, `?page=${page}&pageSize=20`), reloadKey);
-  useEffect(() => { onReady(events.length > 0 && events.every(e => available[e.localKey])); }, [events, available, onReady]);
+  useEffect(() => { onReady(events.some(e => e.enabled) && events.filter(e => e.enabled).every(e => available[e.localKey])); }, [events, available, onReady]);
   const change = (key: string, value: TenantAutomationEvent) => onChange(events.map(e => e.localKey === key ? value : e));
   return <Flex ref={root} vertical gap={token.padding}>
     <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Each source has its own filter and dispatch. Different sources match independently. Received events keep their captured filters; edits apply to new receipts.</Typography.Paragraph>
@@ -77,7 +77,7 @@ function EventChild({ tenant, instance, automation, value, index, disabled, buil
     </Form.Item>
     {source?.kind === 'webhook' && detail.loading && <AccessLoading />}
     {detail.error && source?.kind === 'webhook' && <AccessError error={detail.error} retry={detail.reload} />}
-    {source && !ready && !(source.kind === 'builtin' ? builtins.loading : detail.loading) && <Alert type="warning" showIcon title="Source is unavailable" description="The saved choice is retained. Reload source access or deliberately replace this subscription before saving." />}
+    {source && !ready && !(source.kind === 'builtin' ? builtins.loading : detail.loading) && <Alert type="warning" showIcon title="Source is unavailable" description="The saved choice is retained. You can save a structurally valid disabled draft. Before enabling, restore eligible source access or deliberately replace this subscription." />}
     {webhook?.status === 'revoked' && <Alert type="info" showIcon title="This webhook is revoked" description="It accepts no new receipts. Enabling the Automation does not reactivate the connection." />}
     {filterTrigger && <AutomationEventFilter instanceId={instance} trigger={filterTrigger} example={example} disabled={disabled || !ready}
       onChange={next => onChange({ ...value, filterExpression: next.filterExpression ?? null, dispatch: next.dispatch ?? { mode: 'everyMatch' } })}

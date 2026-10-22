@@ -12,7 +12,8 @@ namespace AgentCore.Application.Security;
 public sealed record TenantAutomationTriggerChange(Guid? TriggerId, AutomationTrigger Configuration, bool Enabled = true, long ExpectedRevision = 0);
 public sealed record TenantAutomationChange(bool Enabled, string Name, string Instructions, TriggerSchedule? Schedule,
     string? ModelKey = null, string? ReasoningEffort = null, bool RequiresTools = true, bool RequiresVision = false,
-    IReadOnlyList<TenantAutomationTriggerChange>? Events = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null);
+    IReadOnlyList<TenantAutomationTriggerChange>? Events = null, Guid? ReportToSessionId = null, Guid? TargetSessionId = null,
+    string? PresetId = null, int? PresetVersion = null);
 
 public sealed partial class TenantAutomationService(IIamStore security, ITenantAutomationStore store, ITenantAgentStore agents,
     TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer iam, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null, ITenantWebhookStore? webhooks = null, ITenantEmailWatchStore? emailWatches = null, ITenantSessionStore? sessions = null)
@@ -54,7 +55,8 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
         if (current is not null) TenantAutomationRules.Owner(current, agent);
         if (agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
         if (current?.Status is AutomationStatus.Cancelled or AutomationStatus.Completed or AutomationStatus.Expired) throw new ArgumentException("A terminal Automation cannot be re-authored.");
-        ExecutionModelPolicy.RequireSelectable(models, change.ModelKey, change.ReasoningEffort);
+        if (change.Enabled || current is null || current.ModelOverrideCatalogKey != change.ModelKey || current.ModelOverrideReasoningEffort != change.ReasoningEffort)
+            ExecutionModelPolicy.RequireSelectable(models, change.ModelKey, change.ReasoningEffort);
         var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         var children = Children(current, change);
         var isSchedule = children.Count == 1 && children[0].Configuration is ScheduleTrigger;
@@ -63,7 +65,7 @@ public sealed partial class TenantAutomationService(IIamStore security, ITenantA
             children,
             isSchedule ? change.Enabled ? TriggerScheduleCalculator.InitialNext(((ScheduleTrigger)children[0].Configuration).Schedule, at) : current?.IsSchedule == true ? current.NextOccurrenceAtUtc : null : null, current?.ExpiresAtUtc, current?.OccurrenceCount ?? 0,
             automationRevision + 1, children.Max(t => t.Revision),
-            current?.Provenance.WithUpdated(at) ?? new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null, change.ModelKey, change.ReasoningEffort,
+            TenantAutomationPresetRules.Provenance(current, change, at), null, change.ModelKey, change.ReasoningEffort,
             change.RequiresVision, change.Name, change.TargetSessionId is { } targetId ? AutomationExecutionTarget.Existing(targetId) : AutomationExecutionTarget.Background, change.ReportToSessionId is { } destination ? AutomationCompletionDelivery.ToSession(destination) : AutomationCompletionDelivery.None, change.RequiresTools);
         TenantAutomationRules.Configuration(proposed, policy, at);
         await TenantAutomationRules.HumanSourcesAsync(state, human.PrincipalId, proposed, iam, ct);

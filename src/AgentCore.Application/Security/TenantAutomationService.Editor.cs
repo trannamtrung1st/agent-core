@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Triggers;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 using AgentCore.Domain.Triggers;
@@ -7,7 +8,8 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantAutomationEditorItem(Automation Automation, bool CanUpdate, bool CanCancel, bool CanRun);
 public sealed record TenantAutomationEditor(TenantAgent Agent, TriggerPolicy? Policy, IReadOnlyList<TenantAutomationEditorItem> Items,
-    int Total, int Page, int PageSize, long SecurityRevision, bool CanCreate, bool CanSchedule, bool CanCoreEvents = false, bool CanWebhookEvents = false);
+    int Total, int Page, int PageSize, long SecurityRevision, bool CanCreate, bool CanSchedule, bool CanCoreEvents = false, bool CanWebhookEvents = false,
+    IReadOnlyList<AutomationPresetOption>? Presets = null);
 
 public sealed partial class TenantAutomationService
 {
@@ -16,6 +18,8 @@ public sealed partial class TenantAutomationService
     {
         var state = await Human(tenant, human, ct); await AgentRead(state, instance, human.PrincipalId, ct);
         var (agent, policy) = await configurations.CurrentPolicyAsync(tenant, instance, ct);
+        var configuration = await agents.ReadTenantAgentConfigurationAsync(tenant, instance, ct) ?? throw new AccessDeniedException("resource_unavailable");
+        if (configuration.Agent.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
         TenantAutomationPage values;
         if (automation is { } id)
         {
@@ -51,6 +55,7 @@ public sealed partial class TenantAutomationService
         await Unchanged(state, human, ct);
         return new(agent, policy.TriggerPolicy, items, values.Total, values.Page, values.PageSize, state.Tenant.Revision, create, AgentCore.Application.Triggers.TriggerDurableSchedulingPolicy.AllowsScheduledOccurrence(policy),
             AgentCore.Application.Triggers.OccurrenceCompatibility.Allows(policy, TriggerSourceKind.CoreEvent),
-            AgentCore.Application.Triggers.OccurrenceCompatibility.Allows(policy, TriggerSourceKind.ApplicationEvent));
+            AgentCore.Application.Triggers.OccurrenceCompatibility.Allows(policy, TriggerSourceKind.ApplicationEvent),
+            TenantAutomationPresetRules.Options(agent, policy, configuration.Isolation, models));
     }
 }

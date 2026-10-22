@@ -91,6 +91,8 @@ public static class TenantAutomationRules
     }
     public static void Configuration(Automation value, AgentDefinition definition, DateTimeOffset at, bool validateSchedulePolicy = true, TriggerSourceKind? sourceKind = null)
     {
+        if (value.Status == AutomationStatus.Active && !value.Triggers.Any(t => t.Enabled))
+            throw new ArgumentException("Enable at least one subscription before automatic occurrences.");
         if (value.Provenance.SourceSessionId is not null || value.Provenance.SourceEventId is not null)
             throw new ArgumentException("Use the exact owned background destination.");
         if (!value.IsSchedule)

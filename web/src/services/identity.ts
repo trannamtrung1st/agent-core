@@ -62,7 +62,9 @@ export class IdentityError extends Error {
   }
 }
 export class IdentityCompletionError extends Error {
-  constructor() { super('The change was saved, but this view could not finish updating. Reload the page before making another change.'); }
+  constructor(public acknowledged = true) { super(acknowledged
+    ? 'The change was saved, but this view could not finish updating. Reload the page before making another change.'
+    : 'The action outcome could not be confirmed. Reload the page before making another change.'); }
 }
 let csrf: string | null = null;
 let pendingCsrf: Promise<string> | null = null;

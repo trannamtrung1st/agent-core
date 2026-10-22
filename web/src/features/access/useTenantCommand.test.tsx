@@ -2,6 +2,14 @@ import { act, renderHook } from '@testing-library/react';
 import { IdentityCompletionError } from '../../services/identity';
 import { useTenantCommand } from './useTenantCommand';
 describe('tenant commands', () => {
+  it('blocks replay of an unconfirmed acknowledgement without claiming the action was saved', async () => {
+    const { result } = renderHook(useTenantCommand); const committed = vi.fn(); const action = vi.fn().mockRejectedValue(new IdentityCompletionError(false));
+    await act(async () => { await result.current.run(action, committed); });
+    expect(result.current.requiresReload).toBe(true); expect((result.current.error as Error).message).toContain('could not be confirmed');
+    expect((result.current.error as Error).message).not.toContain('was saved');
+    await act(async () => { await result.current.run(action, committed); });
+    expect(action).toHaveBeenCalledTimes(1); expect(committed).not.toHaveBeenCalled();
+  });
   it('requires reload after a write was acknowledged but its response could not be read', async () => {
     const { result } = renderHook(useTenantCommand); const action = vi.fn().mockRejectedValue(new IdentityCompletionError());
     await act(async () => { await result.current.run(action, () => {}); });

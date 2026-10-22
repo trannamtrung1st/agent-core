@@ -3,7 +3,7 @@ import { Alert, App, Button, Checkbox, Collapse, Descriptions, Drawer, Empty, Fl
 import { followAppLink } from '../../app/appLink';
 import { confirmAction } from '../../app/confirmAction';
 import { IdentityCompletionError, IdentityError, identityRequest, tenantApi, type TenantContext } from '../../services/identity';
-import { automationDraft, automationWitness, tenantAutomationConversations, newTenantAutomationEvent, validTenantAutomationEvents, saveTenantAutomation, tenantAutomationsApi, type TenantAutomationDraft, type TenantAutomationEditor, type TenantAutomationItem } from '../../services/tenantAutomations';
+import { automationDraft, automationPresetDraft, automationWitness, tenantAutomationConversations, newTenantAutomationEvent, validTenantAutomationEvents, saveTenantAutomation, tenantAutomationsApi, type TenantAutomationDraft, type TenantAutomationEditor, type TenantAutomationItem } from '../../services/tenantAutomations';
 import type { listModels } from '../../services/api';
 import { AdminSessionPicker } from '../admin/AdminSessionPicker';
 import { AgentConfigurationPanel } from '../admin/AgentConfigurationLayout';
@@ -62,12 +62,12 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
             if (run) {
               const result = await identityRequest<{ runId: string | null; sessionId: string | null; approvalRequestId?: string | null }>(tenantAutomationsApi(tenant, id, `/${value.automationId}/run`), { method: 'POST', signal, body: automationWitness(view, value) });
               if (result?.approvalRequestId && !result.runId && !result.sessionId) return { approval: result.approvalRequestId };
-              if (!result?.runId || !result.sessionId) throw new IdentityCompletionError();
+              if (!result?.runId || !result.sessionId) throw new IdentityCompletionError(false);
               return { run: result.runId };
             }
             const witness = new URLSearchParams(Object.entries(automationWitness(view, value)).map(([key, number]) => [key, String(number)]));
             await identityRequest(tenantAutomationsApi(tenant, id, `/${value.automationId}?${witness}`), { method: 'DELETE', signal }); return undefined;
-          } catch (error) { if (!(error instanceof IdentityError)) setUnknown(true); throw error; }
+          } catch (error) { if (!(error instanceof IdentityError)) setUnknown(true); if (error instanceof IdentityCompletionError) throw new IdentityCompletionError(false); throw error; }
         }, result => { if (result?.run) { setAdmitted(result.run); setApproval(undefined); } if (result?.approval) setApproval(result.approval); message.success(run ? result?.approval ? 'Occurrence is waiting for approval. No work has been created.' : 'Run admitted. Open Activity for its outcome.' : 'Automation cancelled. Existing work remains separate.'); state.reload(); });
       } });
   }
@@ -75,7 +75,7 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
   return <Flex ref={collection} vertical gap="var(--ac-space-section)">
     <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Link href={tenantAccessPath(tenant, 'agents')} onClick={followAppLink}>Back to instances</Typography.Link><Button ref={reloadButton} disabled={busy || !!selection} onClick={reload}>Reload Automations</Button></Flex>
     {command.error !== undefined && <AccessError error={command.error} retry={reload} />}
-    {unknown && <Alert type="warning" showIcon title="Check the outcome before another action" description="This action may have been admitted. Inspect current Automations and Activity before leaving and starting another deliberate action. Reload never repeats it." />}
+    {unknown && <Alert type="warning" showIcon title="Check the outcome before another action" description="The outcome of this action is unconfirmed. Inspect current Automations and Activity before leaving and starting another deliberate action. Reload never repeats it." />}
     {approval && <Alert type="info" showIcon title="Waiting for admission approval" description={<><Typography.Paragraph>No Run has been admitted for this occurrence. Approval and admission remain separate steps.</Typography.Paragraph><Typography.Link href={tenantApprovalPath(tenant, approval)} onClick={followAppLink}>Review the exact admission request</Typography.Link></>} />}
     {admitted && <Alert type="success" showIcon title="Run admitted" description={<Typography.Link href={`${tenantAgentPath(tenant, id, 'activity-runs')}?run=${encodeURIComponent(admitted)}`} onClick={followAppLink}>Open the admitted Run in Activity</Typography.Link>} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={reload} /> : view && <>
@@ -100,10 +100,12 @@ export function TenantAgentAutomations({ context, id }: { context: TenantContext
 }
 
 function TenantAutomationDrawer({ context, instance, selection, onClose, onReadLost, onSaved, onUncertain }: { context: TenantContext; instance: string; selection: Selection; onClose: () => void; onReadLost: () => void; onSaved: (savedId?: string) => void; onUncertain: () => void }) {
-  const tenant = context.tenant.tenantId; const { token } = theme.useToken(); const { message } = App.useApp(); const command = useTenantCommand();
+  const tenant = context.tenant.tenantId; const { token } = theme.useToken(); const { message, modal } = App.useApp(); const command = useTenantCommand();
   const compact = !Grid.useBreakpoint().md; const [draft, setDraft] = useState<TenantAutomationDraft>(); const [baseline, setBaseline] = useState<TenantAutomationDraft>();
   const [sourcesReady, setSourcesReady] = useState(false); const [tab, setTab] = useState('configuration');
   const [attempted, setAttempted] = useState(false); const [unknown, setUnknown] = useState(false); const initialized = useRef(false);
+  const [replacing, setReplacing] = useState(false); const replacement = useRef<ReturnType<typeof confirmAction> | null>(null); const retired = useRef(false);
+  useEffect(() => { retired.current = false; return () => { retired.current = true; replacement.current?.destroy(); }; }, []);
   const state = useIdentityQuery<TenantAutomationEditor>(tenantAutomationsApi(tenant, instance, selection.id ? `/${selection.id}/editor` : '/editor?page=0&pageSize=1'));
   const models = useIdentityQuery<Awaited<ReturnType<typeof listModels>>>(tenantApi(tenant, '/chat/models'));
   const conversations = useMemo(() => tenantAutomationConversations(tenant), [tenant, state.data?.securityRevision]);
@@ -111,40 +113,59 @@ function TenantAutomationDrawer({ context, instance, selection, onClose, onReadL
   useEffect(() => {
     if (!state.data) return; setAttempted(false);
     if (!initialized.current) {
-      const next = selection.id ? automationDraft(state.data.items[0]?.automation) : { enabled: false, name: '', instructions: '', schedule: defaultAutomationTiming(), modelKey: null, reasoningEffort: null, requiresTools: true, requiresVision: false };
+      const next = selection.id ? automationDraft(state.data.items[0]?.automation) : automationPresetDraft(undefined, defaultAutomationTiming());
       setDraft(next); setBaseline(next); initialized.current = true;
     }
   }, [state.data]);
   useEffect(() => { if (lostRead(state.error)) { setDraft(undefined); setBaseline(undefined); onReadLost(); } }, [state.error]);
-  const dirty = !!draft && JSON.stringify(draft) !== JSON.stringify(baseline); const guard = useAccessDraftGuard(dirty, command.busy, onClose);
+  const dirty = !!draft && JSON.stringify(draft) !== JSON.stringify(baseline); const guard = useAccessDraftGuard(dirty, command.busy || replacing, onClose);
   const allowed = !!view && (selection.id ? !!item?.canUpdate : view.canCreate);
-  const disabled = !allowed || command.busy || attempted || unknown || command.requiresReload || state.loading || !!state.error;
+  const disabled = !allowed || command.busy || replacing || attempted || unknown || command.requiresReload || state.loading || !!state.error;
   const existingMode = draft?.targetSessionId != null;
   const model = models.data?.models.find(m => m.key === (draft?.modelKey || models.data?.defaultKey));
-  const modelValid = existingMode || !!models.data && (!draft?.modelKey || !!model) && (!draft?.reasoningEffort || !!model?.supportedReasoningEfforts.includes(draft.reasoningEffort));
+  const retainedModel = !!value && draft?.modelKey === value.modelOverrideCatalogKey && draft?.reasoningEffort === value.modelOverrideReasoningEffort;
+  const modelValid = !draft?.enabled && (!draft?.modelKey && !draft?.reasoningEffort || retainedModel)
+    || existingMode || !!models.data && (!draft?.modelKey || !!model) && (!draft?.reasoningEffort || !!model?.supportedReasoningEfforts.includes(draft.reasoningEffort));
   const policy = view?.policy; const timing = draft?.schedule;
   const scheduleAllowed = !!view?.canSchedule && !!policy && !!timing && ({ oneShot: policy.allowOneShot, daily: policy.allowDaily, weekly: policy.allowWeekly, fixedInterval: policy.allowFixedInterval })[timing.kind]
     && (timing.kind === 'oneShot' || policy.allowIndefiniteRecurrence || !!timing.maxOccurrences || !!timing.endDate || !!timing.endAtUtc);
   const eventsMode = draft?.mode === 'events';
-  const enabledAllowed = eventsMode ? !!draft?.events?.every(event => event.source?.kind === 'builtin' ? view?.canCoreEvents : event.source?.kind === 'webhook' && view?.canWebhookEvents) : scheduleAllowed;
-  const triggerValid = eventsMode ? validTenantAutomationEvents(draft?.events) && sourcesReady : !!draft && validAutomationTiming(draft.schedule);
+  const enabledAllowed = eventsMode ? !!draft?.events?.some(event => event.enabled) && !!draft.events.filter(event => event.enabled).every(event => event.source?.kind === 'builtin' ? view?.canCoreEvents : event.source?.kind === 'webhook' && view?.canWebhookEvents) : scheduleAllowed;
+  const triggerValid = eventsMode ? validTenantAutomationEvents(draft?.events) && (!draft?.enabled || sourcesReady) : !!draft && validAutomationTiming(draft.schedule);
   const valid = !!draft && !!draft.name.trim() && draft.name.trim().length <= 120 && !!draft.instructions.trim() && draft.instructions.trim().length <= 2000 && triggerValid && modelValid && draft.targetSessionId !== '' && draft.reportToSessionId !== '' && (!draft.enabled || enabledAllowed);
   const update = (part: Partial<TenantAutomationDraft>) => setDraft(current => current ? { ...current, ...part } : current);
+  const preset = view?.presets?.find(p => p.presetId === draft?.presetId && p.presetVersion === draft?.presetVersion);
+  function startFrom(id: string) {
+    if (disabled || selection.id) return;
+    const recipe = id ? view?.presets?.find(p => p.presetId === id) : undefined;
+    if (id && !recipe) return;
+    const next = automationPresetDraft(recipe, defaultAutomationTiming());
+    const apply = () => { if (!retired.current) { setDraft(next); setSourcesReady(false); } };
+    if (!dirty) { apply(); return; }
+    setReplacing(true);
+    replacement.current = confirmAction(modal, { title: 'Replace this draft?', okText: 'Replace draft', content: 'Replace the unsaved name, instructions, triggers and execution choices with a fresh disabled draft. Nothing is saved or enabled by this choice.',
+      onOk: apply, afterClose: () => { replacement.current = null; if (!retired.current) setReplacing(false); } });
+  }
   const reload = () => { if (command.busy) return; command.clearError(); state.reload(); models.reload(); };
   function save() {
     if (!view || !draft || disabled || !dirty || !valid) return; setAttempted(true);
     void command.run(async signal => {
       try { return await saveTenantAutomation(tenant, instance, view, draft, value, signal); }
       catch (error) {
-        if (error instanceof IdentityCompletionError) return;
-        if (!(error instanceof IdentityError) && !signal.aborted) { setUnknown(true); onUncertain(); }
+        if ((error instanceof IdentityCompletionError || !(error instanceof IdentityError)) && !signal.aborted) { setUnknown(true); onUncertain(); }
         throw error;
       }
     }, saved => { guard.release(); message.success('Automation saved. Reading current registrations.'); onSaved(saved?.automationId); });
   }
   const configuration = <>
-        {value && <Descriptions column={1} size="small" items={[{ key: 'status', label: 'Status', children: value.status }, { key: 'next', label: 'Next occurrence', children: nextOccurrence(value) }, { key: 'count', label: 'Occurrences', children: value.occurrenceCount }]} />}
+        {value && <Descriptions column={1} size="small" items={[{ key: 'status', label: 'Status', children: value.status }, { key: 'next', label: 'Next occurrence', children: nextOccurrence(value) }, { key: 'count', label: 'Occurrences', children: value.occurrenceCount },
+          ...(value.presetId ? [{ key: 'recipe', label: 'Started from', children: `${preset?.name ?? value.presetId} (version ${value.presetVersion})` }] : [])]} />}
         {draft ? <Form layout="vertical" className="admin-config-form automation-editor-form"><Flex vertical gap={token.padding}>
+          {!selection.id && <Form.Item label="Start from" extra="Recipes fill an editable disabled draft. Saving grants no execution, inspection or management authority."><Select aria-label="Automation starting recipe" value={draft.presetId ?? ''} disabled={disabled}
+            options={[{ value: '', label: 'Custom' }, ...(view?.presets ?? []).map(p => ({ value: p.presetId, label: p.name }))]} onChange={startFrom} /></Form.Item>}
+          {!selection.id && preset && <Alert type={preset.eligible ? 'info' : 'warning'} showIcon title={preset.name} description={<Flex vertical gap={token.paddingXS}>
+            <Typography.Text>{preset.description}</Typography.Text><Typography.Text type="secondary">{preset.prerequisites.length ? `Current Agent prerequisites: ${preset.prerequisites.join(' ')}` : 'Current Agent recipe prerequisites are satisfied. Actual admission and tool permissions are checked separately.'}</Typography.Text>
+          </Flex>} />}
           <Form.Item label="Name" required><Input aria-label="Automation name" maxLength={120} value={draft.name} disabled={disabled} onChange={e => update({ name: e.target.value })} /></Form.Item>
           <Form.Item label="Instructions" required><Input.TextArea aria-label="Automation instructions" maxLength={2000} autoSize={{ minRows: 3, maxRows: 10 }} value={draft.instructions} disabled={disabled} onChange={e => update({ instructions: e.target.value })} /></Form.Item>
           <Form.Item label="Trigger type"><Select<'events' | 'schedule'> aria-label="Automation trigger type" disabled={disabled} value={eventsMode ? 'events' : 'schedule'} options={[{ value: 'schedule', label: 'Schedule' }, { value: 'events', label: 'Events' }]} onChange={mode => update({ mode, ...(mode === 'events' && !draft.events?.length ? { events: [newTenantAutomationEvent()] } : {}) })} /></Form.Item>

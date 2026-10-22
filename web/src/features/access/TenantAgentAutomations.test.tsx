@@ -2,24 +2,31 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App } from 'antd';
 import { resetIdentityCsrf, type TenantContext } from '../../services/identity';
-import type { TenantAutomationEditor } from '../../services/tenantAutomations';
+import type { TenantAutomationEditor, TenantAutomationPreset } from '../../services/tenantAutomations';
 import { TenantAgentAutomations } from './TenantAgentAutomations';
 
 const context = { tenant: { tenantId: 'tenant', name: 'Schedule organization', slug: 'schedules' }, principalId: 'human', permissions: [], roles: [], revision: 4 } as unknown as TenantContext;
+const presets: TenantAutomationPreset[] = [
+  { presetId: 'review-recent-work', presetVersion: 1, name: 'Review recent work', description: 'Review owned completed work.', instructions: 'Inspect exact sources before recording.', triggerKind: 'coreEvent', coreEventKey: 'run.completed', filterExpression: "event.data.activationKind === 'UserTurn' && event.data.outcomeKind !== 'NoAction'", dispatch: { mode: 'coalesceLatest', windowSeconds: 900 }, eligible: false, prerequisites: ['Enable Experience.'] },
+  { presetId: 'consolidate-continuity', presetVersion: 1, name: 'Consolidate continuity', description: 'Review redundant owned observations.', instructions: 'Consolidate only with exact permission and approval.', triggerKind: 'schedule', coreEventKey: null, filterExpression: null, dispatch: null, eligible: false, prerequisites: ['Enable Allow agent consolidation.'] },
+  { presetId: 'improve-harness', presetVersion: 1, name: 'Improve agent harness', description: 'Propose a governed improvement.', instructions: 'Inspect friction before proposing one change.', triggerKind: 'schedule', coreEventKey: null, filterExpression: null, dispatch: null, eligible: false, prerequisites: ['Enable Harness Management.'] },
+];
 const fixture = (): TenantAutomationEditor => ({ agent: { principalId: 'executor', instance: { instanceId: 'agent', revision: 3, activeVersion: 32, lifecycle: 'Active', persona: { name: 'Alex' } } }, securityRevision: 8, canCreate: true, canSchedule: true, total: 1, page: 0, pageSize: 10,
   policy: { allowDaily: true, allowOneShot: true, allowWeekly: true, allowFixedInterval: true, allowIndefiniteRecurrence: true }, items: [{ canUpdate: true, canCancel: true, canRun: true,
     automation: { automationId: 'schedule', name: 'Saved schedule', instructions: 'Exact saved instructions', status: 'active', revision: 6, triggerRevision: 2, occurrenceCount: 2, nextOccurrenceAtUtc: null, modelOverrideCatalogKey: null, modelOverrideReasoningEffort: null, requiresTools: true, requiresVision: false,
       executionTarget: 'backgroundSession', completionDelivery: 'none', triggers: [{ kind: 'schedule', schedule: { kind: 'daily', interval: 1, localTime: '09:00', timeZone: 'UTC', startDate: '2026-10-01', endDate: '2027-01-01', maxOccurrences: 10 } }] } }] } as TenantAutomationEditor);
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const fetchMock = vi.fn<typeof fetch>(); let current: TenantAutomationEditor; let stale = false, denied = false, unknown = false, invalidAck = false;
+const fetchMock = vi.fn<typeof fetch>(); let current: TenantAutomationEditor; let stale = false, denied = false, unknown = false, invalidAck = false, catalogFailed = false, mismatchedPreset = false;
 const writes = () => fetchMock.mock.calls.filter(([, options]) => options?.method && options.method !== 'GET' && !String(options.body).includes('csrf'));
 beforeEach(() => {
-  resetIdentityCsrf(); current = fixture(); stale = denied = unknown = invalidAck = false;
+  resetIdentityCsrf(); current = { ...fixture(), presets }; stale = denied = unknown = invalidAck = catalogFailed = mismatchedPreset = false;
   fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockImplementation(async (path, options) => {
     const url = String(path);
     if (url.endsWith('/csrf')) return response({ token: 'csrf' });
-    if (url.endsWith('/chat/models')) return response({ defaultKey: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: [] }] });
+    if (url.endsWith('/chat/models')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ defaultKey: 'alpha', models: [{ key: 'alpha', displayName: 'Alpha', supportedReasoningEfforts: [] }] });
+    if (url.endsWith('/events/builtin')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ items: [{ key: 'run.completed', description: 'Run finished.' }] });
+    if (url.includes('/webhooks')) return catalogFailed ? response({ reasonCode: 'catalog_unavailable' }, 503) : response({ items: [], total: 0 });
     if (options?.method && options.method !== 'GET') {
       if (unknown) throw new TypeError('Connection lost');
       if (stale) return response({ reasonCode: 'stale_revision' }, 409);
@@ -28,7 +35,7 @@ beforeEach(() => {
       if (url.endsWith('/run')) return response({ runId: 'admitted-run', sessionId: 'task-session' });
       const body = JSON.parse(String(options.body ?? '{}'));
       if (body.name) current.items[0].automation = { ...current.items[0].automation, ...body, executionTarget: body.targetSessionId ? 'existingSession' : 'backgroundSession', completionDelivery: body.reportToSessionId ? 'toSession' : 'none', revision: 7 };
-      return response(current.items[0].automation);
+      return response(mismatchedPreset ? { ...current.items[0].automation, presetId: 'improve-harness' } : current.items[0].automation);
     }
     if (url.includes('/automations/')) return denied ? response({ reasonCode: 'permission_denied' }, 403) : response(current);
     throw new Error(`Unexpected endpoint ${url}`);
@@ -61,9 +68,13 @@ it('keeps unknown saves blocked through reload and prevents a duplicate new regi
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Unknown saved draft'));
   expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled(); expect(writes()).toHaveLength(1);
 });
-it('retires a known saved draft when the acknowledgement cannot be decoded', async () => {
+it('preserves an uncertain draft without a success claim when the acknowledgement cannot be decoded', async () => {
   invalidAck = true; await open(); await edit(); fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'Committed acknowledgement' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument()); expect(writes()).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await screen.findByText('Outcome unknown');
+  expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Committed acknowledgement');
+  expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled(); expect(writes()).toHaveLength(1);
+  expect(screen.queryByText('Automation saved. Reading current registrations.')).not.toBeInTheDocument();
+  expect(screen.queryByText(/The change was saved, but this view/)).not.toBeInTheDocument();
 });
 it('exposes independent read-only hints and clears protected detail on read revocation', async () => {
   current.canCreate = false; current.items[0] = { ...current.items[0], canUpdate: false, canRun: false, canCancel: false }; await open();
@@ -158,4 +169,64 @@ it('opens an existing execution destination, retains a stale target draft and sa
   expect(screen.getByText('Session ID: saved-conversation')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(JSON.parse(String(writes()[1][1]?.body))).toMatchObject({ targetSessionId: 'saved-conversation', expectedRevision: 23 });
+});
+
+const newDraft = async () => { await open(); fireEvent.click(screen.getByRole('button', { name: 'New Automation' })); await screen.findByRole('textbox', { name: 'Automation name' }); };
+const recipe = async (name: string) => {
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Automation starting recipe' }));
+  fireEvent.click(await screen.findByText(name, { selector: '.ant-select-item-option-content' }));
+};
+it('fills a finite disabled weekly recipe and acknowledges the exact creation provenance', async () => {
+  await newDraft(); await recipe('Consolidate continuity');
+  expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Consolidate continuity');
+  expect(screen.getByRole('checkbox', { name: 'Enable automatic occurrences' })).not.toBeChecked();
+  expect(screen.getByText(/Current Agent prerequisites: Enable Allow agent consolidation/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' }));
+  await waitFor(() => expect(writes()).toHaveLength(1));
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ presetId: 'consolidate-continuity', presetVersion: 1, enabled: false, requiresTools: true, schedule: { kind: 'weekly', interval: 1, weekdays: [1], maxOccurrences: 52 } });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+it('keeps an edited draft until replacement is explicitly confirmed and starts the replacement disabled', async () => {
+  await newDraft(); await recipe('Consolidate continuity');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'Keep this draft' } });
+  await recipe('Review recent work');
+  let confirm = (await screen.findByRole('button', { name: 'Replace draft' })).closest('[role=dialog]') as HTMLElement;
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Replace draft' })).not.toBeInTheDocument());
+  expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Keep this draft');
+  await recipe('Review recent work'); confirm = (await screen.findByRole('button', { name: 'Replace draft' })).closest('[role=dialog]') as HTMLElement;
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Replace draft' }));
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Review recent work'));
+  expect(screen.getByRole('checkbox', { name: 'Enable automatic occurrences' })).not.toBeChecked(); expect(writes()).toHaveLength(0);
+});
+it('can save a disabled known-source recipe despite model and event catalog refresh failures', async () => {
+  catalogFailed = true; await newDraft(); await recipe('Review recent work');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save Automation' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await waitFor(() => expect(writes()).toHaveLength(1));
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ presetId: 'review-recent-work', enabled: false, triggers: [{ source: { kind: 'builtin', key: 'run.completed' }, dispatch: { mode: 'coalesceLatest', windowSeconds: 900 } }] });
+});
+it('keeps an uncertain save open and blocks replay when the receipt claims different recipe provenance', async () => {
+  mismatchedPreset = true; await newDraft(); await recipe('Consolidate continuity');
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await screen.findByText('Outcome unknown');
+  expect(screen.getByRole('textbox', { name: 'Automation name' })).toHaveValue('Consolidate continuity');
+  expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
+  expect(screen.queryByText('Automation saved. Reading current registrations.')).not.toBeInTheDocument();
+  expect(screen.queryByText(/The change was saved, but this view/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Reload current Automation' })); await waitFor(() => expect(writes()).toHaveLength(1));
+  expect(screen.getByRole('button', { name: 'Save Automation' })).toBeDisabled();
+});
+it('shows immutable saved origin while permitting customized instructions', async () => {
+  current.items[0].automation.presetId = 'consolidate-continuity'; current.items[0].automation.presetVersion = 1;
+  await open(); await edit(); expect(screen.getByText('Consolidate continuity (version 1)')).toBeVisible();
+  expect(screen.queryByRole('combobox', { name: 'Automation starting recipe' })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Automation instructions' }), { target: { value: 'Customized saved task' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Automation' })); await waitFor(() => expect(writes()).toHaveLength(1));
+  expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({ presetId: 'consolidate-continuity', presetVersion: 1, instructions: 'Customized saved task' });
+});
+it('retires a pending recipe replacement when the scoped editor unmounts', async () => {
+  const rendered = render(<App><TenantAgentAutomations context={context} id="agent" /></App>); await screen.findByText('Saved schedule');
+  fireEvent.click(screen.getByRole('button', { name: 'New Automation' })); await screen.findByRole('textbox', { name: 'Automation name' });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Automation name' }), { target: { value: 'Private draft' } }); await recipe('Improve agent harness');
+  await screen.findByRole('button', { name: 'Replace draft' }); rendered.unmount();
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Replace draft' })).not.toBeInTheDocument()); expect(writes()).toHaveLength(0);
 });
