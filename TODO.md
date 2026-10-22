@@ -4,7 +4,7 @@
 
 ## Current status
 
-The IAM cutover remains active. The [delivery ledger](docs/reports/multitenant-iam-delivery-2026-10-16.md) owns current scoped evidence and remaining integration gates. Model Automation create/update/enable/disable/delete have scoped qualification. Finish model `automation.run` and Harness/Self-Management, audit autonomous approval defaults, consolidate internal/schema ownership safely, and complete proposal-wide acceptance. Earlier module reports retain their historical limits.
+The IAM cutover remains active. The [delivery ledger](docs/reports/multitenant-iam-delivery-2026-10-16.md) owns current scoped evidence and remaining integration gates. Model Automation inspection, create/update/enable/disable/delete and exact manual invocation have scoped qualification. Finish Harness/Self-Management, audit autonomous approval defaults, consolidate internal/schema ownership safely, and complete proposal-wide acceptance. Earlier module reports retain their historical limits.
 
 ### Existing foundations
 

@@ -9,13 +9,13 @@ internal static class AutomationMutationApprovalPersistence
     private static string Shape => $"""
         Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision>=1 AND ExpiresAt>CreatedAt
         AND RunId IS NOT NULL AND SessionId IS NOT NULL AND AutomationId IS NULL AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL
-        AND Permission IN ('automations.create','automations.update','automations.delete')
+        AND Permission IN ('automations.create','automations.update','automations.delete','automations.run')
         AND length(Fingerprint)=64 AND Fingerprint NOT GLOB '*[^0-9a-f]*' AND length(CAST(PayloadJson AS BLOB))<=1048576
         AND json_type(PayloadJson,'$.Operation.AutomationMutation') IS 'object'
         AND {J("SessionId")} IS SessionId AND {T("RootSessionId")} IS 'text' AND length({J("RootSessionId")})=36
         AND {T("SemanticReviewRequired")} IN ('true','false')
-        AND {J("ToolName")} IN ('automation.create','automation.update','automation.enable','automation.disable','automation.delete')
-        AND Permission IS CASE {J("ToolName")} WHEN 'automation.create' THEN 'automations.create' WHEN 'automation.delete' THEN 'automations.delete' ELSE 'automations.update' END
+        AND {J("ToolName")} IN ('automation.create','automation.update','automation.enable','automation.disable','automation.delete','automation.run')
+        AND Permission IS CASE {J("ToolName")} WHEN 'automation.create' THEN 'automations.create' WHEN 'automation.delete' THEN 'automations.delete' WHEN 'automation.run' THEN 'automations.run' ELSE 'automations.update' END
         AND {T("ArgumentsJson")} IS 'text' AND length(CAST({J("ArgumentsJson")} AS BLOB)) BETWEEN 2 AND 16384
         AND json_valid({J("ArgumentsJson")}) AND json_type({J("ArgumentsJson")})='object'
         AND {T("IntentHash")} IS 'text' AND length({J("IntentHash")})=64 AND {J("IntentHash")} NOT GLOB '*[^0-9a-f]*'
@@ -28,6 +28,20 @@ internal static class AutomationMutationApprovalPersistence
             AND {J("Current.Owner.AgentInstanceId")} IS InstanceId AND {J("Current.Owner.ExecutorPrincipalId")} IS lower(ExecutorPrincipalId)
             AND {J("Current.Revision")}>=1 AND {J("Proposed.Revision")}={J("Current.Revision")}+1
             AND json_extract({J("ArgumentsJson")},'$.automationId') IS ResourceId AND json_extract({J("ArgumentsJson")},'$.expectedRevision') IS {J("Current.Revision")}))
+        AND (({J("ToolName")}='automation.run' AND {T("Invocation")} IS 'object' AND OriginalInitiatorPrincipalId IS NOT NULL
+            AND {J("Current.Status")}=0 AND {J("Proposed.Status")}=0
+            AND {T("Invocation.SessionId")} IS 'text' AND length({J("Invocation.SessionId")})=36 AND {J("Invocation.SessionId")}<>SessionId
+            AND {T("Invocation.EntryId")} IS 'text' AND length({J("Invocation.EntryId")})=36
+            AND {T("Invocation.ActivationId")} IS 'text' AND length({J("Invocation.ActivationId")})=36
+            AND {T("Invocation.RunId")} IS 'text' AND length({J("Invocation.RunId")})=36 AND {J("Invocation.RunId")}<>RunId
+            AND {T("Invocation.ResponseId")} IS 'text' AND length({J("Invocation.ResponseId")})=36
+            AND {T("Invocation.ConfigurationHash")} IS 'text' AND length({J("Invocation.ConfigurationHash")})=64 AND {J("Invocation.ConfigurationHash")} NOT GLOB '*[^0-9a-f]*'
+            AND {T("Invocation.Model")} IS 'object' AND {T("Invocation.Model.CatalogKey")} IS 'text'
+            AND {T("Invocation.Model.ProviderAlias")} IS 'text' AND {T("Invocation.Model.ModelId")} IS 'text'
+            AND (({J("Proposed.TargetSessionId")} IS NULL AND {J("Invocation.Conversation")} IS NULL)
+                OR ({J("Proposed.TargetSessionId")} IS {J("Invocation.SessionId")} AND {T("Invocation.Conversation")} IS 'object'
+                    AND {J("Invocation.Conversation.SessionRevision")}>0 AND {J("Invocation.Conversation.InputBoundarySequence")}>=0)))
+            OR ({J("ToolName")}<>'automation.run' AND {J("Invocation")} IS NULL))
         AND {Others}
         """;
 }

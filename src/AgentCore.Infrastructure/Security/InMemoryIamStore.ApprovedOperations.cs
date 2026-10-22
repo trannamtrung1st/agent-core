@@ -129,6 +129,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             {
                 try {
                     automationMutation = RequireAutomationMutationApproval(request, run, ct);
+                    RequireAutomationInvocation(automationMutation, request.Operation.AutomationMutation!, commit.AutomationInvocationAdmission, ct);
                     TenantAutomationMutationRules.ReviewerAsync(request, automationMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
                 } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
                 catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
@@ -190,7 +191,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             var updated = configure ? instances.ChangeTenantConfigurationAsync(new(target.Instance.InstanceId, target.Instance.Revision,
                 Persona: change!.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
                 SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides, AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).Result : target.Instance;
-            if (complete && automationMutation is not null) automationBacking.SaveTenantAutomation(request.Operation.AutomationMutation!.Proposed);
+            if (complete && automationMutation is not null)
+            {
+                if (commit.AutomationInvocationAdmission is { } admitted) { StageTenantAutomationGraph(admitted); automationBacking.CommitTenantOccurrence(admitted.Next, admitted.Occurrence); }
+                else automationBacking.SaveTenantAutomation(request.Operation.AutomationMutation!.Proposed);
+            }
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),

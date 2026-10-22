@@ -10,6 +10,7 @@ public sealed partial class SqliteIamStore
         static string Json(IReadOnlyList<Guid>? values) => System.Text.Json.JsonSerializer.Serialize(values?.Select(id => id.ToString("D")));
         var agents = Json(visibility.Agents); var parents = Json(visibility.ReadAutomations); var webhooks = Json(visibility.WebhookSources); var core = visibility.CoreEvents is null;
         var sessions = Json(visibility.ConversationSessions); var chats = Json(visibility.ChatAgents);
+        var runs = Json(visibility.RunAutomations); var create = visibility.CanCreate; var createRuns = visibility.CanCreateRuns;
         var rows = db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
             SELECT * FROM TenantApprovalRequests request WHERE json_type(PayloadJson,'$.Operation.AutomationMutation') IS NOT 'object'
             OR ((json_type({agents})='null' OR InstanceId IN (SELECT value FROM json_each({agents})))
@@ -17,10 +18,13 @@ public sealed partial class SqliteIamStore
                     ((json_type({parents})='null' OR ResourceId IN (SELECT value FROM json_each({parents})))
                         AND EXISTS (SELECT 1 FROM Automations parent WHERE parent.TenantId=request.TenantId AND parent.AgentInstanceId=request.InstanceId
                             AND parent.ExecutorPrincipalId=request.ExecutorPrincipalId AND parent.AutomationId=request.ResourceId)))
+                AND (json_type(PayloadJson,'$.Operation.AutomationMutation.Invocation') IS NOT 'object' OR
+                    ((json_type({runs})='null' OR ResourceId IN (SELECT value FROM json_each({runs})))
+                        AND CASE WHEN json_extract(PayloadJson,'$.Operation.AutomationMutation.Proposed.TargetSessionId') IS NULL THEN {create} ELSE {createRuns} END))
                 AND (json_extract(PayloadJson,'$.Operation.AutomationMutation.ToolName') IN ('automation.disable','automation.delete') OR
-                    (NOT EXISTS (SELECT 1 FROM json_each(PayloadJson,'$.Operation.AutomationMutation.Proposed.Triggers') child
+                    ((json_type(PayloadJson,'$.Operation.AutomationMutation.Invocation') IS 'object' OR NOT EXISTS (SELECT 1 FROM json_each(PayloadJson,'$.Operation.AutomationMutation.Proposed.Triggers') child
                         WHERE (json_type(child.value,'$.WebhookId')='text' AND json_type({webhooks})<>'null' AND json_extract(child.value,'$.WebhookId') NOT IN (SELECT value FROM json_each({webhooks})))
-                            OR (json_type(child.value,'$.CoreEventKey')='text' AND NOT {core}))
+                            OR (json_type(child.value,'$.CoreEventKey')='text' AND NOT {core})))
                     AND (json_extract(PayloadJson,'$.Operation.AutomationMutation.Proposed.TargetSessionId') IS NULL OR
                         ((json_type({sessions})='null' OR json_extract(PayloadJson,'$.Operation.AutomationMutation.Proposed.TargetSessionId') IN (SELECT value FROM json_each({sessions})))
                             AND (json_type({chats})='null' OR InstanceId IN (SELECT value FROM json_each({chats})))

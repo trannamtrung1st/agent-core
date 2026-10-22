@@ -7,7 +7,10 @@ public static class TenantAutomationMutationEvidence
 {
     public static bool Valid(TenantAutomationMutationReceipt value) => value.AutomationId != Guid.Empty && TenantAutomationMutationContract.IsTool(value.ToolName)
         && value.ExpectedRevision is >= 0 and < long.MaxValue && value.Revision > 0 && value.Revision == value.ExpectedRevision + 1 && TenantMemoryOperationRules.ValidHash(value.AfterHash)
-        && (value.ExpectedRevision == 0 ? value.ToolName == ToolCatalog.AutomationCreate && value.BeforeHash is null : value.ToolName != ToolCatalog.AutomationCreate && value.BeforeHash is not null && TenantMemoryOperationRules.ValidHash(value.BeforeHash));
+        && (value.ExpectedRevision == 0 ? value.ToolName == ToolCatalog.AutomationCreate && value.BeforeHash is null : value.ToolName != ToolCatalog.AutomationCreate && value.BeforeHash is not null && TenantMemoryOperationRules.ValidHash(value.BeforeHash))
+        && (value.ToolName == ToolCatalog.AutomationRun ? value.InvocationOccurrenceId is { } occurrence && occurrence != Guid.Empty
+            && value.InvocationSessionId is { } session && session != Guid.Empty && value.InvocationRunId is { } run && run != Guid.Empty
+            : value.InvocationOccurrenceId is null && value.InvocationSessionId is null && value.InvocationRunId is null);
     // Exact completed receipt chains explain this task's own revision changes;
     // they never waive current raw reads, Review, event witnesses or external edits.
     public static bool Explains(TenantMemoryReader reader, TenantAutomationReadSource source, Automation current, IEnumerable<TenantOperationReceipt> receipts)

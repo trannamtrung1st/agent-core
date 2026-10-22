@@ -145,14 +145,14 @@ public static class TenantAutomationRules
             || !Same(TriggerScheduleAdmission.Advance(current, decision, at), advanced))
             throw new ArgumentException("Only an exact non-executing schedule closure may advance without an occurrence.");
     }
-    public static void Admission(TenantAutomationAdmission value, TenantAgent agent, Guid? manualInitiator = null, PreparedAutomationAdmission? consent = null)
+    public static void Admission(TenantAutomationAdmission value, TenantAgent agent, Guid? manualInitiator = null, PreparedAutomationAdmission? consent = null, DateTimeOffset? preparedAt = null)
     {
         var current = value.Current; var next = value.Next; var occurrence = value.Occurrence; var root = value.SessionOwner; var run = value.Run;
         Owner(current, agent); Owner(next, agent);
         if ((occurrence.SourceKind == TriggerSourceKind.ManualInvocation) != (manualInitiator is not null)) throw new ArgumentException("Manual admission requires its actual human invoker.");
         var context = run.Admission.ExecutionContext;
         var at = run.CreatedAtUtc;
-        var sourceAt = consent?.Occurrence.AdmittedAtUtc ?? at;
+        var sourceAt = consent?.Occurrence.AdmittedAtUtc ?? preparedAt ?? at;
         var pin = occurrence.ModelPin ?? throw new ArgumentException("An occurrence requires its exact model pin.");
         Automation expectedNext; TriggerOccurrence expectedOccurrence;
         if (occurrence.SourceKind == TriggerSourceKind.ManualInvocation)

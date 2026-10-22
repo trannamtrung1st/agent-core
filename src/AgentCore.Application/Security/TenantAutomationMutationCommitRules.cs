@@ -27,6 +27,11 @@ public static class TenantAutomationMutationCommitRules
         if (noReview)
             foreach (var (key, scope) in TenantAutomationMutationRules.Targets(source, value).Append((permission, primary)).Distinct())
                 if (await TenantSandboxReadOperationRules.NeedsReviewAsync(reader.Security, reader.Run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, key, scope, iam, ct).ConfigureAwait(false)) throw new AccessDeniedException("automation_mutation_review_required");
+        if (value.ToolName == AgentCore.Application.Tools.ToolCatalog.AutomationRun)
+        {
+            await TenantAutomationInvocationRules.RequesterAsync(source, iam, ct).ConfigureAwait(false);
+            return;
+        }
         if (value.ToolName is not (AgentCore.Application.Tools.ToolCatalog.AutomationDelete or AgentCore.Application.Tools.ToolCatalog.AutomationDisable))
         {
             try { TenantAutomationRules.Configuration(value.Proposed, reader.Current, at ?? value.Proposed.Provenance.UpdatedAt, current: source.Current); }
@@ -43,5 +48,7 @@ public static class TenantAutomationMutationCommitRules
             throw new ArgumentException("Invalid Automation authoring transaction.");
     }
     public static TenantAutomationMutationReceipt Evidence(PreparedAutomationMutation value) => new(value.Proposed.AutomationId, value.ToolName,
-        value.Current?.Revision ?? 0, value.Proposed.Revision, value.Current is null ? null : TenantAutomationReadRules.ConfigurationHash(value.Current), TenantAutomationReadRules.ConfigurationHash(value.Proposed));
+        value.Current?.Revision ?? 0, value.Proposed.Revision, value.Current is null ? null : TenantAutomationReadRules.ConfigurationHash(value.Current), TenantAutomationReadRules.ConfigurationHash(value.Proposed),
+        value.Invocation is { } plan ? AgentCore.Application.Triggers.AutomationRules.ManualOccurrence(value.Current!, plan.Model, value.Proposed.Provenance.UpdatedAt).OccurrenceId : null,
+        value.Invocation?.SessionId, value.Invocation?.RunId);
 }

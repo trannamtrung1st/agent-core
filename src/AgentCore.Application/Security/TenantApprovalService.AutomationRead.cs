@@ -13,10 +13,12 @@ public sealed partial class TenantApprovalService
         foreach (var key in new[] { "credentials.read", "credentials.use", "email.read" })
             if (await VisibleIds(state, human.PrincipalId, key, "credential", ct).ConfigureAwait(false) is { } ids) emailSources.Add(ids);
         IReadOnlyList<Guid>? accounts = emailSources.Count == 0 ? null : emailSources.Skip(1).Aggregate(emailSources[0].AsEnumerable(), (ids, next) => ids.Intersect(next)).ToArray();
-        return new(false, await VisibleIds(state, human.PrincipalId, "agents.read", "agent", ct).ConfigureAwait(false),
-            await VisibleIds(state, human.PrincipalId, "automations.read", "automation", ct).ConfigureAwait(false), [],
+        var createRuns = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agent-runs.create"), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)).Allowed;
+        var createSessions = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("sessions.create"), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)).Allowed;
+        return new(createRuns && createSessions, await VisibleIds(state, human.PrincipalId, "agents.read", "agent", ct).ConfigureAwait(false),
+            await VisibleIds(state, human.PrincipalId, "automations.read", "automation", ct).ConfigureAwait(false), await VisibleIds(state, human.PrincipalId, "automations.run", "automation", ct).ConfigureAwait(false),
             await VisibleIds(state, human.PrincipalId, "webhooks.read", "webhook", ct).ConfigureAwait(false),
-            await VisibleIds(state, human.PrincipalId, "core-events.read", "event", ct).ConfigureAwait(false), accounts, false, await VisibleIds(state, human.PrincipalId, "sessions.read", "session", ct).ConfigureAwait(false), await VisibleIds(state, human.PrincipalId, "agents.chat", "agent", ct).ConfigureAwait(false));
+            await VisibleIds(state, human.PrincipalId, "core-events.read", "event", ct).ConfigureAwait(false), accounts, createRuns, await VisibleIds(state, human.PrincipalId, "sessions.read", "session", ct).ConfigureAwait(false), await VisibleIds(state, human.PrincipalId, "agents.chat", "agent", ct).ConfigureAwait(false), IncludeOccurrenceReservations: false);
     }
 
     private static IReadOnlyList<TenantApprovalFieldChange> AutomationReadObservationChanges(PreparedAutomationRead read)

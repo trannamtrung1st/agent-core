@@ -144,6 +144,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         {
             try {
                 automationMutation = await RequireAutomationMutationApproval(db, request, run, ct).ConfigureAwait(false);
+                await RequireAutomationInvocation(db, automationMutation, request.Operation.AutomationMutation!, commit.AutomationInvocationAdmission, ct).ConfigureAwait(false);
                 await TenantAutomationMutationRules.ReviewerAsync(request, automationMutation, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
             } catch (AccessDeniedException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
             catch (SecurityConflictException error) { commit = commit with { Outcome = TenantOperationOutcome.Denied, ReasonCode = error.ReasonCode }; }
@@ -245,7 +246,11 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         }
         try
         {
-            if (complete && automationMutation is not null) await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            if (complete && automationMutation is not null)
+            {
+                if (commit.AutomationInvocationAdmission is { } admitted) { await StageTenantAutomationGraph(db, admitted, ct).ConfigureAwait(false); db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(admitted.Occurrence)); }
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
             var receipt = new TenantOperationReceipt(commit.OperationId, request.RequestId, request.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.Activation.RootActivationId, request.ExecutorPrincipalId, target.Instance.InstanceId, commit.ActionHash, commit.Outcome, commit.ReasonCode,
                 updated.Revision, updated.PersonaRevision, DateTimeOffset.FromUnixTimeMilliseconds(at.ToUnixTimeMilliseconds()),

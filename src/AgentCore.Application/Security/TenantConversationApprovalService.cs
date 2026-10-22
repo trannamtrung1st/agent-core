@@ -6,7 +6,7 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantConversationApproval(Guid RequestId, Guid RunId, Guid? ResponseId, TenantOperationKind Operation,
     ApprovalKind Kind, TenantApprovalStatus Status, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt,
-    bool Waiting, bool CanInspect, TenantOperationOutcome? Outcome, bool? MemoryRead = null, string? ExperienceTool = null);
+    bool Waiting, bool CanInspect, TenantOperationOutcome? Outcome, bool? MemoryRead = null, string? ExperienceTool = null, string? AutomationTool = null);
 public sealed record TenantConversationApprovalPage(IReadOnlyList<TenantConversationApproval> Items, int Total, int Page, int PageSize);
 
 // Conversation authority permits this minimal status, never the protected action preview or a decision.
@@ -29,10 +29,11 @@ public sealed class TenantConversationApprovalService(TenantConversationService 
             var inspect = false;
             try { await review.ReadViewAsync(tenant, request.RequestId, human, ct).ConfigureAwait(false); inspect = true; }
             catch (AccessDeniedException) { }
+            catch (SecurityConflictException) { } // A stale private preview cannot hide the factual decision/receipt.
             items.Add(new(request.RequestId, request.RunId, run.ResponseId, request.Operation.Kind, request.Kind, request.Status,
                 request.CreatedAt, request.ExpiresAt, request.Status == TenantApprovalStatus.Pending && (request.Operation.BackgroundReport is not null || request.Operation.ReportSourceRead is not null ? run.IsTerminal : run.Status == AgentRunStatus.WaitingForApproval),
                 inspect, result?.Outcome, request.Operation.MemoryOperation is { } memory ? AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(memory.ToolName) : null,
-                request.Operation.ExperienceOperation?.ToolName));
+                request.Operation.ExperienceOperation?.ToolName, request.Operation.AutomationMutation?.ToolName));
         }
         var after = await conversations.AuthorizeRecipientAsync(tenant, session, human, ct).ConfigureAwait(false);
         if (after.SecurityRevision != before.SecurityRevision || after.Owner != before.Owner) throw new SecurityConflictException("stale_revision");

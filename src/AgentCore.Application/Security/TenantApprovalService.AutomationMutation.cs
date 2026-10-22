@@ -53,7 +53,7 @@ public sealed partial class TenantApprovalService
             + string.Concat(a.Triggers.Select(t => $"\nTrigger: {t.TriggerId:D} · revision {t.Revision} · {(t.Enabled ? "Enabled" : "Disabled")}"
                 + (t.Configuration is FilteredEventTrigger e ? $"\nFilter: {e.FilterExpression ?? "None"}\nDispatch: {e.Dispatch.Mode} · window {e.Dispatch.WindowSeconds}" : "")));
         var old = value.Current; var next = value.Proposed;
-        return [new("Automation", old?.Name ?? "No existing Automation", next.Name), new("Instructions", old?.Instructions, next.Instructions),
+        IReadOnlyList<TenantApprovalFieldChange> changes = [new("Automation", old?.Name ?? "No existing Automation", next.Name), new("Instructions", old?.Instructions, next.Instructions),
             new("State", old?.Status.ToString(), next.Status.ToString()), new("Timing and sources", Timing(old), Timing(next)),
             new("Model", old is null ? "No existing Automation" : old.ModelOverrideCatalogKey ?? "Agent default", next.ModelOverrideCatalogKey ?? "Agent default"),
             new("Reasoning", old is null ? "No existing Automation" : old.ModelOverrideReasoningEffort ?? "Agent default", next.ModelOverrideReasoningEffort ?? "Agent default"),
@@ -62,5 +62,9 @@ public sealed partial class TenantApprovalService
             new("Completion report", old is null ? "No existing Automation" : old.CompletionDelivery.SessionId?.ToString("D") ?? "None", next.CompletionDelivery.SessionId?.ToString("D") ?? "None"),
             new("Saved revision", old?.Revision.ToString(), next.Revision.ToString()),
             new("Semantic verification", null, value.SemanticReviewRequired ? "Human verification is required for this exact Before/After change." : "Aligned with the actual admitted request or task.", false)];
+        return value.Invocation is { } invocation ? [
+            new("Manual occurrence", "Not admitted", "Admit one exact manual occurrence. Admission is separate from execution completion."),
+            new("Occurrence model", null, invocation.Model.CatalogKey, false),
+            .. changes] : changes;
     }
 }

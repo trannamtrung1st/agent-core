@@ -8,7 +8,8 @@ namespace AgentCore.Application.Ports;
 public sealed record TenantAutomationMutationObservation(TenantMemoryReader Reader, Automation? Current,
     TenantSession? Conversation, TenantSession? ReportDestination, string IntentText, bool AdmittedTask);
 public sealed record TenantAutomationMutationCommit(Guid OperationId, Guid RunId, Guid Generation, long ExpectedRunRevision,
-    string SourceCallId, string ParametersHash, PreparedAutomationMutation Prepared, long ExpectedInstanceRevision, string ActionHash);
+    string SourceCallId, string ParametersHash, PreparedAutomationMutation Prepared, long ExpectedInstanceRevision, string ActionHash,
+    TenantAutomationAdmission? InvocationAdmission = null);
 
 // Facet of the existing IAM/Automation/Run/receipt transaction, never a human facade.
 public interface ITenantAutomationMutationStore : ITenantDirectOperationStore

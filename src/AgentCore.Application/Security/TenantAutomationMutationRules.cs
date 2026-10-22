@@ -14,13 +14,15 @@ public static class TenantAutomationMutationRules
 {
     public const string Completed = "automation_mutation_completed";
     public static string ParametersHash(string tool, string arguments) => TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { tool, arguments }));
-    public static string Permission(string tool) => tool == ToolCatalog.AutomationCreate ? "automations.create" : tool == ToolCatalog.AutomationDelete ? "automations.delete" : "automations.update";
+    public static string Permission(string tool) => tool == ToolCatalog.AutomationCreate ? "automations.create" : tool == ToolCatalog.AutomationDelete ? "automations.delete" : tool == ToolCatalog.AutomationRun ? "automations.run" : "automations.update";
     public static AccessScope Primary(Guid tenant, string tool, Automation value) => tool == ToolCatalog.AutomationCreate ? AccessScope.ForTenant(tenant) : TenantAutomationRules.Scope(tenant, value.AutomationId);
     public static void Eligible(TenantMemoryReader reader, string tool)
     {
         if (!TenantTaskExecutionContract.Allows(reader.Run, reader.Current) || !TenantAutomationMutationContract.Allows(reader.Run.Admission.Configuration!.Definition, tool)
             || !TenantAutomationMutationContract.Allows(reader.Current, tool) || reader.Agent.Instance.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active)
             throw new AccessDeniedException("automation_policy_unavailable");
+        if (tool == ToolCatalog.AutomationRun && (reader.Root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage || reader.User is null))
+            throw new AccessDeniedException("automation_manual_request_required");
     }
     public static async ValueTask BaseRawAsync(TenantMemoryReader reader, Automation? current, IamAuthorizer iam, CancellationToken ct)
     {
@@ -64,23 +66,32 @@ public static class TenantAutomationMutationRules
         if (source.Current is { } current) yield return ("automations.read", TenantAutomationRules.Scope(tenant, current.AutomationId));
         // Stopping future work never requires unrelated source permission; its exact
         // before/configuration and destination reads remain independently protected.
-        if (value.ToolName is not (ToolCatalog.AutomationDelete or ToolCatalog.AutomationDisable))
+        if (value.ToolName is not (ToolCatalog.AutomationDelete or ToolCatalog.AutomationDisable or ToolCatalog.AutomationRun))
             foreach (var child in value.Proposed.Triggers)
                 if (child.Configuration is EventTrigger webhook) yield return ("webhooks.read", TenantWebhookRules.Scope(tenant, webhook.EventId));
                 else if (child.Configuration is CoreEventTrigger) yield return ("core-events.read", AccessScope.ForTenant(tenant));
         if (value.ToolName is ToolCatalog.AutomationDelete or ToolCatalog.AutomationDisable) yield break;
+        if (value.ToolName == ToolCatalog.AutomationRun)
+        {
+            if (!TenantAutomationConversationRules.Existing(value.Current!)) yield return ("sessions.create", AccessScope.ForTenant(tenant));
+            yield return ("agent-runs.create", AccessScope.ForTenant(tenant));
+        }
         if (value.Proposed.ExecutionTarget.SessionId is { } targetId) { yield return ("sessions.read", TenantSessionRules.Scope(tenant, targetId)); yield return ("agents.chat", AccessScope.ForResource(tenant, "agent", source.Reader.Run.AgentInstanceId.ToString("D"))); }
         if (value.Proposed.CompletionDelivery.SessionId is { } report) { yield return ("sessions.read", TenantSessionRules.Scope(tenant, report)); yield return ("agents.chat", AccessScope.ForResource(tenant, "agent", source.Reader.Run.AgentInstanceId.ToString("D"))); }
     }
     public static async ValueTask RawAsync(TenantAutomationMutationObservation source, PreparedAutomationMutation value, IamAuthorizer iam, CancellationToken ct, Guid? human = null)
     {
-        foreach (var (key, scope) in Targets(source, value).Distinct())
+        var targets = Targets(source, value);
+        if (human is not null && value.Invocation is not null) targets = targets.Append(("automations.run", TenantAutomationRules.Scope(source.Reader.Security.Tenant.TenantId, value.Proposed.AutomationId)));
+        foreach (var (key, scope) in targets.Distinct())
             if (!(await iam.CheckOwnedTenantAsync(source.Reader.Security, human ?? source.Reader.Agent.PrincipalId, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed)
                 throw new AccessDeniedException("automation_source_read_required");
     }
     public static void Validate(TenantAutomationMutationObservation source, PreparedAutomationMutation value)
     {
         var args = TenantAutomationMutationContract.Parse(value.ToolName, value.ArgumentsJson); Eligible(source.Reader, value.ToolName);
+        if (value.ToolName == ToolCatalog.AutomationRun) { TenantAutomationInvocationRules.Validate(source, value); return; }
+        if (value.Invocation is not null) throw new SecurityConflictException("automation_plan_changed");
         if (value.SessionId != source.Reader.Run.SessionId || value.RootSessionId != source.Reader.Root.SessionId || args.Json != value.ArgumentsJson
             || value.IntentHash != IntentHash(source, args) || (source.Current is null) != (value.Current is null)
             || source.Current is not null && !TenantAutomationRules.Same(source.Current, value.Current!)) throw new SecurityConflictException("automation_source_changed");

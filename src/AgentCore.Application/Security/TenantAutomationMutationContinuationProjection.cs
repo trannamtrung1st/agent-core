@@ -11,5 +11,8 @@ public static class TenantAutomationMutationContinuationProjection
             approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
             reasonCode = outcome.ReasonCode, requestId = request.RequestId, operationId = request.Operation.OperationId,
             applied = outcome.Outcome == TenantOperationOutcome.Completed, automationId = request.Operation.AutomationMutation!.Proposed.AutomationId,
+            occurrenceAdmitted = outcome.Outcome == TenantOperationOutcome.Completed && request.Operation.AutomationMutation!.Invocation is not null,
+            executionCompleted = false, admittedSessionId = outcome.Outcome == TenantOperationOutcome.Completed ? request.Operation.AutomationMutation!.Invocation?.SessionId : null,
+            admittedRunId = outcome.Outcome == TenantOperationOutcome.Completed ? request.Operation.AutomationMutation!.Invocation?.RunId : null,
             revision = outcome.Outcome == TenantOperationOutcome.Completed ? request.Operation.AutomationMutation!.Proposed.Revision : (long?)null, replayAllowed = false }));
 }

@@ -538,6 +538,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 && db.Automations.IgnoreQueryFilters().Any(a => a.AutomationId == r.AutomationId && a.TenantId == r.TenantId
                     && a.AgentInstanceId == r.InstanceId && a.ExecutorPrincipalId == r.ExecutorPrincipalId));
         }
+        if (automationVisibility?.IncludeOccurrenceReservations == false) query = query.Where(r => r.AutomationId == null);
         query = AutomationMutationVisible(db, query, automationVisibility);
         if (automationVisibility is null)
             query = query.Where(r => db.Set<TenantApprovalRecord>().FromSqlRaw("SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson,'$.Operation.AutomationRead') IS NOT 'object'").Any(v => v.RequestId == r.RequestId));

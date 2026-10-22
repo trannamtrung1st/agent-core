@@ -10,7 +10,8 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantAutomationMutationPreparation(TenantAutomationMutationObservation Source, PreparedAutomationMutation Value);
 public sealed class TenantAutomationMutationService(ITenantAutomationMutationStore store, TenantOperationAuthorizer operations, IamAuthorizer iam,
-    ITenantApprovalStore approvals, ITriggerCommandAuthorizer semantic, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null)
+    ITenantApprovalStore approvals, ITriggerCommandAuthorizer semantic, IModelCatalog models, IIdGenerator ids, TimeProvider time, IEventFilterEvaluator? filters = null,
+    TenantRunConfigurationResolver? configurations = null)
 {
     public async ValueTask<TenantAutomationMutationPreparation> PrepareAsync(TenantRunReference reference, Guid? generation, string tool, string arguments,
         CancellationToken ct, PreparedAutomationMutation? expected = null, Guid? human = null)
@@ -19,6 +20,19 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         var args = TenantAutomationMutationContract.Parse(tool, arguments); var at = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         if (generation is not null && source.Reader.Run.Claim?.LeaseExpiresAtUtc <= time.GetUtcNow()) throw new SecurityConflictException("execution_claim_expired");
         if (expected is not null) { await CurrentAsync(source, expected, ct).ConfigureAwait(false); return new(source, expected); }
+        if (tool == ToolCatalog.AutomationRun)
+        {
+            var resolved = await ResolveInvocationAsync(source, ct).ConfigureAwait(false); var current = source.Current!;
+            var model = source.Conversation is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Configuration.Definition, source.Reader.Agent.Instance, current).Pin
+                : TenantAutomationConversationRules.Model(current, source.Conversation, resolved.Configuration.Configuration.Definition, models);
+            if (model is null) throw new AccessDeniedException("automation_model_unavailable");
+            var invocation = new PreparedAutomationInvocation(current.ExecutionTarget.SessionId ?? ids.NewSessionId(), ids.NewId(), ids.NewId(), ids.NewId(), ids.NewId(),
+                TenantAutomationRules.Hash(resolved.Configuration), model, source.Conversation is null ? null : new(source.Conversation.Snapshot.Revision, source.Conversation.Snapshot.DurableLastEntrySequence));
+            var next = current.WithScheduleAdvance(current.Status, current.NextOccurrenceAtUtc, current.OccurrenceCount, current.Revision + 1, at, null);
+            var plan = new PreparedAutomationMutation(source.Reader.Run.SessionId, source.Reader.Root.SessionId, tool, args.Json, current, next,
+                TenantAutomationMutationRules.IntentHash(source, args), false, invocation);
+            TenantAutomationMutationRules.Validate(source, plan); await CurrentAsync(source, plan, ct).ConfigureAwait(false); return new(source, plan);
+        }
         var change = TriggerScheduleCommands.NormalizeTenant(source.Reader.Current, source.Current, args, source.Reader.Run.SessionId, source.Reader.Root.CreatedAtUtc, ids);
         var provenance = source.Current?.Provenance.WithUpdated(at) ?? new TriggerProvenance(TriggerAuthorizationOrigin.AgentTask, null, null, at, at, change.PresetId, change.PresetVersion);
         var proposed = tool == ToolCatalog.AutomationDelete ? source.Current!.WithCancellation(source.Current.Revision + 1, at)
@@ -30,6 +44,16 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
     private async ValueTask CurrentAsync(TenantAutomationMutationObservation source, PreparedAutomationMutation value, CancellationToken ct)
     {
         await TenantAutomationMutationRules.RawAsync(source, value, iam, ct).ConfigureAwait(false);
+        if (value.ToolName == ToolCatalog.AutomationRun)
+        {
+            await TenantAutomationInvocationRules.RequesterAsync(source, iam, ct).ConfigureAwait(false);
+            var resolved = await ResolveInvocationAsync(source, ct).ConfigureAwait(false);
+            if (TenantAutomationRules.Hash(resolved.Configuration) != value.Invocation!.ConfigurationHash) throw new SecurityConflictException("automation_configuration_changed");
+            var pin = source.Conversation is null ? ExecutionModelPolicy.Resolve(models, resolved.Configuration.Configuration.Definition, source.Reader.Agent.Instance, source.Current!).Pin
+                : TenantAutomationConversationRules.Model(source.Current!, source.Conversation, resolved.Configuration.Configuration.Definition, models);
+            if (pin is null || JsonSerializer.Serialize(pin) != JsonSerializer.Serialize(value.Invocation.Model)) throw new AccessDeniedException("automation_model_unavailable");
+            return;
+        }
         if (value.ToolName is ToolCatalog.AutomationDelete or ToolCatalog.AutomationDisable) return;
         var reader = source.Reader; var proposed = value.Proposed;
         await TenantCompletionDestinationRules.AuthoringAsync(reader.Security, reader.Agent.PrincipalId, proposed, source.ReportDestination, iam, ct).ConfigureAwait(false);
@@ -69,6 +93,7 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         var exact = JsonSerializer.SerializeToElement(value);
         var action = JsonSerializer.SerializeToElement(new { tool = value.ToolName, arguments = args.RootElement,
             current = exact.GetProperty("Current"), proposed = exact.GetProperty("Proposed"),
+            invocation = value.Invocation,
             referenceTimeUtc = source.Reader.Root.CreatedAtUtc, sessionId = source.Reader.Run.SessionId });
         if (System.Text.Encoding.UTF8.GetByteCount(action.GetRawText()) > 32768)
             return prepared with { Value = value with { SemanticReviewRequired = true } };
@@ -98,12 +123,23 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         var prior = await approvals.FindRootApprovalAsync(reference.TenantId, reader.Run.Admission.Activation.RootActivationId, reader.Agent.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (prior is not null) return JsonSerializer.Serialize(new { decision = prior.Status == TenantApprovalStatus.Pending ? "requiresApproval" : "denied", reasonCode = TenantApprovalRules.DuplicateReason(prior), applied = false });
         var state = reader.Security; var receipt = await store.TryCommitTenantAutomationMutationAsync(state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } }, state.Tenant.Revision,
-            new(prepared.OperationId, reference.RunId, frame.Generation, reader.Run.Revision, call.Id, hash, before.Value, reader.Agent.Instance.Revision, prepared.ActionHash),
+            new(prepared.OperationId, reference.RunId, frame.Generation, reader.Run.Revision, call.Id, hash, before.Value, reader.Agent.Instance.Revision, prepared.ActionHash,
+                await InvocationAdmissionAsync(before, ct).ConfigureAwait(false)),
             new(ids.NewId(), reference.TenantId, reader.Agent.PrincipalId, "operations.automations.mutate", before.Value.Proposed.AutomationId.ToString("D"), "allowed", TenantAutomationMutationRules.Completed, time.GetUtcNow()), ct).ConfigureAwait(false);
         return receipt is null ? throw new SecurityConflictException("stale_revision") : Result(receipt, false);
     }
     public static string Result(TenantOperationReceipt receipt, bool existing) => JsonSerializer.Serialize(new { decision = "allowed", applied = !existing, alreadyCompleted = existing,
-        operationId = receipt.OperationId, automationId = receipt.AutomationMutation?.AutomationId, revision = receipt.AutomationMutation?.Revision, reasonCode = receipt.ReasonCode });
+        operationId = receipt.OperationId, automationId = receipt.AutomationMutation?.AutomationId, revision = receipt.AutomationMutation?.Revision, reasonCode = receipt.ReasonCode,
+        occurrenceAdmitted = receipt.AutomationMutation?.ToolName == ToolCatalog.AutomationRun, executionCompleted = false,
+        admittedSessionId = receipt.AutomationMutation?.InvocationSessionId, admittedRunId = receipt.AutomationMutation?.InvocationRunId });
+    private async ValueTask<(TenantAgent Agent, AgentCore.Application.Execution.ResolvedAgentRunConfiguration Configuration)> ResolveInvocationAsync(TenantAutomationMutationObservation source, CancellationToken ct) =>
+        await (configurations ?? throw new AccessDeniedException("tenant_effect_unavailable")).ResolveAsync(source.Reader.Security.Tenant.TenantId, source.Reader.Run.AgentInstanceId, ct).ConfigureAwait(false);
+    public async ValueTask<TenantAutomationAdmission?> InvocationAdmissionAsync(TenantAutomationMutationPreparation prepared, CancellationToken ct)
+    {
+        if (prepared.Value.Invocation is null) return null;
+        var resolved = await ResolveInvocationAsync(prepared.Source, ct).ConfigureAwait(false);
+        return TenantAutomationInvocationRules.Build(prepared.Source, prepared.Value, resolved.Configuration, TriggerScheduleCalculator.Truncate(time.GetUtcNow()));
+    }
     public async ValueTask<TenantAutomationMutationPreparation> InspectionAsync(TenantApprovalRequest request, Guid human, CancellationToken ct) =>
         await PrepareAsync(new(request.TenantId, request.RunId), null, request.Operation.AutomationMutation!.ToolName, request.Operation.AutomationMutation.ArgumentsJson, ct, request.Operation.AutomationMutation, human).ConfigureAwait(false);
 }

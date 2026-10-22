@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
 using AgentCore.Domain.Triggers;
 namespace AgentCore.Infrastructure.Security;
@@ -11,7 +12,9 @@ public sealed partial class InMemoryIamStore
         if (value.Current is { } current && (visibility.ReadAutomations is not null && !visibility.ReadAutomations.Contains(current.AutomationId)
             || automationBacking.ReadTenantAutomation(request.TenantId, current.AutomationId)?.Owner != current.Owner)) return false;
         if (value.ToolName is AgentCore.Application.Tools.ToolCatalog.AutomationDelete or AgentCore.Application.Tools.ToolCatalog.AutomationDisable) return true;
-        foreach (var child in value.Proposed.Triggers)
+        if (value.Invocation is not null && (TenantAutomationConversationRules.Existing(value.Proposed) ? !visibility.CanCreateRuns : !visibility.CanCreate)
+            || value.Invocation is not null && visibility.RunAutomations is not null && !visibility.RunAutomations.Contains(value.Proposed.AutomationId)) return false;
+        foreach (var child in value.Invocation is null ? value.Proposed.Triggers : [])
             if (child.Configuration is EventTrigger webhook && visibility.WebhookSources is not null && !visibility.WebhookSources.Contains(webhook.EventId)
                 || child.Configuration is CoreEventTrigger && visibility.CoreEvents is not null) return false;
         foreach (var id in new[] { value.Proposed.ExecutionTarget.SessionId, value.Proposed.CompletionDelivery.SessionId }.OfType<Guid>())

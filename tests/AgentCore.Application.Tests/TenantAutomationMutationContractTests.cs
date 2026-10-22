@@ -55,6 +55,6 @@ public sealed class TenantAutomationMutationContractTests
     {
         var proof = new TenantAutomationMutationReceipt(Guid.NewGuid(), ToolCatalog.AutomationUpdate, 4, 5, new string('a',64), new string('b',64));
         Assert.True(TenantAutomationMutationEvidence.Valid(proof)); Assert.False(TenantAutomationMutationEvidence.Valid(proof with { Revision = 6 }));
-        Assert.False(TenantAutomationMutationEvidence.Valid(proof with { ToolName = "automation.run" }));
+        Assert.False(TenantAutomationMutationEvidence.Valid(proof with { ToolName = "unsupported.tool" }));
     }
 }

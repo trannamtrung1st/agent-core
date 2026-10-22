@@ -199,6 +199,7 @@ public sealed partial class TenantAgentAccessTests
         var run = await ExperienceAutomation(factory, owner, clock, tenant, instance, 1, scheduled: true, instructions: intent);
         Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure}; tools=" + string.Join(";", model.Requests.SelectMany(r => r.Messages).Where(m => m.Role == ModelRole.Tool).Select(m => m.Name + ":" + m.Text[..Math.Min(600, m.Text.Length)]))); Assert.Null(run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId);
         Assert.All(verifier.Requests, r => { Assert.True(r.AdmittedTask); Assert.Equal(intent, r.CurrentUserText); }); Assert.Equal(4, verifier.Requests.Count);
+        Assert.All(model.Requests, request => Assert.DoesNotContain(request.Tools ?? [], tool => tool.Name == ToolCatalog.AutomationRun));
         var saved = (await factory.Services.GetRequiredService<ITenantAutomationStore>().FindTenantAutomationAsync(tenant, model.CreatedId))!;
         Assert.Equal(4, saved.Revision); Assert.Equal(AutomationStatus.Disabled, saved.Status); Assert.Null(saved.Owner.ProfileIdOrNull);
     }

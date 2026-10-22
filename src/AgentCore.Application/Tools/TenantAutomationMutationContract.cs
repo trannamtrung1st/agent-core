@@ -15,11 +15,13 @@ public sealed record TenantAutomationMutationIntent(string Tool, string Argument
 }
 public static class TenantAutomationMutationContract
 {
-    public static bool IsTool(string tool) => tool is ToolCatalog.AutomationCreate or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable or ToolCatalog.AutomationDelete;
+    public static bool IsTool(string tool) => tool is ToolCatalog.AutomationCreate or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun;
     public static bool Allows(AgentDefinition definition, string tool) => IsTool(tool) && RolePermissions.AllowsTool(definition, tool)
-        && (tool is ToolCatalog.AutomationDisable or ToolCatalog.AutomationDelete || definition.TriggerPolicy?.AllowUserScheduling == true);
+        && (tool is ToolCatalog.AutomationDisable or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun || definition.TriggerPolicy?.AllowUserScheduling == true);
     public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => TenantTaskExecutionContract.Allows(context)
-        ? new[] { ToolCatalog.AutomationCreate, ToolCatalog.AutomationUpdate, ToolCatalog.AutomationEnable, ToolCatalog.AutomationDisable, ToolCatalog.AutomationDelete }.Where(t => Allows(definition, t)).ToArray() : [];
+        ? new[] { ToolCatalog.AutomationCreate, ToolCatalog.AutomationUpdate, ToolCatalog.AutomationEnable, ToolCatalog.AutomationDisable, ToolCatalog.AutomationDelete, ToolCatalog.AutomationRun }
+            .Where(t => Allows(definition, t) && (t != ToolCatalog.AutomationRun || context?.ExecutionContext?.OriginalInitiatorPrincipalId is not null
+                && !TenantTaskExecutionContract.IsIndependent(context))).ToArray() : [];
     public static TenantAutomationMutationArguments Parse(string tool, string json)
     {
         if (!IsTool(tool) || Encoding.UTF8.GetByteCount(json) > 16384) throw new ArgumentException("Use a bounded exact Automation mutation.");
@@ -91,7 +93,9 @@ public static class TenantAutomationMutationContract
             value["properties"]!["presetVersion"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1 };
         return value;
     }
-    public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with { ParametersJson = Arguments(tool.Name).ToJsonString(), Description =
+    public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool with { ParametersJson = Arguments(tool.Name).ToJsonString(), Description = tool.Name == ToolCatalog.AutomationRun
+        ? "Admit one exact manual occurrence of this Agent's inspected active Automation on the actual current human request. Core binds requester, current configuration, model and destination. Independent Automation/read/creation rights, overlap checks and exact review remain enforced. Request mutate_automation with the unchanged tool and arguments when review is required. Admission is not execution completion and grants no recurring or future tool authority. Never repeat a completed or uncertain admission."
+        :
         "Propose an exact Automation change for this Agent under current admitted task intent, Definition capability and IAM. Inspect the selected Automation first and preserve untouched configuration. Core derives identity, resolved timing and destinations. Disabled drafts confer no execution authority. Missing raw reads cannot be granted. Required oversight withholds the write: request mutate_automation with this exact tool and arguments. A completed mutation is a factual one-time result; never repeat an uncertain operation or claim recurring execution authority." };
     public static JsonNode Schema(IReadOnlyList<string> tools) => new JsonObject { ["type"] = "object", ["additionalProperties"] = false,
         ["properties"] = new JsonObject { ["operation"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("mutate_automation") },

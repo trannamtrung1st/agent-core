@@ -19,6 +19,7 @@ public sealed partial class TenantApprovedOperationService
                 var service = (automationTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).Mutations; var value = request.Operation.AutomationMutation!;
                 var observed = await service.PrepareAsync(reference, generation, value.ToolName, value.ArgumentsJson, ct, value).ConfigureAwait(false);
                 await TenantAutomationMutationRules.ReviewerAsync(request, observed.Source, decision.HumanPrincipalId, new IamAuthorizer(security), ct).ConfigureAwait(false);
+                commit = commit with { AutomationInvocationAdmission = await service.InvocationAdmissionAsync(observed, ct).ConfigureAwait(false) };
             } catch (AccessDeniedException error) { reason = error.ReasonCode; }
             catch (SecurityConflictException error) { reason = error.ReasonCode; }
         }
