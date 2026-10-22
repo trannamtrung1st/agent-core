@@ -47,7 +47,7 @@ public sealed partial class SqliteIamStore
                 await RequireBrowserArtifactBudget(db, request, ct).ConfigureAwait(false);
                 await TenantBrowserEffectRules.RequireAuthorityAsync(before, request, decision, run, agent, new IamAuthorizer(this), ct,
                     grant, OperationGrantStatus.Available, at).ConfigureAwait(false);
-                if ((await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false))?.RequestId != request.RequestId)
+                if ((await RootApprovalAsync(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation, ct).ConfigureAwait(false))?.RequestId != request.RequestId)
                     reason = "root_operation_conflict";
             }
             catch (AccessDeniedException e) { reason = TenantBrowserEffectRules.Denial(e.ReasonCode); }

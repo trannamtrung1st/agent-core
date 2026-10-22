@@ -18,151 +18,22 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
     public async ValueTask<TenantApprovalRequest?> FindRootApprovalAsync(Guid tenantId, Guid rootId, Guid executorId, PreparedTenantOperation operation, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return (await RootApproval(db, tenantId, rootId.ToString("D"), executorId, operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false))?.Domain();
+        return (await RootApprovalAsync(db, tenantId, rootId.ToString("D"), executorId, operation, ct).ConfigureAwait(false))?.Domain();
     }
-    private static IQueryable<TenantApprovalRecord> RootApproval(AgentCoreDbContext db, Guid tenant, string root, Guid executor, PreparedTenantOperation operation) =>
-        SemanticApprovals(db, operation).Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
+    // All operation families use the Domain semantic fingerprint, just like InMemory.
+    // The existing tenant/root/executor index scopes this to one bounded approval lineage.
+    // ActionHash remains the independent exact effect/grant FK witness in the stored column.
+    private static async Task<TenantApprovalRecord?> RootApprovalAsync(AgentCoreDbContext db, Guid tenant, string root, Guid executor,
+        PreparedTenantOperation operation, CancellationToken ct)
+    {
+        var fingerprint = operation.OperationFingerprint;
+        var rows = db.Set<TenantApprovalRecord>().AsNoTracking().Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor)
             .OrderBy(r => r.Status == (int)TenantApprovalStatus.Rejected || r.Status == (int)TenantApprovalStatus.Expired || r.Status == (int)TenantApprovalStatus.Cancelled ? 0 : r.Status == (int)TenantApprovalStatus.Pending ? 1 : 2)
             .ThenBy(r => r.CreatedAt).ThenBy(r => r.RequestId);
-    private static IQueryable<TenantApprovalRecord> SemanticApprovals(AgentCoreDbContext db, PreparedTenantOperation operation) => operation.ManagementRead is { ToolName: "configuration.inspect" }
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson,'$.Operation.ManagementRead.SessionId') = {operation.ManagementRead.SessionId.ToString("D")}
-            AND json_extract(PayloadJson,'$.Operation.ManagementRead.ToolName') = 'configuration.inspect'
-            AND (CASE WHEN json_type(json_extract(PayloadJson,'$.Operation.ManagementRead.ObservationJson'),'$.data.blocker')='object' THEN 1 ELSE 0 END)
-                = {TenantManagementReadSelection.SemanticArguments("configuration.inspect",operation.ManagementRead.ArgumentsJson) != "{}"}
-            AND json_extract(json_extract(PayloadJson,'$.Operation.ManagementRead.ObservationJson'),'$.data.blocker.target')
-                IS {TenantManagementReadSelection.Target(operation.ManagementRead.ArgumentsJson)}
-            """)
-        : operation.ManagementMutation is { } managementMutation ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ManagementMutation.SessionId') = {managementMutation.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ManagementMutation.ToolName') = {managementMutation.ToolName}
-            AND json_remove(json_extract(PayloadJson, '$.Operation.ManagementMutation.ArgumentsJson'), '$.expectedInstanceRevision', '$.expectedRevision', '$.expectedResourceRevision') = {AgentCore.Application.Tools.TenantManagementMutationContract.SemanticArguments(managementMutation.ArgumentsJson)}
-            """) : operation.ManagementRead is { } management ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ManagementRead.SessionId') = {management.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ManagementRead.ToolName') = {management.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.ManagementRead.ArgumentsJson') = {management.ArgumentsJson}
-            """) : operation.ContinuityRead is { } continuity ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ContinuityRead.SessionId') = {continuity.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ContinuityRead.ToolName') = {continuity.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.ContinuityRead.ArgumentsJson') = {continuity.ArgumentsJson}
-            """) : operation.MemoryOperation is { } memory ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.MemoryOperation.SessionId') = {memory.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.MemoryOperation.ToolName') = {memory.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.MemoryOperation.ArgumentsJson') = {memory.ArgumentsJson}
-            """) : operation.AutomationAdmission is { } admission ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE AutomationId = {admission.Current.AutomationId.ToString("D")}
-              AND Permission = {operation.Permission} AND json_extract(PayloadJson, '$.Operation.AutomationAdmission.Occurrence.OccurrenceId') = {admission.Occurrence.OccurrenceId.ToString("D")}
-            """)
-        : operation.AccountAction is { } action
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.AccountAction.SessionId') = {action.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.AccountAction.ToolName') = {action.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.AccountAction.ArgumentsJson') = {action.ArgumentsJson}
-            AND json_extract(PayloadJson, '$.Operation.AccountAction.Credential.CredentialId') = {action.Credential.CredentialId.ToString("D")}
-            """)
-        : operation.AccountRead is { } accountRead
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = 'credentials.use' AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.AccountRead.SessionId') = {accountRead.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.AccountRead.ToolName') = {accountRead.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.AccountRead.ArgumentsJson') = {accountRead.ArgumentsJson}
-            AND json_extract(PayloadJson, '$.Operation.AccountRead.Credential.CredentialId') = {accountRead.Credential.CredentialId.ToString("D")}
-            """)
-        : operation.BackgroundReport is { } report
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE ResourceType = 'tenant'
-            AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ChildRunId') = {report.ChildRunId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.BackgroundReport.ParentSessionId') = {report.ParentSessionId.ToString("D")}
-            """)
-        : operation.BackgroundStart is { } background
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE ResourceType = 'tenant'
-            AND json_extract(PayloadJson, '$.Operation.BackgroundStart.SessionId') = {background.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.BackgroundStart.Objective') = {background.Objective}
-            AND json_extract(PayloadJson, '$.Operation.BackgroundStart.Title') = {background.Title}
-            AND json_extract(PayloadJson, '$.Operation.BackgroundStart.ReportCompletion') = {background.ReportCompletion}
-            """)
-        : operation.WorkspaceMutation is { } mutation
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND ResourceType = 'workspace' AND ResourceId = {operation.ResourceId}
-            AND json_extract(PayloadJson, '$.Operation.WorkspaceMutation.SessionId') = {mutation.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.WorkspaceMutation.ToolName') = {mutation.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.WorkspaceMutation.ArgumentsJson') = {mutation.ArgumentsJson}
-            """)
-        : operation.WorkspaceRead is { } workspace
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND ResourceType = {operation.ResourceType} AND InstanceId = {operation.InstanceId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.WorkspaceRead.SessionId') = {workspace.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.WorkspaceRead.ToolName') = {workspace.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.WorkspaceRead.ArgumentsJson') = {workspace.ArgumentsJson}
-            """)
-        : operation.AttachmentRead is { } attachment
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = 'attachments.read' AND ResourceType = 'attachment' AND ResourceId = {operation.ResourceId}
-            AND json_extract(PayloadJson, '$.Operation.AttachmentRead.SessionId') = {attachment.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.AttachmentRead.ArgumentsJson') = {attachment.ArgumentsJson}
-            """)
-         : operation.ReportSourceRead is { } readSource
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.ReportSourceRead') IS 'object'
-            AND json_extract(PayloadJson, '$.Operation.ReportSourceRead.ParentSessionId') = {readSource.ParentSessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ReportSourceRead.ChildSessionId') = {readSource.ChildSessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ReportSourceRead.InitialRunId') = {readSource.InitialRunId.ToString("D")}
-            """)
-        : operation.CompletionRead is { } completion
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.CompletionRead') IS 'object'
-            AND json_extract(PayloadJson, '$.Operation.CompletionRead.ParentSessionId') = {completion.ParentSessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.CompletionRead.ChildSessionId') = {completion.ChildSessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.CompletionRead.InitialRunId') = {completion.InitialRunId.ToString("D")}
-            """)
-        : operation.ArtifactVerification is { } verification
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = 'artifacts.read' AND ResourceType = 'artifact' AND ResourceId = {operation.ResourceId}
-            AND json_extract(PayloadJson, '$.Operation.ArtifactVerification') = {System.Text.Json.JsonSerializer.Serialize(verification)}
-            """)
-        : operation.ArtifactPublication is { } artifact
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = 'artifacts.create' AND ResourceType = 'session'
-            AND json_extract(PayloadJson, '$.Operation.ArtifactPublication.SessionId') = {artifact.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.ArtifactPublication.ArgumentsJson') = {artifact.ArgumentsJson}
-            """)
-        : operation.SandboxCommand is { } sandbox
-        ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = 'sandbox.execute'
-            AND json_extract(PayloadJson, '$.Operation.SandboxCommand.SessionId') = {sandbox.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.SandboxCommand.ProfileId') = {sandbox.ProfileId}
-            AND json_extract(PayloadJson, '$.Operation.SandboxCommand.CommandJson') = {sandbox.CommandJson}
-            """)
-        : operation.SandboxControl is { } control ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = 'sandbox.manage'
-            AND json_extract(PayloadJson, '$.Operation.SandboxControl.SessionId') = {control.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.SandboxControl.Kind') = {(int)control.Kind}
-            AND json_extract(PayloadJson, '$.Operation.SandboxControl.Generation') = {control.Generation.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.SandboxControl.ExecutionId') IS {control.ExecutionId?.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.SandboxControl.TargetHash') = {control.TargetHash}
-            """)
-        : operation.CredentialRead is { } metadata ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE json_type(PayloadJson, '$.Operation.CredentialRead') IS 'object'
-            AND json_extract(PayloadJson, '$.Operation.CredentialRead.SessionId') = {metadata.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.CredentialRead.ArgumentsJson') = {metadata.ArgumentsJson}
-            """)
-        : operation.BrowserCommand is { } browser ? db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests WHERE Permission = {operation.Permission} AND ResourceType = {operation.ResourceType} AND ResourceId = {operation.ResourceId}
-            AND json_extract(PayloadJson, '$.Operation.BrowserCommand.SessionId') = {browser.SessionId.ToString("D")}
-            AND json_extract(PayloadJson, '$.Operation.BrowserCommand.ToolName') = {browser.ToolName}
-            AND json_extract(PayloadJson, '$.Operation.BrowserCommand.CommandHash') = {browser.CommandHash}
-            """)
-        : db.Set<TenantApprovalRecord>().FromSqlInterpolated($"""
-            SELECT * FROM TenantApprovalRequests
-            WHERE json_remove(json_extract(PayloadJson, '$.Operation.CanonicalActionJson'), '$.expectedInstanceRevision', '$.expectedPersonaRevision', '$.credentialCheck') = {operation.SemanticActionJson}
-            """);
+        await foreach (var row in rows.AsAsyncEnumerable().WithCancellation(ct).ConfigureAwait(false))
+            if (row.Domain().Operation.OperationFingerprint == fingerprint) return row;
+        return null;
+    }
     public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null, TenantManagementApprovalVisibility? managementVisibility = null)
     {
         page.Validate();
@@ -630,7 +501,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         TenantApprovalRequest? result = null;
         var written = await WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
-            var duplicate = await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            var duplicate = await RootApprovalAsync(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation, ct).ConfigureAwait(false);
             if (duplicate is not null) { result = duplicate.Domain(); return false; }
             if (request.ExpiresAt <= ApprovalNow) throw new SecurityConflictException("approval_expired");
             var row = await OwnedRuns(db, request.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
@@ -672,10 +543,13 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             var counts = await recent.GroupBy(r => r.TenantId).Select(g => new { Tenant = g.Count(),
                 Executor = g.Count(r => r.ExecutorPrincipalId == request.ExecutorPrincipalId),
                 Requester = g.Count(r => r.OriginalInitiatorPrincipalId == request.OriginalInitiatorPrincipalId) }).SingleOrDefaultAsync(ct).ConfigureAwait(false);
-            var operationCount = await SemanticApprovals(db, request.Operation).CountAsync(r => r.TenantId == request.TenantId
-                && (r.Status == (int)TenantApprovalStatus.Pending || r.CreatedAt >= cutoff), ct).ConfigureAwait(false);
             var rootCount = await db.Set<TenantApprovalRecord>().CountAsync(r => r.TenantId == request.TenantId
                 && r.RootActivationId == request.RootActivationId.ToString("D"), ct).ConfigureAwait(false);
+            // Reject an already-full actor/tenant/root before loading candidate plans. Under
+            // the incumbent tenant ceiling this remaining window contains at most 127 rows.
+            TenantApprovalLimits.Require(counts?.Tenant ?? 0, counts?.Executor ?? 0, counts?.Requester ?? 0, 0, rootCount, request.OriginalInitiatorPrincipalId is not null);
+            var recentRows = await recent.AsNoTracking().ToArrayAsync(ct).ConfigureAwait(false);
+            var operationCount = recentRows.Count(r => r.Domain().Operation.OperationFingerprint == request.Operation.OperationFingerprint);
             TenantApprovalLimits.Require(counts?.Tenant ?? 0, counts?.Executor ?? 0, counts?.Requester ?? 0, operationCount, rootCount, request.OriginalInitiatorPrincipalId is not null);
             if (run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= ApprovalNow) throw new SecurityConflictException("execution_claim_expired");
             if ((request.Operation.BackgroundReport is null && request.Operation.ReportSourceRead is null))

@@ -41,4 +41,6 @@ Earlier qualification exposed missing saved-review classification, receipt valid
 
 ## Remaining boundary
 
+Current follow-up is recorded in the [delivery ledger](multitenant-iam-delivery-2026-10-16.md#approval-semantic-matching-and-event-recovery): 20 event cases exercise deterministic retry/restart and changed-witness refusal; historical source links are reconciled. The original stall's cause remains unconfirmed. The observations and acceptance limits below describe this report's original version.
+
 This report does not accept model Automation authoring/mutation, Harness/Self-Management, mandatory approval defaults, exhaustive Webhook/Email inspection combinations, complete internal/schema retirement or the full security/isolation/design matrix. The boundary inventory's historical missing-file references and the observed retry reliability issue remain final-audit work. Existing versioned evidence remains historical; no full milestone/proposal acceptance is claimed.

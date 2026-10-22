@@ -37,4 +37,4 @@ Ready generations and mount identities in the store fixtures are controlled meta
 
 ## Limits
 
-No frontend source or visual presentation changed, so browser/Impeccable acceptance is not claimed. No live provider/registry credentials, Docker server, hosted CI, full local CI suite, user database migration/reset, production deployment or Real-host restart occurred. This correction does not accept a milestone or the full proposal, and must not become a final read-only Sandbox design. Remaining obligations stay active in the [boundary inventory](multitenant-iam-boundary-inventory-2026-10-16.md#current-execution-policy-correction--2026-10-18).
+No frontend source or visual presentation changed, so browser/Impeccable acceptance is not claimed. No live provider/registry credentials, Docker server, hosted CI, full local CI suite, user database migration/reset, production deployment or Real-host restart occurred. This correction does not accept a milestone or the full proposal, and must not become a final read-only Sandbox design. Remaining obligations stay active in the [delivery ledger](multitenant-iam-delivery-2026-10-16.md).

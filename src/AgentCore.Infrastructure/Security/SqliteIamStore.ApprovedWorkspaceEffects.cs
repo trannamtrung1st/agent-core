@@ -45,7 +45,7 @@ public sealed partial class SqliteIamStore
                 TenantApprovalRules.Validate(request, run, agent, source: source);
                 await RequireWorkspaceMutationOperation(db, request, run, agent, ct, source).ConfigureAwait(false);
                 await TenantWorkspaceApprovedEffectRules.RequireAuthorityAsync(before, request, decision, agent, new IamAuthorizer(this), grant, OperationGrantStatus.Available, at, ct).ConfigureAwait(false);
-                if ((await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false))?.RequestId != request.RequestId)
+                if ((await RootApprovalAsync(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation, ct).ConfigureAwait(false))?.RequestId != request.RequestId)
                     reason = "root_operation_conflict";
             }
             catch (AccessDeniedException e) { reason = TenantWorkspaceApprovedEffectRules.Denial(e.ReasonCode); }

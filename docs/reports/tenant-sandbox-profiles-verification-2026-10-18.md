@@ -50,4 +50,4 @@ Initial compilation identified an ambiguous SDK/Domain Credential type and a mis
 
 Backend behavior was exercised through WebApplicationFactory, actual services/stores, disposable SQLite/reopen and a real loopback registry. There is no frontend source or presentation change in this checkpoint, so no browser/Impeccable acceptance is claimed. The catalog deliberately reports NeedsVerification/Disabled and never treats a global verification observation as tenant execution authority. Tenant verification, Instance selectors/settings, runtime permissions/effects, cleanup and the UI must use their own canonical boundaries before exposure. Production multi-tenant Sandbox isolation remains unverified and unaccepted.
 
-The [boundary inventory](multitenant-iam-boundary-inventory-2026-10-16.md#sandbox-catalog-successor--2026-10-18) records the catalog successor and each still-open Sandbox route/tool family. The full goal remains active.
+The [delivery ledger](multitenant-iam-delivery-2026-10-16.md) records the catalog successor and each still-open Sandbox route/tool family. The full goal remains active.

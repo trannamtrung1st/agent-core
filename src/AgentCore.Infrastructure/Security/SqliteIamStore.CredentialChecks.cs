@@ -72,7 +72,7 @@ public sealed partial class SqliteIamStore : ITenantCredentialCheckStore
             if (request.OriginalInitiatorPrincipalId is { } requester)
                 try { await ValidateTenantActorAsync(db, before, requester, ct).ConfigureAwait(false); } catch (AccessDeniedException) { reason ??= "requester_unavailable"; }
             if (before.Tenant.Status != IdentityStatus.Active) reason = "tenant_unavailable";
-            var root = await RootApproval(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            var root = await RootApprovalAsync(db, request.TenantId, request.RootActivationId.ToString("D"), request.ExecutorPrincipalId, request.Operation, ct).ConfigureAwait(false);
             if (root?.RequestId != request.RequestId) reason ??= "root_operation_conflict";
         }
         var started = reason is null ? run.BeginApprovedExternalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, at)

@@ -44,8 +44,9 @@ public sealed partial class TenantBrowserApprovalTests
         await using var db = await f.Contexts!.CreateDbContextAsync();
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson = json_set(PayloadJson, '$.Operation.BrowserCommand.ArgumentsJson', '{{}}') WHERE RequestId = {request.RequestId}"));
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020000100_TenantBrowserArtifactPublication"));
-        Assert.Equal(request, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(s.Tenant, request.RequestId));
         await db.Database.MigrateAsync();
+        Assert.False(db.Database.HasPendingModelChanges());
+        Assert.Equal(request, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(s.Tenant, request.RequestId));
     }
 
     [Fact]

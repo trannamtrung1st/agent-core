@@ -124,6 +124,9 @@ public sealed partial class TenantAgentAccessTests
             await using var db = await factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261022020346_TenantAutomationReadConsent"));
             Assert.Contains("20261022041619_TenantAutomationMutations", await db.Database.GetAppliedMigrationsAsync());
+            // A refused multi-step Down can have committed safe successor removals.
+            // Restore the current schema before using its EF receipt mapping again.
+            await db.GetService<IMigrator>().MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             Assert.True(TenantAutomationRules.Same(saved, (await reopened.FindTenantAutomationAsync(tenant, saved.AutomationId))!));
             Assert.NotNull((await reopened.FindOperationReceiptAsync(tenant, receipts.OperationId))!.AutomationMutation);
         }

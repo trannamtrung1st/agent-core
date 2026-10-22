@@ -30,7 +30,7 @@ public sealed partial class SqliteIamStore
         TenantManagementDirectRules.Transaction(next, expectedSecurityRevision, reader, commit, audit, at);
         if (value.Skill is not null) await RequireManagementSkillSources(db, reader, TenantManagementMutationContract.Parse(value.Harness?.ToolName ?? value.ToolName, value.Harness?.ArgumentsJson ?? value.ArgumentsJson), null, ct).ConfigureAwait(false);
         await TenantManagementDirectRules.AuthorityAsync(reader, value, new IamAuthorizer(this), ct).ConfigureAwait(false);
-        var previous = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), reader.Agent.PrincipalId, commit.Operation).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var previous = await RootApprovalAsync(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), reader.Agent.PrincipalId, commit.Operation, ct).ConfigureAwait(false);
         if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous.Domain()));
         var source = new TenantAgentConfigurationSnapshot(reader.Agent, await SqliteAgentInstanceStore.ReadSkillsAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false),
             await SqliteAgentInstanceStore.ReadResourcesAsync(db, run.AgentInstanceId, ct).ConfigureAwait(false), await ReadIsolationMetadataAsync(db, run.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false));

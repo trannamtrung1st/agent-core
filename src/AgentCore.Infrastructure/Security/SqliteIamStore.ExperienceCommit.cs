@@ -26,7 +26,7 @@ public sealed partial class SqliteIamStore
         var prepared = TenantExperienceCommitRules.Require(observed, commit, now); var iam = new IamAuthorizer(this);
         await TenantExperienceRules.RawAsync(observed.Reader, observed.Source!.Witness, false, iam, ct, manage: true).ConfigureAwait(false);
         if (await TenantSandboxReadOperationRules.NeedsReviewAsync(before, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, "memory.manage", AccessScope.ForResource(before.Tenant.TenantId, "agent", run.AgentInstanceId.ToString("D")), iam, ct).ConfigureAwait(false)) throw new AccessDeniedException("experience_review_required");
-        var previous = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), observed.Reader.Agent.PrincipalId, prepared).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var previous = await RootApprovalAsync(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), observed.Reader.Agent.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous.Domain()));
         TenantExperienceCommitRules.Transaction(next, expectedSecurityRevision, run, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);

@@ -5,13 +5,27 @@ async function call<T>(api: APIRequestContext, path: string, data?: unknown, met
   const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const r = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
   expect(r.ok(), `${method} ${path}: ${r.status()} ${await r.text()}`).toBeTruthy(); return r.status() === 204 ? undefined as T : r.json();
 }
-for (const width of [1440, 390]) for (const decision of ['approve', 'reject']) test(`manual Automation admission ${decision} ${width}`, async ({ page }, info) => {
+let authenticatedState: Awaited<ReturnType<APIRequestContext['storageState']>>;
+test.beforeAll(async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL });
+  const page = await context.newPage();
+  try {
+    expect((await (await context.request.get('/health')).json()).profile).toBe('Synthetic');
+    await page.goto('/sign-in');
+    await page.getByLabel('Email', { exact: true }).fill(login);
+    await page.getByLabel('Password', { exact: true }).fill(password);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+    authenticatedState = await context.storageState();
+  } finally { await context.close(); }
+});
+for (const width of [1440, 390]) for (const decision of ['approve', 'reject']) test(`manual Automation admission ${decision} ${width}`, async ({ page, context }, info) => {
   test.setTimeout(120000); await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 }); const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message)); page.on('requestfailed', r => { if (!r.failure()?.errorText.includes('ERR_ABORTED')) errors.push(r.url()); });
   page.on('response', r => { if (r.status() >= 500) errors.push(`${r.status()} ${r.url()}`); });
-  const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL });
+  const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL, storageState: authenticatedState });
   try {
-    expect((await (await api.get('/health')).json()).profile).toBe('Synthetic'); await call(api, '/api/v2/auth/login', { login, password });
+    expect((await (await api.get('/health')).json()).profile).toBe('Synthetic'); await context.addCookies(authenticatedState.cookies);
     const nonce = crypto.randomUUID().slice(0, 8); const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Automation mutations ${nonce}`, slug: `automation-mutations-${nonce}` })).tenantId;
     const prefix = `/api/v2/tenants/${tenant}`; const revision = async () => (await call<{ revision: number }>(api, prefix + '/access/me')).revision;
     const draft = await call<{ draftId: string; definitionId: string; candidate: Record<string, unknown> }>(api, prefix + '/agent-definitions', { name: 'Automation author', expectedRevision: await revision() });
@@ -28,8 +42,7 @@ for (const width of [1440, 390]) for (const decision of ['approve', 'reject']) t
     const target = await call<{ automationId: string }>(api, route, { enabled: true, name: 'Manual target', instructions: instructionsText, requiresTools: false,
       schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 7200000).toISOString() }, expectedRevision: await revision(), expectedInstanceRevision: 1 });
     const command = { tool: 'automation.run', arguments: { automationId: target.automationId, expectedRevision: 1 } };
-    await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible(); await page.goto(`/t/${tenant}`);
+    await page.goto(`/t/${tenant}`);
     const input = page.getByRole('textbox', { name: 'Message', exact: true }); await expect(input).toBeEnabled(); await input.fill('synthetic-tenant-automation-mutation: ' + JSON.stringify(command)); await page.getByRole('button', { name: 'Send', exact: true }).click();
     const approvals = page.getByRole('region', { name: 'Conversation approvals', exact: true }); await expect(approvals.getByText('Admit exact Automation occurrence', { exact: true })).toBeVisible();
     await approvals.getByRole('link', { name: 'Review details', exact: true }).click(); const detail = page.getByRole('dialog', { name: 'Approval details', exact: true });

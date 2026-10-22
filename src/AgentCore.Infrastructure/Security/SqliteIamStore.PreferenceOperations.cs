@@ -29,7 +29,7 @@ public sealed partial class SqliteIamStore : ITenantPreferenceOperationStore
         var prepared = TenantApprovalRules.PreparePreferences(commit.OperationId, run.AgentInstanceId,
                 AgentCore.Application.Tools.TenantPreferenceToolContract.Parameters(AgentCore.Application.Tools.TenantPreferenceToolContract.Parse(commit.ArgumentsJson)),
                 target.Instance.Revision, target.Instance.PersonaRevision);
-        var previous = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), target.PrincipalId, prepared).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var previous = await RootApprovalAsync(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), target.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous.Domain()));
         var candidate = TenantPreferenceOperationRules.Apply(run, target, commit, at);
         TenantPreferenceOperationRules.Transaction(next, expectedSecurityRevision, run, audit);

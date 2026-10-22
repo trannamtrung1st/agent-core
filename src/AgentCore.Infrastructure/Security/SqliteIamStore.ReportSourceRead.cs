@@ -34,8 +34,8 @@ public sealed partial class SqliteIamStore
         TenantBackgroundCompletionFactory.RequireParent(source);
         var iam = new IamAuthorizer(this);
         await TenantReportReadRules.RequireRawAsync(state, source, iam, ct).ConfigureAwait(false);
-        var requestRow = await RootApproval(db, state.Tenant.TenantId, source.Child.Admission.ExecutionContext!.RootActivationId.ToString("D"),
-            source.Child.Owner.ExecutorPrincipalId!.Value, TenantReportSourceReadRules.Lookup(source)).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false);
+        var requestRow = await RootApprovalAsync(db, state.Tenant.TenantId, source.Child.Admission.ExecutionContext!.RootActivationId.ToString("D"),
+            source.Child.Owner.ExecutorPrincipalId!.Value, TenantReportSourceReadRules.Lookup(source), ct).ConfigureAwait(false);
         if (requestRow is null) { await TenantReportReadRules.RequireAsync(state, source, iam, ct).ConfigureAwait(false); return; }
         var request = requestRow.Domain();
         var receiptRow = await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == request.TenantId && r.OperationId == request.Operation.OperationId, ct).ConfigureAwait(false)
@@ -57,8 +57,8 @@ public sealed partial class SqliteIamStore
         var current = InstanceSettingsResolver.Resolve(await TenantAgentDefinitionBaseline(db, agent, ct).ConfigureAwait(false), agent.Instance.SettingsOverrides);
         if (!TenantCompletionDestinationRules.Allows(source, root, current)) throw new AccessDeniedException("background_unavailable");
         if (!await TenantCompletionDestinationRules.NeedsCommunicationReviewAsync(state, source, iam, ct).ConfigureAwait(false)) return;
-        var row = await RootApproval(db, state.Tenant.TenantId, source.Child.Admission.ExecutionContext!.RootActivationId.ToString("D"),
-            source.Child.Owner.ExecutorPrincipalId!.Value, TenantBackgroundReportRules.Lookup(source)).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false)
+        var row = await RootApprovalAsync(db, state.Tenant.TenantId, source.Child.Admission.ExecutionContext!.RootActivationId.ToString("D"),
+            source.Child.Owner.ExecutorPrincipalId!.Value, TenantBackgroundReportRules.Lookup(source), ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("completion_communication_review_required");
         var request = row.Domain();
         var receipt = await db.Set<TenantOperationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == request.TenantId && r.OperationId == request.Operation.OperationId, ct).ConfigureAwait(false)

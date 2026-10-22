@@ -24,6 +24,7 @@ public sealed partial class TenantAgentAccessTests
         public System.Collections.Concurrent.ConcurrentQueue<string> Trace { get; } = new();
         public ModelCapabilities Capabilities => Seed.Capabilities;
         public Guid Source; public bool Review, Record, Hold;
+        public int FailAfterConsent, Failures; public bool RepeatRejected;
         public TaskCompletionSource Observed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
@@ -42,7 +43,21 @@ public sealed partial class TenantAgentAccessTests
                 using var approved = JsonDocument.Parse(consent.Text);
                 value = approved.RootElement.TryGetProperty("experienceSourceObservation", out var observation) ? observation.Clone() : approved.RootElement.Clone();
             }
-            var inspected = value.TryGetProperty("tenantExperienceSourceRead", out var marker) && marker.ValueKind == JsonValueKind.True;
+            if (RepeatRejected && request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization)
+                && !request.Messages.Any(m => m.ToolCallId == "repeat-rejected-source"))
+            {
+                yield return new ModelToolCallEvent(new("repeat-rejected-source", ToolCatalog.RequestAuthorization,
+                    JsonSerializer.Serialize(new { operation = "inspect_experience_source", experience = new { tool = TenantExperienceToolContract.Source, arguments = JsonSerializer.Deserialize<JsonElement>(args) } })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization)
+                && Interlocked.Exchange(ref FailAfterConsent, 0) == 1)
+            {
+                Interlocked.Increment(ref Failures);
+                yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Controlled transient after exact consent settlement.", TimeSpan.FromSeconds(2)));
+                yield break;
+            }
+            var inspected = value.ValueKind == JsonValueKind.Object && value.TryGetProperty("tenantExperienceSourceRead", out var marker) && marker.ValueKind == JsonValueKind.True;
             if (inspected)
             {
                 Observed.TrySetResult(); if (Hold) await Release.Task.WaitAsync(ct);
@@ -54,21 +69,27 @@ public sealed partial class TenantAgentAccessTests
                     yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
                 }
             }
-            yield return new ModelToolCallEvent(new("event-finish", ToolCatalog.WorkComplete, JsonSerializer.Serialize(new { outcome = inspected && !Record ? "NoAction" : "Response",
+            yield return new ModelToolCallEvent(new("event-finish", ToolCatalog.WorkComplete, JsonSerializer.Serialize(new { outcome = !inspected ? "NeedsAttention" : !Record ? "NoAction" : "Response",
                 summary = inspected ? Record ? "Recorded one inspected event source; other sources remain for later review." : "Inspected one source and found nothing useful to record." : "Source inspection was not authorized; no evidence was adopted.", attentionRequired = !inspected })));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }
     public static TheoryData<bool, string> EventExperienceCases => new() { { false, "record" }, { true, "record" }, { false, "source-only" }, { true, "source-only" },
-        { false, "review-approve" }, { true, "review-approve" }, { false, "review-reject" }, { true, "review-reject" }, { false, "source-denied" }, { true, "source-denied" }, { false, "event-revoked" }, { true, "event-revoked" } };
+        { false, "review-approve" }, { true, "review-approve" }, { false, "review-reject" }, { true, "review-reject" },
+        { false, "review-approve-retry" }, { true, "review-approve-retry" }, { false, "review-reject-retry" }, { true, "review-reject-retry" },
+        { true, "review-approve-restart" }, { true, "review-reject-restart" }, { false, "review-reject-changed" }, { true, "review-reject-changed" }, { false, "source-denied" }, { true, "source-denied" }, { false, "event-revoked" }, { true, "event-revoked" } };
     [Theory(Timeout = 120000)] [MemberData(nameof(EventExperienceCases))]
     public async Task Tenant_event_Experience_retains_exact_source_coverage_only_after_authorized_durable_inspection(bool sqlite, string mode)
     {
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); var model = new EventExperienceModel();
-        await using var factory = new RuntimeStateFactory(sqlite, clock, model); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); var model = new EventExperienceModel(); TenantApprovalRequest? consentRequest = null;
+        await using var factory = new RuntimeStateFactory(sqlite, clock, model);
+        await using var recovery = mode.EndsWith("-restart", StringComparison.Ordinal) ? new RuntimeStateFactory(true, clock, model, factory.Root) : null;
+        var active = factory;
+        using var initialOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        HttpClient owner = initialOwner;
         // This fixture drives the actual durable processors explicitly. A fake-time
         // jump must not race a hosted dispatch before the scripted review is configured.
-        foreach (var host in factory.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
+        foreach (var host in active.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
         var (tenant, instance) = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: true, automationReads: mode == "source-only"); await MemoryExecutor(owner, tenant, instance, operations: true, runRead: mode != "source-denied");
         await ExperienceAutomationRights(owner, tenant, instance); var revision = await ExperienceOptIn(owner, tenant, instance, true);
         var api = $"/api/v2/tenants/{tenant}"; var route = api + $"/agents/{instance}/automations";
@@ -80,8 +101,8 @@ public sealed partial class TenantAgentAccessTests
             expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = revision }));
         var automation = registered.GetProperty("automationId").GetGuid();
         var first = await MemoryRequest(factory, owner, tenant, instance, instanceRevision: revision); var second = await MemoryRequest(factory, owner, tenant, instance, instanceRevision: revision);
-        var processor = factory.Services.GetRequiredService<TenantEventProcessor>(); await processor.RunOnceAsync(); clock.Advance(TimeSpan.FromSeconds(61)); await processor.RunOnceAsync();
-        var events = factory.Services.GetRequiredService<ITenantEventStore>(); var registrations = factory.Services.GetRequiredService<ITenantAutomationStore>();
+        var processor = active.Services.GetRequiredService<TenantEventProcessor>(); await processor.RunOnceAsync(); clock.Advance(TimeSpan.FromSeconds(61)); await processor.RunOnceAsync();
+        var events = active.Services.GetRequiredService<ITenantEventStore>(); var registrations = active.Services.GetRequiredService<ITenantAutomationStore>();
         var rows = await events.ListTenantEventActivityAsync(tenant, instance, automation, new(null, null, null), 0, 20);
         Assert.Equal(2, rows.Total); var bucket = Assert.Single(rows.Items.Select(i => i.Bucket!.Bucket.BucketId).Distinct());
         var occurrence = Assert.Single(rows.Items.Select(i => i.Occurrence!.OccurrenceId).Distinct()); var runId = (await registrations.FindTenantOccurrenceAsync(tenant, occurrence))!.AcceptedAgentRunId!.Value;
@@ -97,7 +118,7 @@ public sealed partial class TenantAgentAccessTests
         Assert.Empty((await events.ListTenantEventCoverageAsync(tenant, instance, automation, new([], []), null, 24)).Items);
         await Assert.ThrowsAsync<AccessDeniedException>(() => events.ListTenantEventCoverageAsync(Guid.NewGuid(), instance, automation, new(null, null), null, 24).AsTask());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync(coverage.Replace(tenant.ToString(), Guid.NewGuid().ToString(), StringComparison.Ordinal))).StatusCode);
-        var rootRun = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!;
+        var rootRun = (await active.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!;
         var retainedOccurrence = (await registrations.FindTenantOccurrenceAsync(tenant, occurrence))!;
         var retainedBucket = (await events.FindTenantEventBucketAsync(tenant, bucket))!.Bucket;
         var bounded = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new(ModelRole.Tool, AgentRunToolCallCheckpoint.FinishRequired, Name: TenantExperienceToolContract.Source, ToolCallId: "bounded")]), 1, 100, 1000);
@@ -106,19 +127,67 @@ public sealed partial class TenantAgentAccessTests
         if (mode.StartsWith("review-", StringComparison.Ordinal))
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/agent-runs.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
         if (mode == "event-revoked") Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(api + $"/role-assignments/{assignment.GetProperty("assignmentId").GetGuid()}?expectedRevision={await Revision(owner, tenant)}")).StatusCode);
+        model.RepeatRejected = mode == "review-reject-changed";
+        model.FailAfterConsent = mode.EndsWith("-retry", StringComparison.Ordinal) || recovery is not null ? 1 : 0;
         model.Source = first.Run.AgentRunId; model.Review = true; model.Record = mode == "record"; model.Hold = mode == "source-only";
-        await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
-        var runs = factory.Services.GetRequiredService<ITenantRunStore>(); AgentRun? observed = null;
+        await active.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
+        var runs = active.Services.GetRequiredService<ITenantRunStore>(); AgentRun? observed = null;
         for (var pass = 0; pass < 600; pass++) { observed = await runs.FindTenantRunAsync(tenant, runId); if (observed!.IsTerminal || observed.Status == AgentRunStatus.WaitingForApproval || model.Observed.Task.IsCompleted && model.Hold) break; await Task.Delay(25); }
         Assert.NotNull(observed);
         if (mode.StartsWith("review-", StringComparison.Ordinal))
         {
             Assert.Equal(AgentRunStatus.WaitingForApproval, observed.Status); Assert.Equal(2, (await Json(await owner.GetAsync(coverage))).GetProperty("items").GetArrayLength());
-            var request = (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, observed.ApprovalRequestId!.Value))!;
+            var request = (await active.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, observed.ApprovalRequestId!.Value))!;
+            consentRequest = request;
             var detail = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
-            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = mode == "review-approve" ? "approve" : "reject", actionHash = request.Operation.ActionHash,
+            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = mode.StartsWith("review-approve", StringComparison.Ordinal) ? "approve" : "reject", actionHash = request.Operation.ActionHash,
                 expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision })).StatusCode);
-            try { observed = await ExperienceMaintenanceFinal(factory, tenant, runId); }
+            if (model.RepeatRejected)
+            {
+                var agent = (await active.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!;
+                Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/persona", new { persona = agent.Instance.Persona with { Name = "Changed after exact refusal" },
+                    expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedPersonaRevision = agent.Instance.PersonaRevision })).StatusCode);
+            }
+            if (Volatile.Read(ref model.FailAfterConsent) == 1)
+            {
+                await active.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
+                var source = (await runs.FindTenantRunAsync(tenant, runId))!;
+                var successorId = source.Result!.ContinuationRunId!.Value;
+                await active.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                AgentRun retry;
+                while (true)
+                {
+                    retry = (await runs.FindTenantRunAsync(tenant, successorId, deadline.Token))!;
+                    if (retry.Status == AgentRunStatus.WaitingToRetry || retry.IsTerminal) break;
+                    await Task.Delay(25, deadline.Token);
+                }
+                Assert.Equal(AgentRunStatus.WaitingToRetry, retry.Status); Assert.Equal(1, model.Failures);
+                Assert.NotNull(retry.NextRetryAtUtc); Assert.True(retry.NextRetryAtUtc > clock.GetUtcNow());
+                Assert.Null(retry.Claim); Assert.Equal(source.ResponseId, retry.ResponseId);
+                Assert.Equal(source.Admission.Activation.RootActivationId, retry.Admission.Activation.RootActivationId);
+                AgentRunToolCallCheckpoint.TryRead(retry.Checkpoint, out var retained);
+                Assert.Single(retained!, message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.RequestAuthorization);
+                var traceCount = model.Trace.Count;
+                await active.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
+                Assert.Equal(retry.Revision, (await runs.FindTenantRunAsync(tenant, successorId))!.Revision); Assert.Equal(traceCount, model.Trace.Count);
+                Assert.Equal(mode.StartsWith("review-approve", StringComparison.Ordinal) ? 1 : 2, (await Json(await owner.GetAsync(coverage))).GetProperty("items").GetArrayLength());
+                if (recovery is not null)
+                {
+                    await factory.DisposeAsync(); active = recovery;
+                    owner = recovery.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+                    await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+                    foreach (var host in active.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
+                    runs = active.Services.GetRequiredService<ITenantRunStore>();
+                    var restored = (await runs.FindTenantRunAsync(tenant, successorId))!;
+                    Assert.Equal(AgentRunStatus.WaitingToRetry, restored.Status); Assert.Equal(retry.Revision, restored.Revision);
+                    Assert.Equal(JsonSerializer.Serialize(retry.Checkpoint), JsonSerializer.Serialize(restored.Checkpoint)); Assert.Equal(retry.ResponseId, restored.ResponseId);
+                    Assert.Equal(retry.NextRetryAtUtc, restored.NextRetryAtUtc);
+                }
+                clock.Advance(retry.NextRetryAtUtc!.Value - clock.GetUtcNow() + TimeSpan.FromMilliseconds(1));
+            }
+            try { observed = await ExperienceMaintenanceFinal(active, tenant, runId); }
+
             catch (TimeoutException) {
                 var chain = (await runs.FindTenantRunAsync(tenant, runId))!; if (chain.Result?.ContinuationRunId is { } continuation) chain = (await runs.FindTenantRunAsync(tenant, continuation))!;
                 throw new InvalidOperationException($"Event review continuation: {chain.Status}; {chain.Failure?.Code}; {chain.Failure?.Summary}; diagnostics={JsonSerializer.Serialize(AgentRunToolCallCheckpoint.ReadExecutionState(chain.Checkpoint).FailedAttempts)}; model={string.Join(" | ", model.Trace.TakeLast(3))}");
@@ -130,7 +199,7 @@ public sealed partial class TenantAgentAccessTests
             Assert.Single((await Json(await owner.GetAsync(coverage))).GetProperty("items").EnumerateArray());
             var metadataRole = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Owned Automation metadata", permissions = new[] { "automations.read" }, expectedRevision = await Revision(owner, tenant) }));
             await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = principal, roleId = metadataRole.GetProperty("roleId").GetGuid(), resourceType = "automation", resourceId = automation, expectedRevision = await Revision(owner, tenant) }));
-            var reads = factory.Services.GetRequiredService<TenantAutomationReadService>(); var readReference = new TenantRunReference(tenant, runId);
+            var reads = active.Services.GetRequiredService<TenantAutomationReadService>(); var readReference = new TenantRunReference(tenant, runId);
             var readCall = new ModelToolCall("owned-event-metadata", ToolCatalog.AutomationInspect, JsonSerializer.Serialize(new { automationId = automation }));
             var frame = new TenantRuntimeFrame(observed.Owner, observed.SessionId, runId, observed.Claim!.Generation);
             var metadata = await reads.PrepareAsync(readReference, frame.Generation, readCall.Name, readCall.ArgumentsJson, CancellationToken.None);
@@ -138,29 +207,49 @@ public sealed partial class TenantAgentAccessTests
             using var savedMetadata = JsonDocument.Parse(metadata.Value.ObservationJson);
             Assert.Equal(second.Run.AgentRunId, Assert.Single(savedMetadata.RootElement.GetProperty("coverage").GetProperty("items").EnumerateArray()).GetProperty("sourceRunId").GetGuid());
             var proof = TenantAutomationReadService.Reference(metadata.Value, tenant);
-            await factory.Services.GetRequiredService<ITenantAutomationReadStore>().RequireTenantAutomationReadSourcesAsync(readReference, [proof], frame.Generation);
+            await active.Services.GetRequiredService<ITenantAutomationReadStore>().RequireTenantAutomationReadSourcesAsync(readReference, [proof], frame.Generation);
             Assert.DoesNotContain("automationReadSource", await reads.ExecuteAsync(frame, readCall, 512, CancellationToken.None));
             Assert.Single((await Json(await owner.GetAsync(coverage))).GetProperty("items").EnumerateArray());
             Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(api + $"/role-assignments/{assignment.GetProperty("assignmentId").GetGuid()}?expectedRevision={await Revision(owner, tenant)}")).StatusCode);
-            await Assert.ThrowsAsync<AccessDeniedException>(() => factory.Services.GetRequiredService<ITenantAutomationReadStore>().RequireTenantAutomationReadSourcesAsync(readReference, [proof], null).AsTask());
+            await Assert.ThrowsAsync<AccessDeniedException>(() => active.Services.GetRequiredService<ITenantAutomationReadStore>().RequireTenantAutomationReadSourcesAsync(readReference, [proof], null).AsTask());
             await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = principal, roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
             await Json(await owner.PutAsJsonAsync(api + "/operation-policies/automations.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 }));
             var withheld = await reads.ExecuteAsync(frame, readCall, 16000, CancellationToken.None); Assert.Contains("requiresApproval", withheld); Assert.DoesNotContain("sourceRunId", withheld);
             var remainingWitness = TenantExperienceSourceProjection.RunEvidence(second.Run, null).Witness;
             var proposedSources = TenantExperienceReferences.Sources(observed.Checkpoint).Append(new(tenant, remainingWitness)).ToArray();
             var staleCheckpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([], executionState: new(TenantExperienceSourceReads: proposedSources)), 2, 100, 1000);
-            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => factory.Services.GetRequiredService<ITenantRuntimeStore>().ApplyTenantRuntimeCommandAsync(observed.Owner, runId,
+            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => active.Services.GetRequiredService<ITenantRuntimeStore>().ApplyTenantRuntimeCommandAsync(observed.Owner, runId,
                 new AgentRunCommand.Checkpoint(observed.Revision + 5, clock.GetUtcNow(), observed.Claim!.Generation, staleCheckpoint, null), Guid.NewGuid()).AsTask());
             Assert.Single((await Json(await owner.GetAsync(coverage))).GetProperty("items").EnumerateArray());
-            model.Release.TrySetResult(); observed = await ProfileTerminal(factory, tenant, runId);
+            model.Release.TrySetResult(); observed = await ProfileTerminal(active, tenant, runId);
         }
-        else observed = await ProfileTerminal(factory, tenant, runId);
-        var inspected = mode is "record" or "source-only" or "review-approve";
+        else observed = await ProfileTerminal(active, tenant, runId);
+        var inspected = mode is "record" or "source-only" || mode.StartsWith("review-approve", StringComparison.Ordinal);
         var final = await Json(await owner.GetAsync(coverage)); Assert.Equal(inspected ? 1 : 2, final.GetProperty("items").GetArrayLength());
         if (inspected)
         {
             Assert.Equal(AgentRunStatus.Completed, observed.Status); Assert.Single(TenantExperienceReferences.Sources(observed.Checkpoint));
             Assert.Equal(second.Run.AgentRunId, final.GetProperty("items")[0].GetProperty("source").GetProperty("dataJson").GetString() is { } raw ? JsonDocument.Parse(raw).RootElement.GetProperty("agentRunId").GetGuid() : Guid.Empty);
+        }
+        if (mode.Contains("-retry", StringComparison.Ordinal) || recovery is not null)
+        {
+            Assert.True(observed.Status == AgentRunStatus.Completed, JsonSerializer.Serialize(new { observed.Status, observed.Failure, Attempts = AgentRunToolCallCheckpoint.ReadExecutionState(observed.Checkpoint).FailedAttempts, Trace = model.Trace.TakeLast(5) })); Assert.Equal(2, observed.AttemptCount); Assert.Equal(1, model.Failures);
+            var retainedApproval = (await active.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, consentRequest!.RequestId))!;
+            Assert.Equal(inspected ? TenantApprovalStatus.Approved : TenantApprovalStatus.Rejected, retainedApproval.Status); Assert.Equal(2, retainedApproval.Revision);
+            Assert.Equal(consentRequest.RequestId, (await active.Services.GetRequiredService<ITenantApprovalStore>().FindRootApprovalAsync(tenant, consentRequest.RootActivationId, consentRequest.ExecutorPrincipalId, consentRequest.Operation))!.RequestId);
+            var resumed = AgentRunToolCallCheckpoint.TryRead(observed.Checkpoint, out var messages);
+            Assert.True(resumed); Assert.Single(messages!, message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.RequestAuthorization);
+            Assert.Equal(inspected ? 1 : 0, TenantExperienceReferences.Sources(observed.Checkpoint).Count);
+        }
+        if (mode.StartsWith("review-reject", StringComparison.Ordinal))
+        {
+            Assert.True(observed.Status == AgentRunStatus.Completed, JsonSerializer.Serialize(observed.Failure));
+            if (model.RepeatRejected)
+            {
+                Assert.True(AgentRunToolCallCheckpoint.TryRead(observed.Checkpoint, out var refused));
+                Assert.Contains(refused!, message => message.ToolCallId == "repeat-rejected-source" && message.Text.Contains("previously_rejected", StringComparison.Ordinal));
+                Assert.Equal(consentRequest!.RequestId, (await active.Services.GetRequiredService<ITenantApprovalStore>().FindRootApprovalAsync(tenant, consentRequest.RootActivationId, consentRequest.ExecutorPrincipalId, consentRequest.Operation))!.RequestId);
+            }
         }
         var facts = await Json(await owner.GetAsync(api + $"/agents/{instance}/experience")); Assert.Equal(mode == "record" ? 1 : 0, facts.GetProperty("items").GetArrayLength());
         if (mode == "record") Assert.Equal("Instance", facts.GetProperty("items")[0].GetProperty("scope").GetString());

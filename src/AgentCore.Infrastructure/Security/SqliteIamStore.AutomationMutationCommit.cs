@@ -24,7 +24,7 @@ public sealed partial class SqliteIamStore
         var prepared = TenantAutomationMutationCommitRules.Require(source, commit, now);
         await TenantAutomationMutationCommitRules.AuthorityAsync(source, commit.Prepared, new IamAuthorizer(this), ct, noReview: true, at: now).ConfigureAwait(false);
         await RequireAutomationMutationCapacity(db, source, commit.Prepared, ct).ConfigureAwait(false);
-        var previous = await RootApproval(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), source.Reader.Agent.PrincipalId, prepared).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var previous = await RootApprovalAsync(db, before.Tenant.TenantId, run.Admission.Activation.RootActivationId.ToString("D"), source.Reader.Agent.PrincipalId, prepared, ct).ConfigureAwait(false);
         if (previous is not null) throw new AccessDeniedException(TenantApprovalRules.DuplicateReason(previous.Domain()));
         TenantAutomationMutationCommitRules.Transaction(next, expectedSecurityRevision, source, commit.Prepared, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);

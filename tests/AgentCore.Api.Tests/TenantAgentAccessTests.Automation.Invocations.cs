@@ -119,6 +119,8 @@ public sealed partial class TenantAgentAccessTests
                 await using var db = await factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261022041619_TenantAutomationMutations"));
                 Assert.Contains("20261022060000_TenantAutomationInvocations", await db.Database.GetAppliedMigrationsAsync());
+                await db.GetService<IMigrator>().MigrateAsync();
+                Assert.False(db.Database.HasPendingModelChanges());
             }
         }
         finally { model.Release.TrySetResult(); }
@@ -178,7 +180,11 @@ public sealed partial class TenantAgentAccessTests
         var saved = (await reopened.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, original.RequestId))!;
         Assert.Equal(original.Operation, saved.Operation); Assert.Null(await reopened.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, saved.Operation.AutomationMutation!.Invocation!.RunId));
         await using (var db = await reopened.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync())
+        {
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261022041619_TenantAutomationMutations"));
+            await db.GetService<IMigrator>().MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
+        }
         await Json(await again.PostAsJsonAsync(api + $"/approvals/{saved.RequestId}/decision", new { decision = "approve", actionHash = saved.Operation.ActionHash, expectedRevision = await Revision(again, tenant), expectedRequestRevision = saved.Revision }));
         Assert.Equal(AgentRunStatus.Completed, (await ExperienceMaintenanceFinal(reopened, tenant, submitted.Run)).Status);
         Assert.True(model.Admitted); Assert.Equal(saved.Operation.AutomationMutation.Invocation.RunId, model.Child);

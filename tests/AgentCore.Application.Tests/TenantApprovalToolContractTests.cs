@@ -104,10 +104,14 @@ public sealed class TenantApprovalToolContractTests
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, ExecutionOrigin.UserMessage) };
         var offered = Assert.Single(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         Assert.Contains("check_credential_connection", offered.ParametersJson); Assert.DoesNotContain("update_persona", offered.ParametersJson); Assert.DoesNotContain("update_preferences", offered.ParametersJson);
-        Assert.DoesNotContain(ToolCatalog.For(definition, context with { Configuration = new(definition, 1, 1, []) }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        var withoutBindings = Assert.Single(ToolCatalog.For(definition, context with { Configuration = new(definition, 1, 1, []) }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.DoesNotContain("check_credential_connection", withoutBindings.ParametersJson);
+        Assert.Contains("inspect_management", withoutBindings.ParametersJson); // Independent private Skill-read consent remains available.
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         var unavailable = definition with { Environment = definition.Environment with { Capabilities = new("Selected", []), ToolAllowlist = [] } };
-        Assert.DoesNotContain(ToolCatalog.For(unavailable, context with { Definition = unavailable }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        var withoutCapability = Assert.Single(ToolCatalog.For(unavailable, context with { Definition = unavailable }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.DoesNotContain("check_credential_connection", withoutCapability.ParametersJson);
+        Assert.DoesNotContain("update_preferences", withoutCapability.ParametersJson);
         var uncertain = new TenantApprovalOutcome(context.ExecutionContext.TenantId, context.ExecutionContext.RunId, Guid.NewGuid(), Guid.NewGuid(), instance,
             activation, TenantApprovalStatus.Approved, TenantOperationOutcome.Indeterminate, "credential_check_uncertain", 1, 1);
         Assert.Empty(ToolCatalog.For(definition, context with { ApprovalOutcome = uncertain }, ToolConfigurationGates.AllowAll));
@@ -168,7 +172,7 @@ public sealed class TenantApprovalToolContractTests
     }
 
     [Fact]
-    public async Task Offering_requires_tenant_context_and_pinned_Settings_eligibility_and_never_becomes_a_definition_allowlist_permission()
+    public async Task Settings_operations_require_tenant_context_and_pinned_eligibility_while_private_Skill_read_consent_remains_independent()
     {
         var definition = await CapabilityProjectionTests.Definition();
         definition = definition with { MemoryPolicy = MemoryPolicy.Disabled, StateIsolationPolicy = new(CrossSessionContinuity: false) };
@@ -178,9 +182,12 @@ public sealed class TenantApprovalToolContractTests
             AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
             ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session, Guid.NewGuid(), activation, activation, null, null, AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage)
         };
-        Assert.DoesNotContain(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        var privateReads = Assert.Single(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.Contains("inspect_management", privateReads.ParametersJson);
+        Assert.DoesNotContain("update_persona", privateReads.ParametersJson); Assert.DoesNotContain("update_preferences", privateReads.ParametersJson);
         definition = definition with { SelfManagement = new(HarnessManagementMode.Assisted, [HarnessManagementScope.Settings], [], []) };
-        Assert.Contains(ToolCatalog.For(definition, context with { Definition = definition }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        var settings = Assert.Single(ToolCatalog.For(definition, context with { Definition = definition }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        Assert.Contains("update_persona", settings.ParametersJson); Assert.Contains("update_preferences", settings.ParametersJson);
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { Definition = definition, ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         Assert.False(TenantApprovalToolContract.Descriptor().DefinitionAuthorizable);
     }

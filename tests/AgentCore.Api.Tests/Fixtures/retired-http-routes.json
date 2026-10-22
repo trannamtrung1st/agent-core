@@ -1909,6 +1909,10 @@
     {
       "method": "POST",
       "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/experience/checkpoints"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}/unreviewed-sources"
     }
   ]
 }

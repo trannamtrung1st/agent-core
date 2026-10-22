@@ -37,8 +37,8 @@ public sealed partial class SqliteIamStore
         var tenant = parent.Owner.TenantId!.Value; var state = (await ReadTenantAsync(db, tenant, ct).ConfigureAwait(false))!;
         var source = child.CurrentTaskRun ?? child.Run;
         var row = source.IsTerminal && source.Result?.OutcomeKind != AgentRunOutcomeKind.Continued
-            ? await RootApproval(db, tenant, parent.Admission.ExecutionContext!.RootActivationId.ToString("D"), parent.Owner.ExecutorPrincipalId!.Value,
-                TenantCompletionReadRules.Lookup(parent, child)).AsNoTracking().SingleOrDefaultAsync(ct).ConfigureAwait(false) : null;
+            ? await RootApprovalAsync(db, tenant, parent.Admission.ExecutionContext!.RootActivationId.ToString("D"), parent.Owner.ExecutorPrincipalId!.Value,
+                TenantCompletionReadRules.Lookup(parent, child), ct).ConfigureAwait(false) : null;
         if (row is null) return await TenantWaitRules.CanReadAsync(state, parent, child, new IamAuthorizer(this), ct).ConfigureAwait(false) ? child : null;
         var request = row.Domain();
         if (!TenantCompletionReadReferences.Contains(parent, source.SessionId, source.AgentRunId, request.RequestId)) return null;

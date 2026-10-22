@@ -1,5 +1,9 @@
 # Persistence and Configuration
 
+## Canonical approval semantic matching
+
+SQLite root lookup, local effect conflict checks and rolling operation quotas use the Domain's `PreparedTenantOperation.OperationFingerprint`, matching InMemory for every typed family. The incumbent tenant/root/executor index bounds lineage lookup; tenant/actor/root quotas are checked before loading the remaining recent operation candidates. The `TenantApprovalRequests.Fingerprint` column continues to store exact `ActionHash` for immutable foreign-key witnesses. No migration, column, index or permission/default changes accompany this consolidation. [Qualification and historical inventory cleanup](reports/multitenant-iam-delivery-2026-10-16.md#approval-semantic-matching-and-event-recovery).
+
 ## Canonical configuration remedy and binding persistence
 
 `20261023140000_TenantConfigurationRemedyAuthoring` adds optional closed Remedy and Binding variants to the incumbent management plan. Remedy metadata retains exact original arguments and the qualified inspection reference; Binding metadata contains only the existing association, safe credential revision/metadata and before/after witnesses. Old plans omit both members. Human and model binding effects share the incumbent association writer; settings/bindings, Instance revision, consent settlement, redacted audit and immutable factual receipt retain their existing transaction owners.
