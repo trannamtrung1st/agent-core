@@ -18,7 +18,6 @@ public static partial class TriggerScheduleCommands
         if (session == Guid.Empty || (current?.AutomationId) != input.AutomationId || (current?.Revision ?? 0) != input.ExpectedRevision)
             throw new SecurityConflictException("automation_source_changed");
         var policy = definition.TriggerPolicy;
-        var context = new TriggerCommandContext(null, session, null, null, null, TriggerAuthorizationClassification.Missing, null, referenceTime);
         var preset = current is null ? TenantAutomationPresetRules.Template(Text("presetId"), Number("presetVersion")) : null;
         if (current is not null && (args.TryGetProperty("presetId", out _) || args.TryGetProperty("presetVersion", out _)))
             if (Text("presetId") != current.Provenance.PresetId || Number("presetVersion") != current.Provenance.PresetVersion) throw new SecurityConflictException("automation_provenance_changed");
@@ -77,9 +76,9 @@ public static partial class TriggerScheduleCommands
             }
             using var normalized = JsonDocument.Parse(merged.ToJsonString()); var timing = normalized.RootElement;
             schedule = current?.ScheduleOrNull() is FixedIntervalSchedule fixedCurrent && !IsExplicitCalendarKindChange(args)
-                ? ApplyFixedIntervalUpdate(fixedCurrent, timing, context, scheduling).Schedule
+                ? ApplyFixedIntervalUpdate(fixedCurrent, timing, referenceTime, scheduling).Schedule
                 : TryString(timing, "kind", out var kind) && kind is "daily" or "weekly" or "fixed_interval" or "fixedInterval"
-                    ? ResolveRecurring(timing, context, scheduling) : ResolveOneShot(timing, context, scheduling).Schedule;
+                    ? ResolveRecurring(timing, referenceTime, scheduling) : ResolveOneShot(timing, referenceTime, scheduling).Schedule;
         }
         else if (current is not null)
         {
@@ -98,7 +97,7 @@ public static partial class TriggerScheduleCommands
             else events = [new(null, new CoreEventTrigger(preset.CoreEventKey!, preset.FilterExpression, preset.Dispatch))];
         }
         else throw new ArgumentException("Select one explicit Schedule or typed Event collection.");
-        var target = ChatTarget(args, context, current); var delivery = ChatDelivery(args, context, current);
+        var target = ChatTarget(args, session, current); var delivery = ChatDelivery(args, session, current);
         return new(enabled, name, instructions, schedule, Setting("modelKey", current?.ModelOverrideCatalogKey), Setting("reasoningEffort", current?.ModelOverrideReasoningEffort),
             OptionalRequirement(args, "requiresTools") ?? current?.RequiresTools ?? true, OptionalRequirement(args, "requiresVision") ?? current?.RequiresVision ?? false,
             events, delivery.SessionId, target.SessionId, preset?.PresetId, preset?.PresetVersion);

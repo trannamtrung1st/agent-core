@@ -91,11 +91,6 @@ public sealed partial class SessionRuntime
             _profile = await _store.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
         }
 
-        _scheduleConversationContext = await _tools.TryReconstructScheduleConversationContextAsync(
-            _snapshot.AgentInstanceId,
-            _snapshot.ProfileId,
-            cancellationToken).ConfigureAwait(false);
-
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Attached,

@@ -30,6 +30,12 @@ public sealed partial class InMemoryIamStore : ITenantAutomationMutationStore
             destinations.Report is { } report ? sessionBacking.ReadTenantSession(reader.Security.Tenant.TenantId, report) : null, intent.Text, intent.Task);
         if (expected is not null) { TenantAutomationMutationRules.Validate(source, expected); TenantAutomationMutationRules.RawAsync(source, expected, new IamAuthorizer(this), ct, human).AsTask().GetAwaiter().GetResult(); }
         else TenantAutomationMutationRules.BaseRawAsync(reader, current, new IamAuthorizer(this), ct).AsTask().GetAwaiter().GetResult();
+        if (expected is null && !intent.Task)
+        {
+            var before = entries.Min(e => e.Sequence);
+            var history = sessionBacking.ReadTenantConversation(reader.Security.Tenant.TenantId, reader.Root.SessionId, null, before, 8)?.History.Items ?? [];
+            source = source with { ConversationEvidenceJson = TenantAutomationMutationRules.ConversationEvidence(reader, history, before) };
+        }
         return source;
     }
 }

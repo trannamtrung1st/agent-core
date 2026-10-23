@@ -3740,33 +3740,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             }
                             else
                             {
-                                var automationCommand = TriggerCommand(trigger) with { ResponseId = request.ResponseId };
-                                AutomationCommandPreparation? automationPrepared = null;
-                                if (ToolResources.IsTriggerWrite(call.Name) && !(_boundAgentRun?.Owner.TenantId is not null && TenantAutomationMutationContract.IsTool(call.Name)))
-                                {
-                                    automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, false, overallCts.Token);
-                                    if (automationPrepared.Request is { } proposed)
-                                    {
-                                        automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, true, overallCts.Token);
-                                        if (automationPrepared.RequiresApproval) policy = ToolPolicyDecision.RequireApproval;
-                                        automationCommand = automationCommand with { Verification = automationPrepared };
-                                    }
-                                }
                                 string actionHash;
                                 var preparedFailed = false;
-                                if (automationPrepared?.ErrorJson is { } automationError)
-                                {
-                                    executionResult = ToolExecutionResult.FromText(automationError);
-                                    preparedFailed = true;
-                                    actionHash = string.Empty;
-                                }
-                                else if (automationPrepared?.Verdict is { Decision: TriggerCommandAuthorizationDecision.Deny or TriggerCommandAuthorizationDecision.Ambiguous } deniedAutomation)
-                                {
-                                    executionResult = TriggerScheduleCommands.AuthorizationFailure(deniedAutomation);
-                                    preparedFailed = true;
-                                    actionHash = string.Empty;
-                                }
-                                else if (policy == ToolPolicyDecision.RequireApproval)
+                                if (policy == ToolPolicyDecision.RequireApproval)
                                 {
                                     // Review is settled only by the durable tenant consent owner.
                                     // An unowned response cannot turn a local modal into authority.
@@ -3776,7 +3752,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 }
                                 else
                                 {
-                                    actionHash = automationPrepared?.Request?.ActionHash ?? ToolActionHash.Compute(call.Name, args);
+                                    actionHash = ToolActionHash.Compute(call.Name, args);
                                 }
 
                                 AgentRunToolCallCheckpoint.TryReadState(_boundAgentRun?.Checkpoint, out _, out _, out var blockedActionHash);
@@ -3848,7 +3824,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             call,
                                             resultBudget,
                                             toolCts.Token,
-                                            automationCommand,
                                             new ToolExecutionAdmission(
                                                 Detached: IsInitialBackgroundRun,
                                                 trigger.Kind,
@@ -4405,48 +4380,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             input.Completed?.TrySetResult(ResponseCancelResult.Unknown);
             throw;
         }
-    }
-
-    private TriggerCommandContext TriggerCommand(AgentTrigger trigger)
-    {
-        var language = ExecutionDefinition.ConversationPolicy.Language;
-        TriggerOwner? owner = _snapshot.AgentInstanceId is Guid instance && _snapshot.ProfileId is Guid profile
-            ? new TriggerOwner(instance, profile)
-            : null;
-        string? timeZone = null;
-        if (_profile?.Preferences.TryGetValue("timeZone", out var zone) == true)
-        {
-            timeZone = zone.Value;
-        }
-
-        return new TriggerCommandContext(
-            owner,
-            SessionId,
-            timeZone,
-            trigger.Text,
-            language,
-            TriggerAuthorization.Classify(trigger.Kind),
-            trigger.EventId,
-            _boundAgentRun?.CreatedAtUtc ?? _time.GetUtcNow(),
-            _scheduleConversationContext,
-            _scheduleDraftContext) { ConversationEvidenceJson = AutomationConversationEvidence(trigger) };
-    }
-
-    private string AutomationConversationEvidence(AgentTrigger trigger)
-    {
-        // Prior turns can resolve a current clarification, but remain data rather than authority.
-        var entries = _snapshot.Entries.TakeWhile(entry => entry.SourceEventId != trigger.EventId && entry.EntryId != trigger.EventId)
-            .Where(entry => entry.IsPromptTurn && entry.Status != EntryStatus.Streaming).TakeLast(8)
-            .Select(entry => new { role = entry.Role.ToString(), text = entry.Role == ConversationRole.Assistant
-                ? PromptContextBuilder.EligibleAssistantText(entry) : entry.Text })
-            .Where(entry => entry.text.Length > 0).ToList();
-        var json = JsonSerializer.Serialize(entries);
-        while (entries.Count > 0 && json.Length > 12_000)
-        {
-            entries.RemoveAt(0);
-            json = JsonSerializer.Serialize(entries);
-        }
-        return json;
     }
 
     private async Task SupersedeAsync(

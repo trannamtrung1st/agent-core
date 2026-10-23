@@ -289,6 +289,7 @@ public sealed class PromptContextBuilder(
 
     public static string? BuildSchedulingContext(AgentContext context)
     {
+        if (!TenantTaskExecutionContract.Allows(context)) return null;
         var policy = context.Definition.TriggerPolicy;
         if (policy is not { Enabled: true, AllowUserScheduling: true })
         {

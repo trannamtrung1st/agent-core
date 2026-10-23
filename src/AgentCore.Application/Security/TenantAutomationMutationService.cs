@@ -98,7 +98,7 @@ public sealed class TenantAutomationMutationService(ITenantAutomationMutationSto
         if (System.Text.Encoding.UTF8.GetByteCount(action.GetRawText()) > 32768)
             return prepared with { Value = value with { SemanticReviewRequired = true } };
         var verdict = await semantic.AuthorizeAsync(new(source.IntentText, TriggerAuthorization.ActionForTool(value.ToolName), value.ToolName, action,
-            value.IntentHash, AdmittedTask: source.AdmittedTask), ct).ConfigureAwait(false);
+            value.IntentHash, ConversationEvidenceJson: source.ConversationEvidenceJson, AdmittedTask: source.AdmittedTask), ct).ConfigureAwait(false);
         if (verdict.Decision is TriggerCommandAuthorizationDecision.Deny or TriggerCommandAuthorizationDecision.Ambiguous)
             throw new AccessDeniedException(verdict.Decision == TriggerCommandAuthorizationDecision.Deny ? "automation_intent_denied" : "automation_intent_ambiguous");
         return prepared with { Value = value with { SemanticReviewRequired = verdict.Decision != TriggerCommandAuthorizationDecision.Allow } };

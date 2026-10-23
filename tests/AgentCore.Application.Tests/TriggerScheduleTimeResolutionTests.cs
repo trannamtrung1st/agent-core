@@ -1,5 +1,6 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Definitions;
@@ -54,22 +55,20 @@ public sealed class TriggerScheduleTimeResolutionTests
     }
 
     [Fact]
-    public async Task Relative_delay_seconds_does_not_require_profile_timezone()
+    public async Task Relative_delay_seconds_uses_UTC_without_a_timezone_argument()
     {
         var created = await CreateOnceAsync(
-            """{"executionTarget":"backgroundSession","instructions":"Hello","relativeDelaySeconds":60}""",
-            profileTimeZoneId: null);
+            """{"executionTarget":"backgroundSession","instructions":"Hello","relativeDelaySeconds":60}""");
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
         Assert.Equal("UTC", schedule.TimeZoneId);
     }
 
     [Fact]
-    public async Task At_utc_does_not_require_profile_timezone()
+    public async Task At_utc_uses_UTC_without_a_timezone_argument()
     {
         var created = await CreateOnceAsync(
-            """{"executionTarget":"backgroundSession","instructions":"Hello","atUtc":"2026-09-24T08:30:00Z"}""",
-            profileTimeZoneId: null);
+            """{"executionTarget":"backgroundSession","instructions":"Hello","atUtc":"2026-09-24T08:30:00Z"}""");
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(new DateTimeOffset(2026, 9, 24, 8, 30, 0, TimeSpan.Zero), schedule.AtUtc);
         Assert.Equal("UTC", schedule.TimeZoneId);
@@ -89,6 +88,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     public async Task Scheduling_context_includes_trusted_clock()
     {
         var definition = await LoadAsync();
+        var session = Guid.NewGuid(); var activation = Guid.NewGuid();
         var context = new AgentContext(
             definition,
             [],
@@ -99,7 +99,11 @@ public sealed class TriggerScheduleTimeResolutionTests
             false,
             null,
             new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "schedule"),
-            UtcNow: Now);
+            UtcNow: Now, AgentInstanceId: InstanceId, OwnedSessionId: session)
+        { ExecutionContext = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session,
+            Guid.NewGuid(), activation, activation, null, null, Domain.Conversation.ExecutionOrigin.UserMessage) };
+        context = context with { RequesterContext = new(context.ExecutionContext!, "Organization", "Requester", [], false, 1, Now) };
+        Assert.Null(PromptContextBuilder.BuildSchedulingContext(context with { ExecutionContext = null }));
         var text = PromptContextBuilder.BuildSchedulingContext(context);
         Assert.NotNull(text);
         Assert.Contains("currentUtc=2026-09-23T17:17:00.0000000+00:00", text, StringComparison.Ordinal);
@@ -110,42 +114,19 @@ public sealed class TriggerScheduleTimeResolutionTests
         var rules = Assert.Single(request.Context.Sections, section => section.Id == AgentCore.Application.Context.ContextSectionId.CoreScheduling);
         Assert.Equal(ModelRole.System, rules.Message.Role);
         Assert.Contains("relativeDelaySeconds", rules.Message.Text);
-        Assert.Contains("owner UI decision", rules.Message.Text);
+        Assert.Contains("qualified human decision", rules.Message.Text);
         Assert.Contains("never pre-authorize future actions", rules.Message.Text);
         Assert.DoesNotContain("relativeDelaySeconds", text);
 
     }
 
-    private static async Task<Automation> CreateOnceAsync(
-        string argumentsJson,
-        string? profileTimeZoneId = "UTC")
+    private static async Task<TenantAutomationChange> CreateOnceAsync(string argumentsJson)
     {
-        var time = new FakeTimeProvider(Now);
-        var store = new InMemoryTriggerStore();
-        var ids = new DeterministicIdGenerator(
-            [Guid.Parse("019944af-00d2-7000-8000-000000000001")],
-            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf20")]);
-        var service = new AutomationService(store, ids, time);
-        var tools = new SessionToolExecutor(triggerRegistrations: service, triggerAuthorizer: new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         var definition = await LoadAsync();
-        var owner = new TriggerOwner(InstanceId, ProfileId);
-        var context = new TriggerCommandContext(
-            owner,
-            Guid.Parse("019944af-00d1-7000-8000-0000000000c1"),
-            profileTimeZoneId,
-            "say hello to me after 1 minute",
-            "en",
-            TriggerAuthorizationClassification.CurrentUserTurn,
-            Guid.NewGuid(),
-            Now);
-        var result = await tools.ExecuteAsync(
-            definition,
-            context.SessionId,
-            new ModelToolCall("create", ToolCatalog.AutomationCreate, argumentsJson),
-            ToolLimits.MaxOutputBytes,
-            triggerCommand: context);
-        Assert.Contains("\"status\":\"Active\"", result.Text, StringComparison.Ordinal);
-        return Assert.Single(await store.ListAsync(owner, null));
+        var ids = new DeterministicIdGenerator([Guid.Parse("019944af-00d2-7000-8000-000000000001")], []);
+        return TriggerScheduleCommands.NormalizeTenant(definition, null,
+            new(ToolCatalog.AutomationCreate, argumentsJson, null, 0),
+            Guid.Parse("019944af-00d1-7000-8000-0000000000c1"), Now, ids);
     }
 
     private static async Task<AgentDefinition> LoadAsync()

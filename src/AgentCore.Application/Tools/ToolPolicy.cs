@@ -89,6 +89,7 @@ public static class ToolPolicy
             && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return ToolPolicyDecision.Deny;
         if (ManagementTools.IsManagement(toolName)) return ToolPolicyDecision.Deny;
+        if (TenantAutomationReadContract.IsTool(toolName) || TenantAutomationMutationContract.IsTool(toolName)) return ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -285,6 +286,7 @@ public static class ToolPolicy
         if (descriptor.Name == ToolCatalog.BackgroundStart && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return false;
         if (ManagementTools.IsManagement(descriptor.Name)) return false;
+        if (TenantAutomationReadContract.IsTool(descriptor.Name) || TenantAutomationMutationContract.IsTool(descriptor.Name)) return false;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return context is { AgentInstanceId: not null, ModelSupportsTools: true, CredentialMetadataAvailable: true };

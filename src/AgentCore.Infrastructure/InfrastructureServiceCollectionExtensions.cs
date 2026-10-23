@@ -482,8 +482,6 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IPublicWebFetcher>(),
             provider.GetService<IEmailProvider>(),
             provider.GetRequiredService<IToolConfigurationGate>(),
-            provider.GetRequiredService<IAutomationService>(),
-            provider.GetRequiredService<ITriggerCommandAuthorizer>(),
             provider.GetRequiredService<IAgentInstanceStore>(),
             provider.GetRequiredService<IAgentDefinitionStore>(),
             provider.GetRequiredService<IMemoryStore>(),
@@ -494,8 +492,6 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>(),
             provider.GetRequiredService<AgentInstanceWorkspaceService>(),
             provider.GetRequiredService<CredentialService>(),
-            provider.GetRequiredService<AdminAutomationAuthoringService>(),
-            provider.GetRequiredService<ICoreEventStore>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
             provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>(), provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<IOfficeProcessor>(), provider.GetRequiredService<AgentCore.Application.Drive.DriveService>(), provider.GetRequiredService<ISandboxService>(), provider.GetRequiredService<ISandboxStore>(), provider.GetRequiredService<ISandboxImageAuthority>(), provider.GetRequiredService<ISandboxReadiness>(), provider.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>(), tenantAuthorization: provider.GetRequiredService<AgentCore.Application.Security.TenantToolAuthorization>()));
         services.TryAddSingleton(provider =>

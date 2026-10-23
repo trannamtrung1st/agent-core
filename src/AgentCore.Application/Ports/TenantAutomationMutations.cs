@@ -6,7 +6,11 @@ using AgentCore.Domain.Triggers;
 namespace AgentCore.Application.Ports;
 
 public sealed record TenantAutomationMutationObservation(TenantMemoryReader Reader, Automation? Current,
-    TenantSession? Conversation, TenantSession? ReportDestination, string IntentText, bool AdmittedTask);
+    TenantSession? Conversation, TenantSession? ReportDestination, string IntentText, bool AdmittedTask)
+{
+    // Transient untrusted context from the owning conversation; never grant or prepared-plan data.
+    public string? ConversationEvidenceJson { get; init; }
+}
 public sealed record TenantAutomationMutationCommit(Guid OperationId, Guid RunId, Guid Generation, long ExpectedRunRevision,
     string SourceCallId, string ParametersHash, PreparedAutomationMutation Prepared, long ExpectedInstanceRevision, string ActionHash,
     TenantAutomationAdmission? InvocationAdmission = null);

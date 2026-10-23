@@ -15,6 +15,19 @@ public static class TenantAutomationMutationRules
     public const string Completed = "automation_mutation_completed";
     public static string ParametersHash(string tool, string arguments) => TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new { tool, arguments }));
     public static string Permission(string tool) => tool == ToolCatalog.AutomationCreate ? "automations.create" : tool == ToolCatalog.AutomationDelete ? "automations.delete" : tool == ToolCatalog.AutomationRun ? "automations.run" : "automations.update";
+    public static string? ConversationEvidence(TenantMemoryReader reader, IReadOnlyList<ConversationEntry> entries, long before)
+    {
+        if (reader.Root.Admission.ExecutionContext?.Origin != ExecutionOrigin.UserMessage || reader.User is null) return null;
+        if (before <= 0) return null;
+        // Same owning conversation only. Prior requests resolve references but grant no authority.
+        // Assistant content is limited to what was actually received/heard.
+        var evidence = entries.Where(e => e.Sequence < before && e.IsPromptTurn && e.Status != EntryStatus.Streaming).TakeLast(8)
+            .Select(e => new { role = e.Role.ToString(), text = e.Role == ConversationRole.Assistant ? PromptContextBuilder.EligibleAssistantText(e) : e.Text })
+            .Where(e => e.text.Length > 0).ToList();
+        var json = JsonSerializer.Serialize(evidence);
+        while (evidence.Count > 0 && json.Length > 12000) { evidence.RemoveAt(0); json = JsonSerializer.Serialize(evidence); }
+        return json;
+    }
     public static AccessScope Primary(Guid tenant, string tool, Automation value) => tool == ToolCatalog.AutomationCreate ? AccessScope.ForTenant(tenant) : TenantAutomationRules.Scope(tenant, value.AutomationId);
     public static void Eligible(TenantMemoryReader reader, string tool)
     {

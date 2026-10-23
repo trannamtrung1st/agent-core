@@ -31,20 +31,11 @@ public sealed partial class TenantOperationAuthorizationTests
             using var json = JsonDocument.Parse(result.Text);
             Assert.True(json.RootElement.TryGetProperty("error", out _));
         }
-        var automation = await tools.PrepareAutomationAsync(setup.Run.Admission.Configuration!.Definition,
-            new("create", ToolCatalog.AutomationCreate, "{}"), JsonSerializer.SerializeToElement(new { }),
-            new(null, setup.Run.SessionId, null, "Create a reminder", null, TriggerAuthorizationClassification.CurrentUserTurn, null, f.Clock.GetUtcNow()), false, default);
-        Denied(automation.Request, automation.ErrorJson);
+        var automation = await tools.ExecuteAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId,
+            new("create", ToolCatalog.AutomationCreate, "{}"), 16000, admission: frame);
+        using var denied = JsonDocument.Parse(automation.Text);
+        Assert.Equal("forbidden", denied.RootElement.GetProperty("error").GetString());
         Assert.Equal(0, observed.DraftReads);
-    }
-
-    private static void Denied(object? preparation, string? error)
-    {
-        Assert.Null(preparation); Assert.NotNull(error);
-        using var result = JsonDocument.Parse(error);
-        Assert.Equal("forbidden", result.RootElement.GetProperty("error").GetString());
-        Assert.Equal("tenant_effect_unavailable", result.RootElement.GetProperty("reasonCode").GetString());
-        Assert.DoesNotContain("Private legacy", error);
     }
 
     private sealed class ObservedDraftProvider(IEmailProvider inner) : IEmailProvider

@@ -291,24 +291,18 @@ public sealed class SecretaryIdentityTests
     }
 
     [Fact]
-    public async Task Secretary_non_store_turns_create_an_artifact_and_a_schedule()
+    public async Task Secretary_non_store_turn_creates_an_owned_artifact()
     {
         var secretary = await LoadSecretaryAsync();
         var time = new FakeTimeProvider(Now);
         var artifacts = new InMemoryArtifactStore(time);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), time);
-        var triggers = new InMemoryTriggerStore();
-        var triggerIds = new DeterministicIdGenerator(
-            Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00c3-7000-8000-{index:D12}")),
-            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf21")]);
         var agents = new InMemoryAgentInstanceStore();
         await agents.InsertAsync(new AgentInstance(InstanceId, secretary.Id, secretary.Version, secretary.Identity,
             AgentInstanceLifecycle.Active, Now, Now), initialSkills: secretary.SkillList);
         var tools = new SessionToolExecutor(
             knowledge, agentInstances: agents,
-            artifacts: artifacts,
-            triggerRegistrations: new AutomationService(triggers, triggerIds, time),
-            triggerAuthorizer: new SyntheticTriggerCommandAuthorizer());
+            artifacts: artifacts);
         var sessionIds = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-00c4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf22")]);
@@ -361,14 +355,7 @@ public sealed class SecretaryIdentityTests
         Assert.True(Guid.TryParse(artifact.ArtifactId, out var artifactId));
         Assert.NotNull(await artifacts.GetAsync(runtime.SessionId, artifactId));
 
-        Assert.True(await runtime.SubmitUserTextAsync("Remind me tomorrow at 9 AM to call John."));
-        await runtime.WaitUntilIdleAsync();
-        var scheduleAnswer = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Completed, scheduleAnswer.Status);
-        Assert.Contains("Scheduled Call John.", scheduleAnswer.Text, StringComparison.Ordinal);
-        var saved = Assert.Single(await triggers.ListAsync(new TriggerOwner(InstanceId, ProfileId), null));
-        Assert.Equal("Call John", saved.Instructions);
-        Assert.Equal(AutomationStatus.Active, saved.Status);
+
     }
 
     private sealed class CompletingLanguageModel : ILanguageModel

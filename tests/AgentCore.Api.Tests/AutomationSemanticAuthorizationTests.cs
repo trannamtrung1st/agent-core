@@ -1,112 +1,98 @@
-using System.Runtime.CompilerServices;
 using System.Collections.Concurrent;
-using System.Text.Json.Nodes;
-using Microsoft.Extensions.Time.Testing;
+using System.Net;
+using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AgentCore.Application.Admin;
-using AgentCore.Application.Context;
-using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Sessions;
+using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Triggers;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class AutomationSemanticAuthorizationTests
+public sealed partial class TenantSessionAccessTests
 {
-
-
-    [Theory(Timeout = 60000)]
-    [InlineData(TriggerCommandAuthorizationDecision.Allow)]
-    [InlineData(TriggerCommandAuthorizationDecision.Deny)]
-    public async Task Current_timezone_clarification_supplies_bounded_history_as_evidence_without_granting_authority(TriggerCommandAuthorizationDecision decision)
-    {
-        var verifier = new Verifier(decision);
-        var model = new ProposingModel { AskTimeZoneFirst = true };
-        await using var host = Host(Path.Combine(Path.GetTempPath(), $"semantic-clarification-{Guid.NewGuid():N}.db"), model, verifier);
-        var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
-        var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
-        await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(session, new Output());
-        await runtime.AttachAsync();
-        const string task = "Every day at 9am, review learned experience quietly in background.";
-        Assert.True(await runtime.SubmitUserTextAsync(task));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
-        Assert.Empty(verifier.Requests);
-        Assert.True(await runtime.SubmitUserTextAsync("Dùng múi giờ Việt Nam."));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
-        var request = Assert.Single(verifier.Requests);
-        Assert.Equal("Dùng múi giờ Việt Nam.", request.CurrentUserText);
-        using var history = JsonDocument.Parse(request.ConversationEvidenceJson!);
-        Assert.Contains(history.RootElement.EnumerateArray(), entry => entry.GetProperty("text").GetString() == task);
-        // This fixture sends no display receipt, so unseen assistant prose cannot enter Evidence.
-        Assert.DoesNotContain(history.RootElement.EnumerateArray(), entry => entry.GetProperty("text").GetString() == "Which timezone should I use?");
-        Assert.DoesNotContain(history.RootElement.EnumerateArray(), entry => entry.GetProperty("text").GetString() == request.CurrentUserText);
-        Assert.True(request.ConversationEvidenceJson!.Length <= 12_000);
-        var retained = await services.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null);
-        Assert.Equal(decision == TriggerCommandAuthorizationDecision.Allow ? 1 : 0, retained.Count);
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task Explicit_disabled_creation_persists_the_state_that_was_semantically_verified()
-    {
-        var model = new ProposingModel { Arguments = "{\"instructions\":\"Review experience\",\"kind\":\"daily\",\"localTime\":\"09:00\",\"timeZone\":\"Asia/Ho_Chi_Minh\",\"executionTarget\":\"backgroundSession\",\"enabled\":false}" };
-        var verifier = new Verifier(TriggerCommandAuthorizationDecision.Allow);
-        await using var host = Host(Path.Combine(Path.GetTempPath(), $"semantic-disabled-{Guid.NewGuid():N}.db"), model, verifier);
-        var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
-        var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
-        await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(session, new Output());
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Create a disabled daily review at 9 Vietnam time"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
-        Assert.False(Assert.Single(verifier.Requests).ProposedAction.GetProperty("proposedEnabled").GetBoolean());
-        var created = Assert.Single(await services.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null));
-        Assert.Equal(AutomationStatus.Disabled, created.Status);
-        Assert.Null(created.NextOccurrenceAtUtc);
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task Unavailable_structured_timezone_is_a_schedule_error_before_semantic_verification()
-    {
-        var model = new ProposingModel { Arguments = "{\"instructions\":\"Review experience\",\"kind\":\"daily\",\"localTime\":\"09:00\",\"timeZone\":\"America/NoSuchZone\",\"executionTarget\":\"backgroundSession\"}" };
-        var verifier = new Verifier(TriggerCommandAuthorizationDecision.Allow);
-        await using var host = Host(Path.Combine(Path.GetTempPath(), $"semantic-zone-{Guid.NewGuid():N}.db"), model, verifier);
-        var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
-        var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
-        await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(session, new Output());
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Review experience daily at 9 in this timezone"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
-        Assert.Empty(verifier.Requests);
-        Assert.Equal("schedule_validation_failed", Assert.Single(model.Results).GetProperty("error").GetString());
-        Assert.Empty(await services.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null));
-    }
-
-    private static ExperienceHost Host(string db, ILanguageModel model, ITriggerCommandAuthorizer verifier) => new(db, model, configure: services =>
-    { services.RemoveAll<ITriggerCommandAuthorizer>(); services.AddSingleton(verifier); });
-
-    private sealed class Verifier(TriggerCommandAuthorizationDecision decision) : ITriggerCommandAuthorizer
+    private sealed class CanonicalClarificationVerifier(TriggerCommandAuthorizationDecision decision) : ITriggerCommandAuthorizer
     {
         public List<AutomationAuthorizationRequest> Requests { get; } = [];
         public ValueTask<TriggerCommandAuthorizationVerdict> AuthorizeAsync(AutomationAuthorizationRequest proposed, CancellationToken ct = default)
         { ct.ThrowIfCancellationRequested(); Requests.Add(proposed); return ValueTask.FromResult(new TriggerCommandAuthorizationVerdict(decision)); }
     }
 
-    private sealed class Output : ISessionOutput
+    [Theory(Timeout = 120000)]
+    [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public Task Canonical_timezone_clarification_uses_bounded_own_conversation_without_granting_historical_authority(bool sqlite, bool deny)
+        => CanonicalClarification(sqlite, deny ? "deny" : "allow");
+    [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
+    public Task Canonical_disabled_creation_retains_the_exact_semantically_reviewed_state(bool sqlite) => CanonicalClarification(sqlite, "disabled");
+    [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
+    public Task Canonical_missing_timezone_is_refused_before_semantic_verification(bool sqlite) => CanonicalClarification(sqlite, "timezone");
+
+    private static async Task CanonicalClarification(bool sqlite, string mode)
     {
-        public ConcurrentQueue<SessionOutput> Items { get; } = new();
-        public ValueTask PublishAsync(SessionOutput output, CancellationToken ct = default)
-        { Items.Enqueue(output); return ValueTask.CompletedTask; }
+        var root = Path.Combine(Path.GetTempPath(), "canonical-automation-clarification-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var verifier = new CanonicalClarificationVerifier(mode == "deny" ? TriggerCommandAuthorizationDecision.Deny : TriggerCommandAuthorizationDecision.Allow);
+            var model = new CanonicalClarificationModel { AskTimeZoneFirst = mode is "allow" or "deny" };
+            if (mode is "disabled" or "timezone") model.Arguments = JsonSerializer.Serialize(new { instructions = "Review learned experience", kind = "daily", localTime = "09:00",
+                executionTarget = "backgroundSession", reportBack = false, enabled = false, timeZone = mode == "timezone" ? "" : "Asia/Ho_Chi_Minh" });
+            void Configure(IServiceCollection services) { services.RemoveAll<ITriggerCommandAuthorizer>(); services.AddSingleton<ITriggerCommandAuthorizer>(verifier); }
+            await using WebApplicationFactory<Program> host = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
+            using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+            var setup = await StartTenantBackground(host, owner, submit: false, fileCapabilities: [ToolCatalog.AutomationCreate], independentTask: true);
+            var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}";
+            var sessions = host.Services.GetRequiredService<ITenantSessionStore>(); var parent = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!;
+            var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
+            var access = host.Services.GetRequiredService<TenantAccessService>();
+            var role = await access.SaveRoleAsync(human, tenant, null, "Canonical semantic author", ["agents.read", "automations.create"], await Revision(owner, tenant));
+            await access.AssignRoleAsync(human, tenant, parent.Owner.ExecutorPrincipalId, role.RoleId, AgentCore.Domain.Security.AccessScope.ForTenant(tenant), await Revision(owner, tenant));
+            async Task Send(string text)
+            {
+                var current = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!;
+                var sent = await owner.PostAsJsonAsync(api + $"/sessions/{setup.Session}/messages", new { messageId = Guid.NewGuid(), text,
+                    expectedRevision = await Revision(owner, tenant), expectedSessionRevision = current.Snapshot.Revision });
+                Assert.Equal(HttpStatusCode.Accepted, sent.StatusCode); var id = (await Json(sent)).GetProperty("runId").GetGuid();
+                var runs = host.Services.GetRequiredService<ITenantRunStore>(); using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                while (true)
+                {
+                    await host.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8, deadline.Token);
+                    var run = (await runs.FindTenantRunAsync(tenant, id, deadline.Token))!;
+                    if (run.IsTerminal) { Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure}"); break; }
+                    await Task.Delay(20, deadline.Token);
+                }
+            }
+            const string task = "Every day at 9am, review learned experience quietly in background.";
+            if (mode is "allow" or "deny")
+            {
+                await Send(task); Assert.Empty(verifier.Requests);
+                await Send("Dùng múi giờ Việt Nam.");
+                var request = Assert.Single(verifier.Requests); Assert.Equal("Dùng múi giờ Việt Nam.", request.CurrentUserText); Assert.False(request.AdmittedTask);
+                using var history = JsonDocument.Parse(request.ConversationEvidenceJson!);
+                Assert.Contains(history.RootElement.EnumerateArray(), entry => entry.GetProperty("text").GetString() == task);
+                Assert.DoesNotContain(history.RootElement.EnumerateArray(), entry => entry.GetProperty("text").GetString() == "Which timezone should I use?");
+                Assert.DoesNotContain(history.RootElement.EnumerateArray(), entry => entry.GetProperty("text").GetString() == request.CurrentUserText);
+                Assert.True(request.ConversationEvidenceJson!.Length <= 12000);
+            }
+            else
+            {
+                await Send("Review experience daily at 9 in the selected timezone; retain disabled state.");
+                if (mode == "disabled") Assert.False(Assert.Single(verifier.Requests).ProposedAction.GetProperty("arguments").GetProperty("enabled").GetBoolean());
+                else { Assert.Empty(verifier.Requests); Assert.Equal("invalid", Assert.Single(model.Results).GetProperty("error").GetString()); }
+            }
+            var retained = (await host.Services.GetRequiredService<ITenantAutomationStore>().ListTenantAutomationsAsync(tenant, parent.Owner.AgentInstanceId, null, 0, 100)).Items;
+            if (mode is "deny" or "timezone") Assert.Empty(retained);
+            else { var value = Assert.Single(retained); Assert.Equal(mode == "disabled" ? AutomationStatus.Disabled : AutomationStatus.Active, value.Status); }
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
 
-    private sealed class ProposingModel(string toolName = ToolCatalog.AutomationCreate) : ILanguageModel
+    private sealed class CanonicalClarificationModel(string toolName = ToolCatalog.AutomationCreate) : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(true,true,Tools:true,StructuredOutput:true);
         public List<JsonElement> Results { get; } = [];

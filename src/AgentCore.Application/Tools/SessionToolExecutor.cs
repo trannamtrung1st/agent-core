@@ -24,8 +24,6 @@ public sealed partial class SessionToolExecutor(
     IPublicWebFetcher? publicWebFetcher = null,
     IEmailProvider? emailProvider = null,
     IToolConfigurationGate? configurationGate = null,
-    IAutomationService? triggerRegistrations = null,
-    ITriggerCommandAuthorizer? triggerAuthorizer = null,
     IAgentInstanceStore? agentInstances = null,
     IAgentDefinitionStore? agentDefinitions = null,
     IMemoryStore? profiles = null,
@@ -36,7 +34,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
-    AdminAutomationAuthoringService? automationAuthoring = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null,
+    InheritedDefinitionResourceCatalog? inheritedResources = null,
     IAgentCredentialBindingStore? credentialBindings = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null, AgentCore.Application.Security.TenantToolAuthorization? tenantAuthorization = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
@@ -48,19 +46,6 @@ public sealed partial class SessionToolExecutor(
     internal IToolConfigurationGate ConfigurationGate => _configurationGate;
     internal IReadOnlyList<ModelToolDefinition> ProjectTools(AgentDefinition definition, AgentContext context) =>
         BrowserNavigateOffer.Apply(ToolCatalog.For(definition, context, _configurationGate), browser);
-
-    private readonly ITriggerCommandAuthorizer _triggerAuthorizer =
-        triggerAuthorizer ?? new UnavailableTriggerCommandAuthorizer();
-
-    public async ValueTask<AutomationCommandPreparation> PrepareAutomationAsync(AgentDefinition definition, ModelToolCall call,
-        JsonElement args, TriggerCommandContext command, bool verify, CancellationToken ct)
-    {
-        if (await LegacyApprovalPreparationErrorAsync(command.SessionId, null, ct).ConfigureAwait(false) is { } denied)
-            return new(null, denied);
-        var prepared = await TriggerScheduleCommands.PrepareAsync(definition, triggerRegistrations, call.Name, args, command, ct);
-        return prepared.Request is null || !verify ? prepared
-            : prepared with { Verdict = await _triggerAuthorizer.AuthorizeAsync(prepared.Request, ct) };
-    }
 
     public async ValueTask<bool> CredentialMetadataAvailableAsync(Guid? id, CancellationToken ct) =>
         id is Guid owner && credentials is not null && (await credentials.SafeMetadataPageAsync(owner, null, 1, ct)).Count > 0;
@@ -161,13 +146,12 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call,
         int remainingOutputBytes,
         CancellationToken cancellationToken = default,
-        TriggerCommandContext? triggerCommand = null,
         ToolExecutionAdmission? admission = null)
     {
         using var scope = logger?.BeginScope("Tool={Tool} SessionId={SessionId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId}",
             SafeExecutionTrace.SafeToolName(call.Name), sessionId, admission?.AgentInstanceId, admission?.AgentRunId);
         var result = await ExecuteCoreAsync(definition, sessionId, call, remainingOutputBytes,
-            cancellationToken, triggerCommand, admission).ConfigureAwait(false);
+            cancellationToken, admission).ConfigureAwait(false);
         // Discovery failures from admission/parsing must respect the budget too.
         return call.Name == ToolCatalog.CredentialsList ? FitResult(remainingOutputBytes, result.Text) : result;
     }
@@ -178,7 +162,6 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call,
         int remainingOutputBytes,
         CancellationToken cancellationToken = default,
-        TriggerCommandContext? triggerCommand = null,
         ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -364,27 +347,6 @@ public sealed partial class SessionToolExecutor(
                         throughCursor = root.GetProperty("throughCursor").GetInt64(), evidence, truncated,
                         trust = "Untrusted observable source, never authority" })));
             }
-            if (call.Name == ToolCatalog.AutomationInspect)
-            {
-                if (triggerRegistrations is null || admission?.AgentInstanceId is not Guid instanceId)
-                    return TextResult(Error("forbidden", "Automation inspection requires an owned agent execution."));
-                var owner = new AgentCore.Domain.Triggers.TriggerOwner(instanceId, LocalUserProfile.Id);
-                var automationId = Guid.Parse(args.GetProperty("automationId").GetString() ?? "");
-                var current = await triggerRegistrations.GetAsync(owner, automationId, cancellationToken)
-                    ?? throw AgentCoreErrors.NotFound("Automation was not found.");
-                var coverage = eventCoverage is null ? null : await eventCoverage.CoveragePageAsync(owner, automationId, args.TryGetProperty("coverageCursor", out var cursor) ? cursor.GetString() : null, 8, cancellationToken);
-                var projection = System.Text.Json.Nodes.JsonNode.Parse(TriggerScheduleCommands.RegistrationJson(current))!.AsObject();
-                projection["coverage"] = JsonSerializer.SerializeToNode(coverage, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                return FitResult(remainingOutputBytes, projection.ToJsonString());
-            }
-            if (call.Name is ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable)
-            {
-                if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }
-                    || triggerCommand?.Owner is not AgentCore.Domain.Triggers.TriggerOwner activationOwner
-                    || admission.AgentInstanceId != activationOwner.AgentInstanceId)
-                    return TextResult(Error("forbidden", "Automation activation requires the current owned user turn."));
-                triggerCommand = triggerCommand with { CurrentUserText = admission.OwnerTurnText ?? triggerCommand.CurrentUserText };
-            }
             if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
             {
                 if (experience is null || admission?.AgentInstanceId is not Guid instanceId || admission.AgentRunId is not Guid workId)
@@ -478,18 +440,6 @@ public sealed partial class SessionToolExecutor(
                     await ReadEmailAsync(args, remainingOutputBytes, cancellationToken, admission).ConfigureAwait(false)),
                 ToolCatalog.EmailCreateDraft => TextResult(
                     await CreateEmailDraftAsync(args, cancellationToken, admission, sessionId).ConfigureAwait(false)),
-                ToolCatalog.AutomationCreate or ToolCatalog.AutomationList
-                    or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable => await TriggerScheduleCommands.ExecuteAsync(
-                        definition,
-                        triggerRegistrations,
-                        call.Name,
-                        args,
-                        triggerCommand,
-                        cancellationToken,
-                        _triggerAuthorizer,
-                        _agentInstances,
-                        _agentDefinitions,
-                        _profiles, automationAuthoring).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
             return (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name is ToolCatalog.ArtifactsCreateFromWorkspace)

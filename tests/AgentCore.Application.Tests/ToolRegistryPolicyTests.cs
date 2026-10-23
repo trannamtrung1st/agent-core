@@ -8,16 +8,17 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ToolRegistryPolicyTests
 {
-    public static IEnumerable<object[]> UnownedManagementTools => new[] {
+    public static IEnumerable<object[]> UnownedTenantOperationTools => new[] {
         "skills.list", "skills.inspect", "skills.create", "skills.update", "skills.set_enabled", "skills.delete", "skills.customize", "skills.reset_enabled",
         "configuration.inspect", "configuration.propose", "management.inspect", "management.policy.update", "management.freeze",
         "settings.list", "settings.inspect", "settings.patch", "resources.list", "resources.inspect", "resources.upsert", "resources.set_enabled", "resources.delete", "resources.copy",
-        "credentials.binding.propose", "credentials.binding.remove", "automation.preferences.inspect", "automation.preferences.patch"
+        "credentials.binding.propose", "credentials.binding.remove", "automation.preferences.inspect", "automation.preferences.patch",
+        "automation.create", "automation.list", "automation.inspect", "automation.update", "automation.delete", "automation.enable", "automation.disable", "automation.run"
     }.Select(name => new object[] { name });
 
     [Theory]
-    [MemberData(nameof(UnownedManagementTools))]
-    public async Task Caller_built_delegation_cannot_offer_or_execute_unowned_configuration_or_child_management(string tool)
+    [MemberData(nameof(UnownedTenantOperationTools))]
+    public async Task Caller_built_delegation_cannot_offer_or_execute_unowned_tenant_operations(string tool)
     {
         var definition = Definition("forged-management", 1, [tool]);
         var harness = new HarnessChatContext(new(HarnessManagementMode.Managed,
