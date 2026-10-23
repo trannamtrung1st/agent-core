@@ -378,8 +378,8 @@ public static class ToolPolicy
         var isolation = definition.StateIsolationPolicy ?? StateIsolationPolicy.Default;
         return !(tool == ToolCatalog.AgentStateInspect && isolation.AgentStateVisibility == AgentStateVisibility.Off
             || tool is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet && !isolation.CrossSessionContinuity
-            || tool is AgentCore.Application.Experience.ExperienceService.SourceTool or ToolCatalog.ExperienceRecent && !isolation.ExperienceRecall
-            || tool == AgentCore.Application.Experience.ExperienceService.RecordTool && !isolation.ExperienceRecord
+            || tool is AgentCore.Application.Tools.TenantExperienceToolContract.Source or ToolCatalog.ExperienceRecent && !isolation.ExperienceRecall
+            || tool == AgentCore.Application.Tools.TenantExperienceToolContract.Record && !isolation.ExperienceRecord
             || ToolCatalog.IsIdentityMaintenance(tool) && !isolation.CrossSessionContinuity);
     }
 

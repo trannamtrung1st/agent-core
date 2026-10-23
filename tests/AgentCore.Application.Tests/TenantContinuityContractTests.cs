@@ -32,7 +32,11 @@ public sealed class TenantContinuityContractTests
         var tools = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll); Assert.Contains(tools, t => t.Name == ToolCatalog.ContinuitySearch);
         var schema = Assert.Single(tools, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson; Assert.Contains("inspect_continuity", schema); Assert.DoesNotContain("manage_memory", schema); Assert.DoesNotContain("update_persona", schema);
         var disabled = definition with { StateIsolationPolicy = new(CrossSessionContinuity: false) };
-        Assert.DoesNotContain(ToolCatalog.For(disabled, context with { Definition = disabled }, ToolConfigurationGates.AllowAll), t => t.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet or ToolCatalog.RequestAuthorization);
+        var restricted = ToolCatalog.For(disabled, context with { Definition = disabled }, ToolConfigurationGates.AllowAll);
+        Assert.DoesNotContain(restricted, t => t.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet);
+        var remainingConsent = Assert.Single(restricted, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
+        Assert.DoesNotContain("inspect_continuity", remainingConsent, StringComparison.Ordinal);
+        Assert.Contains("skills.load", remainingConsent, StringComparison.Ordinal);
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
     }
     [Theory] [InlineData("null")] [InlineData("[]")] [InlineData("{\"kind\":\"Other\",\"id\":\"00000000-0000-0000-0000-000000000001\"}")]

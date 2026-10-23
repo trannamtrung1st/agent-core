@@ -1,5 +1,4 @@
 using System.Text.Json;
-using AgentCore.Application.Experience;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 
@@ -24,37 +23,37 @@ internal static class AutomationRunScript
         }
         if (prompt.Contains("Review every owned source Run", StringComparison.Ordinal))
         {
-            if (!Offers(ExperienceService.SourceTool) || !Offers(ExperienceService.RecordTool)) return Complete("NoAction", "Experience review is unavailable.", false);
+            if (!Offers(TenantExperienceToolContract.Source) || !Offers(TenantExperienceToolContract.Record)) return Complete("NoAction", "Experience review is unavailable.", false);
             var ids = System.Text.RegularExpressions.Regex.Matches(prompt, "\\\"agentRunId\\\"\\s*:\\s*\\\"([0-9a-fA-F-]{36})\\\"").Select(m => m.Groups[1].Value).Distinct().ToArray();
             foreach (var id in ids)
             {
-                var recorded = results.FirstOrDefault(r => r.Name == ExperienceService.RecordTool && r.ToolCallId == "review-record-" + id);
+                var recorded = results.FirstOrDefault(r => r.Name == TenantExperienceToolContract.Record && r.ToolCallId == "review-record-" + id);
                 if (recorded is not null) continue;
-                var inspected = results.FirstOrDefault(r => r.Name == ExperienceService.SourceTool && r.ToolCallId == "review-source-" + id);
-                if (inspected is null) return NamedCall("review-source-" + id, ExperienceService.SourceTool, new { sourceKind = "AgentRun", sourceId = id });
+                var inspected = results.FirstOrDefault(r => r.Name == TenantExperienceToolContract.Source && r.ToolCallId == "review-source-" + id);
+                if (inspected is null) return NamedCall("review-source-" + id, TenantExperienceToolContract.Source, new { sourceKind = "AgentRun", sourceId = id });
                 using var data = JsonDocument.Parse(inspected.Text);
                 if (!data.RootElement.TryGetProperty("throughCursor", out var cursor)) continue;
-                return NamedCall("review-record-" + id, ExperienceService.RecordTool, new { sourceKind = "AgentRun", sourceId = id, throughCursor = cursor.GetInt64(),
+                return NamedCall("review-record-" + id, TenantExperienceToolContract.Record, new { sourceKind = "AgentRun", sourceId = id, throughCursor = cursor.GetInt64(),
                     goal = "Review observable completed user work", attempts = Array.Empty<string>(), decisions = Array.Empty<string>(), outcomes = new[] { "Inspected a durable completed Run" }, corrections = Array.Empty<string>(), unresolved = Array.Empty<string>(), difficulties = Array.Empty<string>(), lessons = new[] { "Verify observable source evidence before acting" } });
             }
-            return Complete(results.Any(r => r.Name == ExperienceService.RecordTool && r.Text.Contains("\"changed\":true", StringComparison.Ordinal)) ? "Response" : "NoAction", "Reviewed all available completed user work.", false);
+            return Complete(results.Any(r => r.Name == TenantExperienceToolContract.Record && r.Text.Contains("\"changed\":true", StringComparison.Ordinal)) ? "Response" : "NoAction", "Reviewed all available completed user work.", false);
         }
         var selectedSession = System.Text.RegularExpressions.Regex.Match(prompt,
             @"synthetic-automation-review-session:\s*([0-9a-fA-F-]{36})");
         if (selectedSession.Success)
         {
-            if (!Offers(ExperienceService.SourceTool) || !Offers(ExperienceService.RecordTool))
+            if (!Offers(TenantExperienceToolContract.Source) || !Offers(TenantExperienceToolContract.Record))
                 return Complete("NoAction", "Experience review is unavailable.", false);
-            var recorded = results.LastOrDefault(m => m.Name == ExperienceService.RecordTool);
+            var recorded = results.LastOrDefault(m => m.Name == TenantExperienceToolContract.Record);
             if (recorded is not null)
                 return Complete((recorded.Text.Contains("\"error\"", StringComparison.Ordinal) || recorded.Text.Contains("\"changed\":false", StringComparison.Ordinal)) ? "NoAction" : "Response",
                     "Reviewed the selected completed Session.", false);
-            var inspected = results.LastOrDefault(m => m.Name == ExperienceService.SourceTool);
-            if (inspected is null) return Call(ExperienceService.SourceTool, new { sourceKind = "Session", sourceId = selectedSession.Groups[1].Value });
+            var inspected = results.LastOrDefault(m => m.Name == TenantExperienceToolContract.Source);
+            if (inspected is null) return Call(TenantExperienceToolContract.Source, new { sourceKind = "Session", sourceId = selectedSession.Groups[1].Value });
             using var source = JsonDocument.Parse(inspected.Text);
             if (!source.RootElement.TryGetProperty("throughCursor", out var cursor))
                 return Complete("NoAction", "No stable owned source was available.", false);
-            return Call(ExperienceService.RecordTool, new {
+            return Call(TenantExperienceToolContract.Record, new {
                 sourceKind = "Session", sourceId = selectedSession.Groups[1].Value, throughCursor = cursor.GetInt64(),
                 goal = "Review observable completed work", attempts = Array.Empty<string>(), decisions = Array.Empty<string>(),
                 outcomes = new[] { "Reviewed a stable completed source checkpoint" }, corrections = Array.Empty<string>(),
@@ -63,12 +62,12 @@ internal static class AutomationRunScript
         }
         if (prompt.Contains("\"experienceId\"", StringComparison.Ordinal))
         {
-            if (results.Any(m => m.Name == ExperienceService.RecordTool))
+            if (results.Any(m => m.Name == TenantExperienceToolContract.Record))
                 return Complete("Response", "Recorded observable completed work as Experience.", false);
             var source = string.Join("\n", request.Messages.Where(m => m.Text.Contains("Selected Experience source", StringComparison.Ordinal)).Select(m => m.Text));
-            if (source.Length == 0 || !Offers(ExperienceService.RecordTool))
+            if (source.Length == 0 || !Offers(TenantExperienceToolContract.Record))
                 return Complete("NoAction", "No eligible selected source is available.", false);
-            return Call(ExperienceService.RecordTool, new AgentCore.Domain.Experience.ExperienceContent(
+            return Call(TenantExperienceToolContract.Record, new AgentCore.Domain.Experience.ExperienceContent(
                 "Review observable completed work", [], [], ["Completed observable source checkpoint"],
                 source.Contains("correction", StringComparison.OrdinalIgnoreCase) ? ["The user supplied a correction"] : [], [],
                 source.Contains("failed", StringComparison.OrdinalIgnoreCase) ? ["A recorded approach failed"] : [],

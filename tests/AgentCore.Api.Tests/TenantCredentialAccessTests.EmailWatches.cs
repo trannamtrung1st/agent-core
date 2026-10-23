@@ -21,11 +21,12 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class TenantCredentialAccessTests
 {
-    public static IEnumerable<object[]> TenantMailWatchCases => new[] { false, true }.SelectMany(sqlite => new[] { "review", "off", "coalesce", "pending-off", "accepted-off", "revoke-use", "disconnect", "lease", "refresh", "pause", "complete", "completion-revoke", "scoped-reader", "delete-account" }.Select(mode => new object[] { sqlite, mode })).Concat(new[] { new object[] { true, "pending-reopen" }, new object[] { true, "accepted-reopen" } });
+    public static IEnumerable<object[]> TenantMailWatchCases => new[] { false, true }.SelectMany(sqlite => new[] { "review", "off", "coalesce", "pending-off", "accepted-off", "revoke-use", "disconnect", "lease", "refresh", "pause", "complete", "completion-revoke", "scoped-reader", "delete-account", "coalesce-none", "coalesce-second", "coalesce-all", "late-subscription", "remove-original" }.Select(mode => new object[] { sqlite, mode })).Concat(new[] { new object[] { true, "pending-reopen" }, new object[] { true, "accepted-reopen" } });
     [Theory] [MemberData(nameof(TenantMailWatchCases))]
     public async Task Tenant_email_watch_baselines_then_commits_owned_metadata_and_fences_unadmitted_watch_off(bool sqlite, string mode)
     {
-        var turnOff = mode is "off" or "revoke-use" or "disconnect"; var coalesce = mode == "coalesce";
+        var turnOff = mode is "off" or "revoke-use" or "disconnect"; var coalesce = mode.StartsWith("coalesce", StringComparison.Ordinal);
+        var withheld = turnOff || mode is "coalesce-all" or "remove-original";
         var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
         await using var factory = new OAuthFactory(sqlite: sqlite, preserve: mode.EndsWith("reopen", StringComparison.Ordinal), servicesOverride: services => { services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock); });
         using var owner = ConnectedClient(factory); var s = await ConnectedReadAccount(factory, owner, "EmailAccount", tools: true);
@@ -113,7 +114,7 @@ public sealed partial class TenantCredentialAccessTests
         if (coalesce)
         {
             await factory.Services.GetRequiredService<TenantEventProcessor>().RunOnceAsync();
-            await Configure(false);
+            if (mode is not ("coalesce-none" or "coalesce-second")) await Configure(false);
             using var created = await owner.PostAsJsonAsync(api + "/credentials", new TenantCredentialCreateRequest("Independent second mailbox", "Password", "EmailAccount", await Revision(owner, s.Tenant), ProtectedValue: "synthetic-mail-secret",
                 EmailAccount: new("Custom", "second@example.test", "second@example.test", "second@example.test", new("mail.example.test", 993, "ImplicitTls"), new("mail.example.test", 465, "ImplicitTls"))));
             Assert.Equal(HttpStatusCode.Created, created.StatusCode); var secondAccount = (await Json(created)).GetProperty("credential").GetProperty("credentialId").GetGuid();
@@ -128,17 +129,43 @@ public sealed partial class TenantCredentialAccessTests
             using var check = await owner.PostAsJsonAsync(secondPath + "/check", new { expectedRevision = view.GetProperty("securityRevision").GetInt64(), expectedCredentialRevision = view.GetProperty("credentialRevision").GetInt64(), expectedWatchRevision = view.GetProperty("configurationRevision").GetInt64() });
             Assert.Equal(HttpStatusCode.Accepted, check.StatusCode); Assert.Equal(1, await monitoring.RunOnceAsync());
             secondId = Assert.Single((await events.ListTenantCoreEventsAsync(s.Tenant, s.Instance, "email.message.received", 0, 100)).Items, e => e.Event.EventId != fact.Event.EventId).Event.EventId;
-            await factory.Services.GetRequiredService<TenantEventProcessor>().RunOnceAsync(); clock.Advance(TimeSpan.FromSeconds(50));
+            await factory.Services.GetRequiredService<TenantEventProcessor>().RunOnceAsync();
+            if (mode is "coalesce-second" or "coalesce-all")
+            {
+                view = await Json(await owner.GetAsync(secondPath));
+                using var disabled = await owner.PutAsJsonAsync(secondPath, new { expectedRevision = view.GetProperty("securityRevision").GetInt64(),
+                    expectedCredentialRevision = view.GetProperty("credentialRevision").GetInt64(), expectedWatchRevision = view.GetProperty("configurationRevision").GetInt64(), enabled = false, intervalSeconds = 60 });
+                Assert.True(disabled.IsSuccessStatusCode, await disabled.Content.ReadAsStringAsync());
+            }
+            clock.Advance(TimeSpan.FromSeconds(50));
+        }
+        Automation? later = null;
+        if (mode is "late-subscription" or "remove-original")
+        {
+            var currentAgent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(s.Tenant, s.Instance))!;
+            using var added = await owner.PostAsJsonAsync(api + $"/agents/{s.Instance}/automations", new { enabled = true, name = "Later subscription", instructions = "Inspect only its own accepted mail events.", requiresTools = false,
+                expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = currentAgent.Instance.Revision,
+                triggers = new[] { new { kind = "event", enabled = true, source = new { kind = "builtin", key = "email.message.received" }, filterExpression = "true" } } });
+            Assert.True(added.IsSuccessStatusCode, await added.Content.ReadAsStringAsync());
+            later = (await factory.Services.GetRequiredService<ITenantAutomationStore>().FindTenantAutomationAsync(s.Tenant, (await Json(added)).GetProperty("automationId").GetGuid()))!;
+            if (mode == "remove-original")
+            {
+                using var removed = await owner.DeleteAsync(api + $"/agents/{s.Instance}/automations/{automationId}?expectedRevision={await Revision(owner, s.Tenant)}&expectedInstanceRevision={currentAgent.Instance.Revision}&expectedAutomationRevision={automation.Revision}");
+                Assert.True(removed.IsSuccessStatusCode, await removed.Content.ReadAsStringAsync());
+            }
         }
         await factory.Services.GetRequiredService<TenantEventProcessor>().RunOnceAsync();
+        if (later is not null) Assert.Null(await events.FindTenantEventDeliveryAsync(s.Tenant, TriggerSourceKind.CoreEvent, fact.Event.EventId, later.Triggers[0].TriggerId));
+        var retainedEmailIds = !coalesce ? new[] { fact.Event.EventId } : mode == "coalesce-none" ? new[] { fact.Event.EventId, secondId!.Value }
+            : mode == "coalesce-second" ? new[] { fact.Event.EventId } : new[] { secondId!.Value };
         var delivery = (await events.FindTenantEventDeliveryAsync(s.Tenant, TriggerSourceKind.CoreEvent, fact.Event.EventId, automation.Triggers[0].TriggerId))!;
-        if (!turnOff)
+        if (!withheld)
         {
             Assert.Equal(coalesce ? EventMatchStatus.Coalesced : EventMatchStatus.AwaitingAdmission, delivery.Status);
             var request = Assert.Single((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(s.Tenant, null, null, new())).Items);
             Assert.Equal(ApprovalKind.Review, request.Kind); Assert.Contains(request.Permission, new[] { "credentials.read", "credentials.use", "email.read" });
             Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync(api + $"/approvals/{request.RequestId}")).StatusCode);
-            Assert.Equal(coalesce ? new[] { secondId!.Value } : new[] { fact.Event.EventId }, request.Operation.AutomationAdmission!.EventSource!.EventIds);
+            Assert.Equal(retainedEmailIds.Order(), request.Operation.AutomationAdmission!.EventSource!.EventIds.Order());
             if (mode == "scoped-reader")
             {
                 var identity = factory.Services.GetRequiredService<IdentityService>(); var account = await identity.RegisterAsync("mail-fact-reader@example.test", "Scoped source reader", "strong-mail-reader-password");
@@ -182,9 +209,24 @@ public sealed partial class TenantCredentialAccessTests
             await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
             delivery = (await events.FindTenantEventDeliveryAsync(s.Tenant, TriggerSourceKind.CoreEvent, fact.Event.EventId, automation.Triggers[0].TriggerId))!;
         }
-        Assert.Equal(turnOff ? EventMatchStatus.PolicySkipped : coalesce ? EventMatchStatus.Coalesced : EventMatchStatus.Admitted, delivery.Status);
-        Assert.Equal(turnOff ? 0 : 1, (await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(s.Tenant, null, null, 0, 100, instanceId: s.Instance)).Total);
-        if (!turnOff)
+        // A coalesced delivery retains its original match; current admission is
+        // represented by the bucket/occurrence and public Activity projection.
+        Assert.Equal(coalesce ? EventMatchStatus.Coalesced : withheld ? EventMatchStatus.PolicySkipped : EventMatchStatus.Admitted, delivery.Status);
+        Assert.Equal(withheld ? 0 : 1, (await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(s.Tenant, null, null, 0, 100, instanceId: s.Instance)).Total);
+        if (withheld) Assert.Empty((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(s.Tenant, null, null, new())).Items);
+        if (mode == "coalesce-all")
+        {
+            var skipped = await Json(await owner.GetAsync(api + $"/agents/{s.Instance}/automations/{automationId}/events"));
+            Assert.Equal(2, skipped.GetProperty("total").GetInt32());
+            foreach (var entry in skipped.GetProperty("items").EnumerateArray())
+            {
+                Assert.Equal("policySkipped", entry.GetProperty("status").GetString());
+                Assert.Equal(2, entry.GetProperty("batchCount").GetInt32()); Assert.Equal(JsonValueKind.Null, entry.GetProperty("runId").ValueKind);
+                var bucket = (await events.FindTenantEventBucketAsync(s.Tenant, entry.GetProperty("bucketId").GetGuid()))!.Bucket;
+                Assert.True(bucket.Flushed); Assert.False(string.IsNullOrWhiteSpace(bucket.CompletionCode));
+            }
+        }
+        if (!withheld)
         {
             var run = Assert.Single((await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(s.Tenant, null, null, 0, 100, instanceId: s.Instance)).Items);
             if (mode == "accepted-off") await Configure(false);
@@ -229,10 +271,14 @@ public sealed partial class TenantCredentialAccessTests
             if (coalesce)
             {
                 var activity = await Json(await owner.GetAsync(api + $"/agents/{s.Instance}/automations/{automationId}/events"));
-                var old = Assert.Single(activity.GetProperty("items").EnumerateArray(), r => r.GetProperty("eventId").GetGuid() == fact.Event.EventId);
-                Assert.Equal("policySkipped", old.GetProperty("status").GetString()); Assert.Equal(JsonValueKind.Null, old.GetProperty("batchCount").ValueKind); Assert.Equal(JsonValueKind.Null, old.GetProperty("runId").ValueKind);
-                var retained = Assert.Single(activity.GetProperty("items").EnumerateArray(), r => r.GetProperty("eventId").GetGuid() == secondId);
-                Assert.Equal(1, retained.GetProperty("batchCount").GetInt32()); Assert.Equal(run.AgentRunId, retained.GetProperty("runId").GetGuid());
+                foreach (var eventId in new[] { fact.Event.EventId, secondId!.Value })
+                {
+                    var entry = Assert.Single(activity.GetProperty("items").EnumerateArray(), r => r.GetProperty("eventId").GetGuid() == eventId);
+                    if (retainedEmailIds.Contains(eventId))
+                    { Assert.Equal(retainedEmailIds.Length, entry.GetProperty("batchCount").GetInt32()); Assert.Equal(run.AgentRunId, entry.GetProperty("runId").GetGuid()); }
+                    else
+                    { Assert.Equal("policySkipped", entry.GetProperty("status").GetString()); Assert.Equal(JsonValueKind.Null, entry.GetProperty("batchCount").ValueKind); Assert.Equal(JsonValueKind.Null, entry.GetProperty("runId").ValueKind); }
+                }
             }
         }
         var read = await owner.GetAsync(api + $"/events/core/{fact.Event.EventId}"); Assert.Equal(HttpStatusCode.OK, read.StatusCode);

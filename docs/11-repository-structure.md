@@ -65,10 +65,10 @@ Infrastructure-only workspace layout is `data/workspaces/agent-<instanceN>/home/
 ## P9.8-P9.9 ownership locations
 
 - Domain: `Experience/` owns immutable observation/provenance records; `Triggers/` owns Automation/occurrence values and `Conversation/` owns Activation/AgentRun identities.
-- Application: `Experience/ExperienceService`, `Ports/IExperienceStore`, `Triggers/AdminAutomationAuthoringService`, `Execution/` and shared Session runtime/tool/prompt owners. Application references Domain, never Infrastructure or wire DTOs.
-- Infrastructure: `Persistence/*ExperienceStore`, EF records/migration, atomic occurrence/AgentRun transactions and Synthetic Automation/retrospection fixtures. Provider DTOs remain local to adapters.
-- API/Contracts: owner-protected `ContinuityEndpoints` and `Http/ContinuityDtos`; `Http/AgentRunDtos` exposes owner-safe execution/source/model/outcome metadata.
-- Web: instance `InstanceContinuitySection`, shared `ExecutionModelFields`, and the existing `BackgroundWorkDrawer`/confirmation/diagnostic components. No second component kit or timer service.
+- Application: `Security/TenantExperience*`, `Tools/TenantExperienceToolContract`, `Security/TenantAutomation*`, `Execution/` and shared Session runtime/tool/prompt owners. Application references Domain, never Infrastructure or wire DTOs. Global Experience/Automation authoring and local-Profile catalog services are retired.
+- Infrastructure: tenant-qualified `Security/*IamStore.Experience*` and Automation/Run transactions, retained physical stores/EF mappings and offline Synthetic adapters. Provider DTOs remain local to adapters.
+- API/Contracts: canonical tenant Session/Run/Experience/continuity endpoints and safe scoped execution/source/model/outcome contracts.
+- Web: the existing tenant Admin shell, Experience/Automation destinations and shared exact-action inspectors. No second component kit or timer service.
 
 ## Credential modules
 

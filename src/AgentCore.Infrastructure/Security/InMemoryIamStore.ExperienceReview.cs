@@ -22,7 +22,7 @@ public sealed partial class InMemoryIamStore : ITenantExperienceReviewStore
         if (kind == ExperienceSourceKind.Session)
         {
             var rows = sessionBacking.ReadTenantHistoricalWindow(tenant, id, Math.Max(0, session.Snapshot.DurableLastEntrySequence - 100), session.Snapshot.DurableLastEntrySequence, 101);
-            projected = TenantExperienceSourceProjection.SessionEvidence(session.Snapshot, rows, AgentCore.Application.Experience.ExperienceService.StableSessionCheckpoint(rows));
+            projected = TenantExperienceSourceProjection.SessionEvidence(session.Snapshot, rows, AgentCore.Application.Security.TenantExperienceSourceProjection.StableSessionCheckpoint(rows));
         }
         else
         {

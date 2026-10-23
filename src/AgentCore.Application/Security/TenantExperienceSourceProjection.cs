@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Experience;
 
@@ -9,6 +10,14 @@ namespace AgentCore.Application.Security;
 
 public static class TenantExperienceSourceProjection
 {
+    public static long StableSessionCheckpoint(IReadOnlyList<ConversationEntry> entries)
+    {
+        var firstStreaming = entries.FirstOrDefault(e => e.Status == EntryStatus.Streaming)?.Sequence ?? long.MaxValue;
+        return entries.Where(e => e.Role == ConversationRole.Assistant && e.Status != EntryStatus.Streaming && e.Sequence < firstStreaming
+            && (!string.IsNullOrWhiteSpace(AssistantSemanticProjection.Text(e)) || EffectReceipts.ModelSafe(e.Envelope?.EffectReceipts).Count > 0))
+            .Select(e => e.Sequence).DefaultIfEmpty(0).Max();
+    }
+
     public const int EvidenceBytes = 3000;
     public static TenantExperienceSourceObservation Session(TenantMemoryReader reader, TenantIsolationMetadata settings,
         SessionSnapshot snapshot, IReadOnlyList<ConversationEntry> rows, long stable, TenantExperienceSourceWitness? expected = null)

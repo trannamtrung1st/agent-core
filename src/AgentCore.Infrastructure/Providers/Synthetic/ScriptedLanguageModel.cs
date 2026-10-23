@@ -97,7 +97,7 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (request.ToolChoiceName == AgentCore.Application.Experience.ExperienceService.RecordTool)
+        if (request.ToolChoiceName == AgentCore.Application.Tools.TenantExperienceToolContract.Record)
         {
             var source = request.Messages.Last(m => m.Role == ModelRole.User).Text;
             var content = new AgentCore.Domain.Experience.ExperienceContent("Review observable completed work",
@@ -105,7 +105,7 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
                 source.Contains("correction", StringComparison.OrdinalIgnoreCase) ? ["The user supplied a correction"] : [],
                 [], source.Contains("failed", StringComparison.OrdinalIgnoreCase) ? ["A recorded approach failed"] : [],
                 ["Verify observable state before acting"]);
-            yield return new ModelToolCallEvent(new("experience-result", AgentCore.Application.Experience.ExperienceService.RecordTool,
+            yield return new ModelToolCallEvent(new("experience-result", AgentCore.Application.Tools.TenantExperienceToolContract.Record,
                 JsonSerializer.Serialize(content, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;

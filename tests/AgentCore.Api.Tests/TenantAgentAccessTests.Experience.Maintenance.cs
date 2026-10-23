@@ -37,7 +37,7 @@ public sealed partial class TenantAgentAccessTests
             await foreach (var item in (Maintain ? synthetic : (ILanguageModel)Seed).GenerateAsync(request, ct)) yield return item;
         }
     }
-    private static async Task<AgentRun> ExperienceMaintenanceFinal(RuntimeStateFactory factory, Guid tenant, Guid run)
+    private static async Task<AgentRun> ExperienceMaintenanceFinal(RuntimeStateFactory factory, Guid tenant, Guid run, AgentRun? knownProviderRetry = null)
     {
         var clock = factory.Services.GetRequiredService<TimeProvider>();
         AgentRun? last = null; var deferrals = 0;
@@ -49,9 +49,15 @@ public sealed partial class TenantAgentAccessTests
             if (current.IsTerminal) return current;
             if (current.Status == AgentRunStatus.WaitingToRetry && current.NextRetryAtUtc is { } retry && retry > clock.GetUtcNow())
             {
-                Assert.True(current.Failure is null, $"Unexpected failure before retry: {current.Failure?.Code}; {current.Failure?.Summary}");
+                // Admission deferral preserves the previous provider failure. Only the exact
+                // already-observed retry may survive here; a new provider failure still fails.
+                var retainedKnownFailure = knownProviderRetry?.Failure is not null && current.AgentRunId == knownProviderRetry.AgentRunId
+                    && current.Checkpoint?.AwaitingRuntimeAdmission == true && knownProviderRetry.NextRetryAtUtc <= clock.GetUtcNow()
+                    && JsonSerializer.Serialize(current.Failure) == JsonSerializer.Serialize(knownProviderRetry.Failure);
+                Assert.True(current.Failure is null || retainedKnownFailure,
+                    $"Unexpected failure before retry: {current.Failure?.Code}; admissionPending={current.Checkpoint?.AwaitingRuntimeAdmission}; attempt={current.AttemptCount}; retry={retry:O}; knownRetry={knownProviderRetry?.NextRetryAtUtc:O}");
                 Assert.True(++deferrals <= 8, "Experience continuation repeatedly refused runtime admission.");
-                Console.WriteLine($"Experience admission deferral {deferrals}: attempt={current.AttemptCount}; checkpoint={current.Checkpoint is not null}; effect={current.SideEffect.Disposition}; failure=none; advance={retry - clock.GetUtcNow()}");
+                Console.WriteLine($"Experience admission deferral {deferrals}: attempt={current.AttemptCount}; checkpoint={current.Checkpoint is not null}; effect={current.SideEffect.Disposition}; retainedKnownFailure={retainedKnownFailure}; advance={retry - clock.GetUtcNow()}");
                 Assert.IsType<FakeTimeProvider>(clock).Advance(retry - clock.GetUtcNow() + TimeSpan.FromMilliseconds(1));
             }
             // This fixture freezes TimeProvider; drive the same durable dispatcher explicitly.

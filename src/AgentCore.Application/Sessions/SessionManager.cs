@@ -2,7 +2,6 @@ using System.Diagnostics;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
-using AgentCore.Application.Experience;
 using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -34,7 +33,6 @@ public sealed class SessionManager
     private readonly ITriggerPolicyRecoveryService? _triggerPolicyRecovery;
     private readonly AdminLifecycleCoordinator? _lifecycleGate;
     private readonly IBrowserLease? _browserLease;
-    private readonly ExperienceService? _experience;
     private readonly Execution.AgentRunConfigurationResolver? _configurations;
     private readonly ISandboxService? _sandboxes;
 
@@ -55,7 +53,6 @@ public sealed class SessionManager
         ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
         AdminLifecycleCoordinator? lifecycleGate = null,
         IBrowserLease? browserLease = null,
-        ExperienceService? experience = null,
         AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null, Execution.AgentRunConfigurationResolver? configurations = null, ISandboxService? sandboxes = null)
     {
         _definitions = definitions;
@@ -76,7 +73,6 @@ public sealed class SessionManager
         _triggerPolicyRecovery = triggerPolicyRecovery;
         _lifecycleGate = lifecycleGate;
         _browserLease = browserLease;
-        _experience = experience;
         _configurations = configurations;
     }
 

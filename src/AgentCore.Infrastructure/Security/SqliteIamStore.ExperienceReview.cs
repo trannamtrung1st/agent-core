@@ -31,7 +31,7 @@ public sealed partial class SqliteIamStore : ITenantExperienceReviewStore
             var rows = await db.Entries.AsNoTracking().Where(i => i.SessionId == sessionId.ToString("D") && i.EntrySequence > after && i.EntrySequence <= session.Snapshot.DurableLastEntrySequence)
                 .OrderByDescending(i => i.EntrySequence).Take(101).ToArrayAsync(ct).ConfigureAwait(false);
             var entries = rows.Select(SqliteMemoryStore.ToEntry).OrderBy(i => i.Sequence).ToArray();
-            projected = TenantExperienceSourceProjection.SessionEvidence(session.Snapshot, entries, AgentCore.Application.Experience.ExperienceService.StableSessionCheckpoint(entries));
+            projected = TenantExperienceSourceProjection.SessionEvidence(session.Snapshot, entries, AgentCore.Application.Security.TenantExperienceSourceProjection.StableSessionCheckpoint(entries));
         }
         else
         {

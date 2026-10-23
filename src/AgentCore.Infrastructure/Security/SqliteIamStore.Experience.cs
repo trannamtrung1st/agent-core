@@ -32,7 +32,7 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
             var rows = await db.Entries.AsNoTracking().Where(e => e.SessionId == id.ToString("D") && e.EntrySequence > after && e.EntrySequence <= source.Snapshot.DurableLastEntrySequence)
                 .OrderByDescending(e => e.EntrySequence).Take(101).ToArrayAsync(ct).ConfigureAwait(false);
             var entries = rows.Select(SqliteMemoryStore.ToEntry).OrderBy(e => e.Sequence).ToArray();
-            return TenantExperienceSourceProjection.Session(reader, settings, source.Snapshot, entries, AgentCore.Application.Experience.ExperienceService.StableSessionCheckpoint(entries), human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
+            return TenantExperienceSourceProjection.Session(reader, settings, source.Snapshot, entries, AgentCore.Application.Security.TenantExperienceSourceProjection.StableSessionCheckpoint(entries), human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
         }
         if (kind != ExperienceSourceKind.AgentRun) throw new AccessDeniedException("experience_source_unavailable");
         var metadata = await OwnedRuns(db, reader.Security.Tenant.TenantId).AsNoTracking().Where(r => r.AgentRunId == id.ToString("D") && r.AgentInstanceId == run.AgentInstanceId.ToString("D") && r.ExecutorPrincipalId == reader.Agent.PrincipalId)

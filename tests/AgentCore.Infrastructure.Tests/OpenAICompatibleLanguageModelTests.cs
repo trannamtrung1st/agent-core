@@ -618,8 +618,8 @@ public sealed class OpenAICompatibleLanguageModelTests
         const string body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"record_1\",\"function\":{\"name\":\"experience.record\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
         var model = Create(handler, tools: true);
-        var contract = AgentCore.Application.Experience.ExperienceService.RecordContract;
-        Assert.True(ToolRegistry.TryGet(contract.Name, out _));
+        Assert.True(ToolRegistry.TryGet(TenantExperienceToolContract.Record, out var descriptor));
+        var contract = descriptor.ModelDefinition;
         var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, "Retrospect")],
             Tools: [contract], ToolChoice: ModelToolChoice.Named, ToolChoiceName: contract.Name));
         Assert.Equal(contract.Name, Assert.IsType<ModelToolCallEvent>(events[0]).Call.Name);

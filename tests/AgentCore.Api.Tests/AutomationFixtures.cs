@@ -23,10 +23,3 @@ internal sealed record ScheduleAutomationDraft(long ExpectedRevision, bool Enabl
     public string Name => "Scheduled work";
     public IReadOnlyList<AutomationTriggerDto> Triggers => [new AutomationTriggerDto("schedule", Schedule, TriggerId: Guid.NewGuid().ToString())];
 }
-internal static class AutomationFixtures
-{
-    public static ValueTask<Automation> SaveAsync(this AdminAutomationAuthoringService service, Guid instanceId, Guid? id,
-        long revision, bool enabled, int interval, string instructions, string? model, string? effort, CancellationToken ct = default) =>
-        service.SaveAsync(instanceId, id, revision, enabled, "Periodic review", instructions,
-            new ScheduleTrigger(new FixedIntervalSchedule(interval, DateTimeOffset.UtcNow.AddHours(1))), model, effort, ct);
-}

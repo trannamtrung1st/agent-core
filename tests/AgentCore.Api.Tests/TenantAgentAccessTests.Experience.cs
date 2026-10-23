@@ -84,6 +84,9 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_experience_actual_HTTP_model_and_human_retention_remain_separate_from_Memory_and_source_history(bool sqlite)
     {
         var model = new ExperienceModel(); await using var factory = new RuntimeStateFactory(sqlite, model: model); using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
+        var application = typeof(AgentCore.Application.Sessions.SessionManager).Assembly;
+        foreach (var retired in new[] { "Experience.ExperienceService", "Triggers.AdminAutomationAuthoringService", "Triggers.AutomationPresetCatalog", "Events.UnifiedEventCatalog" })
+            Assert.Null(application.GetType("AgentCore.Application." + retired));
         var value = await ExperienceRecorded(factory, owner, model); var api = $"/api/v2/tenants/{value.Tenant}/agents/{value.Agent}/experience";
         await MemoryRequest(factory, owner, value.Tenant, value.Agent, instanceRevision: value.Revision);
         Assert.Contains(model.Requests.Last().Context!.Sections, s => s.Id == ContextSectionId.Experience && s.Message.Text.Contains("PRIVATE_EXPERIENCE_EVIDENCE", StringComparison.Ordinal));

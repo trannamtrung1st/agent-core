@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Text;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Events;
-using AgentCore.Application.Experience;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Triggers;
 using AgentCore.Application.Work;

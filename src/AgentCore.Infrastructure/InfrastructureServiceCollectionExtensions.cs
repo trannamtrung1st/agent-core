@@ -123,7 +123,6 @@ public static class InfrastructureServiceCollectionExtensions
             new DefaultAgentBrain(
                 provider.GetRequiredService<PromptContextBuilder>(),
                 provider.GetRequiredService<IInitiativeEvaluator>()));
-        services.TryAddSingleton<AgentCore.Application.Experience.ExperienceService>();
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         services.TryAddSingleton<IDiagnosticIdSource, SystemDiagnosticIdSource>();
@@ -409,16 +408,13 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
         }
         services.TryAddSingleton<IAutomationService, AutomationService>();
-        services.TryAddSingleton<AdminAutomationAuthoringService>();
         services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
         services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
         services.TryAddSingleton<ITriggerInstancePolicyReconciliationService, TriggerInstancePolicyReconciliationService>();
         services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
         services.TryAddSingleton<IEventFilterEvaluator, AgentCore.Infrastructure.Events.RestrictedEventFilter>();
-        services.TryAddSingleton<AutomationPresetCatalog>();
         services.TryAddSingleton<WebhookEventService>();
-        services.TryAddSingleton<UnifiedEventCatalog>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),
             provider.GetRequiredService<IAgentDefinitionStore>(),

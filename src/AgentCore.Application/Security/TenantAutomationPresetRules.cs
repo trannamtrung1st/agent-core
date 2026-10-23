@@ -9,11 +9,15 @@ namespace AgentCore.Application.Security;
 
 public static class TenantAutomationPresetRules
 {
-    public static IReadOnlyList<AutomationPreset> Templates { get; } = Array.AsReadOnly(AutomationPresetCatalog.Templates.Select(p => p.PresetId switch {
-        "consolidate-continuity" => p with { Description = "Consolidate redundant Instance Experience with exact permission and approval.",
-            Instructions = "Inspect a narrow set of this Agent's Instance-owned Experience. Use experience.consolidate only for genuinely repeated observations and only with exact approval. Preserve sensitivity, exceptions, failed attempts, temporal/project qualifiers, provenance and contradictions. Respect Allow agent consolidation. Do not adopt a human's private Profile, Memory or Experience. Never forget or promote Experience into Memory. Make one bounded decision or finish quietly with NoAction." },
-        "review-recent-work" => p with { Instructions = "Review the exact owned source Runs represented in this task's trigger references. Inspect each with experience.source before recording useful validated lessons with experience.record. Skip sources this Automation cannot currently read; never adopt private User evidence or invent source IDs or outcomes. Preserve sensitivity and provenance. Do not promote Experience into Memory. If the budget cannot cover every source, identify the unreviewed source IDs in the factual result for a later authorized review. If there is no useful new work, finish quietly with NoAction." },
-        _ => p }).ToArray());
+    public static IReadOnlyList<AutomationPreset> Templates { get; } = Array.AsReadOnly(new[] {
+        new AutomationPreset("review-recent-work", 1, "Review recent work", "Record useful lessons from substantive user work.",
+            "Review the exact owned source Runs represented in this task's trigger references. Inspect each with experience.source before recording useful validated lessons with experience.record. Skip sources this Automation cannot currently read; never adopt private User evidence or invent source IDs or outcomes. Preserve sensitivity and provenance. Do not promote Experience into Memory. If the budget cannot cover every source, identify the unreviewed source IDs in the factual result for a later authorized review. If there is no useful new work, finish quietly with NoAction.",
+            "coreEvent", "run.completed", "event.data.activationKind === 'UserTurn' && event.data.outcomeKind !== 'NoAction'", new(EventDispatchMode.CoalesceLatest, 900)),
+        new AutomationPreset("consolidate-continuity", 1, "Consolidate continuity", "Consolidate redundant Instance Experience with exact permission and approval.",
+            "Inspect a narrow set of this Agent's Instance-owned Experience. Use experience.consolidate only for genuinely repeated observations and only with exact approval. Preserve sensitivity, exceptions, failed attempts, temporal/project qualifiers, provenance and contradictions. Respect Allow agent consolidation. Do not adopt a human's private Profile, Memory or Experience. Never forget or promote Experience into Memory. Make one bounded decision or finish quietly with NoAction.", "schedule"),
+        new AutomationPreset("improve-harness", 1, "Improve agent harness", "Propose a governed improvement to the agent harness.",
+            "Inspect repeated friction, failures and corrections and the current managed harness. Propose one justified improvement through existing Harness Management, or finish quietly with NoAction. Respect enabled scopes, freeze and immutable Definitions. Request exact approval for guarded changes. This recipe does not authorize automatic publication or adoption, or grant new capabilities.", "schedule") });
+
     public static AutomationPreset? Template(string? id, int? version)
     {
         if (id is null && version is null) return null;

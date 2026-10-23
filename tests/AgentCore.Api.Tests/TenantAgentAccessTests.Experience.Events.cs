@@ -149,6 +149,7 @@ public sealed partial class TenantAgentAccessTests
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/persona", new { persona = agent.Instance.Persona with { Name = "Changed after exact refusal" },
                     expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedPersonaRevision = agent.Instance.PersonaRevision })).StatusCode);
             }
+            AgentRun? knownProviderRetry = null;
             // The model consumes the fault flag; it cannot decide whether this fixture advances time.
             if (expectRetry)
             {
@@ -165,6 +166,7 @@ public sealed partial class TenantAgentAccessTests
                     await Task.Delay(25, deadline.Token);
                 }
                 Assert.Equal(AgentRunStatus.WaitingToRetry, retry.Status); Assert.Equal(1, model.Failures);
+                knownProviderRetry = retry;
                 Assert.NotNull(retry.NextRetryAtUtc); Assert.True(retry.NextRetryAtUtc > clock.GetUtcNow());
                 Assert.Null(retry.Claim); Assert.Equal(source.ResponseId, retry.ResponseId);
                 Assert.Equal(source.Admission.Activation.RootActivationId, retry.Admission.Activation.RootActivationId);
@@ -187,8 +189,18 @@ public sealed partial class TenantAgentAccessTests
                     Assert.Equal(retry.NextRetryAtUtc, restored.NextRetryAtUtc);
                 }
                 clock.Advance(retry.NextRetryAtUtc!.Value - clock.GetUtcNow() + TimeSpan.FromMilliseconds(1));
+                // Exercise a persisted unaccepted dispatch deterministically, including
+                // its retained failure, before the ordinary worker resumes this retry.
+                var runtimeStore = active.Services.GetRequiredService<ITenantRuntimeStore>();
+                var generation = Guid.NewGuid(); var at = clock.GetUtcNow();
+                var claimed = await runtimeStore.ApplyTenantRuntimeCommandAsync(retry.Owner, successorId,
+                    new AgentCore.Application.Execution.AgentRunCommand.Claim(retry.Revision, at, generation, at.AddMinutes(1)), Guid.NewGuid());
+                var deferred = await runtimeStore.ApplyTenantRuntimeCommandAsync(claimed.Owner, successorId,
+                    new AgentCore.Application.Execution.AgentRunCommand.DeferApprovalDispatch(claimed.Revision, at, generation, at.AddSeconds(5)), Guid.NewGuid());
+                Assert.True(deferred.Checkpoint!.AwaitingRuntimeAdmission);
+                Assert.Equal(JsonSerializer.Serialize(retry.Failure), JsonSerializer.Serialize(deferred.Failure));
             }
-            try { observed = await ExperienceMaintenanceFinal(active, tenant, runId); }
+            try { observed = await ExperienceMaintenanceFinal(active, tenant, runId, knownProviderRetry); }
 
             catch (TimeoutException) {
                 var chain = (await runs.FindTenantRunAsync(tenant, runId))!; if (chain.Result?.ContinuationRunId is { } continuation) chain = (await runs.FindTenantRunAsync(tenant, continuation))!;

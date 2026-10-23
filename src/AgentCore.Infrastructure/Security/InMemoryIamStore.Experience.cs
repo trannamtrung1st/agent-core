@@ -31,7 +31,7 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
             var raw = new TenantExperienceSourceWitness(kind, id, id, source.Snapshot.Revision, Math.Max(1, source.Snapshot.DurableLastEntrySequence), 0, 20, null, null, new string('a', 64));
             TenantExperienceRules.RawAsync(reader, raw, false, iam, ct, human).AsTask().GetAwaiter().GetResult();
             var rows = sessionBacking.ReadTenantHistoricalWindow(reader.Security.Tenant.TenantId, id, Math.Max(0, source.Snapshot.DurableLastEntrySequence - 100), source.Snapshot.DurableLastEntrySequence, 101);
-            var stable = AgentCore.Application.Experience.ExperienceService.StableSessionCheckpoint(rows);
+            var stable = AgentCore.Application.Security.TenantExperienceSourceProjection.StableSessionCheckpoint(rows);
             result = TenantExperienceSourceProjection.Session(reader, settings, source.Snapshot, rows, stable, human is null || TenantExperienceReviewRules.Selected(reader.Root) is not null ? expected : null);
         }
         else if (kind == ExperienceSourceKind.AgentRun)

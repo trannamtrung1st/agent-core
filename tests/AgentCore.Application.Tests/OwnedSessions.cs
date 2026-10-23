@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
-using AgentCore.Application.Experience;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
@@ -36,7 +35,6 @@ internal static class OwnedSessions
         ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
         AdminLifecycleCoordinator? lifecycleGate = null,
         IBrowserLease? browserLease = null,
-        ExperienceService? experience = null,
         AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
         IAgentInstanceStore? instanceStore = null)
     {
@@ -49,7 +47,7 @@ internal static class OwnedSessions
                 store, workspace, lifecycleGate ?? new AdminLifecycleCoordinator());
         var manager = new SessionManager(definitions, store, ids, time, voice,
             attachments, knowledge, workspace, artifacts, models, localProfiles, structuredMemory,
-            instances, triggerPolicyRecovery, lifecycleGate, browserLease, experience, agentWorkspace);
+            instances, triggerPolicyRecovery, lifecycleGate, browserLease, agentWorkspace);
         Owners.Add(manager, instances);
         return manager;
     }
