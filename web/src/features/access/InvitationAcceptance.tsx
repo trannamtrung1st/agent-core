@@ -13,6 +13,16 @@ export function InvitationAcceptance({ invitationId }: { invitationId: string })
   const [mode, setMode] = useState('Create account'); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>();
   const [form] = Form.useForm<{ displayName?: string; password: string }>(); const [feedback, holder] = message.useMessage(appMessageConfig);
   useEffect(() => {
+    // Reopening the original link after its fragment was removed is a same-document
+    // navigation. Reload that purpose URL so it gets a fresh read and no old form/error.
+    const reopen = () => {
+      const data = new URLSearchParams(window.location.hash.slice(1));
+      if (data.has('tenant') || data.has('token')) window.location.reload();
+    };
+    window.addEventListener('hashchange', reopen);
+    return () => window.removeEventListener('hashchange', reopen);
+  }, []);
+  useEffect(() => {
     // Purpose credentials stay out of requests' URLs, browser history and copied error diagnostics.
     window.history.replaceState(window.history.state, '', window.location.pathname);
     const controller = new AbortController();

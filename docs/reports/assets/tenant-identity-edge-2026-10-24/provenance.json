@@ -1,0 +1,128 @@
+{
+  "date": "2026-10-24",
+  "preimage": "c7049ecb",
+  "profile": "Synthetic",
+  "persistence": "Fresh disposable SQLite",
+  "transport": "MessagePack explicitly pinned in runner",
+  "browser": "Playwright Chromium CLI fallback after prior MCP transport closure",
+  "visualChange": "One existing Ant Design Alert for terminal expired approval guidance; no layout/style/token/font changes.",
+  "sourceHashScope": "Current source snapshot. Paging and expiry captures precede the unrelated InvitationAcceptance hash-reopen fix; their visual and behavior owners are unchanged.",
+  "sources": {
+    "web/src/features/access/InvitationAcceptance.tsx": "b7e2a934726263a7ff55109614730d5853644add89e950212ed9a8041f16100f",
+    "web/src/features/access/TenantApprovals.tsx": "e4f0997ab45bb3ddb715b4ece54af6dd5a59b578637f5a0d12cfd2002a41513f",
+    "web/src/features/access/Organizations.tsx": "83997c031e456ca95e0329058a9bc35a7b0b73bc9e4d07ecd6f6a06f09bfd95e",
+    "web/src/features/access/Members.tsx": "e82f2effca36ec0d28bf97e5f520f0febc2cdddd2c433f9f026aaa1b286381c4",
+    "web/src/features/access/Roles.tsx": "2f0afd88b1cb8e95cb545d97976072e4ba46afffe483f372bdc04282449727f7",
+    "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
+    "web/src/app.css": "bf4c133b24e164054e32f59b2652f0f3c8a12d23982bf7da56d6506971ad2168",
+    "web/e2e/tenant-acceptance.spec.ts": "f0cf44c2f882682571a8e13c3d9462938020a423a412d6584897b64df0021dd5",
+    "web/e2e/support/tenant-acceptance.ts": "5e9aa1449860046c15d2028a1f91488eca3b9565e5697be19dfb53b68fedb259",
+    "web/playwright.tenant-acceptance.config.ts": "33a417aaa60c6453ed7e66214d556c263f1f281a5d62034e0ed32151cbe25ab5"
+  },
+  "captures": [
+    {
+      "file": "no-organization-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "7799509b9dbebaba120ed1366aa1e770fa46f7724d156e830571dfc1375ed372",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-Lo4vwV/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/no-organization-320.png",
+      "capturedAtUtc": "2026-10-23T22:49:25.419704+00:00"
+    },
+    {
+      "file": "no-organization-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "196947e068a286a7014185303bdd6b88ffb267298fb0c723ebbd0473334f5d78",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-Lo4vwV/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/no-organization-1440.png",
+      "capturedAtUtc": "2026-10-23T22:49:25.561002+00:00"
+    },
+    {
+      "file": "invalid-invitation-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "4917c8332bf9abd0e775549484babc3f6fb520afc8aec7efe509401c775f2292",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-Lo4vwV/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/invalid-invitation-320.png",
+      "capturedAtUtc": "2026-10-23T22:49:29.298432+00:00"
+    },
+    {
+      "file": "revoked-invitation-390.png",
+      "width": 390,
+      "height": 900,
+      "sha256": "ca2b8804fe733b2ab27e51a104ba8d0339e875e0b5300ca779aef4c80db1b0ba",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-Lo4vwV/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/revoked-invitation-390.png",
+      "capturedAtUtc": "2026-10-23T22:49:29.981188+00:00"
+    },
+    {
+      "file": "expired-invitation-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "4917c8332bf9abd0e775549484babc3f6fb520afc8aec7efe509401c775f2292",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-Lo4vwV/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/expired-invitation-320.png",
+      "capturedAtUtc": "2026-10-23T22:50:31.104455+00:00"
+    },
+    {
+      "file": "expired-invitation-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "f2ed7d9c42f2da71d85639c55013ff35d169d4cfbcb31d69a45bda36469069d1",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-Lo4vwV/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/expired-invitation-1440.png",
+      "capturedAtUtc": "2026-10-23T22:50:31.248573+00:00"
+    },
+    {
+      "file": "role-search-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "18f3a8f89c34b667638ee810361063337f8bdd1453eec428ba7ba69497de034d",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/role-search-320.png",
+      "capturedAtUtc": "2026-10-23T22:40:41.657311+00:00"
+    },
+    {
+      "file": "role-search-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "d0ab5aa46cf50e5eab22f7cd1045cd066f0dc57fc6269f5b9b5366ac64b2ff3f",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/role-search-1440.png",
+      "capturedAtUtc": "2026-10-23T22:40:41.836570+00:00"
+    },
+    {
+      "file": "member-search-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "142bae3cbdfa2794f8a672c63d56bd45c6edc56af97af5a40162b5075a59342f",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/member-search-320.png",
+      "capturedAtUtc": "2026-10-23T22:40:43.238713+00:00"
+    },
+    {
+      "file": "member-search-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "e55588528ffc3b046e4cdab155d3a3f42de1a5b95d6607fea529a4c20aa69540",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/member-search-1440.png",
+      "capturedAtUtc": "2026-10-23T22:40:43.447702+00:00"
+    },
+    {
+      "file": "organization-search-390.png",
+      "width": 390,
+      "height": 900,
+      "sha256": "2b9427f1b07382c694a7c09fc2991e3bb7ce02ea917885b98d6e4723d3ae704d",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/organization-search-390.png",
+      "capturedAtUtc": "2026-10-23T22:40:40.647541+00:00"
+    },
+    {
+      "file": "expired-approval-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "bc8c9ecc9d1849e53bc3987dfe1be89a860f06131a85592adcd413893464b66b",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV/results/tenant-acceptance-expired--9f3b7-t-and-complete-fresh-review/expired-approval-320.png",
+      "capturedAtUtc": "2026-10-23T22:40:57.135320+00:00"
+    },
+    {
+      "file": "expired-approval-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "66fcf5c15539aa3f2dc47b40521ecacaba48e78be83b3d390af5a5a3f40b427d",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV/results/tenant-acceptance-expired--9f3b7-t-and-complete-fresh-review/expired-approval-1440.png",
+      "capturedAtUtc": "2026-10-23T22:40:57.407581+00:00"
+    }
+  ]
+}

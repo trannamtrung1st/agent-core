@@ -565,6 +565,26 @@
         },
         "observed": "Actual Synthetic SQLite CLI browser journeys after MCP transport closure. Roles and saved-action approval controls at 320/390/768/1024/1440px; long literal action text, native scroll/footer and document overflow assertions. Individually inspected role320, Review1440 and ExceptionalGrant320 captures.",
         "limits": "Scoped inspection only; no fresh detector/reviewer, broad visual acceptance, full WCAG, physical touch/audio or performance claim. Earlier JSON captures are historical; canonical MessagePack functional results are recorded separately. Original proposal remains active."
+      },
+      "tenantIdentityEdgeAcceptance": {
+        "date": "2026-10-24",
+        "scope": "Account/no-tenant and invitation recovery, real organization/role/member pagination, terminal expired approval and new-root recovery. One existing Ant Design Alert; no layout/CSS/font/token change.",
+        "verificationReport": "docs/reports/tenant-identity-edge-verification-2026-10-24.md",
+        "captureProvenance": "docs/reports/assets/tenant-identity-edge-2026-10-24/provenance.json",
+        "sources": {
+          "web/src/features/access/InvitationAcceptance.tsx": "b7e2a934726263a7ff55109614730d5853644add89e950212ed9a8041f16100f",
+          "web/src/features/access/TenantApprovals.tsx": "e4f0997ab45bb3ddb715b4ece54af6dd5a59b578637f5a0d12cfd2002a41513f",
+          "web/src/features/access/Organizations.tsx": "83997c031e456ca95e0329058a9bc35a7b0b73bc9e4d07ecd6f6a06f09bfd95e",
+          "web/src/features/access/Members.tsx": "e82f2effca36ec0d28bf97e5f520f0febc2cdddd2c433f9f026aaa1b286381c4",
+          "web/src/features/access/Roles.tsx": "2f0afd88b1cb8e95cb545d97976072e4ba46afffe483f372bdc04282449727f7",
+          "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
+          "web/src/app.css": "bf4c133b24e164054e32f59b2652f0f3c8a12d23982bf7da56d6506971ad2168",
+          "web/e2e/tenant-acceptance.spec.ts": "f0cf44c2f882682571a8e13c3d9462938020a423a412d6584897b64df0021dd5",
+          "web/e2e/support/tenant-acceptance.ts": "5e9aa1449860046c15d2028a1f91488eca3b9565e5697be19dfb53b68fedb259",
+          "web/playwright.tenant-acceptance.config.ts": "33a417aaa60c6453ed7e66214d556c263f1f281a5d62034e0ed32151cbe25ab5"
+        },
+        "observed": "Synthetic SQLite CLI browser interactions at 320/390/768/1024/1440px. Thirteen retained captures; individually inspected no-organization/expired-invitation/member-search/role-search/expired-approval320 and expired-approval1440. Wrapped content, role-opener focus and native Drawer footer remain usable.",
+        "limits": "Scoped evidence, not a new detector/reviewer or full WCAG, physical-touch/audio, performance or proposal acceptance. Existing shared singular count wording remains noted. Prior design metadata/tokens are preserved; launcher/context was not rerun."
       }
     }
   },

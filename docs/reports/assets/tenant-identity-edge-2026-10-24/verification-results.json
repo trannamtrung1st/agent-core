@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-24",
+  "preimage": "c7049ecb",
+  "uniqueCases": 159,
+  "frontendCases": 135,
+  "httpCases": 9,
+  "owningExpiryCases": 12,
+  "browserJourneys": 3,
+  "records": [
+    {
+      "source": "/private/tmp/tenant-ui-edges-unit-20261024.log",
+      "sha256": "4bedf141b9f8e1cbf8fb4c2c678cd32ae5975c885412208b9456aa02624a78c2",
+      "distinctPassedCases": 135,
+      "scope": "Actual TenantApprovals component file; four additional selector paths matched no files."
+    },
+    {
+      "source": "/private/tmp/tenant-ui-edges-identity-native-20261024.log",
+      "sha256": "ec6fceb2a6f2c5dc601c8728f301b15cea90baf787f74c422bb929ea335a244e",
+      "distinctPassedCases": 7,
+      "scope": "Identity/tenant HTTP and SQLite restart."
+    },
+    {
+      "source": "/private/tmp/tenant-ui-edges-expiry-native-20261024.log",
+      "sha256": "30ecca050e3348a73312b598ffefc7e088335727293cae5be7ba6c8166eea66c",
+      "distinctPassedCases": 12,
+      "scope": "Both-store expiry/root suppression and decision/expiry/CAS races."
+    },
+    {
+      "source": "/private/tmp/tenant-ui-edges-invitation-native-20261024.log",
+      "sha256": "16f07295e1bbf5017562a77a14c08674334a59310398f3a31fe19cde4718fe7a",
+      "distinctPassedCases": 2,
+      "scope": "New both-store expired inspection/registration/acceptance and fresh-proof recovery."
+    },
+    {
+      "source": "/private/tmp/tenant-ui-edges-browser-final-20261024.log",
+      "sha256": "3741f59e1de24ed328c3ebe82b8630c445e385a105696ea97d16e2850d50f5e5",
+      "distinctPassedCases": 2,
+      "scope": "Only paging and approval expiry/recovery passed here; account lookup fixture failed and was separately corrected."
+    },
+    {
+      "source": "/private/tmp/tenant-ui-edges-account-recovery-final-20261024.log",
+      "sha256": "dc3067bf49c932bc7635f0f3241f63361798bb88ccfccc742a97d1b16e4efe61",
+      "distinctPassedCases": 1,
+      "scope": "Final account/no-tenant/two-organization/invalid-revoked-expired invitation journey after actual hash-reopen fix."
+    }
+  ],
+  "builds": [
+    {
+      "source": "/private/tmp/tenant-ui-edges-web-build-final-20261024.log",
+      "sha256": "f79a4906348769704794ffadecc1fc938e1692dfcb4a00805e9b169ad2ad6227",
+      "result": "passed"
+    },
+    {
+      "source": "/private/tmp/tenant-ui-edges-solution-build-final-20261024.log",
+      "sha256": "d007db042c85e06b2be28a02f4606b1856a28ef82e5551759ac838fe9c9979d8",
+      "result": "passed"
+    }
+  ],
+  "browserRoots": [
+    "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-QkqHUV",
+    "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-Lo4vwV"
+  ],
+  "limits": "Focused results across qualified runs. Initial setup and pre-fix recovery failures remain failures; no full-suite, CI, performance or full-proposal claim."
+}
