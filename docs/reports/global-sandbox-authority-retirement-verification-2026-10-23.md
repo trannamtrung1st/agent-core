@@ -40,6 +40,8 @@ A broader Application probe selected 67 cases and initially found **47 passed / 
 
 The other **19 inherited raw Runtime fixture cases remain failing** across eight methods in `AgentRunDurabilityTests` / `BackgroundSemanticRecoveryTests`: typed waits, initial completion, retry ownership, semantic/format recovery, completion-only cutoff and conversational-output exclusion. Their global helper no longer establishes current tenant execution authority. They were not deleted or reclassified as passed here and require explicit canonical reconciliation before final acceptance. The failure-case manifest is `/private/tmp/sandbox-authority-retirement-application-failures-20261023.json`; baseline and current logs retain exact outputs. This scoped module does not claim a green broad Application probe.
 
+The [canonical protocol successor](canonical-background-protocol-verification-2026-10-23.md) subsequently reconciles those 19 inherited failures. Its eight obsolete positive methods are retired only after actual owned recovery/outcome/deadline and current wait/interrupt qualification; the remaining 46-case Application probe passes. The failure evidence above remains the historical checkpoint, not the current outstanding list.
+
 ## Focused local verification
 
 | Check | Observed result |

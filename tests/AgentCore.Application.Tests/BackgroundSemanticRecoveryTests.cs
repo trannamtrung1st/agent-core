@@ -21,58 +21,6 @@ public sealed partial class AgentRunDurabilityTests
         new(ModelRole.Tool, "{\"status\":\"ok\",\"text\":\"Verified source finding\"}", ToolCallId: "read", Name: "web.fetch")];
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Background_work_has_no_conversational_contract_on_either_transport(bool native)
-    {
-        var inner = new BackgroundRecoveryModel(native, plainThenComplete: true);
-        var (snapshot, run, runs, memory, time) = await BackgroundRecoveryFixture();
-        await using var runtime = CreateRuntime(new CapturingSessionOutput(), new SemanticResponseLanguageModel(inner), time, runs, memory, snapshot);
-        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true));
-        await runtime.WaitUntilIdleAsync();
-        var terminal = (await runs.GetAsync(run.Owner, run.AgentRunId))!;
-        Assert.Equal(AgentRunStatus.Completed, terminal.Status);
-        Assert.Equal(2, inner.Requests.Count);
-        Assert.All(inner.Requests, r => {
-            Assert.Null(r.ResponseContract);
-            Assert.DoesNotContain(r.Tools ?? [], t => t.Name == AssistantResponseSchema.ResponseFunctionName);
-            Assert.DoesNotContain(r.Messages, m => m.Text.Contains("required response protocol", StringComparison.Ordinal));
-        });
-        Assert.Equal(ToolCatalog.WorkComplete, Assert.Single(inner.Requests[1].Tools!).Name);
-    }
-
-    [Theory]
-    [InlineData(ProviderFailureReason.InvalidBlocks, ProviderResponseChannel.ResponseFunction, false)]
-    [InlineData(ProviderFailureReason.InvalidJson, ProviderResponseChannel.StructuredOutput, false)]
-    [InlineData(ProviderFailureReason.ResponseFunctionArgumentsInvalid, ProviderResponseChannel.ResponseFunction, false)]
-    [InlineData(ProviderFailureReason.InvalidMarkerEnvelope, ProviderResponseChannel.MarkerCompatibility, false)]
-    [InlineData(ProviderFailureReason.OutputLimit, ProviderResponseChannel.StructuredOutput, false)]
-    [InlineData(ProviderFailureReason.InvalidBlocks, ProviderResponseChannel.ResponseFunction, true)]
-    public async Task Background_format_failure_uses_one_durable_completion_only_recovery(string reason, string channel, bool exhaust)
-    {
-        var (snapshot, run, runs, memory, time) = await BackgroundRecoveryFixture();
-        var model = new BackgroundRecoveryModel(true, failure: new(ProviderErrorCode.InvalidResponse, "Malformed response.", FailureReason: reason, ResponseChannel: channel), exhaust: exhaust);
-        await using var runtime = CreateRuntime(new CapturingSessionOutput(), model, time, runs, memory, snapshot);
-        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true));
-        await runtime.WaitUntilIdleAsync();
-        var terminal = (await runs.GetAsync(run.Owner, run.AgentRunId))!;
-        Assert.Equal(exhaust ? AgentRunStatus.Failed : AgentRunStatus.Completed, terminal.Status);
-        Assert.Equal(run.ResponseId, terminal.ResponseId);
-        Assert.Equal(1, terminal.AttemptCount);
-        Assert.Equal(2, model.Requests.Count);
-        var correction = model.Requests[1];
-        Assert.Equal(ToolCatalog.WorkComplete, Assert.Single(correction.Tools!).Name);
-        Assert.Equal(ModelToolChoice.Named, correction.ToolChoice);
-        Assert.Null(correction.ResponseContract);
-        Assert.Single(correction.Interaction!, m => m.Role == ModelRole.Tool && m.Name == "web.fetch");
-        var state = AgentRunToolCallCheckpoint.ReadExecutionState(terminal.Checkpoint);
-        Assert.Equal("completionOnly", state.ProtocolRecovery!.Strategy);
-        Assert.Equal(exhaust ? "failed" : "succeeded", state.ProtocolRecovery.Outcome);
-        Assert.Equal(reason, state.FailedAttempts![0].Reason);
-        if (!exhaust) Assert.Equal(AgentRunOutcomeKind.NeedsAttention, terminal.Result!.OutcomeKind);
-    }
-
-    [Theory]
     [InlineData(ProviderErrorCode.Authentication, ProviderFailureReason.TransportFailure)]
     [InlineData(ProviderErrorCode.Timeout, ProviderFailureReason.TotalTimeout)]
     [InlineData(ProviderErrorCode.InvalidRequest, ProviderFailureReason.TransportFailure)]
@@ -128,22 +76,6 @@ public sealed partial class AgentRunDurabilityTests
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(AgentRunStatus.Failed, (await runs.GetAsync(run.Owner, run.AgentRunId))!.Status);
         Assert.Single(model.Requests);
-    }
-
-    [Fact]
-    public async Task Semantic_correction_cannot_obtain_a_second_generation_through_completion_validation()
-    {
-        var (snapshot, run, runs, memory, time) = await BackgroundRecoveryFixture();
-        var model = new BackgroundRecoveryModel(true, failure: new(ProviderErrorCode.InvalidResponse, "Invalid blocks.",
-            FailureReason: ProviderFailureReason.InvalidBlocks, ResponseChannel: ProviderResponseChannel.ResponseFunction), invalidCompletion: true);
-        await using var runtime = CreateRuntime(new CapturingSessionOutput(), model, time, runs, memory, snapshot);
-        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true));
-        await runtime.WaitUntilIdleAsync();
-        var terminal = (await runs.GetAsync(run.Owner, run.AgentRunId))!;
-        Assert.Equal(AgentRunStatus.Failed, terminal.Status);
-        Assert.Equal("completion-invalid", terminal.Failure!.Code);
-        Assert.Equal(2, model.Requests.Count);
-        Assert.Equal("failed", AgentRunToolCallCheckpoint.ReadExecutionState(terminal.Checkpoint).ProtocolRecovery!.Outcome);
     }
 
     [Theory]
@@ -220,34 +152,6 @@ public sealed partial class AgentRunDurabilityTests
         Assert.Equal("interrupted", AgentRunToolCallCheckpoint.ReadExecutionState(terminal.Checkpoint).ProtocolRecovery!.Outcome);
         Assert.True(AgentRunToolCallCheckpoint.TryRead(terminal.Checkpoint, out var messages));
         Assert.Single(messages!, m => m.Name == "web.fetch");
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Restart_continues_only_known_transport_retry_or_saved_completion(bool completionSaved)
-    {
-        var recovery = new RunProtocolRecovery(ProviderFailureReason.InvalidBlocks, ProviderResponseChannel.ResponseFunction,
-            "eligible", "completionOnly", completionSaved ? "started" : "retryPending");
-        var (snapshot, run, runs, memory, time) = await BackgroundRecoveryFixture(recovery);
-        if (completionSaved)
-        {
-            var messages = VerifiedRead.Append(new ModelMessage(ModelRole.Assistant, "", ToolCalls: [new("saved-completion", ToolCatalog.WorkComplete,
-                "{\"summary\":\"One source verified; more work remains.\",\"attentionRequired\":true,\"outcome\":\"NeedsAttention\"}")])).ToArray();
-            run = await runs.ApplyAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, time.GetUtcNow(), run.Claim!.Generation,
-                new(AgentRunToolCallCheckpoint.Write(messages, protocolRepairReason: recovery.Reason,
-                    executionState: new(RunPhase.Finalization, "protocolRepair", TranscriptId: run.ResponseId, ProtocolRecovery: recovery)), 2, 64, 25000), null));
-        }
-        var model = new BackgroundRecoveryModel(true);
-        await using var runtime = CreateRuntime(new CapturingSessionOutput(), model, time, runs, memory, (await memory.LoadAsync(snapshot.SessionId))!);
-        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true));
-        await runtime.WaitUntilIdleAsync();
-        var terminal = (await runs.GetAsync(run.Owner, run.AgentRunId))!;
-        Assert.Equal(AgentRunStatus.Completed, terminal.Status);
-        Assert.Equal(AgentRunOutcomeKind.NeedsAttention, terminal.Result!.OutcomeKind);
-        Assert.Equal(completionSaved ? 0 : 1, model.Requests.Count);
-        Assert.All(model.Requests, r => Assert.Equal(ToolCatalog.WorkComplete, Assert.Single(r.Tools!).Name));
-        Assert.Equal("succeeded", AgentRunToolCallCheckpoint.ReadExecutionState(terminal.Checkpoint).ProtocolRecovery!.Outcome);
     }
 
     private static async Task<(SessionSnapshot, AgentRun, RuntimeAgentRunStore, InMemoryMemoryStore, FakeTimeProvider)> BackgroundRecoveryFixture(RunProtocolRecovery? recovery = null)

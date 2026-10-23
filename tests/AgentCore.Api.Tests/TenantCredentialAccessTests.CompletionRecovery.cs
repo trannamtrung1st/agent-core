@@ -27,14 +27,14 @@ public sealed partial class TenantCredentialAccessTests
     }
     private static ModelToolCallEvent RecoveryCall(string name, object args) =>
         new(new(Guid.NewGuid().ToString("N"), name, JsonSerializer.Serialize(args)));
-    private static void ConfigureCompletionRecovery(IServiceCollection services, CompletionRecoveryClock clock)
+    private static void ConfigureCompletionRecovery(IServiceCollection services, TimeProvider clock)
     {
         services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
         foreach (var host in services.Where(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService)).ToArray()) services.Remove(host);
     }
 
     private async Task<(Guid Tenant, Guid Instance, Guid Destination, string Route, Guid Automation)> CreateCompletionRecovery(
-        OAuthFactory factory, HttpClient owner, CompletionRecoveryClock clock, bool reporting)
+        OAuthFactory factory, HttpClient owner, TimeProvider clock, bool reporting)
     {
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
