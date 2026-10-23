@@ -2,6 +2,8 @@
 
 ## Current delivery state — 2026-10-23
 
+The [credential/profile authority retirement](global-credential-authority-retirement-verification-2026-10-23.md) removes the global actors and unowned registry secret fallback. Canonical long SSO, large-page discovery and reserved-cleanup journey qualification remain explicit final acceptance work.
+
 The original proposal remains in progress. The architecture and major foundations are approved; this ledger distinguishes scoped local qualification from proposal-wide acceptance. The Sandbox cutover also fixes the oversized tenant verification label through a versioned private capability and actual Docker qualification. The [canonical background protocol successor](canonical-background-protocol-verification-2026-10-23.md) reconciles the 19 inherited unowned Runtime fixture failures with actual owned recovery/outcome/deadline and current wait/interrupt coverage. Historical checkpoints below describe their original versions. Their old pending lists do not override these current integration boundaries.
 
 | Area | Scoped evidence |

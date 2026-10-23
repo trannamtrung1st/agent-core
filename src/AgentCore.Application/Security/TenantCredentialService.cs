@@ -143,6 +143,6 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
     private static void RequireRevision(TenantCredential current, long revision) { if (revision < 1 || current.Value.Revision != revision) throw new SecurityConflictException("stale_revision"); }
     private static TenantSecurityState Advance(TenantSecurityState state) => state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
     private AuthorizationAudit Audit(Guid tenant, Guid actor, Guid id, string operation, DateTimeOffset at) => new(ids.NewId(), tenant, actor, "credentials." + operation, id.ToString("D"), "allowed", "credential_changed", at);
-    private static TenantCredentialView View(TenantCredential item) => new(item.Owner.TenantId, CredentialService.View(item.Value, item.BindingCount));
+    private static TenantCredentialView View(TenantCredential item) => new(item.Owner.TenantId, CredentialProjection.View(item.Value, item.BindingCount));
     private static T Validate<T>(Func<T> action) { try { return action(); } catch (ArgumentException ex) { throw AgentCoreErrors.Validation(ex.Message); } }
 }

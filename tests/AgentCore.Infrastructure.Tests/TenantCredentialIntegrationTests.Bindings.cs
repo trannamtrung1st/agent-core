@@ -36,9 +36,6 @@ public sealed partial class TenantCredentialIntegrationTests
         Assert.Equal("binding-private-sentinel", f.Protector.Unprotect(id, protectedValue.ProtectionVersion, protectedValue.ProtectedPayload));
         Assert.Empty(await ((IAgentCredentialBindingStore)f.Legacy).ListBindingsAsync());
         Assert.False((await f.Authorizer.CheckAsync(a.PrincipalId, "credentials.use", TenantCredentialRules.Scope(owner.TenantId, id))).Allowed);
-        var legacyResolver = new CredentialService(f.Legacy, (IAgentCredentialBindingStore)f.Legacy, f.Protector, f.Instances, f.Ids, TimeProvider.System);
-        Assert.Empty(await legacyResolver.SafeMetadataAsync(a.Instance.InstanceId));
-        await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => legacyResolver.ResolvePasswordAsync(a.Instance.InstanceId, "primary", "https://example.test").AsTask());
         var before = await Revision(); var audits = (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count;
         var blocked = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Service.DeleteAsync(owner.OwnerPrincipalId, owner.TenantId, id, before, 1).AsTask());
         Assert.Equal("credential_in_use", blocked.ReasonCode); Assert.Equal(before, await Revision());

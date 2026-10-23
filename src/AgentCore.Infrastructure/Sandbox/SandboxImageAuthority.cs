@@ -9,7 +9,7 @@ using AgentCore.Application.Security;
 namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxStore profiles, TimeProvider time,
-    ICredentialStore? credentials = null, ICredentialProtector? protector = null, ITenantCredentialStore? tenantCredentials = null,
+    ICredentialProtector? protector = null, ITenantCredentialStore? tenantCredentials = null,
     TenantSandboxImageAuthorization? tenantAuthorization = null, ITenantSandboxVerificationStore? tenantVerifications = null, ISandboxVerificationHost? verificationHost = null) : ISandboxImageAuthority
 {
     public ValueTask<SandboxProfile> ResolveAsync(SandboxProfile profile, CancellationToken ct = default)
@@ -22,6 +22,8 @@ public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxSt
     private async ValueTask<SandboxProfile> ResolveCoreAsync(SandboxProfile profile, Func<CancellationToken, ValueTask>? require, CancellationToken ct)
     {
         if (require is not null) await require(ct);
+        if (profile.TenantId is null && profile.RegistryCredentialId is not null)
+            throw AgentCoreErrors.Forbidden("Registry credentials require tenant-owned image authority.");
         OciImageSource source;
         try { source = OciImageSource.Parse(profile.ImageReference); }
         catch (ArgumentException) { throw AgentCoreErrors.Validation("Enter a valid image, such as mcr.microsoft.com/dotnet/sdk:10.0, ubuntu:24.04 or registry/repository@sha256:<64 lowercase hex characters>."); }
@@ -88,6 +90,6 @@ public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxSt
     }
     private async ValueTask<AgentCore.Domain.Credentials.Credential?> CredentialAsync(SandboxProfile profile, Guid id, CancellationToken ct) => profile.TenantId is { } tenant
         ? tenantCredentials is null ? null : (await tenantCredentials.FindTenantCredentialAsync(tenant, id, ct))?.Value
-        : credentials is null ? null : await credentials.GetAsync(id, ct);
+        : null;
 
 }

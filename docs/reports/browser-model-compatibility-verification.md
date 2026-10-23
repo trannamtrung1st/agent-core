@@ -1,5 +1,7 @@
 # Browser model compatibility enhancement
 
+Historical evidence only. The unowned Runtime/global Credential fixtures described below were retired during the tenant cutover. See [current credential authority retirement and remaining canonical acceptance gaps](global-credential-authority-retirement-verification-2026-10-23.md).
+
 User-authorized scope: all recommendations from the DeepSeek/Luna review, on `develop/branch-1`. Implementation candidate: `27a984784cb0b38809f2863a507e8917d1650d0f`. This follows browser discovery recovery `13ba2f59`; its earlier five-job CI run does not verify this enhancement. The native cutover freeze `345e8f7a` remains historical. P10/P11 remain unopened.
 
 ## Implemented behavior

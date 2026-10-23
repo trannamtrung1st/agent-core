@@ -122,5 +122,5 @@ public sealed class TenantCredentialBindingService(IIamStore security, ITenantAg
     private AuthorizationAudit Audit(Guid actor, Guid tenant, AgentCredentialBinding binding, string action, DateTimeOffset at) =>
         new(ids.NewId(), tenant, actor, "credentials." + action, $"agent:{binding.AgentInstanceId:D}/credential:{binding.CredentialId:D}/binding:{binding.BindingId:D}", "allowed", "binding_changed", at);
     private static CredentialBindingView View(TenantCredentialBinding item) => new(item.Binding.BindingId, item.Binding.CredentialId, item.Binding.Reference,
-        item.Binding.Revision, CredentialService.View(item.Credential.Value, item.Credential.BindingCount));
+        item.Binding.Revision, CredentialProjection.View(item.Credential.Value, item.Credential.BindingCount));
 }

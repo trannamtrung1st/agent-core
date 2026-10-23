@@ -41,7 +41,7 @@ public sealed partial class TenantCredentialIntegrationTests
         options ??= new() { CanonicalWorkspaceRoot = Path.Combine(f.Root, "working"), WorkspaceDockerHostRoot = Path.Combine(f.Root, "working"), ApiKey = "synthetic-only-key" };
         var store = (ITenantSandboxVerificationStore)f.Iam; var profileStore = (ITenantSandboxProfileStore)f.Iam;
         var guard = new TenantSandboxImageAuthorization(f.Iam, profileStore, f.Identity, f.Authorizer); var host = new SandboxVerificationHost(options);
-        var images = new SandboxImageAuthority(options, f.Sandboxes, f.Clock, f.Legacy, f.Protector, f.Credentials, guard, store, host);
+        var images = new SandboxImageAuthority(options, f.Sandboxes, f.Clock, f.Protector, f.Credentials, guard, store, host);
         var profiles = new TenantSandboxProfileService(f.Iam, profileStore, f.Identity, f.Authorizer, images, f.Ids, f.Clock, store);
         return (profiles, new(f.Iam, store, profiles, guard, images, verifier ?? new ScriptedSandboxVerifier(host.Scope, f.Clock), f.Identity, f.Authorizer, f.Ids, f.Clock), images, options);
     }

@@ -1,5 +1,7 @@
 # Capability tool-awareness verification
 
+Historical evidence only. The unowned Runtime/global Credential fixtures described below were retired during the tenant cutover. See [current credential authority retirement and remaining canonical acceptance gaps](global-credential-authority-retirement-verification-2026-10-23.md).
+
 Date: 2026-10-09. This is a focused correction to existing capability discovery and protected browser fill, not a new milestone or authorization mechanism.
 
 ## Problem and correction

@@ -1,4 +1,3 @@
-using AgentCore.Application.Credentials;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
@@ -27,7 +26,7 @@ public sealed class DrivePersistenceTests
             if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); owners = new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System)); var c = new SqliteCredentialStore(factory); credentials = c; bindings = c; var d = new SqliteDriveStore(factory); operations = d; files = d; }
             else { var i = new InMemoryAgentInstanceStore(); owners = i; var c = new InMemoryCredentialStore(i); credentials = c; bindings = c; var d = new InMemoryDriveStore(); operations = d; files = d; }
             var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 27, new("Test", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
-            var protector = new LocalCredentialProtector(root + "/keys"); var service = new CredentialService(credentials, bindings, protector, owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System); var account = await service.CreateGoogleDriveAccountAsync("Drive"); await service.BindAsync(owner.InstanceId, account.CredentialId, "drive", 1);
+            var protector = new LocalCredentialProtector(root + "/keys"); var account = await SeedNativeAccount(credentials, bindings, owner.InstanceId);
             await SeedConnection(credentials, protector, account.CredentialId);
             var op = new DriveOperation(Guid.NewGuid(), owner.InstanceId, account.CredentialId, "effect-hash", 1, "drive.upload", "file-known", "{}", "Planned", 1, DateTimeOffset.UtcNow); await operations.ClaimAsync(op, default);
             await Assert.ThrowsAsync<AgentCoreException>(() => operations.ClaimAsync(op with { OperationId = Guid.NewGuid() }, default).AsTask()); await Assert.ThrowsAsync<AgentCoreException>(() => operations.ClaimAsync(op with { EffectHash = "different" }, default).AsTask());
@@ -83,8 +82,7 @@ public sealed class DrivePersistenceTests
             var factory = new Factory(dbOptions); await using (var db = factory.CreateDbContext()) await db.Database.MigrateAsync();
             var ids = new SystemIdGenerator(TimeProvider.System); var owners = new SqliteAgentInstanceStore(factory, ids); var credentials = new SqliteCredentialStore(factory); var files = new SqliteDriveStore(factory);
             var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 28, new("UAT", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
-            var protector = new LocalCredentialProtector(root + "/keys"); var service = new CredentialService(credentials, credentials, protector, owners, ids, TimeProvider.System);
-            var account = await service.CreateGoogleDriveAccountAsync("Batch Drive"); await service.BindAsync(owner.InstanceId, account.CredentialId, "drive", 1);
+            var protector = new LocalCredentialProtector(root + "/keys"); var account = await SeedNativeAccount(credentials, credentials, owner.InstanceId);
             await SeedConnection(credentials, protector, account.CredentialId);
             var targets = new List<AgentCore.Application.Drive.DriveTrashTarget>();
             for (var i = 0; i < 8; i++) { var file = new DriveFile("exact-file-" + i, "sample-" + i + ".txt", "text/plain", 2, "1", "49f68a5c8493ec2c0bf489821c21fc3b", ["unavailable-parent"], false); await files.SaveAsync(account.CredentialId, file, "hi"u8.ToArray(), null, default); if (i < 7) targets.Add(new(file.Id, file.Version)); }
@@ -130,6 +128,17 @@ public sealed class DrivePersistenceTests
         public async ValueTask TrashAsync(string id, CancellationToken ct) { count.Trashes++; await inner.TrashAsync(id, ct); if (count.AfterTrash is not null) await count.AfterTrash(id, ct); }
     }
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }
+    // Physical serialization/receipt fixture only. Canonical actor authorization is exercised by TenantCredentialIntegrationTests.
+    private static async Task<Credential> SeedNativeAccount(ICredentialStore credentials, IAgentCredentialBindingStore bindings, Guid owner)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var account = new Credential(Guid.NewGuid(), "Native Drive fixture", CredentialKind.Token, CredentialStatus.Active,
+            CredentialRules.Metadata(null), [], "", 1, 1, now, now, CredentialPurpose.GoogleDriveAccount, DriveAccount: new());
+        await credentials.SaveAsync(account, 0);
+        await bindings.BindAsync(new(Guid.NewGuid(), owner, account.CredentialId, "drive", 1, now, now), 1);
+        return account;
+    }
+
     private static async Task SeedConnection(ICredentialStore credentials, ICredentialProtector protector, Guid id)
     {
         var current = (await credentials.GetAsync(id))!;

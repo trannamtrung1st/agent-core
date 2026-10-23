@@ -1,13 +1,7 @@
-using System.Text.Json;
-using AgentCore.Application.Credentials;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
-using AgentCore.Application.Tools;
-using AgentCore.Infrastructure.Definitions;
 using AgentCore.Domain.Credentials;
-using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Credentials;
-using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -18,115 +12,15 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SystemCredentialTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Shared_credential_rotation_isolation_disable_unbind_and_bound_delete(bool sqlite)
-    {
-        var root = Path.Combine(Path.GetTempPath(), "credential-journey-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        try
-        {
-            var instances = new InMemoryAgentInstanceStore(); var a = NewInstance(); var b = NewInstance();
-            IAgentInstanceStore owners = instances; ICredentialStore store; IAgentCredentialBindingStore bindings;
-            var factory = Factory(root);
-            if (sqlite)
-            {
-                await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync();
-                owners = new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System)); var adapter = new SqliteCredentialStore(factory); store = adapter; bindings = adapter;
-            }
-            else { var adapter = new InMemoryCredentialStore(instances); store = adapter; bindings = adapter; }
-            await owners.InsertAsync(a); await owners.InsertAsync(b);
-            var protector = new LocalCredentialProtector(Path.Combine(root, "keys"));
-            var service = new CredentialService(store, bindings, protector, owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
-            var c = await service.CreateAsync("Shared login", "Password", new Dictionary<string,string> { ["username"] = "operator@example.test", ["canUseBrowser"] = "true" }, ["http://localhost:5088"], "first-secret");
-            var ga = await service.BindAsync(a.InstanceId, c.CredentialId, "PRIMARY", a.Revision);
-            var gb = await service.BindAsync(b.InstanceId, c.CredentialId, "shared", b.Revision);
-            Assert.Equal("primary", Assert.Single(await service.SafeMetadataAsync(a.InstanceId)).Reference);
-            Assert.Equal("shared", Assert.Single(await service.SafeMetadataAsync(b.InstanceId)).Reference);
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(b.InstanceId, "primary", "http://localhost:5088").AsTask());
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(a.InstanceId, c.CredentialId, "duplicate", a.Revision).AsTask());
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(a.InstanceId, "primary", "https://other.test").AsTask());
-            c = await service.ReplaceAsync(c.CredentialId, c.Revision, "replacement-secret");
-            Assert.Equal(2, c.BindingCount);
-            Assert.Equal("replacement-secret", await service.ResolvePasswordAsync(a.InstanceId, "primary", "http://localhost:5088"));
-            Assert.Equal("replacement-secret", await service.ResolvePasswordAsync(b.InstanceId, "shared", "http://localhost:5088"));
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.ReplaceAsync(c.CredentialId, 1, "stale").AsTask());
-            var safe = JsonSerializer.Serialize(await service.ListAsync());
-            Assert.DoesNotContain("replacement-secret", safe); Assert.DoesNotContain("ProtectedPayload", safe); Assert.DoesNotContain("ProtectionVersion", safe);
-            c = await service.UpdateAsync(c.CredentialId, c.Revision, c.DisplayName, "Disabled", c.Metadata, c.AllowedOrigins);
-            Assert.Empty(await service.SafeMetadataAsync(a.InstanceId));
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(a.InstanceId, "primary", "http://localhost:5088").AsTask());
-            c = await service.UpdateAsync(c.CredentialId, c.Revision, c.DisplayName, "Active", c.Metadata, c.AllowedOrigins);
-            await service.UnbindAsync(a.InstanceId, ga.BindingId, ga.Revision, (await owners.FindAsync(a.InstanceId))!.Revision);
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(a.InstanceId, "primary", "http://localhost:5088").AsTask());
-            Assert.Equal("replacement-secret", await service.ResolvePasswordAsync(b.InstanceId, "shared", "http://localhost:5088"));
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.DeleteAsync(c.CredentialId, c.Revision).AsTask());
-            await service.UnbindAsync(b.InstanceId, gb.BindingId, gb.Revision, (await owners.FindAsync(b.InstanceId))!.Revision);
-            await service.DeleteAsync(c.CredentialId, c.Revision); Assert.Empty(await service.ListAsync());
-        }
-        finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
-    }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Discovery_pages_complete_records_under_execution_budget_and_bindings_do_not_change_fingerprint(bool sqlite)
+    [Fact]
+    public void Credential_value_origin_and_metadata_rules_remain_bounded()
     {
-        var root = Path.Combine(Path.GetTempPath(), "credential-discovery-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        try
-        {
-            var instances = new InMemoryAgentInstanceStore(); var owner = NewInstance();
-            IAgentInstanceStore owners = instances; ICredentialStore store; IAgentCredentialBindingStore bindings;
-            if (sqlite)
-            {
-                var factory = Factory(root); await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync();
-                owners = new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System));
-                var adapter = new SqliteCredentialStore(factory); store = adapter; bindings = adapter;
-            }
-            else { var adapter = new InMemoryCredentialStore(instances); store = adapter; bindings = adapter; }
-            await owners.InsertAsync(owner);
-            var service = new CredentialService(store, bindings, new LocalCredentialProtector(Path.Combine(root, "keys")), owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
-            var dir = new DirectoryInfo(AppContext.BaseDirectory); while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AgentCore.sln"))) dir = dir.Parent;
-            var definition = (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 8))!;
-            var draft = AgentDefinitionCandidate.FromDefinition(definition) with { Environment = definition.Environment! with { ToolAllowlist = null, Capabilities = new("All", []), Projection = new([]) } };
-            var before = CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!;
-            Assert.DoesNotContain(ToolCatalog.CredentialsList, before.ResolvedCapabilities);
-            var granted = new List<CredentialBindingView>();
-            for (var i = 24; i >= 0; i--)
-            {
-                var credential = await service.CreateAsync("Credential " + i, "Password", new Dictionary<string,string> { ["label"] = new string('界', 1500) }, [], "protected-fixture");
-                granted.Add(await service.BindAsync(owner.InstanceId, credential.CredentialId, $"alias-{i:D2}", (await owners.FindAsync(owner.InstanceId))!.Revision));
-            }
-            definition = CapabilityAuthorizationResolver.ResolveCandidate(draft).ToPublished(4);
-            var executor = new SessionToolExecutor();
-            var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId);
-            async Task<string> List(string args, int budget) => (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("list", ToolCatalog.CredentialsList, args), budget, admission: admission)).Text;
-            var references = new List<string>(); string? cursor = null;
-            do
-            {
-                var output = await List(cursor is null ? "{\"limit\":100}" : JsonSerializer.Serialize(new { cursor, limit = 100 }), 12000);
-                Assert.True(System.Text.Encoding.UTF8.GetByteCount(output) <= 12000);
-                Assert.DoesNotContain("protected-fixture", output);
-                using var page = JsonDocument.Parse(output);
-                var items = page.RootElement.GetProperty("items").EnumerateArray().ToArray(); Assert.NotEmpty(items);
-                foreach (var item in items) { references.Add(item.GetProperty("reference").GetString()!); Assert.Equal(new string('界', 1500), item.GetProperty("metadata").GetProperty("label").GetString()); }
-                cursor = page.RootElement.GetProperty("nextCursor").GetString();
-                Assert.Equal(cursor is not null, page.RootElement.GetProperty("hasMore").GetBoolean());
-            } while (cursor is not null);
-            Assert.Equal(Enumerable.Range(0, 25).Select(i => $"alias-{i:D2}"), references);
-            using (var defaultPage = JsonDocument.Parse(await List("{}", ToolLimits.MaxOutputBytes)))
-            { Assert.Equal(20, defaultPage.RootElement.GetProperty("items").GetArrayLength()); Assert.True(defaultPage.RootElement.GetProperty("hasMore").GetBoolean()); }
-            Assert.Contains("output_limit", await List("{}", 100));
-            foreach (var invalid in new[] { "{}", "[]", "{", "{\"owner\":\"other\"}", "{\"sessionId\":\"other\"}", "{\"limit\":0}" })
-                Assert.True(System.Text.Encoding.UTF8.GetByteCount(await List(invalid, 1)) <= 1);
-            Assert.Contains("Validation", await List("{\"limit\":0}", 1000));
-            Assert.Contains("Validation", await List("{\"owner\":\"other\"}", 1000));
-            Assert.Equal(before.AuthorizationFingerprint, CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!.AuthorizationFingerprint);
-            foreach (var binding in granted) await service.UnbindAsync(owner.InstanceId, binding.BindingId, binding.Revision, (await owners.FindAsync(owner.InstanceId))!.Revision);
-            Assert.Equal(before.AuthorizationFingerprint, CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!.AuthorizationFingerprint);
-            Assert.Contains("\"hasMore\":false", await List("{}", 1000));
-        }
-        finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+        Assert.Throws<ArgumentException>(() => CredentialRules.Metadata(new Dictionary<string,string> { ["Key"] = "one", [" key "] = "two" }));
+        Assert.Throws<ArgumentException>(() => CredentialRules.Metadata(new Dictionary<string,string> { ["value"] = new string('x', 2049) }));
+        Assert.Throws<ArgumentException>(() => CredentialRules.Origins(["https://*.example.test"]));
+        Assert.Throws<ArgumentException>(() => CredentialRules.Origins(["https://example.test/path"]));
+        Assert.Throws<ArgumentException>(() => CredentialRules.ProtectedValue(""));
     }
 
     [Fact]
@@ -150,33 +44,6 @@ public sealed class SystemCredentialTests
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
-
-    [Fact]
-    public async Task Unknown_kind_wrong_sink_alias_uniqueness_metadata_bounds_and_archived_agent_are_denied()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "credential-policy-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            var instances = new InMemoryAgentInstanceStore(); var a = NewInstance(); var archived = NewInstance() with { Lifecycle = AgentInstanceLifecycle.Archived };
-            await instances.InsertAsync(a); await instances.InsertAsync(archived);
-            var store = new InMemoryCredentialStore(instances);
-            var service = new CredentialService(store, store, new LocalCredentialProtector(root), instances, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.CreateAsync("Invalid", "Custom", null, [], "value").AsTask());
-            var key = await service.CreateAsync("API", "ApiKey", null, ["https://example.test"], "key-value");
-            await service.BindAsync(a.InstanceId, key.CredentialId, "primary", a.Revision);
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(a.InstanceId, "primary", "https://example.test").AsTask());
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(archived.InstanceId, key.CredentialId, "archived", archived.Revision).AsTask());
-            var second = await service.CreateAsync("Other", "Password", null, [], "password");
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(a.InstanceId, second.CredentialId, "primary", a.Revision).AsTask());
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(a.InstanceId, second.CredentialId, "other", a.Revision + 2).AsTask());
-            Assert.Throws<ArgumentException>(() => CredentialRules.Metadata(new Dictionary<string,string> { ["Key"] = "one", [" key "] = "two" }));
-            Assert.Throws<ArgumentException>(() => CredentialRules.Metadata(new Dictionary<string,string> { ["value"] = new string('x',2049) }));
-            Assert.Throws<ArgumentException>(() => CredentialRules.Origins(["https://*.example.test"]));
-            Assert.Throws<ArgumentException>(() => CredentialRules.Origins(["https://example.test/path"]));
-            Assert.Throws<ArgumentException>(() => CredentialRules.ProtectedValue(""));
-        }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
-    }
     [Fact]
     public async Task Unavailable_key_directory_returns_bounded_error()
     {
@@ -192,7 +59,6 @@ public sealed class SystemCredentialTests
         finally { File.Delete(file); }
     }
 
-    private static AgentInstance NewInstance() => new(Guid.NewGuid(), "secretary", 8, new("Test", "Secretary", "Testing", "neutral"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
     private static SqliteFactory Factory(string root) => new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(root,"credentials.db")}").Options);
     private sealed class SqliteFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

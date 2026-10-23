@@ -1,4 +1,3 @@
-using AgentCore.Application.Credentials;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Sessions;
@@ -25,8 +24,6 @@ public sealed partial class IamIdentityIntegrationTests
         await f.Instances.InsertAsync(legacy); await f.Instances.InsertAsync(owned);
         ICredentialStore credentials = sqlite ? new SqliteCredentialStore(f.Contexts!) : new InMemoryCredentialStore((InMemoryAgentInstanceStore)f.Instances);
         var bindings = (IAgentCredentialBindingStore)credentials;
-        var protector = new DeniedCredentialProtector();
-        var service = new CredentialService(credentials, bindings, protector, f.Instances, f.Ids, f.Time);
         var credential = new Credential(f.Ids.NewId(), "Shared fixture", CredentialKind.Password, CredentialStatus.Active,
             CredentialRules.Metadata(null), ["https://example.test"], "protected-fixture", 1, 1, now, now);
         await credentials.SaveAsync(credential, 0);
@@ -51,9 +48,6 @@ public sealed partial class IamIdentityIntegrationTests
         Assert.Null(await f.Instances.FindAsync(owned.InstanceId));
         Assert.Equal(publicBinding, Assert.Single(await bindings.ListBindingsAsync()));
         Assert.Empty(await bindings.ListBindingsAsync(owned.InstanceId));
-        Assert.Equal(1, (await service.GetAsync(credential.CredentialId)).BindingCount);
-        Assert.Empty(await service.SafeMetadataAsync(owned.InstanceId));
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(owned.InstanceId, "private", "https://example.test").AsTask());
 
         async Task Denied(Func<Task> action)
         {
@@ -86,7 +80,6 @@ public sealed partial class IamIdentityIntegrationTests
         Assert.Empty(await bindings.ListBindingsAsync());
         var boundDelete = await Assert.ThrowsAsync<AgentCoreException>(() => credentials.DeleteAsync(credential.CredentialId, 1).AsTask());
         Assert.Equal(409, boundDelete.StatusCode);
-        Assert.Equal(0, protector.UnprotectCalls);
         if (sqlite)
         {
             var reopened = new SqliteCredentialStore(f.Contexts!);
@@ -98,11 +91,4 @@ public sealed partial class IamIdentityIntegrationTests
         }
     }
 
-    private sealed class DeniedCredentialProtector : ICredentialProtector
-    {
-        public int UnprotectCalls { get; private set; }
-        public string Protect(Guid credentialId, int version, string value) => throw new InvalidOperationException("No secret preparation is expected.");
-        public string Unprotect(Guid credentialId, int version, string payload)
-        { UnprotectCalls++; throw new InvalidOperationException("Owned credentials cannot reach a legacy secret sink."); }
-    }
 }

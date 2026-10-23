@@ -25,7 +25,3 @@ public interface ICredentialProtector
     string Protect(Guid credentialId, int version, string value);
     string Unprotect(Guid credentialId, int version, string payload);
 }
-public interface ICredentialResolver
-{
-    ValueTask<string> ResolvePasswordAsync(Guid instanceId, string reference, string origin, CancellationToken ct = default);
-}

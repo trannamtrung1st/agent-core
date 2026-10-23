@@ -19,7 +19,7 @@ public sealed partial class TenantCredentialIntegrationTests
         "ghcr.io/acme/tool@sha256:" + new string('a', 64));
     private static TenantSandboxProfileService SandboxService(Fixture f, ITenantSandboxProfileStore? profiles = null, ISandboxImageAuthority? images = null) =>
         new(f.Iam, profiles ?? (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer,
-            images ?? new SandboxImageAuthority(new(), f.Sandboxes, f.Clock, f.Legacy, f.Protector, f.Credentials, new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer)), f.Ids, f.Clock);
+            images ?? new SandboxImageAuthority(new(), f.Sandboxes, f.Clock, f.Protector, f.Credentials, new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer)), f.Ids, f.Clock);
     private static async Task<HumanSessionReference> SandboxHuman(Fixture f, Guid principal, string login = "owner@example.test", string password = "strong-owner-password")
     {
         var signed = (await f.Identity.SignInAsync(login, password))!;
@@ -146,7 +146,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var input = SandboxInput() with { RegistryCredentialId = credential.Credential.CredentialId };
         var first = await service.SaveAsync(owner.TenantId, null, human, input, await Revision(), 0); var id = first.Profile.Id;
         Assert.Equal(0, first.Profile.RegistrySecretRevision); Assert.Null(await f.Legacy.GetAsync(credential.Credential.CredentialId));
-        var authority = new SandboxImageAuthority(new(), f.Sandboxes, f.Clock, f.Legacy, f.Protector, f.Credentials);
+        var authority = new SandboxImageAuthority(new(), f.Sandboxes, f.Clock, f.Protector, f.Credentials);
         await Assert.ThrowsAsync<AccessDeniedException>(() => authority.ResolveAuthAsync(first.Profile, CancellationToken.None, false).AsTask());
         await Assert.ThrowsAsync<AccessDeniedException>(() => authority.ResolveAsync(first.Profile).AsTask());
         Assert.False((await authority.InspectAsync(first.Profile)).Eligible);
@@ -187,7 +187,7 @@ public sealed partial class TenantCredentialIntegrationTests
             null, null, "private-registry-sentinel", ContainerRegistry: new(host, "fixture", [host + "/acme"])), await Revision());
         var options = new OpenSandboxOptions { AllowedImagePrefixes = [host + "/acme"], InsecureRegistryHosts = [host] };
         var guard = new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer);
-        var images = new SandboxImageAuthority(options, f.Sandboxes, f.Clock, f.Legacy, f.Protector, f.Credentials, guard);
+        var images = new SandboxImageAuthority(options, f.Sandboxes, f.Clock, f.Protector, f.Credentials, guard);
         var service = SandboxService(f, images: images);
         var input = SandboxInput() with { ImageReference = host + "/acme/tool:latest", RegistryCredentialId = credential.Credential.CredentialId };
         var first = await service.SaveAsync(owner.TenantId, null, human, input, await Revision(), 0);
@@ -197,7 +197,7 @@ public sealed partial class TenantCredentialIntegrationTests
         {
             if (++lookups == 2) { await f.Identity.SignOutAsync(captured.AuthenticationSessionId); _ = await SandboxHuman(f, owner.OwnerPrincipalId); }
         });
-        var hookedImages = new SandboxImageAuthority(options, f.Sandboxes, f.Clock, f.Legacy, f.Protector, hookedCredentials, guard);
+        var hookedImages = new SandboxImageAuthority(options, f.Sandboxes, f.Clock, f.Protector, hookedCredentials, guard);
         var before = await Revision();
         await Assert.ThrowsAsync<AccessDeniedException>(() => SandboxService(f, images: hookedImages).SaveAsync(owner.TenantId, first.Profile.Id, human, input, before, 1).AsTask());
         Assert.Equal(1, calls); Assert.Equal(before, await Revision()); Assert.Equal(1, (await ((ITenantSandboxProfileStore)f.Iam).FindTenantSandboxProfileAsync(owner.TenantId, first.Profile.Id))!.Revision);

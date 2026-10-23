@@ -1,4 +1,3 @@
-using AgentCore.Application.Credentials;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
@@ -99,70 +98,55 @@ public sealed class OciSandboxAuthorityTests
         Assert.True(OciImageReference.Parse(profile.ImageReference).IsLocal);
         Assert.False(OciImageReference.Parse("docker.io/acme/tool@sha256:" + Digest).IsLocal);
     }
-
     [Theory]
     [InlineData(false)] [InlineData(true)]
-    public async Task Protected_registry_scope_rotation_disable_delete_and_verification_epoch_survive_store_reopen(bool sqlite)
+    public async Task Unowned_registry_records_cannot_resolve_source_reveal_secrets_or_start_native_verification(bool sqlite)
     {
-        var root = Path.Combine(Path.GetTempPath(), "oci-authority-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        var root = Path.Combine(Path.GetTempPath(), "retired-registry-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var owners = new InMemoryAgentInstanceStore();
-            var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source="+Path.Combine(root,"core.db")).Options);
-            ICredentialStore store; IAgentCredentialBindingStore bindings;
-            if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); var adapter = new SqliteCredentialStore(factory); store=adapter; bindings=adapter; }
-            else { var adapter = new InMemoryCredentialStore(owners); store=adapter; bindings=adapter; }
-            var protector = new LocalCredentialProtector(Path.Combine(root,"keys"));
-            var service = new CredentialService(store,bindings,protector,owners,new SystemIdGenerator(TimeProvider.System),TimeProvider.System);
-            var saved = await service.CreateContainerRegistryAsync("Private OCI","Token",new("ghcr.io","owner",["ghcr.io/acme"]),"private-oci-sentinel");
-            Assert.DoesNotContain("private-oci-sentinel",(await store.GetAsync(saved.CredentialId))!.ProtectedPayload);
+            var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + Path.Combine(root, "core.db")).Options);
+            ICredentialStore store;
+            if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); store = new SqliteCredentialStore(factory); }
+            else store = new InMemoryCredentialStore(new InMemoryAgentInstanceStore());
+            var id = Guid.NewGuid(); var now = DateTimeOffset.UtcNow;
+            var protector = new LocalCredentialProtector(Path.Combine(root, "keys"));
+            var credential = new Credential(id, "Retained unowned fixture", CredentialKind.Token, CredentialStatus.Active,
+                CredentialRules.Metadata(null), [], protector.Protect(id, 1, "retained-private-oci-sentinel"), 1, 1, now, now,
+                CredentialPurpose.ContainerRegistry, ContainerRegistry: new("ghcr.io", "owner", ["ghcr.io/acme"]));
+            await store.SaveAsync(credential, 0);
             var profiles = new InMemorySandboxStore();
-            var profile = new SandboxProfile("fixture",1,"Fixture","",true,"ghcr.io/acme/tool@sha256:"+Digest,RegistryCredentialId:saved.CredentialId);
-            await profiles.SaveProfileAsync(profile,0);
-            var options = new OpenSandboxOptions { AllowedImagePrefixes=["ghcr.io/acme", "ghcr.io/acme-evil"] };
-            var authority = new SandboxImageAuthority(options,profiles,TimeProvider.System,store,protector);
-            Assert.Equal("SourceUnavailable",(await authority.InspectAsync(profile with {ImageReference="ghcr.io/acme-evil/tool@sha256:"+Digest})).Status);
-            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Historical observation"));
-            Assert.False((await authority.InspectAsync(profile)).Eligible);
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Earlier Python-based contract",ContractVersion:1,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
-            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Retired synchronized-files contract",ContractVersion:2,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
-            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Retired strict metadata mount contract",ContractVersion:3,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
-            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Current observation",ContractVersion:SandboxProfileVerification.CurrentContractVersion,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
-            Assert.True((await authority.InspectAsync(profile)).Eligible);
-            var pinned = profile with {RegistryCredentialRevision=1,RegistrySecretRevision=0};
-            Assert.Equal("private-oci-sentinel",(await authority.ResolveAuthAsync(pinned,CancellationToken.None,true))!.Password);
-            saved = await service.ReplaceAsync(saved.CredentialId,saved.Revision,"rotated-oci-sentinel");
-            Assert.Equal(1,(await store.GetAsync(saved.CredentialId))!.SecretRevision);
-            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
-            await Assert.ThrowsAsync<AgentCoreException>(()=>authority.ResolveAuthAsync(pinned,CancellationToken.None,true).AsTask());
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Verified rotated authority",ContractVersion:SandboxProfileVerification.CurrentContractVersion,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:1));
-            Assert.True((await authority.InspectAsync(profile)).Eligible);
-            // Reverification never revives a Run admitted with the old secret epoch.
-            await Assert.ThrowsAsync<AgentCoreException>(()=>authority.ResolveAuthAsync(pinned,CancellationToken.None,true).AsTask());
-            var rotated = profile with { RegistryCredentialRevision=saved.Revision, RegistrySecretRevision=1 };
-            Assert.Equal("rotated-oci-sentinel",(await authority.ResolveAuthAsync(rotated,CancellationToken.None,true))!.Password);
-            if (sqlite)
-            {
-                var reopenedAuthority = new SandboxImageAuthority(options,profiles,TimeProvider.System,new SqliteCredentialStore(factory),protector);
-                await Assert.ThrowsAsync<AgentCoreException>(()=>reopenedAuthority.ResolveAuthAsync(pinned,CancellationToken.None,true).AsTask());
-                Assert.Equal("rotated-oci-sentinel",(await reopenedAuthority.ResolveAuthAsync(rotated,CancellationToken.None,true))!.Password);
-            }
-            saved = await service.UpdateContainerRegistryAsync(saved.CredentialId,saved.Revision,saved.DisplayName,"Active",new("ghcr.io","owner",["ghcr.io/acme/other"]));
-            Assert.Equal("SourceUnavailable",(await authority.InspectAsync(profile)).Status);
-            saved = await service.UpdateContainerRegistryAsync(saved.CredentialId,saved.Revision,saved.DisplayName,"Active",new("ghcr.io","owner",["ghcr.io/acme"],DateTimeOffset.UnixEpoch));
-            Assert.Equal("SourceUnavailable",(await authority.InspectAsync(profile)).Status);
-            saved = await service.UpdateAsync(saved.CredentialId,saved.Revision,saved.DisplayName,"Disabled",saved.Metadata,[]);
-            Assert.Equal("SourceUnavailable",(await authority.InspectAsync(profile)).Status);
-            if (sqlite) Assert.Equal(saved.ContainerRegistry!.Registry,(await new SqliteCredentialStore(factory).GetAsync(saved.CredentialId))!.ContainerRegistry!.Registry);
-            await service.DeleteAsync(saved.CredentialId,saved.Revision);
-            Assert.Equal("SourceUnavailable",(await authority.InspectAsync(profile)).Status);
+            var profile = new SandboxProfile("retired", 1, "Retired", "", true, "ghcr.io/acme/tool@sha256:" + Digest, RegistryCredentialId: id);
+            await profiles.SaveProfileAsync(profile, 0);
+            await profiles.SaveVerificationAsync(new(profile.Id, 1, now, true, "Retained observation",
+                ContractVersion: SandboxProfileVerification.CurrentContractVersion, RegistryCredentialId: id,
+                RegistryCredentialRevision: 1, RegistrySecretRevision: 0));
+            var options = new OpenSandboxOptions { Enabled = true, Endpoint = "http://127.0.0.1:1", ApiKey = "unused", AllowedImagePrefixes = ["ghcr.io/acme"] };
+            var deniedProtector = new RetiredRegistryProtector();
+            var authority = new SandboxImageAuthority(options, profiles, TimeProvider.System, deniedProtector);
+            Assert.Equal("SourceUnavailable", (await authority.InspectAsync(profile)).Status);
+            foreach (var image in new[] { profile.ImageReference, "ghcr.io/acme/tool:latest" })
+                await Assert.ThrowsAsync<AgentCoreException>(() => authority.ResolveAsync(profile with { ImageReference = image }).AsTask());
+            await Assert.ThrowsAsync<AgentCoreException>(() => authority.ResolveAuthAsync(profile, CancellationToken.None, false).AsTask());
+            var adapter = new OpenSandboxService(options, profiles, null!, null!, TimeProvider.System, imageAuthority: authority);
+            var result = await adapter.VerifyProfileAsync(profile, CancellationToken.None);
+            Assert.False(result.Passed); Assert.Equal("sourceAuthority", result.FailureCode);
+            Assert.DoesNotContain("sentinel", result.Message); Assert.Equal(0, deniedProtector.Calls);
+            // No network service exists at Endpoint. Source refusal precedes all disposable host and registry I/O.
+            if (sqlite) store = new SqliteCredentialStore(factory);
+            var retained = Assert.IsType<Credential>(await store.GetAsync(id));
+            Assert.Equal(credential.ProtectedPayload, retained.ProtectedPayload); Assert.Equal(1, retained.Revision); Assert.Equal(0, retained.SecretRevision);
         }
-        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root,true); }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
+
+    private sealed class RetiredRegistryProtector : ICredentialProtector
+    {
+        public int Calls { get; private set; }
+        public string Protect(Guid id, int version, string value) => throw new InvalidOperationException();
+        public string Unprotect(Guid id, int version, string payload) { Calls++; throw new InvalidOperationException("Unowned source cannot release a secret."); }
+    }
+
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

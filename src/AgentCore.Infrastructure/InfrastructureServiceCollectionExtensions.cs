@@ -264,9 +264,6 @@ public static class InfrastructureServiceCollectionExtensions
         }
         services.TryAddSingleton<ICredentialProtector>(p => new LocalCredentialProtector(persistence.CredentialProtectionKeyRoot));
         services.TryAddSingleton<AgentCore.Application.Drive.DriveService>();
-        services.TryAddSingleton<CredentialService>();
-        services.TryAddSingleton<ICredentialResolver>(p => p.GetRequiredService<CredentialService>());
-        services.TryAddSingleton<AgentBrowserProfileService>();
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();
         services.TryAddSingleton<IAgentInstanceWorkspaceStore>(provider =>
