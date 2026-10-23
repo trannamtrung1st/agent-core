@@ -23,7 +23,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             configuration, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, experienceOperations: experience, continuityReads: reads);
         var effects = new TenantApprovedOperationService(current, runs, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, operations,
             configuration, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, experienceOperations: experience, continuityReads: reads);
-        return (experience, reads, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids, experienceOperations: experience, continuityReads: reads));
+        return (experience, reads, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
     private static async Task<TenantApprovalRequest> PrepareExperienceReview(Fixture f, TenantRuntimeFrame frame, ModelToolCall call, TenantApprovalService approvals)
     {

@@ -42,7 +42,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var next = (await runs.FindTenantRunAsync(s.Tenant, source.Result!.ContinuationRunId!.Value))!;
         next = await runtime.ApplyTenantRuntimeCommandAsync(next.Owner, next.AgentRunId,
             new AgentRunCommand.Claim(next.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
-        var continuations = new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, Effects(f, artifactReads: reads), f.Clock, runtime, f.Ids, artifactReads: reads);
+        var continuations = new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, Effects(f, artifactReads: reads), f.Clock, runtime, f.Ids);
         var result = await continuations.ResumeAsync(next); Assert.Equal(TenantOperationOutcome.Completed, result.Outcome!.Outcome);
         Assert.True(AgentRunToolCallCheckpoint.TryRead(result.Run.Checkpoint, out var messages));
         var text = Assert.Single(messages!, m => m.Role == ModelRole.Tool).Text;

@@ -29,7 +29,10 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null, TenantSandboxApprovedOperationService? sandboxResults = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserEffectService? browserEffects = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantCompletionReadService? completionReads = null, TenantMemoryOperationService? memoryOperations = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantAutomationOperationTarget? automationTargets = null, TenantManagementOperationTarget? managementTargets = null, TenantHttpEffectService? httpEffects = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null,
+    TenantSandboxApprovedOperationService? sandboxResults = null, TenantBrowserEffectService? browserEffects = null,
+    TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAccountEffectService? accountEffects = null,
+    TenantHttpEffectService? httpEffects = null)
 {
     public ValueTask<List<ModelMessage>> RehydrateBrowserImagesAsync(AgentRun run, List<ModelMessage> messages, bool vision, CancellationToken ct) =>
         browserEffects is null ? ValueTask.FromResult(messages) : browserEffects.RehydrateCapturesAsync(run, messages, vision, ct);
@@ -102,13 +105,10 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         if (browserEffects is not null) await browserEffects.RequireStoredObservationAsync(run, ct).ConfigureAwait(false);
         if(httpEffects is not null)await httpEffects.RequireStoredAsync(run,ct).ConfigureAwait(false);
         else if(TenantHttpReferences.Read(run).Count>0)throw new AccessDeniedException("http_source_changed");
-        if (accountReads is not null) await accountReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
+        await effects.RequireStoredAccountReadsAsync(run, ct).ConfigureAwait(false);
         if (accountEffects is not null) await accountEffects.RequireStoredAsync(run, ct).ConfigureAwait(false);
         else if (TenantAccountActionReferences.Read(run).Count > 0) throw new AccessDeniedException("account_source_changed");
-        if (credentialReads is not null) await credentialReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
-        if (attachmentReads is not null) await attachmentReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
-        if (artifactReads is not null) await artifactReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
-        if (workspaceReads is not null) await workspaceReads.RequireStoredAsync(run, ct).ConfigureAwait(false);
+        await effects.RequireStoredResourceReadsAsync(run, ct).ConfigureAwait(false);
         TenantOperationReceipt? receipt = null;
         if (request!.Status == TenantApprovalStatus.Approved)
             receipt = await effects.ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
@@ -136,92 +136,11 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                     ? sandboxResults is null ? new TenantSandboxResultRead(null, "tenant_effect_unavailable")
                         : await sandboxResults.ReadResultAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ct).ConfigureAwait(false)
                     : null;
-                string? inspection = null; string? readUnavailable = null;
-                if (request.Operation.ManagementRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (managementTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads.InspectApprovedAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException error) { readUnavailable = error.ReasonCode; }
-                    catch (SecurityConflictException error) { readUnavailable = error.ReasonCode; }
-                }
-                if (request.Operation.AutomationRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (automationTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).Reads.InspectApprovedAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException error) { readUnavailable = error.ReasonCode; }
-                    catch (SecurityConflictException error) { readUnavailable = error.ReasonCode; }
-                }
-                if (request.Operation.ExperienceOperation is { ToolName: TenantExperienceToolContract.Source } && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (experienceOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException error) { readUnavailable = error.ReasonCode; }
-                    catch (SecurityConflictException error) { readUnavailable = error.ReasonCode; }
-                }
-                if (request.Operation.ContinuityRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (continuityReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedAsync(new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException error) { readUnavailable = error.ReasonCode; }
-                    catch (SecurityConflictException error) { readUnavailable = error.ReasonCode; }
-                }
-                if (request.Operation.MemoryOperation is { } memoryOperation && AgentCore.Application.Tools.TenantMemoryToolContract.ReadOnly(memoryOperation.ToolName) && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedAsync(
-                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                }
-                if (request.Operation.WorkspaceRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
-                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                }
-                if (request.Operation.AttachmentRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (attachmentReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
-                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                }
-                if (request.Operation.CompletionRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (completionReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
-                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                }
-                if (request.Operation.ArtifactVerification is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (artifactReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
-                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                }
+                var (inspection, readUnavailable) = receipt is null ? (null, (string?)null)
+                    : await effects.InspectApprovedReadAsync(run, request, receipt, ct).ConfigureAwait(false);
+                // Account inspection may durably rotate OAuth/source state before delivery.
                 if (request.Operation.AccountRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (accountReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
-                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                    catch (AgentCore.Application.Sessions.AgentCoreException e) { readUnavailable = e.Code; }
                     run = await Current(dispatched, ct).ConfigureAwait(false);
-                }
-                if (request.Operation.CredentialRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try { inspection = await (credentialReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
-                        new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes - 512, ct).ConfigureAwait(false); }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                }
-                if (request.Operation.SandboxRead is not null && receipt?.Outcome == TenantOperationOutcome.Completed)
-                {
-                    try
-                    {
-                        inspection = await (sandboxReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).InspectApprovedForRunAsync(
-                            new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), request, receipt, ToolLimits.MaxOutputBytes, ct).ConfigureAwait(false);
-                    }
-                    catch (AccessDeniedException e) { readUnavailable = e.ReasonCode; }
-                    catch (SecurityConflictException e) { readUnavailable = e.ReasonCode; }
-                }
                 var text = JsonSerializer.Serialize(new { approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()), outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.Outcome.ToString()),
                     reasonCode = reason, operationId = outcome.OperationId, applied = request.Operation.Kind == TenantOperationKind.SandboxCommand && outcome.Outcome != TenantOperationOutcome.Denied ? null : outcome.Outcome switch {
                         TenantOperationOutcome.Completed => (bool?)true, TenantOperationOutcome.Denied => false, _ => null } });

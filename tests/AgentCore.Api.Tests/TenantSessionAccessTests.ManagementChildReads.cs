@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -131,7 +132,12 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision, actionHash = request.Operation.ActionHash, expectedRevision = await Revision(owner, tenant), expectedRequestRevision = 1 })).StatusCode);
             var final = await AwaitManagementSuccessor(runs, tenant, session, request.RequestId, runId);
             Assert.True(final.Status == AgentRunStatus.Completed, $"{final.Status}: {final.Failure}");
-            Assert.Equal(decision == "approve" ? 1 : 0, TenantManagementReadReferences.Read(final.Checkpoint).Count);
+            var retained = TenantManagementReadReferences.Read(final.Checkpoint);
+            Assert.Equal(decision == "approve" ? 1 : 0, retained.Count(source => source.ToolName == tool));
+            // Independently permitted Skill metadata remains a mandatory source even
+            // when the requested Resource read is rejected. It activates no Skill.
+            Assert.All(retained.Where(source => source.ToolName != tool), source => Assert.Equal(ToolCatalog.SkillsLoad, source.ToolName));
+            await host.Services.GetRequiredService<ITenantManagementStore>().RequireTenantManagementReadSourcesAsync(new(tenant, final.AgentRunId), retained, null);
             var receipt = await host.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, request.Operation.OperationId);
             if (decision == "approve") Assert.Equal(TenantManagementReadRules.Completed, receipt!.ReasonCode); else Assert.Null(receipt);
             Assert.Null(await approvals.FindOperationGrantAsync(tenant, request.RequestId));

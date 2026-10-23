@@ -30,7 +30,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             s.Resolver, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, sandboxReads: reads);
         var effects = new TenantApprovedOperationService(current, (ITenantRunStore)current, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current,
             operations, s.Resolver, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, sandboxReads: reads);
-        return (approvals, effects, reads, new((ITenantRunStore)current, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids, sandboxReads: reads));
+        return (approvals, effects, reads, new((ITenantRunStore)current, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
     private static async Task<RuntimeSandboxSetup> CheckpointSandboxRead(Fixture f, RuntimeSandboxSetup s, SandboxReadKind kind, Guid? execution = null, bool large = false)
     {

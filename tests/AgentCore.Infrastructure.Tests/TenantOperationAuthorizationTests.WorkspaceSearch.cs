@@ -96,7 +96,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(1, await v.Approvals.DispatchPendingAsync()); var runs = (ITenantRunStore)f.Iam; var runtime = (ITenantRuntimeStore)f.Iam;
         var source = (await runs.FindTenantRunAsync(s.Tenant, s.Run.AgentRunId))!; var next = (await runs.FindTenantRunAsync(s.Tenant, source.Result!.ContinuationRunId!.Value))!;
         next = await runtime.ApplyTenantRuntimeCommandAsync(next.Owner, next.AgentRunId, new AgentRunCommand.Claim(next.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
-        var result = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, Effects(f, workspaceReads: v.Reads), f.Clock, runtime, f.Ids, workspaceReads: v.Reads).ResumeAsync(next);
+        var result = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, Effects(f, workspaceReads: v.Reads), f.Clock, runtime, f.Ids).ResumeAsync(next);
         Assert.Equal(TenantOperationOutcome.Denied, result.Outcome!.Outcome);
         Assert.DoesNotContain("Private model bytes", result.Run.Checkpoint!.PayloadJson); Assert.DoesNotContain("newly discovered", result.Run.Checkpoint.PayloadJson);
     }

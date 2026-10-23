@@ -25,7 +25,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             config, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, memoryOperations: memory);
         var effects = new TenantApprovedOperationService(current, runs, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, operations,
             config, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, memoryOperations: memory);
-        return (memory, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids, memoryOperations: memory));
+        return (memory, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
     private static async Task<(MemorySetup Owner, MemoryTurn Turn, TenantLearnedMemory[] Sources)> MemoryOperationFixture(Fixture f)
     {
@@ -99,5 +99,32 @@ public sealed partial class TenantDefinitionIntegrationTests
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantLearnedMemories SET SourceMemoryIdsJson=NULL WHERE MemoryId={result.MemoryId}"));
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.MemoryOperation.ArgumentsJson','{{}}') WHERE RequestId={request.RequestId}"));
         }
+    }
+
+    [Theory]
+    [InlineData(false, true)] [InlineData(true, true)]
+    [InlineData(false, false)] [InlineData(true, false)]
+    public async Task Tenant_memory_exact_read_consent_preserves_owned_observation_and_refusal_through_consolidated_readback(bool sqlite, bool approve)
+    {
+        await using var f = await Fixture.Create(sqlite); var s = await MemoryOperationFixture(f);
+        await MemoryPolicy(f, s.Owner, "memory.read", OperationApprovalMode.Always);
+        var services = MemoryServices(f); var source = s.Sources[0];
+        var call = new ModelToolCall("read-memory", ToolCatalog.ContinuityGet, JsonSerializer.Serialize(new { kind = "Memory", id = source.MemoryId }));
+        var before = await services.Memory.InspectAsync(s.Turn.Frame, call, 6000);
+        Assert.Contains("requiresApproval", before); Assert.DoesNotContain(source.Content, before);
+        var request = await PrepareMemoryReview(f, s.Turn.Frame, call, services.Approvals);
+        var frame = await DecideMemoryReview(f, s.Owner, request, services.Approvals, approve);
+        if (sqlite) services = MemoryServices(f, new SqliteIamStore(f.Contexts!, f.Content));
+        var run = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(s.Owner.Tenant, frame.RunId))!;
+        var resumed = await services.Continuation.ResumeAsync(run);
+        Assert.Equal(approve ? TenantOperationOutcome.Completed : TenantOperationOutcome.Denied, resumed.Outcome!.Outcome);
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(resumed.Run.Checkpoint, out var messages));
+        var output = Assert.Single(messages!, message => message.Role == ModelRole.Tool).Text;
+        if (approve) Assert.Contains(source.Content, output); else Assert.DoesNotContain(source.Content, output);
+        var receipt = await ((ITenantApprovedOperationStore)f.Iam).FindOperationReceiptAsync(s.Owner.Tenant, request.Operation.OperationId);
+        if (approve) Assert.Equal(TenantOperationOutcome.Completed, receipt!.Outcome); else Assert.Null(receipt);
+        Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Owner.Tenant, request.RequestId));
+        var replay = await services.Continuation.ResumeAsync(resumed.Run);
+        Assert.Equal(resumed.Run.Checkpoint!.PayloadJson, replay.Run.Checkpoint!.PayloadJson);
     }
 }

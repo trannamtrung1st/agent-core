@@ -63,7 +63,7 @@ public sealed partial class TenantRunAdmissionTests
         var next = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(tenant, source.Result!.ContinuationRunId!.Value))!;
         var active = await ClaimBackground(f, next);
         return await new TenantRunContinuationService((ITenantRunStore)f.Iam, (ITenantApprovalStore)f.Iam, CompletionReadEffects(f), f.Clock,
-            (ITenantRuntimeStore)f.Iam, f.Ids, completionReads: CompletionReads(f)).ResumeAsync(active.Run);
+            (ITenantRuntimeStore)f.Iam, f.Ids).ResumeAsync(active.Run);
     }
 
     [Theory] [InlineData(false, "agent-runs.read")] [InlineData(true, "agent-runs.read")]
@@ -86,7 +86,7 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Equal(v.Request.RequestId, inspected.Source.CompletionReadRequestId); Assert.Single(inspected.Artifacts);
         var guard = new TenantWaitSourceAuthority(f.Iam, (ITenantSessionStore)f.Iam, (ITenantRunStore)f.Iam, f.Authorizer, (ITenantArtifactStore)f.Artifacts, CompletionReads(f));
         await guard.RequireStoredAsync(result.Run, default);
-        var continuations = new TenantRunContinuationService((ITenantRunStore)f.Iam, (ITenantApprovalStore)f.Iam, CompletionReadEffects(f), f.Clock, runtime, f.Ids, completionReads: CompletionReads(f));
+        var continuations = new TenantRunContinuationService((ITenantRunStore)f.Iam, (ITenantApprovalStore)f.Iam, CompletionReadEffects(f), f.Clock, runtime, f.Ids);
         var again = await continuations.ResumeAsync(result.Run); Assert.Equal(result.Run.Revision, again.Run.Revision); Assert.Equal(result.Run.Checkpoint!.PayloadJson, again.Run.Checkpoint!.PayloadJson);
         Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(v.Request.TenantId, v.Request.RequestId));
         Assert.Single(await f.Iam.ReadAuditAsync(v.Request.TenantId, 200), a => a.Action == TenantCompletionReadRules.AuditAction);
@@ -144,7 +144,7 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Equal(1, await approvals.DispatchPendingAsync());
         var runs = (ITenantRunStore)f.Iam; var source = (await runs.FindTenantRunAsync(tenant, v.Parent.Parent.AgentRunId))!;
         var active = await ClaimBackground(f, (await runs.FindTenantRunAsync(tenant, source.Result!.ContinuationRunId!.Value))!);
-        var result = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, CompletionReadEffects(f), f.Clock, (ITenantRuntimeStore)f.Iam, f.Ids, completionReads: CompletionReads(f)).ResumeAsync(active.Run);
+        var result = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, CompletionReadEffects(f), f.Clock, (ITenantRuntimeStore)f.Iam, f.Ids).ResumeAsync(active.Run);
         Assert.Equal(TenantOperationOutcome.Denied, result.Outcome!.Outcome);
         Assert.True(AgentRunToolCallCheckpoint.TryRead(result.Run.Checkpoint, out var messages)); var text = Assert.Single(messages!, m => m.Role == ModelRole.Tool).Text;
         using var json = JsonDocument.Parse(text); Assert.False(json.RootElement.GetProperty("readAuthorized").GetBoolean()); Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("completion").ValueKind);

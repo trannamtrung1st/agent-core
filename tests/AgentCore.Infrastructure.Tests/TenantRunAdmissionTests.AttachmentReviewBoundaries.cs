@@ -91,7 +91,7 @@ public sealed partial class TenantRunAdmissionTests
         await v.Approvals.DispatchPendingAsync(); var runs = (ITenantRunStore)f.Iam; var source = (await runs.FindTenantRunAsync(s.Tenant, v.Source.AgentRunId))!;
         var next = (await runs.FindTenantRunAsync(s.Tenant, source.Result!.ContinuationRunId!.Value))!;
         next = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(next.Owner, next.AgentRunId, new AgentRunCommand.Claim(next.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
-        var resumed = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, AttachmentEffects(f, v.Reads), f.Clock, (ITenantRuntimeStore)f.Iam, f.Ids, attachmentReads: v.Reads).ResumeAsync(next);
+        var resumed = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, AttachmentEffects(f, v.Reads), f.Clock, (ITenantRuntimeStore)f.Iam, f.Ids).ResumeAsync(next);
         await new TenantOperationPolicyService(f.Iam, (ITenantOperationPolicyStore)f.Iam, f.Authorizer, f.Identity, f.Ids, f.Clock)
             .SaveAsync(s.Tenant, s.Owner, "attachments.read", new(OperationApprovalMode.WhenRequesterLacksPermission, false), (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision, 1);
         var args = v.Request.Operation.AttachmentRead!.ArgumentsJson; next = resumed.Run;
@@ -114,7 +114,14 @@ public sealed partial class TenantRunAdmissionTests
             row.PayloadJson = payload.ToJsonString();
             Assert.Equal(275, Assert.IsType<SqliteException>((await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync())).InnerException).SqliteExtendedErrorCode);
         }
-        await using (var db = f.Contexts!.CreateDbContext()) await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261019092834_TenantAttachmentOwnership"));
+        await using (var db = f.Contexts!.CreateDbContext())
+        {
+            await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261019092834_TenantAttachmentOwnership"));
+            // Safe newer Down steps may precede the retained Attachment guard.
+            // Restore the current schema before querying through the current model.
+            await db.GetService<IMigrator>().MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
+        }
         Assert.Equal(v.Request, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(v.Setup.Tenant, v.Request.RequestId));
     }
 }

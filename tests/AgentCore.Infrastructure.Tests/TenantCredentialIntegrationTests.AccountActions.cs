@@ -44,7 +44,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var local = new TenantApprovedOperationService(store, (ITenantRunStore)store, (ITenantAgentStore)store, (ITenantApprovalStore)store,
             (ITenantApprovedOperationStore)store, operations, f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, accountReads: reads);
         return new(approvals, effects, new((ITenantRunStore)store, (ITenantApprovalStore)store, local, f.Clock,
-            (ITenantRuntimeStore)store, f.Ids, accountReads: reads, accountEffects: effects), files, reads, ledger);
+            (ITenantRuntimeStore)store, f.Ids, accountEffects: effects), files, reads, ledger);
     }
     public static TheoryData<bool, string> AccountActionBoundaryCases
     {

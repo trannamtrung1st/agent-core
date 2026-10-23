@@ -40,7 +40,7 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Equal(0, probe.Reads); Assert.Equal(1, await approvals.DispatchPendingAsync()); var source = (await runs.FindTenantRunAsync(s.Tenant, run.AgentRunId))!;
         var next = (await runs.FindTenantRunAsync(s.Tenant, source.Result!.ContinuationRunId!.Value))!;
         next = await runtime.ApplyTenantRuntimeCommandAsync(next.Owner, next.AgentRunId, new AgentRunCommand.Claim(next.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
-        var result = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, AttachmentEffects(f, reads), f.Clock, runtime, f.Ids, attachmentReads: reads).ResumeAsync(next);
+        var result = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, AttachmentEffects(f, reads), f.Clock, runtime, f.Ids).ResumeAsync(next);
         Assert.Equal(TenantOperationOutcome.Completed, result.Outcome!.Outcome);
         Assert.True(AgentRunToolCallCheckpoint.TryRead(result.Run.Checkpoint, out var messages)); var tool = Assert.Single(messages!, m => m.Role == ModelRole.Tool);
         using var doc = JsonDocument.Parse(tool.Text); Assert.True(doc.RootElement.GetProperty("readAuthorized").GetBoolean());
@@ -48,7 +48,7 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Null(await ((ITenantApprovalStore)f.Iam).FindOperationGrantAsync(s.Tenant, request.RequestId)); await reads.RequireStoredAsync(result.Run);
         Assert.Null(await new TenantRunExecutionAuthority(AttachmentOperations(f), f.Iam, f.Clock, f.RunConfiguration()).CurrentDefinitionAsync(result.Run));
         Assert.Single(await f.Iam.ReadAuditAsync(s.Tenant, 200), a => a.Action == TenantAttachmentReadRules.AuditAction);
-        var again = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, AttachmentEffects(f, reads), f.Clock, runtime, f.Ids, attachmentReads: reads).ResumeAsync(result.Run);
+        var again = await new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, AttachmentEffects(f, reads), f.Clock, runtime, f.Ids).ResumeAsync(result.Run);
         Assert.Equal(result.Run.Checkpoint!.PayloadJson, again.Run.Checkpoint!.PayloadJson); Assert.Equal(result.Run.Revision, again.Run.Revision);
     }
 }

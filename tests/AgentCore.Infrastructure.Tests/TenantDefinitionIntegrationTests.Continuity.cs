@@ -25,7 +25,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             config, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)current, memoryOperations: memory, continuityReads: reads);
         var effects = new TenantApprovedOperationService(current, runs, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, operations,
             config, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, memoryOperations: memory, continuityReads: reads);
-        return (reads, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids, memoryOperations: memory, continuityReads: reads));
+        return (reads, approvals, effects, new(runs, (ITenantApprovalStore)current, effects, TimeProvider.System, (ITenantRuntimeStore)current, f.Ids));
     }
     private static ModelToolCall HistoryCall(Guid id, long after = 0, int limit = 20) => new("history", ToolCatalog.ContinuityGet, JsonSerializer.Serialize(new { kind = "Session", id, afterEntrySequence = after, limit }));
     private static async Task<TenantApprovalRequest> PrepareContinuityReview(Fixture f, TenantRuntimeFrame frame, ModelToolCall call, TenantApprovalService approvals)

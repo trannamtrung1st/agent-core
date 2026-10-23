@@ -64,7 +64,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(1, await approvals.DispatchPendingAsync()); var source = (await runs.FindTenantRunAsync(s.Tenant, frame.RunId))!;
         var next = (await runs.FindTenantRunAsync(s.Tenant, source.Result!.ContinuationRunId!.Value))!;
         next = await runtime.ApplyTenantRuntimeCommandAsync(next.Owner, next.AgentRunId, new AgentRunCommand.Claim(next.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId());
-        var continuations = new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, Effects(f, workspaceReads: reads), f.Clock, runtime, f.Ids, workspaceReads: reads);
+        var continuations = new TenantRunContinuationService(runs, (ITenantApprovalStore)f.Iam, Effects(f, workspaceReads: reads), f.Clock, runtime, f.Ids);
         var result = await continuations.ResumeAsync(next); Assert.Equal(TenantOperationOutcome.Completed, result.Outcome!.Outcome);
         Assert.True(AgentRunToolCallCheckpoint.TryRead(result.Run.Checkpoint, out var messages)); var text = Assert.Single(messages!, m => m.Role == ModelRole.Tool).Text;
         using var doc = JsonDocument.Parse(text); Assert.True(doc.RootElement.GetProperty("readAuthorized").GetBoolean()); Assert.False(doc.RootElement.GetProperty("applied").GetBoolean());

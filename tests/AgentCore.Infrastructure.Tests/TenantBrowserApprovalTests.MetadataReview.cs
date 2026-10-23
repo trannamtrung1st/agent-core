@@ -21,7 +21,7 @@ public sealed partial class TenantBrowserApprovalTests
         var effect = new TenantApprovedOperationService(store, (ITenantRunStore)store, (ITenantAgentStore)store, (ITenantApprovalStore)store,
             (ITenantApprovedOperationStore)store, Operations(f, store), f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default,
             credentialReads: reads);
-        return new((ITenantRunStore)store, (ITenantApprovalStore)store, effect, f.Clock, (ITenantRuntimeStore)store, f.Ids, credentialReads: reads);
+        return new((ITenantRunStore)store, (ITenantApprovalStore)store, effect, f.Clock, (ITenantRuntimeStore)store, f.Ids);
     }
     private static async Task<(Setup Setup, TenantApprovalRequest Request)> ApprovedMetadata(Fixture f, Setup s, string args = "{}", string choice = "approve")
     {
