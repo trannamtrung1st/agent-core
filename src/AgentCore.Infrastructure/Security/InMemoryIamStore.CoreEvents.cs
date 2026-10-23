@@ -34,6 +34,7 @@ public sealed partial class InMemoryIamStore
         var producer = sessionBacking.ReadTenantRun(frame.Owner.TenantId!.Value, frame.RunId) ?? throw new AccessDeniedException("run_unavailable");
         if (TenantRuntimeRules.PublishesResponse(producer, snapshot, id => sessionBacking.FindEntry(frame.SessionId, id)))
         {
+            RequirePublicWebSources(producer, CancellationToken.None);
             RequireStoredProfileSource(producer, CancellationToken.None);
             RequireStoredMemorySources(producer, CancellationToken.None);
         }

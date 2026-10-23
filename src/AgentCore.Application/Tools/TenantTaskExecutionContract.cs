@@ -14,7 +14,7 @@ public static class TenantTaskExecutionContract
     public static bool IsNativeInspection(string name) => TenantBrowserInspectionContract.IsInspection(name) || TenantSandboxInspectionContract.IsInspection(name) || name == ToolCatalog.AgentStateInspect;
     public static IReadOnlyList<string> BackgroundBrowserTools(AgentDefinition definition) => TenantBrowserAuthorizationContract.Allowed(definition)
         .Where(name => name != ToolCatalog.BrowserFillCredential).ToArray();
-    public static bool IsTool(string name) => TenantAutomationMutationContract.IsTool(name) || TenantAutomationReadContract.IsTool(name) || TenantExperienceToolContract.IsTool(name) || TenantMemoryToolContract.IsTool(name) || TenantCredentialDiscoveryContract.IsTool(name) || TenantWorkspaceReadContract.IsRead(name)
+    public static bool IsTool(string name) => TenantPublicWebReadContract.IsRead(name) || TenantAutomationMutationContract.IsTool(name) || TenantAutomationReadContract.IsTool(name) || TenantExperienceToolContract.IsTool(name) || TenantMemoryToolContract.IsTool(name) || TenantCredentialDiscoveryContract.IsTool(name) || TenantWorkspaceReadContract.IsRead(name)
         || TenantWorkspaceMutationContract.IsMutation(name)
         || name is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsVerify or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace;
     public static bool IsBackground(AgentRun run) => run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;

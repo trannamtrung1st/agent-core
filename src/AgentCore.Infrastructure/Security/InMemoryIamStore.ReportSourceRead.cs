@@ -13,6 +13,7 @@ public sealed partial class InMemoryIamStore
     {
         var source = CompletionSource(AgentRunOwner.ForTenant(request.TenantId, request.Operation.InstanceId, request.ExecutorPrincipalId), request.RunId)
             ?? throw new AccessDeniedException("completion_unavailable");
+        RequirePublicWebSources(source.Child, CancellationToken.None);
         RequireStoredProfileSource(source.Child, CancellationToken.None);
         RequireStoredMemorySources(source.Child, CancellationToken.None);
         var state = _tenants[request.TenantId]; var iam = new IamAuthorizer(this);
@@ -27,6 +28,7 @@ public sealed partial class InMemoryIamStore
     }
     private void RequireTenantReportRead(TenantSecurityState state, TenantBackgroundCompletion source, CancellationToken ct)
     {
+        RequirePublicWebSources(source.Child, ct);
         RequireStoredProfileSource(source.Child, ct);
         RequireStoredMemorySources(source.Child, ct);
         TenantBackgroundCompletionFactory.RequireParent(source);

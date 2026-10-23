@@ -43,7 +43,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         await RequireRuntimeFrame(db, frame, ct).ConfigureAwait(false);
         var producerRow = await db.AgentRuns.AsNoTracking().SingleAsync(r => r.TenantId == frame.Owner.TenantId && r.AgentRunId == frame.RunId.ToString("D"), ct).ConfigureAwait(false);
         var producer = AgentRunStoreMapping.ToDomain(producerRow);
-        if (TenantAutomationConversationRules.IsConversationRoot(producer) || AgentRunToolCallCheckpoint.ReadExecutionState(producer.Checkpoint).TenantProfileSource is not null
+        if (TenantPublicWebReadService.HasStored(producer) || TenantAutomationConversationRules.IsConversationRoot(producer) || AgentRunToolCallCheckpoint.ReadExecutionState(producer.Checkpoint).TenantProfileSource is not null
             || TenantMemoryOperationReferences.Read(producer.Checkpoint) is { Count: > 0 } || TenantHistoricalReferences.Read(producer.Checkpoint) is { Count: > 0 }
             || TenantExperienceReferences.Sources(producer.Checkpoint) is { Count: > 0 } || TenantExperienceReferences.Facts(producer.Checkpoint) is { Count: > 0 })
         {
@@ -51,6 +51,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
             var saved = rows.Select(SqliteMemoryStore.ToEntry).ToDictionary(e => e.EntryId);
             if (TenantRuntimeRules.PublishesResponse(producer, snapshot, id => saved.GetValueOrDefault(id)))
             {
+                await RequirePublicWebSources(db, producer, ct).ConfigureAwait(false);
                 await RequireStoredProfileSource(db, producer, ct).ConfigureAwait(false);
                 await RequireStoredMemorySources(db, producer, ct).ConfigureAwait(false);
                 if (TenantAutomationConversationRules.IsConversationRoot(producer)) await RequireTenantEventRead(db, producer, ct).ConfigureAwait(false);

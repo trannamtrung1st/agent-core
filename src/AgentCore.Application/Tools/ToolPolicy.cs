@@ -229,6 +229,10 @@ public static class ToolPolicy
         if ((TenantTaskExecutionContract.IsBackground(context) || TenantTaskExecutionContract.IsIndependent(context))
             && !IamToolContracts.IsInspection(descriptor.Name) && !TenantTaskExecutionContract.IsTool(descriptor.Name) && !TenantTaskExecutionContract.IsNativeInspection(descriptor.Name)
             && descriptor.Name != ToolCatalog.RequestAuthorization) return false;
+        if (context?.ExecutionContext is { } publicRead && TenantPublicWebReadContract.IsRead(descriptor.Name))
+            return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
+                && TenantTaskExecutionContract.Allows(context) && publicRead.SessionId == context.OwnedSessionId
+                && TenantPublicWebReadContract.Allows(definition, descriptor.Name);
         if (context?.ExecutionContext is { } mutation && TenantWorkspaceMutationContract.IsMutation(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && TenantTaskExecutionContract.Allows(context)

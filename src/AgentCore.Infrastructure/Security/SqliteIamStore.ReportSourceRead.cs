@@ -14,6 +14,7 @@ public sealed partial class SqliteIamStore
     {
         var source = await CompletionSource(db, AgentRunOwner.ForTenant(request.TenantId, request.Operation.InstanceId, request.ExecutorPrincipalId), request.RunId, ct).ConfigureAwait(false)
             ?? throw new AccessDeniedException("completion_unavailable");
+        await RequirePublicWebSources(db, source.Child, ct).ConfigureAwait(false);
         await RequireStoredProfileSource(db, source.Child, ct).ConfigureAwait(false);
         await RequireStoredMemorySources(db, source.Child, ct).ConfigureAwait(false);
         var state = (await ReadTenantAsync(db, request.TenantId, ct).ConfigureAwait(false))!; var iam = new IamAuthorizer(this);
@@ -29,6 +30,7 @@ public sealed partial class SqliteIamStore
     }
     private async ValueTask RequireTenantReportRead(AgentCoreDbContext db, TenantSecurityState state, TenantBackgroundCompletion source, CancellationToken ct)
     {
+        await RequirePublicWebSources(db, source.Child, ct).ConfigureAwait(false);
         await RequireStoredProfileSource(db, source.Child, ct).ConfigureAwait(false);
         await RequireStoredMemorySources(db, source.Child, ct).ConfigureAwait(false);
         TenantBackgroundCompletionFactory.RequireParent(source);

@@ -119,6 +119,15 @@ public sealed partial class TenantSessionAccessTests
             var final = await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(), tenant, runId);
             Assert.True(final.Status == AgentRunStatus.Completed, $"{final.Status}: {final.Failure?.Code}: {final.Failure?.Summary}");
             Assert.Equal(1, final.CapabilityLoadCount); Assert.Contains(tool, final.LoadedCapabilityIds);
+            if (tool == "settings.inspect" && section == "capabilities" && !preferences)
+            {
+                var firstRequestOfNextRun = model.Requests.Count;
+                var currentSession = (await host.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, session))!;
+                var next = await Json(await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Inspect the current capabilities again.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = currentSession.Snapshot.Revision }));
+                var nextRun = await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(), tenant, next.GetProperty("runId").GetGuid());
+                Assert.Equal(AgentRunStatus.Completed, nextRun.Status); Assert.Equal(1, nextRun.CapabilityLoadCount); Assert.Contains(tool, nextRun.LoadedCapabilityIds);
+                Assert.DoesNotContain(model.Requests.ToArray()[firstRequestOfNextRun].Tools!, item => item.Name == tool);
+            }
             var reference = Assert.Single(TenantManagementReadReferences.Read(final.Checkpoint)); Assert.Equal(2, reference.InstanceRevision);
             var requests = model.Requests.ToArray(); Assert.DoesNotContain(requests[0].Tools!, t => t.Name == tool);
             Assert.Contains(requests[1].Tools!, t => t.Name == tool);

@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorizer operations, IIamStore store, TimeProvider time,
     TenantRunConfigurationResolver configurations, TenantBrowserEffectService? browserEffects = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantAttachmentRuntimeContextService? attachmentContext = null,
-    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, AgentCore.Application.Ports.IModelCatalog? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null) : IAgentRunAuthority, ITenantRunContext
+    TenantWaitSourceAuthority? waitSources = null, TenantReportReadAuthority? reportReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountEffectService? accountEffects = null, TenantEventReadAuthority? eventReads = null, TenantRunSourceAuthority? sourceAuthority = null, AgentCore.Application.Ports.IModelCatalog? configurationModels = null, AgentCore.Application.Tools.IToolConfigurationGate? configurationTools = null, TenantPublicWebReadService? publicWebReads = null) : IAgentRunAuthority, ITenantRunContext
 {
     public ValueTask RecordAccountOutputFailureAsync(TenantRunReference reference, string reason, CancellationToken ct) =>
         operations.RecordFailureAsync(reference, reason == "account_metadata_unavailable" ? "credentials.read" : "credentials.use", reason, ExecutionAuthorizationPurpose.EffectEligibility, ct);
@@ -69,6 +69,8 @@ public sealed partial class TenantRunExecutionAuthority(TenantOperationAuthorize
                     else if (TenantAccountActionReferences.Read(after.Run).Count > 0) throw new AccessDeniedException("account_source_changed");
                     if (credentialReads is not null) await credentialReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     if (artifactReads is not null) await artifactReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    if (publicWebReads is not null) await publicWebReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
+                    else if (TenantPublicWebReadService.HasStored(after.Run)) throw new AccessDeniedException("public_web_unavailable");
                     if (workspaceReads is not null) await workspaceReads.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     if (waitSources is not null) await waitSources.RequireStoredAsync(after.Run, cancellationToken).ConfigureAwait(false);
                     else if (TenantWaitSourceAuthority.HasStoredSources(after.Run)) throw new AccessDeniedException("wait_source_unavailable");

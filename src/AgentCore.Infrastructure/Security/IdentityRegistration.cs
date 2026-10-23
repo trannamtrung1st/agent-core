@@ -116,6 +116,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAccountEffectService>();
         services.TryAddSingleton<TenantBrowserEffectService>();
         services.TryAddSingleton<TenantBrowserReadService>();
+        services.TryAddSingleton<TenantPublicWebReadService>();
         services.TryAddSingleton<TenantSandboxControlOperationTarget>();
         services.TryAddSingleton<TenantSandboxApprovedOperationService>();
         services.TryAddSingleton<TenantSandboxExecutionAuthority>();

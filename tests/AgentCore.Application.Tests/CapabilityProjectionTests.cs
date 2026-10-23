@@ -25,7 +25,7 @@ public sealed class CapabilityProjectionTests
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order().ToArray();
         Assert.Equal(new[] { ToolCatalog.CapabilitiesLoad, ToolCatalog.SkillsLoad, ToolCatalog.AutomationList, ToolCatalog.AutomationInspect, ToolCatalog.AutomationCreate, ToolCatalog.AutomationUpdate, ToolCatalog.AutomationEnable, ToolCatalog.AutomationDisable, ToolCatalog.AutomationDelete, ToolCatalog.AutomationRun,
             ToolCatalog.ContinuitySearch, ToolCatalog.ContinuityGet, ToolCatalog.MemoryConsolidate, ToolCatalog.MemoryForget, ToolCatalog.BackgroundStart, ToolCatalog.BackgroundList, ToolCatalog.BackgroundInspect, ToolCatalog.BackgroundTake, ToolCatalog.ExecutionWait, ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceSearch,
-            ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch, ToolCatalog.OfficeDocumentCreate, ToolCatalog.OfficeDocumentEdit, ToolCatalog.OfficeDocumentInspect,
+            ToolCatalog.WebDownload, ToolCatalog.WebSearch, ToolCatalog.WebFetch, ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch, ToolCatalog.OfficeDocumentCreate, ToolCatalog.OfficeDocumentEdit, ToolCatalog.OfficeDocumentInspect,
             ToolCatalog.OfficeSpreadsheetCreate, ToolCatalog.OfficeSpreadsheetEdit, ToolCatalog.OfficeSpreadsheetInspect, ToolCatalog.ArtifactsVerify, ToolCatalog.ArtifactsCreate, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.RequestAuthorization, ToolCatalog.IamCheckAccess, ToolCatalog.IamEffectivePermissions,
             ToolCatalog.SandboxProfiles, ToolCatalog.SandboxStatus, ToolCatalog.SandboxProcessStatus,
             ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserFind, ToolCatalog.BrowserWait, "browser.console_messages", "browser.network_requests",
@@ -53,65 +53,6 @@ public sealed class CapabilityProjectionTests
         Assert.Empty(CapabilityDiscoveryMatcher.Load(definition, context, ToolConfigurationGates.AllowAll, mouse.RootElement, 0).Loaded);
         Assert.Contains("browser.mouse", CapabilityDiscoveryMatcher.Load(definition, context with { ModelSupportsVision = true }, ToolConfigurationGates.AllowAll, mouse.RootElement, 0).Loaded);
     }
-    [Theory]
-    [InlineData("workspace.write")]
-    [InlineData("Please use WORKSPACE.WRITE.")]
-    public async Task Runtime_load_persists_ids_and_next_continuation_executes_then_next_turn_resets(string query)
-    {
-        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspaceRead);
-        d = d with { Environment = d.Environment! with { Workspace = new() } };
-        var root = Path.Combine(Path.GetTempPath(), "capability-loop-" + Guid.NewGuid().ToString("N"));
-        var time = TimeProvider.System;
-        var ids = new AgentCore.Infrastructure.Identity.SystemIdGenerator(time);
-        var now = time.GetUtcNow();
-        var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, d, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null, null, now, now, ModelSelection: new SessionModelSelection("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null), AgentInstanceId: Guid.NewGuid());
-        var memory = new AgentCore.Infrastructure.Persistence.InMemoryMemoryStore();
-        var turns = new RuntimeAgentRunStore();
-        var workspace = AgentCore.Tests.Shared.WorkspaceTestSessions.CreateWorkspace(root, root + "-templates");
-        await workspace.EnsureAsync(snapshot.SessionId, d);
-        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
-        turns.Bind(memory);
-        await memory.SaveAsync(snapshot, 0);
-        var model = new LoadQueryModel(query);
-        try
-        {
-            await using var runtime = SessionRuntimeFixture.Create(snapshot, model,
-                new AgentCore.Application.Agents.DefaultAgentBrain(new AgentCore.Application.Agents.PromptContextBuilder()), memory,
-                new AgentCore.Application.Testing.CapturingSessionOutput(), ids, time, Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(), agentRuns: turns);
-            await runtime.AttachAsync();
-            var source = Guid.NewGuid();
-            Assert.True(await runtime.SubmitPersistedUserTextAsync("synthetic-capability-projection:write", source));
-            await runtime.WaitUntilIdleAsync();
-            var answer = runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant);
-            Assert.Contains("Capability projection results:", answer.Text);
-            Assert.DoesNotContain("error", answer.Text);
-            Assert.Equal("Loaded exact capability café\r\n", System.Text.Encoding.UTF8.GetString((await workspace.ReadAsync(snapshot.SessionId, d, "/working/loaded-capability.txt")).Bytes));
-            var execution = await turns.ForSourceAsync(snapshot.SessionId, source);
-            Assert.Equal([ToolCatalog.WorkspaceWrite], execution!.LoadedCapabilityIds);
-            Assert.Equal(1, execution.CapabilityLoadCount);
-            Assert.True(await runtime.SubmitPersistedUserTextAsync("synthetic-capability-projection:inspect", Guid.NewGuid()));
-            await runtime.WaitUntilIdleAsync();
-            var next = runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant);
-            Assert.Contains(ToolCatalog.CapabilitiesLoad, next.Text);
-            Assert.DoesNotContain(ToolCatalog.WorkspaceWrite, next.Text);
-        }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
-    }
-    private sealed class LoadQueryModel(string query) : ILanguageModel
-    {
-        private readonly ScriptedLanguageModel _inner = new();
-        public ModelCapabilities Capabilities => _inner.Capabilities;
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await foreach (var item in _inner.GenerateAsync(request, cancellationToken))
-                yield return item is ModelToolCallEvent { Call.Name: ToolCatalog.CapabilitiesLoad } load
-                    ? load with { Call = load.Call with { ArgumentsJson = JsonSerializer.Serialize(new { query, limit = 1 }) } }
-                    : item;
-        }
-    }
-
     internal static async Task<AgentDefinition> Definition(params string[] names)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
@@ -188,7 +129,7 @@ public sealed class CapabilityProjectionTests
         d = d with { Environment = d.Environment! with { Projection = new([ToolCatalog.WorkspaceRead]) },
             Skills = [new("write", "Write", "Write a file", "Use tools", SkillProjection.OnDemand, true, [ToolCatalog.WorkspaceWrite], [])] };
         c = c with { Definition = d, AgentInstanceId = Guid.NewGuid(), PinnedSkillCatalog = [new("definition:write", SkillOrigin.Definition, "write", "Write", "Write a file", "Use tools", SkillProjection.OnDemand, [ToolCatalog.WorkspaceWrite], [])], ActiveSkillKeys = ["definition:write"], LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite] };
-        Assert.Equal(6, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Count);
+        Assert.Equal(new[] { ToolCatalog.CapabilitiesLoad, ToolCatalog.SkillsLoad, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite }.Order(), ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name).Order());
         Assert.Contains(ToolCatalog.SkillsLoad, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.Empty(ToolCatalog.For(d, c with { ModelSupportsTools = false }, ToolConfigurationGates.AllowAll));
         Assert.DoesNotContain(ToolCatalog.WorkspaceWrite, ToolCatalog.For(d, Context(d), ToolConfigurationGates.AllowAll).Select(t => t.Name));

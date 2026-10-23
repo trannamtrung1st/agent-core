@@ -63,9 +63,7 @@ internal sealed class InvalidToolCallRecovery
             fields["invalidCallRecovery"] = new
             {
                 strategy, attempt,
-                instruction = ineffectiveDiscovery ? "Follow nextStep: call offered tools or change the goal. Repeating this query cannot add a capability." : attempt == 1 ? "Correct the reported validation error using the offered schema."
-                    : attempt == 2 ? "Second equivalent failure. Rebuild a minimal call from the schema; omit unused fields. The next equivalent invalid attempt will be blocked."
-                    : "Repeated strategy blocked. Report this blocker accurately, or make a different valid attempt."
+                instruction = Instruction(ineffectiveDiscovery, attempt)
             };
             return JsonSerializer.Serialize(fields);
         }
@@ -97,6 +95,19 @@ internal sealed class InvalidToolCallRecovery
         }
         catch (JsonException) { return null; }
     }
+
+    internal static bool IsReceiptMetadata(ModelToolCall call, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object || value.EnumerateObject().Any(p => p.Name is not ("strategy" or "attempt" or "instruction"))
+            || !value.TryGetProperty("strategy", out var strategy) || strategy.ValueKind != JsonValueKind.String || strategy.GetString() != Strategy(call)
+            || !value.TryGetProperty("attempt", out var attempt) || attempt.ValueKind != JsonValueKind.Number || !attempt.TryGetInt32(out var count) || count is < 1 or > ToolLimits.MaxSteps) return false;
+        return !value.TryGetProperty("instruction", out var instruction) || instruction.ValueKind == JsonValueKind.String && instruction.GetString() == Instruction(false, count);
+    }
+    private static string Instruction(bool discovery, int attempt) => discovery
+        ? "Follow nextStep: call offered tools or change the goal. Repeating this query cannot add a capability."
+        : attempt == 1 ? "Correct the reported validation error using the offered schema."
+        : attempt == 2 ? "Second equivalent failure. Rebuild a minimal call from the schema; omit unused fields. The next equivalent invalid attempt will be blocked."
+        : "Repeated strategy blocked. Report this blocker accurately, or make a different valid attempt.";
 
     private static string Strategy(ModelToolCall call, bool discoveryGoalOnly = false)
     {
