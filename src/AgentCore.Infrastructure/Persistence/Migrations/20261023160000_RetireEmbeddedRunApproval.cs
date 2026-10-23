@@ -10,7 +10,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations;
 
 [DbContext(typeof(AgentCoreDbContext))]
 [Migration("20261023160000_RetireEmbeddedRunApproval")]
-public sealed class RetireEmbeddedRunApproval : TenantConfigurationRemedyAuthoring
+public class RetireEmbeddedRunApproval : TenantConfigurationRemedyAuthoring
 {
     // The predecessor's generated target is frozen migration metadata, not the live model.
     // Reuse it here instead of duplicating the entire unchanged target model.

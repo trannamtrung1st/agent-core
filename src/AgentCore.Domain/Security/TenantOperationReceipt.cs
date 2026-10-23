@@ -11,4 +11,5 @@ public sealed record TenantOperationReceipt(Guid OperationId, Guid? RequestId, G
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BrowserArtifactsJson = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantAutomationMutationReceipt? AutomationMutation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantManagementSkillReceipt? ManagementSkill = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantManagementResourceReceipt? ManagementResource = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantManagementResourceReceipt? ManagementResource = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TenantPublicDownloadReceipt? PublicDownload = null);

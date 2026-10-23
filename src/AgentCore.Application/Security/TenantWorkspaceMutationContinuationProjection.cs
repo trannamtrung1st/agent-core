@@ -9,13 +9,18 @@ namespace AgentCore.Application.Security;
 public static class TenantWorkspaceMutationContinuationProjection
 {
     public static AgentRunCheckpoint Complete(AgentRunCheckpoint checkpoint, ModelToolCall call, TenantApprovalRequest request,
-        TenantOperationOutcome outcome, string reason) => AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, call, JsonSerializer.Serialize(new {
+        TenantOperationOutcome outcome, string reason, TenantPublicDownloadReceipt? download = null)
+    {
+        var output = JsonSerializer.SerializeToNode(new {
             tenantWorkspaceMutation = true, approvalStatus = JsonNamingPolicy.CamelCase.ConvertName(request.Status.ToString()),
             outcome = JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()), reasonCode = reason, requestId = request.RequestId, operationId = request.Operation.OperationId,
             applied = outcome == TenantOperationOutcome.Completed ? (bool?)true : outcome == TenantOperationOutcome.Denied ? false : null,
             partialEffectsPossible = outcome == TenantOperationOutcome.Indeterminate, replayAllowed = false, readAuthorityGranted = false
-        }));
-    public static AgentRun Save(AgentRun before, AgentRun saved, TenantApprovalRequest request, TenantOperationOutcome outcome, string reason, DateTimeOffset at)
+        })!;
+        if (download is not null) output["download"] = JsonSerializer.SerializeToNode(TenantPublicDownloadRules.Project(download));
+        return AgentRunToolCallCheckpoint.CompleteTenantAuthorization(checkpoint, call, output.ToJsonString());
+    }
+    public static AgentRun Save(AgentRun before, AgentRun saved, TenantApprovalRequest request, TenantOperationOutcome outcome, string reason, DateTimeOffset at, TenantPublicDownloadReceipt? download = null)
     {
         if (saved.Status != AgentRunStatus.Running || saved.CancellationRequested || saved.Claim is null || saved.Claim.LeaseExpiresAtUtc <= at
             || before.Claim?.Generation != before.SideEffect.ExternalEffect?.Generation || saved.Checkpoint is not { } checkpoint
@@ -24,7 +29,7 @@ public static class TenantWorkspaceMutationContinuationProjection
         try
         {
             TenantRunContinuationService.ValidateAuthorizationCheckpoint(saved, request, requirePending: true);
-            var completed = Complete(checkpoint.PauseBudgetClock(at), pending[0], request, outcome, reason);
+            var completed = Complete(checkpoint.PauseBudgetClock(at), pending[0], request, outcome, reason, download);
             var checkpointed = saved.SaveCheckpoint(saved.Revision, saved.Claim.Generation, completed, null, at);
             return checkpointed.AwaitApprovedExternalResultDelivery(checkpointed.Revision, saved.Claim.Generation, request.RequestId, request.Operation.OperationId, request.Operation.ActionHash, at);
         }

@@ -49,7 +49,7 @@ public sealed partial class TenantWorkspaceMutationEffectService
             return old is not null ? MatchApproved(old, request, run) : throw new SecurityConflictException("workspace_effect_in_progress");
         }
         var args = TenantWorkspaceMutationOperationRules.Arguments(request.Operation.WorkspaceMutation);
-        var outcome = TenantOperationOutcome.Indeterminate; var dispatched = false; var sourceChecked = false; Task<TenantOperationOutcome>? pending = null;
+        var outcome = TenantOperationOutcome.Indeterminate; var dispatched = false; var sourceChecked = false; Task<(TenantOperationOutcome Outcome, TenantPublicDownloadReceipt? Download)>? pending = null; TenantPublicDownloadReceipt? download = null;
         reason = TenantWorkspaceApprovedEffectRules.Uncertain;
         var duration = run.Claim!.LeaseExpiresAtUtc - time.GetUtcNow() - TimeSpan.FromSeconds(1);
         var perTool = TimeSpan.FromSeconds(run.Admission.ExecutionBudget?.Profile.PerToolSeconds ?? 30); if (duration > perTool) duration = perTool;
@@ -63,27 +63,30 @@ public sealed partial class TenantWorkspaceMutationEffectService
                 async ValueTask Check(CancellationToken token)
                 {
                     // Structural effects have an ordered/partial prefix; do not compare their own prefix to the initial footprint.
-                    var observe = !sourceChecked || args.Tool is ToolCatalog.WorkspaceWrite or ToolCatalog.WorkspacePatch;
+                    var observe = !sourceChecked || args.Tool is ToolCatalog.WorkspaceWrite or ToolCatalog.WorkspacePatch
+                        || args.Tool == ToolCatalog.WebDownload && TenantPublicDownloadContract.Read(args).Path is not null;
                     await ApprovedGate(request, decision, fence, observe, token).ConfigureAwait(false); sourceChecked = true;
                 }
                 await ApprovedGate(request, decision, fence, true, linked.Token).ConfigureAwait(false); linked.Token.ThrowIfCancellationRequested(); dispatched = true;
-                pending = ApplyApproved(run, args, Check, linked.Token).AsTask();
-                outcome = await pending.WaitAsync(linked.Token).ConfigureAwait(false); linked.Token.ThrowIfCancellationRequested();
+                pending = ApplyApproved(run, operationId, args, Check, linked.Token).AsTask();
+                var applied = await pending.WaitAsync(linked.Token).ConfigureAwait(false); outcome = applied.Outcome; download = applied.Download; linked.Token.ThrowIfCancellationRequested();
                 reason = outcome == TenantOperationOutcome.Completed ? TenantWorkspaceApprovedEffectRules.Completed : outcome == TenantOperationOutcome.Denied
                     ? TenantWorkspaceApprovedEffectRules.NotApplied : TenantWorkspaceApprovedEffectRules.Uncertain;
             }
             catch (Exception) { if (pending is not null) _ = ObserveApproved(pending); outcome = dispatched ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Denied;
                 reason = dispatched ? TenantWorkspaceApprovedEffectRules.Uncertain : TenantWorkspaceApprovedEffectRules.NotApplied; }
         }
+        if (outcome != TenantOperationOutcome.Completed) download = null;
         using var settlement = new CancellationTokenSource(TimeSpan.FromSeconds(10), time);
         TenantOperationReceipt? receipt;
-        try { receipt = await SettleApproved(fence, outcome, reason, false, settlement.Token).ConfigureAwait(false); }
+        try { receipt = await SettleApproved(fence, outcome, reason, false, settlement.Token, download).ConfigureAwait(false); }
         catch (Exception) { receipt = null; }
         ct.ThrowIfCancellationRequested();
         return receipt ?? throw new SecurityConflictException("workspace_effect_unsettled");
     }
-    private async ValueTask<TenantOperationOutcome> ApplyApproved(AgentRun run, TenantWorkspaceMutationArguments args, Func<CancellationToken, ValueTask> check, CancellationToken ct)
+    private async ValueTask<(TenantOperationOutcome Outcome, TenantPublicDownloadReceipt? Download)> ApplyApproved(AgentRun run, Guid operationId, TenantWorkspaceMutationArguments args, Func<CancellationToken, ValueTask> check, CancellationToken ct)
     {
+        if (args.Tool == ToolCatalog.WebDownload) return await Download(run, operationId, args, check, ct).ConfigureAwait(false);
         if (TenantOfficeMutationContract.IsMutation(args.Tool))
         {
             if (office is null) throw new AccessDeniedException("office_processing_unavailable");
@@ -102,9 +105,9 @@ public sealed partial class TenantWorkspaceMutationEffectService
         else
         {
             var result = await files.StructureTenantAsync(TenantWorkspaceEffectRules.Owner(run, args.Operations[0].Path ?? args.Operations[0].Source!), args.Operations, check, ct).ConfigureAwait(false);
-            return result.Completed ? TenantOperationOutcome.Completed : result.MutationsMayHaveOccurred ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Denied;
+            return (result.Completed ? TenantOperationOutcome.Completed : result.MutationsMayHaveOccurred ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Denied, null);
         }
-        return TenantOperationOutcome.Completed;
+        return (TenantOperationOutcome.Completed, null);
     }
     private static async Task ObserveApproved(Task pending) { try { await pending.ConfigureAwait(false); } catch (Exception) { } }
     private async ValueTask ApprovedGate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantApprovedWorkspaceDispatch fence, bool observe, CancellationToken ct)
@@ -128,13 +131,13 @@ public sealed partial class TenantWorkspaceMutationEffectService
         if (final.Revision != run.Revision || (await security.ReadTenantAsync(fence.TenantId, ct).ConfigureAwait(false))?.Tenant.Revision != state.Tenant.Revision)
             throw new SecurityConflictException("workspace_source_changed");
     }
-    private async ValueTask<TenantOperationReceipt?> SettleApproved(TenantApprovedWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, bool recovery, CancellationToken ct)
+    private async ValueTask<TenantOperationReceipt?> SettleApproved(TenantApprovedWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, bool recovery, CancellationToken ct, TenantPublicDownloadReceipt? download = null)
     {
         var request = await approvals.FindApprovalAsync(fence.TenantId, fence.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         for (var attempt = 0; attempt < 4; attempt++)
         {
             var state = await security.ReadTenantAsync(fence.TenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
-            var receipt = await effects.TrySettleApprovedWorkspaceEffectAsync(Next(state), state.Tenant.Revision, fence, outcome, reason, ApprovedAudit(request, false, reason), recovery, ct).ConfigureAwait(false);
+            var receipt = await effects.TrySettleApprovedWorkspaceEffectAsync(Next(state), state.Tenant.Revision, fence, outcome, reason, ApprovedAudit(request, false, reason), recovery, ct, download).ConfigureAwait(false);
             if (receipt is not null) return receipt;
         }
         return null;

@@ -237,7 +237,7 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
                         outcome.Outcome == TenantOperationOutcome.Completed && accountAction.ToolName == ToolCatalog.EmailCreateDraft
                             ? new TenantAccountActionResult("draft_created", DraftId: accountAction.Draft!.DraftId) : null)
                     : request.Operation.WorkspaceMutation is not null
-                    ? TenantWorkspaceMutationContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason)
+                    ? TenantWorkspaceMutationContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, receipt?.PublicDownload)
                     : request.Operation.BrowserCommand is not null
                     ? TenantBrowserContinuationProjection.Complete(paused, pending[0], request, outcome.Outcome, reason, null,
                         request.Status == TenantApprovalStatus.Approved ? "browser_observation_not_retained" : "browser_command_not_dispatched", receipt)

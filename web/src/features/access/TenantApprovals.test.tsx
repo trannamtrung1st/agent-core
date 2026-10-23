@@ -940,3 +940,19 @@ it.each([
   expect(within(confirmation).getByText(/no role or task execution authority is granted/)).toBeVisible();
   fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep reviewing' })); expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
 });
+
+it.each([undefined, '/working/exact.docx'])('reviews a saved public download and its exact destination behavior: %s', async path => {
+  view(mutationRequest('web.download', { url: 'https://official.example/form.docx?label=%3Cscript%3E', ...(path ? { path } : {}) }));
+  const saved = await screen.findByRole('region', { name: 'Exact saved workspace changes' });
+  expect(within(saved).getByText('Download public file')).toBeVisible();
+  expect(within(saved).getByRole('textbox', { name: 'Source URL' })).toHaveValue('https://official.example/form.docx?label=%3Cscript%3E');
+  expect(within(saved).queryByRole('link')).not.toBeInTheDocument();
+  expect(within(saved).getByText(path ? 'Replace the file at the exact destination below.' : 'Create a unique file with a safe filename under /home/downloads. Existing files will be preserved.')).toBeVisible();
+  if (path) expect(within(saved).getByText(path)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Authorize once' })).toBeEnabled();
+});
+it.each(['file:///etc/passwd', 'https://user:secret@example.test/a', 'javascript:alert(1)'])('refuses an invalid public download preview: %s', async url => {
+  view(mutationRequest('web.download', { url }));
+  expect(await screen.findByText('Saved workspace changes unavailable')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Authorize once' })).toBeDisabled();
+});

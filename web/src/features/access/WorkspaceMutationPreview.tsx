@@ -4,7 +4,7 @@ import { SavedApprovalText as Literal } from './SavedApprovalText';
 import { useAdminDetailLayout } from '../admin/useAdminDetailLayout';
 
 type Operation = { op: string; path?: string; source?: string; destination?: string; recursive?: boolean };
-type Proposal = { office?: OfficeProposal; tool: string; path?: string; content?: string; edits?: { oldText: string; newText: string }[]; operations?: Operation[] };
+type Proposal = { office?: OfficeProposal; tool: string; url?: string; path?: string; content?: string; edits?: { oldText: string; newText: string }[]; operations?: Operation[] };
 const names: Record<string, string> = { write: 'Replace file text', patch: 'Apply exact text edits', mkdir: 'Create directory', copy: 'Copy file or directory', move: 'Move file or directory', delete: 'Delete file or directory', batch: 'Ordered workspace changes' };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const exactPath = (value: unknown): value is string => typeof value === 'string' && (value.startsWith('/home/') || value.startsWith('/working/')) && value.length > 6;
@@ -24,6 +24,11 @@ export function savedWorkspaceMutation(tool: unknown, json: unknown): Proposal |
   try {
     const args: unknown = JSON.parse(json); if (!object(args)) return null;
     if (tool.startsWith('office.')) { const office = savedOfficeMutation(tool, args); return office ? { tool, path: args.path as string, office } : null; }
+    if (tool === 'web.download') {
+      if (!keys(args, ['url', 'path']) || typeof args.url !== 'string' || args.url.length > 4096 || (args.path !== undefined && !exactPath(args.path))) return null;
+      const url = new URL(args.url);
+      return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? { tool, url: args.url, path: args.path as string | undefined } : null;
+    }
     if (!tool.startsWith('workspace.')) return null;
     if (tool === 'workspace.write') return keys(args, ['path', 'content']) && exactPath(args.path) && typeof args.content === 'string' ? { tool, path: args.path, content: args.content } : null;
     if (tool === 'workspace.patch') {
@@ -44,7 +49,11 @@ export function WorkspaceMutationPreview({ proposal }: { proposal: Proposal | nu
   const path = (text: string) => <Typography.Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</Typography.Text>;
   if (!proposal) return <Alert type="warning" showIcon title="Saved workspace changes unavailable" description="Refresh details before deciding. If the saved parameters remain unavailable, cancel this request and ask for a fresh exact action." />;
   return <Flex vertical gap="var(--ac-space-section)">
-    <Typography.Text strong>{proposal.office?.title ?? names[proposal.tool.slice('workspace.'.length)]}</Typography.Text>
+    <Typography.Text strong>{proposal.url ? 'Download public file' : proposal.office?.title ?? names[proposal.tool.slice('workspace.'.length)]}</Typography.Text>
+    {proposal.url && <>
+      <Literal label="Source URL" text={proposal.url} />
+      <Typography.Text>{proposal.path ? 'Replace the file at the exact destination below.' : 'Create a unique file with a safe filename under /home/downloads. Existing files will be preserved.'}</Typography.Text>
+    </>}
     {proposal.path && <Descriptions {...layout} column={1} size="small" items={[{ key: 'path', label: 'Exact path', children: path(proposal.path) }]} />}
     {proposal.office && <><Typography.Text>{proposal.office.disclosure}</Typography.Text>{proposal.office.fields.map((field, index) => <Literal key={index} label={field.label} text={field.text} />)}</>}
     {proposal.content !== undefined && <Literal label="Exact replacement text" text={proposal.content} />}

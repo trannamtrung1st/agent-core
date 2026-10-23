@@ -60,7 +60,7 @@ public sealed partial class SqliteIamStore : ITenantWorkspaceOperationStore
         return rows.Select(AgentRunStoreMapping.ToDomain).Where(r => TenantWorkspaceMutationContract.IsMutation(r.SideEffect.ExternalEffect!.DirectOperation!.ToolName)).Select(TenantWorkspaceEffectRules.Fence).ToArray();
     }
     public async ValueTask<TenantOperationReceipt?> TrySettleWorkspaceEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default)
+        TenantWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantPublicDownloadReceipt? download = null)
     {
         next = IamStateRules.Freeze(next); TenantWorkspaceEffectRules.Outcome(outcome, reason, recovery);
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -80,7 +80,7 @@ public sealed partial class SqliteIamStore : ITenantWorkspaceOperationStore
             && run.SideEffect.Disposition == AgentRunSideEffectDisposition.InFlight ? run.MarkSideEffect(run.Revision, fence.Origin.Generation,
                 outcome == TenantOperationOutcome.Completed ? AgentRunSideEffectDisposition.Succeeded : outcome == TenantOperationOutcome.Denied ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Indeterminate,
                 run.SideEffect.ToolCallId!, fence.ActionHash, at) : run;
-        var receipt = TenantWorkspaceEffectRules.Receipt(run, fence, outcome, reason, at);
+        var receipt = TenantPublicDownloadRules.Attach(TenantWorkspaceEffectRules.Receipt(run, fence, outcome, reason, at), args, download, recovery);
         audit = TenantWorkspaceEffectRules.Audit(audit with { At = at, Decision = outcome == TenantOperationOutcome.Completed ? "allowed" : outcome == TenantOperationOutcome.Denied ? "denied" : "indeterminate", ReasonCode = reason }, before, run, args, op.OperationId, false);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         if (saved.Revision != run.Revision) AgentRunStoreMapping.Apply(row, saved);

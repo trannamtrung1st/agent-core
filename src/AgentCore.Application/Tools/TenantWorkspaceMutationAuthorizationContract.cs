@@ -18,7 +18,7 @@ public static class TenantWorkspaceMutationAuthorizationContract
 {
     public static IReadOnlyList<string> Allowed(AgentDefinition definition, AgentContext? context) => TenantTaskExecutionContract.Allows(context) ? Allowed(definition) : [];
     public static IReadOnlyList<string> Allowed(AgentDefinition definition) =>
-        new[] { ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch,
+        new[] { ToolCatalog.WebDownload, ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspacePatch, ToolCatalog.WorkspaceMkdir, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove, ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch,
                 ToolCatalog.OfficeDocumentCreate, ToolCatalog.OfficeDocumentEdit, ToolCatalog.OfficeSpreadsheetCreate, ToolCatalog.OfficeSpreadsheetEdit }
             .Where(t => TenantWorkspaceMutationContract.Allows(definition, t)).ToArray();
     public static JsonNode Schema(IReadOnlyList<string> tools)

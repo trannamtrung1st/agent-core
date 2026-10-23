@@ -185,9 +185,11 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                 if (workspaceMutations is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
                 var current = await runs.FindTenantRunAsync(boundary.Reference!.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
                 var result = await workspaceMutations.ExecuteAsync(new(current.Owner, session, current.AgentRunId, generation), call, ct).ConfigureAwait(false);
-                return JsonSerializer.Serialize(new { decision = JsonNamingPolicy.CamelCase.ConvertName(result.Decision.ToString()), reasonCode = result.ReasonCode,
+                var output = JsonSerializer.SerializeToNode(new { decision = JsonNamingPolicy.CamelCase.ConvertName(result.Decision.ToString()), reasonCode = result.ReasonCode,
                     outcome = result.IsUncertain ? "indeterminate" : result.Receipt is null ? "notDispatched" : JsonNamingPolicy.CamelCase.ConvertName(result.Receipt.Outcome.ToString()),
                     applied = result.IsUncertain ? (bool?)null : result.Receipt?.Outcome == AgentCore.Domain.Security.TenantOperationOutcome.Completed, operationId = result.OperationId, replayAllowed = false });
+                if (result.Receipt?.PublicDownload is { } download) output!["download"] = JsonSerializer.SerializeToNode(TenantPublicDownloadRules.Project(download));
+                return output!.ToJsonString();
             }
             if (TenantWorkspaceReadContract.IsRead(call.Name))
             {

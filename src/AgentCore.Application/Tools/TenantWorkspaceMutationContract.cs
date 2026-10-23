@@ -14,7 +14,7 @@ public sealed record TenantWorkspaceMutationArguments(string Tool, string? Path,
     IReadOnlyList<WorkspaceStructuralOperation> Operations, string CanonicalArguments, string ParametersHash)
 {
     public IEnumerable<(string Path, string Permission)> Targets => Tool switch {
-        ToolCatalog.WorkspaceWrite => [(Path!, "workspaces.write")],
+        ToolCatalog.WorkspaceWrite or ToolCatalog.WebDownload => [(Path!, "workspaces.write")],
         ToolCatalog.OfficeDocumentCreate or ToolCatalog.OfficeSpreadsheetCreate => [(Path!, "workspaces.write")],
         ToolCatalog.OfficeDocumentEdit or ToolCatalog.OfficeSpreadsheetEdit => [(Path!, "workspaces.read"), (Path!, "workspaces.write")],
         ToolCatalog.WorkspacePatch => [(Path!, "workspaces.read"), (Path!, "workspaces.write")],
@@ -25,7 +25,7 @@ public sealed record TenantWorkspaceMutationArguments(string Tool, string? Path,
 }
 public static class TenantWorkspaceMutationContract
 {
-    public static bool IsMutation(string tool) => tool is ToolCatalog.WorkspaceWrite or ToolCatalog.WorkspacePatch or ToolCatalog.WorkspaceMkdir
+    public static bool IsMutation(string tool) => tool is ToolCatalog.WebDownload or ToolCatalog.WorkspaceWrite or ToolCatalog.WorkspacePatch or ToolCatalog.WorkspaceMkdir
         or ToolCatalog.WorkspaceCopy or ToolCatalog.WorkspaceMove or ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch || TenantOfficeMutationContract.IsMutation(tool);
     public static bool Allows(AgentDefinition definition, string tool) => IsMutation(tool) && RolePermissions.AllowsTool(definition, tool);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
@@ -41,6 +41,7 @@ public static class TenantWorkspaceMutationContract
     {
         if (session == Guid.Empty || !IsMutation(tool) || string.IsNullOrWhiteSpace(json) || Encoding.UTF8.GetByteCount(json) > 65536) throw new ArgumentException("Use bounded workspace mutation arguments.");
         using var doc = JsonDocument.Parse(json); var root = doc.RootElement;
+        if (tool == ToolCatalog.WebDownload) return TenantPublicDownloadContract.Parse(session, root);
         if (TenantOfficeMutationContract.IsMutation(tool))
         {
             var office = TenantOfficeMutationContract.Parse(tool, root);
@@ -95,7 +96,7 @@ public static class TenantWorkspaceMutationContract
         if (Encoding.UTF8.GetByteCount(text) > 65536) throw new ArgumentException("Use bounded canonical workspace arguments.");
         return new(tool, path, content, edits, operations, text, Hash(tool + "\n" + text));
     }
-    public static ModelToolDefinition ForModel(ModelToolDefinition tool) => TenantOfficeMutationContract.IsMutation(tool.Name) ? TenantOfficeMutationContract.ForModel(tool) : tool with {
+    public static ModelToolDefinition ForModel(ModelToolDefinition tool) => tool.Name == ToolCatalog.WebDownload ? TenantPublicDownloadContract.ForModel(tool) : TenantOfficeMutationContract.IsMutation(tool.Name) ? TenantOfficeMutationContract.ForModel(tool) : tool with {
         Description = (tool.Name switch {
             ToolCatalog.WorkspaceWrite => "Write literal UTF-8 text, replacing present content with ordinary concurrent-writer semantics.",
             ToolCatalog.WorkspacePatch => "Apply 1–32 literal UTF-8 edits. Each oldText must match current source exactly once; overlapping ambiguity fails.",

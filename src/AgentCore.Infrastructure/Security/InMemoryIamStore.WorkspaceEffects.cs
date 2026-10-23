@@ -56,7 +56,7 @@ public sealed partial class InMemoryIamStore : ITenantWorkspaceOperationStore
         }
     }
     public ValueTask<TenantOperationReceipt?> TrySettleWorkspaceEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default)
+        TenantWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantPublicDownloadReceipt? download = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next); TenantWorkspaceEffectRules.Outcome(outcome, reason, recovery);
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
@@ -73,7 +73,7 @@ public sealed partial class InMemoryIamStore : ITenantWorkspaceOperationStore
                 && run.SideEffect.Disposition == AgentRunSideEffectDisposition.InFlight ? run.MarkSideEffect(run.Revision, fence.Origin.Generation,
                     outcome == TenantOperationOutcome.Completed ? AgentRunSideEffectDisposition.Succeeded : outcome == TenantOperationOutcome.Denied ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Indeterminate,
                     run.SideEffect.ToolCallId!, fence.ActionHash, at) : run;
-            var receipt = TenantWorkspaceEffectRules.Receipt(run, fence, outcome, reason, at);
+            var receipt = TenantPublicDownloadRules.Attach(TenantWorkspaceEffectRules.Receipt(run, fence, outcome, reason, at), args, download, recovery);
             audit = TenantWorkspaceEffectRules.Audit(audit with { At = at, Decision = outcome == TenantOperationOutcome.Completed ? "allowed" : outcome == TenantOperationOutcome.Denied ? "denied" : "indeterminate", ReasonCode = reason }, before, run, args, op.OperationId, false);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             if (saved.Revision != run.Revision) sessionBacking.SaveRetainedTenantOperationRun(saved, run.Revision);

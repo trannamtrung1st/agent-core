@@ -79,7 +79,7 @@ public sealed partial class InMemoryIamStore
         }
     }
     public ValueTask<TenantOperationReceipt?> TrySettleApprovedWorkspaceEffectAsync(TenantSecurityState next, long expectedSecurityRevision, TenantApprovedWorkspaceDispatch fence,
-        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default)
+        TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantPublicDownloadReceipt? download = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next); TenantWorkspaceApprovedEffectRules.Outcome(outcome, reason, recovery);
         lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate)
@@ -95,8 +95,9 @@ public sealed partial class InMemoryIamStore
             var at = ApprovalNow;
             if (at < fence.Origin.StartedAtUtc || recovery && !TenantWorkspaceApprovedEffectRules.Recoverable(run, at)) return ValueTask.FromResult<TenantOperationReceipt?>(null);
             var saved = TenantWorkspaceApprovedEffectRules.SettleRun(run, fence, outcome, at);
-            saved = TenantWorkspaceMutationContinuationProjection.Save(run, saved, request, outcome, reason, at);
-            var receipt = TenantWorkspaceApprovedEffectRules.Receipt(request, run, outcome, reason, at);
+            saved = TenantWorkspaceMutationContinuationProjection.Save(run, saved, request, outcome, reason, at, download);
+            var receipt = TenantPublicDownloadRules.Attach(TenantWorkspaceApprovedEffectRules.Receipt(request, run, outcome, reason, at),
+                TenantWorkspaceMutationOperationRules.Arguments(request.Operation.WorkspaceMutation!), download, recovery);
             audit = TenantOperationAuditRules.WithEffectResult(audit with { At = at, Decision = outcome switch { TenantOperationOutcome.Completed => "allowed", TenantOperationOutcome.Denied => "denied", _ => "indeterminate" }, ReasonCode = reason }, before, run, request, grant?.GrantId);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             if (saved.Revision != run.Revision) sessionBacking.SaveRetainedTenantOperationRun(saved, run.Revision);

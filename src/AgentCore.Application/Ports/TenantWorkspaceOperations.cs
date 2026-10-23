@@ -15,11 +15,11 @@ public interface ITenantWorkspaceOperationStore : ITenantDirectOperationStore
     ValueTask<TenantWorkspaceEffectStart?> TryStartWorkspaceEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantWorkspaceEffectCommit commit, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<TenantOperationReceipt?> TrySettleWorkspaceEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default);
+        TenantWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantPublicDownloadReceipt? download = null);
     ValueTask<IReadOnlyList<TenantWorkspaceDispatch>> RecoverableWorkspaceEffectsAsync(DateTimeOffset at, int limit, CancellationToken ct = default);
     ValueTask<TenantApprovedWorkspaceStart?> TryStartApprovedWorkspaceEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantOperationCommit commit, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<TenantOperationReceipt?> TrySettleApprovedWorkspaceEffectAsync(TenantSecurityState next, long expectedSecurityRevision,
-        TenantApprovedWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default);
+        TenantApprovedWorkspaceDispatch fence, TenantOperationOutcome outcome, string reason, AuthorizationAudit audit, bool recovery = false, CancellationToken ct = default, TenantPublicDownloadReceipt? download = null);
     ValueTask<IReadOnlyList<TenantApprovedWorkspaceDispatch>> RecoverableApprovedWorkspaceEffectsAsync(DateTimeOffset at, int limit, CancellationToken ct = default);
 }
