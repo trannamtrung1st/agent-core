@@ -52,3 +52,7 @@ Local logs are `/private/tmp/harness-retirement-{build,build-r2,application,infr
 MCP setup corrected two script-only assumptions (relative request URL and unavailable server-side `crypto`) before exercising the flow. An initially guessed post-action `/management-policy` read returned 404; the actual `/self-management` read confirmed Frozen=true. These were manual probe errors, not application changes or hidden passing results.
 
 Historical schema retirement, other global/profile service/store assumptions, final tool-transport inventory and proposal-wide security, isolation, functional and UI acceptance remain open. No hosted CI, live provider call, push, deployment or milestone acceptance was performed.
+
+## Subsequent tenant-owned retention qualification
+
+The [2026-10-24 retained-history matrix](tenant-harness-history-verification-2026-10-24.md) now qualifies actual owned SQLite Instances, public configuration/approval projections and current model Review/ExceptionalGrant despite old Pending/Approved data. It adds 24 distinct focused passing cases without rewriting this historical report's evidence. The physical-erasure condition above applies before deleting hash-bound fields; no erasure, alternative serializer, consent rewrite or migration reset was introduced. Current policy/freeze/assessment fields remain live configuration, while retained preparation is private data without an executor.
