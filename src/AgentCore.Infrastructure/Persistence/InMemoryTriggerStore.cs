@@ -390,7 +390,7 @@ public sealed partial class InMemoryTriggerStore : ITriggerStore
         CancellationToken cancellationToken = default)
     {
         var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
-        var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
+        var take = Math.Clamp(limit, 1, AutomationRules.MaxLegacyBatchSize);
         lock (_state.Gate)
         {
             var due = LegacyRegistrations
@@ -598,7 +598,7 @@ public sealed partial class InMemoryTriggerStore : ITriggerStore
                     current.RoutingRevision + 1,
                     acceptedAt,
                     null,
-                    acceptedAt.Add(TriggerOccurrenceRouter.LivePreparedLease))
+                    acceptedAt.Add(AutomationRules.LegacyPreparedLease))
                 : null));
 
     public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
@@ -831,7 +831,7 @@ public sealed partial class InMemoryTriggerStore : ITriggerStore
                 .Where(item => item.Disposition == disposition)
                 .OrderBy(item => item.AdmittedAtUtc)
                 .ThenBy(item => item.OccurrenceId)
-                .Take(Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize))
+                .Take(Math.Clamp(limit, 1, AutomationRules.MaxLegacyBatchSize))
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<TriggerOccurrence>>(items);
         }

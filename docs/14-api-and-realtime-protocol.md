@@ -1160,7 +1160,7 @@ ProtocolVersion !=1 yields ProtocolVersionMismatch before attachment or audio ac
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant H as Tenant Hub / SessionHost
+    participant H as Tenant Hub / TenantSessionRuntimeHost
     participant S as Session Runtime
     participant D as SQLite
     B--xH: Connection lost

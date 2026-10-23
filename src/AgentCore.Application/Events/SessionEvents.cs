@@ -210,21 +210,6 @@ public sealed record TransportResumedSnapshotReceived(
 
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);
 
-public sealed record DurableOccurrenceReceived(
-    EventContext Context,
-    OccurrenceDelivery Delivery,
-    TaskCompletionSource<OccurrenceAccept> Accepted) : SessionInput(Context);
-
-public sealed record DurableOccurrenceBeginReceived(
-    EventContext Context,
-    OccurrenceDelivery Delivery,
-    TaskCompletionSource<bool> Started) : SessionInput(Context);
-
-public sealed record DurableOccurrenceAbandonReceived(
-    EventContext Context,
-    Guid OccurrenceId,
-    TaskCompletionSource<bool> Abandoned) : SessionInput(Context);
-
 public sealed record CompletionReturned(
     EventContext Context,
     int Generation,

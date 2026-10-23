@@ -130,16 +130,6 @@ public sealed record ScheduleConversationContext(
         return current;
     }
 
-    public static async ValueTask<ScheduleConversationContext?> TryReconstructLatestReferentAsync(
-        IAutomationService registrations,
-        TriggerOwner owner,
-        CancellationToken cancellationToken = default)
-    {
-        var rows = await registrations.ListAsync(owner, null, cancellationToken).ConfigureAwait(false);
-        var latest = rows.FirstOrDefault(row => row.Status == AutomationStatus.Active && row.Trigger is ScheduleTrigger);
-        return latest is null ? null : FromRegistration(latest, TriggerCommandAction.Create);
-    }
-
     private static string TimeZoneOf(TriggerSchedule schedule) => schedule switch
     {
         OneShotSchedule oneShot => oneShot.TimeZoneId,

@@ -6,6 +6,10 @@ namespace AgentCore.Application.Triggers;
 
 public static class AutomationRules
 {
+    // Retained physical occurrence-store bounds; no legacy scheduler/admission owner.
+    public const int MaxLegacyBatchSize = 100;
+    public static readonly TimeSpan LegacyPreparedLease = TimeSpan.FromSeconds(30);
+
     public static void ValidateSave(Automation? current, Automation proposed, long expectedRevision)
     {
         if ((current?.Revision ?? 0) != expectedRevision || proposed.Revision != expectedRevision + 1)

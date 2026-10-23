@@ -405,20 +405,12 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
                 provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
         }
-        services.TryAddSingleton<IAutomationService, AutomationService>();
-        services.TryAddSingleton<TriggerScheduler>();
-        services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
-        services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
-        services.TryAddSingleton<ITriggerInstancePolicyReconciliationService, TriggerInstancePolicyReconciliationService>();
-        services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
         services.TryAddSingleton<IEventFilterEvaluator, AgentCore.Infrastructure.Events.RestrictedEventFilter>();
-        services.TryAddSingleton<WebhookEventService>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),
             provider.GetRequiredService<IAgentDefinitionStore>(),
             provider.GetRequiredService<IIdGenerator>(),
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetService<ITriggerInstancePolicyReconciliationService>()));
+            provider.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
 
         WebSearchProviderRegistration.AddPublicWeb(services, profile);

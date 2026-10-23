@@ -52,7 +52,7 @@ public sealed partial class TenantCredentialAccessTests
         {
             var cases = new TheoryData<bool, string>();
             foreach (var sqlite in new[] { false, true })
-            foreach (var mode in new[] { "manual", "scheduled", "chat-review", "read-review", "run-review", "grant", "reject", "stale-target", "no-reviewer", "missing-chat", "missing-read", "archived", "foreign", "invalid-report", "busy", "frozen-target", "cancel-registration", "revoke-before-output", "policy-before-output", "conversation-model", "conflicting-model" }) cases.Add(sqlite, mode);
+            foreach (var mode in new[] { "manual", "scheduled", "retirement", "chat-review", "read-review", "run-review", "grant", "reject", "stale-target", "no-reviewer", "missing-chat", "missing-read", "archived", "foreign", "invalid-report", "busy", "frozen-target", "cancel-registration", "revoke-before-output", "policy-before-output", "conversation-model", "conflicting-model" }) cases.Add(sqlite, mode);
             cases.Add(true, "restart-pending"); cases.Add(true, "restart-approved"); cases.Add(true, "database-guards"); cases.Add(false, "synthetic-default");
             cases.Add(false, "scoped-inbox"); cases.Add(true, "scoped-inbox");
             cases.Add(false, "request-boundary"); cases.Add(true, "request-boundary");
@@ -72,6 +72,10 @@ public sealed partial class TenantCredentialAccessTests
         await using var firstFactory = new OAuthFactory(sqlite: sqlite, preserve: recovery, execute: true, model: model, servicesOverride: Configure);
         var factory = firstFactory; OAuthFactory? reopened = null; HttpClient? reopenedOwner = null;
         using var firstOwner = ConnectedClient(factory); var owner = firstOwner;
+        var retiring = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRetiring = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var collision = new TaskCompletionSource<AgentRun>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         try
         {
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
@@ -95,6 +99,16 @@ public sealed partial class TenantCredentialAccessTests
         var destination = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, mode = "text", modelKey = explicitModel ? "scripted-beta" : null, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1 }))).GetProperty("sessionId").GetGuid();
         var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>();
         var execution = factory.Services.GetRequiredService<ITenantRunExecution>();
+        if (mode == "retirement")
+        {
+            var host = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>();
+            host.BeforeRuntimeRelease = previous => {
+                if (previous.Admission.Activation.Kind != ActivationKind.UserTurn) return Task.CompletedTask;
+                retiring.TrySetResult(); return releaseRetiring.Task;
+            };
+            host.RuntimeCollisionObserved = (current, _) => collision.TrySetResult(current);
+        }
+
         async Task<AgentRun> Execute(Guid id, bool success = true)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30)); AgentRun run;
@@ -109,6 +123,7 @@ public sealed partial class TenantCredentialAccessTests
             Assert.Contains(Assert.Single(model.Requests).Context!.Sections, s => s.Id == AgentCore.Application.Context.ContextSectionId.Profile
                 && s.Message.Text.Contains("PRIVATE_AUTOMATION_CREATOR_PROFILE", StringComparison.Ordinal));
         }
+        if (mode == "retirement") await retiring.Task.WaitAsync(TimeSpan.FromSeconds(20));
         var before = (await sessions.FindTenantSessionAsync(tenant, destination))!;
         Assert.Equal(human, before.Owner.CreatedByPrincipalId); Assert.Equal(SessionOriginKind.UserChat, before.Snapshot.Origin.Kind);
         var consent = recovery || mode is "chat-review" or "read-review" or "run-review" or "reject" or "stale-target" or "database-guards" or "scoped-inbox";
@@ -268,7 +283,18 @@ public sealed partial class TenantCredentialAccessTests
             });
             Assert.DoesNotContain(retained.Where(row => row.GetProperty("sequence").GetInt64() > before.Snapshot.DurableLastEntrySequence), row => row.GetProperty("status").GetString() == "completed"); return;
         }
+        if (mode == "retirement")
+        {
+            var pass = execution.ExecuteRunnableAsync(8).AsTask();
+            var claimed = await collision.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.Equal(run.AgentRunId, claimed.AgentRunId); Assert.NotEqual(first.AgentRunId, claimed.AgentRunId);
+            Assert.Equal(1, claimed.AttemptCount); Assert.Equal(AgentRunStatus.Running, claimed.Status);
+            releaseRetiring.TrySetResult();
+            Assert.Equal(1, await pass.WaitAsync(TimeSpan.FromSeconds(20)));
+        }
         var completed = await Execute(run.AgentRunId); Assert.Equal(model.UseDefault ? "Hello!" : "An exact conversation task completed.", completed.Result!.Text); Assert.Equal(2, model.Calls);
+        if (mode == "retirement") Assert.Equal(1, completed.AttemptCount);
+
         if (profileBoundary)
         {
             Assert.Null(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.ReadExecutionState(completed.Checkpoint).TenantProfileSource);
@@ -283,6 +309,7 @@ public sealed partial class TenantCredentialAccessTests
         }
         finally
         {
+            releaseRetiring.TrySetResult();
             reopenedOwner?.Dispose(); if (reopened is not null) await reopened.DisposeAsync();
             if (recovery) { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(firstFactory.Root)) Directory.Delete(firstFactory.Root, true); }
         }

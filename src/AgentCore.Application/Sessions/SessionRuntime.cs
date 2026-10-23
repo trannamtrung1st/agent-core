@@ -165,12 +165,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly HashSet<Guid> _undurableUserEntryIds = [];
     private bool _allowQueuedSuffixAutoDispatch;
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
-    private readonly Queue<OccurrenceDelivery> _occurrenceQueue = new();
-    private ExecutionModelPin? _activeOccurrencePin;
-    private readonly Dictionary<Guid, OccurrenceDelivery> _reservedOccurrences = new();
-    private readonly HashSet<Guid> _acceptedOccurrenceIds = [];
-    private readonly HashSet<Guid> _begunOccurrenceIds = [];
-    private const int MaxQueuedOccurrences = 8;
     private int _mailboxPressureSignaled;
     private long _ttsStartedAt;
     private long _segmentPipelineStarted;
@@ -210,8 +204,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IUserTurnCapabilityValidator? turnCapabilities = null,
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
-        IAgentRunAuthority? runAuthority = null,
-        ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
+        IAgentRunAuthority? runAuthority = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
         AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
         AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null, TenantMemoryService? tenantMemory = null, TenantExperienceService? tenantExperience = null)
     {
@@ -228,7 +221,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 throw new InvalidOperationException("Tenant Runtime requires its owned snapshot and current execution authority.");
         }
         _runAuthority = runAuthority;
-        _triggerOccurrences = triggerOccurrences;
         _composer = composer;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
         _catalog = catalog;
@@ -695,149 +687,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public async Task<OccurrenceAccept> SubmitOccurrenceAsync(
-        OccurrenceDelivery delivery,
-        CancellationToken cancellationToken = default)
-    {
-        var accepted = new TaskCompletionSource<OccurrenceAccept>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var context = NewContext();
-        BeginWork();
-        if (!Enqueue(new DurableOccurrenceReceived(context, delivery, accepted), urgent: false))
-        {
-            return OccurrenceAccept.Unavailable;
-        }
-
-        return await accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<bool> BeginAcceptedOccurrenceAsync(
-        OccurrenceDelivery delivery,
-        CancellationToken cancellationToken = default)
-    {
-        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var context = NewContext();
-        BeginWork();
-        if (!Enqueue(new DurableOccurrenceBeginReceived(context, delivery, started), urgent: false))
-        {
-            return false;
-        }
-
-        return await started.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task AbandonOccurrenceReservationAsync(
-        Guid occurrenceId,
-        CancellationToken cancellationToken = default)
-    {
-        var abandoned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var context = NewContext();
-        BeginWork();
-        if (!Enqueue(new DurableOccurrenceAbandonReceived(context, occurrenceId, abandoned), urgent: false))
-        {
-            return;
-        }
-
-        await abandoned.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task HandleDurableOccurrenceAsync(
-        DurableOccurrenceReceived input,
-        CancellationToken cancellationToken)
-    {
-        var delivery = input.Delivery;
-        if (_snapshot.Status != SessionStatus.Attached
-            || _snapshot.ArchivedAt is not null
-            || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)
-            || _snapshot.AgentInstanceId != delivery.Owner.AgentInstanceId
-            || _snapshot.ProfileId != delivery.Owner.ProfileId
-            || !OccurrenceCompatibility.Allows(ExecutionDefinition, delivery.SourceKind))
-        {
-            input.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
-            return;
-        }
-
-        if (!_acceptedOccurrenceIds.Add(delivery.OccurrenceId))
-        {
-            input.Accepted.TrySetResult(OccurrenceAccept.Duplicate);
-            return;
-        }
-
-        if (!IsOutputQuiet() && _occurrenceQueue.Count + _reservedOccurrences.Count >= MaxQueuedOccurrences)
-        {
-            _acceptedOccurrenceIds.Remove(delivery.OccurrenceId);
-            input.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
-            return;
-        }
-
-        _reservedOccurrences[delivery.OccurrenceId] = delivery;
-        input.Accepted.TrySetResult(OccurrenceAccept.Accepted);
-        await Task.CompletedTask.ConfigureAwait(false);
-        _ = cancellationToken;
-    }
-
-    private Task HandleDurableOccurrenceBeginAsync(DurableOccurrenceBeginReceived input)
-    {
-        if (_reservedOccurrences.Remove(input.Delivery.OccurrenceId))
-        {
-            _begunOccurrenceIds.Add(input.Delivery.OccurrenceId);
-            if (!IsOutputQuiet() || HasPendingUserBatch())
-            {
-                _occurrenceQueue.Enqueue(input.Delivery);
-            }
-            else
-            {
-                LaunchOccurrence(input.Context, input.Delivery);
-            }
-
-            input.Started.TrySetResult(true);
-            return Task.CompletedTask;
-        }
-
-        var started = _begunOccurrenceIds.Contains(input.Delivery.OccurrenceId);
-        if (!started)
-        {
-            _acceptedOccurrenceIds.Remove(input.Delivery.OccurrenceId);
-        }
-
-        input.Started.TrySetResult(started);
-        return Task.CompletedTask;
-    }
-
-    private Task HandleDurableOccurrenceAbandonAsync(DurableOccurrenceAbandonReceived input)
-    {
-        if (_reservedOccurrences.Remove(input.OccurrenceId))
-        {
-            _acceptedOccurrenceIds.Remove(input.OccurrenceId);
-        }
-
-        input.Abandoned.TrySetResult(true);
-        return Task.CompletedTask;
-    }
-
-    private void DrainOccurrenceQueue(EventContext context)
-    {
-        if (_occurrenceQueue.Count == 0
-            || !IsOutputQuiet()
-            || HasPendingUserBatch()
-            || _deactivated
-            || _headlessTransportDetached)
-        {
-            return;
-        }
-
-        LaunchOccurrence(context, _occurrenceQueue.Dequeue());
-    }
-
-    private void LaunchOccurrence(EventContext context, OccurrenceDelivery delivery)
-    {
-        var kind = delivery.SourceKind switch { TriggerSourceKind.Schedule => TriggerKind.ScheduledOccurrence, TriggerSourceKind.CoreEvent => TriggerKind.CoreEvent, _ => TriggerKind.ApplicationEvent };
-        var responseId = _ids.NewId();
-        var turn = ++_turnGeneration;
-        var trigger = new AgentTrigger(delivery.OccurrenceId, kind, delivery.EvidenceJson);
-        _activeOccurrencePin = delivery.Model;
-        LaunchBrain(context, trigger, responseId, turn);
-    }
-
     public Task WaitUntilIdleAsync(CancellationToken cancellationToken = default)
     {
         TaskCompletionSource idle;
@@ -1219,15 +1068,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case EnvironmentReceived environment:
                     await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
                     break;
-                case DurableOccurrenceReceived occurrence:
-                    await HandleDurableOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
-                    break;
-                case DurableOccurrenceBeginReceived begin:
-                    await HandleDurableOccurrenceBeginAsync(begin).ConfigureAwait(false);
-                    break;
-                case DurableOccurrenceAbandonReceived abandon:
-                    await HandleDurableOccurrenceAbandonAsync(abandon).ConfigureAwait(false);
-                    break;
                 case ApplicationMessageRequested applicationMessage:
                     await HandleApplicationMessageAsync(applicationMessage, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1454,15 +1294,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case CompactionReturned compaction:
                 compaction.Processed.TrySetResult(false);
-                break;
-            case DurableOccurrenceReceived occurrence:
-                occurrence.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
-                break;
-            case DurableOccurrenceBeginReceived begin:
-                begin.Started.TrySetResult(false);
-                break;
-            case DurableOccurrenceAbandonReceived abandon:
-                abandon.Abandoned.TrySetResult(false);
                 break;
             case ModelResultReceived model:
                 model.Processed.TrySetResult();
@@ -1765,7 +1596,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (_boundAgentRun?.ResponseId == input.ResponseId && !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false)) return;
         if (_deactivated || input.TurnGeneration != _turnGeneration)
         {
-            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             if (proactive)
             {
                 InitiativeEvaluationTelemetry.RecordDisposition(
@@ -1780,7 +1610,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (proactive && _boundAgentRun?.ResponseId != input.ResponseId && IsStaleProactiveDecision(input.Trigger))
         {
-            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             InitiativeEvaluationTelemetry.RecordDisposition(
                 input.Trigger,
                 input.Decision,
@@ -1795,7 +1624,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (input.Decision is RequestDeactivate)
         {
-            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             if (proactive)
             {
                 InitiativeEvaluationTelemetry.RecordDisposition(input.Trigger, input.Decision, admitted: true, blockReason: "deactivate");
@@ -1809,7 +1637,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (input.Decision is not Speak speakable)
         {
-            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             if (input.Decision is StaySilent silent
                 && silent.CountsTowardSilentCap
                 && proactive
@@ -1862,7 +1689,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     false, null, input.DiagnosticId ?? _diagnostics.NewId()), cancellationToken).ConfigureAwait(false);
             ClearAgentRunTerminalPending();
         }
-        await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
         if (input.RequireActiveResponse && _activeResponseId == input.ResponseId)
         {
             var entry = _snapshot.Entries.LastOrDefault(e => e.ResponseId == input.ResponseId && e.Role == ConversationRole.Assistant);
@@ -1932,7 +1758,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _idleConfiguration = resolved;
             var run = AgentCore.Application.Execution.AgentRunAdmissionFactory.ForAdmittedSignal(
                 _ids.NewId(), _ids.NewId(), input.ResponseId, projection, input.Trigger, _time.GetUtcNow(),
-                input.SkillCatalog ?? [], ToolResources.IsOccurrence(input.Trigger.Kind) ? _activeOccurrencePin : null,
+                input.SkillCatalog ?? [], null,
                 AgentCore.Application.Execution.ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration);
             _agentRunAdmissionPending = true;
             RequestPersist(_snapshot, admittedRun: run, onAdmitted: committed => run = committed, then: async ct =>
@@ -1999,7 +1825,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             0,
             0,
             now,
-            ModelProvenance: OccurrenceProvenance(input.Trigger.Kind) ?? ToProvenance(_snapshot.ModelSelection));
+            ModelProvenance: ToProvenance(_snapshot.ModelSelection));
 
         _agentRunProviderFailure = null;
         _activeResponseId = input.ResponseId;
@@ -2100,7 +1926,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
-        DrainOccurrenceQueue(context);
         SchedulePostResponseIdleTimer();
         await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
         LaunchCompletionEvaluation(context);
@@ -2478,7 +2303,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var capturedSnapshot = _snapshot;
         var capturedRun = _boundAgentRun;
         var capturedApprovalOutcome = _tenantApprovalOutcome;
-        var occurrencePin = _activeOccurrencePin;
         var boundDefinition = capturedRun is null ? null : ExecutionDefinition;
         var boundPersona = capturedRun?.PinnedPersona;
 
@@ -2493,9 +2317,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var persona = boundPersona ?? resolved!.Persona;
                 var selection = capturedSnapshot.ModelSelection;
                 if (capturedRun is not null) selection = new(capturedRun.PinnedModel.CatalogKey, capturedRun.PinnedModel.ProviderAlias, capturedRun.PinnedModel.ModelId, ModelSelectionSource.Host, capturedRun.PinnedModel.ReasoningEffort);
-                else if (occurrencePin is not null && ToolResources.IsOccurrence(trigger.Kind)) selection = new(occurrencePin.CatalogKey, occurrencePin.ProviderAlias, occurrencePin.ModelId, ModelSelectionSource.Host, occurrencePin.ReasoningEffort);
                 else if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host)) selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, executionDefinition, selection);
-                var model = selection is null ? ResolveTurnModel(trigger.Kind) : _models.Resolve(selection, capturedRun is not null || occurrencePin is not null && ToolResources.IsOccurrence(trigger.Kind) || trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
+                var model = selection is null ? ResolveTurnModel(trigger.Kind) : _models.Resolve(selection, capturedRun is not null || trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
                 model = TestDecorateLanguageModel?.Invoke(model) ?? model;
                 var tenantFiles = capturedRun?.Owner.TenantId is not null
                     ? await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment context binding is required."))
@@ -3010,8 +2833,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                         overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
-                    ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
-                        ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
+                    ? binding.PinnedModel.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
                 CapabilityProjectionTelemetry.Record(ExecutionDefinition, projectionContext, _tools.ConfigurationGate, working.Tools, projectionModel, CapabilityLoadCountFor(request.ResponseId));
                 try
                 {
@@ -6142,27 +5964,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (_boundAgentRun is { } run)
             return ResolvePinnedModel(new ExecutionModelPin(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias,
                 run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort, ExecutionModelSource.ConversationDefault));
-        if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent
-            && _activeOccurrencePin is ExecutionModelPin pin)
-        {
-            return ResolvePinnedModel(pin);
-        }
-
         return ResolveSessionModel(
             kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
     }
 
-    private ModelGenerationProvenance? OccurrenceProvenance(TriggerKind kind) =>
-        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent
-            && _activeOccurrencePin is ExecutionModelPin pin
-            ? new ModelGenerationProvenance(pin.CatalogKey, pin.ProviderAlias, pin.ModelId, pin.ReasoningEffort)
-            : null;
-
-    private string? ReasoningEffortFor(TriggerKind kind) => _boundAgentRun is { } run ? run.PinnedModel.ReasoningEffort :
-        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent
-            && _activeOccurrencePin is ExecutionModelPin pin
-            ? pin.ReasoningEffort
-            : _snapshot.ModelSelection?.ReasoningEffort;
+    private string? ReasoningEffortFor(TriggerKind kind) =>
+        _boundAgentRun is { } run ? run.PinnedModel.ReasoningEffort : _snapshot.ModelSelection?.ReasoningEffort;
 
     private ILanguageModel ResolvePinnedModel(ExecutionModelPin pin)
     {

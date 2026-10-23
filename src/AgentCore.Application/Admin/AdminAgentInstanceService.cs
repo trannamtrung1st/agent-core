@@ -14,7 +14,6 @@ public sealed class AdminAgentInstanceService(
     IAdminEventStore events,
     IIdGenerator ids,
     TimeProvider time,
-    ITriggerInstancePolicyReconciliationService? policyReconciliation = null,
     IAdminLifecycleDeletion? deletion = null,
     AdminLifecycleCoordinator? lifecycleGate = null,
     IModelCatalog? modelCatalog = null,
@@ -210,7 +209,6 @@ public sealed class AdminAgentInstanceService(
                 append,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (automationPolicy is null) await ReconcileTriggerPolicyAsync(instance.InstanceId, now, cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "instanceVersion",
             "completed",
@@ -409,7 +407,6 @@ public sealed class AdminAgentInstanceService(
                 append,
                 cancellationToken)
             .ConfigureAwait(false);
-        await ReconcileTriggerPolicyAsync(instance.InstanceId, now, cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "instanceLifecycle",
             "completed",
@@ -526,17 +523,4 @@ public sealed class AdminAgentInstanceService(
         return instance;
     }
 
-    private async ValueTask ReconcileTriggerPolicyAsync(
-        Guid agentInstanceId,
-        DateTimeOffset asOfUtc,
-        CancellationToken cancellationToken)
-    {
-        if (policyReconciliation is null)
-        {
-            return;
-        }
-
-        await policyReconciliation.ReconcileAgentInstanceAsync(agentInstanceId, asOfUtc, cancellationToken)
-            .ConfigureAwait(false);
-    }
 }

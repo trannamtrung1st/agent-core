@@ -87,7 +87,7 @@ internal static class SessionRuntimeFixture
         var runtime = new SessionRuntime(snapshot, languageModel, brain, store, output, ids, time, logger, agentRuns,
             classifier, recognition, policy, recognizer, synthesizer, audioOutput, attachments, processor,
             artifacts, tools, voice, modelResolver, catalog, turnCapabilities,
-            diagnostics, browserLease, runAuthority, triggerOccurrences);
+            diagnostics, browserLease, runAuthority);
         Contexts.Add(runtime, new(agentRuns, time));
         return runtime;
     }

@@ -25,10 +25,9 @@ public sealed class DiagnosticLoggingTests
         var diagnostics = factory.Services.GetRequiredService<IDiagnosticIdSource>();
         Assert.IsType<SystemDiagnosticIdSource>(diagnostics);
         Assert.IsType<SystemIdGenerator>(factory.Services.GetRequiredService<IIdGenerator>());
-        Assert.Same(diagnostics, factory.Services.GetRequiredService<TriggerScheduler>().DiagnosticIds);
 
         var hosted = factory.Services.GetServices<IHostedService>().ToArray();
-        Assert.Contains(hosted, service => service is TriggerSchedulerHostedService);
+        Assert.Same(diagnostics, Assert.Single(hosted.OfType<TriggerSchedulerHostedService>()).DiagnosticIds);
         Assert.DoesNotContain(hosted, service => service.GetType().Name == "BackgroundOccurrenceIntakeHostedService");
         Assert.Contains(hosted, service => service is AgentRunHostedService);
     }

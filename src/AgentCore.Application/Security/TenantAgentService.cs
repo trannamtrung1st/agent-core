@@ -7,7 +7,7 @@ namespace AgentCore.Application.Security;
 
 public sealed class TenantAgentService(IIamStore security, ITenantAgentStore agents, IBuiltInAgentDefinitionStore templates,
     IamAuthorizer authorizer, IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null,
-    Triggers.ITriggerInstancePolicyReconciliationService? reconciliation = null, SandboxPolicyEnforcement? sandbox = null, ITenantDefinitionStore? ownedDefinitions = null, TenantBrowserRetirementService? browserRetirement = null)
+    SandboxPolicyEnforcement? sandbox = null, ITenantDefinitionStore? ownedDefinitions = null, TenantBrowserRetirementService? browserRetirement = null)
 {
     public async ValueTask<IReadOnlyList<AgentDefinition>> ListTemplatesAsync(Guid actorId, Guid tenantId, CancellationToken ct = default)
     {
@@ -98,7 +98,6 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
         var updated = await agents.TrySetTenantAgentLifecycleAsync(next, expectedRevision, instanceId, expectedInstanceRevision, lifecycle,
             now, Audit(tenantId, actorId, lifecycle == AgentInstanceLifecycle.Active ? "agents.restore" : "agents.archive", instanceId, now), ct, initiator).ConfigureAwait(false)
             ?? throw new SecurityConflictException("stale_revision");
-        if (reconciliation is not null) await reconciliation.ReconcileAgentInstanceAsync(instanceId, now, ct).ConfigureAwait(false);
         if (sandbox is not null) await sandbox.EnforceAsync(instanceId, ct).ConfigureAwait(false);
         if (browserRetirement is not null) await browserRetirement.ReconcileAsync(tenantId, instance: instanceId, ct: ct).ConfigureAwait(false);
         return updated;

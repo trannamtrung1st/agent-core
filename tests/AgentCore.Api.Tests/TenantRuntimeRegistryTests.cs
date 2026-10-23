@@ -24,10 +24,10 @@ public sealed class TenantRuntimeRegistryTests
         Assert.Null(typeof(SessionHub).Assembly.GetType("AgentCore.Api.Realtime.SessionHost"));
         Assert.Null(services.GetService<IAgentRunDispatcher>());
         Assert.Null(services.GetService<AgentRunCoordinator>());
-        Assert.Null(services.GetService<BackgroundCompletionReporter>());
-        Assert.Null(services.GetService<BackgroundOccurrenceIntake>());
-        Assert.Null(services.GetService<ILiveOccurrenceDirectory>());
-        Assert.Null(services.GetService<IOccurrenceMailbox>());
+        Assert.Null(typeof(AgentRunCoordinator).Assembly.GetType("AgentCore.Application.Execution.BackgroundCompletionReporter"));
+        Assert.Null(typeof(AgentRunCoordinator).Assembly.GetType("AgentCore.Application.Execution.BackgroundOccurrenceIntake"));
+        Assert.Null(typeof(AgentRunCoordinator).Assembly.GetType("AgentCore.Application.Triggers.ILiveOccurrenceDirectory"));
+        Assert.Null(typeof(AgentRunCoordinator).Assembly.GetType("AgentCore.Application.Triggers.IOccurrenceMailbox"));
         Assert.Null(services.GetService<IEnvironmentEventIngress>());
         Assert.Null(typeof(ITenantHostedRuntimeStateReader).Assembly.GetType("AgentCore.Application.Ports.IHostedSessionStateReader"));
         Assert.Same(runtime, services.GetRequiredService<ITenantHostedRuntimeStateReader>());

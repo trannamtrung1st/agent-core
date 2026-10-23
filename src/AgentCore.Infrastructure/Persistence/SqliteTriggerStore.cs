@@ -418,7 +418,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         CancellationToken cancellationToken = default)
     {
         var asOf = TriggerScheduleCalculator.Truncate(asOfUtc).ToUnixTimeMilliseconds();
-        var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
+        var take = Math.Clamp(limit, 1, AutomationRules.MaxLegacyBatchSize);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var rows = await db.Automations.AsNoTracking()
             .Where(row => row.Status == (int)AutomationStatus.Active
@@ -809,7 +809,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                     current.RoutingRevision + 1,
                     acceptedAt,
                     null,
-                    acceptedAt.Add(TriggerOccurrenceRouter.LivePreparedLease))
+                    acceptedAt.Add(AutomationRules.LegacyPreparedLease))
                 : null,
             cancellationToken);
 
@@ -1034,7 +1034,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         int limit,
         CancellationToken cancellationToken = default)
     {
-        var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
+        var take = Math.Clamp(limit, 1, AutomationRules.MaxLegacyBatchSize);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var rows = await db.TriggerOccurrences.AsNoTracking()
             .Where(row => row.Disposition == (int)disposition)

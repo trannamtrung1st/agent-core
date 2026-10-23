@@ -60,15 +60,14 @@ public sealed class TriggerStoreContractTests
         await ForEachStore(async store =>
         {
             var time = Clock();
-            var service = Service(store, time);
             var owner = new TriggerOwner(InstanceA, ProfileA);
             for (var index = 0; index < 45; index++)
-                await service.CreateAsync(Draft(owner, $"Reminder {index}", OneShot()));
+                await Seed(store, owner, $"Reminder {index}", OneShot(), time.GetUtcNow());
             var seen = new List<Guid>();
             Guid? before = null;
             while (true)
             {
-                var page = await service.ListAutomationsPageAsync(owner, 20, before);
+                var page = await store.ListAutomationsPageAsync(owner, 20, before);
                 if (page.Count == 0) break;
                 seen.AddRange(page.Select(item => item.AutomationId));
                 before = page[^1].AutomationId;
@@ -78,164 +77,8 @@ public sealed class TriggerStoreContractTests
             var all = await store.ListAsync(owner, null);
             Assert.Equal(all.Select(item => item.AutomationId), seen);
             var foreign = new TriggerOwner(InstanceB, ProfileB);
-            var error = await Assert.ThrowsAsync<AgentCoreException>(() => service.ListAutomationsPageAsync(foreign, 20, before).AsTask());
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => store.ListAutomationsPageAsync(foreign, 20, before).AsTask());
             Assert.Equal("NotFound", error.Code);
-        });
-    }
-
-    [Fact]
-    public async Task Both_stores_create_list_update_cancel_and_isolate_owners()
-    {
-        await ForEachStore(async store =>
-        {
-            var time = Clock();
-            var service = Service(store, time);
-            var owner = new TriggerOwner(InstanceA, ProfileA);
-            var other = new TriggerOwner(InstanceB, ProfileB);
-            var created = await service.CreateAsync(Draft(owner, "Call John", OneShot()));
-            Assert.Equal(1, created.Revision);
-            Assert.Equal(1, created.TriggerRevision);
-            Assert.Equal(AutomationStatus.Active, created.Status);
-            Assert.Equal(TriggerAuthorizationOrigin.CurrentUserTurn, created.Provenance.AuthorizationOrigin);
-            Assert.Equal(SourceSessionId, created.Provenance.SourceSessionId);
-            Assert.Equal(Now, created.Provenance.CreatedAt);
-            Assert.Equal(owner, created.Owner);
-            Assert.Equal(1, await service.CountActiveAsync(owner));
-            Assert.Equal(0, await service.CountActiveAsync(other));
-
-            time.Advance(TimeSpan.FromSeconds(1));
-            var listed = await service.ListAsync(owner, AutomationStatus.Active);
-            var visible = Assert.Single(listed);
-            Assert.Equal(created.AutomationId, visible.AutomationId);
-            Assert.Empty(await service.ListAsync(other, null));
-            Assert.Null(await service.GetAsync(other, created.AutomationId));
-
-            var same = await service.UpdateAsync(
-                owner,
-                created.AutomationId,
-                1,
-                AutomationChange.InstructionsOnly("  Call John  "));
-            Assert.Equal(1, same.Revision);
-            Assert.Equal("Call John", same.Instructions);
-
-            time.Advance(TimeSpan.FromSeconds(1));
-            var renamed = await service.UpdateAsync(
-                owner,
-                created.AutomationId,
-                1,
-                AutomationChange.InstructionsOnly("Call later"));
-            Assert.Equal(2, renamed.Revision);
-            Assert.Equal(1, renamed.TriggerRevision);
-            Assert.Equal("Call later", renamed.Instructions);
-
-            var stale = await Assert.ThrowsAsync<AgentCoreException>(() => service.UpdateAsync(
-                owner,
-                created.AutomationId,
-                1,
-                AutomationChange.InstructionsOnly("nope")).AsTask());
-            Assert.Equal("Conflict", stale.Code);
-            Assert.Equal("Call later", (await service.GetAsync(owner, created.AutomationId))!.Instructions);
-
-            time.Advance(TimeSpan.FromSeconds(1));
-            var weekly = Weekly();
-            var rescheduled = await service.UpdateAsync(
-                owner,
-                created.AutomationId,
-                2,
-                AutomationChange.ScheduleOnly(weekly, Now.AddDays(5), null));
-            Assert.Equal(3, rescheduled.Revision);
-            Assert.Equal(2, rescheduled.TriggerRevision);
-            Assert.True(weekly.SemanticEquals(rescheduled.Schedule));
-            Assert.Equal(Now.AddDays(5), rescheduled.NextOccurrenceAtUtc);
-
-            var denied = await Assert.ThrowsAsync<AgentCoreException>(() => service.CancelAsync(
-                other,
-                created.AutomationId,
-                3).AsTask());
-            Assert.Equal("NotFound", denied.Code);
-            Assert.DoesNotContain("Call later", denied.Message, StringComparison.Ordinal);
-
-            var staleCancel = await Assert.ThrowsAsync<AgentCoreException>(() => service.CancelAsync(
-                owner,
-                created.AutomationId,
-                2).AsTask());
-            Assert.Equal("Conflict", staleCancel.Code);
-            Assert.Equal(AutomationStatus.Active, (await service.GetAsync(owner, created.AutomationId))!.Status);
-
-            time.Advance(TimeSpan.FromSeconds(1));
-            var cancelled = await service.CancelAsync(owner, created.AutomationId, 3);
-            Assert.Equal(AutomationStatus.Cancelled, cancelled.Status);
-            Assert.Equal(4, cancelled.Revision);
-            Assert.Equal(2, cancelled.TriggerRevision);
-            var repeated = await service.CancelAsync(owner, created.AutomationId, 3);
-            Assert.Equal(cancelled.Revision, repeated.Revision);
-            Assert.Equal(0, await service.CountActiveAsync(owner));
-            Assert.Empty(await service.ListAsync(owner, AutomationStatus.Active));
-            Assert.Equal(created.AutomationId, Assert.Single(await service.ListAsync(owner, AutomationStatus.Cancelled)).AutomationId);
-
-            var updateCancelled = await Assert.ThrowsAsync<AgentCoreException>(() => service.UpdateAsync(
-                owner,
-                created.AutomationId,
-                4,
-                AutomationChange.InstructionsOnly("again")).AsTask());
-            Assert.Equal("ValidationError", updateCancelled.Code);
-        });
-    }
-
-    [Fact]
-    public async Task Both_stores_cancel_suspended_policy_registrations()
-    {
-        await ForEachStore(async store =>
-        {
-            var time = Clock();
-            var service = Service(store, time);
-            var owner = new TriggerOwner(InstanceA, ProfileA);
-            var other = new TriggerOwner(InstanceB, ProfileB);
-            var automationId = Guid.Parse("019944af-0007-7000-8000-000000000001");
-            const string suspensionReason = "Trigger policy ineligible";
-            await store.CreateAsync(new Automation(
-                automationId,
-                owner,
-                AutomationStatus.SuspendedPolicy,
-                "Held reminder",
-                OneShot(),
-                Now.AddDays(1),
-                null,
-                0,
-                2,
-                1,
-                new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, SourceSessionId, null, Now, Now),
-                suspensionReason));
-
-            var suspended = Assert.Single(await service.ListAsync(owner, AutomationStatus.SuspendedPolicy));
-            Assert.Equal(automationId, suspended.AutomationId);
-            Assert.Equal(suspensionReason, suspended.SuspensionReason);
-            Assert.Null(await service.GetAsync(other, automationId));
-
-            var stale = await Assert.ThrowsAsync<AgentCoreException>(() =>
-                service.CancelAsync(owner, automationId, 1).AsTask());
-            Assert.Equal("Conflict", stale.Code);
-            Assert.Equal(AutomationStatus.SuspendedPolicy, (await service.GetAsync(owner, automationId))!.Status);
-
-            var denied = await Assert.ThrowsAsync<AgentCoreException>(() =>
-                service.CancelAsync(other, automationId, 2).AsTask());
-            Assert.Equal("NotFound", denied.Code);
-
-            time.Advance(TimeSpan.FromSeconds(1));
-            var cancelled = await service.CancelAsync(owner, automationId, 2);
-            Assert.Equal(AutomationStatus.Cancelled, cancelled.Status);
-            Assert.Equal(3, cancelled.Revision);
-
-            var persisted = await service.GetAsync(owner, automationId);
-            Assert.NotNull(persisted);
-            Assert.Equal(AutomationStatus.Cancelled, persisted!.Status);
-            Assert.Equal(3, persisted.Revision);
-
-            var repeated = await service.CancelAsync(owner, automationId, 2);
-            Assert.Equal(cancelled.Revision, repeated.Revision);
-            Assert.Equal(
-                automationId,
-                Assert.Single(await service.ListAsync(owner, AutomationStatus.Cancelled)).AutomationId);
         });
     }
 
@@ -245,64 +88,15 @@ public sealed class TriggerStoreContractTests
         await ForEachStore(async store =>
         {
             var time = Clock();
-            var service = Service(store, time);
             var owner = new TriggerOwner(InstanceA, ProfileA);
-            var a = await service.CreateAsync(Draft(owner, "A", OneShot()));
+            var a = await Seed(store, owner, "A", OneShot(), time.GetUtcNow());
             time.Advance(TimeSpan.FromSeconds(1));
-            var b = await service.CreateAsync(Draft(owner, "B", OneShot()));
+            var b = await Seed(store, owner, "B", OneShot(), time.GetUtcNow());
             time.Advance(TimeSpan.FromSeconds(1));
-            var c = await service.CreateAsync(Draft(owner, "C", OneShot()));
+            var c = await Seed(store, owner, "C", OneShot(), time.GetUtcNow());
 
-            var listed = await service.ListAsync(owner, null);
+            var listed = await store.ListAsync(owner, null);
             Assert.Equal([c.AutomationId, b.AutomationId, a.AutomationId], listed.Select(row => row.AutomationId).ToArray());
-        });
-    }
-
-    [Fact]
-    public async Task Occurrence_admission_dedupes_and_hides_other_owners()
-    {
-        await ForEachStore(async store =>
-        {
-            var service = Service(store, Clock());
-            var owner = new TriggerOwner(InstanceA, ProfileA);
-            var other = new TriggerOwner(InstanceB, ProfileB);
-            var draft = new TriggerOccurrenceDraft(
-                owner,
-                "order-status|event-1",
-                null,
-                TriggerSourceKind.ApplicationEvent,
-                null,
-                Now,
-                """{"orderReference":"A1","status":"shipped"}""",
-                Guid.Parse("019944af-0006-7000-8000-0000000000e1"),
-                null);
-            var admitted = await service.AdmitOccurrenceAsync(draft);
-            Assert.Equal(TriggerOccurrenceAdmitKind.Admitted, admitted.Kind);
-            Assert.Equal(OccurrenceRoutingDisposition.Pending, admitted.Occurrence.Disposition);
-            Assert.Equal(0, admitted.Occurrence.RoutingRevision);
-            Assert.Null(admitted.Occurrence.ClaimId);
-            var duplicate = await service.AdmitOccurrenceAsync(draft);
-            Assert.Equal(TriggerOccurrenceAdmitKind.Duplicate, duplicate.Kind);
-            Assert.Equal(admitted.Occurrence.OccurrenceId, duplicate.Occurrence.OccurrenceId);
-            Assert.Null(await service.GetOccurrenceAsync(other, admitted.Occurrence.OccurrenceId));
-            Assert.Equal(
-                admitted.Occurrence.OccurrenceId,
-                (await service.GetOccurrenceAsync(owner, admitted.Occurrence.OccurrenceId))!.OccurrenceId);
-
-            var otherAdmitted = await service.AdmitOccurrenceAsync(draft with { Owner = other });
-            Assert.Equal(TriggerOccurrenceAdmitKind.Admitted, otherAdmitted.Kind);
-            Assert.NotEqual(admitted.Occurrence.OccurrenceId, otherAdmitted.Occurrence.OccurrenceId);
-            var duplicateOwner = await service.AdmitOccurrenceAsync(draft);
-            Assert.Equal(TriggerOccurrenceAdmitKind.Duplicate, duplicateOwner.Kind);
-            Assert.Equal(admitted.Occurrence.OccurrenceId, duplicateOwner.Occurrence.OccurrenceId);
-            var duplicateOther = await service.AdmitOccurrenceAsync(draft with { Owner = other });
-            Assert.Equal(TriggerOccurrenceAdmitKind.Duplicate, duplicateOther.Kind);
-            Assert.Equal(otherAdmitted.Occurrence.OccurrenceId, duplicateOther.Occurrence.OccurrenceId);
-
-            var invalid = await Assert.ThrowsAsync<AgentCoreException>(() => service.AdmitOccurrenceAsync(
-                draft with { DedupeKey = "order-status|event-2", EvidenceJson = "not-json" }).AsTask());
-            Assert.Equal("ValidationError", invalid.Code);
-            Assert.Null(await service.GetOccurrenceAsync(owner, Guid.Parse("019944af-0006-7000-8000-000000000099")));
         });
     }
 
@@ -315,21 +109,15 @@ public sealed class TriggerStoreContractTests
         try
         {
             await new SqliteMemoryStore(factory, time).EnsureCreatedAsync();
-            var service = Service(new SqliteTriggerStore(factory), time);
+            var store = new SqliteTriggerStore(factory);
             var owner = new TriggerOwner(InstanceA, ProfileA);
-            var created = await service.CreateAsync(Draft(owner, "Call John", OneShot()));
-            var admitted = await service.AdmitOccurrenceAsync(new TriggerOccurrenceDraft(
-                owner,
-                "registration|1|1758607200000",
-                created.AutomationId,
-                TriggerSourceKind.Schedule,
-                created.NextOccurrenceAtUtc,
-                Now,
-                "{}",
-                null,
-                created.TriggerRevision));
+            var created = await Seed(store, owner, "Call John", OneShot(), time.GetUtcNow());
+            var admitted = await store.AdmitOccurrenceAsync(new TriggerOccurrence(Guid.NewGuid(),
+                "registration|1|1758607200000", created.AutomationId, owner, TriggerSourceKind.Schedule,
+                created.NextOccurrenceAtUtc, Now, Now, "{}", null, created.TriggerRevision,
+                OccurrenceRoutingDisposition.Pending, null, 0, null, null, null));
 
-            var reopened = Service(new SqliteTriggerStore(factory), time);
+            var reopened = new SqliteTriggerStore(factory);
             var loaded = await reopened.GetAsync(owner, created.AutomationId);
             Assert.NotNull(loaded);
             Assert.Equal("Call John", loaded!.Instructions);
@@ -375,8 +163,8 @@ public sealed class TriggerStoreContractTests
             }
 
             var owner = new TriggerOwner(InstanceA, ProfileA);
-            var service = Service(new SqliteTriggerStore(factory), time);
-            var created = await service.CreateAsync(Draft(owner, "Call John", OneShot()));
+            var store = new SqliteTriggerStore(factory);
+            var created = await Seed(store, owner, "Call John", OneShot(), time.GetUtcNow());
             await new SqliteStructuredMemoryStore(factory).InsertAsync(new StructuredMemoryItem(
                 Guid.Parse("019944af-0006-7000-8000-0000000000ee"),
                 SourceSessionId,
@@ -398,7 +186,7 @@ public sealed class TriggerStoreContractTests
                 Assert.Equal(0, await db.Sessions.CountAsync());
             }
 
-            var loaded = await Service(new SqliteTriggerStore(factory), time).GetAsync(owner, created.AutomationId);
+            var loaded = await new SqliteTriggerStore(factory).GetAsync(owner, created.AutomationId);
             Assert.Equal("Call John", loaded!.Instructions);
             Assert.Equal(SourceSessionId, loaded.Provenance.SourceSessionId);
             Assert.Equal(owner, loaded.Owner);
@@ -410,30 +198,18 @@ public sealed class TriggerStoreContractTests
         }
     }
 
-    private static AutomationDraft Draft(TriggerOwner owner, string intent, TriggerSchedule schedule) =>
-        new(
-            owner,
-            intent,
-            schedule,
-            schedule is OneShotSchedule oneShot ? oneShot.AtUtc : null,
-            null,
-            TriggerAuthorizationOrigin.CurrentUserTurn,
-            SourceSessionId,
-            Guid.Parse("019944af-0006-7000-8000-0000000000e9"));
+    // Literal retained records for physical storage contracts, not Automation admission or IAM.
+    private static ValueTask<Automation> Seed(ITriggerStore store, TriggerOwner owner, string instructions, TriggerSchedule schedule, DateTimeOffset now) =>
+        store.CreateAsync(new Automation(Guid.NewGuid(), owner, AutomationStatus.Active, instructions,
+            new ScheduleTrigger(schedule), schedule is OneShotSchedule one ? one.AtUtc : null, null, 0, 1, 1,
+            new(TriggerAuthorizationOrigin.CurrentUserTurn, SourceSessionId,
+                Guid.Parse("019944af-0006-7000-8000-0000000000e9"), now, now), null));
 
     private static OneShotSchedule OneShot() =>
         new(Now.AddDays(1), "Asia/Ho_Chi_Minh", new DateOnly(2026, 9, 24), new TimeOnly(9, 0));
 
     private static WeeklySchedule Weekly() =>
         new(1, [DayOfWeek.Monday], new TimeOnly(9, 0), "Europe/London");
-
-    private static AutomationService Service(ITriggerStore store, TimeProvider time) =>
-        new(
-            store,
-            new DeterministicIdGenerator(
-                Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-0007-7000-8000-{index:D12}")),
-                [Guid.Parse("019944af-0007-7000-8000-0000000000ff")]),
-            time);
 
     private static FakeTimeProvider Clock() => new(Now);
 

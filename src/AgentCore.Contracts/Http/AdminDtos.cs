@@ -330,7 +330,6 @@ public sealed record AdminWebhookEventResponse(string EventId, string DisplayNam
 public sealed record AdminWebhookEventListResponse(IReadOnlyList<AdminWebhookEventResponse> Items);
 public sealed record AdminCreateWebhookEventRequest(string DisplayName, string EventKey);
 public sealed record AdminRenameWebhookEventRequest(string DisplayName, long ExpectedRevision);
-public sealed record AdminWebhookEventCredentialResponse(string EventId, string EventKey, string Token, string Status);
 public sealed record AdminWebhookEventSubscriber(string AutomationId, string Name, string AgentInstanceId, string Status);
 public sealed record AdminWebhookEventDelivery(string ReceiptId, string SourceEventId, string ReceivedAt,
     string AutomationId, string AgentInstanceId, string Status, string? TriggerId = null);

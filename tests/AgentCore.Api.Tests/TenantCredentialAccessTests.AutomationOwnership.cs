@@ -37,14 +37,23 @@ public sealed partial class TenantCredentialAccessTests
         {
             var cases = new TheoryData<bool, string>();
             foreach (var sqlite in new[] { false, true })
-            foreach (var mode in new[] { "manual", "scheduled", "disabled", "cancelled", "stale", "missing-executor", "foreign-route", "review-required", "policy-change", "archived", "scoped-human", "requester-policy", "technical-close", "due-cursor", "actual-invoker" }) cases.Add(sqlite, mode);
+            foreach (var mode in new[] { "manual", "scheduled", "disabled", "cancelled", "stale", "missing-executor", "foreign-route", "review-required", "policy-change", "archived", "archived-restored", "dst-weekly", "scoped-human", "requester-policy", "technical-close", "due-cursor", "actual-invoker" }) cases.Add(sqlite, mode);
             return cases;
         }
     }
     [Theory] [MemberData(nameof(AutomationOwnerCases))]
     public async Task Tenant_automations_use_current_human_scope_owned_rows_fresh_occurrence_roots_and_actual_worker_outcomes(bool sqlite, string mode)
     {
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); var model = new OwnedAutomationModel();
+        var clock = new FakeTimeProvider(mode == "dst-weekly" ? DateTimeOffset.Parse("2027-03-22T08:30:00Z") : DateTimeOffset.UtcNow); var model = new OwnedAutomationModel();
+        var application = typeof(TenantAutomationService).Assembly;
+        foreach (var retired in new[] { "Triggers.AutomationService", "Ports.IAutomationService", "Triggers.TriggerScheduler", "Triggers.TriggerAdmissionGuard",
+            "Triggers.TriggerPolicyRecoveryService", "Triggers.TriggerInstancePolicyReconciliationService", "Triggers.TriggerOccurrenceRouter",
+            "Triggers.DurableOrderEventIngress", "Events.WebhookEventService", "Events.ExternalEventIngress",
+            "Execution.BackgroundOccurrenceIntake", "Execution.BackgroundCompletionReporter" })
+            Assert.Null(application.GetType("AgentCore.Application." + retired));
+        foreach (var retired in new[] { "SubmitOccurrenceAsync", "BeginAcceptedOccurrenceAsync", "AbandonOccurrenceReservationAsync" })
+            Assert.Null(typeof(AgentCore.Application.Sessions.SessionRuntime).GetMethod(retired));
+
         await using var factory = new OAuthFactory(sqlite: sqlite, execute: true, model: model, servicesOverride: services => {
             services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
         });
@@ -66,8 +75,11 @@ public sealed partial class TenantCredentialAccessTests
         }
         var route = api + $"/agents/{instance}/automations";
         var at = clock.GetUtcNow().AddMinutes(30);
+        object Schedule() => mode == "dst-weekly"
+            ? new { kind = "weekly", timeZone = "Europe/London", interval = 1, localTime = "09:00", weekdays = new[] { 1 } }
+            : new { kind = "oneShot", timeZone = "UTC", atUtc = at.ToString("O") };
         object Body(long security, long revision = 0) => new { enabled = mode != "disabled", name = "Exact owned automation", instructions = "Finish the exact owned task.",
-            schedule = new { kind = "oneShot", timeZone = "UTC", atUtc = at.ToString("O") }, expectedRevision = security,
+            schedule = Schedule(), expectedRevision = security,
             expectedInstanceRevision = agent.Instance.Revision, expectedAutomationRevision = revision, requiresTools = true,
             tenantId = Guid.NewGuid(), executorPrincipalId = Guid.NewGuid() }; // Cannot supply authority through extra DTO fields.
         using var created = await owner.PostAsJsonAsync(route, Body(await Revision(owner, tenant)));
@@ -177,12 +189,17 @@ public sealed partial class TenantCredentialAccessTests
             var restored = (await store.FindTenantAutomationAsync(tenant, id))!;
             Assert.Equal(AutomationStatus.Active, restored.Status); Assert.Equal(suspended.Revision + 1, restored.Revision); Assert.Equal(saved.Instructions, restored.Instructions); return;
         }
-        if (mode == "archived")
+        if (mode is "archived" or "archived-restored")
         {
             using var archived = await owner.PutAsJsonAsync(api + $"/agents/{instance}/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision });
             Assert.True(archived.IsSuccessStatusCode, await archived.Content.ReadAsStringAsync());
             clock.Advance(TimeSpan.FromMinutes(31)); Assert.Equal(0, await factory.Services.GetRequiredService<TenantAutomationService>().AdmitDueAsync());
-            Assert.Empty((await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items); return;
+            Assert.Empty((await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance)).Items);
+            if (mode == "archived") return;
+            using var restored = await owner.PutAsJsonAsync(api + $"/agents/{instance}/lifecycle", new { lifecycle = 0,
+                expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision + 1 });
+            Assert.True(restored.IsSuccessStatusCode, await restored.Content.ReadAsStringAsync());
+            Assert.True(TenantAutomationRules.Same(saved, (await store.FindTenantAutomationAsync(tenant, id))!));
         }
         if (mode == "requester-policy")
         {
@@ -202,7 +219,7 @@ public sealed partial class TenantCredentialAccessTests
         }
         using var invokerLifetime = separateInvoker;
         Guid runId;
-        if (mode is "scheduled" or "requester-policy")
+        if (mode is "scheduled" or "requester-policy" or "archived-restored" or "dst-weekly")
         {
             clock.Advance(TimeSpan.FromMinutes(31)); await factory.Services.GetRequiredService<TenantAutomationService>().AdmitDueAsync();
             var all = await factory.Services.GetRequiredService<ITenantRunStore>().ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: instance);
@@ -223,15 +240,22 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Contains("Owned automation completed", run.Result!.Text); Assert.NotEmpty(model.Requests);
         var context = run.Admission.ExecutionContext!;
         Assert.Equal(run.ActivationId, context.RootActivationId); Assert.Null(context.ParentRunId); Assert.Null(context.ParentActivationId);
-        Assert.Equal(mode is "scheduled" or "requester-policy" ? ExecutionOrigin.ScheduledOccurrence : ExecutionOrigin.ManualInvocation, context.Origin);
-        Assert.Equal(mode is "scheduled" or "requester-policy" ? (Guid?)null : expectedInitiator, context.OriginalInitiatorPrincipalId); Assert.Null(run.Owner.ProfileIdOrNull);
+        Assert.Equal(mode is "scheduled" or "requester-policy" or "archived-restored" or "dst-weekly" ? ExecutionOrigin.ScheduledOccurrence : ExecutionOrigin.ManualInvocation, context.Origin);
+        Assert.Equal(mode is "scheduled" or "requester-policy" or "archived-restored" or "dst-weekly" ? (Guid?)null : expectedInitiator, context.OriginalInitiatorPrincipalId); Assert.Null(run.Owner.ProfileIdOrNull);
         var session = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(tenant, run.SessionId))!;
         Assert.Equal(agent.PrincipalId, session.Owner.CreatedByPrincipalId); Assert.Equal(SessionSurface.BackgroundWork, session.Snapshot.Surfaces);
         var occurrence = (await store.FindTenantOccurrenceAsync(tenant, run.Admission.Activation.TriggerOccurrenceId!.Value))!;
         Assert.Equal(runId, occurrence.AcceptedAgentRunId); Assert.Equal(run.SessionId, occurrence.ExecutionSessionId);
+        if (mode == "dst-weekly")
+        {
+            var next = (await store.FindTenantAutomationAsync(tenant, id))!;
+            Assert.Equal(AutomationStatus.Active, next.Status); Assert.Equal(1, next.OccurrenceCount);
+            Assert.Equal(DateTimeOffset.Parse("2027-03-29T08:00:00Z"), next.NextOccurrenceAtUtc);
+            Assert.Equal(TimeSpan.FromHours(167), next.NextOccurrenceAtUtc - at);
+        }
         Assert.Equal(0, factory.Outbound);
         var prompt = string.Join("\n", model.Requests.SelectMany(r => r.Messages).Select(m => m.Text));
-        Assert.Contains(mode is "scheduled" or "requester-policy" ? "\"requester\":null" : "\"agentChatAdmitted\":false", prompt);
+        Assert.Contains(mode is "scheduled" or "requester-policy" or "archived-restored" or "dst-weekly" ? "\"requester\":null" : "\"agentChatAdmitted\":false", prompt);
         if (mode == "actual-invoker") { Assert.Contains("Actual manual invoker", prompt); Assert.NotEqual(human, context.OriginalInitiatorPrincipalId); }
     }
 }

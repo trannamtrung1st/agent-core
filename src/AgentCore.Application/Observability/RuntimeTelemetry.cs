@@ -34,7 +34,6 @@ public static class RuntimeTelemetry
         RecordDiagnostic("email", duration, $"provider={boundedProvider};operation={boundedOperation};outcome={boundedOutcome};profile={profile}");
     }
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
-    private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
     private static readonly Counter<long> EventFilters = Meter.CreateCounter<long>("automation_event_filters");
     private static readonly Counter<long> EventFilterEvaluations = Meter.CreateCounter<long>("automation_event_filter_evaluations");
     private static readonly Histogram<long> EventFilterAllocatedBytes = Meter.CreateHistogram<long>("automation_event_filter_allocated_bytes", "By");
@@ -62,8 +61,6 @@ public static class RuntimeTelemetry
         new KeyValuePair<string, object?>("source", source == "core" ? "core" : "webhook"),
         new KeyValuePair<string, object?>("outcome", outcome switch
         { "retry_pending" or "emitted" or "matched" or "filtered" or "filter_error" or "coalesced" or "duplicate" or "policy_denied" or "loop_skipped" or "budget_skipped" or "admitted" or "recovered" => outcome, _ => "other" }));
-    private static readonly Counter<long> AutomationEvents = Meter.CreateCounter<long>("trigger_registration_events");
-    private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
     private static readonly Histogram<double> BackgroundDeliveryLagMs = Meter.CreateHistogram<double>("background_completion_delivery_lag_ms", "ms");
     public static void RecordBackgroundDeliveryLag(string phase, double milliseconds) => BackgroundDeliveryLagMs.Record(
         Math.Max(0, milliseconds), new KeyValuePair<string, object?>("phase", phase is "admission" or "delivery" ? phase : "other"));
@@ -138,24 +135,6 @@ public static class RuntimeTelemetry
                 { "outcome", outcome },
                 { "phase", phase }
             });
-    }
-
-    public static void RecordTriggerScheduler(string outcome)
-    {
-        TriggerSchedulerEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
-    }
-
-    public static void RecordAutomation(string operation, string outcome)
-    {
-        AutomationEvents.Add(
-            1,
-            new KeyValuePair<string, object?>("operation", operation),
-            new KeyValuePair<string, object?>("outcome", outcome));
-    }
-
-    public static void RecordTriggerDueLag(double lagMs)
-    {
-        TriggerDueLagMs.Record(Math.Max(0, lagMs), new KeyValuePair<string, object?>("source", "schedule"));
     }
 
     private static readonly Counter<long> ExperienceEvents = Meter.CreateCounter<long>("experience_events");

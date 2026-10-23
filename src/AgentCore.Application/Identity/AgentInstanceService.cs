@@ -11,7 +11,6 @@ public sealed class AgentInstanceService(
     IAgentDefinitionStore definitions,
     IIdGenerator ids,
     TimeProvider time,
-    ITriggerInstancePolicyReconciliationService? policyReconciliation = null,
     Admin.AdminAgentInstanceService? adminInstances = null) : IAgentInstanceService
 {
     public async ValueTask<AgentInstance> CreateAsync(
@@ -61,7 +60,6 @@ public sealed class AgentInstanceService(
                 updatedAt,
                 cancellationToken)
             .ConfigureAwait(false);
-        await ReconcileTriggerPolicyAsync(instance.InstanceId, updatedAt, cancellationToken).ConfigureAwait(false);
         return updated;
     }
 
@@ -113,7 +111,6 @@ public sealed class AgentInstanceService(
                 updatedAt,
                 cancellationToken)
             .ConfigureAwait(false);
-        await ReconcileTriggerPolicyAsync(instanceId, updatedAt, cancellationToken).ConfigureAwait(false);
         return updated;
     }
 
@@ -133,20 +130,6 @@ public sealed class AgentInstanceService(
             .OrderBy(item => item.Persona.Name, StringComparer.Ordinal)
             .ThenBy(item => item.InstanceId)
             .ToArray();
-    }
-
-    private async ValueTask ReconcileTriggerPolicyAsync(
-        Guid agentInstanceId,
-        DateTimeOffset asOfUtc,
-        CancellationToken cancellationToken)
-    {
-        if (policyReconciliation is null)
-        {
-            return;
-        }
-
-        await policyReconciliation.ReconcileAgentInstanceAsync(agentInstanceId, asOfUtc, cancellationToken)
-            .ConfigureAwait(false);
     }
 
 }

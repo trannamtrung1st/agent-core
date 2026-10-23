@@ -41,6 +41,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     // Deterministic fixture barrier around the existing claim/snapshot registration race.
     internal Func<Guid, Task>? BeforeDispatchRegistration { get; set; }
     internal Func<AgentRun, Task>? BeforeRuntimeRelease { get; set; }
+    internal Action<AgentRun, AgentRun>? RuntimeCollisionObserved { get; set; }
 
     // Deterministic fixture barrier: a durable wait is visible before its supervised
     // generation has finished releasing the provider/runtime and capacity slot.
@@ -54,7 +55,6 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         return stopped.WaitAsync(ct);
     }
 
-    public ValueTask<bool> AdmitCompletionAsync(BackgroundCompletionCandidate source, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
     public ValueTask<bool> RepairPendingInputsAsync(Guid sessionId, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
     public async ValueTask<bool> DispatchAsync(AgentRun run, CancellationToken cancellationToken = default)
     {
@@ -93,8 +93,9 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         if (existing is not null) return await existing.Accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         if (collision is not null)
         {
+            RuntimeCollisionObserved?.Invoke(run, collision.Run);
             await CancelStaleLiveAsync(collision, cancellationToken).ConfigureAwait(false);
-            if (await DrainPreviousAttemptAsync(run, collision, cancellationToken).ConfigureAwait(false))
+            if (await DrainPreviousRuntimeAsync(run, collision, cancellationToken).ConfigureAwait(false))
                 return await DispatchClaimAsync(run, attempt, cancellationToken).ConfigureAwait(false);
             await DeferUnacceptedAsync(run, cancellationToken).ConfigureAwait(false); return false;
         }
@@ -139,8 +140,9 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         {
             if (collision is not null)
             {
+                RuntimeCollisionObserved?.Invoke(run, collision.Run);
                 await CancelStaleLiveAsync(collision, cancellationToken).ConfigureAwait(false);
-                if (await DrainPreviousAttemptAsync(run, collision, cancellationToken).ConfigureAwait(false))
+                if (await DrainPreviousRuntimeAsync(run, collision, cancellationToken).ConfigureAwait(false))
                     return await DispatchClaimAsync(run, attempt, cancellationToken).ConfigureAwait(false);
             }
             await DeferUnacceptedAsync(run, cancellationToken).ConfigureAwait(false); return false;
@@ -172,13 +174,21 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         catch { live.Accepted.TrySetResult(false); throw; }
         finally { _ = SuperviseAsync(run.SessionId, live); }
     }
-    private static async ValueTask<bool> DrainPreviousAttemptAsync(AgentRun run, Live previous, CancellationToken ct)
+    private async ValueTask<bool> DrainPreviousRuntimeAsync(AgentRun run, Live previous, CancellationToken ct)
     {
-        if (previous.Run.AgentRunId != run.AgentRunId || previous.Run.Claim!.Generation == run.Claim!.Generation
-            || run.AttemptCount <= previous.Run.AttemptCount) return false;
-        // A persisted provider retry can be claimed before its old Runtime has
-        // finished disposal. Retain this claim until that generation releases
-        // the Session, then reload authority/checkpoint before admission.
+        if (previous.Run.Owner != run.Owner || previous.Run.SessionId != run.SessionId) return false;
+        if (previous.Run.AgentRunId == run.AgentRunId)
+        {
+            if (previous.Run.Claim!.Generation == run.Claim!.Generation || run.AttemptCount <= previous.Run.AttemptCount) return false;
+        }
+        else
+        {
+            var persisted = await runs.FindTenantRunAsync(run.Owner.TenantId!.Value, previous.Run.AgentRunId, ct).ConfigureAwait(false);
+            if (persisted is null || !persisted.IsTerminal || persisted.Owner != run.Owner || persisted.SessionId != run.SessionId) return false;
+        }
+        // A terminal predecessor or an older retry generation can still own
+        // the Session during disposal. Retain the new claim until it releases
+        // the registry, then reload current authority/checkpoint for admission.
         await previous.Stopped.Task.WaitAsync(ct).ConfigureAwait(false);
         return true;
     }
