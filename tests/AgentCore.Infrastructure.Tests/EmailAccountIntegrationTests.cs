@@ -23,33 +23,7 @@ public sealed class EmailAccountIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Handled_send_exception_is_diagnosable_and_durable_uncertainty_never_dispatches_again(bool sqlite)
-    {
-        await using var f = await Fixture.Create(sqlite);
-        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "private-secret");
-        var admission = await f.Bind(f.A, account, "mail");
-        var session = Guid.NewGuid();
-        var draft = await f.Email.CreateDraftAsync(session, admission, null, new(["to@example.test"], [], [], "Private subject", "Private body"), default);
-        var approval = Grant(EmailDraftNormalizer.ComputeSendActionHash(draft));
-        f.Factory.SendFailure = new IOException("private-secret Private body sender@example.test");
-        var result = await f.Email.SendAsync(session, admission, draft.DraftId, null, approval, default);
-        Assert.Equal(EmailSendOutcome.Indeterminate, result.Outcome);
-        var entry = Assert.Single(f.Logs.Entries);
-        Assert.Equal(LogLevel.Warning, entry.Level);
-        Assert.Equal(session, entry.Properties["SessionId"]);
-        Assert.Equal("dispatch_unconfirmed", entry.Properties["ErrorCode"]);
-        Assert.Contains(nameof(IOException), entry.Exception!.ToString());
-        Assert.DoesNotContain("private-secret", entry.Exception.ToString());
-        Assert.DoesNotContain("Private body", entry.Exception.ToString());
-        f.Reopen();
-        Assert.Equal(result, await f.Email.SendAsync(session, admission, draft.DraftId, null, approval, default));
-        Assert.Equal(1, f.Factory.Dispatches);
-        Assert.Single(f.Logs.Entries);
-    }
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Bound_account_search_read_draft_exact_approval_dispatch_replay_and_reopen(bool sqlite)
+    public async Task Bound_account_search_read_and_exact_draft_survive_reopen_without_dispatch(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
         var account = await f.Credentials.CreateEmailAccountAsync("Demo", EmailAccountProfile.Custom("sender@example.test"), "never-model-visible");
@@ -71,57 +45,19 @@ public sealed class EmailAccountIntegrationTests
         Assert.Equal(account.CredentialId, draft.AccountId); Assert.Equal("sender@example.test", draft.Sender);
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.DraftAsync(session, b, draft.DraftId, null, default).AsTask());
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.DraftAsync(Guid.NewGuid(), a, draft.DraftId, null, default).AsTask());
-        var executor = new SessionToolExecutor(emailAccounts: f.Email, configurationGate: ToolConfigurationGates.AllowAll);
-        var preview = await executor.PrepareEmailSendApprovalAsync(JsonSerializer.SerializeToElement(new { draftId = draft.DraftId }), default, a, session);
-        Assert.Equal(body, preview.Preparation!.Details["Body"]);
-        Assert.Contains("hidden@example.test", preview.Preparation.Details["Bcc"]);
-        Assert.Equal("sender@example.test", preview.Preparation.Details["From"]);
-        var hash = preview.Preparation.ActionHash;
+        var hash = EmailDraftNormalizer.ComputeSendActionHash(draft);
         Assert.NotEqual(hash, EmailDraftNormalizer.ComputeSendActionHash(draft with { AccountRevision = 2 }));
         Assert.NotEqual(hash, EmailDraftNormalizer.ComputeSendActionHash(draft with { Sender = "forged@example.test" }));
-        await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.SendAsync(session, a, draft.DraftId, null, Grant("wrong"), default).AsTask());
-        // Distinct approvals race on the same immutable draft, not just the same approval identity.
-        var sends = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => f.Email.SendAsync(session, a, draft.DraftId, null, Grant(hash), default).AsTask()));
-        Assert.Contains(sends, s => s.Outcome == EmailSendOutcome.Sent); Assert.Equal(1, f.Factory.Dispatches);
         f.Reopen();
-        Assert.Equal(hash, EmailDraftNormalizer.ComputeSendActionHash(await f.Email.DraftAsync(session, a, draft.DraftId, null, default)));
-        Assert.Equal(EmailSendOutcome.Sent, (await f.Email.SendAsync(session, a, draft.DraftId, null, Grant(hash), default)).Outcome);
-        Assert.Equal(1, f.Factory.Dispatches);
-        Assert.DoesNotContain("never-model-visible", JsonSerializer.Serialize(new { results, message, draft, preview }));
+        var retained = await f.Email.DraftAsync(session, a, draft.DraftId, null, default);
+        Assert.Equal(hash, EmailDraftNormalizer.ComputeSendActionHash(retained));
+        Assert.Equal(body, retained.Body); Assert.Equal(0, f.Factory.Dispatches);
+        Assert.DoesNotContain("never-model-visible", JsonSerializer.Serialize(new { results, message, draft }));
         Assert.NotEqual("never-model-visible", (await f.Store.GetAsync(account.CredentialId))!.ProtectedPayload);
         var protector = new LocalCredentialProtector(f.Root + "/keys");
         var c = (await f.Store.GetAsync(account.CredentialId))!;
         Assert.Equal("never-model-visible", protector.Unprotect(c.CredentialId, c.ProtectionVersion, c.ProtectedPayload));
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Credentials.ResolvePasswordAsync(f.A.InstanceId, "primary", "https://mail.google.com").AsTask());
-    }
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Rotation_disable_unbind_and_old_pins_prevent_dispatch_and_unknown_claim_never_retries(bool sqlite)
-    {
-        await using var f = await Fixture.Create(sqlite);
-        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "protected-value");
-        var a = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
-        async Task<EmailDraftSnapshot> Draft() => await f.Email.CreateDraftAsync(session, a, null, new(["to@example.test"], [], [], "Subject", "Body"), default);
-        var draft = await Draft(); var hash = EmailDraftNormalizer.ComputeSendActionHash(draft);
-        await f.Credentials.ReplaceAsync(account.CredentialId, 1, "rotated");
-        await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.SendAsync(session, a, draft.DraftId, null, Grant(hash), default).AsTask());
-        Assert.Equal(0, f.Factory.Dispatches);
-        draft = await Draft(); hash = EmailDraftNormalizer.ComputeSendActionHash(draft);
-        Assert.True(await f.EmailStore.TryClaimSendAsync(new(draft.DraftId, account.CredentialId, 1, Guid.NewGuid(), hash, null, DateTimeOffset.UtcNow)));
-        f.Reopen();
-        Assert.Equal(EmailSendOutcome.Indeterminate, (await f.Email.SendAsync(session, a, draft.DraftId, null, Grant(hash), default)).Outcome);
-        Assert.Equal(0, f.Factory.Dispatches);
-        account = await f.Credentials.GetAsync(account.CredentialId);
-        await f.Credentials.UpdateAsync(account.CredentialId, account.Revision, account.DisplayName, "Disabled", account.Metadata, []);
-        Assert.Empty(await f.Email.AccountsAsync(a, default));
-        await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.SendAsync(session, a, draft.DraftId, null, Grant(hash), default).AsTask());
-        account = await f.Credentials.GetAsync(account.CredentialId);
-        await f.Credentials.UpdateAsync(account.CredentialId, account.Revision, account.DisplayName, "Active", account.Metadata, []);
-        var binding = Assert.Single(await f.Credentials.BindingsAsync(f.A.InstanceId));
-        await f.Credentials.UnbindAsync(f.A.InstanceId, binding.BindingId, binding.Revision, (await f.Owners.FindAsync(f.A.InstanceId))!.Revision);
-        await f.Bind(f.A, account, "mail");
-        await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.ResolveAsync(a, "mail", default).AsTask());
     }
     [Theory]
     [InlineData("127.0.0.1")]
@@ -162,11 +98,10 @@ public sealed class EmailAccountIntegrationTests
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
-    private static ToolApprovalGrant Grant(string hash) => new(Guid.NewGuid(), ToolCatalog.EmailSend, hash, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Malformed_account_alias_returns_safe_tool_and_approval_errors(bool sqlite)
+    public async Task Malformed_account_alias_returns_safe_tool_error(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
         var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "protected-fixture");
@@ -180,8 +115,6 @@ public sealed class EmailAccountIntegrationTests
         var search = await executor.ExecuteAsync(definition, session,
             new("bad-alias", ToolCatalog.EmailSearch, """{"query":"harness","accountRef":"../mail"}"""), ToolLimits.MaxOutputBytes, admission: admission);
         Assert.Contains("Validation", search.Text); Assert.DoesNotContain("protected-fixture", search.Text);
-        var approval = await executor.PrepareEmailSendApprovalAsync(JsonSerializer.SerializeToElement(new { draftId = draft.DraftId, accountRef = "../mail" }), default, admission, session);
-        Assert.Null(approval.Preparation); Assert.Contains("Validation", approval.ErrorJson!);
         Assert.Equal(0, f.Factory.Dispatches);
     }
     [Theory]
@@ -205,7 +138,6 @@ public sealed class EmailAccountIntegrationTests
         Assert.NotEmpty(results.RootElement.GetProperty("results").EnumerateArray());
         var draft = await f.Email.CreateDraftAsync(session, admission, "mail", new(["to@example.test"], [], [], "Subject", "Body"), default);
         var args = JsonSerializer.SerializeToElement(new { draftId = draft.DraftId });
-        var approved = await executor.PrepareEmailSendApprovalAsync(args, default, admission, session);
         f.Factory.IsSendEnabled = false;
         Assert.True(gate.IsConfigured(ToolCatalog.EmailSearch)); Assert.True(gate.IsConfigured(ToolCatalog.EmailCreateDraft));
         Assert.False(gate.IsConfigured(ToolCatalog.EmailSend));
@@ -220,18 +152,15 @@ public sealed class EmailAccountIntegrationTests
         var context = new AgentContext(definition, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
             new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "send email"), ModelSupportsTools: true);
         Assert.DoesNotContain(ToolCatalog.For(definition, context, gate), tool => tool.Name == ToolCatalog.EmailSend);
-        var blocked = await executor.PrepareEmailSendApprovalAsync(args, default, admission, session);
-        Assert.Null(blocked.Preparation); Assert.Contains("smtp_disabled", blocked.ErrorJson!); Assert.Contains("Email:SmtpEnabled", blocked.ErrorJson!);
         var dispatched = await executor.ExecuteAsync(definition, session, new("blocked", ToolCatalog.EmailSend, args.GetRawText()), ToolLimits.MaxOutputBytes,
-            approvalGrant: Grant(approved.Preparation!.ActionHash), admission: admission);
+            admission: admission);
         Assert.Contains("smtp_disabled", dispatched.Text);
-        await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.SendAsync(session, admission, draft.DraftId, "mail", Grant(approved.Preparation.ActionHash), default).AsTask());
         f.Reopen();
         Assert.Null(await f.EmailStore.GetSendAsync(draft.DraftId)); Assert.Equal(0, f.Factory.Dispatches);
         f.Factory.IsSendEnabled = true;
-        var fresh = await executor.PrepareEmailSendApprovalAsync(args, default, admission, session);
-        var sent = await f.Email.SendAsync(session, admission, draft.DraftId, "mail", Grant(fresh.Preparation!.ActionHash), default);
-        Assert.Equal(EmailSendOutcome.Sent, sent.Outcome); Assert.Equal(1, f.Factory.Dispatches);
+        Assert.Equal(draft.DraftId, (await f.Email.DraftAsync(session, admission, draft.DraftId, "mail", default)).DraftId);
+        Assert.Equal(0, f.Factory.Dispatches);
+
     }
 
     [Fact]
@@ -286,7 +215,7 @@ public sealed class EmailAccountIntegrationTests
             }
             Credentials = new(Store, Bindings, protector, Owners, ids, TimeProvider.System);
             Factory ??= new(new AccountEmailProviderFactory(Store, Bindings, protector, Owners, new(), TimeProvider.System, true));
-            Email = new(Store, Bindings, Owners, Factory, EmailStore, ids, TimeProvider.System, Logs);
+            Email = new(Store, Bindings, Owners, Factory, EmailStore, ids, TimeProvider.System);
         }
         public void Reopen() => Configure();
         public async Task<ToolExecutionAdmission> Bind(AgentInstance owner, CredentialView c, string alias)
@@ -299,7 +228,6 @@ public sealed class EmailAccountIntegrationTests
     }
     private sealed class CountingFactory(IEmailProviderFactory inner) : IEmailProviderFactory
     {
-        public Exception? SendFailure;
         public int Dispatches; public EmailSearchRequest? LastSearchRequest; public bool IsEnabled => inner.IsEnabled;
         public bool IsSendEnabled { get; set; } = inner.IsSendEnabled;
         public IEmailProvider Create(EmailAccountContext account) => new CountingProvider(inner.Create(account), this);
@@ -312,6 +240,6 @@ public sealed class EmailAccountIntegrationTests
         public ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest r, CancellationToken ct = default) => inner.ReadAsync(r, ct);
         public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest r, CancellationToken ct = default) => inner.CreateDraftAsync(r, ct);
         public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string id, CancellationToken ct = default) => inner.GetDraftAsync(id, ct);
-        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest r, CancellationToken ct = default) { Interlocked.Increment(ref owner.Dispatches); if (owner.SendFailure is { } failure) throw failure; return inner.SendDraftAsync(r, ct); }
+        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest r, CancellationToken ct = default) { Interlocked.Increment(ref owner.Dispatches);  return inner.SendDraftAsync(r, ct); }
     }
 }

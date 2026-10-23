@@ -23,7 +23,6 @@ public sealed partial class SessionToolExecutor(
     IWebSearchProvider? webSearch = null,
     IPublicWebFetcher? publicWebFetcher = null,
     IEmailProvider? emailProvider = null,
-    IHttpRequestClient? httpRequestClient = null,
     IToolConfigurationGate? configurationGate = null,
     IAutomationService? triggerRegistrations = null,
     ITriggerCommandAuthorizer? triggerAuthorizer = null,
@@ -123,9 +122,8 @@ public sealed partial class SessionToolExecutor(
     public ToolPolicyDecision EvaluateExecutionPolicy(
         AgentDefinition definition,
         string toolName,
-        ToolApprovalGrant? grant = null,
         ToolExecutionAdmission? admission = null) =>
-        ToolPolicy.EvaluateExecution(definition, toolName, _configurationGate, grant, admission);
+        ToolPolicy.EvaluateExecution(definition, toolName, _configurationGate, admission);
     public ValueTask<bool> AllowsAgentConsolidationAsync(Guid? id, CancellationToken ct) =>
         identityMaintenance?.AllowsAutonomousAsync(id, ct) ?? ValueTask.FromResult(false);
 
@@ -139,7 +137,7 @@ public sealed partial class SessionToolExecutor(
             definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, ct);
         if (ManagementTools.IsManagement(call.Name) && admission is not null)
             admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, ct) };
-        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return ManagementDecision(definition, call.Name, args, admission, null,
+        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return ManagementDecision(definition, call.Name, args, admission,
             EvaluateExecutionPolicy(definition, call.Name, admission: admission));
         if (identityMaintenance is null) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
         try
@@ -157,22 +155,6 @@ public sealed partial class SessionToolExecutor(
     private static void RecordMaintenanceRejection(string tool) => RuntimeTelemetry.RecordIdentityMaintenance(
         tool == ToolCatalog.MemoryForget ? "forget_rejected" : "rejected_by_policy");
 
-    public async ValueTask<(ToolApprovalPreparation? Preparation, string? ErrorJson)> PrepareIdentityMaintenanceApprovalAsync(
-        AgentDefinition? definition, Guid sessionId, ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
-    {
-        if (await LegacyApprovalPreparationErrorAsync(sessionId, admission, ct).ConfigureAwait(false) is { } denied)
-            return (null, denied);
-        if (identityMaintenance is null || definition is null || admission is null)
-            return (null, Error("forbidden", "Trusted identity maintenance context is required."));
-        try
-        {
-            var preview = await identityMaintenance.ApprovalPreviewAsync(definition, sessionId, call.Name, args, admission, ct);
-            return (new(ToolActionHash.Compute(call.Name, args), preview.Summary, call.ArgumentsJson, preview.Details), null);
-        }
-        catch (AgentCoreException ex) { return (null, Error(ex.Code, ex.Message)); }
-        catch (ArgumentException) { return (null, Error("invalid", "Maintenance approval exceeds its content bound.")); }
-    }
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -184,14 +166,13 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call,
         int remainingOutputBytes,
         CancellationToken cancellationToken = default,
-        ToolApprovalGrant? approvalGrant = null,
         TriggerCommandContext? triggerCommand = null,
         ToolExecutionAdmission? admission = null)
     {
         using var scope = logger?.BeginScope("Tool={Tool} SessionId={SessionId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId}",
             SafeExecutionTrace.SafeToolName(call.Name), sessionId, admission?.AgentInstanceId, admission?.AgentRunId);
         var result = await ExecuteCoreAsync(definition, sessionId, call, remainingOutputBytes,
-            cancellationToken, approvalGrant, triggerCommand, admission).ConfigureAwait(false);
+            cancellationToken, triggerCommand, admission).ConfigureAwait(false);
         // Discovery failures from admission/parsing must respect the budget too.
         return call.Name == ToolCatalog.CredentialsList ? FitResult(remainingOutputBytes, result.Text) : result;
     }
@@ -202,7 +183,6 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call,
         int remainingOutputBytes,
         CancellationToken cancellationToken = default,
-        ToolApprovalGrant? approvalGrant = null,
         TriggerCommandContext? triggerCommand = null,
         ToolExecutionAdmission? admission = null)
     {
@@ -266,10 +246,10 @@ public sealed partial class SessionToolExecutor(
         if (ManagementTools.IsManagement(call.Name) && admission is not null)
             admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, cancellationToken) };
 
-        var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant, admission);
+        var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, admission);
         if (ConfigurationTools.IsTool(call.Name))
         {
-            try { using var decisionArgs = JsonDocument.Parse(call.ArgumentsJson); policy = ManagementDecision(definition, call.Name, decisionArgs.RootElement, admission, approvalGrant, policy); }
+            try { using var decisionArgs = JsonDocument.Parse(call.ArgumentsJson); policy = ManagementDecision(definition, call.Name, decisionArgs.RootElement, admission, policy); }
             catch (JsonException) { return TextResult(Error("invalid", "Management arguments are malformed.")); }
         }
         if (policy == ToolPolicyDecision.Deny
@@ -330,20 +310,6 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("forbidden", "Tool arguments are not permitted."));
         }
 
-        if (approvalGrant is not null
-            && !string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal)
-            && !string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal)
-            && !ToolResources.IsTriggerWrite(call.Name))
-        {
-            var boundHash = ToolActionHash.Compute(call.Name, args);
-            if (!string.Equals(boundHash, approvalGrant.ActionHash, StringComparison.Ordinal)
-                || !string.Equals(call.Name, approvalGrant.ToolName, StringComparison.Ordinal))
-            {
-                if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
-                return TextResult(Error("stale_approval", "Approval no longer matches the requested action."));
-            }
-        }
-
         if (InstanceSkillTools.IsManagement(call.Name)) return await ExecuteSkillManagementAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
         if (ConfigurationTools.IsTool(call.Name)) return await ExecuteConfigurationAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
 
@@ -366,7 +332,7 @@ public sealed partial class SessionToolExecutor(
                     RecordMaintenanceRejection(call.Name);
                     return TextResult(Error("forbidden", "Identity maintenance is unavailable."));
                 }
-                var result = await identityMaintenance.ExecuteAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken);
+                var result = await identityMaintenance.ExecuteAsync(definition, sessionId, call, args, admission, cancellationToken);
                 return TextResult(AgentCore.Application.Continuity.ContinuityService.Serialize(result));
             }
             if (call.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet)
@@ -466,7 +432,7 @@ public sealed partial class SessionToolExecutor(
                     return TextResult(Error("forbidden", "Harness authoring is unavailable in this execution."));
                 var result = call.Name == HarnessChatTools.Inspect
                     ? await harnessAuthoring().InspectChatAsync(instanceId, definition.Version, cancellationToken)
-                    : await harnessAuthoring().AuthorChatAsync(instanceId, call.Name, args, approvalGrant,
+                    : await harnessAuthoring().AuthorChatAsync(instanceId, call.Name, args,
                         admission.HarnessSources ?? [], admission.OwnerTurnText, cancellationToken);
                 return FitResult(remainingOutputBytes, JsonSerializer.Serialize(result));
             }
@@ -486,7 +452,7 @@ public sealed partial class SessionToolExecutor(
                 ProtectCwd(call.Name, args, sessionId, cwd);
             }
             if (call.Name.StartsWith("drive.", StringComparison.Ordinal))
-                return FitResult(remainingOutputBytes, await ExecuteDriveAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken));
+                return FitResult(remainingOutputBytes, await ExecuteDriveAsync(definition, sessionId, call, args, admission, cancellationToken));
             if (call.Name.StartsWith("office.", StringComparison.Ordinal))
                 return FitResult(remainingOutputBytes, await ExecuteOfficeAsync(call.Name, definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", remainingOutputBytes, cancellationToken));
             var executed = call.Name switch
@@ -526,13 +492,8 @@ public sealed partial class SessionToolExecutor(
                     await FetchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.WebDownload => FitResult(remainingOutputBytes,
                     await DownloadWebAsync(definition, sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.HttpRequest => FitResult(
-                    remainingOutputBytes,
-                    await ExecuteHttpRequestAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
                 _ when ToolCatalog.IsBrowserTool(call.Name) => await ExecuteBrowserAsync(
                     definition, sessionId, call.Name, args, admission, remainingOutputBytes, cancellationToken).ConfigureAwait(false),
-                ToolCatalog.DemoSensitiveAction => TextResult(
-                    ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
                 ToolCatalog.EmailRequestAccount => TextResult(await RequestEmailAccountAsync(definition, sessionId, args, admission, cancellationToken)),
                 ToolCatalog.EmailAccounts => FitResult(remainingOutputBytes, await ListEmailAccountsAsync(admission, cancellationToken)),
                 ToolCatalog.EmailSearch => FitResult(
@@ -543,8 +504,6 @@ public sealed partial class SessionToolExecutor(
                     await ReadEmailAsync(args, remainingOutputBytes, cancellationToken, admission).ConfigureAwait(false)),
                 ToolCatalog.EmailCreateDraft => TextResult(
                     await CreateEmailDraftAsync(args, cancellationToken, admission, sessionId).ConfigureAwait(false)),
-                ToolCatalog.EmailSend => TextResult(
-                    await SendEmailDraftAsync(args, approvalGrant, cancellationToken, admission, sessionId).ConfigureAwait(false)),
                 ToolCatalog.AutomationCreate or ToolCatalog.AutomationList
                     or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable => await TriggerScheduleCommands.ExecuteAsync(
                         definition,
@@ -556,7 +515,7 @@ public sealed partial class SessionToolExecutor(
                         _triggerAuthorizer,
                         _agentInstances,
                         _agentDefinitions,
-                        _profiles, automationAuthoring, approvalGrant).ConfigureAwait(false),
+                        _profiles, automationAuthoring).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
             return (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name is ToolCatalog.ArtifactsCreateFromWorkspace)
@@ -1324,57 +1283,6 @@ public sealed partial class SessionToolExecutor(
         return JsonSerializer.Serialize(new { accounts = accounts.Select(c => new { accountRef = c.AccountRef, displayName = c.DisplayName, emailAddress = c.EmailAddress, provider = c.Provider, authentication = c.Authentication, connection = c.Connection, readAvailable = c.ReadAvailable, sendAvailable = c.SendAvailable }), status = accounts.Count == 0 ? "no_eligible_account" : "available", sendAvailable = accounts.Any(c => c.SendAvailable), sendSetupGuidance = !emailAccounts.IsSendEnabled ? EmailAccountService.SendSetupGuidance : accounts.Any(c => c.SendAvailable) ? null : "Connect and bind an account with send permission in Connections → Credentials." });
     }
 
-    public async Task<EmailSendApprovalPrepareResult> PrepareEmailSendApprovalAsync(
-        JsonElement args,
-        CancellationToken cancellationToken = default, ToolExecutionAdmission? admission = null, Guid sessionId = default)
-    {
-        if (await LegacyApprovalPreparationErrorAsync(sessionId, admission, cancellationToken).ConfigureAwait(false) is { } denied)
-            return new(null, denied);
-        if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
-        {
-            return new EmailSendApprovalPrepareResult(null, Error("unavailable", "Email is not configured."));
-        }
-
-        if (emailAccounts is { IsSendEnabled: false })
-            return new(null, Error("smtp_disabled", EmailAccountService.SendSetupGuidance));
-
-        if (!TryString(args, "draftId", out var draftId))
-        {
-            return new EmailSendApprovalPrepareResult(null, Error("invalid", "draftId is required."));
-        }
-
-        EmailDraftSnapshot? draft;
-        try { draft = emailAccounts is null ? await emailProvider!.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false)
-            : await emailAccounts.DraftAsync(sessionId, RequireMailAdmission(admission), draftId, AccountRef(args), cancellationToken);
-            if (emailAccounts is not null) emailAccounts.RequireSendEnabled(await emailAccounts.ResolveAsync(RequireMailAdmission(admission), draft!.AccountRef, cancellationToken)); }
-        catch (AgentCoreException ex) { return new(null, Error(ex.Code, ex.Message)); }
-        if (draft is null)
-        {
-            return new EmailSendApprovalPrepareResult(null, Error("notFound", "Draft was not found."));
-        }
-
-        var normalized = EmailDraftNormalizer.Normalize(draft);
-        var actionHash = EmailDraftNormalizer.ComputeSendActionHash(normalized);
-        var summary = ToolApprovalPreview.BoundSummary($"Send email to {string.Join(", ", normalized.To)}");
-        var details = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["To"] = string.Join(", ", normalized.To),
-            ["Cc"] = string.Join(", ", normalized.Cc),
-            ["Bcc"] = string.Join(", ", normalized.Bcc),
-            ["Subject"] = normalized.Subject,
-            ["Body"] = normalized.Body
-        };
-        if (normalized.AccountId is not null)
-        {
-            details["Account"] = $"{normalized.AccountRef} · {normalized.AccountId:D}";
-            details["From"] = normalized.Sender ?? "";
-            details["Revisions"] = $"Account {normalized.AccountRevision}; draft {normalized.Revision}; binding {normalized.BindingRevision}";
-        }
-        return new EmailSendApprovalPrepareResult(
-            new EmailSendApprovalPreparation(actionHash, summary, details),
-            null);
-    }
-
     private async Task<string> SearchEmailAsync(
         JsonElement args,
         int remainingOutputBytes,
@@ -1540,96 +1448,6 @@ public sealed partial class SessionToolExecutor(
         });
     }
 
-    private async Task<string> SendEmailDraftAsync(
-        JsonElement args,
-        ToolApprovalGrant? approvalGrant,
-        CancellationToken cancellationToken, ToolExecutionAdmission? admission = null, Guid sessionId = default)
-    {
-        if (approvalGrant is null)
-        {
-            return Error("approval_required", "Tool execution requires explicit approval.");
-        }
-
-        if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
-        {
-            return Error("unavailable", "Email is not configured.");
-        }
-
-        if (!TryString(args, "draftId", out var draftId))
-        {
-            return Error("invalid", "draftId is required.");
-        }
-
-        if (emailAccounts is not null)
-        {
-            var receipt = await emailAccounts.SendAsync(sessionId, RequireMailAdmission(admission), draftId, AccountRef(args), approvalGrant, cancellationToken);
-            return JsonSerializer.Serialize(new { outcome = receipt.Outcome.ToString().ToLowerInvariant(), providerMessageId = receipt.ProviderMessageId, error = receipt.ErrorCode, message = receipt.ErrorMessage });
-        }
-        var draft = await emailProvider!.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        if (draft is null)
-        {
-            return Error("notFound", "Draft was not found.");
-        }
-
-        var normalized = EmailDraftNormalizer.Normalize(draft);
-        var actionHash = EmailDraftNormalizer.ComputeSendActionHash(normalized);
-        if (!string.Equals(actionHash, approvalGrant.ActionHash, StringComparison.Ordinal)
-            || !string.Equals(approvalGrant.ToolName, ToolCatalog.EmailSend, StringComparison.Ordinal))
-        {
-            return Error("stale_approval", "Approval no longer matches the draft content.");
-        }
-
-        var sendClaim = new EmailSendLedger.ClaimKey(approvalGrant.ResponseId, approvalGrant.ApprovalId);
-        if (!EmailSendLedger.TryBegin(sendClaim))
-        {
-            return Error("duplicate", "This approval was already used to send email.");
-        }
-
-        var started = Stopwatch.GetTimestamp();
-        var sendStarted = false;
-        try
-        {
-            sendStarted = true;
-            var result = await emailProvider
-                .SendDraftAsync(new EmailSendDraftRequest(draftId, normalized), cancellationToken)
-                .ConfigureAwait(false);
-            RuntimeTelemetry.Record("email.send", RuntimeTelemetry.ElapsedMs(started));
-            switch (result.Outcome)
-            {
-                case EmailSendOutcome.Sent:
-                    EmailSendLedger.CompleteSent(sendClaim);
-                    break;
-                case EmailSendOutcome.Failed:
-                    EmailSendLedger.MarkDefinitelyFailed(sendClaim);
-                    break;
-                default:
-                    EmailSendLedger.MarkIndeterminate(sendClaim);
-                    break;
-            }
-
-            return JsonSerializer.Serialize(new
-            {
-                outcome = result.Outcome.ToString().ToLowerInvariant(),
-                providerMessageId = result.ProviderMessageId,
-                error = result.ErrorCode,
-                message = result.ErrorMessage
-            });
-        }
-        catch
-        {
-            if (sendStarted)
-            {
-                EmailSendLedger.MarkIndeterminate(sendClaim);
-            }
-            else
-            {
-                EmailSendLedger.MarkDefinitelyFailed(sendClaim);
-            }
-
-            throw;
-        }
-    }
-
     private static bool TryReadAddressList(
         JsonElement args,
         string name,
@@ -1700,32 +1518,6 @@ public sealed partial class SessionToolExecutor(
 
     private static string TruncatePreview(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..maxLength] + "…";
-
-    private static string ExecuteDemoSensitiveAction(
-        Guid sessionId,
-        JsonElement args,
-        ToolApprovalGrant? approvalGrant)
-    {
-        if (approvalGrant is null)
-        {
-            return Error("approval_required", "Tool execution requires explicit approval.");
-        }
-
-        if (!TryString(args, "label", out var label))
-        {
-            return Error("invalid", "label is required.");
-        }
-
-        var actionHash = ToolActionHash.Compute(ToolCatalog.DemoSensitiveAction, args);
-        if (!string.Equals(actionHash, approvalGrant.ActionHash, StringComparison.Ordinal))
-        {
-            return Error("stale_approval", "Approval no longer matches the requested action.");
-        }
-
-        return DemoSensitiveActionStore.TryExecute(sessionId, approvalGrant.ApprovalId, label, out var result)
-            ? result
-            : result;
-    }
 
     private static bool TryResolveWorkspacePath(
         string raw,

@@ -119,30 +119,6 @@ public sealed class SelfManagementAuthorityTests
         finally { Directory.Delete(root, true); }
     }
 
-    [Fact]
-    public async Task Exact_agent_policy_update_preserves_independent_builtin_choices()
-    {
-        await using var factory = new AgentCoreApiFactory();
-        var services = factory.Services;
-        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
-        var management = services.GetRequiredService<SelfManagementService>();
-        var view = await management.UpdateAsync(owner.InstanceId, owner.Revision,
-            new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.ManagementPolicy]), ConfigurationAssistance: new(false)));
-        var definition = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
-        var args = JsonSerializer.SerializeToElement(new { expectedInstanceRevision = view.InstanceRevision,
-            mode = "Assisted", scopes = new[] { "ManagementPolicy" }, managedAutoApply = Array.Empty<string>() });
-        var call = new ModelToolCall("change", "management.policy.update", args.GetRawText());
-        var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        var result = await services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition, Guid.NewGuid(), call, 100000,
-            approvalGrant: grant, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId));
-        Assert.Contains("\"outcome\":\"applied\"", result.Text);
-        Assert.Contains("\"revocationsApplyTo\":\"immediate\"", result.Text);
-        view = await management.ReadAsync(owner.InstanceId);
-        Assert.Equal(HarnessManagementMode.Assisted, view.Effective.Mode);
-        Assert.False(view.Effective.BuiltInSkills!.ConfigurationAssistance);
-        Assert.False(view.Overrides!.ConfigurationAssistance!.Value);
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

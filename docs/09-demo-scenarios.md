@@ -157,7 +157,7 @@ On Riley (`general-assistant` v8–v10) with a trusted profile timezone when wal
 
 ## P6 background work (historical freeze evidence)
 
-Ending the chat before a one-shot reminder fires still completes that reminder as one Background Work item. The result is in the Background Work drawer and is not a new transcript turn. An approval-demo application event can wait in that drawer across an API restart and then run the exact approved action once. Cancelling a retrying item stays cancelled after restart. Phase I continuation of Support, Compliance, and `sandbox.run` after deactivation is still not this behavior. P6 frozen on `30adaeb` (workflow `36085265506` green).
+Ending the chat before a one-shot reminder fires still completes that reminder as one Background Work item. The result is in the Background Work drawer and is not a new transcript turn. The old approval-demo is retired. Current tenant saved consent and exact continuation have separate [delivery evidence](reports/multitenant-iam-delivery-2026-10-16.md); the historical drawer scenario does not establish current tenant acceptance. Cancelling a retrying item stays cancelled after restart. Phase I continuation of Support, Compliance, and `sandbox.run` after deactivation is still not this behavior. P6 frozen on `30adaeb` (workflow `36085265506` green).
 
 ## P7 Admin harness lifecycle (observed)
 

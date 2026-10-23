@@ -395,7 +395,7 @@ public sealed class HarnessManagementService(
     }
 
     public ValueTask<object> AuthorChatAsync(Guid instanceId, string toolName, JsonElement args,
-        ToolApprovalGrant? approval, IReadOnlyList<HarnessSourceReceipt> sourceReceipts, string? ownerText,
+        IReadOnlyList<HarnessSourceReceipt> sourceReceipts, string? ownerText,
         CancellationToken ct) => gates.WithInstanceAsync<object>(instanceId, async token =>
         {
             var instance = await RequireInstanceAsync(instanceId, token);
@@ -408,9 +408,8 @@ public sealed class HarnessManagementService(
                 || !args.TryGetProperty("policyRevision", out var revision) || !revision.TryGetInt64(out var policyRevision)
                 || expectedVersion != instance.ActiveVersion || policyRevision != state.PolicyRevision)
                 throw AgentCoreErrors.Conflict("Harness authority or active version changed; inspect and request a fresh operation.");
-            if (HarnessChatTools.NeedsApproval(toolName, context) && (approval is null || approval.ToolName != toolName
-                || approval.ActionHash != ToolActionHash.Compute(toolName, args)))
-                throw AgentCoreErrors.Conflict("This exact harness change requires owner approval in Chat.");
+            if (HarnessChatTools.NeedsApproval(toolName, context))
+                throw AgentCoreErrors.Forbidden("This exact harness change requires canonical tenant consent.");
             HarnessAuthoringOperation operation;
             try
             {
@@ -450,7 +449,7 @@ public sealed class HarnessManagementService(
             // Validate before any Instance mutation. Shared publications are outside ordinary Chat authority.
             ValidateOperation(state.Policy, AgentDefinitionCandidate.FromDefinition(active), operation, sourceRead);
             var receipt = new HarnessInstanceChange(ids.NewId(), operation.Kind, instance.Revision + 1,
-                instance.ActiveVersion, state.PolicyRevision, approval?.ApprovalId, ToolActionHash.Compute(toolName, args), operation.Source,
+                instance.ActiveVersion, state.PolicyRevision, null, ToolActionHash.Compute(toolName, args), operation.Source,
                 time.GetUtcNow(), new("Agent", instance.Revision + 1, "Instance self-management", HarnessEvidenceStatus.PartiallyVerified,
                     expected ?? "Typed operation succeeds.", observed ?? "Instance content saved.", limitation));
             var localState = state with { InstanceChanges = [.. (state.InstanceChanges ?? []).TakeLast(63), receipt] };

@@ -129,7 +129,9 @@ public sealed partial class TenantCredentialIntegrationTests
         if (sqlite)
         {
             await using var db = f.Contexts!.CreateDbContext();
-            Assert.Equal(19, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
+            var guards = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type='trigger' AND tbl_name='TenantApprovalRequests'").ToArrayAsync();
+            Assert.Contains("TR_TenantApprovals_AccountAction_Insert", guards);
+            Assert.Contains("TR_TenantApprovals_AccountAction_Update", guards);
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.AccountAction.ArgumentsJson','{{}}') WHERE RequestId={request.RequestId}"));
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Snapshot.Credential.DisplayName','Changed') WHERE RequestId={request.RequestId}"));
         }

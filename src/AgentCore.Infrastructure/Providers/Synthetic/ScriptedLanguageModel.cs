@@ -698,37 +698,6 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
         }
 
         if (toolRounds == 0
-            && lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
-            && Offers(request, ToolCatalog.DemoSensitiveAction))
-        {
-            yield return new ModelToolCallEvent(new ModelToolCall(
-                "call-sensitive",
-                ToolCatalog.DemoSensitiveAction,
-                """{"label":"Synthetic sensitive approval"}"""));
-            yield return new ModelCompleted(ModelStopReason.ToolCalls);
-            yield break;
-        }
-
-        if (toolRounds == 1
-            && lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
-            && lastTool.Contains("completed", StringComparison.OrdinalIgnoreCase))
-        {
-            if (Offers(request, ToolCatalog.WorkComplete))
-            {
-                yield return new ModelToolCallEvent(new ModelToolCall(
-                    "call-sensitive-complete",
-                    ToolCatalog.WorkComplete,
-                    """{"summary":"Sensitive action completed after approval.","attentionRequired":false,"outcome":"Response"}"""));
-                yield return new ModelCompleted(ModelStopReason.ToolCalls);
-                yield break;
-            }
-
-            yield return new ModelTextDelta("Sensitive action completed after approval.");
-            yield return new ModelCompleted(ModelStopReason.Completed);
-            yield break;
-        }
-
-        if (toolRounds == 0
             && lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             && Offers(request, ToolCatalog.AttachmentsRead)
             && TryReadManifestAttachmentId(request, out var historicalAttachmentId))
@@ -1336,7 +1305,6 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("compliance case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("email account chooser", StringComparison.OrdinalIgnoreCase)
             || (request.Tools?.Any(t => t.Name == ToolCatalog.AutomationList || t.Name == ToolCatalog.AutomationCreate) == true && IsScheduleTurn(request, lastUser))
@@ -2014,7 +1982,6 @@ public sealed partial class ScriptedLanguageModel : ILanguageModel
 
     public const string EmailHarnessMarker = "email harness";
 
-    public const string SensitiveApprovalMarker = "sensitive approval";
 
     public const string AutomationApprovalMarker = "[test:automation-approval]";
     public const string ScheduleForceMarker = "[test:schedule-force]";

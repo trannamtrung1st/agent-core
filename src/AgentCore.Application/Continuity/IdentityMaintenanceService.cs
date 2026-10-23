@@ -83,39 +83,11 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
         return ToolPolicyDecision.Deny;
     }
 
-    public async ValueTask<(string Summary, Dictionary<string, string> Details)> ApprovalPreviewAsync(
-        AgentDefinition definition, Guid sessionId, string tool, JsonElement args, ToolExecutionAdmission admission, CancellationToken ct)
-    {
-        if (await PolicyAsync(definition, sessionId, tool, args, admission, ct) == ToolPolicyDecision.Deny)
-            throw new AgentCoreException("PolicyDenied", "Identity maintenance is not permitted by current policy.", 403);
-        var preview = ToolApprovalPreview.Build(tool, args);
-        if (tool == ToolCatalog.ExperienceConsolidate) return preview;
-        var id = admission.AgentInstanceId!.Value;
-        var instance = await instances.RequireInstanceAsync(id, ct);
-        var current = (await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct))!;
-        var sources = tool == ToolCatalog.MemoryForget
-            ? new[] { await ResolveMemoryAsync(id, sessionId, ReadId(args, "memoryId"), definition, current, admission.Detached, ct) }
-            : await MemorySourcesAsync(id, sessionId, ReadIds(args, "sourceMemoryIds"), definition, current, admission.Detached, ct);
-        if (sources.Any(s => s.Scope != sources[0].Scope || s.Kind != sources[0].Kind))
-            throw AgentCoreErrors.Validation("Memory consolidation cannot cross scopes or kinds.");
-        preview.Details["Scope"] = sources[0].Scope switch
-        {
-            MemoryScope.User => "User-wide",
-            MemoryScope.IdentityUser => "This Agent Instance and trusted user profile",
-            _ => "This Session"
-        };
-        preview.Details["Memory kind"] = sources[0].Kind.ToString();
-        preview.Details["Source subjects"] = string.Join("\n", sources.Select(s => $"{s.MemoryId:D}: {s.Subject}"));
-        if (sources[0].Scope == MemoryScope.User)
-            preview.Details["Cross-agent effect"] = "This learned memory may be retrieved by other Agent Instances for this trusted user profile.";
-        return preview;
-    }
-
     public async ValueTask<object> ExecuteAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call,
-        JsonElement args, ToolExecutionAdmission admission, ToolApprovalGrant? grant, CancellationToken ct)
+        JsonElement args, ToolExecutionAdmission admission, CancellationToken ct)
     {
         RuntimeTelemetry.RecordIdentityMaintenance("attempted");
-        try { return await ExecuteCoreAsync(definition, sessionId, call, args, admission, grant, ct); }
+        try { return await ExecuteCoreAsync(definition, sessionId, call, args, admission, ct); }
         catch (AgentCoreException ex)
         {
             RuntimeTelemetry.RecordIdentityMaintenance(call.Name == ToolCatalog.MemoryForget ? "forget_rejected"
@@ -130,13 +102,12 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
     }
 
     private async ValueTask<object> ExecuteCoreAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call,
-        JsonElement args, ToolExecutionAdmission admission, ToolApprovalGrant? grant, CancellationToken ct)
+        JsonElement args, ToolExecutionAdmission admission, CancellationToken ct)
     {
         var policy = await PolicyAsync(definition, sessionId, call.Name, args, admission, ct);
         if (policy == ToolPolicyDecision.Deny) throw new AgentCoreException("PolicyDenied", "Identity maintenance is not permitted by current policy.", 403);
-        if (policy == ToolPolicyDecision.RequireApproval && (grant is null || grant.ToolName != call.Name
-            || grant.ActionHash != ToolActionHash.Compute(call.Name, args)))
-            throw new AgentCoreException("ApprovalRequired", "This exact identity maintenance operation requires owner approval.", 403);
+        if (policy == ToolPolicyDecision.RequireApproval)
+            throw AgentCoreErrors.Forbidden("This exact identity maintenance operation requires canonical tenant consent.");
         var id = admission.AgentInstanceId!.Value;
         var instance = await instances.RequireInstanceAsync(id, ct);
         var current = (await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct))!;

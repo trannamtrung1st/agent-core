@@ -10,7 +10,6 @@ public static class ToolPolicy
         AgentDefinition definition,
         string toolName,
         IToolConfigurationGate configurationGate,
-        ToolApprovalGrant? grant = null,
         ToolExecutionAdmission? admission = null)
     {
         if (!ToolRegistry.TryGet(toolName, out var descriptor))
@@ -117,7 +116,7 @@ public static class ToolPolicy
                 || !HarnessChatTools.Allows(toolName, admission.Harness)) return ToolPolicyDecision.Deny;
             if (ToolResources.IsOccurrence(admission.TriggerKind) && toolName is "harness.tool.select" or "harness.tool.configure")
                 return ToolPolicyDecision.Deny;
-            return HarnessChatTools.NeedsApproval(toolName, admission.Harness!) && grant is null
+            return HarnessChatTools.NeedsApproval(toolName, admission.Harness!)
                 ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Allow;
         }
 
@@ -201,19 +200,12 @@ public static class ToolPolicy
 
         if (InstanceSkillTools.IsManagement(toolName) && descriptor.Effect != ToolEffect.ReadOnly
             && (toolName is "skills.delete" or "skills.customize" || !(admission!.Harness!.Policy.AutoApplies(ManagementAutoApply.SkillChanges)
-                && (definition.SelfManagement?.AutoApplies(ManagementAutoApply.SkillChanges) ?? true))) && grant is null)
+                && (definition.SelfManagement?.AutoApplies(ManagementAutoApply.SkillChanges) ?? true))))
             return ToolPolicyDecision.RequireApproval;
 
         if (descriptor.Effect is ToolEffect.SensitiveWrite or ToolEffect.Destructive || admission?.ConfigurationContinuationTarget is not null && descriptor.Effect != ToolEffect.ReadOnly)
         {
-            if (grant is null
-                || !string.Equals(grant.ToolName, toolName, StringComparison.Ordinal)
-                || grant.ActionHash.Length == 0)
-            {
-                return ToolPolicyDecision.RequireApproval;
-            }
-
-            return ToolPolicyDecision.Allow;
+            return ToolPolicyDecision.RequireApproval;
         }
 
         return ToolPolicyDecision.Allow;

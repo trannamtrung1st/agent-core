@@ -123,7 +123,7 @@ public sealed class NativeBrowserContractTests
         Assert.Contains("forbidden", unauthorized.Text);
     }
     [Fact]
-    public async Task Privileged_browser_effects_require_exact_approval_and_coordinate_authority()
+    public async Task Unowned_privileged_browser_effects_cannot_dispatch_and_coordinate_authority_remains_required()
     {
         var browser = new Subset(true); var gate = new ToolConfigurationGate(null, null, null, browser, true);
         var definition = Definition("browser.route", "browser.mouse");
@@ -131,16 +131,12 @@ public sealed class NativeBrowserContractTests
         var call = new ModelToolCall("route", "browser.route", "{\"url\":\"http://127.0.0.1/mock\",\"action\":\"abort\"}");
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn);
         Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        using var args = JsonDocument.Parse(call.ArgumentsJson);
-        var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var changed = call with { ArgumentsJson = "{\"url\":\"http://127.0.0.1/changed\",\"action\":\"abort\"}" };
-        Assert.Contains("stale_approval", (await executor.ExecuteAsync(definition, Guid.NewGuid(), changed, ToolLimits.MaxOutputBytes, approvalGrant: grant, admission: admission)).Text);
+        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), changed, ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Equal(0, browser.Commands);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, approvalGrant: grant, admission: admission)).Text);
-        Assert.Equal(1, browser.Commands);
         var mouse = new ModelToolCall("mouse", "browser.mouse", "{\"operation\":\"click\",\"x\":1,\"y\":1}");
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), mouse, ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.Equal(1, browser.Commands);
+        Assert.Equal(0, browser.Commands);
     }
     [Fact]
     public async Task Environment_tools_preserve_negotiation_approval_and_direct_turn_boundaries()
@@ -155,14 +151,10 @@ public sealed class NativeBrowserContractTests
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn);
         var call = new ModelToolCall("geo", ToolCatalog.BrowserGeolocation, "{\"operation\":\"set\",\"origin\":\"http://127.0.0.1\",\"latitude\":10,\"longitude\":20}");
         Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        using var args = JsonDocument.Parse(call.ArgumentsJson);
-        var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        Assert.Contains("stale_approval", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call with { ArgumentsJson = call.ArgumentsJson.Replace(":10", ":11") }, ToolLimits.MaxOutputBytes, approvalGrant: grant, admission: admission)).Text);
-        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, approvalGrant: grant,
+        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call with { ArgumentsJson = call.ArgumentsJson.Replace(":10", ":11") }, ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes,
             admission: new(false, TriggerKind.ScheduledOccurrence))).Text);
         Assert.Equal(0, browser.Commands);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, approvalGrant: grant, admission: admission)).Text);
-        Assert.Equal(1, browser.Commands);
         foreach (var json in new[] { "{\"reducedMotion\":\"reduce\"}", "{\"colorScheme\":null}", "{\"forcedColors\":\"active\",\"contrast\":\"more\"}" })
             Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         foreach (var json in new[] { "{\"colorScheme\":true}", "{\"contrast\":\"wrong\"}", "{\"colorScheme\":null,\"colorScheme\":\"light\"}" })

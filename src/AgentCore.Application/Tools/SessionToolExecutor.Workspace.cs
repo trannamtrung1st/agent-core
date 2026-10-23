@@ -7,15 +7,6 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
 
-public sealed record HttpRequestApprovalPreparation(
-    string ActionHash,
-    string Summary,
-    Dictionary<string, string> Details);
-
-public sealed record HttpRequestApprovalPrepareResult(
-    HttpRequestApprovalPreparation? Preparation,
-    string? ErrorJson);
-
 public static class WorkspaceSearchLimits
 {
     public const int DefaultMaxResults = 20;
@@ -30,92 +21,6 @@ public static class WorkspaceSearchLimits
 
 public sealed partial class SessionToolExecutor
 {
-    public HttpRequestApprovalPrepareResult PrepareHttpRequestApproval(JsonElement args)
-    {
-        if (httpRequestClient is null)
-        {
-            return new HttpRequestApprovalPrepareResult(null, Error("unavailable", "HTTP requests are unavailable."));
-        }
-
-        if (!HttpRequestNormalizer.TryNormalize(args, out var snapshot, out var code, out var message) || snapshot is null)
-        {
-            return new HttpRequestApprovalPrepareResult(null, Error(code, message));
-        }
-
-        return new HttpRequestApprovalPrepareResult(
-            new HttpRequestApprovalPreparation(
-                HttpRequestNormalizer.ComputeActionHash(snapshot),
-                HttpRequestNormalizer.Summary(snapshot),
-                HttpRequestNormalizer.Details(snapshot)),
-            null);
-    }
-
-    private async Task<string> ExecuteHttpRequestAsync(
-        JsonElement args,
-        ToolApprovalGrant? approvalGrant,
-        CancellationToken cancellationToken)
-    {
-        if (httpRequestClient is null)
-        {
-            return Error("unavailable", "HTTP requests are unavailable.");
-        }
-
-        if (approvalGrant is null)
-        {
-            return Error("approval_required", "Tool execution requires explicit approval.");
-        }
-
-        if (!HttpRequestNormalizer.TryNormalize(args, out var snapshot, out var code, out var message) || snapshot is null)
-        {
-            return Error(code, message);
-        }
-
-        var actionHash = HttpRequestNormalizer.ComputeActionHash(snapshot);
-        if (!string.Equals(actionHash, approvalGrant.ActionHash, StringComparison.Ordinal)
-            || !string.Equals(approvalGrant.ToolName, ToolCatalog.HttpRequest, StringComparison.Ordinal))
-        {
-            return Error("stale_approval", "Approval no longer matches the requested action.");
-        }
-
-        if (!Uri.TryCreate(snapshot.Url, UriKind.Absolute, out var uri))
-        {
-            return Error("invalid", "url must be an absolute http or https URL.");
-        }
-
-        var result = await httpRequestClient.SendAsync(
-                new HttpToolRequest(
-                    snapshot.Method,
-                    uri,
-                    snapshot.Headers,
-                    Encoding.UTF8.GetBytes(snapshot.Body),
-                    snapshot.FollowRedirects),
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (result.ErrorCode is not null)
-        {
-            return JsonSerializer.Serialize(new
-            {
-                untrusted = true,
-                method = snapshot.Method,
-                finalUrl = result.FinalUrl,
-                error = result.ErrorCode,
-                message = result.ErrorMessage
-            });
-        }
-
-        return JsonSerializer.Serialize(new
-        {
-            untrusted = true,
-            method = snapshot.Method,
-            status = result.StatusCode,
-            finalUrl = result.FinalUrl,
-            contentType = result.ContentType,
-            redirectLocation = result.RedirectLocation,
-            truncated = result.Truncated,
-            body = result.Body
-        });
-    }
-
     private async Task<string> SearchWorkspaceAsync(
         AgentDefinition definition,
         Guid sessionId,

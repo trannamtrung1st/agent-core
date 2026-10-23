@@ -47,16 +47,17 @@ public sealed class ToolRegistryPolicyTests
         Assert.Equal(ToolReplaySafety.ReplaySafe, ToolCatalog.ReplaySafetyOf(ToolCatalog.KnowledgeRetrieve));
         Assert.Throws<KeyNotFoundException>(() => ToolCatalog.EffectOf("sandbox.run"));
         Assert.DoesNotContain("sandbox.run",ToolCatalog.AllKnownNames());
-        Assert.Equal(ToolEffect.SensitiveWrite, ToolCatalog.EffectOf(ToolCatalog.DemoSensitiveAction));
+        Assert.Equal(ToolEffect.SensitiveWrite, ToolCatalog.EffectOf(ToolCatalog.HttpRequest));
+        Assert.DoesNotContain("demo.sensitive_action", ToolCatalog.AllKnownNames());
     }
 
     [Fact]
-    public void Sensitive_execution_requires_approval_without_grant()
+    public void Unowned_sensitive_execution_requires_canonical_consent()
     {
-        var definition = Definition("general-assistant", 3, [ToolCatalog.DemoSensitiveAction]);
+        var definition = Definition("general-assistant", 3, [ToolCatalog.HttpRequest]);
         Assert.Equal(
             ToolPolicyDecision.RequireApproval,
-            ToolPolicy.EvaluateExecution(definition, ToolCatalog.DemoSensitiveAction, ToolConfigurationGates.AllowAll));
+            ToolPolicy.EvaluateExecution(definition, ToolCatalog.HttpRequest, ToolConfigurationGates.AllowAll));
     }
 
     [Fact]

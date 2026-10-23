@@ -25,15 +25,13 @@ public sealed partial class SessionToolExecutor
     };
 
     private ToolPolicyDecision ManagementDecision(AgentDefinition definition, string name, JsonElement args,
-        ToolExecutionAdmission? admission, ToolApprovalGrant? grant, ToolPolicyDecision fallback)
+        ToolExecutionAdmission? admission, ToolPolicyDecision fallback)
     {
         if (!ConfigurationTools.IsTool(name) || fallback == ToolPolicyDecision.Deny) return fallback;
         try
         {
             ConfigurationTools.Validate(name, args);
             if (OwnerOnlySandboxFields(name, args)) return ToolPolicyDecision.Deny;
-            if (grant is not null) return grant.ToolName == name && grant.ActionHash == ToolActionHash.Compute(name, args)
-                ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
             // Core permits only these specific local preferences; max tokens, instructions and every authority field retain approval.
             if (name is "settings.patch" or "configuration.propose" && args.GetProperty("section").GetString() == "conversationPolicy"
                 && args.GetProperty("set").ValueKind == JsonValueKind.Object && args.GetProperty("clear").ValueKind == JsonValueKind.Array

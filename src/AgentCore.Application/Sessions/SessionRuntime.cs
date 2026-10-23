@@ -3848,7 +3848,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             call,
                                             resultBudget,
                                             toolCts.Token,
-                                            null,
                                             automationCommand,
                                             new ToolExecutionAdmission(
                                                 Detached: IsInitialBackgroundRun,

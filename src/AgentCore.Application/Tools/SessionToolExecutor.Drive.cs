@@ -9,7 +9,7 @@ namespace AgentCore.Application.Tools;
 
 public sealed partial class SessionToolExecutor
 {
-    private async Task<string> ExecuteDriveAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, ToolApprovalGrant? grant, CancellationToken ct)
+    private async Task<string> ExecuteDriveAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         if (driveService is null || agentWorkspace is null || admission?.AgentInstanceId is not Guid instanceId || await agentWorkspace.SessionOwnerAsync(sessionId, ct) != instanceId)
             return Error("forbidden", "Drive requires the current owned Session/Agent Instance.");
@@ -42,7 +42,7 @@ public sealed partial class SessionToolExecutor
             }
             if (!args.TryGetProperty("authEpoch", out var epoch) || !epoch.TryGetInt64(out var authEpoch) || authEpoch < 1) return Error("invalid", "authEpoch from drive.accounts is required for remote writes.");
             if (DriveMutationArguments.RequiresApproval(call.Name))
-                if (grant is null || grant.ToolName != call.Name || grant.ActionHash != ToolActionHash.Compute(call.Name, args)) return Error("approval_required", "Exact current Drive action approval is required.");
+                return Error("forbidden", "Trusted tenant execution is required for this Drive action.");
             var operationBytes = SHA256.HashData(Encoding.UTF8.GetBytes((admission.AgentRunId ?? sessionId).ToString("D") + "|" + call.Id + "|" + call.Name)); var operationId = new Guid(operationBytes.AsSpan(0, 16));
             if (call.Name == "drive.trash_batch")
             {

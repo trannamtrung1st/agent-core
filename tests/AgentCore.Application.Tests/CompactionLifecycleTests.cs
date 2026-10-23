@@ -437,7 +437,7 @@ public sealed class CompactionLifecycleTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist: [ToolCatalog.DemoSensitiveAction]));
+            new RoleEnvironment(ToolAllowlist: [ToolCatalog.EmailSend]));
 
     private sealed class CountingModel(ScriptedLanguageModel inner) : ILanguageModel
     {
@@ -562,7 +562,7 @@ public sealed class CompactionLifecycleTests
             }
 
             yield return new ModelToolCallEvent(
-                new ModelToolCall("call-sensitive", ToolCatalog.DemoSensitiveAction, "{}"));
+                new ModelToolCall("call-sensitive", ToolCatalog.EmailSend, "{}"));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }

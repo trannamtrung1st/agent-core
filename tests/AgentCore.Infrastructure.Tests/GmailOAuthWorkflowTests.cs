@@ -23,7 +23,7 @@ public sealed class GmailOAuthWorkflowTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Connected_account_restores_refreshes_reads_exactly_sends_once_and_disconnects_every_binding(bool sqlite)
+    public async Task Connected_account_restores_refreshes_reads_and_disconnects_every_binding(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
         var c = await f.Credentials.CreateEmailAccountAsync("Gmail", EmailAccountProfile.Gmail(), ""); await f.Connect(c.CredentialId, 1);
@@ -36,27 +36,12 @@ public sealed class GmailOAuthWorkflowTests
         f.Reopen(); await f.OAuth.AccessTokenAsync(c.CredentialId, before.Revision, default);
         var after = (await f.Store.GetAsync(c.CredentialId))!; Assert.Equal(before.Revision, after.Revision); Assert.True(after.SecretRevision > before.SecretRevision);
         Assert.Equal(hash, EmailDraftNormalizer.ComputeSendActionHash(await f.Email.DraftAsync(session, a, draft.DraftId, "primary", default)));
-        var grant = new ToolApprovalGrant(Guid.NewGuid(), ToolCatalog.EmailSend, hash, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        Assert.Equal(EmailSendOutcome.Sent, (await f.Email.SendAsync(session, a, draft.DraftId, "primary", grant, default)).Outcome);
-        f.Reopen(); Assert.Equal(EmailSendOutcome.Sent, (await f.Email.SendAsync(session, a, draft.DraftId, "primary", grant, default)).Outcome); Assert.Equal(1, f.Http.Sends);
-        Assert.Contains("hidden@example.test", f.Http.Mime!); Assert.Contains("From: verified@example.test", f.Http.Mime!);
+        Assert.Equal(0, f.Http.Sends);
         var current = (await f.Store.GetAsync(c.CredentialId))!; await f.OAuth.DisconnectAsync(c.CredentialId, current.Revision, default);
         Assert.Empty(await f.Email.AccountsAsync(a, default)); Assert.Empty(await f.Email.AccountsAsync(b, default));
         Assert.Equal(2, (await f.Bindings.ListBindingsAsync()).Count);
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.Provider(account).ReadAsync(new(message.MessageId)).AsTask());
-        Assert.Equal(EmailSendOutcome.Sent, (await f.MailStore.GetSendAsync(draft.DraftId))!.Result!.Outcome);
-    }
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Auth_failure_and_host_disable_before_dispatch_leave_immutable_draft_unclaimed(bool disable)
-    {
-        await using var f = await Fixture.Create(true); var c = await f.Credentials.CreateEmailAccountAsync("Gmail", EmailAccountProfile.Gmail(), ""); await f.Connect(c.CredentialId, 1);
-        var a = await f.Bind(f.A, c.CredentialId, "gmail"); var session = Guid.NewGuid(); var draft = await f.Email.CreateDraftAsync(session, a, "gmail", new(["to@example.test"], [], [], "subject", "body"), default);
-        await f.Email.Provider(await f.Email.ResolveAsync(a, "gmail", default)).SearchAsync(new("", 1));
-        if (disable) f.Options.SendEnabled = false; else f.Http.InvalidGrant = true;
-        var grant = new ToolApprovalGrant(Guid.NewGuid(), ToolCatalog.EmailSend, EmailDraftNormalizer.ComputeSendActionHash(draft), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.SendAsync(session, a, draft.DraftId, "gmail", grant, default).AsTask()); Assert.Null(await f.MailStore.GetSendAsync(draft.DraftId)); Assert.Equal(0, f.Http.Sends);
+        Assert.Null(await f.MailStore.GetSendAsync(draft.DraftId));
     }
     [Fact]
     public async Task Provider_revocation_of_a_cached_token_blocks_reads_and_requires_reconnect()

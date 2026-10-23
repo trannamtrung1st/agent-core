@@ -92,12 +92,6 @@ internal static class AutomationRunScript
             return Complete("NeedsAttention", "Reminder: Call John.", true);
         if (prompt.Contains("check the oven", StringComparison.OrdinalIgnoreCase))
             return Complete("NeedsAttention", "Oven is ready.", true);
-        if (prompt.Contains(ScriptedLanguageModel.SensitiveApprovalMarker, StringComparison.Ordinal) && Offers(ToolCatalog.DemoSensitiveAction))
-        {
-            var action = results.LastOrDefault(m => m.Name == ToolCatalog.DemoSensitiveAction);
-            return action is null ? Call(ToolCatalog.DemoSensitiveAction, new { label = "Synthetic sensitive approval" })
-                : Complete("Response", "Sensitive action completed after approval.", false);
-        }
         return Complete("NoAction", "No meaningful change requires action.", false);
     }
     private static IReadOnlyList<ModelGenerationEvent> NamedCall(string id, string name, object args) =>

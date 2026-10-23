@@ -45,14 +45,6 @@ public sealed partial class TenantOperationAuthorizationTests
         using (var result = JsonDocument.Parse((await tools.ExecuteAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId,
             new("legacy", ToolCatalog.CredentialsList, "{}"), 16_000, admission: frame)).Text))
             Assert.Equal("tenant_effect_unavailable", result.RootElement.GetProperty("reasonCode").GetString());
-        using (var empty = JsonDocument.Parse("{}"))
-        {
-            var legacyGrant = new ToolApprovalGrant(Guid.NewGuid(), ToolCatalog.CredentialsList, ToolActionHash.Compute(ToolCatalog.CredentialsList, empty.RootElement),
-                setup.Run.ResponseId!.Value, Guid.NewGuid(), Guid.NewGuid());
-            using var denied = JsonDocument.Parse((await tools.ExecuteAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId,
-                new("legacy-grant", ToolCatalog.CredentialsList, "{}"), 16_000, approvalGrant: legacyGrant, admission: frame)).Text);
-            Assert.Equal("tenant_effect_unavailable", denied.RootElement.GetProperty("reasonCode").GetString());
-        }
         Assert.Equal(ToolPolicyDecision.Deny, await tools.EvaluateExecutionPolicyAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId, call, default, frame with { TenantId = Guid.NewGuid() }, default));
         Assert.Equal(ToolPolicyDecision.Deny, await tools.EvaluateExecutionPolicyAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId, call, default, null, default));
         var reserved = await operations.CheckAsync(new(setup.Tenant, setup.Run.AgentRunId), "iam.roles.assign", "agent", setup.Agent.Instance.InstanceId.ToString("D"));
@@ -66,12 +58,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(ToolPolicyDecision.Deny, await tools.EvaluateExecutionPolicyAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId, browserCall, default, frame, default));
         using (var browserDenied = JsonDocument.Parse((await tools.ExecuteAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId, browserCall, 16_000, admission: frame)).Text))
             Assert.Equal("tenant_effect_unavailable", browserDenied.RootElement.GetProperty("reasonCode").GetString());
-        using var browserArgs = JsonDocument.Parse(browserCall.ArgumentsJson);
-        var browserLegacyGrant = new ToolApprovalGrant(Guid.NewGuid(), browserCall.Name, ToolActionHash.Compute(browserCall.Name, browserArgs.RootElement),
-            setup.Run.ResponseId!.Value, Guid.NewGuid(), Guid.NewGuid());
-        using var legacyBrowserDenied = JsonDocument.Parse((await tools.ExecuteAsync(setup.Run.Admission.Configuration.Definition, setup.Run.SessionId,
-            browserCall, 16_000, approvalGrant: browserLegacyGrant, admission: frame)).Text);
-        Assert.Equal("tenant_effect_unavailable", legacyBrowserDenied.RootElement.GetProperty("reasonCode").GetString());
+
     }
 
     private sealed record Environment(Guid Tenant, TenantSessionInitiator Owner, TenantAgent Agent, AgentRun Run);

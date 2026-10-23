@@ -68,19 +68,6 @@ public static class ToolApprovalPreview
             return (Bound($"Save {operation.Kind} to this Instance"), details);
         }
 
-        if (string.Equals(toolName, ToolCatalog.DemoSensitiveAction, StringComparison.Ordinal))
-        {
-            var label = ReadString(args, "label") ?? "Sensitive action";
-            var summary = Bound($"Run sensitive demo action: {label}");
-            var details = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (!string.IsNullOrWhiteSpace(label))
-            {
-                details["label"] = BoundDetail(label);
-            }
-
-            return (summary, details);
-        }
-
         if (string.Equals(toolName, ToolCatalog.EmailSend, StringComparison.Ordinal))
         {
             var draftId = ReadString(args, "draftId") ?? "draft";

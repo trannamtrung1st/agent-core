@@ -473,7 +473,7 @@ P3A introduces typed non-text tool results, safe historical image rehydration th
 
 ## P3B–P3F — Tools, web, approval, email, assistant capability closure
 
-P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The freeze on `27efe17` was reopened after review found email/approval boundary defects. Key-free correction HEAD `e255916` is historical. P3F closes the assistant capability gap: working-directory path segments, `workspace.search` / `workspace.move`, approval-gated `http.request`, `general-assistant` v7, and the former 32-name allowlist bound (removed by the subsequent capability enhancement above). `demo.sensitive_action` remains on `approval-demo` for the harness. Sandbox networking, calendar, and GitHub mutations stay outside this closure. See the [P3 closure report](reports/p3-freeze-candidate.md).
+P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The freeze on `27efe17` was reopened after review found email/approval boundary defects. Key-free correction HEAD `e255916` is historical. P3F closes the assistant capability gap: working-directory path segments, `workspace.search` / `workspace.move`, approval-gated `http.request`, `general-assistant` v7, and the former 32-name allowlist bound (removed by the subsequent capability enhancement above). The historical `demo.sensitive_action`/`approval-demo` harness is retired by the tenant cutover. Sandbox networking, calendar, and GitHub mutations stay outside this closure. See the [P3 closure report](reports/p3-freeze-candidate.md).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -481,7 +481,7 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3B-2 workspace/artifacts | `workspace.list`/`patch`, `artifacts.create_from_workspace` | **Observed** (TDP) |
 | P3C-1 public web foundation | SSRF-safe fetch, search ports, Synthetic/Brave | **Observed** (TDP) |
 | P3C-2 web tools | `web.search`/`web.fetch`, `general-assistant` v2 | **Observed** (TDP) |
-| P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action on `approval-demo`; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
+| P3D-1 approval | Historical response-bound protocol/UI, local grant and synthetic demo; superseded by durable tenant consent and Run continuation | **Historical; retired** |
 | P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw` | **Observed** |
 | P3E reconcile | Docs/TODO/report alignment for the earlier correction | **Observed** |
 | P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, `Content-Type` canonicalization, shared text charset decode, provider error message off by default | **Observed / key-free frozen** on `4dbb920` (see [P3 closure report](reports/p3-freeze-candidate.md); implementation bulk `da93489`) |

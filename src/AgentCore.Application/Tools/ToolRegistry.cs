@@ -257,12 +257,6 @@ public static class ToolRegistry
                 """{"type":"object","properties":{"accountRef":{"type":"string"},"draftId":{"type":"string"}},"required":["draftId"]}""",
                 ToolEffect.SensitiveWrite,
                 ToolOfferRule.ConfigurationWhenRoleAllows),
-            [ToolCatalog.DemoSensitiveAction] = Descriptor(
-                ToolCatalog.DemoSensitiveAction,
-                "Execute a bounded synthetic sensitive write for approval testing.",
-                """{"type":"object","properties":{"label":{"type":"string"}},"required":["label"]}""",
-                ToolEffect.SensitiveWrite,
-                scope: ToolResourceScope.External),
             [ToolCatalog.AutomationCreate] = Descriptor(
                 ToolCatalog.AutomationCreate,
                 "Create an owned Automation from the current user request. Provide name and instructions. For one-shot timing provide exactly one of relativeDelaySeconds, relativeDayOffset + localTime, localDate + localTime or atUtc. For recurring timing provide kind fixed_interval/daily/weekly and its timing fields. For Events provide triggers, each with a typed source (builtin key or webhook eventId), optional filterExpression, dispatch and enabled flag. Matching is OR. Preserve triggerId/revision when editing. New Event collections default disabled; enable only when the user requests activation. automation.list exposes editable preset templates; presetId expands one as a normal disabled Automation by default. Events and templates grant no authority. Trigger payloads never approve future tools; every Run uses current capabilities and exact approvals. Core resolves trusted relative time and validates policy. Choose currentSession for greetings, reminders and conversational follow-ups; choose backgroundSession for independent work. Set reportBack true only when its result was requested in this chat. Acknowledge the saved destination. Core binds all Session identifiers.",

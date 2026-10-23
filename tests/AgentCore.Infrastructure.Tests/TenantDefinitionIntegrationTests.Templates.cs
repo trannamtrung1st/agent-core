@@ -20,6 +20,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         await using var f = await Fixture.Create(sqlite);
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var catalog = await f.Service.ListTemplatesAsync(owner.OwnerPrincipalId, owner.TenantId);
+        Assert.DoesNotContain(catalog, item => item.Id == "approval-demo");
+        var retired = await Assert.ThrowsAsync<AccessDeniedException>(() => f.Service.ForkTemplateAsync(owner.OwnerPrincipalId,
+            owner.TenantId, "approval-demo", 1, "Retired approval demo", 1).AsTask());
+        Assert.Equal("definition_unavailable", retired.ReasonCode);
         var template = catalog.Single(d => d.Id == "customer-support" && d.Version == 3);
         var source = (await Fixture.ShippedTemplates().ReadAsync(template.Id, template.Version))!;
         var draft = await f.Service.ForkTemplateAsync(owner.OwnerPrincipalId, owner.TenantId, template.Id, template.Version, "Private support", 1);

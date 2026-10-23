@@ -1,0 +1,39 @@
+# Local approval grant retirement — 2026-10-23
+
+The live response protocol and embedded Run approval state are already retired. This slice removes the remaining caller-constructed grant and its local preview/send pipeline. Canonical tenant operations retain their existing request, decision, grant, receipt and continuation owners.
+
+## Implemented boundary
+
+- Deleted `ToolApprovalGrant`, `ToolActionPreparation`, their local preparation records, direct Email/HTTP/Drive/management/identity-maintenance preview facades and the response-local `EmailSendLedger`. The generic executor and older helper services accept no local approval-grant parameter. RequireApproval cannot be satisfied by caller-supplied tool fields or a standalone grant object.
+- Removed generic Email/HTTP send callbacks and the standalone `EmailAccountService.SendAsync` path. Canonical account operation services still use their owned immutable drafts, exact saved consent, native adapters and durable effect receipts. Normalization, provider adapters and their safety checks remain.
+- Removed the unused HTTP-client dependency from the generic executor and unused send-logging dependencies from the account helper. Retained generic Harness and identity-maintenance helpers refuse operations requiring consent; canonical tenant services retain their independent policy and effect owners.
+- Removed the synthetic sensitive-action tool, implementation, scripted special cases and `approval-demo` template. Actual tenant template discovery omits it and rejects a forged fork, while the supported template fork/publish workflow still succeeds.
+- Retained ordinary browser/media/type, workspace, account discovery/read/draft, argument validation and immutable-draft checks. Replaced tenant preview-facade assertions with actual dispatch attempts that withhold a private draft for missing, stripped, foreign and actual tenant frames even when approval facts are forged.
+
+Twenty-eight reviewed obsolete test methods depended on constructing a local grant or invoking a deleted preparation facade. They were removed by C# syntax-node boundaries. Current tenant account/Memory/Harness/configuration/Automation workflows and native adapter checks qualify their supported replacements; this does not make remaining historical global fixtures current tenant acceptance. The account/OAuth fixtures retain read, refresh, draft, disconnect and secrecy behavior separately from canonical dispatch.
+
+## Verification
+
+**298 distinct backend cases qualified**, with none skipped. Correction runs overlap their original selections and are counted only once. Backend tests use `dotnet test <project> --no-build --no-restore --nologo --filter <selection>`, with `FullyQualifiedName~…` selectors joined by `|` unless shown otherwise.
+
+| Selection | Qualified result and evidence |
+| --- | --- |
+| Application `ToolApprovalTests`, `ToolRegistryPolicyTests`, `HttpRequestToolTests` | **18 passed**. Forged approval facts cannot satisfy the unowned requirement or read a provider draft; normalizer/header/host checks remain. `/private/tmp/local-grant-retirement-boundary-20261023.log`. |
+| Application `EmailToolTests`, `NativeBrowserContractTests`, `WorkspaceStructureToolContractTests`, `CompactionLifecycleTests`, `TriggerScheduleSemanticsTests`, `TriggerDurablePolicyTests`, `TriggerScheduleContinuationTests` | **88 qualified passes**: 87 passed initially; a stale browser mock counter from the removed granted effect was corrected to zero and that case passed. `/private/tmp/local-grant-retirement-application-20261023.log`, `/private/tmp/local-grant-retirement-native-recheck-20261023.log`. |
+| Infrastructure tenant no-disclosure, template fork/publish/retirement and canonical account action matrix | **22 qualified passes**: 13 passed initially. Nine SQLite account cases stopped on an obsolete global trigger count; the fixture now checks its actual AccountAction insert/update guards and still attempts forbidden saved-action/source edits. All nine SQLite cases then passed through exact successors, native effects, receipts and replay/refusal behavior. `/private/tmp/local-grant-retirement-workflow-20261023.log`, `/private/tmp/local-grant-retirement-account-recheck-20261023.log`. |
+| Infrastructure retained account/OAuth, native Email/HTTP adapters, shared authority and abandoned dispatch recovery | **59 passed**. `/private/tmp/local-grant-retirement-infrastructure-20261023.log`. |
+| Canonical Memory operations | **16 passed**, covering exact read consent, atomic consolidation/receipt reuse, forget/successor exclusion, changed or revoked sources, independent reviewers and private User facts. `/private/tmp/local-grant-retirement-memory-20261023.log`. |
+| API model account/Harness/configuration/Automation workflows | **95 passed** in 7 m 25 s. Actual model-driven account work retains immutable drafts and separate exact send consent, independent children retain their consent/receipts, and the complete Harness matrix retains direct/Assisted, grant/read/source/scope/ceiling/revision and unchanged-operation behavior across both stores. Configuration and Automation continuations remain functional. `/private/tmp/local-grant-retirement-api-20261023.log`. |
+| Solution build | **Passed**, zero warnings/errors, 6.34 s. `/private/tmp/local-grant-retirement-build-20261023-r5.log`. Command: `dotnet build AgentCore.sln --no-restore --nologo -m:1 -nodeReuse:false -p:UseSharedCompilation=false`. |
+
+The 22-case workflow selection was `Tenant_sensitive_dispatch_cannot_read_a_legacy_draft`, `Shipped_template_fork_owns_approved_knowledge` and `Account_actions_use_owned_atomic_drafts_exact_successors_and_factual_native_receipts_without_replay`. Its corrected SQLite-only recheck used the last method selector with `&DisplayName~sqlite: True`; it selected and passed nine cases.
+
+The 59-case Infrastructure selection was `EmailAccountIntegrationTests`, `GmailOAuthWorkflowTests`, `HttpRequestClientTests`, `GmailEmailProviderTests`, `ImapSmtpEmailProviderTests`, `Shared_tool_boundary_uses_actual_executor_roles`, `Account_abandoned_claim_recovery` and `Account_password_read_consent`. Memory used `FullyQualifiedName~Tenant_memory_operation_&FullyQualifiedName!~migration`.
+
+The API selection was `Model_account_actions_create_immutable_draft_then_request_separate_exact_send_and_return_factual_results`, `Model_immediate_background_account_actions_preserve_child_consent_successors_and_exact_effects`, `Canonical_Harness_commands_retain_independent_delegation_exact_effect_and_partial_assessment`, `Harness_command_pending_exact_assessment_and_effect_survive_SQLite_recreation`, `Tenant_model_Automation_mutations_create_inspect_edit_enable_disable` and `Canonical_configuration_`.
+
+Only test fixtures changed after the first passing production build; successful unrelated cases were retained. Source scanning found zero retired grant/preparation/demo/ledger API references in production source, tests or shipped agents. No Markdown links target deleted sources; changed-document link/anchor/fence checks and whitespace preflight pass. No frontend source changed, so browser/frontend builds were not repeated. CI, live providers and proposal-wide acceptance were not run or claimed.
+
+## Remaining scope
+
+This removes one complete local grant pipeline, not every legacy service/store assumption. Older Harness preparation/approval state and global/profile service APIs still require source/authority reconciliation. The final tool-transport inventory, approval-dependency/schema consolidation and proposal-wide security, isolation, functional and UI acceptance remain open in the [delivery ledger](multitenant-iam-delivery-2026-10-16.md). No permission catalog, approval default, schema or migration changes are made here; no user data was reset.

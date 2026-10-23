@@ -92,8 +92,7 @@ public static partial class TriggerScheduleCommands
         IAgentInstanceStore? instances = null,
         IAgentDefinitionStore? definitions = null,
         IMemoryStore? profiles = null,
-        AdminAutomationAuthoringService? automationAuthoring = null,
-        ToolApprovalGrant? approval = null)
+        AdminAutomationAuthoringService? automationAuthoring = null)
     {
         authorizer ??= DefaultAuthorizer;
         if (registrations is null)
@@ -112,13 +111,9 @@ public static partial class TriggerScheduleCommands
         if (context.Owner is not TriggerOwner owner) return Result("forbidden", "Trusted Automation owner is required.");
         if (required != TriggerCommandAction.List)
         {
-            var approved = approval is not null && approval.ToolName == toolName && approval.ActionHash == prepared.Request!.ActionHash
-                && context.ResponseId != Guid.Empty && approval.ResponseId == context.ResponseId;
-            if (approval is not null && !approved) return Result("stale_approval", "Approval does not match this exact Automation action.");
             var receipt = context.Verification;
-            var verdict = approved ? new TriggerCommandAuthorizationVerdict(TriggerCommandAuthorizationDecision.Allow)
-                : receipt?.Verdict is { } verified && receipt.Request?.ActionHash == prepared.Request!.ActionHash && receipt.SourceEventId == context.SourceEventId
-                    ? verified : await authorizer.AuthorizeAsync(prepared.Request!, cancellationToken).ConfigureAwait(false);
+            var verdict = receipt?.Verdict is { } verified && receipt.Request?.ActionHash == prepared.Request!.ActionHash && receipt.SourceEventId == context.SourceEventId
+                ? verified : await authorizer.AuthorizeAsync(prepared.Request!, cancellationToken).ConfigureAwait(false);
             if (verdict.Decision != TriggerCommandAuthorizationDecision.Allow)
                 return AuthorizationFailure(verdict);
         }
@@ -541,8 +536,7 @@ public static partial class TriggerScheduleCommands
         TriggerCommandContext context,
         JsonElement arguments,
         CancellationToken cancellationToken,
-        AdminAutomationAuthoringService? automationAuthoring = null,
-        ToolApprovalGrant? approval = null)
+        AdminAutomationAuthoringService? automationAuthoring = null)
     {
         RequirePolicy(definition, "cancel", requireUserScheduling: false);
         var id = RequireId(arguments);

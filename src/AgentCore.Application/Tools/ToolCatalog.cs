@@ -59,7 +59,6 @@ public static class ToolCatalog
     public const string EmailRead = "email.read";
     public const string EmailCreateDraft = "email.create_draft";
     public const string EmailSend = "email.send";
-    public const string DemoSensitiveAction = "demo.sensitive_action";
     public const string AutomationCreate = "automation.create";
     public const string AutomationList = "automation.list";
     public const string AutomationInspect = "automation.inspect";
