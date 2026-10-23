@@ -264,8 +264,8 @@ public sealed class OrderPlacedAdmissionTests
             Now,
             Now,
             UnattendedModelCatalogKey: unattendedModel));
-        var profiles = new LocalUserProfileService(memory, TimeProvider.System);
-        var profile = await profiles.GetLocalProfileAsync();
+        var profile = new UserProfile(LocalUserProfile.Id, 1, LocalUserProfile.CreateDefaultSeed(Now), Now);
+        await memory.SaveProfileAsync(profile, 0);
         triggers ??= new InMemoryTriggerStore();
         events ??= new InMemoryExternalEventStore();
         logs ??= new ListLogger();

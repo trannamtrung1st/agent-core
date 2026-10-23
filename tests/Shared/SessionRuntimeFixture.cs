@@ -6,6 +6,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,18 @@ internal static class SessionRuntimeFixture
     private sealed record FixtureContext(IAgentRunStore Runs, TimeProvider Time);
     internal static void Bind(IMemoryStore sessions, IAgentRunStore runs) => Runs.Add(sessions, runs);
     internal static readonly Guid ProfileId = Guid.Parse("bbcc7700-0000-4000-8000-000000000001");
+    // Literal physical state for isolated mailbox/adapter tests; not Session admission or tenant authority.
+    internal static async Task<SessionSnapshot> SeedAsync(IMemoryStore store, AgentDefinition definition, DateTimeOffset now,
+        SessionMode mode = SessionMode.Text, string? locale = null, SessionModelSelection? selection = null,
+        SessionPurpose? purpose = null, SessionCompletionPolicy? policy = null)
+    {
+        var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, definition, mode, null, SessionStatus.Created, [], "", 0, null,
+            ProfileId, now, now, AgentInstanceId: Guid.NewGuid(), PinnedPersona: definition.Identity,
+            SpeechLocaleOverride: locale, ModelSelection: selection, Purpose: purpose ?? SessionPurpose.OngoingDefault,
+            CompletionPolicy: policy ?? SessionCompletionPolicy.Default);
+        await store.SaveAsync(snapshot, 0); return snapshot;
+    }
+
     internal static SessionRuntime Create(
         SessionSnapshot snapshot,
         ILanguageModel languageModel,

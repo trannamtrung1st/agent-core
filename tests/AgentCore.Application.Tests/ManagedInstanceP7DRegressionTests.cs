@@ -60,80 +60,6 @@ public sealed class ManagedInstanceP7DRegressionTests
     private const string FirstInstanceIdentityMemory = "P7D_FIRST_INSTANCE_IDENTITY_USER_SENTINEL";
 
     [Fact]
-    public async Task Archived_managed_instance_retains_session_memory_and_trigger_history()
-    {
-        await ForEachDurableStore(async (sessions, instances, structured, triggers, clock) =>
-        {
-            var definitions = new VersionedDefinitions(SampleDefinitions.Examiner);
-            var service = Service(instances, definitions, sessions, clock);
-            var manager = Manager(definitions, sessions, service, clock, structured);
-            var managed = await service.CreateAsync("examiner", 1);
-            var session = await manager.CreateForInstanceAsync(managed.InstanceId, SessionMode.Text);
-            await sessions.SaveAsync(
-                session with
-                {
-                    Revision = session.Revision + 1,
-                    Entries =
-                    [
-                        new ConversationEntry(
-                            Guid.Parse("019944af-00f3-7000-8000-000000000001"),
-                            1,
-                            null,
-                            ConversationRole.User,
-                            "archived history line",
-                            null,
-                            EntryStatus.Completed,
-                            SessionMode.Text,
-                            0,
-                            21,
-                            Now)
-                    ],
-                    LastEntrySequence = 1
-                },
-                session.Revision);
-
-            foreach (var (subject, content, scope) in new[] {
-                ("Retention", "survives archive", MemoryScope.Session),
-                ("Identity retention", FirstInstanceIdentityMemory, MemoryScope.IdentityUser) })
-                await structured.InsertAsync(new(Guid.NewGuid(), session.SessionId, MemoryKind.Fact, MemoryItemStatus.Active,
-                    subject, content, StructuredMemoryItem.SubjectKeyFor(subject), new("fixture", [], null, Now), Now, Now,
-                    scope, scope == MemoryScope.IdentityUser ? managed.InstanceId : null, scope == MemoryScope.IdentityUser ? ProfileId : null));
-
-            var owner = new TriggerOwner(managed.InstanceId, ProfileId);
-            var automationId = Guid.Parse("019944af-00f3-7000-8000-000000000002");
-            var due = Now.AddHours(2);
-            await triggers.CreateAsync(new Automation(
-                automationId,
-                owner,
-                AutomationStatus.Completed,
-                "Completed schedule",
-                new OneShotSchedule(due, "UTC", null, null),
-                due,
-                due,
-                0,
-                1,
-                1,
-                new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
-                null));
-
-            var archived = await service.SetLifecycleAsync(
-                managed.InstanceId,
-                AgentInstanceLifecycle.Archived,
-                managed.Revision);
-            Assert.Equal(AgentInstanceLifecycle.Archived, archived.Lifecycle);
-
-            var reloaded = (await sessions.LoadAsync(session.SessionId))!;
-            Assert.Equal("archived history line", Assert.Single(reloaded.Entries).Text);
-            Assert.Contains(await structured.ListActiveAsync(session.SessionId), item => item.Content == "survives archive");
-            Assert.Contains(await structured.ListActiveIdentityUserAsync(managed.InstanceId, ProfileId), item => item.Content == FirstInstanceIdentityMemory);
-            var trigger = await triggers.GetAsync(owner, automationId);
-            Assert.NotNull(trigger);
-            Assert.Equal(AutomationStatus.Completed, trigger.Status);
-            Assert.Equal("Completed schedule", trigger.Instructions);
-        });
-    }
-
-    [Fact]
     public async Task Archived_managed_instance_leaves_accepted_running_work_unchanged()
     {
         await ForEachRunStore(async (work, runMemory) =>
@@ -233,21 +159,6 @@ public sealed class ManagedInstanceP7DRegressionTests
         IMemoryStore sessions,
         TimeProvider clock) =>
         new(instances, definitions, Ids(8, "019944af-00f6-7000-8000-"), clock);
-
-    private static SessionManager Manager(
-        IAgentDefinitionStore definitions,
-        IMemoryStore sessions,
-        IAgentInstanceService instances,
-        TimeProvider clock,
-        IStructuredMemoryStore structured) =>
-        new(
-            definitions,
-            sessions,
-            Ids(16, "019944af-00f7-7000-8000-"),
-            clock,
-            new VoiceAvailability { SpeechAdaptersResolved = true },
-            structuredMemory: structured,
-            instances: instances);
 
     private static DeterministicIdGenerator Ids(int count, string prefix) =>
         new(

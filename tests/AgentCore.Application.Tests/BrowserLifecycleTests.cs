@@ -22,23 +22,10 @@ public sealed class BrowserLifecycleTests
     private static readonly string[] FixtureOrigin = ["http://127.0.0.1:5091"];
 
     [Fact]
-    public async Task Delete_and_end_release_the_browser_session()
+    public async Task End_and_dispose_release_the_browser_session()
     {
-        var lease = new CountingLease();
-        var sessions = new InMemoryMemoryStore();
-        var manager = OwnedSessions.Manager(
-            new StaticDefinitions(SampleDefinitions.Examiner),
-            sessions,
-            Ids("019944af-00c1-7000-8000-", "873f07d1-e264-4c81-a31b-7e59e940c1"),
-            TimeProvider.System,
-            new VoiceAvailability { SpeechAdaptersResolved = true },
-            browserLease: lease);
-        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
-        await manager.DurablyDeleteAsync(created.SessionId);
-        Assert.Equal([created.SessionId], lease.Sessions);
-
         var browser = new HoldingBrowser();
-        lease = new CountingLease();
+        var lease = new CountingLease();
         var runtime = Runtime(browser, lease, new OneNavigateModel());
         await runtime.AttachAsync();
         Assert.True(await runtime.RequestEndAsync());

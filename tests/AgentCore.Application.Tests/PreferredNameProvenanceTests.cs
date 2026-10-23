@@ -55,68 +55,6 @@ public sealed class PreferredNameProvenanceTests
         Assert.DoesNotContain("Do not invent one.", sections.Text(ContextSectionId.Profile), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Create_does_not_seed_friend_and_created_session_prompt_lacks_invented_name()
-    {
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
-        var store = new InMemoryMemoryStore();
-        var manager = CreateManager(store, time);
-        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
-        var profile = await store.LoadProfileAsync(LocalUserProfile.Id);
-        Assert.NotNull(profile);
-        Assert.False(profile!.Preferences.ContainsKey("preferredName"));
-
-        var model = new RecordingLanguageModel(new Infrastructure.Providers.Synthetic.ScriptedLanguageModel());
-        var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0008-7000-8000-{index:D12}")),
-            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b848")]);
-        await using var runtime = SessionRuntimeFixture.Create(
-            created,
-            model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
-            store,
-            new CapturingSessionOutput(),
-            ids,
-            time,
-            NullLogger<SessionRuntime>.Instance);
-        await runtime.AttachAsync();
-        await runtime.SubmitUserTextAsync("Hello");
-        await runtime.WaitUntilIdleAsync();
-        Assert.NotNull(model.LastRequest);
-        var memory = model.LastRequest!.Context!.Text(ContextSectionId.Profile);
-        Assert.DoesNotContain("friend", memory, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("preferredName=", memory, StringComparison.Ordinal);
-        Assert.Contains("Never invent a preferred user name", model.LastRequest.Context!.Text(ContextSectionId.OperatingContract));
-        Assert.Contains(model.LastRequest.Messages, message => message.Role == ModelRole.User && message.Text == "Hello");
-    }
-
-    [Fact]
-    public async Task Ensure_strips_durable_seeded_friend_before_prompt()
-    {
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
-        await using var harness = await SqliteTestHarness.CreateMigratedAsync();
-        await harness.Store.SaveProfileAsync(
-            new UserProfile(
-                LocalUserProfile.Id,
-                1,
-                LocalUserProfile.CreateDefaultSeed(time.GetUtcNow()),
-                time.GetUtcNow()),
-            0);
-        await using (var db = await harness.Factory.CreateDbContextAsync())
-        {
-            var row = await db.Profiles.SingleAsync(item => item.ProfileId == LocalUserProfile.Id.ToString("D"));
-            row.PreferencesJson = """{"language":"en","preferredName":"friend"}""";
-            await db.SaveChangesAsync();
-        }
-
-        var manager = CreateManager(harness.Store, time);
-        await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
-        var profile = await harness.Store.LoadProfileAsync(LocalUserProfile.Id);
-        Assert.NotNull(profile);
-        Assert.False(profile!.Preferences.ContainsKey("preferredName"));
-        Assert.Equal("en", profile.Preferences["language"].Value);
-    }
-
     private static AgentContext Context(UserProfile profile)
     {
         var now = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero);
@@ -144,31 +82,4 @@ public sealed class PreferredNameProvenanceTests
             new AgentTrigger(user.EntryId, TriggerKind.UserTurn, "Hello"));
     }
 
-    private static SessionManager CreateManager(IMemoryStore store, FakeTimeProvider time)
-    {
-        var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0009-7000-8000-{index:D12}")),
-            Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b9{index:D2}")).ToArray());
-        return OwnedSessions.Manager(
-            new StaticDefinitions(SampleDefinitions.Examiner),
-            store,
-            ids,
-            time,
-            new VoiceAvailability { SpeechAdaptersResolved = true });
-    }
-
-    private sealed class StaticDefinitions(AgentCore.Domain.Definitions.AgentDefinition definition)
-        : IAgentDefinitionStore
-    {
-        public ValueTask<IReadOnlyList<AgentCore.Domain.Definitions.AgentDefinition>> ListAsync(
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<IReadOnlyList<AgentCore.Domain.Definitions.AgentDefinition>>([definition]);
-
-        public ValueTask<AgentCore.Domain.Definitions.AgentDefinition?> GetAsync(
-            string id,
-            int? version = null,
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<AgentCore.Domain.Definitions.AgentDefinition?>(
-                string.Equals(id, definition.Id, StringComparison.Ordinal) ? definition : null);
-    }
 }

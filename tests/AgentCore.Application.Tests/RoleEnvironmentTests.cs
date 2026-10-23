@@ -43,15 +43,8 @@ public sealed class RoleEnvironmentTests
         {
             File.Copy(Path.Combine(FindAgents(), "examiner.json"), Path.Combine(directory.FullName, "examiner.json"));
             var storeV1 = new ScenarioDefinitionStore(directory.FullName, SyntheticProviderAliases.Default);
-            var manager = OwnedSessions.Manager(
-                storeV1,
-                new InMemoryMemoryStore(),
-                new DeterministicIdGenerator(
-                    Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00e1-7000-8000-{index:D12}")),
-                    [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940be01")]),
-                TimeProvider.System,
-                new VoiceAvailability { SpeechAdaptersResolved = true });
-            var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
+            var memory = new InMemoryMemoryStore();
+            var created = await SessionRuntimeFixture.SeedAsync(memory, (await storeV1.GetAsync("examiner", 1))!, DateTimeOffset.UtcNow);
             Assert.Equal(1, created.Definition.Version);
             Assert.Equal(1, created.Definition.InitiativePolicy.ConsecutiveCap);
 
@@ -64,7 +57,7 @@ public sealed class RoleEnvironmentTests
             var latest = await storeLater.GetAsync("examiner");
             Assert.Equal(2, latest!.Version);
             Assert.Equal(3, latest.InitiativePolicy.ConsecutiveCap);
-            var pinned = await manager.GetAsync(created.SessionId);
+            var pinned = (await memory.LoadAsync(created.SessionId))!;
             Assert.Equal(1, pinned.Definition.Version);
             Assert.Equal(1, pinned.Definition.InitiativePolicy.ConsecutiveCap);
         }

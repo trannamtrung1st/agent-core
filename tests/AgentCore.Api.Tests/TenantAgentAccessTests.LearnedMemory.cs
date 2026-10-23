@@ -101,8 +101,8 @@ public sealed partial class TenantAgentAccessTests
         Assert.DoesNotContain(model.Requests.Last().Context!.Sections, section => section.Id == ContextSectionId.Memory && section.Message.Text.Contains(body, StringComparison.Ordinal));
         var retained = Assert.Single((await Json(await owner.GetAsync(memoryUrl))).GetProperty("items").EnumerateArray());
         Assert.Equal(before.GetProperty("memoryId").GetGuid(), retained.GetProperty("memoryId").GetGuid()); Assert.Equal(body, retained.GetProperty("content").GetString());
-        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Ports.IStructuredMemoryService"));
-        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Memory.MemoryAdmission"));
+        Assert.Null(typeof(AgentCore.Application.Security.TenantSessionService).Assembly.GetType("AgentCore.Application.Ports.IStructuredMemoryService"));
+        Assert.Null(typeof(AgentCore.Application.Security.TenantSessionService).Assembly.GetType("AgentCore.Application.Memory.MemoryAdmission"));
     }
 
     [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
@@ -120,8 +120,8 @@ public sealed partial class TenantAgentAccessTests
         var context = model.Requests.Last().Context!;
         Assert.Contains("PRIVATE_CUSTOMER_EVIDENCE", Assert.Single(context.Sections, s => s.Id == ContextSectionId.Memory).Message.Text);
         Assert.DoesNotContain(context.Sections, s => s.Layer != ContextLayer.Evidence && s.Message.Text.Contains("PRIVATE_CUSTOMER_EVIDENCE", StringComparison.Ordinal));
-        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Ports.IStructuredMemoryService"));
-        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Memory.MemoryAdmission"));
+        Assert.Null(typeof(AgentCore.Application.Security.TenantSessionService).Assembly.GetType("AgentCore.Application.Ports.IStructuredMemoryService"));
+        Assert.Null(typeof(AgentCore.Application.Security.TenantSessionService).Assembly.GetType("AgentCore.Application.Memory.MemoryAdmission"));
     }
 
     [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]

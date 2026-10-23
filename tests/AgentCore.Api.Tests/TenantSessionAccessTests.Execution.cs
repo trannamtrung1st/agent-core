@@ -18,7 +18,16 @@ public sealed partial class TenantSessionAccessTests
     [Fact]
     public async Task Canonical_tenant_worker_completes_actual_HTTP_text_without_a_global_profile()
     {
-        await using var factory = new ExecutingTenantFactory(); using var owner = Client(factory);
+        await using var factory = new ExecutingTenantFactory();
+        var application = typeof(AgentCore.Application.Sessions.SessionRuntimeFactory).Assembly;
+        foreach (var retired in new[] { "Sessions.SessionManager", "Sessions.LocalUserProfileService", "Ports.ILocalUserProfileService", "Ports.IProfileLiveUpdateNotifier", "Events.ProfileUpdatedReceived" })
+            Assert.Null(application.GetType("AgentCore.Application." + retired));
+        Assert.Null(typeof(AgentCore.Application.Sessions.SessionRuntimeFactory).GetMethod("Create"));
+        Assert.Null(typeof(AgentCore.Application.Sessions.SessionRuntime).GetMethod("ApplyProfileAsync"));
+        Assert.DoesNotContain(typeof(AgentCore.Application.Sessions.SessionRuntimeFactory).GetConstructors().Single().GetParameters(),
+            p => p.ParameterType == typeof(IMemoryStore) || p.ParameterType == typeof(IAgentRunStore)
+                || p.ParameterType == typeof(IAttachmentStore) || p.ParameterType == typeof(IArtifactReferenceAuthorizer));
+ using var owner = Client(factory);
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var api = $"/api/v2/tenants/{tenant}";
@@ -42,6 +51,7 @@ public sealed partial class TenantSessionAccessTests
         }
         Assert.NotNull(run); Assert.True(run.Status == AgentRunStatus.Completed, $"{run.Status}: {run.Failure?.Code}: {run.Failure?.Summary}");
         Assert.Null(run.Owner.ProfileIdOrNull); Assert.Equal(executor, run.Owner.ExecutorPrincipalId);
+        Assert.Null(await factory.Services.GetRequiredService<IMemoryStore>().LoadProfileAsync(AgentCore.Domain.Conversation.LocalUserProfile.Id));
         Assert.Equal(requester, run.Admission.ExecutionContext!.OriginalInitiatorPrincipalId);
         Assert.Equal(receipt.GetProperty("activationId").GetGuid(), run.Admission.ExecutionContext.RootActivationId);
         Assert.False(string.IsNullOrWhiteSpace(run.Result!.Text)); Assert.NotNull(run.Result.OutcomeEntryId);
@@ -53,7 +63,8 @@ public sealed partial class TenantSessionAccessTests
     [Fact]
     public async Task Canonical_dispatch_rechecks_executor_authority_before_starting_a_model()
     {
-        await using var factory = new AgentCoreApiFactory(); using var owner = Client(factory);
+        await using var factory = new AgentCoreApiFactory();
+ using var owner = Client(factory);
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var api = $"/api/v2/tenants/{tenant}";

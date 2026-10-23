@@ -208,11 +208,6 @@ public sealed record TransportResumedSnapshotReceived(
     SessionSnapshot Snapshot,
     TaskCompletionSource Applied) : SessionInput(Context);
 
-public sealed record ProfileUpdatedReceived(
-    EventContext Context,
-    UserProfile Profile,
-    TaskCompletionSource Applied) : SessionInput(Context);
-
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);
 
 public sealed record DurableOccurrenceReceived(

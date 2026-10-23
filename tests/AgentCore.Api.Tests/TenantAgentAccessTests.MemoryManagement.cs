@@ -13,7 +13,7 @@ public sealed partial class TenantAgentAccessTests
     {
         var model = new LearnedMemoryModel(); model.Turns.Enqueue([Learn("PRIVATE_MANAGEMENT_EVIDENCE")]);
         await using var app = new RuntimeStateFactory(sqlite, model: model);
-        var application = typeof(AgentCore.Application.Sessions.SessionManager).Assembly;
+        var application = typeof(AgentCore.Application.Security.TenantSessionService).Assembly;
         foreach (var retired in new[] { "Admin.AdminMemoryService", "Admin.AdminMemoryHistoryService", "Admin.AdminAutomationService", "Admin.AdminAutomationHistoryService", "Ports.IAdminP7eHistoryMutator" })
             Assert.Null(application.GetType("AgentCore.Application." + retired));
         using var owner = app.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var (tenant, agent) = await OwnedMemoryAgent(owner); await MemoryExecutor(owner, tenant, agent);

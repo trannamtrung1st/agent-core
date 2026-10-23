@@ -421,7 +421,7 @@ The canonical MVP is a composed, text-first voice pipeline: STT → Interaction 
 ```mermaid
 flowchart TD
     Browser[React SPA: microphone, chat, speaker] <-->|SignalR + MessagePack| Hub[Thin session hub]
-    Browser -->|REST lifecycle| Api[Minimal APIs / SessionManager]
+    Browser -->|REST lifecycle| Api[Minimal APIs / TenantSessionService]
     Api --> Session[Session Runtime: single state owner]
     Hub -->|UI commands| Session
     Hub -->|Binary PCM: serverAudio ingress only| STT[ISpeechRecognizer / STT]
@@ -467,7 +467,7 @@ Authoring, Runtime, and Operations are responsibilities inside the existing modu
 
 **Authoring** prepares immutable configuration. `AgentDefinitionLifecycleService` creates, updates, and deletes drafts and deprecates publications through `IAgentDefinitionAdminStore`. `AgentDefinitionDraftPublishService` runs validation, evaluation evidence, and diff, then asks the lifecycle service to commit the publication. Optional `skills` publish with that Definition version and stay immutable. A missing `skills` list is an empty set. A Skill requires capabilities and Definition resources; it does not add tools, credentials, approval, or owner scope. `AgentDefinitionLifecycleService.CreateNewDraftAsync` stores a server starter (`SourceKind.New`); the browser sends only the definition id. `AgentDefinitionResourceService` mutates draft resource bytes, including one-revision batch bind; publish freezes those bytes. Knowledge retrieval uses `KnowledgeSourcePaths.ResolveBackingPath` (explicit `resourcePath`, otherwise `knowledge/{identity}`). Built-in definition files stay immutable seeds. Publishing or deprecating does not rewrite stored session snapshots.
 
-**Runtime** executes one conversation per session. `SessionManager` activates a session. That session's `SessionRuntime` mailbox is the only writer of live conversational state. Canonical learned Memory enters through `TenantMemoryService` and tenant-qualified projection/admission; global Profile recall is retired. Session snapshots stay on `IMemoryStore`. Session tools mutate the session workspace and create artifacts under session authorization. The chat catalog lists active managed instances through `AgentInstanceService.ListChatEligibleAsync`. Session creation requires an explicit eligible Agent Instance; no identity is created or backfilled implicitly.
+**Runtime** executes one conversation per session. `TenantSessionService` admits authenticated tenant-owned Sessions; `SessionHost` activates them through `SessionRuntimeFactory.CreateTenant`. That session's `SessionRuntime` mailbox is the only writer of live conversational state. Canonical learned Memory enters through `TenantMemoryService` and tenant-qualified projection/admission; global Profile recall is retired. Session snapshots stay on `IMemoryStore`. Session tools mutate the session workspace and create artifacts under session authorization. The chat catalog lists active managed instances through `AgentInstanceService.ListChatEligibleAsync`. Session creation requires an explicit eligible Agent Instance; no identity is created or backfilled implicitly.
 
 **Operations** uses one Automation authoring owner and the existing TriggerScheduler → TriggerOccurrenceRouter → BackgroundOccurrenceIntake → AgentRunCoordinator → SessionHost/SessionRuntime substrate. Authored runs always execute durably with frozen instructions/model and current authority checks. Internal native environment occurrences can still dispatch to a live runtime. Admin history is append-only evidence, not a policy engine.
 
@@ -484,7 +484,7 @@ Infrastructure stores persist the rows named below. API routes map commands and 
 | DefinitionResource | `AgentDefinitionResourceService` | draft resource bytes; publish freezes them in the publication transaction | definition-resource stores | evaluation manifest, published knowledge reads | configuration |
 | AgentInstance, managed | `AdminAgentInstanceService` | create, reassociate/rollback, persona revision, archive/unarchive, and archived hard delete when unreferenced, each with an `AdminEvent` | `IAgentInstanceStore` | sessions pin `agentInstanceId`; chat catalog `GET /api/v2/agent-instances` through `AgentInstanceService.ListChatEligibleAsync`; triggers; work owner; Admin reads | runtime identity |
 | PersonaRevision | `AdminAgentInstanceService.UpdatePersonaAsync` | typed persona revision on the managed instance, with history | instance row | prompt context, work provenance | trusted identity |
-| Session | `SessionManager` activates; `SessionRuntime` mailbox owns live mutation | mailbox only | `IMemoryStore` snapshots | hub, catalog, history | runtime |
+| Session | `TenantSessionService` owns admission/metadata/lifecycle; `SessionHost` binds `SessionRuntime` | mailbox owns live mutation; typed tenant transactions own detached changes | `ITenantSessionStore` / `ITenantRuntimeStore` | authenticated tenant hub, catalog, history | runtime |
 | Activation / AgentRun | Session mailbox atomically admits the effective input batch | shared coordinator claims/retries; mailbox owns execution, checkpoint, approval and terminal outcome | `IAgentRunStore` | Session history, Background Work, Admin Runs | execution |
 | Learned memory | `TenantMemoryService` and `TenantMemoryRules` | actual tenant Run response transaction, current policy and independent raw permissions | `ITenantLearnedMemoryStore` | guarded private Evidence and canonical Memory management | learned state; Core admits proposals into owned scopes. |
 | Human Memory management | `TenantMemoryManagementService` | original live human, actual owned sources, raw read/manage and exact item/scope CAS | `ITenantMemoryManagementStore` with tenant security revision and body-free audit | tenant Memory UI | retained-state inspection/forgetting; no local-Profile authority or parallel history transaction. |
@@ -492,7 +492,7 @@ Infrastructure stores persist the rows named below. API routes map commands and 
 
 Known boundaries that stay separate:
 
-- All Agent Instances share `IAgentInstanceStore`. Product HTTP for create, persona, lifecycle, and active-version changes calls `AdminAgentInstanceService` and writes an `AdminEvent`. `AgentInstanceService` still exposes history-free `CreateAsync`, `UpgradeAsync`, `UpdatePersonaAsync`, and `SetLifecycleAsync`. Production HTTP and `SessionManager` do not call those four methods. They remain on `IAgentInstanceService` for existing tests. They are not the Admin owner and are not a second product policy.
+- Historical single-owner Admin services and raw `IAgentInstanceService` storage contracts are distinct from current tenant Agent/configuration admission. Current product Session creation uses `TenantSessionService`, current authenticated human membership and the actual Agent executor. The global `SessionManager`/local-Profile facade and generic factory entry are retired; raw lifecycle fixtures do not confer tenant authority.
 - Automation mutation uses current owner or current-turn authorization and the same revisioned domain/store rules; provenance is immutable across later owner edits.
 
 ### Effective configuration
@@ -531,8 +531,10 @@ Justified non-merges: do not merge attachment, artifact, definition-resource, an
 
 ## Per-session execution
 
+The factory has only `CreateTenant`: canonical storage, execution, continuation, attachment, artifact, Profile and Memory owners are required. It does not resolve a global Profile, accept an unowned Run store or expose a generic runtime creation path. Profile refresh follows the original human source protocol through `TenantRunProfileService`; there is no global Profile mailbox fan-out. See the [retirement evidence](reports/global-session-profile-authority-retirement-verification-2026-10-23.md).
+
 ```text
-SessionManager (singleton, atomically get/create per sessionId)
+SessionHost (singleton registry, tenant-bound Runtime per owned Session)
   +-- SessionRuntime A (one logical async event loop)
   |     +-- bounded Channel<SessionInput>, single reader
   |     +-- current mode Text|Voice (may transition; one conversation)

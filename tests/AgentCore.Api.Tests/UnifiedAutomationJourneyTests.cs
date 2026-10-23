@@ -28,10 +28,4 @@ public sealed class UnifiedAutomationJourneyTests
         Assert.Equal("trigger_depth_exceeded", reason);
     }
 
-    internal static async Task Drain(IServiceProvider s)
-    {
-        await s.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
-        await s.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync();
-        await s.ExecuteRunsAsync(100);
-    }
 }

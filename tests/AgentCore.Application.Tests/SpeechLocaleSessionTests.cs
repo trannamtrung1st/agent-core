@@ -16,48 +16,13 @@ namespace AgentCore.Application.Tests;
 
 public sealed class SpeechLocaleSessionTests
 {
-    [Fact]
-    public async Task Override_survives_persistence_without_rewriting_text_language()
-    {
-        var store = new InMemoryMemoryStore();
-        var manager = CreateManager(store);
-        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
-        Assert.Equal("en", created.Definition.ConversationPolicy.Language);
-        Assert.Null(created.SpeechLocaleOverride);
-        Assert.Equal("en", SpeechLocale.Resolve(created).Effective);
-        Assert.Equal(SpeechLocaleSource.AgentDefault, SpeechLocale.Resolve(created).Source);
-
-        var updated = await manager.SetSpeechLocaleAsync(created.SessionId, "vi-vn");
-        Assert.Equal("vi-VN", updated.SpeechLocaleOverride);
-        Assert.Equal("en", updated.Definition.ConversationPolicy.Language);
-
-        var loaded = await store.LoadMetadataAsync(created.SessionId);
-        Assert.Equal("vi-VN", loaded!.SpeechLocaleOverride);
-        Assert.Equal("en", loaded.Definition.ConversationPolicy.Language);
-        Assert.Equal("vi-VN", SpeechLocale.Resolve(loaded).Effective);
-        Assert.Equal(SpeechLocaleSource.SessionOverride, SpeechLocale.Resolve(loaded).Source);
-    }
-
-    [Fact]
-    public async Task Invalid_override_is_rejected_at_the_application_boundary()
-    {
-        var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
-        var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            manager.SetSpeechLocaleAsync(created.SessionId, "en_US"));
-        Assert.Equal("ValidationError", error.Code);
-        var loaded = await manager.GetAsync(created.SessionId);
-        Assert.Null(loaded.SpeechLocaleOverride);
-        Assert.Equal("en", loaded.Definition.ConversationPolicy.Language);
-    }
 
     [Fact]
     public async Task Reconnect_ready_exposes_effective_locale_not_only_agent_language()
     {
         var store = new InMemoryMemoryStore();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
-        var manager = CreateManager(store, time);
-        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text, speechLocaleOverride: "fr-FR");
+        var created = await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, time.GetUtcNow(), locale: "fr-FR");
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, time, store, created);
         await runtime.AttachAsync();
@@ -73,11 +38,7 @@ public sealed class SpeechLocaleSessionTests
     {
         var store = new InMemoryMemoryStore();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
-        var created = await CreateManager(store, time).CreateOwnedAsync(
-            "examiner",
-            null,
-            SessionMode.Voice,
-            speechLocaleOverride: "ja-JP");
+        var created = await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, time.GetUtcNow(), SessionMode.Voice, "ja-JP");
         var recognizer = new RecordingRecognizer();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, time, store, created, recognizer);
@@ -96,8 +57,7 @@ public sealed class SpeechLocaleSessionTests
             SpeechAdaptersResolved = true,
             LocaleSupport = new RejectingLocaleSupport("ja-JP")
         };
-        var manager = CreateManager(store, time, voice);
-        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text, speechLocaleOverride: "ja-JP");
+        var created = await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, time.GetUtcNow(), locale: "ja-JP");
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, time, store, created, voice: voice);
         await runtime.AttachAsync();
@@ -108,22 +68,6 @@ public sealed class SpeechLocaleSessionTests
         Assert.True(await runtime.SubmitPersistedUserTextAsync("Still text", Guid.Parse("019944af-0000-7000-8000-000000000099")));
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
-    }
-
-    private static SessionManager CreateManager(
-        IMemoryStore store,
-        TimeProvider? time = null,
-        VoiceAvailability? voice = null)
-    {
-        var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
-            Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        return OwnedSessions.Manager(
-            new StaticDefinitions(SampleDefinitions.Examiner),
-            store,
-            ids,
-            time ?? new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero)),
-            voice ?? new VoiceAvailability { SpeechAdaptersResolved = true });
     }
 
     private static SessionRuntime CreateRuntime(

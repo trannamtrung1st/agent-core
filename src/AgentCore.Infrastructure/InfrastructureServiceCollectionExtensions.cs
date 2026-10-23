@@ -372,7 +372,6 @@ public static class InfrastructureServiceCollectionExtensions
             };
         });
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
-        services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
         if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
@@ -420,7 +419,6 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IIdGenerator>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ITriggerInstancePolicyReconciliationService>()));
-        services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
 
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
@@ -463,32 +461,23 @@ public static class InfrastructureServiceCollectionExtensions
             return new SessionRuntimeFactory(
                 provider.GetRequiredService<ILanguageModel>(),
                 provider.GetRequiredService<IAgentBrain>(),
-                provider.GetRequiredService<IMemoryStore>(),
                 provider.GetRequiredService<IIdGenerator>(),
                 provider.GetRequiredService<TimeProvider>(),
                 provider.GetRequiredService<ILoggerFactory>(),
                 provider.GetRequiredService<IInterruptionClassifier>(),
                 provider.GetRequiredService<InteractionPolicy>(),
-                speech.Recognizer,
-                speech.Synthesizer,
+                speech.Recognizer, speech.Synthesizer,
                 provider.GetRequiredService<VoiceAvailability>(),
-                provider.GetRequiredService<IAttachmentStore>(),
-                provider.GetRequiredService<IAttachmentProcessor>(),
-                provider.GetRequiredService<IArtifactReferenceAuthorizer>(),
                 provider.GetRequiredService<SessionToolExecutor>(),
-                provider.GetRequiredService<IAgentRunStore>(),
+                provider.GetRequiredService<AgentCore.Application.Security.TenantRunContinuationService>(),
+                provider.GetRequiredService<AgentCore.Application.Security.TenantArtifactReferenceService>(),
+                provider.GetRequiredService<AgentCore.Application.Security.TenantAttachmentRuntimeContextService>(),
+                provider.GetRequiredService<AgentCore.Application.Security.TenantRunProfileService>(),
+                provider.GetRequiredService<AgentCore.Application.Security.TenantMemoryService>(),
+                provider.GetRequiredService<AgentCore.Application.Security.TenantExperienceService>(),
                 provider.GetRequiredService<ILanguageModelResolver>(),
                 provider.GetRequiredService<IModelCatalog>(),
-                provider.GetRequiredService<IUserTurnCapabilityValidator>(),
-                provider.GetRequiredService<IDiagnosticIdSource>(),
-                provider.GetService<IBrowserLease>(), provider.GetRequiredService<IAgentRunAuthority>(),
-                composer: provider.GetRequiredService<AgentCore.Application.Composer.ComposerReferenceService>(),
-                tenantContinuations: provider.GetRequiredService<AgentCore.Application.Security.TenantRunContinuationService>(),
-                tenantArtifacts: provider.GetRequiredService<AgentCore.Application.Security.TenantArtifactReferenceService>(),
-                tenantAttachments: provider.GetRequiredService<AgentCore.Application.Security.TenantAttachmentRuntimeContextService>(),
-                tenantProfiles: provider.GetRequiredService<AgentCore.Application.Security.TenantRunProfileService>(),
-                tenantMemory: provider.GetRequiredService<AgentCore.Application.Security.TenantMemoryService>(),
-                tenantExperience: provider.GetRequiredService<AgentCore.Application.Security.TenantExperienceService>());
+                provider.GetRequiredService<IDiagnosticIdSource>());
         });
         services.TryAddSingleton<AgentCore.Application.Composer.ComposerReferenceService>();
         services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();

@@ -377,14 +377,6 @@ public sealed class AdminLifecycleConcurrencyTests
             deletion,
             gate);
         var instanceRuntime = new AgentInstanceService(instances, definitionCatalog, ids, clock);
-        var sessionsManager = new SessionManager(
-            definitionCatalog,
-            sessions,
-            ids,
-            clock,
-            new VoiceAvailability { SpeechAdaptersResolved = true },
-            instances: instanceRuntime,
-            lifecycleGate: gate);
         var instanceService = new AdminAgentInstanceService(
             definitionCatalog,
             instances,
@@ -402,7 +394,6 @@ public sealed class AdminLifecycleConcurrencyTests
             gate,
             lifecycle,
             instanceService,
-            sessionsManager,
             definitionCatalog,
             instanceRuntime);
     }
@@ -501,7 +492,6 @@ public sealed class AdminLifecycleConcurrencyTests
         AdminLifecycleCoordinator Gate,
         AgentDefinitionLifecycleService Lifecycle,
         AdminAgentInstanceService InstancesService,
-        SessionManager SessionsManager,
         IAgentDefinitionStore DefinitionCatalog,
         AgentInstanceService InstanceRuntime);
 }

@@ -352,19 +352,10 @@ public sealed class SessionRealtimeLifecycleTests
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var store = new InMemoryMemoryStore();
-        var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
-            Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        var manager = OwnedSessions.Manager(
-            new StaticDefinitions(SampleDefinitions.Examiner),
-            store,
-            ids,
-            time,
-            new VoiceAvailability { SpeechAdaptersResolved = true });
-        var first = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
+        var first = await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, time.GetUtcNow());
         time.Advance(TimeSpan.FromSeconds(1));
-        var second = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
-        var firstSnapshot = await manager.GetAsync(first.SessionId);
+        var second = await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, time.GetUtcNow());
+        var firstSnapshot = (await store.LoadAsync(first.SessionId))!;
 
         await using var runtime = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), store, firstSnapshot);
         await runtime.AttachAsync();
@@ -372,7 +363,7 @@ public sealed class SessionRealtimeLifecycleTests
         await runtime.DetachAsync();
         await runtime.WaitUntilIdleAsync();
 
-        var order = await manager.ListCatalogAsync(null, 50, false);
+        var order = await store.ListCatalogAsync(null, 50, false);
         Assert.Equal([second.SessionId, first.SessionId], order.Items.Select(item => item.SessionId).ToArray());
     }
 

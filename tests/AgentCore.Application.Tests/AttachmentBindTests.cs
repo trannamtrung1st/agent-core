@@ -45,17 +45,8 @@ public sealed class AttachmentBindTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var store = new InMemoryMemoryStore();
-        var manager = OwnedSessions.Manager(
-            new TestDefinitions(SampleDefinitions.Examiner),
-            store,
-            new DeterministicIdGenerator(
-                Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0004-7000-8000-{index:D12}")),
-                [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]),
-            TimeProvider.System,
-            new VoiceAvailability { SpeechAdaptersResolved = true },
-            attachments);
-        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
-        var renamed = await manager.RenameAsync(created.SessionId, "Planning notes");
+        var renamed = (await SessionRuntimeFixture.SeedAsync(store, SampleDefinitions.Examiner, DateTimeOffset.UtcNow)) with { Title = "Planning notes" };
+        await store.SaveAsync(renamed with { Revision = 2 }, 1); renamed = (await store.LoadAsync(renamed.SessionId))!;
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, attachments, store, renamed);
         var uploaded = await attachments.UploadPendingAsync(
@@ -69,31 +60,6 @@ public sealed class AttachmentBindTests
         await runtime.WaitUntilIdleAsync();
         Assert.Equal("Planning notes", runtime.Snapshot.Title);
         Assert.Equal(AttachmentState.Pending, (await attachments.GetAsync(runtime.SessionId, uploaded.AttachmentId))!.State);
-    }
-
-    [Fact]
-    public async Task Durable_delete_removes_attachment_blobs()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var store = new InMemoryMemoryStore();
-        var manager = OwnedSessions.Manager(
-            new TestDefinitions(SampleDefinitions.Examiner),
-            store,
-            new DeterministicIdGenerator(
-                Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0005-7000-8000-{index:D12}")),
-                [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b801")]),
-            TimeProvider.System,
-            new VoiceAvailability { SpeechAdaptersResolved = true },
-            attachments);
-        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
-        var uploaded = await attachments.UploadPendingAsync(
-            created.SessionId,
-            "a.txt",
-            "text/plain",
-            new MemoryStream("x"u8.ToArray()),
-            false);
-        await manager.DurablyDeleteAsync(created.SessionId);
-        Assert.Null(await attachments.GetAsync(created.SessionId, uploaded.AttachmentId));
     }
 
     private static SessionRuntime CreateRuntime(

@@ -54,4 +54,4 @@ Build: `dotnet build AgentCore.sln --no-restore --nologo -m:1 -nodeReuse:false -
 
 No CI, live Google acceptance or rendered UI run was requested for this backend slice. These checks do not establish complete proposal acceptance.
 
-The remaining global `SessionManager`/`LocalUserProfileService` composition roots, broader internal/schema reconciliation and final proposal-wide security/isolation/rendered UI acceptance are outside this Drive slice and remain active work.
+At this Drive checkpoint the global `SessionManager`/`LocalUserProfileService` composition roots remained outside the slice. The [session/profile successor](global-session-profile-authority-retirement-verification-2026-10-23.md) records their retirement. Broader internal/schema reconciliation and final proposal-wide security/isolation/rendered UI acceptance remain active work.
