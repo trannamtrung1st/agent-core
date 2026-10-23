@@ -122,7 +122,6 @@ export function reconcileOrphanedLiveConversation(
   agentRunId: null;
   outputState: "idle";
   activeProgress: null;
-  pendingApproval: null;
 } | null {
   if (liveResponseId == null || isInFlightOutput(outputState)) {
     return null;
@@ -137,7 +136,6 @@ export function reconcileOrphanedLiveConversation(
     agentRunId: null,
     outputState: "idle",
     activeProgress: null,
-    pendingApproval: null
   };
 }
 
@@ -212,7 +210,6 @@ export async function loadNewestHistoryPage(
             agentRunId: null,
             outputState: "idle",
             activeProgress: null,
-            pendingApproval: null
           })
         : {})
     });

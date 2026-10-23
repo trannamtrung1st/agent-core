@@ -214,14 +214,13 @@ public sealed class ReliabilityJourneyTests
         var s = host.Services;
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
         var snapshot = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
-        var output = new RejectAutomationApprovalOutput();
+        var output = new AgentCore.Application.Testing.CapturingSessionOutput();
         await using var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, output);
-        output.Runtime = runtime;
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync(request));
         await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
         Assert.Empty(await s.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null));
-        Assert.Contains(model.ScheduleResults, text => text.Contains("\"error\":\"" + (mode is "invalid" or "conflicting" or "unavailable" ? "rejected" : expected) + "\"", StringComparison.Ordinal));
+        Assert.Contains(model.ScheduleResults, text => text.Contains("\"error\":\"" + (mode is "invalid" or "conflicting" or "unavailable" ? "forbidden" : expected) + "\"", StringComparison.Ordinal));
     }
 
     private sealed class ClassifierModel(string mode) : ILanguageModel

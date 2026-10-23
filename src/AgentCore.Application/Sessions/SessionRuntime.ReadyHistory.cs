@@ -83,7 +83,6 @@ public sealed partial class SessionRuntime
             _snapshot.LifecycleStatus,
             SpeechLocale.Resolve(_snapshot),
             _snapshot.ModelSelection,
-            BuildPublicPendingApproval(),
             _boundAgentRun?.AgentRunId,
             _outputActivity.ToString(),
             hasOlderHistory,

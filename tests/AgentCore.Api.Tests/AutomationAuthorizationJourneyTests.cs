@@ -81,7 +81,7 @@ public sealed class AutomationAuthorizationJourneyTests
     [InlineData("explicit", null, ModelInferenceTransport.ChatCompletions)]
     [InlineData("recover", null, ModelInferenceTransport.Responses)]
     [InlineData("truncated", "authorization_classifier_invalid_output", ModelInferenceTransport.Responses)]
-    public async Task Calendar_authorization_preserves_timezone_destination_and_fail_closed_outcomes(string outcome, string? error, ModelInferenceTransport transport)
+    public async Task Calendar_semantic_intent_preserves_timezone_destination_and_fail_closed_outcomes(string outcome, string? error, ModelInferenceTransport transport)
     {
         var db = Path.Combine(Path.GetTempPath(), $"automation-authorization-{Guid.NewGuid():N}.db");
         var clock = new Clock(Now);
@@ -98,9 +98,8 @@ public sealed class AutomationAuthorizationJourneyTests
                 .CreateManagedAsync("general-assistant", 24)).InstanceId;
             var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
             sessionId = session.SessionId;
-            var output = new RejectAutomationApprovalOutput();
+            var output = new AgentCore.Application.Testing.CapturingSessionOutput();
             await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(session, output);
-            output.Runtime = runtime;
             await runtime.AttachAsync();
             Assert.True(await runtime.SubmitUserTextAsync(outcome == "explicit" ? Request : "I would like daily reflection on how you can consolidate your memory, experience at 9am"));
             await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
@@ -109,13 +108,9 @@ public sealed class AutomationAuthorizationJourneyTests
             {
                 Assert.Empty(await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null));
                 Assert.Equal(0, model.WorkRuns);
-                Assert.Contains(model.Results, result => result.GetProperty("error").GetString() == (error == "authorization_denied" ? error : "rejected"));
+                Assert.Contains(model.Results, result => result.GetProperty("error").GetString() == (error == "authorization_denied" ? error : "forbidden"));
                 Assert.Equal(outcome == "truncated" ? 2 : 1, handler.Payloads.Count);
-                if (outcome is "truncated" or "invalid" or "unavailable")
-                {
-                    var pending = Assert.Single(output.Requests);
-                    Assert.Contains("Reflect on learned Memory", pending.Details["Exact action"]);
-                }
+                Assert.DoesNotContain(output.Items, item => item.Payload?.GetType().Name == "ApprovalRequestedOutput");
                 return;
             }
             var created = Assert.Single(await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null));
@@ -144,33 +139,18 @@ public sealed class AutomationAuthorizationJourneyTests
             services.AddSingleton(catalog);
         });
         var reopenedServices = reopened.Services;
-        for (var day = 0; day < 2; day++)
-        {
-            clock.Current = Now.AddDays(day).AddHours(2).AddSeconds(-1);
-            Assert.Equal(0, (await reopenedServices.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.Current)).Admitted);
-            clock.Current = clock.Current.AddSeconds(1);
-            for (var scan = 0; scan < 2; scan++)
-            {
-                Assert.Equal(scan == 0 ? 1 : 0,
-                    (await reopenedServices.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.Current)).Admitted);
-                await reopenedServices.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
-                Assert.Equal(scan == 0 ? 1 : 0,
-                    (await reopenedServices.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync()).Accepted);
-                await reopenedServices.ExecuteRunsAsync();
-            }
-        }
-        var runs = await reopenedServices.AutomationRunsAsync(new(instanceId, LocalUserProfile.Id), model.AutomationId);
-        Assert.Equal(2, runs.Count);
-        Assert.Equal(2, runs.Select(run => run.Admission.Activation.TriggerOccurrenceId).Distinct().Count());
-        Assert.All(runs, run =>
-        {
-            Assert.Equal(AgentRunStatus.Completed, run.Status);
-            Assert.Equal("NoAction", run.Result!.OutcomeKind.ToString());
-            Assert.False(run.Result.AttentionRequired);
-        });
-        Assert.Equal(2, model.WorkRuns);
+        // This is the provider/semantic-intent contract, not a tenant admission gate.
+        // Retained schedules are read back here; the canonical tenant worker fixtures
+        // own execution, current IAM and occurrence dedupe qualification.
+        var retained = Assert.Single(await reopenedServices.GetRequiredService<ITriggerStore>().ListAsync(new(instanceId, LocalUserProfile.Id), null));
+        Assert.Equal(model.AutomationId, retained.AutomationId);
+        Assert.Equal(Instructions, retained.Instructions);
+        Assert.Equal(AutomationExecutionTarget.Background, retained.ExecutionTarget);
+        Assert.Equal(0, model.WorkRuns);
+        Assert.Empty(await reopenedServices.AutomationRunsAsync(new(instanceId, LocalUserProfile.Id), model.AutomationId));
         var history = await reopenedServices.GetRequiredService<IMemoryStore>().LoadAsync(sessionId);
         Assert.DoesNotContain(history!.Entries, entry => entry.Text == "No safe consolidation found.");
+
     }
 
     private static void ConfigureClassifier(IServiceCollection services, ILanguageModel model, HttpClient http, ModelInferenceTransport transport = ModelInferenceTransport.ChatCompletions)

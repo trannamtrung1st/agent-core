@@ -97,7 +97,6 @@ public sealed partial class SessionRuntime
             || _deactivated
             || _headlessTransportDetached
             || _activeResponseId is not null
-            || _pendingApproval is not null
             || HasPendingUserBatch()
             || LifecycleTransition.IsTerminal(_snapshot)
             || _snapshot.Status is SessionStatus.Ending or SessionStatus.Ended)
@@ -225,8 +224,7 @@ public sealed partial class SessionRuntime
         }
 
         var candidate = accepted.Candidate;
-        if (_pendingApproval is not null
-            || _deactivated
+        if (_deactivated
             || LifecycleTransition.IsTerminal(_snapshot)
             || _snapshot.Status is SessionStatus.Ending or SessionStatus.Ended
             || !string.Equals(flight.BaseSummary, _snapshot.Summary, StringComparison.Ordinal)

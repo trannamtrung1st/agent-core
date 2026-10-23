@@ -40,4 +40,4 @@ Browser navigation was reset to `about:blank`. Only the API/Vite processes start
 
 This is focused UI completion, not milestone acceptance. Backend/full solution tests, hosted CI and paid model calls were unnecessary for the presentation change and were not run. Concurrent unrelated backend/work-result changes in the shared checkout were preserved and excluded from this commit.
 
-Canonical owners: [Frontend](../13-frontend-implementation-spec.md#live-approval-observed), [Testing](../16-testing-strategy.md#automation-approval-presentation). The [semantic authorization report](semantic-automation-authorization-verification-2026-10-16.md) owns the underlying behavior.
+Canonical owners: [Frontend](../13-frontend-implementation-spec.md#durable-approval-in-chat), [Testing](../16-testing-strategy.md#automation-approval-presentation). The [semantic authorization report](semantic-automation-authorization-verification-2026-10-16.md) owns the underlying behavior.

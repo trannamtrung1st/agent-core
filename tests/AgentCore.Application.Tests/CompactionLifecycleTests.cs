@@ -270,7 +270,7 @@ public sealed class CompactionLifecycleTests
     }
 
     [Fact]
-    public async Task Short_history_and_pending_approval_do_not_compact()
+    public async Task Short_history_does_not_compact()
     {
         var shortStore = new InMemoryMemoryStore();
         var shortSnapshot = Snapshot(History(8));
@@ -285,38 +285,6 @@ public sealed class CompactionLifecycleTests
             Assert.Equal(Legacy, runtime.Snapshot.Summary);
         }
 
-        var entries = History(42);
-        var store = new InMemoryMemoryStore();
-        var snapshot = Snapshot(entries, definition: SensitiveDefinition());
-        await store.SaveAsync(snapshot, 0);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var model = new ApprovalHoldModel(release, started);
-        var output = new CapturingSessionOutput();
-        await using var approvalRuntime = Runtime(snapshot, store, model, output, new SessionToolExecutor());
-        await approvalRuntime.AttachAsync();
-        Assert.True(await approvalRuntime.SubmitPersistedUserTextAsync("first", Guid.Parse("019944af-0006-7000-8000-0000000000d7")));
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        approvalRuntime.TestCompactionSettled = settled;
-        release.TrySetResult();
-        await settled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await approvalRuntime.WaitUntilIdleAsync();
-        Assert.Contains(Goal, approvalRuntime.Snapshot.Summary, StringComparison.Ordinal);
-        Assert.True(await approvalRuntime.SubmitPersistedUserTextAsync("approve this", Guid.Parse("019944af-0006-7000-8000-0000000000d8")));
-        var approval = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approval.Payload!;
-        Assert.NotNull(approvalRuntime.BuildPublicPendingApproval());
-        Assert.Equal(1, model.CompactionCalls);
-        Assert.Contains(Goal, approvalRuntime.Snapshot.Summary, StringComparison.Ordinal);
-
-        Assert.Equal(
-            ResponseApprovalResult.Accepted,
-            await approvalRuntime.RespondApprovalAsync(
-                approvalRuntime.ActiveResponseId!.Value,
-                requested.ApprovalId,
-                ToolApprovalDecision.Approve));
-        await approvalRuntime.WaitUntilIdleAsync();
     }
 
     [Fact]

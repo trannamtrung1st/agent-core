@@ -615,7 +615,6 @@ function dropLiveTransport(connection: "reconnecting" | "failed"): void {
     captureLive: false,
     attachmentId: null,
     activeProgress: null,
-    pendingApproval: null,
     ...(connection === "reconnecting"
       ? { error: null, sessionError: null, errorFatal: false, errorHoldSequence: 0 }
       : {})
@@ -649,7 +648,6 @@ function markConnectionFailed(message: string, options?: { force?: boolean }): v
     captureLive: false,
     attachmentId: null,
     activeProgress: null,
-    pendingApproval: null,
     pendingSendQueue: []
   });
 }

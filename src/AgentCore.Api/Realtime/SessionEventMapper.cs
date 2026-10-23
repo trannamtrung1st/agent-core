@@ -135,16 +135,6 @@ public static class SessionEventMapper
                 ["state"] = ToProgressState(progress.State),
                 ["message"] = progress.Message
             }),
-            ApprovalRequestedOutput approval => ("agent.approval.requested", new Dictionary<string, object?>
-            {
-                ["approvalId"] = approval.ApprovalId.ToString(),
-                ["operationId"] = approval.OperationId.ToString(),
-                ["toolName"] = approval.ToolName,
-                ["effect"] = approval.Effect,
-                ["summary"] = approval.Summary,
-                ["details"] = approval.Details,
-                ["expiresAt"] = approval.ExpiresAt.ToString("O")
-            }),
             ErrorOutput error => ("error", new Dictionary<string, object?>
             {
                 ["category"] = error.Category,
@@ -293,10 +283,7 @@ public static class SessionEventMapper
             ["history"] = history,
             ["hasOlderHistory"] = ready.HasOlderHistory,
             ["historyBeforeSequence"] = ready.HistoryBeforeSequence,
-            ["activeResponseId"] = ready.ActiveResponseId?.ToString(),
-            ["pendingApproval"] = ready.PendingApproval is { } pendingApproval
-                ? MapPendingApproval(pendingApproval)
-                : null
+            ["activeResponseId"] = ready.ActiveResponseId?.ToString()
         };
     }
 
@@ -349,19 +336,6 @@ public static class SessionEventMapper
                     ["protocolRepairOutcome"] = failure.ProtocolRepairOutcome
                 }
                 : null
-        };
-
-    private static Dictionary<string, object?> MapPendingApproval(PublicPendingApproval approval) =>
-        new(StringComparer.Ordinal)
-        {
-            ["approvalId"] = approval.ApprovalId.ToString(),
-            ["responseId"] = approval.ResponseId.ToString(),
-            ["operationId"] = approval.OperationId.ToString(),
-            ["toolName"] = approval.ToolName,
-            ["effect"] = approval.Effect,
-            ["summary"] = approval.Summary,
-            ["details"] = approval.Details,
-            ["expiresAt"] = approval.ExpiresAt.ToString("O")
         };
 
     private static string ToTrigger(string trigger) => trigger switch

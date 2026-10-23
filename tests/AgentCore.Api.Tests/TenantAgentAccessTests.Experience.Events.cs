@@ -128,7 +128,8 @@ public sealed partial class TenantAgentAccessTests
             Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + "/operation-policies/agent-runs.read", new { mode = "always", independentReview = false, expectedRevision = await Revision(owner, tenant), expectedPolicyRevision = 0 })).StatusCode);
         if (mode == "event-revoked") Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(api + $"/role-assignments/{assignment.GetProperty("assignmentId").GetGuid()}?expectedRevision={await Revision(owner, tenant)}")).StatusCode);
         model.RepeatRejected = mode == "review-reject-changed";
-        model.FailAfterConsent = mode.EndsWith("-retry", StringComparison.Ordinal) || recovery is not null ? 1 : 0;
+        var expectRetry = mode.EndsWith("-retry", StringComparison.Ordinal) || recovery is not null;
+        model.FailAfterConsent = expectRetry ? 1 : 0;
         model.Source = first.Run.AgentRunId; model.Review = true; model.Record = mode == "record"; model.Hold = mode == "source-only";
         await active.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8);
         var runs = active.Services.GetRequiredService<ITenantRunStore>(); AgentRun? observed = null;
@@ -148,7 +149,8 @@ public sealed partial class TenantAgentAccessTests
                 Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync(api + $"/agents/{instance}/persona", new { persona = agent.Instance.Persona with { Name = "Changed after exact refusal" },
                     expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, expectedPersonaRevision = agent.Instance.PersonaRevision })).StatusCode);
             }
-            if (Volatile.Read(ref model.FailAfterConsent) == 1)
+            // The model consumes the fault flag; it cannot decide whether this fixture advances time.
+            if (expectRetry)
             {
                 await active.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
                 var source = (await runs.FindTenantRunAsync(tenant, runId))!;
@@ -231,7 +233,7 @@ public sealed partial class TenantAgentAccessTests
             Assert.Equal(AgentRunStatus.Completed, observed.Status); Assert.Single(TenantExperienceReferences.Sources(observed.Checkpoint));
             Assert.Equal(second.Run.AgentRunId, final.GetProperty("items")[0].GetProperty("source").GetProperty("dataJson").GetString() is { } raw ? JsonDocument.Parse(raw).RootElement.GetProperty("agentRunId").GetGuid() : Guid.Empty);
         }
-        if (mode.Contains("-retry", StringComparison.Ordinal) || recovery is not null)
+        if (expectRetry)
         {
             Assert.True(observed.Status == AgentRunStatus.Completed, JsonSerializer.Serialize(new { observed.Status, observed.Failure, Attempts = AgentRunToolCallCheckpoint.ReadExecutionState(observed.Checkpoint).FailedAttempts, Trace = model.Trace.TakeLast(5) })); Assert.Equal(2, observed.AttemptCount); Assert.Equal(1, model.Failures);
             var retainedApproval = (await active.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, consentRequest!.RequestId))!;

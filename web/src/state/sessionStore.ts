@@ -45,18 +45,6 @@ export type ResponseProgress = {
   message: string | null;
 };
 
-export type PendingApproval = {
-  decisionError?: string;
-  approvalId: string;
-  responseId: string;
-  operationId: string;
-  toolName: string;
-  effect: string;
-  summary: string;
-  details: Record<string, string>;
-  expiresAt: string;
-};
-
 export type HistoryFailure = {
   diagnosticId: string;
   correlationId: string | null;
@@ -165,7 +153,6 @@ export type SessionView = {
   agentRunId: string | null;
   liveResponseId: string | null;
   activeProgress: ResponseProgress | null;
-  pendingApproval: PendingApproval | null;
   tombstones: Record<string, "interrupted" | "completed" | "failed">;
   lastServerSequence: number;
   streamId: string | null;
@@ -223,7 +210,6 @@ export const emptySession = (): SessionView => ({
   agentRunId: null,
   liveResponseId: null,
   activeProgress: null,
-  pendingApproval: null,
   tombstones: {},
   lastServerSequence: 0,
   streamId: null,
@@ -579,43 +565,6 @@ function stampEntryFailure(entries: HistoryEntry[], error: SessionErrorView): Hi
     isAssistantForResponse(entry, error.responseId ?? null) ? { ...entry, failure } : entry);
 }
 
-export function pendingApprovalFromPayload(raw: unknown, activeResponseId: string | null): PendingApproval | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return null;
-  }
-
-  const row = raw as Record<string, unknown>;
-  const approvalId = asString(row.approvalId);
-  if (!approvalId) {
-    return null;
-  }
-
-  const responseId = row.responseId == null ? activeResponseId : asString(row.responseId);
-  if (!responseId) {
-    return null;
-  }
-
-  const detailsRaw = row.details;
-  const details: Record<string, string> = {};
-  if (detailsRaw && typeof detailsRaw === "object" && !Array.isArray(detailsRaw)) {
-    for (const [key, value] of Object.entries(detailsRaw as Record<string, unknown>)) {
-      if (typeof value === "string") {
-        details[key] = value;
-      }
-    }
-  }
-
-  return {
-    approvalId,
-    responseId,
-    operationId: asString(row.operationId),
-    toolName: asString(row.toolName),
-    effect: asString(row.effect),
-    summary: asString(row.summary),
-    details,
-    expiresAt: asString(row.expiresAt)
-  };
-}
 
 function asBlocks(raw: unknown): HistoryBlock[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) {
@@ -701,11 +650,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       errorFatal: false,
       connection: "failed",
       activeProgress: null,
-      pendingApproval: null
     };
   }
 
-    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "agent.block.upsert" || event.type === "playback.gain" || event.type === "agent.progress" || event.type === "agent.approval.requested" || event.type === "session.entry.upsert")) {
+    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "agent.block.upsert" || event.type === "playback.gain" || event.type === "agent.progress" || event.type === "session.entry.upsert")) {
     return { ...state, lastServerSequence: event.sequence };
   }
 
@@ -751,10 +699,6 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
           : payload.agentRunId == null ? null : asString(payload.agentRunId),
         liveResponseId: orphanLiveClear ? null : activeResponseId,
         activeProgress: null,
-        pendingApproval: pendingApprovalFromPayload(
-          payload.pendingApproval,
-          activeResponseId
-        ),
         tombstones: {},
         lastServerSequence: event.sequence,
         streamId: payload.streamId == null ? null : asString(payload.streamId),
@@ -817,36 +761,6 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         liveResponseId: event.responseId,
         entries: upsert(state.entries, entry),
         lastServerSequence: event.sequence
-      };
-    }
-    case "agent.approval.requested": {
-      if (!event.responseId) {
-        return { ...state, lastServerSequence: event.sequence };
-      }
-
-      const detailsRaw = event.payload.details;
-      const details: Record<string, string> = {};
-      if (detailsRaw && typeof detailsRaw === "object" && !Array.isArray(detailsRaw)) {
-        for (const [key, value] of Object.entries(detailsRaw as Record<string, unknown>)) {
-          if (typeof value === "string") {
-            details[key] = value;
-          }
-        }
-      }
-
-      return {
-        ...state,
-        lastServerSequence: event.sequence,
-        pendingApproval: {
-          approvalId: asString(event.payload.approvalId),
-          responseId: event.responseId,
-          operationId: asString(event.payload.operationId),
-          toolName: asString(event.payload.toolName),
-          effect: asString(event.payload.effect),
-          summary: asString(event.payload.summary),
-          details,
-          expiresAt: asString(event.payload.expiresAt)
-        }
       };
     }
     case "agent.progress": {
@@ -1009,9 +923,6 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         activeProgress: event.responseId && state.activeProgress?.responseId === event.responseId
           ? null
           : state.activeProgress,
-        pendingApproval: event.responseId && state.pendingApproval?.responseId === event.responseId
-          ? null
-          : state.pendingApproval,
         outputState: nextOutputState(event.type, liveResponseId, state.outputState),
         tombstones,
         lastServerSequence: event.sequence,

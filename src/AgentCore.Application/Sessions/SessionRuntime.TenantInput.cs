@@ -95,7 +95,6 @@ public sealed partial class SessionRuntime
             {
                 _responseTerminal = true;
                 _responseCts?.Cancel(); _brainEvaluationCts?.Cancel(); _ttsCts?.Cancel();
-                ClearPendingApproval();
             }
         }
         finally { _boundAgentRun = null; }

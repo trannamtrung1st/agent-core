@@ -450,7 +450,6 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                       draft={state.draft}
                       canSend={canSend}
                       canStop={canStop}
-                      approvalPending={state.pendingApproval !== null}
                       sendLabel={sendLabel}
                       pendingSendQueue={state.pendingSendQueue}
                       ready={composerReady}

@@ -71,7 +71,7 @@ public sealed partial class SessionRuntime
             return true;
         }
 
-        if (_agentRunAdmissionPending || _pendingApproval is not null)
+        if (_agentRunAdmissionPending)
         {
             return true;
         }

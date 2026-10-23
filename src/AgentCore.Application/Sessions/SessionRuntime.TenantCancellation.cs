@@ -49,7 +49,6 @@ public sealed partial class SessionRuntime
             {
                 _responseTerminal = true;
                 _responseCts?.Cancel(); _brainEvaluationCts?.Cancel(); _ttsCts?.Cancel();
-                ClearPendingApproval();
             }
         }
         catch (Exception ex) { DiagnosticLog.Warning(_logger, ex, _ids.NewId(), "Tenant cancellation cleanup did not settle."); }

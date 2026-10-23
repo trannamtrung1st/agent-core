@@ -22,97 +22,28 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ToolApprovalTests
 {
-    [Theory]
-    [InlineData(ToolApprovalDecision.Approve)]
-    [InlineData(ToolApprovalDecision.Reject)]
-    public async Task Valid_decision_is_acknowledged_while_durable_resume_is_still_blocked(ToolApprovalDecision decision)
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        var turns = DispatchProxy.Create<IAgentRunStore, BlockingResumeStore>();
-        var gate = (BlockingResumeStore)(object)turns;
-        await using var runtime = new Harness(CreateRuntime(output, await LoadGeneralV3(), new ScriptedLanguageModel(),
-            new SessionToolExecutor(), agentRuns: turns));
-        await runtime.Runtime.AttachAsync();
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
-        var acknowledgement = runtime.Runtime.RespondApprovalAsync(approvalEvent.ResponseId!.Value, requested.ApprovalId, decision);
-        try
-        {
-            await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.Equal(ResponseApprovalResult.Accepted, await acknowledgement.WaitAsync(TimeSpan.FromSeconds(5)));
-            Assert.False(gate.Release.Task.IsCompleted);
-            Assert.Null(runtime.Runtime.BuildPublicPendingApproval());
-        }
-        finally
-        {
-            gate.Release.TrySetResult();
-        }
-        await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(await turns.ListForSessionAsync(new(runtime.Runtime.Snapshot.AgentInstanceId,
-            runtime.Runtime.Snapshot.ProfileId!.Value), runtime.Runtime.SessionId), run => !run.IsTerminal);
-        var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Completed, assistant.Status);
-        if (decision == ToolApprovalDecision.Approve)
-            Assert.Contains("completed after approval", assistant.Text, StringComparison.OrdinalIgnoreCase);
-        else
-            Assert.DoesNotContain("completed after approval", assistant.Text, StringComparison.OrdinalIgnoreCase);
-    }
 
-    public class BlockingResumeStore : DispatchProxy
-    {
-        internal RuntimeAgentRunStore Inner { get; } = new();
-        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private bool HasDecision;
-        public FakeTimeProvider? ApprovalClock { get; set; }
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
-        {
-            if (args?[2] is AgentRunCommand.BeginApproval begin && ApprovalClock is { } clock)
-            {
-                // Model the mailbox dispatch delay before its durable pause transition.
-                clock.Advance(TimeSpan.FromMilliseconds(25));
-                args[2] = begin with { At = clock.GetUtcNow(), AtUtc = clock.GetUtcNow() };
-            }
-            if (args?[2] is AgentRunCommand.DecideApproval) HasDecision = true;
-            return
-            method!.Name == nameof(IAgentRunStore.ApplyAsync) && args?[2] is AgentRunCommand.Claim && HasDecision
-                ? new ValueTask<AgentRun>(ResumeAsync(method, args))
-                : method.Invoke(Inner, args);
-        }
-        private async Task<AgentRun> ResumeAsync(MethodInfo method, object?[]? args)
-        {
-            Entered.TrySetResult();
-            await Release.Task;
-            return await (ValueTask<AgentRun>)method.Invoke(Inner, args)!;
-        }
-    }
 
-    [Theory]
-    [InlineData(ToolApprovalDecision.Approve)]
-    [InlineData(ToolApprovalDecision.Reject)]
-    public async Task Durable_approval_pause_boundary_preserves_dispatch_time_and_excludes_human_wait(ToolApprovalDecision decision)
+    [Fact(Timeout = 15000)]
+    public async Task Unowned_review_requirement_finishes_without_an_inline_approval_or_sensitive_effect()
     {
-        DemoSensitiveActionStore.Reset();
-        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
         var output = new CapturingSessionOutput();
-        var turns = DispatchProxy.Create<IAgentRunStore, BlockingResumeStore>();
-        var gate = (BlockingResumeStore)(object)turns;
-        gate.ApprovalClock = clock;
-        gate.Release.TrySetResult();
-        await using var runtime = new Harness(CreateRuntime(output, await LoadGeneralV3(), new ScriptedLanguageModel(), new SessionToolExecutor(), clock, turns));
+        var tracking = new TrackingEmailProvider();
+        var model = new EmailSendOnceLanguageModel();
+        var tools = new SessionToolExecutor(emailProvider: tracking, configurationGate: ToolConfigurationGates.AllowAll);
+        await using var runtime = new Harness(CreateRuntime(output, Definition("review-without-tenant", 1, [ToolCatalog.EmailSend]), model, tools));
         await runtime.Runtime.AttachAsync();
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        clock.Advance(TimeSpan.FromSeconds(10));
-        Assert.Equal(ResponseApprovalResult.Accepted, await runtime.Runtime.RespondApprovalAsync(approvalEvent.ResponseId!.Value,
-            ((ApprovalRequestedOutput)approvalEvent.Payload!).ApprovalId, decision));
+        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Send the draft"));
         await runtime.Runtime.WaitUntilIdleAsync();
-        var run = Assert.Single(await turns.ListForSessionAsync(new(runtime.Runtime.Snapshot.AgentInstanceId, runtime.Runtime.Snapshot.ProfileId!.Value), runtime.Runtime.SessionId));
-        Assert.Equal(AgentRunStatus.Completed, run.Status);
-        Assert.Equal(25, run.Checkpoint!.ActiveExecutionMs);
-        Assert.Equal(run.Admission.ExecutionBudget!.Profile.DurationSeconds * 1000 - 25, run.Checkpoint.RemainingOverallBudgetMs);
+        Assert.Equal(0, tracking.GetDraftCount);
+        Assert.Contains(model.Requests.SelectMany(request => request.Messages), message => message.Role == ModelRole.Tool && message.Text.Contains("tenant_context_required", StringComparison.Ordinal));
+        Assert.DoesNotContain(output.Items, item => item.Payload?.GetType().Name == "ApprovalRequestedOutput");
+        Assert.DoesNotContain(output.Items, item => item.Payload is ResponseProgressOutput { Kind: ResponseProgressKind.WaitingExternal });
+        Assert.Null(typeof(SessionRuntime).GetMethod("RespondApprovalAsync"));
+        Assert.Null(typeof(SessionRuntime).GetMethod("ControlAgentRunAsync"));
+        Assert.Null(typeof(OutputPayload).Assembly.GetType("AgentCore.Application.Events.ApprovalRequestedOutput"));
+        Assert.Null(typeof(OutputPayload).Assembly.GetType("AgentCore.Application.Events.ApprovalResponseReceived"));
+        Assert.Contains(runtime.Runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
     }
 
     [Fact]
@@ -138,147 +69,6 @@ public sealed class ToolApprovalTests
             ToolPolicy.EvaluateExecution(definition, ToolCatalog.DemoSensitiveAction, gate, grant));
     }
 
-    [Fact]
-    public async Task Approval_flow_executes_once_after_explicit_approve()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        await using var runtime = await CreateGeneralV3Async(output);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
-        Assert.Equal(ToolCatalog.DemoSensitiveAction, requested.ToolName);
-        var pendingOnReady = runtime.Runtime.BuildPublicPendingApproval();
-        Assert.NotNull(pendingOnReady);
-        Assert.Equal(requested.ApprovalId, pendingOnReady!.ApprovalId);
-        Assert.Equal(requested.Summary, pendingOnReady.Summary);
-        Assert.Contains(
-            output.Items,
-            item => item.Payload is ResponseProgressOutput progress
-                && progress.Kind == ResponseProgressKind.WaitingExternal
-                && progress.State == ResponseProgressState.Started);
-
-        Assert.Equal(ResponseApprovalResult.Accepted, await runtime.Runtime.RespondApprovalAsync(
-            runtime.Runtime.ActiveResponseId!.Value,
-            requested.ApprovalId,
-            ToolApprovalDecision.Approve));
-
-        await runtime.Runtime.WaitUntilIdleAsync();
-        var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Contains("completed after approval", assistant.Text, StringComparison.OrdinalIgnoreCase);
-
-        var completedWaiting = output.Items
-            .Select(item => item.Payload)
-            .OfType<ResponseProgressOutput>()
-            .Count(progress =>
-                progress.Kind == ResponseProgressKind.WaitingExternal
-                && progress.State == ResponseProgressState.Completed);
-        Assert.Equal(1, completedWaiting);
-
-        var duplicate = await runtime.Runtime.RespondApprovalAsync(
-            runtime.Runtime.ActiveResponseId ?? requested.ApprovalId,
-            requested.ApprovalId,
-            ToolApprovalDecision.Approve);
-        Assert.True(duplicate is ResponseApprovalResult.Stale or ResponseApprovalResult.Unknown or ResponseApprovalResult.Idempotent);
-    }
-
-    [Fact]
-    public async Task Stale_approval_id_on_respond_returns_stale()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        await using var runtime = await CreateGeneralV3Async(output);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
-        var responseId = runtime.Runtime.ActiveResponseId!.Value;
-
-        Assert.Equal(
-            ResponseApprovalResult.Stale,
-            await runtime.Runtime.RespondApprovalAsync(
-                responseId,
-                Guid.NewGuid(),
-                ToolApprovalDecision.Approve));
-    }
-
-    [Fact]
-    public async Task Stale_response_id_on_respond_returns_stale()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        await using var runtime = await CreateGeneralV3Async(output);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
-
-        Assert.Equal(
-            ResponseApprovalResult.Stale,
-            await runtime.Runtime.RespondApprovalAsync(
-                Guid.NewGuid(),
-                requested.ApprovalId,
-                ToolApprovalDecision.Approve));
-    }
-
-    [Fact]
-    public async Task Approval_expires_without_executing_sensitive_action()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
-        await using var runtime = await CreateGeneralV3AtTimeAsync(output, time);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        time.Advance(ToolApprovalLimits.Lifetime + TimeSpan.FromSeconds(1));
-        await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(
-            runtime.Runtime.Snapshot.Entries,
-            entry => entry.Role == ConversationRole.Assistant
-                && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public async Task Deactivate_during_approval_prevents_sensitive_execution()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        await using var runtime = await CreateGeneralV3Async(output);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        Assert.True(await runtime.Runtime.RequestDeactivateAsync());
-        await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(
-            runtime.Runtime.Snapshot.Entries,
-            entry => entry.Role == ConversationRole.Assistant
-                && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public async Task Interrupt_during_approval_prevents_sensitive_execution()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        await using var runtime = await CreateGeneralV3Async(output);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("stop", behavior: UserTextBehavior.Interrupt));
-        await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(
-            runtime.Runtime.Snapshot.Entries,
-            entry => entry.Role == ConversationRole.Assistant
-                && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));
-    }
 
     [Fact]
     public async Task Duplicate_demo_sensitive_execution_reports_duplicate_error()
@@ -311,90 +101,6 @@ public sealed class ToolApprovalTests
         Assert.Contains("duplicate", second.Text, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public async Task Detach_during_approval_preserves_wait_and_reattach_resumes_same_response()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        await using var runtime = await CreateGeneralV3Async(output);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
-        var responseId = runtime.Runtime.ActiveResponseId!.Value;
-        await runtime.Runtime.DetachAsync();
-        Assert.True(runtime.Runtime.HeadlessTransportDetached);
-
-        Assert.True(await runtime.Runtime.AttachAsync());
-        var ready = output.Items
-            .Select(item => item.Payload)
-            .OfType<ReadyOutput>()
-            .Last();
-        Assert.Equal(requested.ApprovalId, ready.Ready.PendingApproval?.ApprovalId);
-        Assert.Equal(responseId, ready.Ready.PendingApproval?.ResponseId);
-
-        Assert.Equal(
-            ResponseApprovalResult.Accepted,
-            await runtime.Runtime.RespondApprovalAsync(
-                responseId,
-                requested.ApprovalId,
-                ToolApprovalDecision.Approve));
-        await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.Contains(
-            runtime.Runtime.Snapshot.Entries,
-            entry => entry.Role == ConversationRole.Assistant
-                && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public async Task Reject_prevents_sensitive_execution()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        await using var runtime = await CreateGeneralV3Async(output);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Need sensitive approval now."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
-        Assert.Equal(
-            ResponseApprovalResult.Accepted,
-            await runtime.Runtime.RespondApprovalAsync(
-                runtime.Runtime.ActiveResponseId!.Value,
-                requested.ApprovalId,
-                ToolApprovalDecision.Reject));
-        await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(
-            runtime.Runtime.Snapshot.Entries,
-            entry => entry.Role == ConversationRole.Assistant
-                && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public async Task Approval_wait_does_not_consume_per_tool_or_overall_execution_budget()
-    {
-        DemoSensitiveActionStore.Reset();
-        var output = new CapturingSessionOutput();
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
-        await using var runtime = await CreateGeneralV3AtTimeAsync(output, time);
-        await runtime.Runtime.AttachAsync();
-
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
-        time.Advance(ToolLimits.PerTool + TimeSpan.FromSeconds(1));
-        time.Advance(ToolLimits.Overall);
-        Assert.Equal(
-            ResponseApprovalResult.Accepted,
-            await runtime.Runtime.RespondApprovalAsync(
-                runtime.Runtime.ActiveResponseId!.Value,
-                requested.ApprovalId,
-                ToolApprovalDecision.Approve));
-        await runtime.Runtime.WaitUntilIdleAsync();
-        var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Contains("completed after approval", assistant.Text, StringComparison.OrdinalIgnoreCase);
-    }
 
     [Fact]
     public async Task Denied_email_send_does_not_read_the_provider_draft()
@@ -413,41 +119,6 @@ public sealed class ToolApprovalTests
         Assert.True(await runtime.Runtime.SubmitUserTextAsync("send the draft"));
         await runtime.Runtime.WaitUntilIdleAsync();
         Assert.Equal(0, tracking.GetDraftCount);
-    }
-
-    private static async Task<Harness> CreateGeneralV3Async(CapturingSessionOutput output) =>
-        await CreateGeneralV3AtTimeAsync(output, new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero)));
-
-    private static async Task<Harness> CreateGeneralV3AtTimeAsync(CapturingSessionOutput output, FakeTimeProvider time)
-    {
-        var definition = await LoadGeneralV3();
-        var tools = new SessionToolExecutor();
-        var model = new ScriptedLanguageModel();
-        var runtime = CreateRuntime(output, definition, model, tools, time);
-        return new Harness(runtime);
-    }
-
-    private static async Task<AgentDefinition> LoadGeneralV3()
-    {
-        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        return (await store.GetAsync("general-assistant", 3))!;
-    }
-
-    private static string FindAgents()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var candidate = Path.Combine(dir.FullName, "agents");
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException("agents directory not found.");
     }
 
     private static SessionRuntime CreateRuntime(
@@ -482,7 +153,6 @@ public sealed class ToolApprovalTests
         if (agentRuns is not null)
         {
             snapshot = RuntimeAgentRunStore.WithPins(snapshot);
-            if (agentRuns is BlockingResumeStore proxy) proxy.Inner.Bind(store);
         }
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return SessionRuntimeFixture.Create(
@@ -520,6 +190,7 @@ public sealed class ToolApprovalTests
 
     private sealed class EmailSendOnceLanguageModel : ILanguageModel
     {
+        public List<ModelRequest> Requests { get; } = [];
         public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
@@ -527,6 +198,7 @@ public sealed class ToolApprovalTests
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            Requests.Add(request);
             if (request.Messages.Any(message => message.Role == ModelRole.Tool))
             {
                 yield return new ModelTextDelta("Noted.");

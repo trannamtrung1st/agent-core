@@ -1001,7 +1001,7 @@ describe("agent.progress", () => {
     expect(state.activeProgress).toBeNull();
   });
 
-  it("restores pending approval from session.ready during reattach", () => {
+  it("ignores the retired response-bound approval projection on reattach", () => {
     const next = applyServerEvent(emptySession(), event({
       type: "session.ready",
       sequence: 1,
@@ -1022,16 +1022,19 @@ describe("agent.progress", () => {
         }
       }
     }));
-    expect(next.pendingApproval).toEqual({
-      approvalId: "appr-1",
-      responseId: "resp-1",
-      operationId: "op-1",
-      toolName: "email.send",
-      effect: "sensitiveWrite",
-      summary: "Send email",
-      details: { to: "a@example.com" },
-      expiresAt: "2026-09-22T12:00:00.000Z"
-    });
+    expect(next).not.toHaveProperty("pendingApproval");
+    expect(next.liveResponseId).toBeNull();
+  });
+
+  it("ignores a retired approval frame without reviving authority or blocking the composer", () => {
+    const state = { ...emptySession(), liveResponseId: "resp-1" };
+    const next = applyServerEvent(state, event({
+      type: "agent.approval.requested", sequence: 1, responseId: "resp-1",
+      payload: { approvalId: "forged", operationId: "operation", toolName: "email.send", effect: "sensitiveWrite" }
+    }));
+    expect(next).not.toHaveProperty("pendingApproval");
+    expect(next.liveResponseId).toBe(state.liveResponseId);
+    expect(next.outputState).toBe(state.outputState);
   });
 
   it("restores stable conversation execution identity and partial text on reattach", () => {

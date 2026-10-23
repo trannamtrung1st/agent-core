@@ -464,19 +464,5 @@ public sealed partial class SessionRuntime
         catch (Exception exception) { input.Completed.TrySetException(exception); }
     }
 
-    private async Task ResolveBoundApprovalAsync(AgentRunApprovalDecision? decision, CancellationToken ct, Action? accepted = null)
-    {
-        if (_boundAgentRun is not { Status: AgentRunStatus.WaitingForApproval, Approval: { } approval } run) return;
-        var now = _time.GetUtcNow();
-        AgentRunCommand command = decision is { } value
-            ? new AgentRunCommand.DecideApproval(run.Revision, now, approval.ApprovalId, approval.Revision, approval.ActionHash, value)
-            : new AgentRunCommand.ExpireApproval(run.Revision, now);
-        run = await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId, command, ct).ConfigureAwait(false);
-        _boundAgentRun = run;
-        accepted?.Invoke();
-        _boundAgentRun = await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId,
-            new AgentRunCommand.Claim(run.Revision, now, _ids.NewId(), now + AgentRunCoordinator.ClaimDuration), ct).ConfigureAwait(false);
-    }
-
     private void ClearAgentRunTerminalPending() { _pendingTerminalAgentRunId = null; _pendingTerminalResponseId = null; }
 }

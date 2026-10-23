@@ -146,13 +146,6 @@ public sealed record CancelResponseReceived(
     Guid ResponseId,
     TaskCompletionSource<ResponseCancelResult>? Completed = null) : SessionInput(Context);
 
-public sealed record ApprovalResponseReceived(
-    EventContext Context,
-    Guid ResponseId,
-    Guid ApprovalId,
-    ToolApprovalDecision Decision,
-    TaskCompletionSource<ResponseApprovalResult>? Completed = null) : SessionInput(Context);
-
 public sealed record MuteReceived(EventContext Context, bool Muted) : SessionInput(Context);
 
 public sealed record SynthesisResultReceived(
@@ -373,16 +366,6 @@ public sealed record PublicFailureReference(
     string? ProtocolRepair = null,
     string? ProtocolRepairOutcome = null);
 
-public sealed record PublicPendingApproval(
-    Guid ApprovalId,
-    Guid ResponseId,
-    Guid OperationId,
-    string ToolName,
-    string Effect,
-    string Summary,
-    IReadOnlyDictionary<string, string> Details,
-    DateTimeOffset ExpiresAt);
-
 public sealed record SessionReadyProjection(
     SessionMode Mode,
     SessionMode? PendingMode,
@@ -401,7 +384,6 @@ public sealed record SessionReadyProjection(
     SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active,
     SpeechLocaleResolution? SpeechLocale = null,
     SessionModelSelection? ModelSelection = null,
-    PublicPendingApproval? PendingApproval = null,
     Guid? AgentRunId = null,
     string OutputActivity = "Idle",
     bool HasOlderHistory = false,
@@ -513,15 +495,6 @@ public sealed record ResponseProgressOutput(
     ResponseProgressState State,
     Guid? OperationId = null,
     string? Message = null) : OutputPayload;
-
-public sealed record ApprovalRequestedOutput(
-    Guid ApprovalId,
-    Guid OperationId,
-    string ToolName,
-    string Effect,
-    string Summary,
-    IReadOnlyDictionary<string, string> Details,
-    DateTimeOffset ExpiresAt) : OutputPayload;
 
 public static class ResponseProgressMessages
 {

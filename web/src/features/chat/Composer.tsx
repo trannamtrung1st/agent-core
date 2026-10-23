@@ -173,16 +173,10 @@ function MicrophoneControl({
   );
 }
 
-function ComposerActionTooltip({ suppressed, title, children }: { suppressed: boolean; title: string; children: ReactNode }) {
-  // Unmount the underlying popup immediately while the approval owns Escape.
-  return suppressed ? <>{children}</> : <Tooltip title={title}>{children}</Tooltip>;
-}
-
 export function Composer({
   draft, fileAttachmentsEnabled = true,
   canSend: suppliedCanSend,
   canStop,
-  approvalPending = false,
   sendLabel,
   pendingSendQueue,
   ready,
@@ -217,7 +211,6 @@ export function Composer({
 
   canSend: boolean;
   canStop: boolean;
-  approvalPending?: boolean;
   sendLabel: string;
   pendingSendQueue: PendingSendItem[];
   ready: boolean;
@@ -469,7 +462,7 @@ export function Composer({
               </Button>
             ) : null}
             {canStop && canSend ? (
-              <ComposerActionTooltip suppressed={approvalPending} title="Stop">
+              <Tooltip title="Stop">
                 <Button
                   htmlType="button"
                   type="text"
@@ -481,10 +474,10 @@ export function Composer({
                     focusMessage();
                   }}
                 />
-              </ComposerActionTooltip>
+              </Tooltip>
             ) : null}
             {canStop && !canSend ? (
-              <ComposerActionTooltip suppressed={approvalPending} title="Stop">
+              <Tooltip title="Stop">
                 <Button
                   htmlType="button"
                   className="composer-icon composer-stop"
@@ -495,9 +488,9 @@ export function Composer({
                     focusMessage();
                   }}
                 />
-              </ComposerActionTooltip>
+              </Tooltip>
             ) : (
-              <ComposerActionTooltip suppressed={approvalPending} title={!canStop ? `${sendLabel} (Enter)` : `${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
+              <Tooltip title={!canStop ? `${sendLabel} (Enter)` : `${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
                 <Button
                   type="primary"
                   htmlType="submit"
@@ -506,7 +499,7 @@ export function Composer({
                   disabled={!canSend}
                   icon={<SendOutlined />}
                 />
-              </ComposerActionTooltip>
+              </Tooltip>
             )}
           </Flex>
         </Flex>

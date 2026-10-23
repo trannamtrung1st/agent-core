@@ -1210,9 +1210,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case TenantRunCancellationReceived tenantCancel:
                     await HandleTenantRunCancellationAsync(tenantCancel, cancellationToken).ConfigureAwait(false);
                     break;
-                case ApprovalResponseReceived approval:
-                    await HandleApprovalResponseAsync(approval, cancellationToken).ConfigureAwait(false);
-                    break;
                 case EndSessionReceived ended:
                     await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1257,9 +1254,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case WorkspaceCwdRequested workspaceCwd:
                     await HandleWorkspaceCwdAsync(workspaceCwd, cancellationToken).ConfigureAwait(false);
-                    break;
-                case AgentRunControlReceived control:
-                    await HandleAgentRunControlAsync(control, cancellationToken).ConfigureAwait(false);
                     break;
                 case TenantInputReceived tenantInput:
                     HandleTenantInput(tenantInput);
@@ -1410,9 +1404,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case AcceptedConversationWorkQueryReceived query:
                 query.Result.TrySetResult(value);
-                break;
-            case AgentRunControlReceived control:
-                control.Completed.TrySetException(AgentCoreErrors.Conflict("Session mailbox is unavailable."));
                 break;
             case TenantSpeechReceived speech:
                 speech.Completed.TrySetResult(false);
@@ -2826,10 +2817,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var remainingBudget = checkpoint is null ? budget.Overall
             : TimeSpan.FromMilliseconds(checkpoint.RemainingOverallBudgetMs);
         var activeStartedAt = _time.GetUtcNow();
-        var pausedTime = TimeSpan.Zero;
-        var activeAdjustmentMs = 0;
         var previousActiveMs = checkpoint?.ActiveExecutionMs ?? (checkpoint is null ? 0 : Math.Max(0, (int)budget.Overall.TotalMilliseconds - checkpoint.RemainingOverallBudgetMs));
-        int ActiveExecutionMs() => previousActiveMs + activeAdjustmentMs + Math.Max(0, (int)(_time.GetUtcNow() - activeStartedAt - pausedTime).TotalMilliseconds);
+        int ActiveExecutionMs() => previousActiveMs + Math.Max(0, (int)(_time.GetUtcNow() - activeStartedAt).TotalMilliseconds);
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, remainingBudget) : null;
         var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
@@ -3556,7 +3545,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         "Tool={Tool} SessionId={SessionId} ResponseId={ResponseId} CorrelationId={CorrelationId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId}",
                         SafeExecutionTrace.SafeToolName(call.Name), SessionId, request.ResponseId, cause.CorrelationId, _snapshot.AgentInstanceId, _boundAgentRun?.AgentRunId);
                     using var toolActivity = RuntimeTelemetry.Activity.StartActivity("tool");
-                    ToolApprovalGrant? approvalGrant = null;
                     var effectFenced = false;
                     string? effectHash = null;
                     try
@@ -3759,20 +3747,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, false, overallCts.Token);
                                     if (automationPrepared.Request is { } proposed)
                                     {
-                                        var retained = _boundAgentRun?.Approval;
-                                        if (retained?.ToolName == call.Name && retained.ActionHash == proposed.ActionHash && retained.PreparedActionJson == args.GetRawText())
-                                            policy = ToolPolicyDecision.RequireApproval;
-                                        else
-                                        {
-                                            automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, true, overallCts.Token);
-                                            if (automationPrepared.RequiresApproval) policy = ToolPolicyDecision.RequireApproval;
-                                        }
+                                        automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, true, overallCts.Token);
+                                        if (automationPrepared.RequiresApproval) policy = ToolPolicyDecision.RequireApproval;
                                         automationCommand = automationCommand with { Verification = automationPrepared };
                                     }
                                 }
                                 string actionHash;
-                                string? approvalSummaryOverride = null;
-                                IReadOnlyDictionary<string, string>? approvalDetailsOverride = null;
                                 var preparedFailed = false;
                                 if (automationPrepared?.ErrorJson is { } automationError)
                                 {
@@ -3788,31 +3768,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 }
                                 else if (policy == ToolPolicyDecision.RequireApproval)
                                 {
-                                    var prepared = automationPrepared?.Request is { } exactAutomation
-                                        ? (Preparation: (ToolApprovalPreparation?)new ToolApprovalPreparation(exactAutomation.ActionHash,
-                                            TriggerScheduleCommands.ApprovalSummary, call.ArgumentsJson,
-                                            TriggerScheduleCommands.ApprovalDetails(exactAutomation)), ErrorJson: (string?)null)
-                                        : await ToolActionPreparation.PrepareApprovalAsync(
-                                            _tools,
-                                            call,
-                                            args,
-                                            overallCts.Token,
-                                            ExecutionDefinition, SessionId,
-                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings, AgentRunId: _boundAgentRun?.AgentRunId, TenantId: _boundAgentRun?.Owner.TenantId, AgentRunGeneration: _boundAgentRun?.Claim?.Generation))
-                                        .ConfigureAwait(false);
-                                    if (prepared.Preparation is null)
-                                    {
-                                        executionResult = ToolExecutionResult.FromText(
-                                            prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare action approval."}""");
-                                        preparedFailed = true;
-                                        actionHash = string.Empty;
-                                    }
-                                    else
-                                    {
-                                        actionHash = prepared.Preparation.ActionHash;
-                                        approvalSummaryOverride = prepared.Preparation.Preview;
-                                        approvalDetailsOverride = prepared.Preparation.Details;
-                                    }
+                                    // Review is settled only by the durable tenant consent owner.
+                                    // An unowned response cannot turn a local modal into authority.
+                                    executionResult = ToolExecutionResult.FromText("{\"error\":\"forbidden\",\"reasonCode\":\"tenant_context_required\"}");
+                                    preparedFailed = true;
+                                    actionHash = string.Empty;
                                 }
                                 else
                                 {
@@ -3826,73 +3786,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 {
                                     preparedFailed = true;
                                     executionResult = ToolExecutionResult.FromText("{\"error\":\"not_replayed\",\"message\":\"This browser change was not replayed. Use fresh page evidence before requesting a different action.\"}");
-                                }
-
-                                if (!preparedFailed
-                                    && policy == ToolPolicyDecision.RequireApproval)
-                                {
-                                    var approvalWaitStarted = _time.GetUtcNow();
-                                    var pausedOverallRemaining = PauseToolClock(overallTimer, overallDeadline);
-                                    workTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-                                    cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-                                    try
-                                    {
-                                        if (_boundAgentRun?.Approval is { Decision: AgentRunApprovalDecision.Approved } approved
-                                            && approved.ToolName == call.Name && approved.ActionHash == actionHash
-                                            && approved.PreparedActionJson == args.GetRawText())
-                                            approvalGrant = new ToolApprovalGrant(approved.ApprovalId, call.Name, actionHash,
-                                                ResponseId: request.ResponseId, OperationId: operationId, RuntimeEpoch: _epoch);
-                                        else if (_boundAgentRun?.Approval is { Decision: AgentRunApprovalDecision.Rejected or AgentRunApprovalDecision.Expired } denied
-                                            && denied.ToolName == call.Name && denied.ActionHash == actionHash)
-                                            approvalGrant = null;
-                                        else
-                                        approvalGrant = await WaitForToolApprovalAsync(
-                                                cause,
-                                                request.ResponseId,
-                                                operationId,
-                                                call,
-                                                args,
-                                                actionHash,
-                                                cancellationToken,
-                                                approvalSummaryOverride,
-                                                approvalDetailsOverride)
-                                            .ConfigureAwait(false);
-                                    }
-                                    finally
-                                    {
-                                        pausedTime += _time.GetUtcNow() - approvalWaitStarted;
-                                        // The durable transition owns the exact pause boundary. Mailbox
-                                        // dispatch between the worker pause and BeginApproval is active time.
-                                        if (_boundAgentRun?.Checkpoint is { ActiveExecutionMs: not null } admittedClock)
-                                        {
-                                            var currentClock = admittedClock.PauseBudgetClock(_time.GetUtcNow());
-                                            activeAdjustmentMs += Math.Max(0, currentClock.ActiveExecutionMs!.Value - ActiveExecutionMs());
-                                            var durableRemaining = TimeSpan.FromMilliseconds(currentClock.RemainingOverallBudgetMs);
-                                            if (pausedOverallRemaining is { } workerRemaining && durableRemaining < workerRemaining)
-                                                pausedOverallRemaining = durableRemaining;
-                                        }
-                                        overallDeadline = ResumeToolClock(
-                                            overallTimer,
-                                            overallCts,
-                                            pausedOverallRemaining);
-                                        if (workTimer is not null && pausedOverallRemaining is { } restoredRemaining)
-                                        {
-                                            workTimer.Change(restoredRemaining > finalizationReserve + budget.CleanupReserve ? restoredRemaining - finalizationReserve - budget.CleanupReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
-                                            cleanupTimer?.Change(restoredRemaining > finalizationReserve ? restoredRemaining - finalizationReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
-                                        }
-                                    }
-
-                                    if (_boundAgentRun?.Claim is { } resumedClaim)
-                                        cause = cause with { AgentRunGeneration = resumedClaim.Generation };
-                                    if (approvalGrant is null
-                                        || approvalGrant.RuntimeEpoch != _epoch
-                                        || approvalGrant.ResponseId != request.ResponseId
-                                        || approvalGrant.OperationId != operationId)
-                                    {
-                                        executionResult = ToolExecutionResult.FromText(
-                                            """{"error":"rejected","message":"Action was not approved."}""");
-                                        preparedFailed = true;
-                                    }
                                 }
 
                                 if (!preparedFailed && _runAuthority is not null && _boundAgentRun is { } currentRun)
@@ -3924,7 +3817,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
                                     // Canonical local mutations and Artifact publication own their durable Run/effect receipts.
                                     effectFenced = !(_runtimeOwner is not null && (TenantManagementMutationContract.IsTool(call.Name) || TenantAutomationMutationContract.IsTool(call.Name) || TenantWorkspaceMutationContract.IsMutation(call.Name) || TenantBrowserInspectionContract.IsInspection(call.Name) || call.Name is ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace))
-                                        && (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
+                                        && ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe;
                                     effectHash = actionHash;
                                     var skipDispatch = false;
                                     if (_boundAgentRun is { SideEffect.Disposition: AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight })
@@ -3955,7 +3848,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             call,
                                             resultBudget,
                                             toolCts.Token,
-                                            approvalGrant,
+                                            null,
                                             automationCommand,
                                             new ToolExecutionAdmission(
                                                 Detached: IsInitialBackgroundRun,
@@ -4338,35 +4231,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private static ITimer ScheduleCancel(TimeProvider time, CancellationTokenSource cts, TimeSpan delay) =>
         time.CreateTimer(static state => ((CancellationTokenSource)state!).Cancel(), cts, delay, Timeout.InfiniteTimeSpan);
 
-    private TimeSpan? PauseToolClock(ITimer? timer, DateTimeOffset? deadline)
-    {
-        if (timer is null || deadline is null)
-        {
-            return null;
-        }
-
-        var remaining = deadline.Value - _time.GetUtcNow();
-        timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        return remaining;
-    }
-
-    private DateTimeOffset? ResumeToolClock(ITimer? timer, CancellationTokenSource cts, TimeSpan? remaining)
-    {
-        if (timer is null || remaining is null)
-        {
-            return null;
-        }
-
-        if (remaining.Value <= TimeSpan.Zero)
-        {
-            cts.Cancel();
-            return _time.GetUtcNow();
-        }
-
-        timer.Change(remaining.Value, Timeout.InfiniteTimeSpan);
-        return _time.GetUtcNow() + remaining.Value;
-    }
-
     private async Task HandleModelAsync(ModelResultReceived input, CancellationToken cancellationToken)
     {
         if (_activeResponseId != input.ResponseId
@@ -4629,7 +4493,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             reason);
         _responseCts?.Cancel();
         _ttsCts?.Cancel();
-        ClearPendingApproval();
 
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
@@ -5940,7 +5803,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void ClearActive()
     {
-        ClearPendingApproval();
         _activeResponseId = null;
         _activeResponseTriggerKind = null;
         _activeEntryId = null;
