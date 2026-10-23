@@ -218,66 +218,6 @@ public sealed class SecretaryIdentityTests
     }
 
     [Fact]
-    public async Task Secretary_memory_admission_rejects_credentials_and_stores_an_ordinary_fact()
-    {
-        var secretary = await LoadSecretaryAsync();
-        var memories = new StructuredMemoryService(
-            new InMemoryStructuredMemoryStore(),
-            new DeterministicIdGenerator(
-                Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00c2-7000-8000-{index:D12}")),
-                [SessionId]),
-            new FakeTimeProvider(Now));
-        var profile = new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>(), Now);
-        var secret = new MemoryProposal(
-            MemoryProposalOperation.Upsert,
-            MemoryKind.Fact,
-            "token",
-            "sk-abcdefghijklmnopqrst",
-            null,
-            MemoryProposalSource.UserExplicit);
-        Assert.Equal(
-            MemoryAdmissionStatus.Rejected,
-            await MemoryAdmission.AdmitOneAsync(
-                memories,
-                secretary,
-                SessionId,
-                InstanceId,
-                profile,
-                [],
-                Guid.Parse("019944af-00c1-7000-8000-0000000000d1"),
-                secret,
-                NullLogger.Instance));
-        Assert.Empty(await memories.SearchAsync(
-            new TrustedMemoryOwner(SessionId),
-            new MemorySearchQuery(null, null),
-            new MemoryAdmissionContext("user_explicit", [], new HashSet<string>(StringComparer.Ordinal))));
-
-        var fact = new MemoryProposal(
-            MemoryProposalOperation.Upsert,
-            MemoryKind.Fact,
-            "project codename",
-            "Atlas",
-            null,
-            MemoryProposalSource.UserExplicit);
-        var stored = await MemoryAdmission.AdmitOneAsync(
-            memories,
-            secretary,
-            SessionId,
-            InstanceId,
-            profile,
-            [],
-            Guid.Parse("019944af-00c1-7000-8000-0000000000d2"),
-            fact,
-            NullLogger.Instance);
-        Assert.NotEqual(MemoryAdmissionStatus.Rejected, stored);
-        var recalled = await memories.SearchAsync(
-            new TrustedMemoryOwner(SessionId),
-            new MemorySearchQuery("Atlas", null),
-            new MemoryAdmissionContext("user_explicit", [], new HashSet<string>(StringComparer.Ordinal)));
-        Assert.Equal("Atlas", Assert.Single(recalled).Content);
-    }
-
-    [Fact]
     public async Task Secretary_sensitive_tools_still_require_approval()
     {
         var secretary = await LoadSecretaryAsync();

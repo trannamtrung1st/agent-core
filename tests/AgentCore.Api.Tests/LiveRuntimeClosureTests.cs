@@ -28,7 +28,7 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
     public async Task Real_incremental_maintenance_keeps_scope_qualifiers_and_finishes_with_bounded_evidence()
     {
         var options = new LanguageModelProviderOptions { Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/",
-            ApiKey = LiveIdentityMaintenanceTests.Key(), DefaultModel = "deepseek/deepseek-v4.1-flash", Tools = true, StructuredOutput = false };
+            ApiKey = LiveIdentityMaintenanceFactAttribute.Key(), DefaultModel = "deepseek/deepseek-v4.1-flash", Tools = true, StructuredOutput = false };
         using var http = new HttpClient();
         var model = new ObservedModel(new SemanticResponseLanguageModel(new OpenAICompatibleLanguageModel(http, options)));
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"p910-live-closure-{Guid.NewGuid():N}.db"), model,

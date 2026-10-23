@@ -375,7 +375,6 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
-        services.TryAddSingleton<IStructuredMemoryService, StructuredMemoryService>();
         if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>

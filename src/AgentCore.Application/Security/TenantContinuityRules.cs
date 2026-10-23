@@ -72,7 +72,7 @@ public static class TenantContinuityRules
     public static string Safe(string value, int limit, out bool truncated)
     {
         truncated = value.Length > limit;
-        return StructuredMemoryService.ContainsSensitive(value) ? "[sensitive historical content omitted]" : truncated ? value[..limit] : value;
+        return MemoryContentRules.ContainsSensitive(value) ? "[sensitive historical content omitted]" : truncated ? value[..limit] : value;
     }
     public static TenantHistoricalSession Project(Guid session, long revision, long through, string title, string summary, DateTimeOffset updated,
         IReadOnlyList<ConversationEntry> entries, long after, int limit, bool hasMore)

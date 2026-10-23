@@ -186,17 +186,6 @@ public sealed class SessionMemoryPromptTests
             ownerProfileId);
     }
 
-    private static StructuredMemoryService Service(IStructuredMemoryStore store) =>
-        new(
-            store,
-            new DeterministicIdGenerator(
-                Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0012-7000-8000-{index:D12}")),
-                [Guid.Parse("019944af-0012-7000-8000-0000000000ff")]),
-            TimeProvider.System);
-
-    private static MemoryAdmissionContext Admission() =>
-        new("application", [], new HashSet<string>(StringComparer.Ordinal));
-
     private static AgentContext Context(
         AgentDefinition definition,
         UserProfile profile,

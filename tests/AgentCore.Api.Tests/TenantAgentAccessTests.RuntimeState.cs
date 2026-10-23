@@ -118,7 +118,7 @@ public sealed partial class TenantAgentAccessTests
             return Pending is { } pending ? await pending : new("browser", "available", "isolated", DateTimeOffset.UtcNow, LiveContexts: 0, OpenPages: CountPages ? Calls : 0);
         }
     }
-    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, ILanguageModel? model = null, string? root = null, IModelCatalog? catalog = null, AgentCore.Application.Triggers.ITriggerCommandAuthorizer? semantic = null, Action? legacyMemoryResolution = null) : AgentCoreApiFactory
+    private sealed class RuntimeStateFactory(bool sqlite, TimeProvider? clock = null, ILanguageModel? model = null, string? root = null, IModelCatalog? catalog = null, AgentCore.Application.Triggers.ITriggerCommandAuthorizer? semantic = null) : AgentCoreApiFactory
     {
         protected override bool EnableTenantRunExecution => model is not null;
         public RuntimeBrowserProbe Browser { get; } = new(); public string Root { get; } = root ?? Path.Combine(Path.GetTempPath(), "tenant-runtime-state-" + Guid.NewGuid().ToString("N"));
@@ -126,8 +126,6 @@ public sealed partial class TenantAgentAccessTests
         {
             base.ConfigureWebHost(builder);
             builder.ConfigureTestServices(services => {
-                if (legacyMemoryResolution is not null) services.Replace(ServiceDescriptor.Singleton<IStructuredMemoryService>(_ => {
-                    legacyMemoryResolution(); throw new InvalidOperationException("Global learned-memory resolution is retired from tenant Runtime."); }));
                 if (sqlite) { Directory.CreateDirectory(Root); var connection = $"Data Source={Path.Combine(Root, "state.db")};Foreign Keys=True;Default Timeout=10";
                     services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(connection)); TestSqliteIdentity.Configure(services, connection, Path.Combine(Root, "keys")); }
                 if (model is not null)

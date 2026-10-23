@@ -81,10 +81,10 @@ public sealed partial class TenantAgentAccessTests
     public async Task Tenant_learned_memory_close_and_repeat_keep_owned_receipts_and_retained_facts_without_global_recall(bool sqlite)
     {
         const string body = "OPEN_LOOP_RETAINED_EVIDENCE";
-        var resolutions = 0; var model = new LearnedMemoryModel();
+        var model = new LearnedMemoryModel();
         var proposal = Learn(body) with { Kind = MemoryKind.OpenLoop, Subject = "Example research task" };
         model.Turns.Enqueue([proposal]);
-        await using var factory = new RuntimeStateFactory(sqlite, model: model, legacyMemoryResolution: () => Interlocked.Increment(ref resolutions));
+        await using var factory = new RuntimeStateFactory(sqlite, model: model);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance) = await OwnedMemoryAgent(owner); await MemoryExecutor(owner, tenant, instance);
         var first = await MemoryRequest(factory, owner, tenant, instance);
@@ -101,15 +101,15 @@ public sealed partial class TenantAgentAccessTests
         Assert.DoesNotContain(model.Requests.Last().Context!.Sections, section => section.Id == ContextSectionId.Memory && section.Message.Text.Contains(body, StringComparison.Ordinal));
         var retained = Assert.Single((await Json(await owner.GetAsync(memoryUrl))).GetProperty("items").EnumerateArray());
         Assert.Equal(before.GetProperty("memoryId").GetGuid(), retained.GetProperty("memoryId").GetGuid()); Assert.Equal(body, retained.GetProperty("content").GetString());
-        Assert.Equal(0, Volatile.Read(ref resolutions));
+        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Ports.IStructuredMemoryService"));
+        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Memory.MemoryAdmission"));
     }
 
     [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_learned_memory_Runtime_does_not_resolve_global_recall_and_reprojects_current_owned_evidence(bool sqlite)
     {
-        var resolutions = 0; var model = new LearnedMemoryModel(); model.Turns.Enqueue([Learn()]);
-        await using var factory = new RuntimeStateFactory(sqlite, model: model,
-            legacyMemoryResolution: () => Interlocked.Increment(ref resolutions));
+        var model = new LearnedMemoryModel(); model.Turns.Enqueue([Learn()]);
+        await using var factory = new RuntimeStateFactory(sqlite, model: model);
         using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") });
         var (tenant, instance) = await OwnedMemoryAgent(owner); await MemoryExecutor(owner, tenant, instance);
         var first = await MemoryRequest(factory, owner, tenant, instance);
@@ -120,7 +120,8 @@ public sealed partial class TenantAgentAccessTests
         var context = model.Requests.Last().Context!;
         Assert.Contains("PRIVATE_CUSTOMER_EVIDENCE", Assert.Single(context.Sections, s => s.Id == ContextSectionId.Memory).Message.Text);
         Assert.DoesNotContain(context.Sections, s => s.Layer != ContextLayer.Evidence && s.Message.Text.Contains("PRIVATE_CUSTOMER_EVIDENCE", StringComparison.Ordinal));
-        Assert.Equal(0, Volatile.Read(ref resolutions));
+        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Ports.IStructuredMemoryService"));
+        Assert.Null(typeof(AgentCore.Application.Sessions.SessionManager).Assembly.GetType("AgentCore.Application.Memory.MemoryAdmission"));
     }
 
     [Theory(Timeout = 120000)] [InlineData(false)] [InlineData(true)]

@@ -211,16 +211,10 @@ public sealed class SessionCatalogTests
         var memories = new InMemoryStructuredMemoryStore();
         var manager = CreateManager(sessions, structuredMemory: memories);
         var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
-        var service = new StructuredMemoryService(
-            memories,
-            new DeterministicIdGenerator(
-                [Guid.Parse("019944af-0011-7000-8000-000000000001")],
-                [Guid.Parse("019944af-0011-7000-8000-0000000000ff")]),
-            TimeProvider.System);
-        await service.WriteAsync(
-            new TrustedMemoryOwner(created.SessionId),
-            new MemoryWriteProposal(MemoryKind.Fact, "Early fact", "kept until delete", []),
-            new MemoryAdmissionContext("application", [], new HashSet<string>(StringComparer.Ordinal)));
+        var at = TimeProvider.System.GetUtcNow();
+        await memories.InsertAsync(new(Guid.Parse("019944af-0011-7000-8000-000000000001"), created.SessionId,
+            MemoryKind.Fact, MemoryItemStatus.Active, "Early fact", "kept until delete", "early fact",
+            new("fixture", [], null, at), at, at));
         await manager.DurablyDeleteAsync(created.SessionId);
         Assert.Empty(await memories.ListActiveAsync(created.SessionId));
         Assert.Null(await memories.FindAsync(created.SessionId, Guid.Parse("019944af-0011-7000-8000-000000000001")));

@@ -50,12 +50,9 @@ public sealed class AgentInstanceTests
         Assert.Equal(1, first.Definition.Version);
         Assert.Equal(alice.Persona, first.PinnedPersona);
         Assert.DoesNotContain("V2_MARKER", first.Definition.AgentInstructions, StringComparison.Ordinal);
-        var memory = new StructuredMemoryService(memories, Ids(4, "019944af-0018-7000-8000-"), clock);
-        var admission = new MemoryAdmissionContext("application", [], new HashSet<string>(StringComparer.Ordinal));
-        await memory.WriteAsync(
-            new TrustedMemoryOwner(first.SessionId),
-            new MemoryWriteProposal(MemoryKind.Fact, "Ship the report", "by Monday", []),
-            admission);
+        await memories.InsertAsync(new(Guid.Parse("019944af-0018-7000-8000-000000000001"), first.SessionId,
+            MemoryKind.Fact, MemoryItemStatus.Active, "Ship the report", "by Monday", "ship the report",
+            new("fixture", [], null, Now), Now, Now));
 
         var upgraded = await service.UpgradeAsync(alice.InstanceId, 2, alice.Revision);
         Assert.Equal(alice.InstanceId, upgraded.InstanceId);
@@ -66,10 +63,7 @@ public sealed class AgentInstanceTests
         Assert.Equal(alice.InstanceId, historical.AgentInstanceId);
         Assert.Equal(alice.Persona, historical.PinnedPersona);
         Assert.DoesNotContain("V2_MARKER", historical.Definition.AgentInstructions, StringComparison.Ordinal);
-        Assert.Equal("by Monday", Assert.Single(await memory.SearchAsync(
-            new TrustedMemoryOwner(first.SessionId),
-            new MemorySearchQuery(null, null),
-            admission)).Content);
+        Assert.Equal("by Monday", Assert.Single(await memories.ListActiveAsync(first.SessionId)).Content);
 
         var later = await manager.CreateForInstanceAsync(alice.InstanceId, SessionMode.Text);
         Assert.Equal(alice.InstanceId, later.AgentInstanceId);

@@ -84,7 +84,7 @@ public static class TenantExperienceRules
     public static TenantExperience Copy(TenantExperience value) => value with { Content = value.Content is null ? null : Freeze(value.Content) };
     public static ExperienceContent Freeze(ExperienceContent value)
     {
-        value.Validate(); if (StructuredMemoryService.ContainsSensitive(JsonSerializer.Serialize(value))) throw new AccessDeniedException("experience_sensitive_content");
+        value.Validate(); if (MemoryContentRules.ContainsSensitive(JsonSerializer.Serialize(value))) throw new AccessDeniedException("experience_sensitive_content");
         return value with { Attempts = value.Attempts.ToArray(), Decisions = value.Decisions.ToArray(), Outcomes = value.Outcomes.ToArray(), Corrections = value.Corrections.ToArray(),
             Unresolved = value.Unresolved.ToArray(), Difficulties = value.Difficulties.ToArray(), Lessons = value.Lessons.ToArray() };
     }

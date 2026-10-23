@@ -250,7 +250,7 @@ public sealed class ExperienceService(IExperienceStore experience, IAgentRunStor
             .Where(p => p.Name is not ("sourceKind" or "sourceId" or "throughCursor")).ToDictionary(p => p.Name, p => p.Value)), Json) ?? throw new JsonException(); content.Validate(); }
         catch (Exception ex) when (ex is JsonException or ArgumentException)
         { throw AgentCoreErrors.Validation("Experience observation is invalid."); }
-        if (StructuredMemoryService.ContainsSensitive(JsonSerializer.Serialize(content))) throw AgentCoreErrors.Validation("Experience contains sensitive content.");
+        if (MemoryContentRules.ContainsSensitive(JsonSerializer.Serialize(content))) throw AgentCoreErrors.Validation("Experience contains sensitive content.");
         record = await experience.AdmitAsync(record, ct);
         if (record.Visibility != ExperienceVisibility.Eligible) throw AgentCoreErrors.Forbidden("Experience source is unavailable.");
         if (record.Content is not null) return JsonSerializer.Serialize(new { recorded = true, changed = false, experienceId = record.ExperienceId });
@@ -273,7 +273,7 @@ public sealed class ExperienceService(IExperienceStore experience, IAgentRunStor
             foreach (var e in entries.Where(e => e.Sequence <= record.ThroughCursor && e.Status != EntryStatus.Streaming))
             {
                 var text = e.Role == ConversationRole.Assistant ? AssistantSemanticProjection.Text(e) : e.Text;
-                if (StructuredMemoryService.ContainsSensitive(text)) text = "[sensitive source text omitted]";
+                if (MemoryContentRules.ContainsSensitive(text)) text = "[sensitive source text omitted]";
                 parts.Add(JsonSerializer.Serialize(new { e.EntryId, e.Sequence, role = e.Role.ToString(), status = e.Status.ToString(), text = Clip(text, 1800),
                     effects = EffectReceipts.ModelSafe(e.Envelope?.EffectReceipts) }, Json));
             }
@@ -301,5 +301,5 @@ public sealed class ExperienceService(IExperienceStore experience, IAgentRunStor
         return instance;
     }
     private static string Clip(string text, int max) => text.Length <= max ? text : text[..max];
-    private static string Safe(string text) => StructuredMemoryService.ContainsSensitive(text) ? "[sensitive text omitted]" : text;
+    private static string Safe(string text) => MemoryContentRules.ContainsSensitive(text) ? "[sensitive text omitted]" : text;
 }

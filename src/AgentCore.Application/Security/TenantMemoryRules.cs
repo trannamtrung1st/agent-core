@@ -127,7 +127,7 @@ public static class TenantMemoryRules
             try
             {
                 if (proposal.Operation == MemoryProposalOperation.Upsert)
-                    (subject, body, key, _) = StructuredMemoryService.ValidateContent(proposal.Kind, subject, body, sourceEntry is { } entry ? [entry] : [], admission);
+                    (subject, body, key, _) = MemoryContentRules.ValidateContent(proposal.Kind, subject, body, sourceEntry is { } entry ? [entry] : [], admission);
                 else if (proposal.Kind != MemoryKind.OpenLoop || subject.Length is 0 or > MemoryLimits.MaxSubjectCharacters) throw new ArgumentException("An exact open loop is required.");
             }
             catch (Exception error) when (error is AgentCoreException or ArgumentException)

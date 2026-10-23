@@ -43,8 +43,8 @@ public static class SessionMemoryPrompt
                 continue;
             }
 
-            if (StructuredMemoryService.ContainsSensitive(item.Subject)
-                || StructuredMemoryService.ContainsSensitive(item.Content)
+            if (MemoryContentRules.ContainsSensitive(item.Subject)
+                || MemoryContentRules.ContainsSensitive(item.Content)
                 || ContainsForbidden(item, admission))
             {
                 continue;

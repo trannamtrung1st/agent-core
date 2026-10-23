@@ -60,86 +60,6 @@ public sealed class ManagedInstanceP7DRegressionTests
     private const string FirstInstanceIdentityMemory = "P7D_FIRST_INSTANCE_IDENTITY_USER_SENTINEL";
 
     [Fact]
-    public async Task Two_managed_instances_do_not_share_identity_user_memory()
-    {
-        await ForEachDurableStore(async (sessions, instances, structured, triggers, clock) =>
-        {
-            _ = triggers;
-            var definitions = new VersionedDefinitions(SampleDefinitions.Examiner);
-            var service = Service(instances, definitions, sessions, clock);
-            var manager = Manager(definitions, sessions, service, clock, structured);
-            var first = await service.CreateAsync("examiner", 1);
-            var second = await service.CreateAsync("examiner", 1);
-            var sessionFirst = await manager.CreateForInstanceAsync(first.InstanceId, SessionMode.Text);
-            _ = await manager.CreateForInstanceAsync(second.InstanceId, SessionMode.Text);
-
-            var memory = new StructuredMemoryService(structured, Ids(12, "019944af-00f9-7000-8000-"), clock);
-            var admission = new MemoryAdmissionContext("application", [], new HashSet<string>(StringComparer.Ordinal));
-            var source = await memory.WriteAsync(
-                new TrustedMemoryOwner(sessionFirst.SessionId),
-                new MemoryWriteProposal(MemoryKind.Fact, "Learned preference", FirstInstanceIdentityMemory, []),
-                admission);
-            var promoted = await memory.PromoteToIdentityUserAsync(
-                new TrustedMemoryOwner(sessionFirst.SessionId),
-                source.MemoryId,
-                new TrustedIdentityUserOwner(first.InstanceId, ProfileId),
-                promotionAllowed: true,
-                admission);
-            Assert.Equal(MemoryScope.IdentityUser, promoted.Scope);
-            Assert.Equal(first.InstanceId, promoted.OwnerInstanceId);
-
-            var onFirst = await memory.SearchIdentityUserAsync(
-                new TrustedIdentityUserOwner(first.InstanceId, ProfileId),
-                new MemorySearchQuery(null, null),
-                retrievalAllowed: true,
-                admission);
-            Assert.Contains(onFirst, item => item.Content == FirstInstanceIdentityMemory);
-
-            var onSecond = await memory.SearchIdentityUserAsync(
-                new TrustedIdentityUserOwner(second.InstanceId, ProfileId),
-                new MemorySearchQuery(null, null),
-                retrievalAllowed: true,
-                admission);
-            Assert.DoesNotContain(onSecond, item => item.Content.Contains(FirstInstanceIdentityMemory, StringComparison.Ordinal));
-        });
-    }
-
-    [Fact]
-    public async Task Two_managed_instances_do_not_share_session_scoped_memory()
-    {
-        var definitions = new VersionedDefinitions(SampleDefinitions.Examiner);
-        var instances = new InMemoryAgentInstanceStore();
-        var sessions = new InMemoryMemoryStore();
-        var structured = new InMemoryStructuredMemoryStore();
-        var clock = new FakeTimeProvider(Now);
-        var service = Service(instances, definitions, sessions, clock);
-        var manager = Manager(definitions, sessions, service, clock, structured);
-        var first = await service.CreateAsync("examiner", 1);
-        var second = await service.CreateAsync("examiner", 1);
-        var sessionFirst = await manager.CreateForInstanceAsync(first.InstanceId, SessionMode.Text);
-        var sessionSecond = await manager.CreateForInstanceAsync(second.InstanceId, SessionMode.Text);
-
-        var memory = new StructuredMemoryService(structured, Ids(8, "019944af-00f2-7000-8000-"), clock);
-        var admission = new MemoryAdmissionContext("application", [], new HashSet<string>(StringComparer.Ordinal));
-        await memory.WriteAsync(
-            new TrustedMemoryOwner(sessionFirst.SessionId),
-            new MemoryWriteProposal(MemoryKind.Fact, "Instance A", "only on first managed instance", []),
-            admission);
-
-        var onFirst = await memory.SearchAsync(
-            new TrustedMemoryOwner(sessionFirst.SessionId),
-            new MemorySearchQuery(null, null),
-            admission);
-        Assert.Contains(onFirst, item => item.Content == "only on first managed instance");
-
-        var onSecond = await memory.SearchAsync(
-            new TrustedMemoryOwner(sessionSecond.SessionId),
-            new MemorySearchQuery(null, null),
-            admission);
-        Assert.DoesNotContain(onSecond, item => item.Content.Contains("only on first managed instance", StringComparison.Ordinal));
-    }
-
-    [Fact]
     public async Task Archived_managed_instance_retains_session_memory_and_trigger_history()
     {
         await ForEachDurableStore(async (sessions, instances, structured, triggers, clock) =>
@@ -172,22 +92,12 @@ public sealed class ManagedInstanceP7DRegressionTests
                 },
                 session.Revision);
 
-            var memory = new StructuredMemoryService(structured, Ids(8, "019944af-00f4-7000-8000-"), clock);
-            var admission = new MemoryAdmissionContext("application", [], new HashSet<string>(StringComparer.Ordinal));
-            await memory.WriteAsync(
-                new TrustedMemoryOwner(session.SessionId),
-                new MemoryWriteProposal(MemoryKind.Fact, "Retention", "survives archive", []),
-                admission);
-            var identitySource = await memory.WriteAsync(
-                new TrustedMemoryOwner(session.SessionId),
-                new MemoryWriteProposal(MemoryKind.Fact, "Identity retention", FirstInstanceIdentityMemory, []),
-                admission);
-            await memory.PromoteToIdentityUserAsync(
-                new TrustedMemoryOwner(session.SessionId),
-                identitySource.MemoryId,
-                new TrustedIdentityUserOwner(managed.InstanceId, ProfileId),
-                promotionAllowed: true,
-                admission);
+            foreach (var (subject, content, scope) in new[] {
+                ("Retention", "survives archive", MemoryScope.Session),
+                ("Identity retention", FirstInstanceIdentityMemory, MemoryScope.IdentityUser) })
+                await structured.InsertAsync(new(Guid.NewGuid(), session.SessionId, MemoryKind.Fact, MemoryItemStatus.Active,
+                    subject, content, StructuredMemoryItem.SubjectKeyFor(subject), new("fixture", [], null, Now), Now, Now,
+                    scope, scope == MemoryScope.IdentityUser ? managed.InstanceId : null, scope == MemoryScope.IdentityUser ? ProfileId : null));
 
             var owner = new TriggerOwner(managed.InstanceId, ProfileId);
             var automationId = Guid.Parse("019944af-00f3-7000-8000-000000000002");
@@ -214,18 +124,8 @@ public sealed class ManagedInstanceP7DRegressionTests
 
             var reloaded = (await sessions.LoadAsync(session.SessionId))!;
             Assert.Equal("archived history line", Assert.Single(reloaded.Entries).Text);
-            Assert.Contains(
-                (await memory.SearchAsync(
-                    new TrustedMemoryOwner(session.SessionId),
-                    new MemorySearchQuery(null, null),
-                    admission)).Select(item => item.Content),
-                content => content == "survives archive");
-            var identityAfterArchive = await memory.SearchIdentityUserAsync(
-                new TrustedIdentityUserOwner(managed.InstanceId, ProfileId),
-                new MemorySearchQuery(null, null),
-                retrievalAllowed: true,
-                admission);
-            Assert.Contains(identityAfterArchive, item => item.Content == FirstInstanceIdentityMemory);
+            Assert.Contains(await structured.ListActiveAsync(session.SessionId), item => item.Content == "survives archive");
+            Assert.Contains(await structured.ListActiveIdentityUserAsync(managed.InstanceId, ProfileId), item => item.Content == FirstInstanceIdentityMemory);
             var trigger = await triggers.GetAsync(owner, automationId);
             Assert.NotNull(trigger);
             Assert.Equal(AutomationStatus.Completed, trigger.Status);

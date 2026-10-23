@@ -117,7 +117,7 @@ public static class TenantMemoryOperationRules
             if (args.Tool == ToolCatalog.MemoryConsolidate)
             {
                 var context = SessionMemoryPrompt.CreateAdmissionContext("learned", reader.Effective, null, reader.Session.Snapshot.Entries);
-                var (_, _, key, _) = StructuredMemoryService.ValidateContent(args.Kind!.Value, args.Subject!, args.Content!, [], context);
+                var (_, _, key, _) = MemoryContentRules.ValidateContent(args.Kind!.Value, args.Subject!, args.Content!, [], context);
                 if (owned.Any(i => i.OwnerKey == items[0].OwnerKey && i.Kind == items[0].Kind && i.SubjectKey == key && i.Status == MemoryItemStatus.Active && !items.Any(source => source.MemoryId == i.MemoryId)))
                     throw new SecurityConflictException("memory_subject_conflict");
             }
