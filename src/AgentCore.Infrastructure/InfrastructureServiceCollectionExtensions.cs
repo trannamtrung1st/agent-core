@@ -175,14 +175,6 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>(),
                 provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetService<IBrowser>()));
-            services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
-                new SqliteAdminP7eHistoryMutator(
-                    provider.GetRequiredService<AdminMemoryService>(),
-                    provider.GetRequiredService<AdminAutomationService>(),
-                    provider.GetRequiredService<ILocalUserProfileService>(),
-                    provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                    provider.GetRequiredService<IIdGenerator>(),
-                    provider.GetRequiredService<TimeProvider>()));
             services.AddSingleton<IEmailStore, SqliteEmailStore>();
             services.AddSingleton<IEmailWatchStore, SqliteEmailWatchStore>();
             services.AddSingleton<SqliteDriveStore>();
@@ -271,13 +263,6 @@ public static class InfrastructureServiceCollectionExtensions
                     (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(),
                     provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetRequiredService<IAgentCredentialBindingStore>(), provider.GetService<IBrowser>(), provider.GetRequiredService<InMemoryCoreEventStore>(), provider.GetRequiredService<IDriveOperationStore>());
             });
-            services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
-                new InMemoryAdminP7eHistoryMutator(
-                    provider.GetRequiredService<AdminMemoryService>(),
-                    provider.GetRequiredService<InMemoryAdminEventStore>(),
-                    (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(),
-                    provider.GetRequiredService<AdminAutomationService>(),
-                    provider.GetRequiredService<InMemoryDurableState>()));
         }
         services.TryAddSingleton<ICredentialProtector>(p => new LocalCredentialProtector(persistence.CredentialProtectionKeyRoot));
         services.TryAddSingleton<AgentCore.Application.Drive.DriveService>();

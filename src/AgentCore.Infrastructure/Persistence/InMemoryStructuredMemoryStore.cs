@@ -22,49 +22,6 @@ public sealed partial class InMemoryStructuredMemoryStore : IStructuredMemorySto
         }
     }
 
-    internal StructuredMemoryItem? TryGetCopy(Guid memoryId)
-    {
-        lock (_gate)
-        {
-            return _items.TryGetValue(memoryId, out var item) ? item : null;
-        }
-    }
-
-    internal void RestoreItem(Guid memoryId, StructuredMemoryItem? prior)
-    {
-        lock (_gate)
-        {
-            if (prior is null)
-            {
-                _items.Remove(memoryId);
-                return;
-            }
-
-            _items[memoryId] = prior;
-        }
-    }
-
-    internal Dictionary<Guid, StructuredMemoryItem> SnapshotActive(Func<StructuredMemoryItem, bool> predicate)
-    {
-        lock (_gate)
-        {
-            return _items.Values
-                .Where(item => item.Status == MemoryItemStatus.Active && predicate(item))
-                .ToDictionary(item => item.MemoryId, item => item);
-        }
-    }
-
-    internal void RestoreItems(Dictionary<Guid, StructuredMemoryItem> snapshot)
-    {
-        lock (_gate)
-        {
-            foreach (var pair in snapshot)
-            {
-                _items[pair.Key] = pair.Value;
-            }
-        }
-    }
-
     public ValueTask<StructuredMemoryItem?> FindAsync(
         Guid sessionId,
         Guid memoryId,

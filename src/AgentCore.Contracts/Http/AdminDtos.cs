@@ -322,60 +322,6 @@ public sealed record AdminUpdateAgentInstanceLifecycleRequest(long ExpectedRevis
 
 public sealed record AdminReassociateAgentInstanceVersionRequest(long ExpectedRevision, int Version);
 
-public sealed record AdminLearnedMemoryListResponse(
-    string Scope,
-    IReadOnlyList<AdminLearnedMemoryItemResponse> Items);
-
-public sealed record AdminLearnedMemoryItemResponse(
-    string MemoryId,
-    string Kind,
-    string Subject,
-    string Content,
-    AdminLearnedMemoryProvenanceResponse Provenance,
-    string UpdatedAt, string Status = "Active");
-
-public sealed record AdminLearnedMemoryProvenanceResponse(
-    string Source,
-    string? OriginSessionId,
-    string? OriginMemoryId,
-    string RecordedAt, IReadOnlyList<string>? DerivedFromMemoryIds = null, string? MaintenanceOrigin = null,
-    string? MaintenanceAgentInstanceId = null, string? MaintenanceSessionId = null, string? MaintenanceAgentRunId = null);
-
-public sealed record AdminLearnedMemoryResetRequest(string Scope, string? SessionId, bool Confirm);
-
-public sealed record AdminLearnedMemoryResetResponse(string Scope, int ItemsRemoved);
-
-public sealed record AdminAutomationRegistrationListResponse(
-    IReadOnlyList<AdminAutomationRegistrationResponse> Items);
-
-public sealed record AdminAutomationProvenanceResponse(
-    string AuthorizationOrigin,
-    string? SourceSessionId,
-    string CreatedAt,
-    string UpdatedAt);
-
-public sealed record AdminAutomationRegistrationResponse(
-    string AutomationId,
-    string Intent,
-    string Status,
-    string ScheduleKind,
-    string TimeZoneId,
-    string ScheduleSummary,
-    string? NextOccurrenceAtUtc,
-    long Revision,
-    string? SuspensionReason,
-    AdminAutomationProvenanceResponse Provenance,
-    string? ModelOverrideCatalogKey = null,
-    string? ModelOverrideReasoningEffort = null,
-    string ModelSource = "Conversation default");
-
-public sealed record AdminSetRegistrationModelRequest(
-    long ExpectedRevision,
-    string? CatalogKey,
-    string? ReasoningEffort);
-
-public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevision, bool Confirm);
-
 public sealed record AdminEventListResponse(IReadOnlyList<AdminEventResponse> Items);
 
 public sealed record AdminWebhookEventResponse(string EventId, string DisplayName, string EventKey,

@@ -240,62 +240,6 @@ internal static class AdminHttpMapping
             item.ContentSha256,
             item.ByteLength);
 
-    public static AdminLearnedMemoryListResponse ToLearnedMemoryList(AdminLearnedMemoryListResult result) =>
-        new(
-            result.Scope.ToString(),
-            result.Items.Select(ToLearnedMemoryItem).ToArray());
-
-    public static AdminLearnedMemoryItemResponse ToLearnedMemoryItem(AdminLearnedMemoryItem item) =>
-        new(
-            item.MemoryId.ToString("D"),
-            item.Kind.ToString(),
-            item.Subject,
-            item.Content,
-            new AdminLearnedMemoryProvenanceResponse(
-                item.ProvenanceSource,
-                item.OriginSessionId?.ToString("D"),
-                item.OriginMemoryId?.ToString("D"),
-                item.RecordedAt.ToString("o"), (item.DerivedFromMemoryIds ?? []).Select(id => id.ToString("D")).ToArray(), item.MaintenanceOrigin,
-                item.MaintenanceAgentInstanceId?.ToString("D"), item.MaintenanceSessionId?.ToString("D"), item.MaintenanceAgentRunId?.ToString("D")),
-            item.UpdatedAt.ToString("o"), item.Status.ToString());
-
-    public static AdminLearnedMemoryResetResponse ToLearnedMemoryReset(AdminLearnedMemoryResetResult result) =>
-        new(result.Scope.ToString(), result.ItemsRemoved);
-
-    public static AdminAutomationRegistrationListResponse ToAutomationRegistrations(
-        IReadOnlyList<AdminAutomationRegistration> items) =>
-        new(items.Select(ToAutomationRegistration).ToArray());
-
-    public static AdminAutomationRegistrationResponse ToAutomationRegistration(AdminAutomationRegistration item) =>
-        new(
-            item.AutomationId.ToString("D"),
-            item.Intent,
-            ToAutomationStatus(item.Status),
-            item.ScheduleKind,
-            item.TimeZoneId,
-            item.ScheduleSummary,
-            item.NextOccurrenceAtUtc?.ToString("o"),
-            item.Revision,
-            item.SuspensionReason,
-            new AdminAutomationProvenanceResponse(
-                item.Provenance.AuthorizationOrigin,
-                item.Provenance.SourceSessionId,
-                item.Provenance.CreatedAt.ToString("o"),
-                item.Provenance.UpdatedAt.ToString("o")),
-            item.ModelOverrideCatalogKey,
-            item.ModelOverrideReasoningEffort,
-            item.ModelSource);
-
-    private static string ToAutomationStatus(AutomationStatus status) => status switch
-    {
-        AutomationStatus.Active => "active",
-        AutomationStatus.Completed => "completed",
-        AutomationStatus.Cancelled => "cancelled",
-        AutomationStatus.Expired => "expired",
-        AutomationStatus.SuspendedPolicy => "suspendedPolicy",
-        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
-    };
-
     private static AdminTriggerPolicyResponse ToTriggerPolicy(TriggerPolicy policy) =>
         new(
             policy.Enabled,

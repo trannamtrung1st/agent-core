@@ -52,6 +52,38 @@ public abstract class AdminEventStoreContractTests
 {
     protected abstract Task ForEachStoreAsync(Func<IAdminEventStore, Task> exercise);
 
+    [Theory]
+    [InlineData(AdminLearnedMemoryScope.Session)]
+    [InlineData(AdminLearnedMemoryScope.IdentityUser)]
+    [InlineData(AdminLearnedMemoryScope.User)]
+    public async Task Historical_Memory_and_Automation_events_remain_readable_without_retired_mutators(AdminLearnedMemoryScope scope)
+    {
+        await ForEachStoreAsync(async store =>
+        {
+            var at = DateTimeOffset.Parse("2026-09-25T12:00:00Z"); var instance = Guid.NewGuid();
+            Guid? session = scope == AdminLearnedMemoryScope.Session ? Guid.NewGuid() : null;
+            var records = new[] {
+                AdminEventFactory.MemoryItemDeleted(Guid.NewGuid(), at, instance, scope, Guid.NewGuid(), session),
+                AdminEventFactory.MemoryScopeReset(Guid.NewGuid(), at, instance, scope, 2, session),
+                AdminEventFactory.AutomationRevoked(Guid.NewGuid(), at, instance, Guid.NewGuid(), 3)
+            };
+            foreach (var append in records)
+            {
+                var saved = await store.AppendAsync(append, CancellationToken.None);
+                var retained = await store.TryGetByOperationIdAsync(append.OperationId, CancellationToken.None);
+                Assert.NotNull(retained); Assert.Equal(saved.EventId, retained.EventId);
+                Assert.Equal(append.Operation, retained.Operation); Assert.Equal(append.SummaryJson, retained.SummaryJson);
+                using var summary = System.Text.Json.JsonDocument.Parse(retained.SummaryJson);
+                Assert.False(summary.RootElement.TryGetProperty("content", out _));
+                Assert.False(summary.RootElement.TryGetProperty("subject", out _));
+                if (append.Operation != AdminEventOperationKind.AutomationRevoked)
+                    Assert.Equal(scope.ToString(), summary.RootElement.GetProperty("scope").GetString());
+                if (append.Operation == AdminEventOperationKind.MemoryScopeReset)
+                    Assert.Equal(2, summary.RootElement.GetProperty("itemsRemoved").GetInt32());
+            }
+        });
+    }
+
     [Fact]
     public async Task Append_is_idempotent_by_operation_id()
     {

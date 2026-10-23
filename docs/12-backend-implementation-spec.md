@@ -827,7 +827,7 @@ Observed execution-model pin: `ExecutionModelPolicy` runs before live-versus-dur
 
 ## P7E memory and automation Admin (observed)
 
-`AdminMemoryService` and `AdminAutomationService` expose owner-protected list/delete/reset and trigger registration cancel through existing P4/P5 stores with scope confirmation and revision checks. `TriggerInstancePolicyReconciliationService` suspends ineligible future registrations on managed version downgrade or archive without cancelling accepted P6 work. HTTP routes under `/api/v2/admin/agent-instances/{instanceId}/learned-memory` and `.../automations` map in `AdminEndpoints.cs`. See [Interfaces](04-backend-interfaces.md#p7e-memory-and-automation-admin-observed) and [P7E report](reports/p7e-memory-automation-admin.md).
+The historical P7E single-owner routes and application/history facades are retired. Current tenant Memory and Automation commands use canonical IAM-qualified owners, scope/revision checks and atomic audit transactions described in [Interfaces](04-backend-interfaces.md#p7e-memory-and-automation-admin-observed). The [P7E report](reports/p7e-memory-automation-admin.md) retains historical evidence; the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) owns current qualification.
 
 ## P7F validate, evaluate, diff, publish (observed)
 
