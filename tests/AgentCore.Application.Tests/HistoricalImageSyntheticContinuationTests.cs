@@ -23,7 +23,7 @@ public sealed class HistoricalImageSyntheticContinuationTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var tools = new SessionToolExecutor();
         var model = new VisionToolsLanguageModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
         var store = new InMemoryMemoryStore();

@@ -114,7 +114,7 @@ public sealed class SessionAttachmentRecallTests
             var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 17, 1, 0, 0, TimeSpan.Zero));
             var attachments = new SqliteAttachmentStore(harness.Factory, time, blobRoot);
             var processor = new AttachmentProcessor(attachments);
-            var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+            var tools = new SessionToolExecutor();
             var firstModel = new RecordingLanguageModel(new ScriptedLanguageModel());
             var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
             var output = new CapturingSessionOutput();

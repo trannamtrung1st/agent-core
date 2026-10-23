@@ -33,10 +33,9 @@ public sealed partial class SessionRuntime
             OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
             AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
             HasBackgroundClaim: _boundAgentRun is { Claim: { } claim } bound && await _agentRuns.HasCompletionClaimAsync(bound.Owner, bound.AgentRunId, claim.Generation, _time.GetUtcNow(), ct),
-            CredentialMetadataAvailable: _boundAgentRun?.Owner.TenantId is not null ? _boundAgentRun.Admission.Configuration?.CredentialBindings.Count > 0
-                : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
+            CredentialMetadataAvailable: _boundAgentRun?.Owner.TenantId is not null && _boundAgentRun.Admission.Configuration?.CredentialBindings.Count > 0,
             Harness: await HarnessContextAsync(_boundAgentRun, ct),
-            AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
+            AgentWorkspaceAvailable: _runtimeOwner is not null,
             AllowAgentConsolidation: (await CurrentContinuitySettingsAsync(_boundAgentRun, ct).ConfigureAwait(false))?.AllowMaintenance == true,
             ContinuityContext: null)
             { TenantManagementReadSources = tenantSkills.Sources, ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,

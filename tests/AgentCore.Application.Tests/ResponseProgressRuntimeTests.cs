@@ -131,8 +131,7 @@ public sealed class ResponseProgressRuntimeTests
         var output = new CapturingSessionOutput();
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            artifacts: artifacts);
+);
         await using var runtime = CreateSupportRuntime(output, definition, new DualToolLanguageModel(), tools, artifacts);
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync("Run the support case for order 91."));
@@ -156,9 +155,7 @@ public sealed class ResponseProgressRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
-            artifacts: artifacts);
+);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
         await runtime.AttachAsync();
@@ -187,9 +184,7 @@ public sealed class ResponseProgressRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
-            artifacts: artifacts);
+);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
         await runtime.AttachAsync();
@@ -243,9 +238,7 @@ public sealed class ResponseProgressRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
-            artifacts: artifacts);
+);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
         await runtime.AttachAsync();
@@ -283,9 +276,7 @@ public sealed class ResponseProgressRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
-            artifacts: artifacts);
+);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
         await runtime.AttachAsync();
@@ -390,9 +381,7 @@ public sealed class ResponseProgressRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
-            artifacts: artifacts);
+);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
         await runtime.AttachAsync();
@@ -453,8 +442,7 @@ public sealed class ResponseProgressRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            artifacts: artifacts);
+);
         var output = new CapturingSessionOutput();
         var runtime = CreateSupportRuntime(output, definition, new ScriptedLanguageModel(), tools, artifacts);
         return new Harness(runtime, output);

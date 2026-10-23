@@ -42,7 +42,7 @@ public sealed class ComplianceRealToolLoopTests
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var tools = new SessionToolExecutor(knowledge, attachments);
+        var tools = new SessionToolExecutor();
         var output = new CapturingSessionOutput();
         var definition = await LoadComplianceAsync();
         await using var runtime = CreateRuntime(output, attachments, processor, tools, model, definition);

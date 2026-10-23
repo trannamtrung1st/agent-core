@@ -34,7 +34,7 @@ public sealed partial class TerminalDisplayRepairTests
             var grants = new[] { ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserType,
                 ToolCatalog.BrowserFillCredential, ToolCatalog.BrowserClick, ToolCatalog.BrowserClose, "browser.verify", ToolCatalog.BrowserWait,
                 "browser.scroll", ToolCatalog.BrowserPressKey }.Concat(grantHover ? [ToolCatalog.BrowserHover] : Array.Empty<string>()).ToArray();
-            var executor = new SessionToolExecutor(browser: browser, agentInstances: instances, credentials: credentials, credentialBindings: credentialStore, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
             await using var runtime = CreateCore(model, browser, null, grants, executor: executor);
             var snapshot = runtime.Snapshot; var now = DateTimeOffset.UtcNow;
             await instances.InsertAsync(new(snapshot.AgentInstanceId, snapshot.Definition.Id, snapshot.Definition.Version,

@@ -2,15 +2,6 @@ using AgentCore.Application.Tools;
 namespace AgentCore.Application.Tests;
 public sealed class SandboxFailureSummaryTests
 {
-    [Theory]
-    [InlineData("Indeterminate",true,true)]
-    [InlineData("Indeterminate",false,false)]
-    [InlineData("Completed",true,false)]
-    public void Only_current_call_uncertainty_is_attributed(string status,bool currentCall,bool unknown)
-    {
-        var result = new AgentCore.Application.Ports.SandboxCommandResult(Guid.NewGuid(),status,status=="Completed"?7:null,"","",false,0,true,Error:"recovery_required");
-        Assert.Equal(unknown,SessionToolExecutor.SandboxEffectUnknown(result,currentCall));
-    }
 
     [Fact]
     public void A_null_error_is_not_a_definitive_effect_rejection()

@@ -471,24 +471,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentCore.Application.Execution.AgentRunConfigurationResolver>();
         services.TryAddSingleton<IOfficeProcessor, AgentCore.Infrastructure.Office.OfficeProcessor>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
-            provider.GetService<RoleKnowledgeService>(),
-            provider.GetService<IAttachmentStore>(),
-            provider.GetService<IAttachmentProcessor>(),
-            provider.GetService<ISessionWorkspace>(),
-            provider.GetService<IArtifactStore>(),
-            provider.GetService<IWebSearchProvider>(),
-            provider.GetService<IPublicWebFetcher>(),
-            provider.GetService<IEmailProvider>(),
-            provider.GetRequiredService<IToolConfigurationGate>(),
-            provider.GetRequiredService<IAgentInstanceStore>(),
-            provider.GetRequiredService<IAgentDefinitionStore>(),
-            provider.GetRequiredService<IMemoryStore>(),
-            provider.GetService<IBrowser>(),
-            provider.GetService<IAgentDefinitionResourceAdminStore>(),
-            provider.GetRequiredService<AgentInstanceWorkspaceService>(),
-            provider.GetRequiredService<CredentialService>(),
-            provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
-            provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>(), provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<IOfficeProcessor>(), provider.GetRequiredService<AgentCore.Application.Drive.DriveService>(), provider.GetRequiredService<ISandboxService>(), provider.GetRequiredService<ISandboxStore>(), provider.GetRequiredService<ISandboxImageAuthority>(), provider.GetRequiredService<ISandboxReadiness>(), provider.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>(), tenantAuthorization: provider.GetRequiredService<AgentCore.Application.Security.TenantToolAuthorization>()));
+            configurationGate: provider.GetRequiredService<IToolConfigurationGate>(),
+            browser: provider.GetService<IBrowser>(),
+            sandboxService: provider.GetRequiredService<ISandboxService>(),
+            sandboxStore: provider.GetRequiredService<ISandboxStore>(),
+            workingCleanup: provider.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>(),
+            tenantAuthorization: provider.GetRequiredService<AgentCore.Application.Security.TenantToolAuthorization>(),
+            logger: provider.GetService<ILogger<SessionToolExecutor>>()));
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();

@@ -286,7 +286,7 @@ public sealed class BrowserRecordJourneyTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            tools: new SessionToolExecutor(agentInstances: instances, browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
+            tools: new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll),
             agentRuns: turns);
     }
 

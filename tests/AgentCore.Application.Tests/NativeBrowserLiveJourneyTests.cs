@@ -58,7 +58,7 @@ public sealed class NativeBrowserLiveJourneyTests(ITestOutputHelper evidence)
             await using var runtime = AgentCore.Tests.Shared.SessionRuntimeFixture.Create(snapshot, new SemanticResponseLanguageModel(recording),
                 new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory, output,
                 new SystemIdGenerator(TimeProvider.System), TimeProvider.System, NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(browser: browser, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll),
+                tools: new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll),
                 browserLease: browser);
             await runtime.AttachAsync();
             var url = browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html";

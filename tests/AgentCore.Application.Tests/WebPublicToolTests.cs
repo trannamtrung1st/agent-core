@@ -113,8 +113,7 @@ public sealed class WebPublicToolTests
         var search = new RecordingWebSearch();
         var gate = ToolConfigurationGates.From(tool => tool != ToolCatalog.WebSearch);
         var executor = new SessionToolExecutor(
-            webSearch: search,
-            configurationGate: gate);
+ configurationGate:gate);
         var definition = Definition(
             "general-assistant",
             2,
@@ -173,9 +172,7 @@ public sealed class WebPublicToolTests
         IWebSearchProvider? search = null,
         IPublicWebFetcher? fetch = null) =>
         new SessionToolExecutor(
-            webSearch: search ?? new RecordingWebSearch(),
-            publicWebFetcher: fetch ?? new RecordingFetcher("fixture"),
-            configurationGate: ToolConfigurationGates.AllowAll);
+ configurationGate:ToolConfigurationGates.AllowAll);
 
     private static AgentDefinition Definition(string id, int version, IReadOnlyList<string> tools) =>
         new(

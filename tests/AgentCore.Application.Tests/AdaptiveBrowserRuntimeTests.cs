@@ -51,7 +51,7 @@ public sealed class AdaptiveBrowserRuntimeTests(Xunit.Abstractions.ITestOutputHe
             await using var runtime = SessionRuntimeFixture.Create(snapshot, model,
                 new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory, output,
                 new SystemIdGenerator(TimeProvider.System), TimeProvider.System, NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(browser: browser, artifacts: artifacts, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll),
+                tools: new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll),
                 browserLease: browser, agentRuns: runs);
             await runtime.AttachAsync(); var source = Guid.NewGuid();
             Assert.True(await runtime.SubmitPersistedUserTextAsync(mode == "accessible" ? "Save inspection notes." : "Inspect the cooling project pump PUMP-1042.", source));
@@ -151,7 +151,7 @@ public sealed class AdaptiveBrowserRuntimeTests(Xunit.Abstractions.ITestOutputHe
             var fieldBox = (await page.Locator("[data-sensitive]").BoundingBoxAsync())!;
             var definition = await CapabilityProjectionTests.Definition(ToolCatalog.BrowserScreenshot, ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserVisionMouse);
             var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-            var executor = new SessionToolExecutor(browser: browser, artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
             var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, SupportsVision: vision, CaptureScope: "one-capture");
             async Task<ToolExecutionResult> Run(string name, object args, int budget = ToolLimits.MaxOutputBytes) =>
                 await executor.ExecuteAsync(definition, id, new(Guid.NewGuid().ToString(), name, JsonSerializer.Serialize(args)), budget, admission: admission);

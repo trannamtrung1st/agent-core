@@ -30,7 +30,7 @@ public sealed partial class TerminalDisplayRepairTests
             var artifacts = new InMemoryArtifactStore(TimeProvider.System);
             var document = new string('x', AgentRunLimits.MaxCheckpointBytes + 1);
             var model = new SemanticResponseLanguageModel(new DocumentModel(document, structured: true));
-            var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
             await using var runtime = CreateCore(model, null, null,
                 [ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace], executor, new SessionArtifactAuthorizer(artifacts));
             await runtime.AttachAsync();
@@ -59,7 +59,7 @@ public sealed partial class TerminalDisplayRepairTests
             var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 400));
             var inner = new DocumentModel(document, structured);
             var model = new SemanticResponseLanguageModel(inner);
-            var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
             await using var runtime = CreateCore(model, null, null,
                 [ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace], executor, new SessionArtifactAuthorizer(artifacts));
             await runtime.AttachAsync();

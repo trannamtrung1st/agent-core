@@ -137,7 +137,7 @@ public sealed class EmailToolTests
     {
         var provider = new SyntheticEmailProvider();
         var gate = ToolConfigurationGates.From(tool => tool != ToolCatalog.EmailSearch);
-        var executor = new SessionToolExecutor(emailProvider: provider, configurationGate: gate);
+        var executor = new SessionToolExecutor( configurationGate:gate);
         var definition = Definition(4, [ToolCatalog.EmailSearch]);
         var result = await executor.ExecuteAsync(
             definition,
@@ -149,8 +149,7 @@ public sealed class EmailToolTests
 
     private static SessionToolExecutor CreateExecutor(IEmailProvider provider) =>
         new SessionToolExecutor(
-            emailProvider: provider,
-            configurationGate: ToolConfigurationGates.AllowAll);
+ configurationGate:ToolConfigurationGates.AllowAll);
 
     private static AgentDefinition Definition(int version, IReadOnlyList<string> tools) =>
         new(

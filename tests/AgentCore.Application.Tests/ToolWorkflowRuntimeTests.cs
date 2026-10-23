@@ -27,8 +27,7 @@ public sealed class ToolWorkflowRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var workspace = new CountingWorkspace();
-        var tools = new SessionToolExecutor(RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
+        var tools = new SessionToolExecutor();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, definition, new BoundedWriteLanguageModel(2, true, sameArguments), tools, artifacts);
         await runtime.AttachAsync();
@@ -114,7 +113,7 @@ public sealed class ToolWorkflowRuntimeTests
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var workspace = new CountingWorkspace();
-        var tools = new SessionToolExecutor(knowledge, workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
+        var tools = new SessionToolExecutor();
         var model = new MultiFileLanguageModel();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, definition, model, tools, artifacts);
@@ -144,10 +143,7 @@ public sealed class ToolWorkflowRuntimeTests
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var workspace = new CountingWorkspace();
         var tools = new SessionToolExecutor(
-            knowledge,
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
-            artifacts: artifacts,
-            configurationGate: ToolConfigurationGates.AllowAll);
+ configurationGate:ToolConfigurationGates.AllowAll);
         var model = new BoundedWriteLanguageModel(25);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(
@@ -173,7 +169,7 @@ public sealed class ToolWorkflowRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var tools = new SessionToolExecutor(knowledge, workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
+        var tools = new SessionToolExecutor();
         var model = new WorkspaceWriteLanguageModel();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, definition, model, tools, artifacts);
@@ -192,7 +188,7 @@ public sealed class ToolWorkflowRuntimeTests
         var definition = await Load(compliance ? "compliance" : "customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var tools = new SessionToolExecutor(knowledge, artifacts: artifacts);
+        var tools = new SessionToolExecutor();
         var model = new ScriptedLanguageModel(alwaysToolCall: alwaysToolCall);
         var output = new CapturingSessionOutput();
         var runtime = CreateRuntime(output, definition, model, tools, artifacts);

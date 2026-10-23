@@ -186,7 +186,7 @@ public sealed class SecretaryIdentityTests
             sessionIds,
             new FakeTimeProvider(Now),
             NullLogger<SessionRuntime>.Instance,
-            tools: new SessionToolExecutor(agentInstances: agents),
+            tools: new SessionToolExecutor(),
             agentRuns: turns);
         await runtime.AttachAsync();
 
@@ -301,8 +301,7 @@ public sealed class SecretaryIdentityTests
         await agents.InsertAsync(new AgentInstance(InstanceId, secretary.Id, secretary.Version, secretary.Identity,
             AgentInstanceLifecycle.Active, Now, Now), initialSkills: secretary.SkillList);
         var tools = new SessionToolExecutor(
-            knowledge, agentInstances: agents,
-            artifacts: artifacts);
+);
         var sessionIds = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-00c4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf22")]);

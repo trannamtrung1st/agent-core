@@ -830,8 +830,7 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
         public AgentDefinition Definition { get; private set; } = null!; public SessionSnapshot Session { get; private set; } = null!;
         public AgentRun Run { get; private set; } = null!; public OpenSandboxService Service { get; private set; } = null!;
         public SandboxProfile Profile => _profile;
-        public SessionToolExecutor Executor(IArtifactStore? artifacts = null) => new(workspace:Workspace,artifacts:artifacts,profiles:_memory,emailRuns:_runs,sandboxService:Service,sandboxStore:Store,
-            agentWorkspace:new AgentCore.Application.Workspaces.AgentInstanceWorkspaceService(Instances,Home,_memory,Workspace,new AgentCore.Application.Admin.AdminLifecycleCoordinator()));
+        public SessionToolExecutor Executor(IArtifactStore? artifacts = null) => new( sandboxService:Service, sandboxStore:Store);
         public FileSessionWorkspace Workspace { get; private set; } = null!; public ISandboxStore Store { get; private set; } = null!;
         private Factory _factory = null!; private SqliteMemoryStore _memory = null!; private SqliteAgentRunStore _runs = null!;
         public SqliteAgentInstanceStore Instances { get; private set; } = null!;

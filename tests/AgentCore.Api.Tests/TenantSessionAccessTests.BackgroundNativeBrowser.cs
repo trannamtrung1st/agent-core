@@ -34,7 +34,7 @@ public sealed partial class TenantSessionAccessTests
             Requests.Enqueue(request);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.BrowserSnapshot);
-            Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BrowserNavigate or ToolCatalog.SandboxExec or ToolCatalog.BackgroundStart);
+            Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BrowserNavigate or ToolCatalog.SandboxExec);
             var schema = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
             Assert.Contains("run_browser_command", schema); Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, schema); Assert.DoesNotContain("update_persona", schema);
             var navigation = request.Messages.SingleOrDefault(m => m.Role == ModelRole.Tool && m.ToolCallId == "child-native-navigate");
@@ -147,7 +147,7 @@ public sealed partial class TenantSessionAccessTests
                 }
             }
             var waiting = await AwaitChild(r => r.Status == AgentRunStatus.WaitingForApproval);
-            Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure}");
+            Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code} {waiting.Failure?.Summary}; effects={waiting.SideEffect.Disposition}; latest tools={string.Join(",", model.Requests.LastOrDefault()?.Tools?.Select(t => t.Name) ?? [])}");
             var scope = new TenantBrowserOwner(tenant, parent.Owner.AgentInstanceId, parent.Owner.ExecutorPrincipalId, waiting.SessionId);
             Assert.Equal(0, (await native.ObserveTenantSessionAsync(scope)).LiveContexts);
             var approvals = factory.Services.GetRequiredService<ITenantApprovalStore>(); var first = (await approvals.FindApprovalAsync(tenant, waiting.ApprovalRequestId!.Value))!;

@@ -37,7 +37,7 @@ public sealed partial class TenantOperationAuthorizationTests
             var v = await ResourceSourceCase(f, logicalPath: "knowledge/support-order-policy", kind: AgentDefinitionResourceKind.Knowledge); s = v.Setup; identity = key = v.Key; expected = Encoding.UTF8.GetString(v.Bytes);
         }
         var frame = await ClaimArtifactRun(f, s); var trap = new KnowledgeFallbackTrap();
-        var executor = new SessionToolExecutor(knowledge: RoleKnowledgeService.FromApprovedCatalog(trap, f.Clock), tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), workspaceReads: WorkspaceRuntimeReads(f)));
+        var executor = new SessionToolExecutor( tenantAuthorization:new((ITenantRunStore)f.Iam, Operations(f), workspaceReads: WorkspaceRuntimeReads(f)));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId, SupportsTools: true,
             AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation);
         var call = new ModelToolCall("approved-knowledge", ToolCatalog.KnowledgeRetrieve, JsonSerializer.Serialize(new { identity }));

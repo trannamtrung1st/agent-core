@@ -174,7 +174,7 @@ public sealed partial class SessionRuntime
         if (_runtimeOwner is not null) return false; // Canonical ingress already admitted each exact attributed Run.
         if (!CanStartUserConversationBatch()) return false;
         var users = PendingUserBatch();
-        if (users.Count == 0) return await TryStartConfigurationContinuationAsync(cause, ct).ConfigureAwait(false);
+        if (users.Count == 0) return false;
         if (users.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId))) return false;
         var (projection, resolved) = await ResolveNewRunAsync(ct).ConfigureAwait(false);
         PinModelSelectionIfMissing();

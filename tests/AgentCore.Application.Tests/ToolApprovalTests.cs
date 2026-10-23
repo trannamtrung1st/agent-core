@@ -28,15 +28,14 @@ public sealed class ToolApprovalTests
     public async Task Unowned_review_requirement_finishes_without_an_inline_approval_or_sensitive_effect()
     {
         var output = new CapturingSessionOutput();
-        var tracking = new TrackingEmailProvider();
         var model = new EmailSendOnceLanguageModel();
-        var tools = new SessionToolExecutor(emailProvider: tracking, configurationGate: ToolConfigurationGates.AllowAll);
+        var tools = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
         await using var runtime = new Harness(CreateRuntime(output, Definition("review-without-tenant", 1, [ToolCatalog.EmailSend]), model, tools));
         await runtime.Runtime.AttachAsync();
         Assert.True(await runtime.Runtime.SubmitUserTextAsync("Send the draft"));
         await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.Equal(0, tracking.GetDraftCount);
-        Assert.Contains(model.Requests.SelectMany(request => request.Messages), message => message.Role == ModelRole.Tool && message.Text.Contains("tenant_context_required", StringComparison.Ordinal));
+        Assert.NotEmpty(model.Requests);
+        Assert.All(model.Requests, request => Assert.DoesNotContain(request.Tools ?? [], tool => tool.Name == ToolCatalog.EmailSend));
         Assert.DoesNotContain(output.Items, item => item.Payload?.GetType().Name == "ApprovalRequestedOutput");
         Assert.DoesNotContain(output.Items, item => item.Payload is ResponseProgressOutput { Kind: ResponseProgressKind.WaitingExternal });
         Assert.Null(typeof(SessionRuntime).GetMethod("RespondApprovalAsync"));
@@ -52,22 +51,18 @@ public sealed class ToolApprovalTests
     public async Task Unowned_sensitive_tools_cannot_turn_model_supplied_approval_facts_into_authority(string tool, string arguments)
     {
         var definition = Definition("unowned", 1, [tool]);
-        var provider = new TrackingEmailProvider();
-        var tools = new SessionToolExecutor(emailProvider: provider, configurationGate: ToolConfigurationGates.AllowAll);
+        var tools = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
         var result = await tools.ExecuteAsync(definition, Guid.NewGuid(), new("forged", tool, arguments), 16000);
-        Assert.Contains("approval_required", result.Text);
-        Assert.Equal(0, provider.GetDraftCount);
+        Assert.Contains("forbidden", result.Text);
     }
 
 
     [Fact]
-    public async Task Denied_email_send_does_not_read_the_provider_draft()
+    public async Task Unowned_Runtime_does_not_offer_email_despite_configured_provider_metadata()
     {
-        var tracking = new TrackingEmailProvider();
         var output = new CapturingSessionOutput();
         var tools = new SessionToolExecutor(
-            emailProvider: tracking,
-            configurationGate: ToolConfigurationGates.AllowAll);
+ configurationGate:ToolConfigurationGates.AllowAll);
         var definition = Definition("examiner", 1, []);
         var model = new EmailSendOnceLanguageModel();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
@@ -76,7 +71,9 @@ public sealed class ToolApprovalTests
 
         Assert.True(await runtime.Runtime.SubmitUserTextAsync("send the draft"));
         await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.Equal(0, tracking.GetDraftCount);
+        Assert.NotEmpty(model.Requests);
+        Assert.All(model.Requests, request => Assert.DoesNotContain(request.Tools ?? [], tool => tool.Name == ToolCatalog.EmailSend));
+        Assert.Contains(runtime.Runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
     }
 
     private static SessionRuntime CreateRuntime(
@@ -170,30 +167,4 @@ public sealed class ToolApprovalTests
         }
     }
 
-    private sealed class TrackingEmailProvider : IEmailProvider
-    {
-        private readonly SyntheticEmailProvider _inner = new();
-
-        public int GetDraftCount { get; private set; }
-
-        public bool IsAvailable => _inner.IsAvailable;
-
-        public ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default) =>
-            _inner.SearchAsync(request, cancellationToken);
-
-        public ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default) =>
-            _inner.ReadAsync(request, cancellationToken);
-
-        public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) =>
-            _inner.CreateDraftAsync(request, cancellationToken);
-
-        public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default)
-        {
-            GetDraftCount++;
-            return _inner.GetDraftAsync(draftId, cancellationToken);
-        }
-
-        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default) =>
-            _inner.SendDraftAsync(request, cancellationToken);
-    }
 }

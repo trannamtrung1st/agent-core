@@ -192,7 +192,7 @@ public sealed class ToolRegistryPolicyTests
             new ModelToolCall("w1", ToolCatalog.WorkspaceRead, """{"path":"notes.txt"}"""),
             ToolLimits.MaxOutputBytes,
             admission: admission);
-        Assert.Contains("Session context is required.", forged.Text, StringComparison.Ordinal);
+        Assert.Contains("Trusted tenant execution is required.", forged.Text, StringComparison.Ordinal);
         Assert.Equal(
             ToolPolicyDecision.Deny,
             ToolPolicy.EvaluateExecution(

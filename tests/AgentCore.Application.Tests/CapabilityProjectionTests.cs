@@ -78,7 +78,7 @@ public sealed class CapabilityProjectionTests
             await using var runtime = SessionRuntimeFixture.Create(snapshot, model,
                 new AgentCore.Application.Agents.DefaultAgentBrain(new AgentCore.Application.Agents.PromptContextBuilder()), memory,
                 new AgentCore.Application.Testing.CapturingSessionOutput(), ids, time, Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace)), agentRuns: turns);
+                tools: new SessionToolExecutor(), agentRuns: turns);
             await runtime.AttachAsync();
             var source = Guid.NewGuid();
             Assert.True(await runtime.SubmitPersistedUserTextAsync("synthetic-capability-projection:write", source));

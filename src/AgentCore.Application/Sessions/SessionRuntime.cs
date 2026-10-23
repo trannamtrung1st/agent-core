@@ -1264,17 +1264,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case ContinueInChatReceived foreground:
                     HandleContinueInChat(foreground);
                     break;
-                case BackgroundCompletionReceived completionReport:
-                    await HandleBackgroundCompletionAsync(completionReport, cancellationToken).ConfigureAwait(false);
-                    break;
                 case CompletionToolReceived completionTool:
                     await HandleCompletionToolAsync(completionTool, cancellationToken).ConfigureAwait(false);
                     break;
                 case BackgroundStartReceived backgroundStart:
                     await HandleBackgroundStartAsync(backgroundStart, cancellationToken).ConfigureAwait(false);
-                    break;
-                case EmailSelectionDecisionReceived emailSelection:
-                    await HandleEmailSelectionDecisionAsync(emailSelection, cancellationToken).ConfigureAwait(false);
                     break;
                 case CapabilityLoadRequested capabilityLoad:
                     await HandleCapabilityLoadAsync(capabilityLoad, cancellationToken).ConfigureAwait(false);
@@ -1319,7 +1313,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 receipt.Admitted.TrySetResult(false);
             }
 
-            if (input is EmailSelectionDecisionReceived emailSelection) emailSelection.Completed.TrySetResult(false);
             if (input is WorkspaceCwdRequested workspaceCwd) workspaceCwd.Completed.TrySetResult(null);
             if (input is CapabilityLoadRequested capabilityLoad) capabilityLoad.Completed.TrySetResult(new(SkillLoadAdmission.Error("stale", "Capability load is no longer owned by this execution."), null, "load_stale"));
             if (input is SkillLoadRequested skillLoad)
@@ -1399,9 +1392,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         switch (input)
         {
-            case EmailSelectionDecisionReceived emailSelection:
-                emailSelection.Completed.TrySetResult(false);
-                break;
             case AcceptedConversationWorkQueryReceived query:
                 query.Result.TrySetResult(value);
                 break;
@@ -1422,9 +1412,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case ContinueInChatReceived foreground:
                 foreground.Committed.TrySetResult(false);
-                break;
-            case BackgroundCompletionReceived completionReport:
-                completionReport.Committed.TrySetResult(false);
                 break;
             case CompletionToolReceived completionTool:
                 completionTool.Completed.TrySetResult(new(SkillLoadAdmission.Error("stale", "Execution no longer owns this request.")));
@@ -2586,10 +2573,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ConfigurationContinuationTarget: ContinuationTarget(capturedRun),
                     PinnedSkillCatalog: tenantSkills.Catalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
-                    CredentialMetadataAvailable: capturedRun?.Owner.TenantId is not null ? capturedRun.Admission.Configuration?.CredentialBindings.Count > 0
-                        : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
+                    CredentialMetadataAvailable: capturedRun?.Owner.TenantId is not null && capturedRun.Admission.Configuration?.CredentialBindings.Count > 0,
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await HarnessContextAsync(capturedRun, evaluationToken) : null,
-                    AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
+                    AgentWorkspaceAvailable: _runtimeOwner is not null,
                     AllowAgentConsolidation: (await CurrentContinuitySettingsAsync(capturedRun, evaluationToken).ConfigureAwait(false))?.AllowMaintenance == true,
                     ExperienceContext: null,
                     ContinuityContext: null)
@@ -2757,7 +2743,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentRunToolCallCheckpoint.EnsureCurrentBrowserContract(checkpoint);
         var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
         var messages = restored ? restoredMessages!.ToList() : new List<ModelMessage>();
-        if (restored && _runtimeOwner is null) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
         if (restored && _runtimeOwner is not null && _boundAgentRun is { } attachmentRun)
             messages = await (_tenantAttachments ?? throw new InvalidOperationException("Tenant attachment binding is required."))
                 .RehydrateReadImagesAsync(attachmentRun, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
@@ -2804,13 +2789,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ? WithOfferedTools(request, authorizedTools, trigger, model).Tools
             : ToolCatalog.Eligible(ExecutionDefinition,
                 await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
-        await using var backgroundBrowser = IsInitialBackgroundRun
-            ? await _tools.OpenOccurrenceBrowserAsync(SessionId, _snapshot.AgentInstanceId, cancellationToken).ConfigureAwait(false) : null;
         var budget = executionRun?.Admission.ExecutionBudget is { } pinnedBudget ? ToolExecutionBudget.FromPin(pinnedBudget)
             : ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
                 && ToolCatalog.AuthorizesBrowser(budgetTools),
-            PersistentBrowserLease: backgroundBrowser?.PersistentBrowserLease == true));
+            PersistentBrowserLease: false));
         var finalizationReserve = IsInitialBackgroundRun
             ? TimeSpan.FromSeconds(Math.Min(30, budget.Overall.TotalSeconds / 4)) : budget.FinalizationReserve;
         var toolDeadline = request.Tools is { Count: > 0 } || executionRun?.Admission.ExecutionBudget is not null;

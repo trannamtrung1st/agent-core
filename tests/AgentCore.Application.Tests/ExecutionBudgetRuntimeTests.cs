@@ -20,7 +20,7 @@ public sealed partial class TerminalDisplayRepairTests
             var rounds = Enumerable.Range(0, 50).Select(i => new ModelGenerationEvent[] {
                 new ModelToolCallEvent(new("write-" + i, ToolCatalog.WorkspaceWrite, System.Text.Json.JsonSerializer.Serialize(new { path = "/working/part-" + i + ".txt", content = new string('x', 7000) + i }))), new ModelCompleted(ModelStopReason.ToolCalls) }).ToArray();
             var model = new CapacityFinalizationModel(rounds);
-            var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
             await using var runtime = CreateCore(model, null, null, [ToolCatalog.WorkspaceWrite], executor: executor,
                 executionBudgets: new(Standard: new(144, 900)));
             await runtime.AttachAsync(); Assert.True(await runtime.SubmitUserTextAsync("Write each requested part, then report the saved parts.")); await runtime.WaitUntilIdleAsync();
@@ -60,7 +60,7 @@ public sealed partial class TerminalDisplayRepairTests
             [new ModelToolCallEvent(new("first", ToolCatalog.BrowserSnapshot, "{}")), new ModelCompleted(ModelStopReason.ToolCalls)], FinalAnswer(),
             [new ModelToolCallEvent(new("second", ToolCatalog.BrowserSnapshot, "{}")), new ModelCompleted(ModelStopReason.ToolCalls)], FinalAnswer());
         await using var runtime = CreateCore(model, browser, null, [ToolCatalog.BrowserSnapshot],
-            executor: new SessionToolExecutor(browser: browser, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll));
+            executor: new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll));
         var s = runtime.Snapshot; var now = DateTimeOffset.UtcNow;
         await instances.InsertAsync(new(s.AgentInstanceId, s.Definition.Id, s.Definition.Version, s.Definition.Identity, AgentInstanceLifecycle.Active, now, now));
         browser.ObservationContent = n =>

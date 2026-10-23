@@ -18,6 +18,23 @@ namespace AgentCore.Application.Tests;
 
 public sealed class MemoryProposalAdmissionTests
 {
+    [Theory]
+    [InlineData(MemoryProposalSource.UserExplicit)]
+    [InlineData(MemoryProposalSource.AgentInferred)]
+    public async Task Unowned_inline_proposals_cannot_write_private_memory_even_with_a_configured_store(MemoryProposalSource source)
+    {
+        var memories = Service();
+        var model = new ScriptedLanguageModel(["Noted."], memoryTurns:
+            [[Proposal(MemoryKind.Fact, "Sample project", "Use the Atlas example project.", source)]]);
+        await using var runtime = await RuntimeAsync(memories, Enabled(), model);
+        await runtime.SubmitPersistedUserTextAsync("Remember the Atlas example project.", Guid.NewGuid());
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal("unavailable", AssistantReceipt(runtime).Outcome);
+        Assert.Empty(await memories.SearchAsync(new(SessionA), new(null, null), Admission("agent_inferred")));
+        Assert.Empty(await memories.SearchIdentityUserAsync(new(InstanceA, ProfileId), new(null, null), true, Admission("agent_inferred")));
+        Assert.Empty(await memories.SearchUserAsync(new(ProfileId), new(null, null), true, Admission("agent_inferred")));
+    }
+
     [Fact]
     public async Task Closing_work_resolves_the_loop_preserves_content_and_repeated_close_is_idempotent()
     {

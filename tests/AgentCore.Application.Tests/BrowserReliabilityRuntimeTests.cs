@@ -43,7 +43,7 @@ public sealed class BrowserReliabilityRuntimeTests
             await using var runtime = SessionRuntimeFixture.Create(snapshot, model,
                 new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory, output,
                 new SystemIdGenerator(TimeProvider.System), TimeProvider.System, NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(browser: browser, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll),
+                tools: new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll),
                 browserLease: browser, agentRuns: runs);
             await runtime.AttachAsync();
             var source = Guid.NewGuid();

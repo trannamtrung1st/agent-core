@@ -75,9 +75,7 @@ public sealed class ProductPublishWorkflowTests
             null);
         var browser = new UploadBrowser();
         var executor = new SessionToolExecutor(
-            artifacts: artifacts,
-            browser: browser,
-            configurationGate: ToolConfigurationGates.AllowAll);
+ browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
         var uploaded = await executor.ExecuteAsync(
             Definition(),
             sessionId,
@@ -94,9 +92,7 @@ public sealed class ProductPublishWorkflowTests
 
         browser = new UploadBrowser();
         executor = new SessionToolExecutor(
-            artifacts: artifacts,
-            browser: browser,
-            configurationGate: ToolConfigurationGates.AllowAll);
+ browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
         var path = await executor.ExecuteAsync(
             Definition(),
             sessionId,
@@ -120,9 +116,7 @@ public sealed class ProductPublishWorkflowTests
         var resourceId = Guid.NewGuid();
         var browser = new UploadBrowser();
         var executor = new SessionToolExecutor(
-            browser: browser,
-            configurationGate: ToolConfigurationGates.AllowAll,
-            definitionResources: new PublicationResource(resourceId, [9, 8, 7]));
+ browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
         var uploaded = await executor.ExecuteAsync(
             Definition(),
             Guid.NewGuid(),
@@ -250,7 +244,7 @@ public sealed class ProductPublishWorkflowTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            tools: new SessionToolExecutor(browser: browser, agentInstances: agents, configurationGate: ToolConfigurationGates.AllowAll),
+            tools: new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll),
             agentRuns: turns);
     }
 

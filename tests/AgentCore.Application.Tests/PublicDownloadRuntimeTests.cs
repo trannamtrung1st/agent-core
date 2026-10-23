@@ -42,7 +42,7 @@ public sealed class PublicDownloadRuntimeTests
             var home = new AgentInstanceWorkspaceService(instances, homeStore, memory, workspace, new AdminLifecycleCoordinator());
             var office = new OfficeProcessor(); var original = office.CreateDocument(new("Public form", [new("Name", ["Applicant: ______", "Keep this text"], null)]), default).Bytes;
             var transport = new Transport(original); var artifacts = new InMemoryArtifactStore(clock);
-            var executor = new SessionToolExecutor(workspace: workspace, artifacts: artifacts, publicWebFetcher: new PublicWebFetcher(transport), configurationGate: ToolConfigurationGates.AllowAll, agentWorkspace: home, officeProcessor: office);
+            var executor = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
             var model = new WorkflowModel(retry);
             await using var runtime = SessionRuntimeFixture.Create(snapshot, new SemanticResponseLanguageModel(model), new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll)),
                 memory, new CapturingSessionOutput(), ids, clock, NullLogger.Instance, tools: executor, artifacts: new SessionArtifactAuthorizer(artifacts));

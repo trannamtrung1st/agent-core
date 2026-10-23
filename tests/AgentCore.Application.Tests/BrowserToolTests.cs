@@ -900,10 +900,7 @@ public sealed class BrowserToolTests
         await workspace.WriteAsync(session, "/working/ac-keyboard.png", png);
         var browser = new FakeBrowser { CurrentUrl = new Uri("http://127.0.0.1:5091/") };
         var executor = new SessionToolExecutor(
-            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
-            artifacts: artifacts,
-            browser: browser,
-            configurationGate: ToolConfigurationGates.AllowAll);
+ browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
         var created = await executor.ExecuteAsync(
             definition,
             session,
@@ -960,7 +957,7 @@ public sealed class BrowserToolTests
         using var retirement = new CancellationTokenSource();
         var browser = new RetiringCapturingBrowser(retirement.Token);
         var store = new RecordingArtifacts { BeforeCreate = _ => { retirement.Cancel(); return ValueTask.CompletedTask; } };
-        var executor = new SessionToolExecutor(artifacts: store, browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+        var executor = new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
         var definition = BrowserDefinition() with { Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserScreenshot]) };
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => executor.ExecuteAsync(definition, Guid.NewGuid(),
             Call(ToolCatalog.BrowserScreenshot,"{}"), ToolLimits.MaxOutputBytes, admission: UserTurn() with { SupportsVision = true }));
@@ -974,9 +971,7 @@ public sealed class BrowserToolTests
         var browser = new CapturingBrowser();
         var store = new RecordingArtifacts();
         var executor = new SessionToolExecutor(
-            artifacts: store,
-            browser: browser,
-            configurationGate: ToolConfigurationGates.AllowAll);
+ browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
         var definition = BrowserDefinition() with
         {
             Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserScreenshot])
@@ -1030,7 +1025,7 @@ public sealed class BrowserToolTests
     {
         var browser = new DownloadingBrowser { HostPolicy = InteractiveFixture with { Limits = new(DownloadBytes: 1024, DownloadsPerScope: 1) } };
         var artifacts = new RecordingArtifacts();
-        var executor = new SessionToolExecutor(browser: browser, artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+        var executor = new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
         var session = Guid.NewGuid();
         var call = Call(ToolCatalog.BrowserNavigate, "{\"url\":\"http://127.0.0.1:5091/\"}");
         var admission = UserTurn();

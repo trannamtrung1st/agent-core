@@ -19,7 +19,7 @@ public sealed class WorkspaceArtifactToolTests
         var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
+        var executor = new SessionToolExecutor();
 
         var wrote = await ExecuteTextAsync(
             executor,
@@ -53,7 +53,7 @@ public sealed class WorkspaceArtifactToolTests
         var workspace = WorkspaceTestSessions.CreateWorkspace(
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
+        var executor = new SessionToolExecutor();
         var definition = WorkspaceTools();
         var session = Guid.CreateVersion7();
         var json = await ExecuteTextAsync(
@@ -74,7 +74,7 @@ public sealed class WorkspaceArtifactToolTests
         await workspace.EnsureAsync(session, definition);
         await workspace.WriteAsync(session, "/working/note.md", "hello"u8.ToArray());
 
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
+        var executor = new SessionToolExecutor();
         var json = await ExecuteTextAsync(
             executor,
             definition,
@@ -102,7 +102,7 @@ public sealed class WorkspaceArtifactToolTests
         await workspace.WriteAsync(session, path, "alpha beta gamma"u8.ToArray());
         var hash = Sha256Hex("alpha beta gamma");
 
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
+        var executor = new SessionToolExecutor();
         var patched = await ExecuteTextAsync(
             executor,
             definition,
@@ -140,7 +140,7 @@ public sealed class WorkspaceArtifactToolTests
         const string path = "/working/out.md";
         await workspace.WriteAsync(session, path, "# Title"u8.ToArray());
 
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
+        var executor = new SessionToolExecutor();
         var result = await ExecuteTextAsync(
             executor,
             definition,
@@ -179,7 +179,7 @@ public sealed class WorkspaceArtifactToolTests
         await workspace.WriteAsync(session, "/working/reports/summary.txt", "hello workspace"u8.ToArray());
         await workspace.WriteAsync(session, "/working/draft..txt", "sample in a dotted name"u8.ToArray());
         await workspace.WriteAsync(session, "/working/pixel.bin", new byte[] { 0, 1, 2, 3 });
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
+        var executor = new SessionToolExecutor();
 
         var json = await ExecuteTextAsync(
             executor,
@@ -206,7 +206,7 @@ public sealed class WorkspaceArtifactToolTests
         var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
+        var executor = new SessionToolExecutor();
         await ExecuteTextAsync(
             executor,
             definition,

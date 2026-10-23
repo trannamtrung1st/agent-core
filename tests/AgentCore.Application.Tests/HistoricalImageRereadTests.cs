@@ -31,7 +31,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -55,7 +55,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         using var image = new SKBitmap(3, 3);
         using var webp = new MemoryStream();
@@ -81,7 +81,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var owner = Guid.NewGuid();
         var other = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
@@ -116,7 +116,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var tools = new SessionToolExecutor();
         var model = new HistoricalImageToolLoopModel();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, attachments, processor, model, tools);
@@ -146,7 +146,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -169,7 +169,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -191,7 +191,7 @@ public sealed class HistoricalImageRereadTests
     public async Task Unknown_attachment_id_returns_not_found()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: new AttachmentProcessor(attachments));
+        var executor = new SessionToolExecutor();
         var result = await executor.ExecuteAsync(
             Support(),
             Guid.NewGuid(),
@@ -212,7 +212,7 @@ public sealed class HistoricalImageRereadTests
             "image/png",
             new MemoryStream(PngBytes()),
             false);
-        var withoutProcessor = new SessionToolExecutor(attachments: attachments);
+        var withoutProcessor = new SessionToolExecutor();
         var missingProcessor = await withoutProcessor.ExecuteAsync(
             Support(),
             sessionId,
@@ -221,7 +221,7 @@ public sealed class HistoricalImageRereadTests
         Assert.Contains("attachment_processing_failed", missingProcessor.Text, StringComparison.Ordinal);
         Assert.Null(missingProcessor.Parts);
 
-        var emptyProcessor = new SessionToolExecutor(attachments: attachments, processor: new EmptyImageProcessor());
+        var emptyProcessor = new SessionToolExecutor();
         var empty = await emptyProcessor.ExecuteAsync(
             Support(),
             sessionId,
@@ -267,7 +267,7 @@ public sealed class HistoricalImageRereadTests
         var store = new InMemoryMemoryStore();
         var attachments = new InMemoryAttachmentStore(time);
         var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var tools = new SessionToolExecutor();
         var output = new CapturingSessionOutput();
         Guid sessionId;
         Guid attachmentId;
@@ -309,7 +309,7 @@ public sealed class HistoricalImageRereadTests
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var tools = new SessionToolExecutor(knowledge, attachments, processor);
+        var tools = new SessionToolExecutor();
         var model = new RecordingLanguageModel(new MixedHistoricalImageModel());
         var output = new CapturingSessionOutput();
         var store = new InMemoryMemoryStore();
@@ -352,7 +352,7 @@ public sealed class HistoricalImageRereadTests
         var inner = new AttachmentProcessor(attachments);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var processor = new GateAfterFirstImageProcessor(inner, gate.Task);
-        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var tools = new SessionToolExecutor();
         var model = new RecordingLanguageModel(new HistoricalImageVisionRereadModel());
         var output = new CapturingSessionOutput();
         var store = new InMemoryMemoryStore();
@@ -389,7 +389,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var tools = new SessionToolExecutor();
         var model = new RecordingLanguageModel(new VisionToolsLanguageModel(new HistoricalImageVisionRereadModel()));
         var output = new CapturingSessionOutput();
         var store = new InMemoryMemoryStore();
@@ -422,7 +422,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var tools = new SessionToolExecutor();
         var store = new InMemoryMemoryStore();
         var output = new CapturingSessionOutput();
         var handler = new QueuedChatHandler();
@@ -513,7 +513,7 @@ public sealed class HistoricalImageRereadTests
             }));
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var tools = new SessionToolExecutor();
         var store = new InMemoryMemoryStore();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);

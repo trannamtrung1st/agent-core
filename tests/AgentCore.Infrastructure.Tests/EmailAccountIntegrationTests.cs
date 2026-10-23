@@ -111,7 +111,7 @@ public sealed class EmailAccountIntegrationTests
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048), new(false, 60_000, 120_000, 1, ["longSilence"], 0),
             new(false, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
             new(ToolAllowlist: [ToolCatalog.EmailSearch]));
-        var executor = new SessionToolExecutor(emailAccounts: f.Email, configurationGate: ToolConfigurationGates.AllowAll);
+        var executor = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
         var search = await executor.ExecuteAsync(definition, session,
             new("bad-alias", ToolCatalog.EmailSearch, """{"query":"harness","accountRef":"../mail"}"""), ToolLimits.MaxOutputBytes, admission: admission);
         Assert.Contains("Validation", search.Text); Assert.DoesNotContain("protected-fixture", search.Text);
@@ -130,7 +130,7 @@ public sealed class EmailAccountIntegrationTests
             new(false, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
             new(ToolAllowlist: [ToolCatalog.EmailAccounts, ToolCatalog.EmailRequestAccount, ToolCatalog.EmailSearch, ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]));
         var gate = new AgentCore.Infrastructure.Tools.ToolConfigurationGate(null, null, null, emailFactory: f.Factory);
-        var executor = new SessionToolExecutor(emailAccounts: f.Email, emailStore: f.EmailStore, configurationGate: gate);
+        var executor = new SessionToolExecutor( configurationGate:gate);
         var search = await executor.ExecuteAsync(definition, session, new("latest-ten", ToolCatalog.EmailSearch, """{"limit":10}"""), ToolLimits.MaxOutputBytes, admission: admission);
         using var results = JsonDocument.Parse(search.Text);
         Assert.Equal("mail", results.RootElement.GetProperty("accountRef").GetString());

@@ -18,7 +18,7 @@ public sealed class SessionToolExecutorTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -45,7 +45,7 @@ public sealed class SessionToolExecutorTests
     public async Task Host_paths_and_session_mutation_arguments_are_denied()
     {
         var workspace = new RecordingWorkspace();
-        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
         var host = await ExecuteTextAsync(
             executor,
@@ -106,7 +106,7 @@ public sealed class SessionToolExecutorTests
     public async Task Generated_artifact_create_ignores_fabricated_source_attachment()
     {
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var executor = new SessionToolExecutor(artifacts: artifacts);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var fabricated = Guid.NewGuid();
         var result = await ExecuteTextAsync(
@@ -155,7 +155,7 @@ public sealed class SessionToolExecutorTests
     public async Task Attachments_read_accepts_text_plain_with_charset_parameter()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var executor = new SessionToolExecutor(attachments: attachments);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -176,7 +176,7 @@ public sealed class SessionToolExecutorTests
     public async Task Attachments_read_reports_unsupported_reader_for_invalid_utf8_without_fabricated_text()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var executor = new SessionToolExecutor(attachments: attachments);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         // A valid intake prefix with invalid UTF-8 later exercises read-time decoding;
         // an immediately invalid prefix is correctly rejected by upload classification.
@@ -207,7 +207,7 @@ public sealed class SessionToolExecutorTests
         var bytes = office.CreateWorkbook(new([new("Checklist", [[new("text", Text: "Wedding item")]])]), default).Bytes;
         var sessionId = Guid.NewGuid();
         var workbook = await attachments.UploadPendingAsync(sessionId, "checklist.xlsx", OfficeLimits.SpreadsheetMime, new MemoryStream(bytes), true);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: new AttachmentProcessor(attachments, office));
+        var executor = new SessionToolExecutor();
         var unavailable = await ExecuteTextAsync(executor, Support(), sessionId,
             new("missing-office", ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(new { attachmentId = workbook.AttachmentId, sheet = "Checklist" })));
         Assert.Contains("unavailable", unavailable);
@@ -223,7 +223,7 @@ public sealed class SessionToolExecutorTests
     public async Task Knowledge_retrieve_returns_valid_json_when_output_is_truncated()
     {
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var executor = new SessionToolExecutor(knowledge);
+        var executor = new SessionToolExecutor();
         var result = await ExecuteTextAsync(
             executor,
             Compliance(),
@@ -241,7 +241,7 @@ public sealed class SessionToolExecutorTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -267,7 +267,7 @@ public sealed class SessionToolExecutorTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var executor = new SessionToolExecutor();
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,

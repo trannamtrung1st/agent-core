@@ -63,7 +63,7 @@ public sealed class AgentBrowserProfileTests
             var instances = new InMemoryAgentInstanceStore(); var now = DateTimeOffset.UtcNow;
             await instances.InsertAsync(new(instanceId, "general-assistant", 11, new("Test", "Secretary", "Fixture", "neutral"), AgentInstanceLifecycle.Active, now, now));
             var browser = new CountingBrowser();
-            var executor = new SessionToolExecutor(browser: browser, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
             var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instanceId);
             var call = new ModelToolCall("navigate", ToolCatalog.BrowserNavigate, """{"url":"http://127.0.0.1:5088/admin"}""");
             var allowed = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission);

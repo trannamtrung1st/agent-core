@@ -24,7 +24,7 @@ public sealed class WebPublicToolRuntimeTests
     {
         var store = new InMemoryMemoryStore();
         var search = new MarkerWebSearch(EphemeralWebMarker);
-        var tools = new SessionToolExecutor(webSearch: search, configurationGate: ToolConfigurationGates.AllowAll);
+        var tools = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
         var output = new CapturingSessionOutput();
         var definition = await LoadGeneralV2Async();
         await using var runtime = CreateRuntime(output, store, definition, new WebSearchLoopModel(), tools);
@@ -45,7 +45,7 @@ public sealed class WebPublicToolRuntimeTests
     public async Task Web_search_honors_runtime_cancel_before_provider_returns()
     {
         var search = new GatedWebSearch();
-        var tools = new SessionToolExecutor(webSearch: search, configurationGate: ToolConfigurationGates.AllowAll);
+        var tools = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
         var output = new CapturingSessionOutput();
         var definition = await LoadGeneralV2Async();
         await using var runtime = CreateRuntime(output, new InMemoryMemoryStore(), definition, new WebSearchLoopModel(), tools);
@@ -79,7 +79,7 @@ public sealed class WebPublicToolRuntimeTests
     public async Task Web_search_stops_after_runtime_epoch_bump_from_deactivate()
     {
         var search = new GatedWebSearch();
-        var tools = new SessionToolExecutor(webSearch: search, configurationGate: ToolConfigurationGates.AllowAll);
+        var tools = new SessionToolExecutor( configurationGate:ToolConfigurationGates.AllowAll);
         var output = new CapturingSessionOutput();
         var definition = await LoadGeneralV2Async();
         await using var runtime = CreateRuntime(output, new InMemoryMemoryStore(), definition, new WebSearchLoopModel(), tools);

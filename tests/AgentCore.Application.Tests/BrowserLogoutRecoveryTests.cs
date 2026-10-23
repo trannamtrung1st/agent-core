@@ -69,7 +69,7 @@ public sealed class BrowserLogoutRecoveryTests
         var gate = new AgentCore.Infrastructure.Tools.ToolConfigurationGate(null,null,null,browser,true);
         await using var runtime=SessionRuntimeFixture.Create(snapshot,model,new DefaultAgentBrain(new PromptContextBuilder(gate,browser)),
             memory,output,new SystemIdGenerator(TimeProvider.System),TimeProvider.System,NullLogger<SessionRuntime>.Instance,
-            tools:new SessionToolExecutor(browser:browser,artifacts:new InMemoryArtifactStore(TimeProvider.System),agentInstances:instances,configurationGate:gate),
+            tools:new SessionToolExecutor( browser:browser, configurationGate:gate),
             browserLease:browser,agentRuns:runs);
         await runtime.AttachAsync();Assert.True(await runtime.SubmitPersistedUserTextAsync(input,Guid.NewGuid()));
         await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromMinutes(5));

@@ -290,7 +290,7 @@ public sealed partial class MessagingSkillJourneyTests
             time,
             NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
-            agentRuns: turns, tools: new SessionToolExecutor(agentInstances: instances));
+            agentRuns: turns, tools: new SessionToolExecutor());
     }
 
     private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel

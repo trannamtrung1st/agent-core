@@ -27,7 +27,4 @@ public sealed partial class SessionToolExecutor
         observation.Sessions, observation.HostedSessions, observation.Runs, observation.Resources, observation.Issues
     }, StateJson);
 
-    private Task<ToolExecutionResult> ExecuteStateInspectAsync(Guid sessionId, JsonElement args,
-        ToolExecutionAdmission? admission, int budget, CancellationToken ct) => Task.FromResult(FitResult(Math.Min(budget, 4096),
-            Error("forbidden", "State inspection requires canonical tenant Run authority.")));
 }

@@ -30,7 +30,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             var service = new CredentialService(store, store, new LocalCredentialProtector(root), instances, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
             var c = await service.CreateAsync("Store", "Password", new Dictionary<string,string> { ["username"] = "owner@example.test" }, [origin], password);
             var binding = await service.BindAsync(owner, c.CredentialId, "store-admin", 1);
-            var executor = new SessionToolExecutor(browser: fixture.Session, agentInstances: instances, credentials: service, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( browser:fixture.Session, configurationGate:ToolConfigurationGates.AllowAll);
             var definition = await Definition(); var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner, SupportsVision: true);
             async Task<string> Execute(string tool, string args, ToolExecutionAdmission? a = null) => (await executor.ExecuteAsync(definition, session, new("call-" + Guid.NewGuid(), tool, args), ToolLimits.MaxOutputBytes, admission: a ?? admission)).Text;
             var nav = await Execute(ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = origin + "/credential-login?reflect=1" }));
@@ -157,7 +157,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             Assert.Contains("AC-CREDENTIAL-1042", (await browser.ExecuteAsync(BrowserTestRequests.Navigate(restarted, new(origin + "/credential-login")))).Observation!.Content!);
             var other = Guid.NewGuid(); var instances = new InMemoryAgentInstanceStore(); var now = DateTimeOffset.UtcNow;
             await instances.InsertAsync(new(other, "secretary", 8, new("Other", "Secretary", "Test", "neutral"), AgentInstanceLifecycle.Active, now, now));
-            var executor = new SessionToolExecutor(browser: browser, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor( browser:browser, configurationGate:ToolConfigurationGates.AllowAll);
             var attention = await executor.ExecuteAsync(await Definition(), Guid.NewGuid(), new("login-wall", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = origin + "/credential-login" })), ToolLimits.MaxOutputBytes,
                 admission: new(true, TriggerKind.ApplicationEvent, AgentInstanceId: other));
             Assert.Contains("user_intervention_required", attention.Text);

@@ -98,7 +98,7 @@ public sealed class SystemCredentialTests
                 granted.Add(await service.BindAsync(owner.InstanceId, credential.CredentialId, $"alias-{i:D2}", (await owners.FindAsync(owner.InstanceId))!.Revision));
             }
             definition = CapabilityAuthorizationResolver.ResolveCandidate(draft).ToPublished(4);
-            var executor = new SessionToolExecutor(credentials: service);
+            var executor = new SessionToolExecutor();
             var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId);
             async Task<string> List(string args, int budget) => (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("list", ToolCatalog.CredentialsList, args), budget, admission: admission)).Text;
             var references = new List<string>(); string? cursor = null;
