@@ -1,0 +1,704 @@
+[
+  {
+    "permission": "agent-definitions.create",
+    "resourceType": "definition",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-definitions.delete",
+    "resourceType": "definition",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-definitions.publish",
+    "resourceType": "definition",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-definitions.read",
+    "resourceType": "definition",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-definitions.update",
+    "resourceType": "definition",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-runs.cancel",
+    "resourceType": "agent-run",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-runs.create",
+    "resourceType": "agent-run",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agent-runs.read",
+    "resourceType": "agent-run",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agents.chat",
+    "resourceType": "agent",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agents.create",
+    "resourceType": "agent",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agents.delete",
+    "resourceType": "agent",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agents.read",
+    "resourceType": "agent",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "agents.update",
+    "resourceType": "agent",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "approvals.approve",
+    "resourceType": "approval",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "approvals.cancel",
+    "resourceType": "approval",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "approvals.grant_exception",
+    "resourceType": "approval",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "approvals.read",
+    "resourceType": "approval",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "artifacts.create",
+    "resourceType": "artifact",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "artifacts.delete",
+    "resourceType": "artifact",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "artifacts.read",
+    "resourceType": "artifact",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "attachments.create",
+    "resourceType": "attachment",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "attachments.delete",
+    "resourceType": "attachment",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "attachments.read",
+    "resourceType": "attachment",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "automations.create",
+    "resourceType": "automation",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "automations.delete",
+    "resourceType": "automation",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "automations.read",
+    "resourceType": "automation",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "automations.run",
+    "resourceType": "automation",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "automations.update",
+    "resourceType": "automation",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "browser.manage",
+    "resourceType": "agent",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "browser.read",
+    "resourceType": "agent",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "browser.use",
+    "resourceType": "agent",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "core-events.manage",
+    "resourceType": "event",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "core-events.read",
+    "resourceType": "event",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "credentials.bind",
+    "resourceType": "credential",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "credentials.manage",
+    "resourceType": "credential",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "credentials.read",
+    "resourceType": "credential",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "credentials.use",
+    "resourceType": "credential",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "drive.delete",
+    "resourceType": "credential",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "drive.read",
+    "resourceType": "credential",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "drive.write",
+    "resourceType": "credential",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "email.draft",
+    "resourceType": "credential",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "email.read",
+    "resourceType": "credential",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "email.send",
+    "resourceType": "credential",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "http.request",
+    "resourceType": "agent",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "iam.roles.assign",
+    "resourceType": "role",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "iam.roles.manage",
+    "resourceType": "role",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "iam.roles.read",
+    "resourceType": "role",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "members.invite",
+    "resourceType": "member",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "members.read",
+    "resourceType": "member",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "members.remove",
+    "resourceType": "member",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "members.update",
+    "resourceType": "member",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "memory.manage",
+    "resourceType": "agent",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "memory.read",
+    "resourceType": "agent",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "resources.delete",
+    "resourceType": "resource",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "resources.manage",
+    "resourceType": "resource",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "resources.read",
+    "resourceType": "resource",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "sandbox.execute",
+    "resourceType": "agent",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "sandbox.manage",
+    "resourceType": "agent",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "sandbox.read",
+    "resourceType": "agent",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "security.audit.read",
+    "resourceType": "tenant",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "sessions.create",
+    "resourceType": "session",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "sessions.delete",
+    "resourceType": "session",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "sessions.manage",
+    "resourceType": "session",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "sessions.read",
+    "resourceType": "session",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "skills.manage",
+    "resourceType": "skill",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "skills.read",
+    "resourceType": "skill",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "system.accounts.manage",
+    "resourceType": "account",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": true
+  },
+  {
+    "permission": "system.governance.manage",
+    "resourceType": "system",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": true
+  },
+  {
+    "permission": "system.tenants.create",
+    "resourceType": "tenant",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": true
+  },
+  {
+    "permission": "system.tenants.manage",
+    "resourceType": "tenant",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": true
+  },
+  {
+    "permission": "system.tenants.read",
+    "resourceType": "tenant",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": true
+  },
+  {
+    "permission": "tenant.governance.manage",
+    "resourceType": "tenant",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": true,
+    "delegatable": false,
+    "systemOnly": false
+  },
+  {
+    "permission": "tenant.governance.read",
+    "resourceType": "tenant",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "webhooks.manage",
+    "resourceType": "webhook",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "webhooks.read",
+    "resourceType": "webhook",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workspaces.delete",
+    "resourceType": "workspace",
+    "approvalClass": "Sensitive",
+    "minimum": "Always",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workspaces.read",
+    "resourceType": "workspace",
+    "approvalClass": "ReadOnly",
+    "minimum": "None",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  },
+  {
+    "permission": "workspaces.write",
+    "resourceType": "workspace",
+    "approvalClass": "Mutation",
+    "minimum": "WhenRequesterLacksPermission",
+    "humanOnly": false,
+    "delegatable": true,
+    "systemOnly": false
+  }
+]
