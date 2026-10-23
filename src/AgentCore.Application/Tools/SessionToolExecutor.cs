@@ -36,9 +36,8 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
-    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
-    AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null, AgentCore.Application.Security.TenantToolAuthorization? tenantAuthorization = null)
+    AdminAutomationAuthoringService? automationAuthoring = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null,
+    IAgentCredentialBindingStore? credentialBindings = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null, AgentCore.Application.Security.TenantToolAuthorization? tenantAuthorization = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -134,10 +133,7 @@ public sealed partial class SessionToolExecutor(
         if (admission?.TenantId is not null || (IamToolContracts.IsInspection(call.Name) || call.Name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name)) return ToolPolicyDecision.Deny;
         if (admission?.AgentInstanceId is { } isolationOwner)
             definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, ct);
-        if (ManagementTools.IsManagement(call.Name) && admission is not null)
-            admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, ct) };
-        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return ManagementDecision(definition, call.Name, args, admission,
-            EvaluateExecutionPolicy(definition, call.Name, admission: admission));
+        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return EvaluateExecutionPolicy(definition, call.Name, admission);
         if (identityMaintenance is null) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
         try
         {
@@ -242,15 +238,7 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("forbidden", "Trigger changes are not authorized from occurrence evidence."));
         }
 
-        if (ManagementTools.IsManagement(call.Name) && admission is not null)
-            admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, cancellationToken) };
-
         var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, admission);
-        if (ConfigurationTools.IsTool(call.Name))
-        {
-            try { using var decisionArgs = JsonDocument.Parse(call.ArgumentsJson); policy = ManagementDecision(definition, call.Name, decisionArgs.RootElement, admission, policy); }
-            catch (JsonException) { return TextResult(Error("invalid", "Management arguments are malformed.")); }
-        }
         if (policy == ToolPolicyDecision.Deny
             || string.IsNullOrWhiteSpace(call.Name))
         {
@@ -308,9 +296,6 @@ public sealed partial class SessionToolExecutor(
             if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("forbidden", "Tool arguments are not permitted."));
         }
-
-        if (InstanceSkillTools.IsManagement(call.Name)) return await ExecuteSkillManagementAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
-        if (ConfigurationTools.IsTool(call.Name)) return await ExecuteConfigurationAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
 
         try
         {

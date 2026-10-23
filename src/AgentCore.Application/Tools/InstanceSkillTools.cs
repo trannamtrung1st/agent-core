@@ -42,34 +42,3 @@ public static class InstanceSkillTools
             projection.GetString() == "Always" ? SkillProjection.Always : SkillProjection.OnDemand, a.GetProperty("enabled").GetBoolean(), a.GetProperty("requiredCapabilities").EnumerateArray().Select(c => c.GetString()!).ToArray(), a.TryGetProperty("id", out var id) ? id.GetString() : null);
     }
 }
-public sealed partial class SessionToolExecutor
-{
-    private async Task<ToolExecutionResult> ExecuteSkillManagementAsync(AgentDefinition definition, ModelToolCall call, JsonElement args,
-        ToolExecutionAdmission? admission, int budget, CancellationToken ct)
-    {
-        if (instanceSkills is null || admission?.AgentInstanceId is not Guid id || !admission.SupportsTools)
-            return TextResult(Error("forbidden", "Trusted Agent Instance context is required."));
-        try
-        {
-            using var schema = JsonDocument.Parse(ToolRegistry.Get(call.Name).ModelDefinition.ParametersJson);
-            var allowed = schema.RootElement.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();
-            if (args.EnumerateObject().Any(p => !allowed.Contains(p.Name))) throw AgentCoreErrors.Validation("Unknown Skill argument.");
-            foreach (var r in schema.RootElement.GetProperty("required").EnumerateArray())
-                if (!args.TryGetProperty(r.GetString()!, out _)) throw AgentCoreErrors.Validation($"{r.GetString()} is required.");
-            var op = call.Name[7..];
-            object result;
-            if (op == "list") result = new { instanceRevision = (await _agentInstances!.FindAsync(id, ct))!.Revision, skills = (await instanceSkills.ListAsync(id, definition, ct)).Select(s => new { s.InstanceRevision, s.Key, s.Origin, s.Name, s.Description, s.Projection, s.Enabled, s.Revision, s.RequiredCapabilities, s.MissingCapabilities, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId }).ToArray() };
-            else if (op == "inspect") result = await instanceSkills.InspectAsync(id, args.GetProperty("key").GetString()!, definition, ct);
-            else if (op == "customize") result = await instanceSkills.CustomizeAsync(id, args.GetProperty("key").GetString()!,
-                args.GetProperty("expectedRevision").GetInt64(), SkillAuthor.Agent, definition, ct, args.GetProperty("expectedInstanceRevision").GetInt64());
-            else result = await instanceSkills.WriteAsync(id, op, args.TryGetProperty("key", out var key) ? key.GetString() : null,
-                args.TryGetProperty("expectedRevision", out var rev) ? rev.GetInt64() : null,
-                op is "create" or "update" ? InstanceSkillTools.ReadInput(args) : null,
-                args.TryGetProperty("enabled", out var enabled) ? enabled.GetBoolean() : null, SkillAuthor.Agent, definition, ct, args.GetProperty("expectedInstanceRevision").GetInt64());
-            return FitResult(budget, JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } }));
-        }
-        catch (AgentCoreException e) { return TextResult(Error(e.Code, e.Message)); }
-        catch (Exception e) when (e is JsonException or InvalidOperationException or KeyNotFoundException or FormatException or ArgumentException)
-        { return TextResult(Error("invalid", "Skill arguments do not match the schema.")); }
-    }
-}

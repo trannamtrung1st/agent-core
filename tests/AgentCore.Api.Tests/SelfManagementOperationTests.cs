@@ -36,59 +36,32 @@ public sealed class SelfManagementOperationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Managed_settings_and_text_resources_share_admin_owners_remain_pinned_and_survive_freeze(bool sqlite)
+    public async Task Unowned_executor_cannot_change_actual_settings_or_resources_despite_all_auto_apply_delegation(bool sqlite)
     {
-        var root = Path.Combine(Path.GetTempPath(), "self-management-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "unowned-management-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        Guid id;
         try
         {
-            await using (AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory())
+            await using AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
+            var services = factory.Services;
+            var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
+            var policy = services.GetRequiredService<SelfManagementService>();
+            var view = await policy.UpdateAsync(owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
+                new(Enum.GetValues<HarnessManagementScope>()), new(Enum.GetValues<ManagementAutoApply>())));
+            var admitted = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration;
+            var executor = services.GetRequiredService<SessionToolExecutor>(); var session = Guid.NewGuid();
+            var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId,
+                OwnerTurnText: "Keep this concise review procedure.", Harness: await executor.HarnessContextAsync(owner.InstanceId, default), OwnedSessionId: session);
+            var patch = JsonSerializer.Serialize(new { expectedInstanceRevision = view.InstanceRevision, section = "conversationPolicy", set = new { responseLength = "concise" }, clear = Array.Empty<string>() });
+            var resource = JsonSerializer.Serialize(new { expectedInstanceRevision = view.InstanceRevision, logicalPath = "reviews/checklist.md", kind = "Knowledge", mediaType = "text/markdown", content = "Private review procedure.", source = "conversation:user" });
+            foreach (var (tool, arguments) in new[] { ("settings.patch", patch), ("resources.upsert", resource) })
             {
-                var services = factory.Services;
-                var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
-                id = owner.InstanceId;
-                var policy = services.GetRequiredService<SelfManagementService>();
-                var view = await policy.UpdateAsync(id, owner.Revision, new(new(HarnessManagementMode.Managed),
-                    new([HarnessManagementScope.Settings, HarnessManagementScope.Resources, HarnessManagementScope.Skills]),
-                    new([ManagementAutoApply.ConversationPreferences, ManagementAutoApply.TextResources])));
-                var resolver = services.GetRequiredService<AgentRunConfigurationResolver>();
-                var admitted = (await resolver.ResolveAsync(id)).Configuration;
-                var executor = services.GetRequiredService<SessionToolExecutor>();
-                var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: id, OwnerTurnText: "Keep this concise review procedure.");
-                var patch = JsonSerializer.Serialize(new { expectedInstanceRevision = view.InstanceRevision, section = "conversationPolicy", set = new { responseLength = "concise" }, clear = Array.Empty<string>() });
-                var saved = await executor.ExecuteAsync(admitted.Definition, Guid.NewGuid(), new("change", "settings.patch", patch), 100000, admission: admission);
-                Assert.Contains("\"outcome\":\"applied\"", saved.Text);
-                var settings = await services.GetRequiredService<AgentInstanceSettingsService>().ReadAsync(id, "conversationPolicy");
-                Assert.Equal("concise", settings.Effective["responseLength"]);
-                Assert.Equal("instance", settings.Sources["responseLength"]);
-                Assert.Equal("balanced", admitted.Definition.ConversationPolicy.ResponseLength);
-                var stale = await executor.ExecuteAsync(admitted.Definition, Guid.NewGuid(), new("retry", "settings.patch", patch), 100000, admission: admission);
-                Assert.DoesNotContain("\"outcome\":\"applied\"", stale.Text);
-                Assert.Equal("concise", (await resolver.ResolveAsync(id)).Configuration.Definition.ConversationPolicy.ResponseLength);
-                view = await policy.ReadAsync(id);
-                var resource = JsonSerializer.Serialize(new { expectedInstanceRevision = view.InstanceRevision, logicalPath = "reviews/checklist.md", kind = "Knowledge", mediaType = "text/markdown", content = "Check the observed totals before answering.", source = "conversation:user" });
-                var retained = await executor.ExecuteAsync(admitted.Definition, Guid.NewGuid(), new("resource", "resources.upsert", resource), 100000, admission: admission);
-                Assert.DoesNotContain("\"error\"", retained.Text);
-                var catalog = await services.GetRequiredService<AgentInstanceResourceService>().ListAsync(id);
-                var local = Assert.Single(catalog.Resources, r => r.Origin == "Instance");
-                Assert.Equal("reviews/checklist.md", local.LogicalPath);
-                Assert.Equal(64, local.ContentSha256.Length);
-                Assert.DoesNotContain(admitted.Resources, r => r.Key == local.Key);
-                Assert.Contains((await resolver.ResolveAsync(id)).Configuration.Resources, r => r.Key == local.Key);
-                var frozen = await policy.FreezeAsync(id, catalog.InstanceRevision);
-                var denied = await executor.ExecuteAsync(admitted.Definition, Guid.NewGuid(), new("blocked", "settings.patch", patch), 100000, admission: admission);
-                Assert.Contains("forbidden", denied.Text);
-                Assert.True(frozen.Effective.Frozen);
-                Assert.Equal("concise", (await services.GetRequiredService<AgentInstanceSettingsService>().ReadAsync(id, "conversationPolicy")).Effective["responseLength"]);
+                var result = await executor.ExecuteAsync(admitted.Definition, session, new("unowned", tool, arguments), 100000, admission: admission);
+                Assert.Contains("forbidden", result.Text);
             }
-            if (sqlite)
-            {
-                await using var reopened = new HarnessSqliteFactory(root);
-                Assert.True((await reopened.Services.GetRequiredService<SelfManagementService>().ReadAsync(id)).Effective.Frozen);
-                Assert.Equal("concise", (await reopened.Services.GetRequiredService<AgentInstanceSettingsService>().ReadAsync(id, "conversationPolicy")).Effective["responseLength"]);
-                Assert.Contains((await reopened.Services.GetRequiredService<AgentInstanceResourceService>().ListAsync(id)).Resources, r => r.LogicalPath == "reviews/checklist.md");
-            }
+            Assert.Equal(view.InstanceRevision, (await policy.ReadAsync(owner.InstanceId)).InstanceRevision);
+            Assert.Equal("balanced", (await services.GetRequiredService<AgentInstanceSettingsService>().ReadAsync(owner.InstanceId, "conversationPolicy")).Effective["responseLength"]);
+            Assert.DoesNotContain((await services.GetRequiredService<AgentInstanceResourceService>().ListAsync(owner.InstanceId)).Resources, r => r.Origin == "Instance");
         }
         finally { Directory.Delete(root, true); }
     }
@@ -98,7 +71,7 @@ public sealed class SelfManagementOperationTests
     [InlineData("triggerPolicy", "enabled", false)]
     [InlineData("conversationPolicy", "maxOutputTokens", 2048)]
     [InlineData("capabilities", "selected", "workspace.read")]
-    public async Task Managed_delegation_never_bypasses_sensitive_exact_approval(string section, string field, object value)
+    public async Task Unowned_sensitive_settings_require_canonical_authority_before_any_consent(string section, string field, object value)
     {
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
@@ -109,9 +82,9 @@ public sealed class SelfManagementOperationTests
         var args = JsonSerializer.SerializeToElement(new { expectedInstanceRevision = view.InstanceRevision, section, set = new Dictionary<string, object> { [field] = section == "capabilities" ? new[] { value } : value }, clear = Array.Empty<string>() });
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId);
-        Assert.Equal(ToolPolicyDecision.RequireApproval, await executor.EvaluateExecutionPolicyAsync(definition, Guid.NewGuid(), new("change", "settings.patch", args.GetRawText()), args, admission, default));
+        Assert.Equal(ToolPolicyDecision.Deny, await executor.EvaluateExecutionPolicyAsync(definition, Guid.NewGuid(), new("change", "settings.patch", args.GetRawText()), args, admission, default));
         var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("change", "settings.patch", args.GetRawText()), 100000, admission: admission);
-        Assert.Contains("approval_required", result.Text);
+        Assert.Contains("forbidden", result.Text);
         Assert.Equal(view.InstanceRevision, (await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId)).InstanceRevision);
     }
 
@@ -140,7 +113,7 @@ public sealed class SelfManagementOperationTests
         Assert.Null(builtin.SourceDefinitionId);
         await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () => await services.GetRequiredService<AgentInstanceSkillService>().WriteAsync(owner.InstanceId, "delete", builtin.Key, builtin.Revision));
         using var query = JsonDocument.Parse("{\"query\":\"configuration.inspect\"}");
-        Assert.Contains("configuration.inspect", CapabilityDiscoveryMatcher.Load(context.Definition, context, ToolConfigurationGates.Unconfigured, query.RootElement, 0).Loaded);
+        Assert.Empty(CapabilityDiscoveryMatcher.Load(context.Definition, context, ToolConfigurationGates.Unconfigured, query.RootElement, 0).Loaded);
         await policy.FreezeAsync(owner.InstanceId, view.InstanceRevision);
         context = context with { Harness = null };
         var unavailable = CapabilityDiscoveryMatcher.Load(context.Definition, context, ToolConfigurationGates.Unconfigured, query.RootElement, 0);

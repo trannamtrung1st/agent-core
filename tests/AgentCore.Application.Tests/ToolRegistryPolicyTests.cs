@@ -8,6 +8,34 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ToolRegistryPolicyTests
 {
+    public static IEnumerable<object[]> UnownedManagementTools => new[] {
+        "skills.list", "skills.inspect", "skills.create", "skills.update", "skills.set_enabled", "skills.delete", "skills.customize", "skills.reset_enabled",
+        "configuration.inspect", "configuration.propose", "management.inspect", "management.policy.update", "management.freeze",
+        "settings.list", "settings.inspect", "settings.patch", "resources.list", "resources.inspect", "resources.upsert", "resources.set_enabled", "resources.delete", "resources.copy",
+        "credentials.binding.propose", "credentials.binding.remove", "automation.preferences.inspect", "automation.preferences.patch"
+    }.Select(name => new object[] { name });
+
+    [Theory]
+    [MemberData(nameof(UnownedManagementTools))]
+    public async Task Caller_built_delegation_cannot_offer_or_execute_unowned_configuration_or_child_management(string tool)
+    {
+        var definition = Definition("forged-management", 1, [tool]);
+        var harness = new HarnessChatContext(new(HarnessManagementMode.Managed,
+            Enum.GetValues<HarnessManagementScope>(), [], [], ManagedAutoApply: Enum.GetValues<ManagementAutoApply>()), 1, 1);
+        var instance = Guid.NewGuid(); var session = Guid.NewGuid();
+        var context = Context(definition, true, []) with { Harness = harness, AgentInstanceId = instance, OwnedSessionId = session };
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance,
+            AgentRunId: Guid.NewGuid(), Harness: harness, OwnedSessionId: session);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == tool);
+        var executor = new SessionToolExecutor();
+        using var args = System.Text.Json.JsonDocument.Parse("{}");
+        Assert.Equal(ToolPolicyDecision.Deny, await executor.EvaluateExecutionPolicyAsync(definition, session,
+            new("forged-management", tool, "{}"), args.RootElement, admission, default));
+        var result = await executor.ExecuteAsync(definition, session,
+            new ModelToolCall("forged-management", tool, "{}"), ToolLimits.MaxOutputBytes, admission: admission);
+        Assert.Contains("forbidden", result.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("harness.inspect")]
     [InlineData("harness.knowledge.upsert")]

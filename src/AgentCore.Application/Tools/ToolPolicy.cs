@@ -88,10 +88,7 @@ public static class ToolPolicy
         if (ToolResources.IsTriggerWrite(toolName) && admission is not null
             && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return ToolPolicyDecision.Deny;
-        if (ManagementTools.IsManagement(toolName) && (admission is not { AgentInstanceId: not null, SupportsTools: true }
-            || !ManagementTools.Allows(toolName, definition, admission.Harness)
-            || !HarnessChatTools.IsHarness(toolName) && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }))
-            return ToolPolicyDecision.Deny;
+        if (ManagementTools.IsManagement(toolName)) return ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
@@ -287,10 +284,7 @@ public static class ToolPolicy
         if (ToolCatalog.IsCompletionTool(descriptor.Name) && context?.OwnedSessionId is null) return false;
         if (descriptor.Name == ToolCatalog.BackgroundStart && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return false;
-        if (ManagementTools.IsManagement(descriptor.Name) && (context is not { AgentInstanceId: not null, ModelSupportsTools: true }
-            || !ManagementTools.Allows(descriptor.Name, definition, context.Harness)
-            || !HarnessChatTools.IsHarness(descriptor.Name) && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }))
-            return false;
+        if (ManagementTools.IsManagement(descriptor.Name)) return false;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return context is { AgentInstanceId: not null, ModelSupportsTools: true, CredentialMetadataAvailable: true };
