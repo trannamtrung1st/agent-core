@@ -21,22 +21,20 @@ public sealed class SandboxApiTests
     { public bool IsAvailable=>true;public string State=>"Ready";public string SafeMessage=>"Deterministic fixture"; }
 
     [Fact]
-    public async Task Historical_drafts_require_explicit_owner_repair_and_never_restore_retired_execution()
+    public async Task Retired_Sandbox_candidate_requires_explicit_repair_without_rewriting_immutable_source()
     {
         await using var factory = new SandboxFactory();
-        var lifecycle = factory.Services.GetRequiredService<AgentCore.Application.Admin.AgentDefinitionLifecycleService>();
         var source = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
         Assert.Contains("sandbox.run", RoleEnvironments.Of(source).ToolList);
-        var draft = await lifecycle.ForkDraftAsync(source.Id, source.Version, DefinitionDraftSourceKind.ForkBuiltIn);
-        var rejected = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(()=>lifecycle.UpdateDraftAsync(
-            draft.DraftId,draft.Revision,draft.Candidate with {AgentInstructions="Explicit owner edit."}).AsTask());
-        Assert.Equal(400,rejected.StatusCode);
-        var repaired = await lifecycle.UpdateDraftAsync(draft.DraftId,draft.Revision,
-            HarnessLegacyFixture.WithoutRetiredSandboxTool(draft.Candidate) with {AgentInstructions="Explicit owner edit."});
-        Assert.Equal(draft.Revision+1,repaired.Revision);
-        Assert.DoesNotContain("sandbox.run",repaired.Candidate.Environment!.ToolList);
-        Assert.DoesNotContain("sandbox.exec",repaired.Candidate.Environment.ToolList);
-        Assert.Null(repaired.Candidate.SandboxPolicy);
+        var candidate = AgentDefinitionCandidate.FromDefinition(source);
+        var aliases = factory.Services.GetRequiredService<ProviderAliasSet>();
+        var rejected = Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() =>
+            AgentCore.Application.Admin.AgentDefinitionCandidateValidator.ValidateForPersistence(candidate with { AgentInstructions = "Explicit repair." }, aliases));
+        Assert.Equal(400, rejected.StatusCode);
+        var repaired = HarnessLegacyFixture.WithoutRetiredSandboxTool(candidate) with { AgentInstructions = "Explicit repair." };
+        AgentCore.Application.Admin.AgentDefinitionCandidateValidator.ValidateForPersistence(repaired, aliases);
+        Assert.DoesNotContain("sandbox.run", repaired.Environment!.ToolList); Assert.DoesNotContain("sandbox.exec", repaired.Environment.ToolList);
+        Assert.Null(repaired.SandboxPolicy);
         Assert.Contains("sandbox.run",RoleEnvironments.Of((await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(source.Id,source.Version))!).ToolList);
     }
 

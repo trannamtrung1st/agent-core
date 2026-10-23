@@ -134,13 +134,8 @@ public sealed class SelfManagementAuthorityTests
             Assert.Null(policy.Overrides.AutoApply);
             Assert.Null(policy.Overrides.HarnessAuthoring);
             Assert.False(policy.Overrides.ConfigurationAssistance!.Value);
-            var lifecycle = services.GetRequiredService<AgentDefinitionLifecycleService>();
-            var draft = await lifecycle.ForkDraftAsync("general-assistant", 23, DefinitionDraftSourceKind.ForkBuiltIn);
-            var candidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(draft.Candidate);
-            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with {
-                Environment = candidate.Environment! with { KnowledgeSources = [] },
-                SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
-            var published = await services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
+            var published = await NativeInstanceConfigurationSeed.PublicationAsync(services, "general-assistant", 23,
+                new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []));
             await NativeInstanceConfigurationSeed.AdoptAsync(admin, owner.InstanceId, published.Version, policy.InstanceRevision);
             policy = await NativeInstanceConfigurationSeed.PolicyViewAsync(services, owner.InstanceId);
             Assert.Equal(HarnessManagementMode.Managed, policy.Effective.Mode);
@@ -165,13 +160,8 @@ public sealed class SelfManagementAuthorityTests
         try
         {
             await using AgentCoreApiFactory host = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
-            var lifecycle = host.Services.GetRequiredService<AgentDefinitionLifecycleService>();
-            var draft = await lifecycle.ForkDraftAsync("general-assistant", 23, DefinitionDraftSourceKind.ForkBuiltIn);
-            var candidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(draft.Candidate);
-            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with {
-                Environment = candidate.Environment! with { KnowledgeSources = [] },
-                SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
-            var published = await host.Services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
+            var published = await NativeInstanceConfigurationSeed.PublicationAsync(host.Services, "general-assistant", 23,
+                new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []));
             var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "general-assistant", published.Version);
             var policy = await NativeInstanceConfigurationSeed.FreezeAsync(host.Services, owner.InstanceId, owner.Revision);
             Assert.True(policy.Effective.Frozen);

@@ -3,37 +3,6 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Admin;
 
-public static class AdminDefinitionSources
-{
-    public const string BuiltIn = "builtIn";
-    public const string Durable = "durable";
-    public const string Draft = "draft";
-}
-
-public static class AdminDefinitionStatuses
-{
-    public const string Published = "published";
-    public const string Deprecated = "deprecated";
-    public const string DraftOnly = "draftOnly";
-}
-
-public sealed record AdminDefinitionInventoryItem(
-    string DefinitionId,
-    int Version,
-    string Source,
-    string Status,
-    string DisplayName,
-    int DraftCount = 0);
-
-public sealed record AdminInstanceInventoryItem(
-    Guid InstanceId,
-    string DefinitionId,
-    int ActiveVersion,
-    AgentInstanceLifecycle Lifecycle,
-    string PersonaName,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
-
 public sealed record AdminKnowledgeSource(
     string Identity,
     string Title,

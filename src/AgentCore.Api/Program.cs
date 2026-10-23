@@ -84,12 +84,6 @@ var observability = builder.Configuration.GetSection("Observability").Get<Observ
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
 builder.Services.AddSingleton<AdminLifecycleCoordinator>();
 builder.Services.AddSingleton<AdminAuthoringOptionsService>();
-builder.Services.AddSingleton<AgentDefinitionLifecycleService>();
-builder.Services.AddSingleton<AgentDefinitionDraftValidationService>();
-builder.Services.AddSingleton<AgentDefinitionDraftPublishService>();
-builder.Services.AddSingleton<AgentDefinitionDraftDiffService>();
-builder.Services.AddSingleton<AgentDefinitionDraftEvaluationService>();
-builder.Services.AddSingleton<AgentDefinitionResourceService>();
 builder.Services.AddSingleton<TenantRuntimeCapacity>();
 builder.Services.AddSingleton<TenantSessionRuntimeHost>();
 builder.Services.AddSingleton<ITenantHostedRuntimeStateReader>(p => p.GetRequiredService<TenantSessionRuntimeHost>());

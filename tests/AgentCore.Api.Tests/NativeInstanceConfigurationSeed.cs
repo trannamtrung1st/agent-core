@@ -10,6 +10,18 @@ namespace AgentCore.Api.Tests;
 // Canonical mutation and disclosure are qualified separately through tenant HTTP/model tests.
 internal static class NativeInstanceConfigurationSeed
 {
+    internal static async ValueTask<AgentDefinitionPublication> PublicationAsync(IServiceProvider services, string sourceId, int sourceVersion, HarnessManagementPolicy policy)
+    {
+        var source = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(sourceId, sourceVersion))!;
+        var candidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(AgentDefinitionCandidate.FromDefinition(source));
+        candidate = candidate with { Environment = candidate.Environment! with { KnowledgeSources = [] }, SelfManagement = policy };
+        var aliases = services.GetRequiredService<ProviderAliasSet>();
+        AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
+        var store = services.GetRequiredService<IAgentDefinitionAdminStore>(); var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
+        var draft = await store.CreateDraftAsync(new(sourceId, candidate, DefinitionDraftSourceKind.ForkBuiltIn, sourceVersion, now));
+        var occupied = (await services.GetRequiredService<IBuiltInAgentDefinitionStore>().ListAsync()).Where(d => d.Id == sourceId).Select(d => d.Version).ToArray();
+        return await store.PublishDraftAsync(new(draft.DraftId, draft.Revision, occupied, now));
+    }
     internal static async ValueTask<AgentInstance> CreateAsync(IServiceProvider services, string definitionId, int version)
     {
         var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(definitionId, version))!;
