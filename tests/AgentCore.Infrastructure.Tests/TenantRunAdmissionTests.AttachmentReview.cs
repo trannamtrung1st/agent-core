@@ -30,7 +30,7 @@ public sealed partial class TenantRunAdmissionTests
         var call = new ModelToolCall("read-exact", ToolCatalog.RequestAuthorization, JsonSerializer.Serialize(new { operation = "read_attachment", read = new { attachmentId = v.Id } }));
         var run = await runtime.ApplyTenantRuntimeCommandAsync(v.Run.Owner, v.Run.AgentRunId, new AgentRunCommand.Checkpoint(v.Run.Revision, f.Clock.GetUtcNow(), v.Run.Claim!.Generation,
             new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: v.Run.ResponseId)), 1, 0, 60000, 100), null), f.Ids.NewId());
-        var prepared = await new TenantToolAuthorization(runs, AttachmentOperations(f), approvals, f.RunConfiguration(), tenantAttachments: reads).PrepareAsync(run.SessionId, call,
+        var prepared = await new TenantToolAuthorization(runs, AttachmentOperations(f), f.Clock, approvals, f.RunConfiguration(), tenantAttachments: reads).PrepareAsync(run.SessionId, call,
             new(false, TriggerKind.UserTurn, AgentInstanceId: run.AgentInstanceId, OwnedSessionId: run.SessionId, AgentRunId: run.AgentRunId, TenantId: s.Tenant, AgentRunGeneration: run.Claim!.Generation), default);
         Assert.Equal(0, probe.Reads); var request = Assert.IsType<TenantApprovalRequest>(prepared.Request); Assert.Equal(ApprovalKind.Review, request.Kind); Assert.Equal("attachments.read", request.Permission);
         Assert.Equal(v.Id, request.Operation.AttachmentRead!.AttachmentId); Assert.DoesNotContain("Private attachment body", JsonSerializer.Serialize(request));

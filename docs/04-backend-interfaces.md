@@ -7,6 +7,11 @@ Canonical `SessionToolExecutor` is a tenant dispatch facade. It requires actual 
 `IOwnerCapabilityService`, `IOwnerCapabilityStore`, `IssuedOwnerCapability` and their implementations are removed. No issuer, validator or store is registered. Public owner header/response DTOs and the old `AttachPayload` are removed from Contracts. Account cookie/server-session authentication and exact tenant admission remain the supported boundary. The only old-header test fixture is a fixed adversarial value; it has no authority or issuance path. Earlier owner-capability descriptions in this document are historical implementation records, not current interfaces. [Measured retirement](reports/owner-credential-retirement-verification-2026-10-21.md).
 
 
+## Model-tool live claim boundary
+
+`TenantToolAuthorization` uses the injected `TimeProvider` and current persisted Run claim for every tool family. Actual tenant Session ownership, a Running uncancelled Run, exact nonempty generation and an unexpired current deadline precede family eligibility, argument parsing and dispatch inside that adapter. IAM inspection repeats this check before returning its result. Runtime mailbox commands cannot borrow the generic IAM parser. Existing family capability, current IAM, policy, source/consent and effect-transaction checks remain independent. The [complete registered tool checkpoint](reports/tenant-model-tool-authority-verification-2026-10-24.md) records scope and outstanding parity work.
+
+
 ## Runtime registry cutover checkpoint
 
 The registered dispatcher is `ITenantRunDispatcher` backed by the singleton `TenantSessionRuntimeHost`; input, foreground, cancellation and receipt controls resolve to that same object. The old unowned `IAgentRunDispatcher` registration, `IEnvironmentEventIngress`, live occurrence directory/mailbox, hosted state reader and profile live-update adapter are removed. Shared claimed-Run coordination still receives explicit tenant persistence and dispatcher bindings. No replacement empty authority adapter is registered.

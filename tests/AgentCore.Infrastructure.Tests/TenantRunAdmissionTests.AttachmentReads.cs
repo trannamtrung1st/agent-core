@@ -82,7 +82,7 @@ public sealed partial class TenantRunAdmissionTests
     public async Task Tenant_attachment_model_read_typed_tool_boundary_bounds_failures_and_omits_image_parts(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite, attachmentAuthority: true); var v = await ContextCase(f);
-        var executor = new SessionToolExecutor(tenantAuthorization: new TenantToolAuthorization((ITenantRunStore)f.Iam, AttachmentOperations(f), tenantAttachments: ContextService(f)));
+        var executor = new SessionToolExecutor(tenantAuthorization: new TenantToolAuthorization((ITenantRunStore)f.Iam, AttachmentOperations(f), f.Clock, tenantAttachments: ContextService(f)));
         var result = await executor.ExecuteAsync(v.Run.Admission.Configuration!.Definition, v.Run.SessionId,
             new("missing-source", ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(new { attachmentId = Guid.NewGuid() })), 10,
             admission: new(false, TriggerKind.UserTurn, AgentInstanceId: v.Run.AgentInstanceId, SupportsVision: true, AgentRunId: v.Run.AgentRunId,

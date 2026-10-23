@@ -74,7 +74,7 @@ public sealed partial class TenantOperationAuthorizationTests
         run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, f.Clock.GetUtcNow(), frame.Generation,
             new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 10000, 100), null), f.Ids.NewId());
         var approvals = ApprovalService(f, workspaceReads: reads);
-        var prepared = await new TenantToolAuthorization(runs, Operations(f), approvals, f.RunConfiguration(), workspaceReads: reads).PrepareAsync(run.SessionId, call,
+        var prepared = await new TenantToolAuthorization(runs, Operations(f), f.Clock, approvals, f.RunConfiguration(), workspaceReads: reads).PrepareAsync(run.SessionId, call,
             new(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: run.SessionId, SupportsTools: true, AgentRunId: run.AgentRunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation), default);
         var request = Assert.IsType<TenantApprovalRequest>(prepared.Request); Assert.Equal("sessions.read", request.Permission); Assert.Equal("session", request.ResourceType);
         Assert.Equal(4, TenantApprovalRules.ResourceReadMembers(request.Operation.WorkspaceRead!).Count);

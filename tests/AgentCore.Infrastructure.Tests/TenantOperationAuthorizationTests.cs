@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
@@ -15,10 +16,12 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Shared_tool_boundary_uses_actual_executor_roles_and_rechecks_revoke_without_borrowing_requester_authority(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
+        setup = setup with { Run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(setup.Run.Owner, setup.Run.AgentRunId,
+            new AgentRunCommand.Claim(setup.Run.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId()) };
         var operations = new TenantOperationAuthorizer(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock));
-        var tools = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, operations));
+        var tools = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, operations, f.Clock));
         var frame = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: setup.Agent.Instance.InstanceId, AgentRunId: setup.Run.AgentRunId,
-            OwnedSessionId: setup.Run.SessionId, TenantId: setup.Tenant);
+            OwnedSessionId: setup.Run.SessionId, TenantId: setup.Tenant, AgentRunGeneration: setup.Run.Claim!.Generation);
         var args = JsonSerializer.Serialize(new { permission = "agents.read", resourceType = "agent", resourceId = setup.Agent.Instance.InstanceId });
         var call = new ModelToolCall("inspect", ToolCatalog.IamCheckAccess, args);
         using (var result = JsonDocument.Parse((await tools.ExecuteAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId, call, 16_000, admission: frame)).Text))

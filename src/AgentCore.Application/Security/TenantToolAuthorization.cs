@@ -5,7 +5,7 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Security;
 
-public sealed partial class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer,
+public sealed partial class TenantToolAuthorization(ITenantRunStore runs, TenantOperationAuthorizer authorizer, TimeProvider time,
     TenantApprovalService? approvals = null, TenantRunConfigurationResolver? configuration = null,
     TenantPreferenceOperationService? preferences = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserReadService? browserReads = null,
     TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactOperationService? artifactPublications = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationEffectService? workspaceMutations = null, TenantAttachmentRuntimeContextService? tenantAttachments = null, IOfficeProcessor? office = null, Func<TenantRuntimeStateService>? runtimeState = null, TenantMemoryOperationService? memoryOperations = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantAutomationReadService? automationReads = null, TenantAutomationMutationService? automationMutations = null, TenantManagementOperationTarget? managementTargets = null, TenantPublicWebReadService? publicWebReads = null)
@@ -25,7 +25,8 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
     {
         var owner = await runs.ResolveTenantSessionOwnerAsync(session, ct).ConfigureAwait(false);
         if (owner is null) return new(false, false, null, "tenant_context_required");
-        if (admission is not { AgentRunId: { } runId, SupportsTools: true } || admission.TenantId != owner.TenantId
+        if (admission is not { AgentRunId: { } runId, AgentRunGeneration: { } generation, SupportsTools: true }
+            || runId == Guid.Empty || generation == Guid.Empty || admission.TenantId != owner.TenantId
             || admission.AgentInstanceId != owner.AgentInstanceId || admission.OwnedSessionId != owner.SessionId)
             return new(true, false, null, "tenant_context_required");
         var reference = new TenantRunReference(owner.TenantId, runId);
@@ -33,47 +34,51 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
         {
             var (run, _) = await authorizer.ResolveAsync(reference, ct).ConfigureAwait(false);
             if (run.SessionId != session || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId) return new(true, false, null, "tenant_context_mismatch");
+            // A trusted task identity is not a live execution lease. Every model tool,
+            // including IAM discovery, uses the current persisted generation/deadline.
+            if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.CancellationRequested
+                || run.Claim is not { } claim || claim.Generation != generation)
+                return new(true, false, reference, "tenant_runtime_unavailable");
+            if (claim.LeaseExpiresAtUtc <= time.GetUtcNow())
+                return new(true, false, reference, "execution_claim_expired");
             if (TenantManagementMutationContract.IsTool(tool))
             {
-                var allowedChange = TenantManagementReadContract.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
+                var allowedChange = TenantManagementReadContract.Allows(run);
                 return new(true, allowedChange, reference, allowedChange ? "allowed" : "management_unavailable");
             }
             if (TenantManagementReadContract.IsTool(tool))
             {
-                var allowedRead = (tool == ToolCatalog.SkillsLoad ? TenantSkillLoadContract.Allows(run) || TenantCoreProcedureContract.Allows(run) : TenantManagementReadContract.Allows(run)) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
-                    && run.Claim?.Generation == admission.AgentRunGeneration;
+                var allowedRead = tool == ToolCatalog.SkillsLoad ? TenantSkillLoadContract.Allows(run) || TenantCoreProcedureContract.Allows(run) : TenantManagementReadContract.Allows(run);
                 return new(true, allowedRead, reference, allowedRead ? "allowed" : "management_read_unavailable");
             }
             if (tool == ToolCatalog.CapabilitiesLoad)
             {
-                var allowedDiscovery = TenantTaskExecutionContract.Allows(run) && run.Admission.Configuration?.Definition.Environment?.Capabilities is not null
-                    && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
+                var allowedDiscovery = TenantTaskExecutionContract.Allows(run) && run.Admission.Configuration?.Definition.Environment?.Capabilities is not null;
                 return new(true, allowedDiscovery, reference, allowedDiscovery ? "allowed" : "capability_discovery_unavailable");
-            }
-            if (tool == ToolCatalog.SkillsLoad)
-            {
-                var allowedProcedure = TenantCoreProcedureContract.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
-                    && run.Claim?.Generation == admission.AgentRunGeneration;
-                return new(true, allowedProcedure, reference, allowedProcedure ? "allowed" : "procedure_load_unavailable");
             }
             if (TenantBackgroundToolContract.IsTool(tool))
             {
-                var background = TenantBackgroundToolContract.Allows(run, tool) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
-                    && run.Claim?.Generation == admission.AgentRunGeneration;
+                var background = TenantBackgroundToolContract.Allows(run, tool);
                 return new(true, background, reference, background ? "allowed" : "tenant_effect_unavailable");
             }
             if (tool == ToolCatalog.ExecutionWait || TenantCompletionToolContract.IsTool(tool))
             {
-                var allowedWait = TenantWaitRules.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running
-                    && run.Claim?.Generation == admission.AgentRunGeneration;
+                var allowedWait = TenantWaitRules.Allows(run);
                 return new(true, allowedWait, reference, allowedWait ? "allowed" : "wait_unavailable");
             }
             if (!IamToolContracts.IsInspection(tool)
                 && (run.Admission.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
                     || TenantTaskExecutionContract.IsBackground(run) && !TenantTaskExecutionContract.IsTool(tool) && !TenantTaskExecutionContract.IsNativeInspection(tool) && tool != ToolCatalog.RequestAuthorization))
                 return new(true, false, reference, "tenant_effect_unavailable");
-            var allowed = IamToolContracts.IsInspection(tool) || ((tool==ToolCatalog.HttpRequest || TenantPublicWebReadContract.IsRead(tool)) && TenantTaskExecutionContract.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration) || TenantAutomationMutationContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantAutomationReadContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantExperienceToolContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantMemoryToolContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || TenantCredentialDiscoveryContract.IsTool(tool) || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool) || tool == ToolCatalog.AgentStateInspect)
-                && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
+            var task = TenantTaskExecutionContract.Allows(run);
+            var allowed = IamToolContracts.IsInspection(tool)
+                || task && (tool == ToolCatalog.HttpRequest || TenantPublicWebReadContract.IsRead(tool)
+                    || TenantAutomationMutationContract.IsTool(tool) || TenantAutomationReadContract.IsTool(tool)
+                    || TenantExperienceToolContract.IsTool(tool) || TenantMemoryToolContract.IsTool(tool))
+                || TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool)
+                || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify
+                || TenantCredentialDiscoveryContract.IsTool(tool) || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name
+                || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool) || tool == ToolCatalog.AgentStateInspect;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
         catch (AccessDeniedException ex) { return new(true, false, reference, ex.ReasonCode); }
@@ -247,6 +252,9 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                     reasonCode = result.ReasonCode, applied = result.Receipt is not null, operationId = result.Receipt?.OperationId,
                     instanceRevision = result.Receipt?.InstanceRevision });
             }
+            // Runtime-owned commands must not fall through to IAM inspection merely
+            // because they carry an object with resourceType/resourceId fields.
+            if (!IamToolContracts.IsInspection(call.Name)) return Error("forbidden", "runtime_dispatch_required");
             if (string.IsNullOrWhiteSpace(call.ArgumentsJson) || Encoding.UTF8.GetByteCount(call.ArgumentsJson) > IamToolContracts.MaxArgumentBytes)
                 return Error("invalid", "invalid_arguments");
             using var document = JsonDocument.Parse(call.ArgumentsJson); var input = document.RootElement;
@@ -257,8 +265,14 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
             string Read(string name, int max) => input.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                 && value.GetString() is { Length: > 0 } text && text.Length <= max ? text : throw new ArgumentException("Invalid IAM arguments.");
             var type = Read("resourceType", 32); var id = Read("resourceId", 200);
-            if (check) return JsonSerializer.Serialize(Project(await authorizer.CheckAsync(boundary.Reference!, Read("permission", 128), type, id, ct).ConfigureAwait(false)));
+            if (check)
+            {
+                var decision = await authorizer.CheckAsync(boundary.Reference!, Read("permission", 128), type, id, ct).ConfigureAwait(false);
+                await RequireInspectionBoundaryAsync(session, call.Name, admission!, boundary.Reference!, ct).ConfigureAwait(false);
+                return JsonSerializer.Serialize(Project(decision));
+            }
             var items = await authorizer.EffectiveAsync(boundary.Reference!, type, id, ct).ConfigureAwait(false);
+            await RequireInspectionBoundaryAsync(session, call.Name, admission!, boundary.Reference!, ct).ConfigureAwait(false);
             return JsonSerializer.Serialize(new { operations = items.Select(Project).ToArray() });
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException) { return Error("invalid", "invalid_arguments"); }
@@ -267,6 +281,14 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
         catch (AccessDeniedException ex) { return Error("forbidden", ex.ReasonCode); }
         catch (SecurityConflictException ex) { return Error("conflict", ex.ReasonCode); }
         catch (AgentCore.Application.Sessions.AgentCoreException ex) when (call.Name == ToolCatalog.AgentStateInspect) { return Error(ex.Code, ex.Code); }
+    }
+    private async ValueTask RequireInspectionBoundaryAsync(Guid session, string tool, ToolExecutionAdmission admission,
+        TenantRunReference reference, CancellationToken ct)
+    {
+        var current = await Resolve(session, admission, tool, ct).ConfigureAwait(false);
+        if (current.Allowed && current.Reference == reference) return;
+        await authorizer.RecordFailureAsync(reference, "", current.Reason, AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ToolBoundary, ct, session).ConfigureAwait(false);
+        throw new AccessDeniedException(current.Reason);
     }
     public async ValueTask<TenantApprovalPreparationResult> PrepareAsync(Guid session, ModelToolCall call, ToolExecutionAdmission admission, CancellationToken ct)
     {

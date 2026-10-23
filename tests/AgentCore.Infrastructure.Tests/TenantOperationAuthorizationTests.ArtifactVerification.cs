@@ -22,7 +22,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var s = await Setup(f, "customer-support", 3); var frame = await ClaimArtifactRun(f, s);
         var artifact = await ((ITenantArtifactStore)f.Artifacts).CreateTenantAsync(frame, f.Ids.NewId(), "private.md", "text/plain", "Unreturned file bytes"u8.ToArray());
         var reads = ArtifactReads(f);
-        var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), artifactReads: reads));
+        var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock, artifactReads: reads));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId,
             OwnedSessionId: frame.SessionId, SupportsTools: true, AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation);
         var call = new ModelToolCall("verify-owned", ToolCatalog.ArtifactsVerify, JsonSerializer.Serialize(new { artifactId = artifact.ArtifactId }));

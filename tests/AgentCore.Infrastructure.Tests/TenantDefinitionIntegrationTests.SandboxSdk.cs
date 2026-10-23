@@ -169,7 +169,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             }
             var services = SandboxApprovalServices(f, s);
             var request = (modelCall is not null
-                ? await new TenantToolAuthorization((ITenantRunStore)f.Iam, operations, services.Approvals, s.Resolver).PrepareAsync(s.Session.SessionId, modelCall,
+                ? await new TenantToolAuthorization((ITenantRunStore)f.Iam, operations, TimeProvider.System, services.Approvals, s.Resolver).PrepareAsync(s.Session.SessionId, modelCall,
                     new(false, TriggerKind.UserTurn, AgentInstanceId: s.Session.AgentInstanceId, AgentRunId: s.Run.AgentRunId,
                         OwnedSessionId: s.Session.SessionId, TenantId: s.Tenant, AgentRunGeneration: s.Run.Claim!.Generation), default)
                 : await services.Approvals.PrepareSandboxAsync(new(s.Tenant, s.Run.AgentRunId), s.Lease.Profile.Id,

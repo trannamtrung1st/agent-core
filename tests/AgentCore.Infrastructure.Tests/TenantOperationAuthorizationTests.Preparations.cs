@@ -17,7 +17,7 @@ public sealed partial class TenantOperationAuthorizationTests
         var provider = new SyntheticEmailProvider();
         var draft = await provider.CreateDraftAsync(new EmailCreateDraftRequest(["private@example.test"], [], [], "Private legacy subject", "Private legacy body"), default);
         var observed = new ObservedDraftProvider(provider);
-        var tools = new SessionToolExecutor( tenantAuthorization:new((ITenantRunStore)f.Iam, Operations(f)));
+        var tools = new SessionToolExecutor( tenantAuthorization:new((ITenantRunStore)f.Iam, Operations(f), f.Clock));
         var args = JsonSerializer.SerializeToElement(new { draftId = draft.Draft.DraftId, approvalId = Guid.NewGuid(), approved = true });
         var call = new ModelToolCall("send", ToolCatalog.EmailSend, args.GetRawText());
         var frame = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: setup.Agent.Instance.InstanceId,

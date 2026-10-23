@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using AgentCore.Application.Security;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -153,12 +154,14 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Unsupported_tenant_credential_tool_is_audited_without_copying_model_arguments_or_reading_a_secret(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
-        var tools = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f)));
+        setup = setup with { Run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(setup.Run.Owner, setup.Run.AgentRunId,
+            new AgentRunCommand.Claim(setup.Run.Revision, f.Clock.GetUtcNow(), f.Ids.NewId(), f.Clock.GetUtcNow().AddMinutes(5)), f.Ids.NewId()) };
+        var tools = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock));
         var frame = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: setup.Agent.Instance.InstanceId,
-            AgentRunId: setup.Run.AgentRunId, OwnedSessionId: setup.Run.SessionId, TenantId: setup.Tenant);
+            AgentRunId: setup.Run.AgentRunId, OwnedSessionId: setup.Run.SessionId, TenantId: setup.Tenant, AgentRunGeneration: setup.Run.Claim!.Generation);
         const string secret = "untrusted-credential-content";
         var result = await tools.ExecuteAsync(setup.Run.Admission.Configuration!.Definition, setup.Run.SessionId,
-            new("blocked-use", ToolCatalog.CredentialsList, secret), 16000, admission: frame);
+            new("blocked-use", "credentials.create", secret), 16000, admission: frame);
         using var body = JsonDocument.Parse(result.Text); Assert.Equal("tenant_effect_unavailable", body.RootElement.GetProperty("reasonCode").GetString());
         var entry = Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Execution is not null);
         Assert.Equal("denied", entry.Decision); Assert.Equal("tenant_effect_unavailable", entry.ReasonCode);

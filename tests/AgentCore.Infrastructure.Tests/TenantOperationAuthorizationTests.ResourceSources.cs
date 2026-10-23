@@ -165,7 +165,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await ResourceSourceCase(f); var s = v.Setup;
         var frame = await ClaimArtifactRun(f, s); await GrantWorkspaceRuntimeReads(f, s, ["sessions.read", "agents.read", "resources.read"]);
         Assert.Equal(v.Bytes, (await ResourceSources(f).CaptureAsync(frame, ToolCatalog.WorkspaceRead, v.Path)).CopyContent());
-        var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), workspaceReads: WorkspaceRuntimeReads(f)));
+        var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock, workspaceReads: WorkspaceRuntimeReads(f)));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId,
             SupportsTools: true, AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation);
         var call = new ModelToolCall("unconverted-resource", ToolCatalog.WorkspaceRead, System.Text.Json.JsonSerializer.Serialize(new { path = v.Path }));

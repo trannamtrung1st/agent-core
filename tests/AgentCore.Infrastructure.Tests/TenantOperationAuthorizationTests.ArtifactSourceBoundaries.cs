@@ -150,7 +150,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true, artifactAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var frame = await ClaimArtifactRun(f, s); await GrantPublication(f, s); await GrantWorkspaceRuntimeReads(f, s);
-        var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), artifactPublications: SourcePublicationService(f)));
+        var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock, artifactPublications: SourcePublicationService(f)));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId,
             SupportsTools: true, AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation);
         await SeedRuntimeWorkspace(f, s, true, "source.bin", [0, 255, 128, 3]);

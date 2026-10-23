@@ -93,11 +93,11 @@ One bounded desktop/phone visual round inspected the incumbent Ant Design dark i
 
 ## Current boundary inventory checkpoint
 
-The exact HTTP inventory now contains **249 canonical API method/path pairs**: 232 retained baseline pairs plus 17 canonical additions. The new Event Activity `unreviewed-sources` route had been functionally qualified but omitted from the retained-route fixture; it is now recorded alongside the other additions. The original 228 retired pairs and baseline commit remain unchanged. `Tenant_HTTP_cutover_removes_all_228_retired_routes*` passes in Memory and SQLite: runtime `EndpointDataSource` equals the full manifest, every retired pair returns 404 without SPA HTML to anonymous, valid old-token and signed-in platform-operator clients, old tokens cannot authenticate canonical private families, and no provider HTTP occurs. The Hub declaration check also passes: authentication is required and only 14 canonical control/input/receipt methods are declared. **3 passed**; `/private/tmp/iam-current-boundary-inventory-20261023-r2.log` supersedes the initial two missing-manifest failures.
+The exact HTTP inventory now contains **250 canonical API method/path pairs**: 232 retained baseline pairs plus 18 canonical additions. The tenant Composer discovery route is included; the [Composer report](tenant-composer-references-verification-2026-10-24.md) owns its latest both-store route evidence. The new Event Activity `unreviewed-sources` route had been functionally qualified but omitted from the retained-route fixture; it is now recorded alongside the other additions. The original 228 retired pairs and baseline commit remain unchanged. `Tenant_HTTP_cutover_removes_all_228_retired_routes*` passes in Memory and SQLite: runtime `EndpointDataSource` equals the full manifest, every retired pair returns 404 without SPA HTML to anonymous, valid old-token and signed-in platform-operator clients, old tokens cannot authenticate canonical private families, and no provider HTTP occurs. The Hub declaration check also passes: authentication is required and only 14 canonical control/input/receipt methods are declared. **3 passed**; `/private/tmp/iam-current-boundary-inventory-20261023-r2.log` supersedes the initial two missing-manifest failures.
 
 | Current API family | Method/path pairs |
 | --- | ---: |
-| Explicit tenant routes | 226 |
+| Explicit tenant routes | 227 |
 | Authentication | 5 |
 | Account self-service | 4 |
 | System administration | 10 |
@@ -580,3 +580,7 @@ The full goal remains active. Other resource/effect families, tenant Sandbox/dec
 After `8eead654`, canonical organization Credential inventory, exact-owner inspection, all five purpose forms, protected replacement and Google consent return/disconnect use cookie/CSRF APIs and current resource authority. Lifecycle and connection status remain independently visible. Safe drafts survive revoked/stale writes; protected inputs clear after attempts, and acknowledged responses that cannot be read require reload without duplicate creation. [Verification](tenant-credential-ui-verification-2026-10-17.md) records 10 HTTP tests, 36 focused frontend tests, 3 integrated Synthetic browser journeys, Playwright MCP interaction, responsive evidence and the scoped Impeccable verdict/documentation handoff.
 
 This adds Phase 4/7 progress. Runtime refresh/use and effect permission checks, resource assignment administration, Instance binding UI, other resource/store families, Sandbox/decommission, Session/Run/Hub/tool/background tenancy, trusted lineage, durable approvals, obsolete authority removal and final schema/reset consolidation remain required. Live Google acceptance was not exercised. The full goal remains active; no user-data reset, Real restart, deployment, CI or milestone acceptance occurred.
+
+## Common model-tool claim fence
+
+The [complete 150-name tool checkpoint](tenant-model-tool-authority-verification-2026-10-24.md) maps canonical dispatch owners and records the shared live-claim fix, with 966 distinct focused cases passing and a warning-free solution build. The original goal remains active. This closes no final store/effect matrix or proposal-wide acceptance gate; registered application-message tenant parity and safe historical Harness serialization reconciliation remain open.

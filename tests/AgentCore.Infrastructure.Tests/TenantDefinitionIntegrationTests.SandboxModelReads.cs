@@ -23,7 +23,7 @@ public sealed partial class TenantDefinitionIntegrationTests
     {
         var operations = new TenantOperationAuthorizer(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer,
             new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, TimeProvider.System));
-        return new((ITenantRunStore)f.Iam, operations, configuration: s.Resolver, sandboxReads: reads ?? ModelSandboxReads(f, s));
+        return new((ITenantRunStore)f.Iam, operations, TimeProvider.System, configuration: s.Resolver, sandboxReads: reads ?? ModelSandboxReads(f, s));
     }
     private static ToolExecutionAdmission SandboxReadAdmission(RuntimeSandboxSetup s) => new(false, TriggerKind.UserTurn,
         AgentInstanceId: s.Session.AgentInstanceId, AgentRunId: s.Run.AgentRunId, OwnedSessionId: s.Session.SessionId,

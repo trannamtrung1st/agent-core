@@ -32,7 +32,7 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Setup(f, "general-assistant", 32);
         var frame = await ClaimArtifactRun(f, s); await SeedRuntimeWorkspace(f, s, working);
-        var service = WorkspaceRuntimeReads(f); var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), workspaceReads: service));
+        var service = WorkspaceRuntimeReads(f); var executor = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, Operations(f), f.Clock, workspaceReads: service));
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId,
             SupportsTools: true, AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation);
         var root = working ? "/working" : "/home"; var call = new ModelToolCall("actual-workspace-read", ToolCatalog.WorkspaceRead, JsonSerializer.Serialize(new { path = root + "/private.txt" }));

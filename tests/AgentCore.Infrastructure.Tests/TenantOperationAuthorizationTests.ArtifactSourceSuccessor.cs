@@ -24,7 +24,7 @@ public sealed partial class TenantOperationAuthorizationTests
         run = await runtime.ApplyTenantRuntimeCommandAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, f.Clock.GetUtcNow(), frame.Generation,
             new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 10000, 100), null), f.Ids.NewId());
         var approvals = ApprovalService(f, artifactSources: ArtifactSources(f));
-        var prepared = await new TenantToolAuthorization(runs, Operations(f), approvals, f.RunConfiguration()).PrepareAsync(run.SessionId, call,
+        var prepared = await new TenantToolAuthorization(runs, Operations(f), f.Clock, approvals, f.RunConfiguration()).PrepareAsync(run.SessionId, call,
             new(false, TriggerKind.UserTurn, AgentInstanceId: s.Agent.Instance.InstanceId, OwnedSessionId: frame.SessionId, SupportsTools: true,
                 AgentRunId: frame.RunId, TenantId: s.Tenant, AgentRunGeneration: frame.Generation), default);
         var request = prepared.Request!; Assert.NotNull(request); Assert.Equal(grant ? ApprovalKind.ExceptionalGrant : ApprovalKind.Review, request.Kind);
