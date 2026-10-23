@@ -1,4 +1,5 @@
 using AgentCore.Application.Agents;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -13,6 +14,7 @@ public sealed class TenantBrowserOperationTarget(ITenantSessionStore sessions, T
     public async ValueTask<(TenantAgent Agent, PreparedBrowserCommand Command, TenantBrowserCommandWitness Witness)> PrepareAsync(AgentRun run, string tool, string json, CancellationToken ct, bool registerCold = false, bool downloadArtifacts = false)
     {
         var intent = TenantApprovalRules.BrowserIntent(run.SessionId, tool, json);
+        if(RunFinalization.InCleanup(run) && !RunFinalization.CleanupBrowser(tool,intent.Arguments,downloadArtifacts))throw new AccessDeniedException("cleanup_only");
         var destinationUrl = intent.Command switch { BrowserNavigate { Operation: "goto" } navigation => navigation.Url,
             BrowserTabs { Operation: "new" } tab => tab.Url, _ => null };
         if (destinationUrl is not null)

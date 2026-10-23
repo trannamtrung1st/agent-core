@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-namespace AgentCore.Application.Tests;
+namespace AgentCore.Api.Tests;
 
 // Test-only, two loopback origins. The protected record is issued only after server-side login.
 internal sealed class GenericSsoFixture : IAsyncDisposable

@@ -16,7 +16,7 @@ public static class AgentRunAdmissionFactory
 {
     public static bool RequestsCleanup(string text) => BrowserCleanupIntentRecognition.From(text).Any;
 
-    private static EffectiveExecutionBudget WithCleanupIntent(EffectiveExecutionBudget budget, string text)
+    internal static EffectiveExecutionBudget WithCleanupIntent(EffectiveExecutionBudget budget, string text)
     {
         var intent = BrowserCleanupIntentRecognition.From(text);
         return budget with { RequestedCleanup = intent.Any, CleanupIntent = intent };

@@ -47,7 +47,7 @@ public static class TenantPublicWebReadRules
         "invalid", "forbidden", "conflict", "output_limit", "invalid_tool_strategy_blocked", "public_web_unavailable", "timeout", "forbidden_host", "credentials_in_url",
         "invalid_url", "http_error", "body_too_large", "unsupported_content_type", "too_many_redirects", "transport_error", "unavailable" };
     private static readonly HashSet<string> Reasons = new(StringComparer.Ordinal) {
-        "invalid_arguments", "executor_read_required", "public_web_read_review_required", "permission_denied", "public_web_unavailable", "provider_unavailable",
+        "cleanup_only", "invalid_arguments", "executor_read_required", "public_web_read_review_required", "permission_denied", "public_web_unavailable", "provider_unavailable",
         "tenant_context_required", "tenant_context_mismatch", "tenant_runtime_unavailable", "resource_unavailable", "run_unavailable", "public_web_source_changed",
         "stale_revision", "execution_budget_exhausted", "requester_unavailable", "executor_unavailable", "tenant_unavailable", "policy_transition_pending", "capability_unavailable" };
     public static void Require(AgentRun run,TenantAgent agent,AgentDefinition current,TenantSession session,IReadOnlyList<string> tools)

@@ -277,6 +277,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
         var run = (await runs.FindTenantRunAsync(boundary.Reference.TenantId, boundary.Reference.RunId, ct).ConfigureAwait(false))!;
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
+        if(AgentCore.Application.Execution.RunFinalization.InCleanup(run) && !AgentCore.Application.Execution.RunFinalization.CleanupCall(call))throw new AccessDeniedException("cleanup_only");
         if (TenantTaskExecutionContract.IsBackground(run) && intent.WorkspaceRead is null && intent.AttachmentArguments is null && intent.ArtifactId is null
             && intent.HttpArguments is null && intent.ManagementMutation is null && intent.ManagementRead is null && intent.AutomationMutation is null && intent.AutomationRead is null && intent.Experience is null && intent.Continuity is null && intent.Memory is null && intent.WorkspaceMutation is null && intent.ArtifactArguments is null && intent.CompletionArguments is null && intent.BackgroundArguments is null
             && intent.MetadataArguments is null && intent.AccountAction is null && intent.AccountRead is null && intent.Browser is null && intent.Sandbox is null && intent.SandboxRead is null && intent.SandboxControl is null)

@@ -25,34 +25,52 @@ public static class RunBudgetDiagnosticProjection
         var unresolved = new HashSet<string>(StringComparer.Ordinal);
         var inCleanup = false;
         var receiptIndex = 0;
+        var calls=new Dictionary<string,ModelToolCall>(StringComparer.Ordinal);
         foreach (var receipt in messages)
         {
             if (state.CleanupStartedAtMessage is { } start && receiptIndex++ >= start) inCleanup = true;
-            if (receipt.Role != ModelRole.Tool || receipt.Name?.StartsWith("browser.", StringComparison.Ordinal) != true) continue;
+            foreach(var call in receipt.ToolCalls ?? [])calls[call.Id]=call;
+            if (receipt.Role != ModelRole.Tool || receipt.Name is null || !(receipt.Name.StartsWith("browser.", StringComparison.Ordinal) || receipt.Name==ToolCatalog.RequestAuthorization)) continue;
             try
             {
                 using var doc = JsonDocument.Parse(receipt.Text); var root = doc.RootElement;
                 if (root.ValueKind != JsonValueKind.Object) continue;
+                var tool=receipt.Name;
+                if(tool==ToolCatalog.RequestAuthorization)
+                {
+                    if(!calls.TryGetValue(receipt.ToolCallId ?? "",out var call) || TenantApprovalToolContract.Parse(call).Browser is not { } command
+                        || !root.TryGetProperty("commandCompleted",out var completed))continue;
+                    tool=command.Tool;
+                    var known=completed.ValueKind==JsonValueKind.True && ReadString(root,"outcome")=="completed" && ReadString(root,"approvalStatus")=="approved"
+                        && root.TryGetProperty("replayAllowed",out var replay) && replay.ValueKind==JsonValueKind.False;
+                    if(!known || !root.TryGetProperty("browser",out var native) || native.ValueKind!=JsonValueKind.Object)
+                    {
+                        if(inCleanup)unresolved.Add(tool);
+                        if(tool==ToolCatalog.BrowserClose)closure=false;
+                        continue;
+                    }
+                    root=native;
+                }
                 var status = ReadString(root, "status");
                 var hasError = root.TryGetProperty("error", out _);
-                var closed = receipt.Name == ToolCatalog.BrowserClose && !hasError && status is "closed" or "already_closed";
-                if (receipt.Name == ToolCatalog.BrowserClose) closure = closed;
+                var closed = tool == ToolCatalog.BrowserClose && !hasError && status is "closed" or "already_closed";
+                if (tool == ToolCatalog.BrowserClose) closure = closed;
                 if (!inCleanup) continue;
                 if (hasError || status is "close_failed" or "close_uncertain" or "provider_unavailable")
-                    unresolved.Add(receipt.Name);
+                    unresolved.Add(tool);
                 else if (closed || status == "ok")
                 {
-                    unresolved.Remove(receipt.Name);
+                    unresolved.Remove(tool);
                     // A later SDK-confirmed interaction can establish recovery through an
                     // alternate target/path. Read-only observation alone cannot do so.
                     if (root.TryGetProperty("effectConfirmedBySdk", out var confirmed)
-                        && confirmed.ValueKind == JsonValueKind.True && BrowserToolCatalog.IsInteraction(receipt.Name))
+                        && confirmed.ValueKind == JsonValueKind.True && BrowserToolCatalog.IsInteraction(tool))
                         unresolved.RemoveWhere(name => name != ToolCatalog.BrowserClose);
                 }
                 // Generic verification proves its requested predicate, not application sign-out.
                 // Model wording and successful clicks never create trusted logout evidence.
             }
-            catch (JsonException) { }
+            catch (Exception e) when(e is JsonException or ArgumentException or InvalidOperationException) { }
         }
         var intent = pin.CleanupIntent;
         // A close-only obligation is fulfilled by its authoritative close receipt.

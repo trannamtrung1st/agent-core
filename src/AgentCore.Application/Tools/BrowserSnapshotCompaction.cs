@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 
 namespace AgentCore.Application.Tools;
 
@@ -11,6 +13,46 @@ internal static class BrowserSnapshotCompaction
     internal const int RecentDiscoveries = 8;
 
     internal static void Compact(List<ModelMessage> messages)
+    {
+        // Reviewed commands carry the same native observation inside a consent receipt.
+        // Compact only that untrusted observation; retain the exact consent/result facts
+        // and source identifiers so current authority is still checked on every use.
+        var projected = messages.ToList();
+        var receipts = new Dictionary<int, JsonObject>();
+        var calls = new Dictionary<string, ModelToolCall>(StringComparer.Ordinal);
+        for (var index = 0; index < messages.Count; index++)
+        {
+            var message = messages[index];
+            foreach (var call in message.ToolCalls ?? []) calls[call.Id] = call;
+            if (message.Role != ModelRole.Tool || message.Name != ToolCatalog.RequestAuthorization
+                || !calls.TryGetValue(message.ToolCallId ?? "", out var source)) continue;
+            try
+            {
+                if (TenantApprovalToolContract.Parse(source).Browser is not { } command) continue;
+                var receipt = JsonNode.Parse(message.Text)!.AsObject();
+                if (receipt["approvalStatus"]?.GetValue<string>() != "approved" || receipt["outcome"]?.GetValue<string>() != "completed"
+                    || receipt["commandCompleted"]?.GetValue<bool>() != true || receipt["replayAllowed"]?.GetValue<bool>() != false
+                    || receipt["browser"] is not JsonObject native || native["observation"] is not JsonObject observation) continue;
+                var flattened = observation.DeepClone().AsObject();
+                foreach (var key in new[] { "untrustedBrowserContent", "status", "effectAttempted", "effectConfirmedBySdk", "applicationOutcomeVerified" })
+                    flattened[key] = native[key]?.DeepClone();
+                projected[index] = message with { Name = command.Tool, Text = flattened.ToJsonString() };
+                receipts[index] = receipt;
+            }
+            catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException) { }
+        }
+        var before = projected.Select(m => m.Text).ToArray();
+        CompactObservations(projected);
+        for (var index = 0; index < messages.Count; index++)
+        {
+            if (!receipts.TryGetValue(index, out var receipt)) { messages[index] = projected[index]; continue; }
+            if (projected[index].Text == before[index]) continue;
+            receipt["browser"]!["observation"] = JsonNode.Parse(projected[index].Text);
+            messages[index] = messages[index] with { Text = receipt.ToJsonString(), Parts = null };
+        }
+    }
+
+    private static void CompactObservations(List<ModelMessage> messages)
     {
         var full = new List<int>();
         for (var index = 0; index < messages.Count; index++)
@@ -39,19 +81,12 @@ internal static class BrowserSnapshotCompaction
         if (full.Count <= RecentFullObservations) return;
 
         var keepFrom = full.Count - RecentFullObservations;
-        var latestByUrl = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (var ordinal = 0; ordinal < keepFrom; ordinal++)
-        {
-            var index = full[ordinal];
-            latestByUrl[PageUrl(messages[index].Text, index)] = index;
-        }
-
         for (var ordinal = 0; ordinal < keepFrom; ordinal++)
         {
             var index = full[ordinal];
             var message = messages[index];
             var urlKey = PageUrl(message.Text, index);
-            var rich = latestByUrl[urlKey] == index;
+            var rich = latest[urlKey] == index;
             messages[index] = message with { Text = Receipt(message.Text, rich), Parts = null };
         }
     }

@@ -2762,7 +2762,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
                 if (cleanupPhase && finalizationReason is null && working.Tools is { } cleanupTools)
-                    working = working with { Tools = cleanupTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray() };
+                    working = working with { Tools = RunFinalization.CleanupTools(cleanupTools) };
                 if (finalizationReason is not null) working = IsInitialBackgroundRun
                     ? working with { Tools = [AgentCore.Application.Work.WorkCompletionRequest.Contract],
                         ToolChoice = ModelToolChoice.Named, ToolChoiceName = ToolCatalog.WorkComplete, ResponseContract = null,
@@ -2778,7 +2778,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         eligibleForGuide = ProjectBrowserTools(working with
                         { Tools = ToolCatalog.Eligible(ExecutionDefinition, projectionContext, _tools.ConfigurationGate) },
                             pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
-                        if (cleanupPhase) eligibleForGuide = eligibleForGuide.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
+                        if (cleanupPhase) eligibleForGuide = RunFinalization.CleanupTools(eligibleForGuide);
                     }
                     working = working with { Context = PromptContextBuilder.WithToolEnvironment(
                         working.Context!, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide) };
@@ -2786,7 +2786,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var recoveryTools = projectionContext is null ? working.Tools ?? []
                     : ProjectBrowserTools(working with { Tools = ToolCatalog.Eligible(_snapshot.Definition, projectionContext, _tools.ConfigurationGate) },
                         pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
-                if (cleanupPhase) recoveryTools = recoveryTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
+                if (cleanupPhase) recoveryTools = RunFinalization.CleanupTools(recoveryTools);
                 if (finalizationReason is null && !inRepair && !checkpointCapacityReached
                     && ContextSection.BrowserRecovery(evidence,
                         recoveryTools.Select(t => t.Name), model.Capabilities.Vision,
@@ -3230,7 +3230,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (_runtimeOwner is not null && pending.Count == 1 && pending[0].Name == ToolCatalog.RequestAuthorization && ToolLimits.MaxOutputBytes - outputBytes >= 1024)
                 {
                     var call = pending[0];
-                    var receipt = !model.Capabilities.Tools || working.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) != true
+                    var receipt = cleanupPhase && !RunFinalization.CleanupCall(call)
+                        ? new TenantApprovalToolResult(false, "{\"error\":\"forbidden\",\"reasonCode\":\"cleanup_only\"}")
+                        : !model.Capabilities.Tools || working.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) != true
                         ? new TenantApprovalToolResult(false, "{\"error\":\"forbidden\",\"reasonCode\":\"tool_not_offered\"}")
                         : AgentRunToolCallCheckpoint.ToolResultBudget(messages, call, false, null, TriggerKind.UserTurn,
                         _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0,
@@ -3271,7 +3273,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                         continue;
                     }
-                    if (finalizationReason is null && cleanupPhase && !RunFinalization.CleanupTool(call.Name))
+                    if (finalizationReason is null && cleanupPhase && !RunFinalization.CleanupCall(call))
                     {
                         messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"cleanup_reserve\"}", ToolCallId: call.Id, Name: call.Name));
                         await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);

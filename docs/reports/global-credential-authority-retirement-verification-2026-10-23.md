@@ -2,6 +2,8 @@
 
 Date: 2026-10-23. Preimage: `fbf3efd7`. This is a scoped continuation of the active tenant cutover, not full proposal acceptance.
 
+The subsequent [canonical native Browser qualification](tenant-native-browser-journeys-verification-2026-10-23.md) supplies the no-Skills SSO, large discovery and long reserved-cleanup evidence left pending by this retirement. The original results and pending statements below remain historical to this module. Proposal-wide acceptance is still open.
+
 ## Result
 
 Removed global `CredentialService`, `ICredentialResolver` and `AgentBrowserProfileService`, including their DI registrations. These actors had no current production callers beyond registration. The existing credential/binding DTOs and identical pure projection moved to `CredentialViews.cs`; current `TenantCredentialService` and `TenantCredentialBindingService` use that mapper. `TenantBrowserProfileService` remains the owner of protected reset and uncertainty receipts.

@@ -93,7 +93,7 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
             ?? throw AgentCoreErrors.Validation("A resolved model is required.");
         var run = AgentRun.Create(runId, AgentRunOwner.ForTenant(tenant, agent.Instance.InstanceId, agent.PrincipalId),
             new(activation, definition.Id, definition.Version, resolved.Persona, responseId, AgentRunOutputContract.ConversationResponse,
-                ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, false), resolved.Configuration, executionContext: context),
+                AgentRunAdmissionFactory.WithCleanupIntent(ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, true), text), resolved.Configuration, executionContext: context),
             new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, now,
             resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
         var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption, speech);

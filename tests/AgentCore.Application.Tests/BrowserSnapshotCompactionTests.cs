@@ -7,6 +7,49 @@ namespace AgentCore.Application.Tests;
 public sealed class BrowserSnapshotCompactionTests
 {
     [Fact]
+    public void Reviewed_native_observations_share_compaction_without_changing_consent_or_effect_facts()
+    {
+        var messages = new List<ModelMessage>();
+        for (var index = 0; index < 16; index++)
+        {
+            var call = new ModelToolCall($"approved-{index}", ToolCatalog.RequestAuthorization,
+                "{\"operation\":\"run_browser_command\",\"command\":{\"tool\":\"browser.click\",\"arguments\":{\"target\":{\"by\":\"text\",\"value\":\"Inspect\"}}}}");
+            messages.Add(new(ModelRole.Assistant, "", ToolCalls: [call]));
+            messages.Add(new(ModelRole.Tool, JsonSerializer.Serialize(new {
+                approvalStatus="approved", outcome="completed", commandCompleted=true, replayAllowed=false,
+                requestId=$"request-{index}", operationId=$"operation-{index}",
+                browser=new { status="ok", effectAttempted=true, effectConfirmedBySdk=true, applicationOutcomeVerified=false,
+                    untrustedBrowserContent=true, observation=new { url="https://fixture.test/record", title="Record", content=new string('x',16000), targets=new[] { new { name=$"target-{index}" } } },
+                    data=new { factual="preserve" } } }), ToolCallId:call.Id, Name:call.Name));
+        }
+        var before=messages.Sum(m=>m.Text.Length);
+        BrowserSnapshotCompaction.Compact(messages);
+        var once=messages.Select(m=>m.Text).ToArray();
+        BrowserSnapshotCompaction.Compact(messages);
+        Assert.Equal(once,messages.Select(m=>m.Text));
+        Assert.True(messages.Sum(m=>m.Text.Length)<before/4);
+        for(var index=0;index<16;index++)
+        {
+            using var json=JsonDocument.Parse(messages[index*2+1].Text);var root=json.RootElement;
+            Assert.Equal($"request-{index}",root.GetProperty("requestId").GetString());
+            Assert.Equal($"operation-{index}",root.GetProperty("operationId").GetString());
+            Assert.True(root.GetProperty("commandCompleted").GetBoolean());Assert.False(root.GetProperty("replayAllowed").GetBoolean());
+            var native=root.GetProperty("browser");Assert.True(native.GetProperty("effectConfirmedBySdk").GetBoolean());
+            Assert.False(native.GetProperty("applicationOutcomeVerified").GetBoolean());Assert.Equal("preserve",native.GetProperty("data").GetProperty("factual").GetString());
+            Assert.Equal(index==15,native.GetProperty("observation").TryGetProperty("targets",out _));
+        }
+    }
+
+    [Theory]
+    [InlineData("denied")] [InlineData("indeterminate")]
+    public void Unsuccessful_reviewed_results_are_not_rewritten(string outcome)
+    {
+        var call=new ModelToolCall("a",ToolCatalog.RequestAuthorization,"{\"operation\":\"run_browser_command\",\"command\":{\"tool\":\"browser.close\",\"arguments\":{}}}");
+        var text=JsonSerializer.Serialize(new { approvalStatus="approved",outcome,commandCompleted=false,replayAllowed=false,browser=new { observation=new { content="retain failure",targets=Array.Empty<object>() } } });
+        var messages=new List<ModelMessage> { new(ModelRole.Assistant,"",ToolCalls:[call]),new(ModelRole.Tool,text,ToolCallId:call.Id,Name:call.Name),Observation(1,"new") };
+        BrowserSnapshotCompaction.Compact(messages);Assert.Equal(text,messages[1].Text);
+    }
+    [Fact]
     public void New_snapshot_preserves_recent_direct_targets_and_failures()
     {
         var messages = new List<ModelMessage>

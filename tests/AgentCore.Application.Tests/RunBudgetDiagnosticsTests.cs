@@ -1,4 +1,5 @@
 using AgentCore.Application.Execution;
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -151,6 +152,18 @@ public sealed class RunBudgetDiagnosticsTests
         var generation = Guid.NewGuid(); var now = run.CreatedAtUtc;
         run = run.TakeClaim(generation, now, now.AddMinutes(1));
         return run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages, executionState: new(RunPhase.Cleanup, CleanupStartedAtMessage: 0)), 4, 100, 290000), null, now);
+    }
+
+    [Theory] [InlineData(true,true)] [InlineData(false,true)] [InlineData(true,false)]
+    public void Canonical_exact_cleanup_result_projects_only_a_matching_completed_native_close(bool completed,bool includeNative)
+    {
+        var call=new ModelToolCall("exact-close",ToolCatalog.RequestAuthorization,"{\"operation\":\"run_browser_command\",\"command\":{\"tool\":\"browser.close\",\"arguments\":{}}}");
+        var text=JsonSerializer.Serialize(new { approvalStatus="approved",outcome=completed?"completed":"denied",commandCompleted=completed,replayAllowed=false,
+            browser=includeNative?new { status="closed",effectConfirmedBySdk=true,applicationOutcomeVerified=false } : null });
+        var run=NewRun();var now=run.CreatedAtUtc;var generation=Guid.NewGuid();run=run.TakeClaim(generation,now,now.AddMinutes(1));
+        ModelMessage[] messages=[new(ModelRole.Assistant,"",ToolCalls:[call]),new(ModelRole.Tool,text,ToolCallId:call.Id,Name:call.Name)];
+        run=run.SaveCheckpoint(run.Revision,generation,new(AgentRunToolCallCheckpoint.Write(messages,executionState:new(RunPhase.Cleanup,CleanupStartedAtMessage:0)),2,100,290000),null,now);
+        var result=RunBudgetDiagnosticProjection.From(run)!;Assert.Equal(completed && includeNative,result.ClosureConfirmed);Assert.False(result.LogoutVerified);
     }
 
     private static AgentRun NewRun()
