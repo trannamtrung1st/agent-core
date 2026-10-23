@@ -374,8 +374,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<AgentRunRecord>(entity =>
         {
-            entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 7) OR (Status = 2 AND TenantId IS NULL)").HasDatabaseName("IX_AgentRuns_SessionExecution");
-            entity.ToTable("AgentRuns");
+            entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 7)").HasDatabaseName("IX_AgentRuns_SessionExecution");
+            entity.ToTable("AgentRuns", table => { table.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_INSERT"); table.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_UPDATE"); });
             entity.HasKey(row => row.AgentRunId);
             entity.HasIndex(row => new { row.RootActivationId, row.CreatedAtUtc, row.AgentRunId });
             entity.HasOne<ActivationRecord>().WithMany().HasForeignKey(row => row.RootActivationId).OnDelete(DeleteBehavior.Restrict);

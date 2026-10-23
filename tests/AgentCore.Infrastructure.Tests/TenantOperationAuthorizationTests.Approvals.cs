@@ -24,7 +24,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(setup.Run.Admission.Activation.RootActivationId, request.RootActivationId);
         Assert.Equal(setup.Owner.PrincipalId, request.OriginalInitiatorPrincipalId);
         var waiting = (await runs.FindTenantRunAsync(setup.Tenant, setup.Run.AgentRunId))!;
-        Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status); Assert.Null(waiting.Claim); Assert.Null(waiting.Approval);
+        Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status); Assert.Null(waiting.Claim);
         Assert.Equal(request.RequestId, waiting.ApprovalRequestId); Assert.Equal(0, waiting.AttemptCount);
         var securityRevision = await Revision();
         var duplicate = await service.PreparePersonaAsync(new(setup.Tenant, setup.Run.AgentRunId), persona, setup.Run.Revision);

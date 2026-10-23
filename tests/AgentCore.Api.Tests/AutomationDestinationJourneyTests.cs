@@ -134,7 +134,6 @@ public sealed class AutomationDestinationJourneyTests
     [Theory(Timeout = 60000)]
     [InlineData("failed")]
     [InlineData("cancelled")]
-    [InlineData("approval")]
     [InlineData("quiet")]
     [InlineData("parent-unavailable")]
     [InlineData("policy-revoked")]
@@ -167,10 +166,7 @@ public sealed class AutomationDestinationJourneyTests
         var owner = new AgentRunOwner(instance.InstanceId, LocalUserProfile.Id);
         var child = Assert.Single(await runs.ListRunnableAsync(Now, 100));
         child = await runs.ApplyAsync(owner, child.AgentRunId, new AgentRunCommand.Claim(child.Revision, Now, Guid.NewGuid(), Now.AddMinutes(5)));
-        if (disposition == "approval")
-            await runs.ApplyAsync(owner, child.AgentRunId, new AgentRunCommand.BeginApproval(child.Revision, Now, child.Claim!.Generation,
-                Guid.NewGuid(), "http.request", "{}", new string('a', 64), "Approve the action", Now.AddMinutes(2)));
-        else if (disposition == "cancelled")
+        if (disposition == "cancelled")
         {
             child = await runs.ApplyAsync(owner, child.AgentRunId, new AgentRunCommand.RequestCancellation(child.Revision, Now, null));
             await runs.ApplyAsync(owner, child.AgentRunId, new AgentRunCommand.CommitCancellation(child.Revision, Now, child.Claim!.Generation, "The task was cancelled."));
@@ -190,7 +186,7 @@ public sealed class AutomationDestinationJourneyTests
         await s.GetRequiredService<BackgroundCompletionReporter>().ReportPendingAsync(100);
         await s.ExecuteRunsAsync();
         var delivery = await runs.GetCompletionDeliveryAsync(owner, child.AgentRunId);
-        Assert.Equal(disposition switch { "failed" or "cancelled" => "delivered", "approval" => "pending", _ => "skipped" }, delivery.Status);
+        Assert.Equal(disposition switch { "failed" or "cancelled" => "delivered", _ => "skipped" }, delivery.Status);
         var history = (await s.GetRequiredService<IMemoryStore>().LoadAsync(parent.SessionId))!;
         Assert.Equal(disposition is "failed" or "cancelled" ? 1 : 0, history.Entries.Count);
         if (disposition == "failed") Assert.Contains("task failed", history.Entries[0].Text);

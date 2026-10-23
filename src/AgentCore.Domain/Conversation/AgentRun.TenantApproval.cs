@@ -11,7 +11,7 @@ public sealed partial class AgentRun
         return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null,
             SideEffect.Disposition == AgentRunSideEffectDisposition.Succeeded ? AgentRunKnownEffects.PreserveCompletedExternalEffect(KnownEffectSummary) : KnownEffectSummary,
             Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.InFlight, "operation:" + operation.OperationId.ToString("D"), actionHash, at,
-                new(generation, checked(revision + 1), at, operation)), Approval, at);
+                new(generation, checked(revision + 1), at, operation)), at);
     }
 
     public AgentRun BeginApprovedExternalEffect(long revision, Guid generation, Guid requestId, Guid operationId, string actionHash, DateTimeOffset at)
@@ -23,7 +23,7 @@ public sealed partial class AgentRun
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "A live unused exact external operation is required.");
         return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null, KnownEffectSummary,
             Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.InFlight, "operation:" + operationId.ToString("D"), actionHash, at,
-                new(generation, checked(revision + 1), at)), null, at);
+                new(generation, checked(revision + 1), at)), at);
     }
 
     // The owning receipt transaction seals the exact checkpoint before using this handoff.
@@ -37,7 +37,7 @@ public sealed partial class AgentRun
             || SideEffect.Disposition is not (AgentRunSideEffectDisposition.Succeeded or AgentRunSideEffectDisposition.DefinitelyFailed or AgentRunSideEffectDisposition.Indeterminate))
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "An exact sealed external result is required for delivery.");
         return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary,
-            Progress, Checkpoint.PauseBudgetClock(at).WithRuntimeAdmissionPending(true), Result, Failure, SideEffect, Approval, at);
+            Progress, Checkpoint.PauseBudgetClock(at).WithRuntimeAdmissionPending(true), Result, Failure, SideEffect, at);
     }
     private bool ExternalResultAwaitingAdmission(AgentRunCheckpoint? checkpoint, AgentRunSideEffect sideEffect) => ExternalResultAwaitingAdmission(Owner, Admission, ApprovalRequestId, checkpoint, sideEffect);
     private static bool ExternalResultAwaitingAdmission(AgentRunOwner owner, AgentRunAdmission admission, Guid? requestId,
@@ -54,7 +54,7 @@ public sealed partial class AgentRun
             || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "An exact saved approval checkpoint is required for continuation.");
         return new(id, Owner, admission, PinnedModel, AgentRunStatus.Queued, 1, AttemptCount, MaxAttempts, null, null, false, null,
-            KnownEffectSummary, Progress, Checkpoint, null, null, SideEffect, null, at, at, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount,
+            KnownEffectSummary, Progress, Checkpoint, null, null, SideEffect, at, at, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount,
             LoadedCapabilityIds, CapabilityLoadCount, null, WaitCount, TotalWaitSeconds, requestId);
     }
 
@@ -70,7 +70,7 @@ public sealed partial class AgentRun
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Only a known unaccepted approval continuation can defer with its checkpoint.");
         var checkpoint = Checkpoint.PauseBudgetClock(Claim!.ClaimedAtUtc).WithRuntimeAdmissionPending(true);
         return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, retryAt, null, false, null, KnownEffectSummary,
-            Progress, checkpoint, Result, Failure, SideEffect, Approval, at);
+            Progress, checkpoint, Result, Failure, SideEffect, at);
     }
 
     public AgentRun HandoffApprovalContinuation(long revision, Guid requestId, Guid nextRunId, DateTimeOffset at)
@@ -80,7 +80,7 @@ public sealed partial class AgentRun
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "Approval handoff requires its waiting source.");
         var result = new AgentRunResult("Exact approval operation continues in the linked Run.", at, outcomeKind: AgentRunOutcomeKind.Continued, continuationRunId: nextRunId);
         return Copy(AgentRunStatus.Completed, checked(Revision + 1), AttemptCount, null, null, false, null, KnownEffectSummary,
-            Progress, Checkpoint, result, null, SideEffect, null, at);
+            Progress, Checkpoint, result, null, SideEffect, at);
     }
 
     public AgentRun RecordDirectLocalEffect(long revision, Guid generation, Guid operationId, string actionHash, DateTimeOffset at)
@@ -90,7 +90,7 @@ public sealed partial class AgentRun
             || SideEffect.Disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "A live direct local operation is required.");
         return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null, KnownEffectSummary,
-            Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.Succeeded, "operation:" + operationId.ToString("D"), actionHash, at), Approval, at);
+            Progress, Checkpoint, Result, Failure, new(AgentRunSideEffectDisposition.Succeeded, "operation:" + operationId.ToString("D"), actionHash, at), at);
     }
     public AgentRun RecordApprovedLocalEffect(long revision, Guid generation, Guid requestId, Guid operationId,
         string actionHash, bool succeeded, DateTimeOffset at)
@@ -103,7 +103,7 @@ public sealed partial class AgentRun
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "Another side effect is prepared.");
         return Copy(Status, checked(Revision + 1), AttemptCount, NextRetryAtUtc, Claim, false, null, KnownEffectSummary,
             Progress, Checkpoint, Result, Failure, new(succeeded ? AgentRunSideEffectDisposition.Succeeded : AgentRunSideEffectDisposition.DefinitelyFailed,
-                "operation:" + operationId.ToString("D"), actionHash, at), null, at);
+                "operation:" + operationId.ToString("D"), actionHash, at), at);
     }
 
     // A queued operation may require authorization before its first model attempt. Running work is generation-fenced.
@@ -121,7 +121,7 @@ public sealed partial class AgentRun
             if (Claim!.LeaseExpiresAtUtc <= at) throw new AgentRunTransitionException(AgentRunTransitionFailure.StaleGeneration, "Execution claim has expired.");
         }
         return Copy(AgentRunStatus.WaitingForApproval, checked(Revision + 1), AttemptCount, null, null,
-            CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, null, at,
+            CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, at,
             approvalRequestId: requestId);
     }
 
@@ -131,6 +131,6 @@ public sealed partial class AgentRun
         if (Owner.TenantId is null || Status != AgentRunStatus.WaitingForApproval || ApprovalRequestId != requestId || CancellationRequested)
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "Approval does not own the waiting Run.");
         return Copy(AgentRunStatus.Queued, checked(Revision + 1), AttemptCount, null, null,
-            false, null, KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, null, at);
+            false, null, KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, at);
     }
 }

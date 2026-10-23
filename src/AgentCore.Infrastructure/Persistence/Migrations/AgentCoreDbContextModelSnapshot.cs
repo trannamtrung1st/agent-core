@@ -1127,9 +1127,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<long?>("ApprovalExpiresAtUtc")
-                        .HasColumnType("INTEGER");
-
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -1181,7 +1178,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("SessionId")
                         .IsUnique()
                         .HasDatabaseName("IX_AgentRuns_SessionExecution")
-                        .HasFilter("Status IN (1, 7) OR (Status = 2 AND TenantId IS NULL)");
+                        .HasFilter("Status IN (1, 7)");
 
                     b.HasIndex("ActivationId", "RootActivationId")
                         .IsUnique();
@@ -1200,6 +1197,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("AgentRuns", null, t =>
                         {
+                            t.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_INSERT");
+
+                            t.HasTrigger("TR_AgentRuns_NoEmbeddedApproval_UPDATE");
+
                             t.HasTrigger("TR_AgentRuns_DirectWorkspace_Insert");
 
                             t.HasTrigger("TR_AgentRuns_DirectWorkspace_Update");

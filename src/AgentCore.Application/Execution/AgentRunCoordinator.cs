@@ -48,12 +48,6 @@ public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatche
                 run = await store.ApplyAsync(run.Owner, run.AgentRunId,
                     new AgentRunCommand.Recover(run.Revision, now), cancellationToken).ConfigureAwait(false);
             }
-            else if (run.Status == AgentRunStatus.WaitingForApproval)
-            {
-                if (run.Approval!.ExpiresAtUtc > now) return false;
-                run = await store.ApplyAsync(run.Owner, run.AgentRunId,
-                    new AgentRunCommand.ExpireApproval(run.Revision, now), cancellationToken).ConfigureAwait(false);
-            }
 
             if (run.Status is AgentRunStatus.Queued or AgentRunStatus.WaitingToRetry)
             {

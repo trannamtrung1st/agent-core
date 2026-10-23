@@ -92,11 +92,12 @@ internal static class AgentRunStoreMapping
     }
 
     // Indexed relational identity is authoritative; payload holds the immutable pins and bounded state.
+    [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
     private sealed record RunPayload(AgentRunAdmission Admission, AgentRunModelPin PinnedModel,
         int AttemptCount, int MaxAttempts, AgentRunClaim? Claim, bool CancellationRequested,
         DateTimeOffset? CancellationRequestedAtUtc, string? KnownEffectSummary,
         AgentRunProgress? Progress, AgentRunCheckpoint? Checkpoint, AgentRunResult? Result,
-        AgentRunFailure? Failure, AgentRunSideEffect SideEffect, AgentRunApproval? Approval,
+        AgentRunFailure? Failure, AgentRunSideEffect SideEffect,
         IReadOnlyList<EffectiveSkill> PinnedSkillCatalog, IReadOnlyList<string> ActiveSkillKeys,
         int SkillLoadCount, IReadOnlyList<string> LoadedCapabilityIds, int CapabilityLoadCount,
         AgentRunWait? Wait = null, int WaitCount = 0, double TotalWaitSeconds = 0, Guid? ApprovalRequestId = null);
@@ -143,13 +144,12 @@ internal static class AgentRunStoreMapping
         row.Revision = run.Revision;
         row.NextRetryAtUtc = run.NextRetryAtUtc?.ToUnixTimeMilliseconds();
         row.LeaseExpiresAtUtc = run.Claim?.LeaseExpiresAtUtc.ToUnixTimeMilliseconds();
-        row.ApprovalExpiresAtUtc = run.Approval?.ExpiresAtUtc.ToUnixTimeMilliseconds();
         row.CreatedAtUtc = run.CreatedAtUtc.ToUnixTimeMilliseconds();
         row.UpdatedAtUtc = run.UpdatedAtUtc.ToUnixTimeMilliseconds();
         row.PayloadJson = JsonSerializer.Serialize(new RunPayload(run.Admission, run.PinnedModel,
             run.AttemptCount, run.MaxAttempts, run.Claim, run.CancellationRequested,
             run.CancellationRequestedAtUtc, run.KnownEffectSummary, run.Progress, run.Checkpoint,
-            run.Result, run.Failure, run.SideEffect, run.Approval, run.PinnedSkillCatalog,
+            run.Result, run.Failure, run.SideEffect, run.PinnedSkillCatalog,
             run.ActiveSkillKeys, run.SkillLoadCount, run.LoadedCapabilityIds, run.CapabilityLoadCount, run.Wait, run.WaitCount, run.TotalWaitSeconds, run.ApprovalRequestId), Json);
     }
 
@@ -169,7 +169,7 @@ internal static class AgentRunStoreMapping
             p.Admission, p.PinnedModel, (AgentRunStatus)row.Status, row.Revision, p.AttemptCount, p.MaxAttempts,
             row.NextRetryAtUtc is { } retry ? DateTimeOffset.FromUnixTimeMilliseconds(retry) : null,
             p.Claim, p.CancellationRequested, p.CancellationRequestedAtUtc, p.KnownEffectSummary,
-            p.Progress, p.Checkpoint, p.Result, p.Failure, p.SideEffect, p.Approval,
+            p.Progress, p.Checkpoint, p.Result, p.Failure, p.SideEffect,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             p.PinnedSkillCatalog, p.ActiveSkillKeys, p.SkillLoadCount, p.LoadedCapabilityIds, p.CapabilityLoadCount, p.Wait, p.WaitCount, p.TotalWaitSeconds, p.ApprovalRequestId);
     }

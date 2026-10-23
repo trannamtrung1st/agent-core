@@ -23,7 +23,6 @@ public sealed partial class AgentRun
         AgentRunResult? result,
         AgentRunFailure? failure,
         AgentRunSideEffect sideEffect,
-        AgentRunApproval? approval,
         DateTimeOffset createdAtUtc,
         DateTimeOffset updatedAtUtc,
         IReadOnlyList<EffectiveSkill>? pinnedSkillCatalog = null,
@@ -143,19 +142,10 @@ public sealed partial class AgentRun
             throw new ArgumentException("Retry time is required only while waiting to retry.");
         }
 
-        if (approval is not null && approval.AgentRunId != agentRunId)
-        {
-            throw new ArgumentException("Approval belongs to a different agent run.");
-        }
-
-        if (approvalRequestId == Guid.Empty || owner.TenantId is null && approvalRequestId is not null
-            || owner.TenantId is not null && approval is not null)
-            throw new ArgumentException("Tenant approval references and legacy approval state cannot be mixed.");
-        var pending = owner.TenantId is null ? approval is { Decision: AgentRunApprovalDecision.Pending } : approvalRequestId is not null && status == AgentRunStatus.WaitingForApproval;
-        if ((status == AgentRunStatus.WaitingForApproval) != pending)
-        {
-            throw new ArgumentException("Waiting for approval requires one pending approval.");
-        }
+        if (approvalRequestId == Guid.Empty || owner.TenantId is null && approvalRequestId is not null)
+            throw new ArgumentException("Approval references require a tenant Run.");
+        if (status == AgentRunStatus.WaitingForApproval && (owner.TenantId is null || approvalRequestId is null))
+            throw new ArgumentException("Waiting for approval requires a durable tenant request.");
 
         if (sideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
             && status is not (AgentRunStatus.Running or AgentRunStatus.Failed or AgentRunStatus.Cancelled)
@@ -198,7 +188,6 @@ public sealed partial class AgentRun
         Result = result;
         Failure = failure;
         SideEffect = sideEffect;
-        Approval = approval;
         ApprovalRequestId = approvalRequestId;
         CreatedAtUtc = createdAtUtc;
         UpdatedAtUtc = updatedAtUtc;
@@ -258,7 +247,6 @@ public sealed partial class AgentRun
 
     public AgentRunSideEffect SideEffect { get; }
 
-    public AgentRunApproval? Approval { get; }
 
     public DateTimeOffset CreatedAtUtc { get; }
 
@@ -280,7 +268,6 @@ public sealed partial class AgentRun
         && Checkpoint is null
         && Result is null
         && Failure is null
-        && Approval is null
         && SideEffect.Disposition == AgentRunSideEffectDisposition.None
         && KnownEffectSummary is null;
 
@@ -327,7 +314,6 @@ public sealed partial class AgentRun
             result: null,
             failure: null,
             AgentRunSideEffect.None,
-            approval: null,
             createdAtUtc,
             createdAtUtc, pinnedSkillCatalog, activeSkillKeys);
 
@@ -367,7 +353,7 @@ public sealed partial class AgentRun
         if (updatedAtUtc < UpdatedAtUtc) throw new ArgumentException("Updated time cannot move backwards.");
         return new AgentRun(AgentRunId, Owner, Admission, PinnedModel, Status, Revision + 1, AttemptCount,
             MaxAttempts, NextRetryAtUtc, Claim, CancellationRequested, CancellationRequestedAtUtc,
-            KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, Approval, CreatedAtUtc,
+            KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, CreatedAtUtc,
             updatedAtUtc, PinnedSkillCatalog, activeSkillKeys, skillLoadCount, loadedCapabilityIds, capabilityLoadCount, Wait, WaitCount, TotalWaitSeconds, ApprovalRequestId);
     }
 
@@ -381,7 +367,7 @@ public sealed partial class AgentRun
             || SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Wait budget or effect fence prevents suspension.");
         return Copy(AgentRunStatus.WaitingForSignal, Revision + 1, AttemptCount, null, null,
-            false, null, KnownEffectSummary, Progress, checkpoint, null, null, SideEffect, Approval, now,
+            false, null, KnownEffectSummary, Progress, checkpoint, null, null, SideEffect, now,
             wait, WaitCount + 1, TotalWaitSeconds + seconds);
     }
 
@@ -392,7 +378,7 @@ public sealed partial class AgentRun
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Execution is no longer waiting.");
         return Copy(AgentRunStatus.Running, Revision + 1, AttemptCount, null,
             new AgentRunClaim(generation, now, leaseExpiresAt), false, null, KnownEffectSummary, Progress,
-            Owner.TenantId is not null ? checkpoint.WithSignalAdmissionPending() : checkpoint, null, null, SideEffect, Approval, now);
+            Owner.TenantId is not null ? checkpoint.WithSignalAdmissionPending() : checkpoint, null, null, SideEffect, now);
     }
 
     public AgentRun TakeClaim(Guid generation, DateTimeOffset claimedAtUtc, DateTimeOffset leaseExpiresAtUtc)
@@ -421,7 +407,6 @@ public sealed partial class AgentRun
             Result,
             Failure,
             SideEffect,
-            Approval,
             claimedAtUtc);
     }
 
@@ -448,7 +433,6 @@ public sealed partial class AgentRun
             Result,
             Failure,
             SideEffect,
-            Approval,
             renewedAtUtc);
     }
 
@@ -485,7 +469,6 @@ public sealed partial class AgentRun
             Result,
             Failure,
             SideEffect,
-            Approval,
             updatedAtUtc);
     }
 
@@ -534,7 +517,6 @@ public sealed partial class AgentRun
             new AgentRunResult(resultText, completedAtUtc, attentionRequired, outcomeKind, outcomeEntryId),
             failure: null,
             SideEffect,
-            Approval,
             completedAtUtc);
     }
 
@@ -605,7 +587,6 @@ public sealed partial class AgentRun
             Result,
             new AgentRunFailure(failureCode!, failureSummary!, failedAtUtc, DiagnosticIdOrNull(allocateDiagnosticId)),
             SideEffect,
-            Approval,
             failedAtUtc);
     }
 
@@ -638,7 +619,7 @@ public sealed partial class AgentRun
                 Result,
                 Failure,
                 SideEffect,
-                Approval,
+
                 requestedAtUtc);
         }
 
@@ -679,7 +660,7 @@ public sealed partial class AgentRun
         if (Checkpoint is not null || SideEffect.Disposition != AgentRunSideEffectDisposition.None || retryAtUtc <= atUtc)
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Only an unstarted refused dispatch can be deferred.");
         return Copy(AgentRunStatus.WaitingToRetry, Revision + 1, AttemptCount - 1, retryAtUtc, null,
-            CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary, Progress, null, Result, Failure, SideEffect, Approval, atUtc);
+            CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary, Progress, null, Result, Failure, SideEffect, atUtc);
     }
 
     private bool SignalAwaitingAdmission => Owner.TenantId is not null && WaitCount > 0 && AttemptCount > 0
@@ -693,7 +674,7 @@ public sealed partial class AgentRun
             or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Only an unaccepted signal continuation can defer with its checkpoint.");
         return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, retryAt, null, false, null,
-            KnownEffectSummary, Progress, Checkpoint!.PauseBudgetClock(Claim!.ClaimedAtUtc), Result, Failure, SideEffect, Approval, at);
+            KnownEffectSummary, Progress, Checkpoint!.PauseBudgetClock(Claim!.ClaimedAtUtc), Result, Failure, SideEffect, at);
     }
 
     public AgentRun RecoverExpiredClaim(DateTimeOffset asOfUtc, Func<Guid>? allocateDiagnosticId = null)
@@ -711,7 +692,7 @@ public sealed partial class AgentRun
 
         if (SignalAwaitingAdmission || ExternalResultAwaitingAdmission(Checkpoint, SideEffect))
             return Copy(AgentRunStatus.WaitingToRetry, checked(Revision + 1), AttemptCount, asOfUtc, null, false, null, KnownEffectSummary,
-                Progress, Checkpoint, Result, Failure, SideEffect, Approval, asOfUtc);
+                Progress, Checkpoint, Result, Failure, SideEffect, asOfUtc);
 
         if (SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
         {
@@ -751,7 +732,7 @@ public sealed partial class AgentRun
                     Result,
                     Failure,
                     SideEffect,
-                    Approval,
+
                     asOfUtc);
             }
 
@@ -790,162 +771,7 @@ public sealed partial class AgentRun
             Result,
             Failure,
             SideEffect,
-            Approval,
             asOfUtc);
-    }
-
-    public AgentRun BeginApproval(
-        long expectedRevision,
-        Guid generation,
-        Guid approvalId,
-        string toolName,
-        string preparedActionJson,
-        string actionHash,
-        string preview,
-        DateTimeOffset expiresAtUtc,
-        DateTimeOffset updatedAtUtc)
-    {
-        if (Owner.TenantId is not null) throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "Tenant Runs require a durable approval request.");
-        if (Status == AgentRunStatus.WaitingForApproval
-            && Approval!.ApprovalId == approvalId
-            && string.Equals(Approval.ActionHash, actionHash, StringComparison.Ordinal))
-        {
-            return this;
-        }
-
-        RequireOperational(expectedRevision, generation);
-        if (SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
-        {
-            throw new AgentRunTransitionException(
-                AgentRunTransitionFailure.Rejected,
-                "An uncertain external effect cannot wait for approval.");
-        }
-
-        if (Approval is { Decision: AgentRunApprovalDecision.Pending })
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Approval is already pending.");
-        }
-
-        var approval = new AgentRunApproval(
-            approvalId,
-            AgentRunId,
-            generation,
-            Revision,
-            toolName,
-            preparedActionJson,
-            actionHash,
-            preview,
-            expiresAtUtc,
-            AgentRunApprovalDecision.Pending,
-            decidedAtUtc: null,
-            consumed: false,
-            revision: 1,
-            updatedAtUtc);
-        return Copy(
-            AgentRunStatus.WaitingForApproval,
-            Revision + 1,
-            AttemptCount,
-            nextRetryAtUtc: null,
-            claim: null,
-            CancellationRequested,
-            CancellationRequestedAtUtc,
-            KnownEffectSummary,
-            Progress,
-            Checkpoint,
-            Result,
-            Failure,
-            SideEffect,
-            approval,
-            updatedAtUtc);
-    }
-
-    public AgentRun DecideApproval(
-        Guid approvalId,
-        long expectedRevision,
-        long expectedApprovalRevision,
-        string actionHash,
-        AgentRunApprovalDecision decision,
-        DateTimeOffset decidedAtUtc)
-    {
-        if (decision is not (AgentRunApprovalDecision.Approved or AgentRunApprovalDecision.Rejected))
-        {
-            throw new ArgumentException("Approval can only be approved or rejected.", nameof(decision));
-        }
-
-        var approval = RequireApproval(approvalId, actionHash);
-        if (approval.Decision == decision)
-        {
-            return this;
-        }
-
-        if (approval.Decision != AgentRunApprovalDecision.Pending || Status != AgentRunStatus.WaitingForApproval)
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.ApprovalMismatch, "Approval was already decided.");
-        }
-
-        RequireRevision(expectedRevision);
-        if (approval.Revision != expectedApprovalRevision)
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.StaleRevision, "Approval revision is stale.");
-        }
-
-        if (decidedAtUtc >= approval.ExpiresAtUtc)
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.ApprovalMismatch, "Approval has expired.");
-        }
-
-        return Copy(
-            AgentRunStatus.Queued,
-            Revision + 1,
-            AttemptCount,
-            nextRetryAtUtc: null,
-            claim: null,
-            CancellationRequested,
-            CancellationRequestedAtUtc,
-            KnownEffectSummary,
-            Progress,
-            Checkpoint,
-            Result,
-            Failure,
-            SideEffectForDecision(decision, approval.ActionHash),
-            approval.WithDecision(decision, decidedAtUtc, approval.Revision + 1),
-            decidedAtUtc);
-    }
-
-    public AgentRun ExpireApproval(long expectedRevision, DateTimeOffset expiredAtUtc)
-    {
-        if (Approval is { Decision: AgentRunApprovalDecision.Expired } && Status == AgentRunStatus.Queued)
-        {
-            return this;
-        }
-
-        RequireRevision(expectedRevision);
-        if (Status != AgentRunStatus.WaitingForApproval || Approval is not { Decision: AgentRunApprovalDecision.Pending })
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Agent run is not waiting for approval.");
-        }
-
-        if (expiredAtUtc < Approval.ExpiresAtUtc)
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Approval has not expired.");
-        }
-
-        return Copy(
-            AgentRunStatus.Queued,
-            Revision + 1,
-            AttemptCount,
-            nextRetryAtUtc: null,
-            claim: null,
-            CancellationRequested,
-            CancellationRequestedAtUtc,
-            KnownEffectSummary,
-            Progress,
-            Checkpoint,
-            Result,
-            Failure,
-            SideEffectForDecision(AgentRunApprovalDecision.Expired, Approval.ActionHash),
-            Approval.WithDecision(AgentRunApprovalDecision.Expired, expiredAtUtc, Approval.Revision + 1),
-            expiredAtUtc);
     }
 
     public AgentRun MarkSideEffect(
@@ -976,11 +802,6 @@ public sealed partial class AgentRun
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Rejected, "Side-effect action does not match.");
         }
 
-        if (disposition is AgentRunSideEffectDisposition.Prepared or AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Succeeded)
-        {
-            RequireApprovedDispatch(actionHash);
-        }
-
         if (!CanTransitionSideEffect(SideEffect.Disposition, disposition))
         {
             throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Side-effect transition is not allowed.");
@@ -1000,7 +821,6 @@ public sealed partial class AgentRun
             Result,
             Failure,
             new AgentRunSideEffect(disposition, toolCallId, actionHash, updatedAtUtc, SideEffect.ExternalEffect),
-            Approval,
             updatedAtUtc);
     }
 
@@ -1028,7 +848,6 @@ public sealed partial class AgentRun
             Result,
             Failure,
             AgentRunSideEffect.None,
-            Approval,
             updatedAtUtc);
     }
 
@@ -1051,7 +870,6 @@ public sealed partial class AgentRun
                 "Only a completed operation side effect can be cleared.");
         }
 
-        var approval = Approval is { Decision: AgentRunApprovalDecision.Approved } ? null : Approval;
         var knownEffect = recordExternalEffect && SideEffect.Disposition == AgentRunSideEffectDisposition.Succeeded
             ? AgentRunKnownEffects.PreserveCompletedExternalEffect(KnownEffectSummary)
             : KnownEffectSummary;
@@ -1069,18 +887,12 @@ public sealed partial class AgentRun
             Result,
             Failure,
             AgentRunSideEffect.None,
-            approval,
             updatedAtUtc);
     }
 
     private AgentRun AsCancelled(DateTimeOffset cancelledAtUtc, string? knownEffectSummary)
     {
-        var approval = Approval is { Decision: AgentRunApprovalDecision.Pending }
-            ? Approval.WithDecision(AgentRunApprovalDecision.Cancelled, cancelledAtUtc, Approval.Revision + 1)
-            : Approval;
-        var sideEffect = approval != Approval
-            ? SideEffectForDecision(AgentRunApprovalDecision.Cancelled, Approval?.ActionHash)
-            : SideEffect;
+        var sideEffect = SideEffect;
         return Copy(
             AgentRunStatus.Cancelled,
             Revision + 1,
@@ -1095,7 +907,6 @@ public sealed partial class AgentRun
             Result,
             Failure,
             sideEffect,
-            approval,
             cancelledAtUtc);
     }
 
@@ -1119,7 +930,6 @@ public sealed partial class AgentRun
             result: null,
             new AgentRunFailure(code, summary, failedAtUtc, diagnosticId),
             sideEffect,
-            Approval,
             failedAtUtc);
 
     private static Guid? DiagnosticIdOrNull(Func<Guid>? allocateDiagnosticId)
@@ -1181,69 +991,12 @@ public sealed partial class AgentRun
         }
     }
 
-    private AgentRunApproval RequireApproval(Guid approvalId, string actionHash)
-    {
-        if (Approval is null || Approval.ApprovalId != approvalId)
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.ApprovalMismatch, "Approval was not found.");
-        }
-
-        if (!string.Equals(Approval.ActionHash, actionHash, StringComparison.Ordinal))
-        {
-            throw new AgentRunTransitionException(AgentRunTransitionFailure.ApprovalMismatch, "Approval action does not match.");
-        }
-
-        return Approval;
-    }
-
     private static bool IsObservationRequiredCheckpoint(AgentRunCheckpoint? checkpoint) =>
         checkpoint?.PayloadJson.Contains("\"ObservationRequired\":true", StringComparison.Ordinal) == true;
 
     private bool IsApprovalResume =>
         (Status == AgentRunStatus.Queued || Status == AgentRunStatus.WaitingToRetry && Admission.ApprovalResume is not null && Checkpoint?.AwaitingRuntimeAdmission == true)
-        && (Owner.TenantId is not null && ApprovalRequestId is not null && AttemptCount > 0 || Approval is
-        {
-            Decision: AgentRunApprovalDecision.Approved or AgentRunApprovalDecision.Rejected or AgentRunApprovalDecision.Expired
-        });
-
-    private AgentRunSideEffect SideEffectForDecision(AgentRunApprovalDecision decision, string? actionHash)
-    {
-        if (SideEffect.Disposition != AgentRunSideEffectDisposition.Prepared)
-        {
-            return SideEffect;
-        }
-
-        if (decision == AgentRunApprovalDecision.Approved
-            && string.Equals(SideEffect.ActionHash, actionHash, StringComparison.Ordinal))
-        {
-            return SideEffect;
-        }
-
-        if (decision == AgentRunApprovalDecision.Approved)
-        {
-            throw new AgentRunTransitionException(
-                AgentRunTransitionFailure.ApprovalMismatch,
-                "Prepared action does not match the approval.");
-        }
-
-        return AgentRunSideEffect.None;
-    }
-
-    private void RequireApprovedDispatch(string actionHash)
-    {
-        if (Approval is null)
-        {
-            return;
-        }
-
-        if (Approval.Decision != AgentRunApprovalDecision.Approved
-            || !string.Equals(Approval.ActionHash, actionHash, StringComparison.Ordinal))
-        {
-            throw new AgentRunTransitionException(
-                AgentRunTransitionFailure.Rejected,
-                "Side effect requires the approved action.");
-        }
-    }
+        && Owner.TenantId is not null && ApprovalRequestId is not null && AttemptCount > 0;
 
     private static bool CanTransitionSideEffect(AgentRunSideEffectDisposition from, AgentRunSideEffectDisposition to) =>
         (from, to) switch
@@ -1271,7 +1024,6 @@ public sealed partial class AgentRun
         AgentRunResult? result,
         AgentRunFailure? failure,
         AgentRunSideEffect sideEffect,
-        AgentRunApproval? approval,
         DateTimeOffset updatedAtUtc, AgentRunWait? wait = null, int? waitCount = null, double? totalWaitSeconds = null, Guid? approvalRequestId = null)
     {
         if (updatedAtUtc < UpdatedAtUtc)
@@ -1308,7 +1060,6 @@ public sealed partial class AgentRun
             result,
             failure,
             sideEffect,
-            approval,
             CreatedAtUtc,
             updatedAtUtc, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount, LoadedCapabilityIds, CapabilityLoadCount,
             status == AgentRunStatus.WaitingForSignal ? wait ?? Wait : null, waitCount ?? WaitCount, totalWaitSeconds ?? TotalWaitSeconds, approvalRequestId ?? ApprovalRequestId);

@@ -311,8 +311,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
         lock (sessions.AdmissionGate)
             return ValueTask.FromResult<IReadOnlyList<AgentRun>>(State.Runs.Values.Where(r => r.Owner.TenantId is null).Where(run =>
                 run.Status == AgentRunStatus.WaitingForSignal && AgentRunWaitExecution.IsReady(run, asOfUtc, WaitChildren(run.Wait!.BackgroundSessionIds)) || run.Status == AgentRunStatus.Queued || run.Status == AgentRunStatus.WaitingToRetry && run.NextRetryAtUtc <= asOfUtc
-                || run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= asOfUtc
-                || run.Status == AgentRunStatus.WaitingForApproval && run.Approval!.ExpiresAtUtc <= asOfUtc)
+                || run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= asOfUtc)
                 .Where(run => run.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval or AgentRunStatus.WaitingForSignal
                     || !State.Runs.Values.Where(r => r.Owner.TenantId is null).Any(other => other.SessionId == run.SessionId && other.AgentRunId != run.AgentRunId
                         && other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval or AgentRunStatus.WaitingForSignal))

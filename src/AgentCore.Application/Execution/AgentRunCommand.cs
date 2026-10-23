@@ -33,12 +33,6 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
     public sealed record CommitCancellation(long Revision, DateTimeOffset At, Guid Generation, string? KnownEffect)
         : AgentRunCommand(Revision, At);
     public sealed record Recover(long Revision, DateTimeOffset At) : AgentRunCommand(Revision, At);
-    public sealed record BeginApproval(long Revision, DateTimeOffset At, Guid Generation, Guid ApprovalId,
-        string ToolName, string PreparedActionJson, string ActionHash, string Preview, DateTimeOffset ExpiresAt)
-        : AgentRunCommand(Revision, At);
-    public sealed record DecideApproval(long Revision, DateTimeOffset At, Guid ApprovalId, long ApprovalRevision,
-        string ActionHash, AgentRunApprovalDecision Decision) : AgentRunCommand(Revision, At);
-    public sealed record ExpireApproval(long Revision, DateTimeOffset At) : AgentRunCommand(Revision, At);
     public sealed record MarkSideEffect(long Revision, DateTimeOffset At, Guid Generation,
         AgentRunSideEffectDisposition Disposition, string ToolCallId, string ActionHash) : AgentRunCommand(Revision, At);
     public sealed record ClearSideEffect(long Revision, DateTimeOffset At, Guid Generation, bool RecordExternalEffect = true)
@@ -81,11 +75,6 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             RequestCancellation c => run.RequestCancellation(c.ExpectedRevision, c.KnownEffect, c.AtUtc),
             CommitCancellation c => run.CommitCancellation(c.ExpectedRevision, c.Generation, c.KnownEffect, c.AtUtc),
             Recover c => run.RecoverExpiredClaim(c.AtUtc, allocateDiagnosticId),
-            BeginApproval c => run.BeginApproval(c.ExpectedRevision, c.Generation, c.ApprovalId, c.ToolName,
-                c.PreparedActionJson, c.ActionHash, c.Preview, c.ExpiresAt, c.AtUtc),
-            DecideApproval c => run.DecideApproval(c.ApprovalId, c.ExpectedRevision, c.ApprovalRevision,
-                c.ActionHash, c.Decision, c.AtUtc),
-            ExpireApproval c => run.ExpireApproval(c.ExpectedRevision, c.AtUtc),
             MarkSideEffect c => run.MarkSideEffect(c.ExpectedRevision, c.Generation, c.Disposition, c.ToolCallId, c.ActionHash, c.AtUtc),
             ClearSideEffect c => run.ClearSideEffect(c.ExpectedRevision, c.Generation, c.AtUtc, c.RecordExternalEffect),
             AcceptBrowserSnapshot c => run.AcceptBrowserSnapshot(c.ExpectedRevision, c.Generation, c.AtUtc),

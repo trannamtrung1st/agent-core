@@ -4,13 +4,11 @@ namespace AgentCore.Contracts.Http;
 
 public sealed record ArtifactPageResponse(IReadOnlyList<ArtifactResponse> Items, string? NextCursor, bool HasMore);
 
-public sealed record AgentRunApprovalResponse(string ApprovalId, long Revision, string ActionHash,
-    string ToolName, string Preview, string ExpiresAt);
 public sealed record AgentRunOutcomeResponse(string Kind, string Summary, string? OutcomeEntryId, bool AttentionRequired);
 public sealed record AgentRunWaitResponse(string Mode, string Until, IReadOnlyList<string> BackgroundSessionIds, string Deadline);
 public sealed record AgentRunResponse(string AgentRunId, string SessionId, string ActivationId, string ActivationKind,
     string Status, long Revision, int AttemptCount, int MaxAttempts, bool CancellationRequested, bool CancellationAvailable,
-    string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt, AgentRunApprovalResponse? Approval,
+    string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt,
     AgentRunOutcomeResponse? Outcome, string? FailureCode, string? FailureSummary, string? DiagnosticId,
     string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null, AgentRunConfigurationResponse? Configuration = null, AutomationTriggerOriginResponse? TriggerOrigin = null, ComposerRunInputResponse? ComposerInput = null, RunExecutionDiagnosticResponse? ExecutionDiagnostic = null, ContextManifestResponse? ContextManifest = null);
 public sealed record AgentRunConfigurationResponse(string DefinitionId, int DefinitionVersion, long InstanceRevision,
@@ -25,7 +23,6 @@ public sealed record BackgroundSessionResponse(SessionCatalogItemResponse Sessio
 public sealed record BackgroundSessionPageResponse(IReadOnlyList<BackgroundSessionResponse> Items, string? NextCursor, bool HasMore);
 public sealed record ContinueInChatResponse(string SessionId);
 public sealed record CancelAgentRunRequest(long ExpectedRevision);
-public sealed record DecideAgentRunApprovalRequest(long ExpectedRevision, long ExpectedApprovalRevision, string ActionHash);
 
 public sealed record InstanceActivitySessionResponse(SessionCatalogItemResponse Session, string Origin, IReadOnlyList<string> Surfaces);
 public sealed record InstanceActivitySessionPageResponse(IReadOnlyList<InstanceActivitySessionResponse> Items, string? NextCursor, bool HasMore);

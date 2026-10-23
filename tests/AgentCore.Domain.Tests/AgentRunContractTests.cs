@@ -344,140 +344,47 @@ public sealed class AgentRunContractTests
         }
     }
 
-    [Fact]
-    public void Approval_wait_releases_the_claim_and_binds_the_exact_action()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Durable_approval_reference_releases_claim_and_resumes_without_spending_an_attempt(int maxAttempts)
     {
-        var claimed = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
-        var waiting = claimed.BeginApproval(
-            2,
-            GenerationA,
-            ApprovalId,
-            "demo.sensitive_action",
-            """{"to":"SECRET_ACTION"}""",
-            ActionHash,
-            "Send the weekly note",
-            Now.AddMinutes(10),
-            Now.AddSeconds(1));
+        var run = TenantItem(maxAttempts).TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+        if (maxAttempts == 2)
+            run = run.Fail(run.Revision, GenerationA, "model-unavailable", "Try again", true, Now.AddSeconds(1), Now.AddSeconds(2))
+                .TakeClaim(GenerationB, Now.AddSeconds(2), Now.AddMinutes(1));
+        var generation = run.Claim!.Generation;
+        var waiting = run.WaitForDurableApproval(run.Revision, ApprovalId, generation, Now.AddSeconds(3));
         Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status);
-        Assert.False(waiting.HasLiveClaim);
-        Assert.Equal(2, waiting.Approval!.CheckpointRevision);
-        Assert.Equal(GenerationA, waiting.Approval.ExecutionGeneration);
-        Assert.False(waiting.Approval.Consumed);
-
-        var mismatch = Assert.Throws<AgentRunTransitionException>(() =>
-            waiting.DecideApproval(ApprovalId, 3, 1, OtherHash, AgentRunApprovalDecision.Approved, Now.AddSeconds(2)));
-        Assert.Equal(AgentRunTransitionFailure.ApprovalMismatch, mismatch.Failure);
-
-        var approved = waiting.DecideApproval(ApprovalId, 3, 1, ActionHash, AgentRunApprovalDecision.Approved, Now.AddSeconds(2));
-        Assert.Equal(AgentRunStatus.Queued, approved.Status);
-        Assert.True(approved.Approval!.Consumed);
-        Assert.Equal(approved.AgentRunId, waiting.AgentRunId);
-        Assert.Equal(approved.Revision, approved.DecideApproval(ApprovalId, 1, 1, ActionHash, AgentRunApprovalDecision.Approved, Now.AddSeconds(3)).Revision);
-        var altered = Assert.Throws<AgentRunTransitionException>(() =>
-            approved.DecideApproval(ApprovalId, approved.Revision, 2, OtherHash, AgentRunApprovalDecision.Approved, Now.AddSeconds(3)));
-        Assert.Equal(AgentRunTransitionFailure.ApprovalMismatch, altered.Failure);
-
-        var rejectedWait = NewItem(id: Guid.Parse("019944af-0008-7000-8000-0000000000c3"))
-            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .BeginApproval(2, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(1));
-        var expired = Assert.Throws<AgentRunTransitionException>(() =>
-            rejectedWait.DecideApproval(ApprovalId, 3, 1, ActionHash, AgentRunApprovalDecision.Approved, Now.AddMinutes(10)));
-        Assert.Equal(AgentRunTransitionFailure.ApprovalMismatch, expired.Failure);
-        var closed = rejectedWait.ExpireApproval(3, Now.AddMinutes(10));
-        Assert.Equal(AgentRunStatus.Queued, closed.Status);
-        Assert.Equal(AgentRunApprovalDecision.Expired, closed.Approval!.Decision);
-        Assert.False(closed.Approval.Consumed);
-        Assert.False(closed.HasLiveClaim);
+        Assert.Null(waiting.Claim);
+        Assert.Equal(ApprovalId, waiting.ApprovalRequestId);
+        Assert.Throws<AgentRunTransitionException>(() => waiting.TakeClaim(GenerationA, Now.AddMinutes(10), Now.AddMinutes(11)));
+        Assert.Throws<AgentRunTransitionException>(() => waiting.ResumeDurableApproval(waiting.Revision, Guid.NewGuid(), Now.AddMinutes(10)));
+        var resumed = waiting.ResumeDurableApproval(waiting.Revision, ApprovalId, Now.AddMinutes(10))
+            .TakeClaim(GenerationA, Now.AddMinutes(10), Now.AddMinutes(11));
+        Assert.Equal(maxAttempts, resumed.AttemptCount);
+        Assert.Equal(run.AgentRunId, resumed.AgentRunId);
+        Assert.Equal(AgentRunStatus.Running, resumed.Status);
+        Assert.Null(typeof(AgentRun).GetProperty("Approval"));
+        Assert.Null(typeof(AgentRun).GetMethod("BeginApproval"));
+        Assert.Null(typeof(AgentRun).Assembly.GetType("AgentCore.Domain.Conversation.AgentRunApproval"));
     }
 
     [Fact]
-    public void Approval_resume_keeps_the_attempt_that_is_already_at_the_budget()
+    public void Unowned_run_cannot_enter_the_durable_approval_state()
     {
-        foreach (var decision in new[] { AgentRunApprovalDecision.Approved, AgentRunApprovalDecision.Rejected })
-        {
-            var waiting = NewItem(maxAttempts: 1, id: Guid.NewGuid(), sourceId: Guid.NewGuid())
-                .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-                .BeginApproval(2, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(1));
-            Assert.Equal(1, waiting.AttemptCount);
-            var decided = waiting.DecideApproval(ApprovalId, 3, 1, ActionHash, decision, Now.AddSeconds(2));
-            var resumed = decided.TakeClaim(GenerationB, Now.AddSeconds(2), Now.AddMinutes(2));
-            Assert.Equal(AgentRunStatus.Running, resumed.Status);
-            Assert.Equal(1, resumed.AttemptCount);
-            Assert.Equal(GenerationB, resumed.Claim!.Generation);
-        }
-
-        var expiredWait = NewItem(maxAttempts: 1, id: Guid.NewGuid(), sourceId: Guid.NewGuid())
-            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .BeginApproval(2, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(1));
-        var expired = expiredWait.ExpireApproval(3, Now.AddMinutes(10));
-        var resumedAfterExpiry = expired.TakeClaim(GenerationB, Now.AddMinutes(10), Now.AddMinutes(11));
-        Assert.Equal(AgentRunStatus.Running, resumedAfterExpiry.Status);
-        Assert.Equal(1, resumedAfterExpiry.AttemptCount);
-
-        var retry = NewItem(maxAttempts: 2, id: Guid.NewGuid(), sourceId: Guid.NewGuid())
-            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .Fail(2, GenerationA, "model-unavailable", "Model timed out.", true, Now.AddSeconds(1), Now.AddSeconds(2));
-        var finalAttempt = retry.TakeClaim(GenerationB, Now.AddSeconds(2), Now.AddMinutes(2));
-        Assert.Equal(2, finalAttempt.AttemptCount);
-        var finalWait = finalAttempt.BeginApproval(
-            finalAttempt.Revision,
-            GenerationB,
-            ApprovalId,
-            "demo.sensitive_action",
-            "{}",
-            ActionHash,
-            "Preview",
-            Now.AddMinutes(12),
-            Now.AddSeconds(3));
-        var finalDecision = finalWait.DecideApproval(ApprovalId, finalWait.Revision, 1, ActionHash, AgentRunApprovalDecision.Approved, Now.AddSeconds(4));
-        var resumedFinal = finalDecision.TakeClaim(GenerationA, Now.AddSeconds(4), Now.AddMinutes(3));
-        Assert.Equal(2, resumedFinal.AttemptCount);
-        Assert.Equal(AgentRunStatus.Running, resumedFinal.Status);
+        var run = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+        Assert.Throws<AgentRunTransitionException>(() => run.WaitForDurableApproval(run.Revision, ApprovalId, GenerationA, Now));
     }
 
     [Fact]
-    public void Side_effect_dispatch_requires_the_same_approved_action()
+    public void Prepared_side_effect_cannot_dispatch_a_substituted_operation()
     {
-        var prepared = NewItem()
-            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .MarkSideEffect(2, GenerationA, AgentRunSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1));
-        var substituted = Assert.Throws<AgentRunTransitionException>(() =>
-            prepared.MarkSideEffect(3, GenerationA, AgentRunSideEffectDisposition.InFlight, OtherToolCallId, OtherHash, Now.AddSeconds(2)));
-        Assert.Equal(AgentRunTransitionFailure.Rejected, substituted.Failure);
+        var prepared = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .MarkSideEffect(2, GenerationA, AgentRunSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now);
+        Assert.Throws<AgentRunTransitionException>(() => prepared.MarkSideEffect(prepared.Revision, GenerationA,
+            AgentRunSideEffectDisposition.InFlight, OtherToolCallId, OtherHash, Now));
         Assert.Equal(ActionHash, prepared.SideEffect.ActionHash);
-
-        var rejected = prepared
-            .BeginApproval(3, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(2))
-            .DecideApproval(ApprovalId, 4, 1, ActionHash, AgentRunApprovalDecision.Rejected, Now.AddSeconds(3));
-        Assert.Equal(AgentRunSideEffectDisposition.None, rejected.SideEffect.Disposition);
-        var rejectedRun = rejected.TakeClaim(GenerationB, Now.AddSeconds(3), Now.AddMinutes(2));
-        Assert.Equal(1, rejectedRun.AttemptCount);
-        var rejectedDispatch = Assert.Throws<AgentRunTransitionException>(() =>
-            rejectedRun.MarkSideEffect(rejectedRun.Revision, GenerationB, AgentRunSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(4)));
-        Assert.Equal(AgentRunTransitionFailure.Rejected, rejectedDispatch.Failure);
-
-        var replacementId = Guid.Parse("019944af-0008-7000-8000-0000000000f2");
-        var replaced = rejectedRun
-            .BeginApproval(rejectedRun.Revision, GenerationB, replacementId, "demo.sensitive_action", "{}", OtherHash, "Send the other note", Now.AddMinutes(11), Now.AddSeconds(4))
-            .DecideApproval(replacementId, rejectedRun.Revision + 1, 1, OtherHash, AgentRunApprovalDecision.Approved, Now.AddSeconds(5));
-        var replacedRun = replaced.TakeClaim(GenerationA, Now.AddSeconds(5), Now.AddMinutes(3));
-        var dispatched = replacedRun
-            .MarkSideEffect(replacedRun.Revision, GenerationA, AgentRunSideEffectDisposition.Prepared, OtherToolCallId, OtherHash, Now.AddSeconds(6))
-            .MarkSideEffect(replacedRun.Revision + 1, GenerationA, AgentRunSideEffectDisposition.InFlight, OtherToolCallId, OtherHash, Now.AddSeconds(7));
-        Assert.Equal(AgentRunSideEffectDisposition.InFlight, dispatched.SideEffect.Disposition);
-        Assert.Equal(OtherHash, dispatched.SideEffect.ActionHash);
-        Assert.Equal(1, dispatched.AttemptCount);
-
-        var expired = NewItem(id: Guid.Parse("019944af-0008-7000-8000-0000000000c4"), sourceId: Guid.Parse("019944af-0008-7000-8000-0000000000d4"))
-            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .MarkSideEffect(2, GenerationA, AgentRunSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1))
-            .BeginApproval(3, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(2))
-            .ExpireApproval(4, Now.AddMinutes(10));
-        Assert.Equal(AgentRunSideEffectDisposition.None, expired.SideEffect.Disposition);
-        var expiredRun = expired.TakeClaim(GenerationB, Now.AddMinutes(10), Now.AddMinutes(11));
-        var expiredDispatch = Assert.Throws<AgentRunTransitionException>(() =>
-            expiredRun.MarkSideEffect(expiredRun.Revision, GenerationB, AgentRunSideEffectDisposition.Succeeded, ToolCallId, ActionHash, Now.AddMinutes(10).AddSeconds(1)));
-        Assert.Equal(AgentRunTransitionFailure.Rejected, expiredDispatch.Failure);
     }
 
     [Fact]
@@ -578,6 +485,18 @@ public sealed class AgentRunContractTests
         Assert.Throws<ArgumentException>(() => new AgentRunWait("wait", AgentRunWaitMode.Duration, [], AgentRunWaitUntil.All, Now, Now.AddSeconds(seconds)).Validate());
         var target = Guid.NewGuid();
         Assert.Throws<ArgumentException>(() => new AgentRunWait("wait", AgentRunWaitMode.Background, [target, target], AgentRunWaitUntil.Any, Now, Now.AddSeconds(1)).Validate());
+    }
+
+    private static AgentRun TenantItem(int maxAttempts)
+    {
+        var template = NewItem(); var tenant = Guid.NewGuid(); var agent = Guid.NewGuid();
+        var activation = template.Admission.Activation;
+        var context = new TrustedExecutionContext(tenant, agent, null, template.SessionId,
+            template.AgentRunId, activation.ActivationId, activation.RootActivationId, activation.SourceAgentRunId,
+            activation.ParentActivationId, ExecutionOrigin.ScheduledOccurrence);
+        return AgentRun.Create(template.AgentRunId, new AgentRunOwner(InstanceId, null, tenant, agent),
+            new AgentRunAdmission(activation, template.DefinitionId, template.DefinitionVersion, template.PinnedPersona,
+                template.ResponseId, template.Admission.OutputContract, executionContext: context), template.PinnedModel, maxAttempts, Now);
     }
 
     private static AgentRun CompletedItem() =>

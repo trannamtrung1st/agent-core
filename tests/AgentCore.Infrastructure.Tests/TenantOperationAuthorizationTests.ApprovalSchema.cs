@@ -49,7 +49,7 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Null(waiting.Claim);
         var resumed = waiting.ResumeDurableApproval(waiting.Revision, requestId, at).TakeClaim(f.Ids.NewId(), at, at.AddMinutes(1));
         Assert.Equal(claimed.AttemptCount, resumed.AttemptCount);
-        Assert.Throws<AgentRunTransitionException>(() => claimed.BeginApproval(claimed.Revision, generation, f.Ids.NewId(), "legacy", "{}", "hash", "Legacy", at.AddMinutes(1), at));
+        Assert.Null(typeof(AgentRun).GetMethod("BeginApproval"));
     }
 
     [Fact]

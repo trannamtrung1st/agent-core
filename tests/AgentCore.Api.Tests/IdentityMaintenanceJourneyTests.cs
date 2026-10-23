@@ -134,10 +134,6 @@ public sealed class IdentityMaintenanceJourneyTests
         foreach (var source in sources) Assert.Contains(source.ToString(), prepared.Preparation.Details["Source subjects"]);
         var preview = prepared.Preparation.Preview + "\n" + string.Join("\n", prepared.Preparation.Details.Select(d => $"{d.Key}: {d.Value}"));
         Assert.True(preview.Length > 2000);
-        var now = DateTimeOffset.UtcNow;
-        var durable = new AgentRunApproval(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, call.Name, call.ArgumentsJson, prepared.Preparation.ActionHash,
-            preview, now.AddMinutes(5), AgentRunApprovalDecision.Pending, null, false, 1, now);
-        Assert.Equal(preview, durable.Preview);
         Assert.Contains("forbidden", (await ToolActionPreparation.PrepareApprovalAsync(tools, call, args)).ErrorJson);
         await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, session.SessionId, call, args, admission, null, default).AsTask());
         Assert.Equal(1, metrics.Outcomes["rejected_by_policy"]);

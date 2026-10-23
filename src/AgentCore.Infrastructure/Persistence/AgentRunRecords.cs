@@ -33,7 +33,6 @@ public sealed class AgentRunRecord
     public long Revision { get; set; }
     public long? NextRetryAtUtc { get; set; }
     public long? LeaseExpiresAtUtc { get; set; }
-    public long? ApprovalExpiresAtUtc { get; set; }
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
     public string PayloadJson { get; set; } = "";

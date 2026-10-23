@@ -305,8 +305,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         var readyWaits = waiting.Select(AgentRunStoreMapping.ToDomain).Where(r => AgentRunWaitExecution.IsReady(r, asOfUtc, children)).ToArray();
         var rows = await LegacyRuns(db).AsNoTracking().Where(row => row.Status == (int)AgentRunStatus.Queued
             || row.Status == (int)AgentRunStatus.WaitingToRetry && row.NextRetryAtUtc <= utc
-            || row.Status == (int)AgentRunStatus.Running && row.LeaseExpiresAtUtc <= utc
-            || row.Status == (int)AgentRunStatus.WaitingForApproval && row.ApprovalExpiresAtUtc <= utc)
+            || row.Status == (int)AgentRunStatus.Running && row.LeaseExpiresAtUtc <= utc)
             .Where(row => row.Status == (int)AgentRunStatus.Running || row.Status == (int)AgentRunStatus.WaitingForApproval
                 || !LegacyRuns(db).Any(other => other.SessionId == row.SessionId && other.AgentRunId != row.AgentRunId
                     && (other.Status == (int)AgentRunStatus.Running || other.Status == (int)AgentRunStatus.WaitingForApproval || other.Status == (int)AgentRunStatus.WaitingForSignal)))
@@ -315,8 +314,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
                 && (earlier.CreatedAtUtc < row.CreatedAtUtc || earlier.CreatedAtUtc == row.CreatedAtUtc && string.Compare(earlier.AgentRunId, row.AgentRunId) < 0)
                 && (earlier.Status == (int)AgentRunStatus.Queued
                     || earlier.Status == (int)AgentRunStatus.WaitingToRetry && earlier.NextRetryAtUtc <= utc
-                    || earlier.Status == (int)AgentRunStatus.Running && earlier.LeaseExpiresAtUtc <= utc
-                    || earlier.Status == (int)AgentRunStatus.WaitingForApproval && earlier.ApprovalExpiresAtUtc <= utc)))
+                    || earlier.Status == (int)AgentRunStatus.Running && earlier.LeaseExpiresAtUtc <= utc)))
             .OrderBy(row => row.CreatedAtUtc).ThenBy(row => row.AgentRunId).Take(limit)
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
         return rows.Select(AgentRunStoreMapping.ToDomain).Concat(readyWaits).OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.AgentRunId).Take(limit).ToArray();

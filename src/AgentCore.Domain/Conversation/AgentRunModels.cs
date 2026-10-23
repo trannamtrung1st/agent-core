@@ -61,15 +61,6 @@ public enum AgentRunSideEffectDisposition
     Indeterminate = 5
 }
 
-public enum AgentRunApprovalDecision
-{
-    Pending = 0,
-    Approved = 1,
-    Rejected = 2,
-    Expired = 3,
-    Cancelled = 4
-}
-
 public enum AgentRunTransitionFailure
 {
     StaleRevision,
@@ -77,7 +68,6 @@ public enum AgentRunTransitionFailure
     Terminal,
     Illegal,
     NotClaimable,
-    ApprovalMismatch,
     Rejected
 }
 
@@ -401,133 +391,6 @@ public sealed class AgentRunSideEffect
 
     public DateTimeOffset? UpdatedAtUtc { get; }
     public AgentRunExternalEffect? ExternalEffect { get; }
-}
-
-public sealed class AgentRunApproval
-{
-    public AgentRunApproval(
-        Guid approvalId,
-        Guid agentRunId,
-        Guid executionGeneration,
-        long checkpointRevision,
-        string toolName,
-        string preparedActionJson,
-        string actionHash,
-        string preview,
-        DateTimeOffset expiresAtUtc,
-        AgentRunApprovalDecision decision,
-        DateTimeOffset? decidedAtUtc,
-        bool consumed,
-        long revision,
-        DateTimeOffset createdAtUtc)
-    {
-        if (approvalId == Guid.Empty)
-        {
-            throw new ArgumentException("Approval identifier is required.", nameof(approvalId));
-        }
-
-        if (agentRunId == Guid.Empty)
-        {
-            throw new ArgumentException("Approval requires a agent run.", nameof(agentRunId));
-        }
-
-        if (executionGeneration == Guid.Empty)
-        {
-            throw new ArgumentException("Approval requires an execution generation.", nameof(executionGeneration));
-        }
-
-        if (checkpointRevision < 1 || revision < 1)
-        {
-            throw new ArgumentException("Approval revisions start at 1.");
-        }
-
-        if (!Enum.IsDefined(decision))
-        {
-            throw new ArgumentException("Approval decision is not valid.", nameof(decision));
-        }
-
-        AgentRunTime.RequireUtc(expiresAtUtc, "Approval expiry");
-        AgentRunTime.RequireUtc(createdAtUtc, "Approval");
-        AgentRunTime.RequireUtc(decidedAtUtc, "Approval decision");
-        var consumedRequired = decision == AgentRunApprovalDecision.Approved;
-        if (consumed != consumedRequired)
-        {
-            throw new ArgumentException("Only an approved action is consumed.");
-        }
-
-        if (decision == AgentRunApprovalDecision.Pending)
-        {
-            if (decidedAtUtc is not null)
-            {
-                throw new ArgumentException("A pending approval has no decision time.");
-            }
-        }
-        else if (decidedAtUtc is null)
-        {
-            throw new ArgumentException("A decided approval requires a decision time.");
-        }
-
-        ApprovalId = approvalId;
-        AgentRunId = agentRunId;
-        ExecutionGeneration = executionGeneration;
-        CheckpointRevision = checkpointRevision;
-        ToolName = AgentRunText.RequireToolName(toolName);
-        var automation = ToolName is "automation.create" or "automation.update" or "automation.delete" or "automation.enable" or "automation.disable" or "automation.run";
-        PreparedActionJson = AgentRunText.RequireUtf8(preparedActionJson, automation ? AgentRunLimits.MaxAutomationPreparedActionBytes : ToolName == "drive.trash_batch" ? AgentRunLimits.MaxDriveBatchPreparedActionBytes : AgentRunLimits.MaxPreparedActionBytes, "Prepared action");
-        ActionHash = AgentRunText.RequireActionHash(actionHash);
-        Preview = AgentRunText.RequireMultiline(preview, automation ? AgentRunLimits.MaxAutomationPreviewCharacters : ToolName == "drive.trash_batch" ? AgentRunLimits.MaxDriveBatchPreviewCharacters : AgentRunLimits.MaxPreviewCharacters, "Approval preview");
-        ExpiresAtUtc = expiresAtUtc;
-        Decision = decision;
-        DecidedAtUtc = decidedAtUtc;
-        Consumed = consumed;
-        Revision = revision;
-        CreatedAtUtc = createdAtUtc;
-    }
-
-    public Guid ApprovalId { get; }
-
-    public Guid AgentRunId { get; }
-
-    public Guid ExecutionGeneration { get; }
-
-    public long CheckpointRevision { get; }
-
-    public string ToolName { get; }
-
-    public string PreparedActionJson { get; }
-
-    public string ActionHash { get; }
-
-    public string Preview { get; }
-
-    public DateTimeOffset ExpiresAtUtc { get; }
-
-    public AgentRunApprovalDecision Decision { get; }
-
-    public DateTimeOffset? DecidedAtUtc { get; }
-
-    public bool Consumed { get; }
-
-    public long Revision { get; }
-
-    public DateTimeOffset CreatedAtUtc { get; }
-
-    public AgentRunApproval WithDecision(AgentRunApprovalDecision decision, DateTimeOffset decidedAtUtc, long revision) =>
-        new(
-            ApprovalId,
-            AgentRunId,
-            ExecutionGeneration,
-            CheckpointRevision,
-            ToolName,
-            PreparedActionJson,
-            ActionHash,
-            Preview,
-            ExpiresAtUtc,
-            decision,
-            decidedAtUtc,
-            consumed: decision == AgentRunApprovalDecision.Approved,
-            revision,
-            CreatedAtUtc);
 }
 
 internal static class AgentRunTime

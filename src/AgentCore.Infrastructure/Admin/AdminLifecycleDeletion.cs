@@ -131,7 +131,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             triggersForInstance.Registrations,
             triggersForInstance.Occurrences,
             runs.Length,
-            runs.Count(run => run.Approval is not null),
+            runs.Count(run => run.Status == AgentRunStatus.WaitingForApproval),
             runs.Length,
             Instances: 0);
     }
@@ -146,7 +146,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             Automations: 0,
             TriggerOccurrences: 0,
             runs.Length,
-            runs.Count(run => run.Approval is not null),
+            runs.Count(run => run.Status == AgentRunStatus.WaitingForApproval),
             runs.Length,
             instances.CountByDefinition(definitionId));
     }

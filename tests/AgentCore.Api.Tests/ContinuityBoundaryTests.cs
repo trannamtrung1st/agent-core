@@ -286,7 +286,7 @@ public sealed class ContinuityBoundaryTests
         Assert.Equal(AgentRunStatus.Completed, item.Status);
         Assert.Equal("NoAction", item.Result!.OutcomeKind.ToString());
         Assert.False(item.Result.AttentionRequired);
-        Assert.Null(item.Approval);
+        Assert.Null(item.ApprovalRequestId);
         Assert.Equal(21, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
         Assert.Null((await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.HarnessManagement);
         Assert.False(item.Result?.AttentionRequired ?? false);

@@ -47,7 +47,7 @@ public sealed class ContinuityBudgetTests
         var work = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
         Assert.Equal(AgentRunStatus.Completed, work.Status);
         Assert.Equal("NoAction", work.Result!.OutcomeKind.ToString());
-        Assert.False(work.Result.AttentionRequired); Assert.Null(work.Approval);
+        Assert.False(work.Result.AttentionRequired); Assert.Null(work.ApprovalRequestId);
         Assert.Single(await memory.ListActiveUserAsync(LocalUserProfile.Id));
         Assert.Single(await memory.ListActiveIdentityUserAsync(id, LocalUserProfile.Id));
         Assert.Equal(2, model.Requests.Count);

@@ -77,8 +77,7 @@ public sealed partial class InMemoryIamStore : ITenantRuntimeStore
                 var entry = sessionBacking.FindEntry(run.SessionId, entryId);
                 if (entry is not { Role: ConversationRole.Assistant, Status: EntryStatus.Completed } || entry.ResponseId != run.ResponseId) throw AgentCoreErrors.Conflict("Outcome must reference the saved response.");
             }
-            if (command is AgentRunCommand.BeginApproval or AgentRunCommand.DecideApproval or AgentRunCommand.ExpireApproval)
-                throw AgentCoreErrors.Conflict("This tenant continuation requires its canonical service.");
+
             if (run.Claim is { } claim && claim.LeaseExpiresAtUtc <= (clock ?? TimeProvider.System).GetUtcNow()
                 && command is not (AgentRunCommand.Recover or AgentRunCommand.RequestCancellation or AgentRunCommand.DeadlineExceeded)) throw AgentCoreErrors.Conflict("Execution claim expired.");
             try

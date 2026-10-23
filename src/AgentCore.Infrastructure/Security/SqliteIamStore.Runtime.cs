@@ -153,7 +153,7 @@ public sealed partial class SqliteIamStore : ITenantRuntimeStore
         if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId }
             && !await db.Entries.AnyAsync(e => e.SessionId == row.SessionId && e.EntryId == entryId.ToString("D") && e.Role == nameof(ConversationRole.Assistant)
                 && e.Status == nameof(EntryStatus.Completed) && e.ResponseId == run.ResponseId!.Value.ToString("D"), ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Outcome must reference the saved response.");
-        if (command is AgentRunCommand.BeginApproval or AgentRunCommand.DecideApproval or AgentRunCommand.ExpireApproval) throw AgentCoreErrors.Conflict("Canonical tenant continuation service required.");
+
         if (run.Claim is { } claim && claim.LeaseExpiresAtUtc <= (clock ?? TimeProvider.System).GetUtcNow()
             && command is not (AgentRunCommand.Recover or AgentRunCommand.RequestCancellation or AgentRunCommand.DeadlineExceeded)) throw AgentCoreErrors.Conflict("Execution claim expired.");
         AgentRun next;

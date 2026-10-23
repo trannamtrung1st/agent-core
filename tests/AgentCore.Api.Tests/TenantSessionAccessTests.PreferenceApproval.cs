@@ -130,7 +130,7 @@ public sealed partial class TenantSessionAccessTests
                 Assert.All(await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => dispatcher.DispatchAsync(active).AsTask())), accepted => Assert.True(accepted));
                 var stale = new AgentRun(active.AgentRunId, active.Owner, active.Admission, active.PinnedModel, active.Status, active.Revision, active.AttemptCount, active.MaxAttempts,
                     active.NextRetryAtUtc, new(Guid.NewGuid(), active.Claim!.ClaimedAtUtc, active.Claim.LeaseExpiresAtUtc), active.CancellationRequested, active.CancellationRequestedAtUtc,
-                    active.KnownEffectSummary, active.Progress, active.Checkpoint, active.Result, active.Failure, active.SideEffect, active.Approval, active.CreatedAtUtc, active.UpdatedAtUtc,
+                    active.KnownEffectSummary, active.Progress, active.Checkpoint, active.Result, active.Failure, active.SideEffect, active.CreatedAtUtc, active.UpdatedAtUtc,
                     active.PinnedSkillCatalog, active.ActiveSkillKeys, active.SkillLoadCount, active.LoadedCapabilityIds, active.CapabilityLoadCount, active.Wait, active.WaitCount, active.TotalWaitSeconds, active.ApprovalRequestId);
                 Assert.False(await dispatcher.DispatchAsync(stale));
                 Assert.Equal(active.Claim.Generation, (await runs.FindTenantRunAsync(tenant, active.AgentRunId))!.Claim!.Generation);

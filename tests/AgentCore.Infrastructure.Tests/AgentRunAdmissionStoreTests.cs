@@ -835,7 +835,7 @@ public sealed partial class AgentRunAdmissionStoreTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Exact_approval_decision_resumes_same_attempt_and_uncertain_effect_survives_restart(bool sqlite)
+    public async Task Prepared_effect_identity_and_uncertain_outcome_survive_restart(bool sqlite)
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var turn = UserTurn();
@@ -843,18 +843,10 @@ public sealed partial class AgentRunAdmissionStoreTests
         var run = await Claim(f, turn.Run);
         run = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.MarkSideEffect(run.Revision,
             Now.AddSeconds(1), run.Claim!.Generation, AgentRunSideEffectDisposition.Prepared, "email-1", Hash));
-        run = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.BeginApproval(run.Revision,
-            Now.AddSeconds(2), run.Claim!.Generation, Guid.NewGuid(), "email.send", "{}", Hash, "Send note", Now.AddMinutes(10)));
         await f.ReopenAsync();
-        var waiting = (await f.Runs.GetAsync(Owner, run.AgentRunId))!;
-        Assert.Null(waiting.Claim);
-        Assert.Equal(AgentRunStatus.WaitingForApproval, waiting.Status);
-        Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.ApplyAsync(Owner, waiting.AgentRunId,
-            new AgentRunCommand.DecideApproval(waiting.Revision, Now.AddSeconds(3), waiting.Approval!.ApprovalId,
-                waiting.Approval.Revision, new string('f', 64), AgentRunApprovalDecision.Approved)).AsTask())).Code);
-        run = await f.Runs.ApplyAsync(Owner, waiting.AgentRunId, new AgentRunCommand.DecideApproval(waiting.Revision,
-            Now.AddSeconds(3), waiting.Approval!.ApprovalId, waiting.Approval.Revision, Hash, AgentRunApprovalDecision.Approved));
-        run = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, Now.AddSeconds(3), Guid.NewGuid(), Now.AddMinutes(1)));
+        run = (await f.Runs.GetAsync(Owner, run.AgentRunId))!;
+        Assert.Equal(AgentRunSideEffectDisposition.Prepared, run.SideEffect.Disposition);
+        Assert.Equal(Hash, run.SideEffect.ActionHash);
         Assert.Equal(1, run.AttemptCount);
         run = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.MarkSideEffect(run.Revision,
             Now.AddSeconds(4), run.Claim!.Generation, AgentRunSideEffectDisposition.InFlight, "email-1", Hash));

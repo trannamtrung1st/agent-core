@@ -16,7 +16,7 @@ public sealed partial class InMemoryIamStore : ITenantAgentDecommissionStore
         var triggers = instances.TriggerStore?.CountForInstance(instance) ?? (Registrations: 0, Occurrences: 0);
         var runs = definitionReferences.AgentRuns.Runs.Values.Where(r => r.AgentInstanceId == instance).ToArray();
         var references = new AdminDeletionReferenceCounts(definitionReferences.CountLiveByInstance(instance), (structuredMemories?.CountActiveIdentityUser(instance) ?? 0) + learnedMemories.Values.Count(i => i.TenantId == tenant && i.AgentInstanceId == instance && i.Status != AgentCore.Domain.Memory.MemoryItemStatus.Deleted),
-            triggers.Registrations, triggers.Occurrences, runs.Length, runs.Count(r => r.Approval is not null), runs.Length, 0);
+            triggers.Registrations, triggers.Occurrences, runs.Length, runs.Count(r => r.Status == AgentCore.Domain.Conversation.AgentRunStatus.WaitingForApproval), runs.Length, 0);
         return new(new(tenant, identity.SystemIdentityId, identity.PrincipalId, row), identity.Status, references,
             _audit.SingleOrDefault(a => a.TenantId == tenant && a.Action == TenantAgentDecommissionRules.Action && a.Target == instance.ToString("D")));
     }

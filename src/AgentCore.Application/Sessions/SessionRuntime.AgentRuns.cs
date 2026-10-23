@@ -436,7 +436,7 @@ public sealed partial class SessionRuntime
         var bound = _boundAgentRun;
         ct.ThrowIfCancellationRequested();
         if (bound is null) throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
-        var generation = cause.AgentRunGeneration ?? bound.Claim?.Generation ?? bound.Approval?.ExecutionGeneration
+        var generation = cause.AgentRunGeneration ?? bound.Claim?.Generation
             ?? throw AgentCoreErrors.Conflict("AgentRun generation is unavailable.");
         var completed = new TaskCompletionSource<AgentRun?>(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
@@ -455,7 +455,7 @@ public sealed partial class SessionRuntime
             var current = await _agentRuns.GetAsync(RunOwner, input.AgentRunId, ct).ConfigureAwait(false)
                 ?? throw AgentCoreErrors.NotFound("AgentRun was not found.");
             if (current.IsTerminal || current.CancellationRequested ||
-                (current.Claim?.Generation ?? current.Approval?.ExecutionGeneration) != input.Generation)
+                current.Claim?.Generation != input.Generation)
                 throw AgentCoreErrors.Conflict("AgentRun command generation is stale.");
             _boundAgentRun = await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,
                 input.Build(current, _time.GetUtcNow()), ct).ConfigureAwait(false);

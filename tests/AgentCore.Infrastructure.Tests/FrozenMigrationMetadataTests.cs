@@ -89,9 +89,14 @@ public sealed class FrozenMigrationMetadataTests
             const string historical = "20261019023004_TenantWorkspaceMutationReview";
             await migrator.MigrateAsync(historical);
             var original = await Schema(db);
+            await migrator.MigrateAsync("20261023140000_TenantConfigurationRemedyAuthoring");
+            var predecessor = await Schema(db);
+            Assert.Equal(133, predecessor.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
             await migrator.MigrateAsync();
             var current = await Schema(db);
-            Assert.Equal(117, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            Assert.Equal(135, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            foreach (var guard in predecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
+                Assert.Equal(guard.Value, current[guard.Key]);
             Assert.False(db.Database.HasPendingModelChanges());
             await migrator.MigrateAsync(historical);
             SameSchema(original, await Schema(db));

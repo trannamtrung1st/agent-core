@@ -152,30 +152,6 @@ public sealed class AgentRunCoordinatorTests
     }
 
     [Fact]
-    public async Task Approval_expiry_resumes_same_attempt_and_preserves_exact_decision_for_the_mailbox()
-    {
-        var f = await Fixture.CreateAsync();
-        await f.Coordinator.DispatchAsync(Owner, f.Run.AgentRunId);
-        var running = Assert.Single(f.Dispatcher.Dispatched);
-        var checkpointed = await f.Store.ApplyAsync(Owner, running.AgentRunId,
-            new AgentRunCommand.Checkpoint(running.Revision, Now, running.Claim!.Generation,
-                new AgentRunCheckpoint("{}", 1, 0, 1000), null));
-        const string hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-        var awaiting = await f.Store.ApplyAsync(Owner, running.AgentRunId,
-            new AgentRunCommand.BeginApproval(checkpointed.Revision, Now, running.Claim.Generation,
-                Guid.NewGuid(), "email.send", "{}", hash, "Send email", Now.AddMinutes(1)));
-        Assert.False(await f.Coordinator.DispatchAsync(Owner, awaiting.AgentRunId));
-        f.Time.Advance(TimeSpan.FromMinutes(1));
-
-        Assert.Equal(1, await f.Coordinator.ExecuteRunnableAsync(8));
-        var resumed = f.Dispatcher.Dispatched[1];
-        Assert.Equal(running.AgentRunId, resumed.AgentRunId);
-        Assert.Equal(1, resumed.AttemptCount);
-        Assert.Equal(AgentRunApprovalDecision.Expired, resumed.Approval!.Decision);
-        Assert.Equal(hash, resumed.Approval.ActionHash);
-    }
-
-    [Fact]
     public async Task Missing_session_fails_only_its_run_and_the_next_session_still_dispatches()
     {
         var f = await Fixture.CreateAsync();
