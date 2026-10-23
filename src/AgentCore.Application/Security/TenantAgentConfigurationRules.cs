@@ -54,6 +54,9 @@ public static class TenantAgentConfigurationRules
                 || System.Text.Json.JsonSerializer.Serialize(assessmentState.InstanceChanges) != System.Text.Json.JsonSerializer.Serialize((current.HarnessManagement?.InstanceChanges ?? []).TakeLast(63).Append(assessment).ToArray()))
                 throw new ArgumentException("Use one factual local Harness assessment without changing delegated authority.");
         }
+        if (change.HarnessManagement is { } management
+            && System.Text.Json.JsonSerializer.Serialize(management.Preparation) != System.Text.Json.JsonSerializer.Serialize(current.HarnessManagement?.Preparation))
+            throw new ArgumentException("Historical Harness preparation cannot be created or changed.");
         if (change.HarnessManagement?.Overrides is { } overrides) Admin.SelfManagementService.Validate(overrides);
         return current with { Persona = change.Persona ?? current.Persona, ActiveVersion = change.ActiveVersion ?? current.ActiveVersion,
             PersonaRevision = current.PersonaRevision + (change.Persona is not null && change.Persona != current.Persona ? 1 : 0),

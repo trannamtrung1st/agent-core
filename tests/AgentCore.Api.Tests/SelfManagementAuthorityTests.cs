@@ -14,6 +14,42 @@ namespace AgentCore.Api.Tests;
 public sealed class SelfManagementAuthorityTests
 {
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Policy_update_and_freeze_keep_inert_historical_preparation_bytes_private_and_unchanged(bool sqlite)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "inert-harness-history-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            await using AgentCoreApiFactory host = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
+            var services = host.Services;
+            var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22);
+            var history = new HarnessPreparation(Guid.NewGuid(), Guid.NewGuid(), owner.ActiveVersion, "Historical only", 1,
+                HarnessPreparationStatus.AwaitingApproval,
+                [new(Guid.NewGuid(), new string('a', 64), new("instructions.update", 1, Content: "historical-private-instructions"), "Pending")], []);
+            var instances = services.GetRequiredService<IAgentInstanceStore>();
+            // Seed retained historical data; this fixture does not authorize a preparation or execute it.
+            owner = await instances.UpdateWithExpectedRevisionAsync(new(owner.InstanceId, owner.Revision,
+                HarnessManagement: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []), Preparation: history)),
+                services.GetRequiredService<TimeProvider>().GetUtcNow());
+            var bytes = JsonSerializer.Serialize(owner.HarnessManagement!.Preparation);
+            var policy = services.GetRequiredService<SelfManagementService>();
+            var updated = await policy.UpdateAsync(owner.InstanceId, owner.Revision, new(Mode: new(HarnessManagementMode.Assisted)));
+            Assert.Equal(HarnessManagementMode.Assisted, updated.Effective.Mode);
+            Assert.DoesNotContain("historical-private-instructions", JsonSerializer.Serialize(updated));
+            Assert.Equal(bytes, JsonSerializer.Serialize((await instances.FindAsync(owner.InstanceId))!.HarnessManagement!.Preparation));
+            var frozen = await policy.FreezeAsync(owner.InstanceId, updated.InstanceRevision);
+            Assert.True(frozen.Effective.Frozen);
+            Assert.DoesNotContain("historical-private-instructions", JsonSerializer.Serialize(frozen));
+            var retained = (await instances.FindAsync(owner.InstanceId))!;
+            Assert.Equal(bytes, JsonSerializer.Serialize(retained.HarnessManagement!.Preparation));
+            Assert.Equal("Pending", Assert.Single(retained.HarnessManagement.Preparation!.Approvals).Status);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public async Task Sparse_policy_inherits_per_field_and_freeze_wins_over_new_definition_defaults()
     {

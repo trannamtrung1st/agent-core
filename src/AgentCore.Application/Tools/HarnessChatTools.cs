@@ -5,7 +5,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
 
-/// <summary>Contextual trusted-local owner authority; never sourced from Definition text.</summary>
+/// <summary>Pinned management delegation for canonical tenant operations; never sourced from Definition text.</summary>
 public sealed record HarnessChatContext(HarnessManagementPolicy Policy, long PolicyRevision, int ActiveVersion);
 public sealed record HarnessSourceReceipt(string Source, string ToolName);
 

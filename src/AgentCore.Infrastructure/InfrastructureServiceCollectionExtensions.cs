@@ -489,7 +489,6 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IMemoryStore>(),
             provider.GetService<IBrowser>(),
             provider.GetService<IAgentDefinitionResourceAdminStore>(),
-            () => provider.GetRequiredService<HarnessManagementService>(),
             provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
             provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>(),
             provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>(),

@@ -39,10 +39,7 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
             EligibleTools = effective.EligibleTools.Concat(RoleEnvironments.Of(definition).ToolList.Append(ToolCatalog.AttachmentsRead))
                 .Where(t => ToolRegistry.TryGet(t, out var descriptor) && descriptor.DefinitionAuthorizable
                     && RolePermissions.AllowsTool(definition, t)).Distinct().ToArray() };
-        return old with { Policy = policy, Overrides = overrides, PolicyRevision = checked(old.PolicyRevision + 1),
-            Preparation = old.Preparation is { Status: not HarnessPreparationStatus.Published } prep ? prep with {
-                Status = HarnessPreparationStatus.Cancelled,
-                Approvals = prep.Approvals.Select(a => a.Status == "Pending" ? a with { Status = "Cancelled" } : a).ToArray() } : old.Preparation };
+        return old with { Policy = policy, Overrides = overrides, PolicyRevision = checked(old.PolicyRevision + 1) };
     }
 
     public async ValueTask<ManagementPolicyView> UpdateAsync(Guid id, long revision, ManagementPolicyOverrides overrides,
@@ -113,10 +110,7 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
         if (!ManagementTools.Enabled(effective)) throw AgentCoreErrors.Forbidden("Self-management is disabled or frozen.");
         var old = owner.HarnessManagement ?? new(effective);
         return old with { Policy = effective with { Frozen = true }, PolicyRevision = checked(old.PolicyRevision + 1),
-            Overrides = owner.HarnessManagement is null ? new() : old.Overrides,
-            Preparation = old.Preparation is { Status: not HarnessPreparationStatus.Published } prep ? prep with {
-                Status = HarnessPreparationStatus.Cancelled,
-                Approvals = prep.Approvals.Select(a => a.Status == "Pending" ? a with { Status = "Cancelled" } : a).ToArray() } : old.Preparation };
+            Overrides = owner.HarnessManagement is null ? new() : old.Overrides };
     }
 
     public static void Validate(ManagementPolicyOverrides overrides)

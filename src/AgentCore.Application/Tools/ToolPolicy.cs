@@ -109,16 +109,7 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
-        {
-            if (admission is not { AgentInstanceId: not null, SupportsTools: true }
-                || !((!admission.Detached && admission.TriggerKind == TriggerKind.UserTurn)
-                    || (admission.Detached && ToolResources.IsOccurrence(admission.TriggerKind)))
-                || !HarnessChatTools.Allows(toolName, admission.Harness)) return ToolPolicyDecision.Deny;
-            if (ToolResources.IsOccurrence(admission.TriggerKind) && toolName is "harness.tool.select" or "harness.tool.configure")
-                return ToolPolicyDecision.Deny;
-            return HarnessChatTools.NeedsApproval(toolName, admission.Harness!)
-                ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Allow;
-        }
+            return ToolPolicyDecision.Deny;
 
         if (toolName == ToolCatalog.CapabilitiesLoad)
             return definition.Environment?.Capabilities is not null && admission is { SupportsTools: true }
@@ -340,11 +331,7 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
             return context is { AgentInstanceId: not null, ModelSupportsTools: true };
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
-            return context is { ModelSupportsTools: true }
-                && ((!context.DetachedExecution && context.Trigger.Kind == TriggerKind.UserTurn)
-                    || (context.DetachedExecution && ToolResources.IsOccurrence(context.Trigger.Kind)))
-                && !(ToolResources.IsOccurrence(context.Trigger.Kind) && descriptor.Name is "harness.tool.select" or "harness.tool.configure")
-                && HarnessChatTools.Allows(descriptor.Name, context.Harness);
+            return false;
 
         if (descriptor.Name == ToolCatalog.CapabilitiesLoad)
             return definition.Environment?.Capabilities is not null && context is { ModelSupportsTools: true }

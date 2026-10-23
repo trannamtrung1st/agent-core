@@ -20,6 +20,7 @@ public sealed record ManagementPolicyOverrides(
         new(policy.Mode), new(policy.Scopes.ToArray()), new((policy.ManagedAutoApply ?? []).ToArray()),
         new(policy.BuiltInSkills?.ConfigurationAssistance ?? true), new(policy.BuiltInSkills?.HarnessAuthoring ?? true));
 }
+// Inert historical serialization only. The preparation/approval executor is retired.
 public enum HarnessPreparationStatus { Preparing, AwaitingApproval, Ready, Failed, Cancelled, Published }
 public enum HarnessEvidenceStatus { Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence, Failed }
 

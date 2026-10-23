@@ -31,7 +31,6 @@ public sealed partial class SessionToolExecutor(
     IMemoryStore? profiles = null,
     IBrowser? browser = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
-    Func<HarnessManagementService>? harnessAuthoring = null,
     AgentCore.Application.Experience.ExperienceService? experience = null,
     AgentCore.Application.Continuity.ContinuityService? continuity = null,
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
@@ -425,16 +424,6 @@ public sealed partial class SessionToolExecutor(
                 await experience.RequireInstanceAsync(ownerId, cancellationToken);
                 var projection = await experience.RecallAsync(ownerId, cancellationToken, query, recordId);
                 return FitResult(remainingOutputBytes, JsonSerializer.Serialize(new { historicalExperience = projection }));
-            }
-            if (HarnessChatTools.IsHarness(call.Name))
-            {
-                if (harnessAuthoring is null || admission?.AgentInstanceId is not Guid instanceId)
-                    return TextResult(Error("forbidden", "Harness authoring is unavailable in this execution."));
-                var result = call.Name == HarnessChatTools.Inspect
-                    ? await harnessAuthoring().InspectChatAsync(instanceId, definition.Version, cancellationToken)
-                    : await harnessAuthoring().AuthorChatAsync(instanceId, call.Name, args,
-                        admission.HarnessSources ?? [], admission.OwnerTurnText, cancellationToken);
-                return FitResult(remainingOutputBytes, JsonSerializer.Serialize(result));
             }
             if (admission is not null && (call.Name.StartsWith("drive.", StringComparison.Ordinal)
                 || call.Name.StartsWith("office.", StringComparison.Ordinal) || call.Name == ToolCatalog.WebDownload))

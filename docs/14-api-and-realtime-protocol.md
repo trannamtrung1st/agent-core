@@ -1227,21 +1227,9 @@ Repairable semantic presentation/format failures (`missingDisplayText`, `invalid
 
 ## P9.7 owner HTTP surface
 
-All governance/advanced owner routes retain the local trusted-owner filter under `/api/v2/admin/agent-instances/{instanceId}/harness`. Primary Chat authoring uses contextual fixed semantic tools through existing SignalR/runtime exact approval messages; no new realtime wire envelope is introduced.
+The former trusted-owner `/api/v2/admin/agent-instances/{instanceId}/harness` routes are retired, including prepare/verify/cancel/approval/publish-adopt and `/continue`. Their standalone orchestrator and unused HTTP DTOs are removed. They are not compatibility authority paths.
 
-| Method / suffix | Request | Effect |
-| --- | --- | --- |
-| GET root | none | Policy, recent internal candidate/diff/evidence inspection. |
-| PUT `/policy` | expectedRevision, mode, scopes, sources, eligibleTools, frozen | Grant/revoke/freeze. Normal UI sends empty source/eligible arrays; server derives authorized configured eligibility. Advanced arrays are bounded to 24 sources and 64 eligible tool names. |
-| POST `/prepare` | expectedRevision, purpose | Advanced owner candidate fork; no model loop. |
-| POST `/verify` | preparationId | Advanced current candidate Core checks. |
-| POST `/cancel` | expectedRevision | Discard unfinished candidate/pending approvals; Published returns 409. |
-| POST `/approvals/{approvalId}` | expectedRevision, actionHash, approve | Legacy advanced exact candidate decision. |
-| POST `/publish-adopt` | expectedRevision, draftRevision | Advanced owner lifecycle publication/adoption. |
-
-`POST /continue` was removed and returns 404. Harness tools are `harness.inspect`, `harness.knowledge.upsert/remove`, `harness.instructions.update` and `harness.tool.select/configure`. Mutations carry expectedVersion/policyRevision and a semantic payload. Exact runtime approval binds tool and canonical arguments; authority is rechecked after waiting. Changed writes return saved/changed, activeVersion, next-Run scope and verification/limitations. Identical state writes return changed=false. Blocking verification returns saved=false, verification_failed and bounded findings. Safe errors carry diagnostic references when available. Skills have no Harness alias; administrative operations additionally require the unified self-management Skills area.
-
-Typed owner review uses string modes/statuses and evidence actor, draft revision, check, status, expected/observed/limitation. Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence and Failed remain distinct. Published evidence retains tested publishedDraftRevision. Invalid requests use 400; stale revisions/grants use 409; unexpected failures use server diagnostics. No private credential or host-path projection enters model context.
+Current `harness.inspect`, `harness.knowledge.upsert/remove`, `harness.instructions.update` and `harness.tool.select/configure` are canonical tenant operations through the incumbent Runtime and exact saved-action protocol. Independent current tenant rights, delegated areas, source evidence and immutable Run pins apply. The [application contract](04-backend-interfaces.md#unified-self-management-application-owners) and current tenant management sections own request/receipt semantics. Skills retain their separate canonical commands. Inert historical preparation JSON has no decision or resume transport.
 
 ## Shared Event webhook envelope
 

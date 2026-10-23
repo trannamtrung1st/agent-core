@@ -8,6 +8,29 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ToolRegistryPolicyTests
 {
+    [Theory]
+    [InlineData("harness.inspect")]
+    [InlineData("harness.knowledge.upsert")]
+    [InlineData("harness.knowledge.remove")]
+    [InlineData("harness.instructions.update")]
+    [InlineData("harness.tool.select")]
+    [InlineData("harness.tool.configure")]
+    public async Task Caller_built_Harness_policy_cannot_offer_or_execute_unowned_management(string tool)
+    {
+        var definition = Definition("forged-harness", 1, [tool]);
+        var harness = new HarnessChatContext(new(HarnessManagementMode.Managed,
+            Enum.GetValues<HarnessManagementScope>(), [], []), 1, 1);
+        var instance = Guid.NewGuid(); var session = Guid.NewGuid();
+        var context = Context(definition, true, []) with { Harness = harness, AgentInstanceId = instance, OwnedSessionId = session };
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance,
+            AgentRunId: Guid.NewGuid(), Harness: harness, OwnedSessionId: session);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == tool);
+        Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(definition, tool, ToolConfigurationGates.AllowAll, admission));
+        var result = await new SessionToolExecutor().ExecuteAsync(definition, session,
+            new ModelToolCall("forged-harness", tool, "{}"), ToolLimits.MaxOutputBytes, admission: admission);
+        Assert.Contains("forbidden", result.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Sandbox_timeout_omission_uses_selection_rather_than_a_fixed_schema_default()
     {

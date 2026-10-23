@@ -398,21 +398,6 @@ export type AdminWebhookEventDetails = {
 export type HarnessMode = "Disabled" | "Assisted" | "Managed";
 export type HarnessScope = "KnowledgeResources" | "Instructions" | "ToolSelection" | "Settings" | "Skills" | "Resources" | "Connections" | "ManagementPolicy" | "AutomationPreferences";
 export type HarnessPolicy = { mode: HarnessMode; scopes: HarnessScope[]; sources: string[]; eligibleTools: string[]; frozen: boolean };
-export type HarnessSkill = { id: string; name: string; description: string; procedure: string; requiredCapabilities: string[]; resourcePaths: string[] };
-export type HarnessOperation = { kind: string; draftRevision: number; id: string | null; content: string | null; source: string | null;
-  enabled: boolean | null; allowUnreadUnsupportedTypes: boolean | null };
-export type HarnessApproval = { approvalId: string; actionHash: string; operation: HarnessOperation; status: string };
-export type HarnessEvidence = { actor: string; draftRevision: number; check: string; status: string; expected: string; observed: string; limitation: string | null };
-export type HarnessReview = {
-  instanceId: string; instanceRevision: number; activeVersion: number; policy: HarnessPolicy; policyRevision: number;
-  preparation: { preparationId: string; draftId: string; baseVersion: number; purpose: string; status: string;
-    approvals: HarnessApproval[]; evidence: HarnessEvidence[]; publishedVersion: number | null; diagnosticId: string | null; publishedDraftRevision: number | null } | null;
-  draftRevision: number | null; instructions: string | null; skills: HarnessSkill[];
-  knowledge: { identity: string; title: string; citation: string; resourcePath: string | null }[]; selectedTools: string[];
-  diff: AdminDefinitionDraftDiff | null; resources: AdminDefinitionDraftResource[];
-  instanceChanges?: { operationId: string; operation: string; instanceRevision: number; definitionVersion: number; policyRevision: number; approvalId: string | null; actionHash: string; source: string | null; savedAt: string; evidence: HarnessEvidence }[];
-};
-
 export type ExperienceContent = {
   goal: string; attempts: string[]; decisions: string[]; outcomes: string[]; corrections: string[];
   unresolved: string[]; difficulties: string[]; lessons: string[];
