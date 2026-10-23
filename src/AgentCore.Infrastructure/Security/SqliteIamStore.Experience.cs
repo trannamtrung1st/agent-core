@@ -99,7 +99,7 @@ public sealed partial class SqliteIamStore : ITenantExperienceStore
         {
             var rows = (await db.Set<TenantExperienceRecord>().AsNoTracking().Where(i => i.TenantId == reader.Security.Tenant.TenantId && i.AgentInstanceId == run.AgentInstanceId.ToString("D") && keys.Contains(i.OwnerKey)
                 && i.Visibility == (int)ExperienceVisibility.Eligible && (experienceId == null || i.ExperienceId == experienceId)).OrderByDescending(i => i.UpdatedAtUtc).ThenBy(i => i.ExperienceId).Take(101).ToArrayAsync(ct).ConfigureAwait(false)).Select(i => i.Domain());
-            items = rows.Where(i => TenantExperienceRules.Owns(reader, i.Reference())).Select(i => (Item: i, Score: AgentCore.Application.Continuity.ContinuityService.Score(TenantExperienceRules.SearchText(i), query)))
+            items = rows.Where(i => TenantExperienceRules.Owns(reader, i.Reference())).Select(i => (Item: i, Score: AgentCore.Application.Continuity.ContinuityRelevance.Score(TenantExperienceRules.SearchText(i), query)))
                 .Where(i => string.IsNullOrWhiteSpace(query) || i.Score > 0).OrderByDescending(i => i.Score).ThenByDescending(i => i.Item.UpdatedAt).ThenBy(i => i.Item.ExperienceId).Take(Math.Clamp(limit, 1, 11)).Select(i => i.Item).ToArray();
         }
         return new(reader, settings, items, reader.Security.Tenant.Revision, allowed);

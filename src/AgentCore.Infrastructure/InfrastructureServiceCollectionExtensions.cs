@@ -124,8 +124,6 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<PromptContextBuilder>(),
                 provider.GetRequiredService<IInitiativeEvaluator>()));
         services.TryAddSingleton<AgentCore.Application.Experience.ExperienceService>();
-        services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityService>();
-        services.TryAddSingleton<AgentCore.Application.Continuity.IdentityMaintenanceService>();
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         services.TryAddSingleton<IDiagnosticIdSource, SystemDiagnosticIdSource>();
@@ -487,9 +485,6 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IMemoryStore>(),
             provider.GetService<IBrowser>(),
             provider.GetService<IAgentDefinitionResourceAdminStore>(),
-            provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
-            provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>(),
-            provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>(),
             provider.GetRequiredService<AgentInstanceWorkspaceService>(),
             provider.GetRequiredService<CredentialService>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),

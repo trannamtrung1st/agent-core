@@ -95,6 +95,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         await MemoryPolicy(f, owner, "sessions.read", OperationApprovalMode.Always); var s = ContinuityServices(f); var request = await PrepareContinuityReview(f, current.Frame, HistoryCall(source.Frame.SessionId), s.Approvals);
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.ContinuityRead.SessionsJson','[]') WHERE RequestId={request.RequestId}"));
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migrations.MigrateAsync("20261021185601_TenantMemoryOperations")); Assert.True(await db.Set<TenantApprovalRecord>().AnyAsync(r => r.RequestId == request.RequestId));
+        // A refused multi-step Down may already have removed safe successor columns.
+        await migrations.MigrateAsync();
+        Assert.Equal(db.Database.GetMigrations(), await db.Database.GetAppliedMigrationsAsync());
+        Assert.False(db.Database.HasPendingModelChanges());
         var reopened = ContinuityServices(f, new SqliteIamStore(f.Contexts, f.Content)); var view = await reopened.Approvals.ReadViewAsync(owner.Tenant, request.RequestId, new(owner.Human.AccountId, owner.Human.AuthenticationSessionId, owner.Human.PrincipalId)); Assert.True(view.Review!.CanDecide);
     }
 }

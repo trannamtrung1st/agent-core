@@ -17,7 +17,7 @@ public sealed partial class SessionRuntime
     }
     private async ValueTask<HarnessChatContext?> HarnessContextAsync(AgentRun? run, CancellationToken ct)
     {
-        if (_runtimeOwner is null) return await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct).ConfigureAwait(false);
+        if (_runtimeOwner is null) return null;
         if (run is null || run.Owner != _runtimeOwner || _runAuthority is not ITenantRunContext source)
             throw AgentCoreErrors.Forbidden("Tenant management context is unavailable.");
         return await source.CurrentHarnessContextAsync(run, ct).ConfigureAwait(false);

@@ -55,7 +55,7 @@ public sealed class SelfManagementCompletionTests
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Skills]), new([ManagementAutoApply.SkillChanges])));
         var definition = (await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:owner.InstanceId,
-            Harness:await s.GetRequiredService<SessionToolExecutor>().HarnessContextAsync(owner.InstanceId, default));
+            Harness:new(new(HarnessManagementMode.Managed, Enum.GetValues<HarnessManagementScope>(), [], [], ManagedAutoApply: Enum.GetValues<ManagementAutoApply>()), 1, 23));
         Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(definition, name, ToolConfigurationGates.Unconfigured, admission:admission));
     }
 }

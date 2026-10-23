@@ -2590,9 +2590,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await HarnessContextAsync(capturedRun, evaluationToken) : null,
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
-                    AllowAgentConsolidation: _runtimeOwner is not null ? (await CurrentContinuitySettingsAsync(capturedRun, evaluationToken).ConfigureAwait(false))?.AllowMaintenance == true : await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
-                    ExperienceContext: executionDefinition.StateIsolationPolicy?.ExperienceRecall != false ? await RunExperienceContextAsync(evaluationToken) : null,
-                    ContinuityContext: _runtimeOwner is not null ? null : await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, executionDefinition, evaluationToken))
+                    AllowAgentConsolidation: (await CurrentContinuitySettingsAsync(capturedRun, evaluationToken).ConfigureAwait(false))?.AllowMaintenance == true,
+                    ExperienceContext: null,
+                    ContinuityContext: null)
                 {
                     TenantManagementReadSources = tenantSkills.Sources,
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,

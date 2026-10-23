@@ -325,15 +325,6 @@ public sealed partial class SessionRuntime
         ClearAgentRunTerminalPending();
     }
 
-    private async Task<string> RunExperienceContextAsync(CancellationToken ct)
-    {
-        if (_runtimeOwner is not null) return ""; // Canonical facts enter only through the guarded tenant projector.
-        var selected = _boundAgentRun is { } run
-            ? await _tools.SelectedExperienceContextAsync(_snapshot.AgentInstanceId, run.AgentRunId, ct).ConfigureAwait(false) : "";
-        return string.IsNullOrWhiteSpace(selected)
-            ? await _tools.ExperienceContextAsync(_snapshot.AgentInstanceId, ct).ConfigureAwait(false) : selected;
-    }
-
     private static string AgentRunFailureCode(ProviderFailure? failure) => failure switch
     {
         { FailureReason: ProviderFailureReason.BackgroundCompletionRequired } => "completion-required",

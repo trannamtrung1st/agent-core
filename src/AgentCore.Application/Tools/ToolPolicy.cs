@@ -90,22 +90,13 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         if (ManagementTools.IsManagement(toolName)) return ToolPolicyDecision.Deny;
         if (TenantAutomationReadContract.IsTool(toolName) || TenantAutomationMutationContract.IsTool(toolName)) return ToolPolicyDecision.Deny;
+        if (TenantMemoryToolContract.IsTool(toolName) || TenantExperienceToolContract.IsTool(toolName) || toolName == ToolCatalog.ExperienceRecent) return ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
         if (descriptor.DefinitionAuthorizable && definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, toolName)) return ToolPolicyDecision.Deny;
 
-        if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
-            return admission is { AgentInstanceId: not null, SupportsTools: true }
-                && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
-                    || admission.Detached && ToolResources.IsOccurrence(admission.TriggerKind))
-                ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
-
-        if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
-            return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
-        if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
-            return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
             return ToolPolicyDecision.Deny;
 
@@ -287,6 +278,7 @@ public static class ToolPolicy
             return false;
         if (ManagementTools.IsManagement(descriptor.Name)) return false;
         if (TenantAutomationReadContract.IsTool(descriptor.Name) || TenantAutomationMutationContract.IsTool(descriptor.Name)) return false;
+        if (TenantMemoryToolContract.IsTool(descriptor.Name) || TenantExperienceToolContract.IsTool(descriptor.Name) || descriptor.Name == ToolCatalog.ExperienceRecent) return false;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return context is { AgentInstanceId: not null, ModelSupportsTools: true, CredentialMetadataAvailable: true };
@@ -316,16 +308,6 @@ public static class ToolPolicy
 
 
 
-        if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
-            return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext)
-                && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
-                    || context is { DetachedExecution: true, AllowAgentConsolidation: true } && ToolResources.IsOccurrence(context.Trigger.Kind)
-                        && descriptor.Name != ToolCatalog.MemoryForget);
-
-        if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
-            return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext);
-        if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
-            return context is { AgentInstanceId: not null, ModelSupportsTools: true };
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
             return false;
 

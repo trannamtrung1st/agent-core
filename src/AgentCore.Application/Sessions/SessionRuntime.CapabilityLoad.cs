@@ -37,8 +37,8 @@ public sealed partial class SessionRuntime
                 : await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
             Harness: await HarnessContextAsync(_boundAgentRun, ct),
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
-            AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
-            ContinuityContext: _runtimeOwner is not null ? null : await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct))
+            AllowAgentConsolidation: (await CurrentContinuitySettingsAsync(_boundAgentRun, ct).ConfigureAwait(false))?.AllowMaintenance == true,
+            ContinuityContext: null)
             { TenantManagementReadSources = tenantSkills.Sources, ExecutionContext = _boundAgentRun?.Admission.ExecutionContext, ApprovalOutcome = _tenantApprovalOutcome,
                 Configuration = _boundAgentRun?.Admission.Configuration, CurrentContinuitySettings = await CurrentContinuitySettingsAsync(_boundAgentRun, ct).ConfigureAwait(false), RunTaskIntent = _boundAgentRun?.Admission.TaskIntent };
     }

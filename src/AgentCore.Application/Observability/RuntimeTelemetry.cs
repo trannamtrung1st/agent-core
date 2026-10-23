@@ -165,8 +165,6 @@ public static class RuntimeTelemetry
     }
 
     private static readonly Counter<long> ExperienceEvents = Meter.CreateCounter<long>("experience_events");
-    private static readonly Counter<long> IdentityMaintenanceEvents = Meter.CreateCounter<long>("identity_maintenance_events");
-    public static void RecordIdentityMaintenance(string outcome) => IdentityMaintenanceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     public static void RecordExperience(string outcome) => ExperienceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     private static readonly Counter<long> SchedulerPasses = Meter.CreateCounter<long>("automation_scheduler_passes");
     private static readonly Counter<long> RunOutcomes = Meter.CreateCounter<long>("agent_run_outcomes");

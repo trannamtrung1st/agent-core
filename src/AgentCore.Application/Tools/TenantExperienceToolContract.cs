@@ -47,7 +47,7 @@ public static class TenantExperienceToolContract
                 var cursor = root.GetProperty("throughCursor"); if (cursor.ValueKind != JsonValueKind.Number || !cursor.TryGetInt64(out var n) || n < 1) throw new ArgumentException("Use the observed stable source cursor."); through = n;
             }
         }
-        else ids = IdentityMaintenanceService.ReadIds(root, "sourceExperienceIds");
+        else ids = IdentityMaintenanceContract.ReadIds(root, "sourceExperienceIds");
         if (tool == Source) return new(tool, JsonSerializer.Serialize(new { sourceKind = kind.ToString(), sourceId = id }), kind, id);
         string Text(string field) => root.GetProperty(field).ValueKind == JsonValueKind.String ? root.GetProperty(field).GetString()! : throw new ArgumentException("Use bounded observation text.");
         string[] Lines(string field) => root.GetProperty(field).ValueKind == JsonValueKind.Array ? root.GetProperty(field).EnumerateArray().Select(v => v.ValueKind == JsonValueKind.String ? v.GetString()! : throw new ArgumentException("Use observation text arrays.")).ToArray() : throw new ArgumentException("Use observation arrays.");

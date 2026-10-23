@@ -51,7 +51,7 @@ public sealed class SelfManagementOperationTests
             var admitted = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration;
             var executor = services.GetRequiredService<SessionToolExecutor>(); var session = Guid.NewGuid();
             var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId,
-                OwnerTurnText: "Keep this concise review procedure.", Harness: await executor.HarnessContextAsync(owner.InstanceId, default), OwnedSessionId: session);
+                OwnerTurnText: "Keep this concise review procedure.", Harness: new(new(HarnessManagementMode.Managed, Enum.GetValues<HarnessManagementScope>(), [], [], ManagedAutoApply: Enum.GetValues<ManagementAutoApply>()), 1, 23), OwnedSessionId: session);
             var patch = JsonSerializer.Serialize(new { expectedInstanceRevision = view.InstanceRevision, section = "conversationPolicy", set = new { responseLength = "concise" }, clear = Array.Empty<string>() });
             var resource = JsonSerializer.Serialize(new { expectedInstanceRevision = view.InstanceRevision, logicalPath = "reviews/checklist.md", kind = "Knowledge", mediaType = "text/markdown", content = "Private review procedure.", source = "conversation:user" });
             foreach (var (tool, arguments) in new[] { ("settings.patch", patch), ("resources.upsert", resource) })
@@ -101,7 +101,7 @@ public sealed class SelfManagementOperationTests
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var context = new AgentContext(resolved.Configuration.Definition, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "Hello"), AgentInstanceId: owner.InstanceId,
-            Harness: await executor.HarnessContextAsync(owner.InstanceId, default), PinnedSkillCatalog: resolved.Skills);
+            Harness: new(new(HarnessManagementMode.Managed, Enum.GetValues<HarnessManagementScope>(), [], [], ManagedAutoApply: Enum.GetValues<ManagementAutoApply>()), 1, 23), PinnedSkillCatalog: resolved.Skills);
         var prompt = new PromptContextBuilder().Build(context, Guid.NewGuid());
         Assert.DoesNotContain(new PromptContextBuilder().OfferTools(context.Definition, context), t => ManagementTools.IsManagement(t.Name));
         var system = string.Join('\n', prompt.Messages.Where(m => m.Role == ModelRole.System).Select(m => m.Text));

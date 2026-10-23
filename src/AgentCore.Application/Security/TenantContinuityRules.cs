@@ -104,7 +104,7 @@ public static class TenantContinuityRules
     {
         if (!inspection) Eligible(reader);
         var selected = args.Tool == ToolCatalog.ContinuityGet || inspection ? candidates.ToArray() : candidates
-            .Select(s => (Item: s, Score: AgentCore.Application.Continuity.ContinuityService.Score(s.Title + " " + s.Summary + " " + string.Join(' ', s.Entries.Select(e => e.Text)), args.Query)))
+            .Select(s => (Item: s, Score: AgentCore.Application.Continuity.ContinuityRelevance.Score(s.Title + " " + s.Summary + " " + string.Join(' ', s.Entries.Select(e => e.Text)), args.Query)))
             .Where(s => string.IsNullOrWhiteSpace(args.Query) || s.Score > 0).OrderByDescending(s => s.Score).ThenByDescending(s => s.Item.UpdatedAt).ThenBy(s => s.Item.SessionId)
             .Take(args.Limit + 1).Select(s => s.Item).ToArray();
         if (args.Kind == "Session" && (selected.Length != 1 || selected[0].SessionId != args.Id)) throw new AccessDeniedException("continuity_source_unavailable");

@@ -24,7 +24,7 @@ public sealed class IdentityMaintenanceToolContractTests
     public void Source_bound_is_shared_by_runtime_and_model_contract(int count)
     {
         var args = JsonSerializer.SerializeToElement(new { sourceMemoryIds = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()) });
-        Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() => IdentityMaintenanceService.ReadIds(args, "sourceMemoryIds"));
+        Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() => IdentityMaintenanceContract.ReadIds(args, "sourceMemoryIds"));
         foreach (var tool in new[] { ToolCatalog.MemoryConsolidate, ToolCatalog.ExperienceConsolidate })
         {
             Assert.True(ToolRegistry.TryGet(tool, out var descriptor));

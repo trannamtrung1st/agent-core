@@ -14,7 +14,7 @@ public static class TenantExperienceFactRules
         var references = expected is null ? null : Sources(expected); var named = references?.Select(i => i.ExperienceId).ToHashSet();
         var selected = candidates.Where(i => TenantExperienceRules.Owns(reader, i.Reference()) && (named is not null ? named.Contains(i.ExperienceId)
                 : i.Visibility == ExperienceVisibility.Eligible && i.Content is not null && (args.Id is null || i.ExperienceId == args.Id)))
-            .Select(i => (Item: TenantExperienceRules.Copy(i), Score: AgentCore.Application.Continuity.ContinuityService.Score(TenantExperienceRules.SearchText(i), args.Query)))
+            .Select(i => (Item: TenantExperienceRules.Copy(i), Score: AgentCore.Application.Continuity.ContinuityRelevance.Score(TenantExperienceRules.SearchText(i), args.Query)))
             .Where(i => named is not null || args.Kind == "Experience" || string.IsNullOrWhiteSpace(args.Query) || i.Score > 0)
             .OrderByDescending(i => i.Score).ThenByDescending(i => i.Item.UpdatedAt).ThenBy(i => i.Item.ExperienceId).Take(named?.Count ?? args.Limit + 1).Select(i => i.Item).ToArray();
         if (args.Kind == "Experience" && selected.Length != 1 || named is not null && selected.Length != named.Count) throw new AccessDeniedException("experience_source_unavailable");

@@ -36,7 +36,7 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
                 services.RemoveAll<IModelCatalog>(); services.AddSingleton<IModelCatalog>(ModelCatalogFactory.Create("Real", options, null));
                 services.RemoveAll<ILanguageModelResolver>(); services.AddSingleton<ILanguageModelResolver>(new Resolver(model));
                 var original = services.Last(d => d.ServiceType == typeof(IAgentDefinitionStore)); services.Remove(original);
-                services.AddSingleton<IAgentDefinitionStore>(sp => new ContinuityBudgetTests.UserRetrievalDefinitions((IAgentDefinitionStore)(
+                services.AddSingleton<IAgentDefinitionStore>(sp => new UserRetrievalDefinitions((IAgentDefinitionStore)(
                     original.ImplementationInstance ?? original.ImplementationFactory?.Invoke(sp) ?? ActivatorUtilities.CreateInstance(sp, original.ImplementationType!))));
             }, configuration: c => c.AddInMemoryCollection(new Dictionary<string, string?> {
                 ["AgentCore:Profile"] = "Real", ["Providers:LanguageModels:primary-llm:Adapter"] = "OpenAICompatible",

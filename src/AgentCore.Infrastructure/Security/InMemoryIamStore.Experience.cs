@@ -110,7 +110,7 @@ public sealed partial class InMemoryIamStore : ITenantExperienceStore
             catch (AccessDeniedException) { }
             var items = allowed ? OwnedExperience(reader).Where(i => i.Visibility == ExperienceVisibility.Eligible && i.Content is not null && (experienceId is null || i.ExperienceId == experienceId))
                 .OrderByDescending(i => i.UpdatedAt).ThenBy(i => i.ExperienceId).Take(101)
-                .Select(i => (Item: i, Score: AgentCore.Application.Continuity.ContinuityService.Score(TenantExperienceRules.SearchText(i), query)))
+                .Select(i => (Item: i, Score: AgentCore.Application.Continuity.ContinuityRelevance.Score(TenantExperienceRules.SearchText(i), query)))
                 .Where(i => string.IsNullOrWhiteSpace(query) || i.Score > 0).OrderByDescending(i => i.Score).ThenByDescending(i => i.Item.UpdatedAt).ThenBy(i => i.Item.ExperienceId)
                 .Take(Math.Clamp(limit, 1, 11)).Select(i => i.Item).ToArray() : [];
             return ValueTask.FromResult(new TenantExperienceObservation(reader, settings, items, reader.Security.Tenant.Revision, allowed));

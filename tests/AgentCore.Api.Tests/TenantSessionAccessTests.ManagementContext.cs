@@ -96,7 +96,6 @@ public sealed partial class TenantSessionAccessTests
                     var context = await host.Services.GetRequiredService<TenantRunExecutionAuthority>().CurrentHarnessContextAsync(run, ct);
                     Assert.NotNull(context); Assert.Equal(2, context.PolicyRevision); Assert.Equal(32, context.ActiveVersion);
                     Assert.True(context.Policy.Allows(HarnessManagementScope.KnowledgeResources));
-                    Assert.Null(await host.Services.GetRequiredService<SessionToolExecutor>().HarnessContextAsync(instance, ct));
                 }
                 if (transition == "freeze_before_load" ? step != 1 : step != 2) return;
                 if (transition is "freeze" or "freeze_before_load")

@@ -93,7 +93,7 @@ public sealed class TenantContinuityReadService(ITenantContinuityStore storage, 
     public static string Serialize(TenantContinuityObservation observed, int remainingBytes, DateTimeOffset at, Guid? operation = null)
     {
         var entries = new List<(int Score, DateTimeOffset At, Guid Id, JsonNode Item, TenantHistoricalSession? Session, TenantMemorySource? Memory, TenantExperienceFactSource? Experience)>();
-        foreach (var item in observed.Memory?.Items ?? []) entries.Add((AgentCore.Application.Continuity.ContinuityService.Score(item.Subject + " " + item.Content, observed.Arguments.Query), item.UpdatedAt, item.MemoryId,
+        foreach (var item in observed.Memory?.Items ?? []) entries.Add((AgentCore.Application.Continuity.ContinuityRelevance.Score(item.Subject + " " + item.Content, observed.Arguments.Query), item.UpdatedAt, item.MemoryId,
             JsonSerializer.SerializeToNode(new { kind = "Memory", id = item.MemoryId, memoryKind = item.Kind.ToString(), subject = item.Subject, content = item.Content, status = item.Status.ToString(),
                 provenance = new { scope = TenantMemoryRules.ScopeName(item.Scope), item.Source, sourceMemoryIds = TenantMemoryOperationMutation.Sources(item) } })!, null,
             new(item.TenantId, item.MemoryId, item.ContentHash, item.Status == AgentCore.Domain.Memory.MemoryItemStatus.Deleted), null));
@@ -101,7 +101,7 @@ public sealed class TenantContinuityReadService(ITenantContinuityStore storage, 
         {
             var summary = TenantContinuityRules.Safe(observed.Arguments.Kind == "Session" ? session.Summary
                 : session.Title + "\n" + session.Summary + "\n" + string.Join('\n', session.Entries.Select(e => e.Text)), 700, out var clipped);
-            entries.Add((AgentCore.Application.Continuity.ContinuityService.Score(session.Title + " " + session.Summary + " " + string.Join(' ', session.Entries.Select(e => e.Text)), observed.Arguments.Query), session.UpdatedAt, session.SessionId,
+            entries.Add((AgentCore.Application.Continuity.ContinuityRelevance.Score(session.Title + " " + session.Summary + " " + string.Join(' ', session.Entries.Select(e => e.Text)), observed.Arguments.Query), session.UpdatedAt, session.SessionId,
                 JsonSerializer.SerializeToNode(new { kind = "Session", id = session.SessionId, title = session.Title, summary,
                     entries = observed.Arguments.Kind == "Session" ? session.Entries.Select(e => new { entryId = e.EntryId, sequence = e.Sequence, role = e.Role, status = e.Status, text = e.Text, truncated = e.Truncated }).ToArray() : null, hasMore = session.HasMore, nextAfter = session.NextAfter, truncated = clipped,
                     provenance = new { scope = "AgentInstanceSession", throughEntrySequence = session.ThroughEntrySequence, afterEntrySequence = session.AfterEntrySequence, limit = session.Limit, observedAtUtc = session.UpdatedAt } })!, session, null, null));
@@ -109,7 +109,7 @@ public sealed class TenantContinuityReadService(ITenantContinuityStore storage, 
         foreach (var item in observed.Experience?.Items ?? [])
         {
             var exact = observed.Arguments.Kind == "Experience";
-            entries.Add((AgentCore.Application.Continuity.ContinuityService.Score(TenantExperienceRules.SearchText(item), observed.Arguments.Query), item.UpdatedAt, item.ExperienceId,
+            entries.Add((AgentCore.Application.Continuity.ContinuityRelevance.Score(TenantExperienceRules.SearchText(item), observed.Arguments.Query), item.UpdatedAt, item.ExperienceId,
                 JsonSerializer.SerializeToNode(new { kind = "Experience", id = item.ExperienceId, goal = TenantContinuityRules.Safe(item.Content?.Goal ?? "Content removed", 160, out _),
                     content = exact ? item.Content : null, summary = exact ? null : TenantContinuityRules.Safe(string.Join(' ', item.Content?.Lessons ?? []), 300, out _),
                     visibility = item.Visibility.ToString(), boundedObservation = true, untrustedHistory = true,

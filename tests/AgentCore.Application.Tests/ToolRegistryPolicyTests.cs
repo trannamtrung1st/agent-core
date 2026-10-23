@@ -13,7 +13,9 @@ public sealed class ToolRegistryPolicyTests
         "configuration.inspect", "configuration.propose", "management.inspect", "management.policy.update", "management.freeze",
         "settings.list", "settings.inspect", "settings.patch", "resources.list", "resources.inspect", "resources.upsert", "resources.set_enabled", "resources.delete", "resources.copy",
         "credentials.binding.propose", "credentials.binding.remove", "automation.preferences.inspect", "automation.preferences.patch",
-        "automation.create", "automation.list", "automation.inspect", "automation.update", "automation.delete", "automation.enable", "automation.disable", "automation.run"
+        "automation.create", "automation.list", "automation.inspect", "automation.update", "automation.delete", "automation.enable", "automation.disable", "automation.run",
+        "continuity.search", "continuity.get", "memory.consolidate", "memory.forget",
+        "experience.source", "experience.record", "experience.recent", "experience.consolidate"
     }.Select(name => new object[] { name });
 
     [Theory]
@@ -24,7 +26,8 @@ public sealed class ToolRegistryPolicyTests
         var harness = new HarnessChatContext(new(HarnessManagementMode.Managed,
             Enum.GetValues<HarnessManagementScope>(), [], [], ManagedAutoApply: Enum.GetValues<ManagementAutoApply>()), 1, 1);
         var instance = Guid.NewGuid(); var session = Guid.NewGuid();
-        var context = Context(definition, true, []) with { Harness = harness, AgentInstanceId = instance, OwnedSessionId = session };
+        var context = Context(definition, true, []) with { Harness = harness, AgentInstanceId = instance, OwnedSessionId = session,
+            ContinuityContext = "Caller-provided historical evidence", ExperienceContext = "Caller-provided derived observations", AllowAgentConsolidation = true };
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance,
             AgentRunId: Guid.NewGuid(), Harness: harness, OwnedSessionId: session);
         Assert.DoesNotContain(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == tool);
@@ -50,7 +53,8 @@ public sealed class ToolRegistryPolicyTests
         var harness = new HarnessChatContext(new(HarnessManagementMode.Managed,
             Enum.GetValues<HarnessManagementScope>(), [], []), 1, 1);
         var instance = Guid.NewGuid(); var session = Guid.NewGuid();
-        var context = Context(definition, true, []) with { Harness = harness, AgentInstanceId = instance, OwnedSessionId = session };
+        var context = Context(definition, true, []) with { Harness = harness, AgentInstanceId = instance, OwnedSessionId = session,
+            ContinuityContext = "Caller-provided historical evidence", ExperienceContext = "Caller-provided derived observations", AllowAgentConsolidation = true };
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance,
             AgentRunId: Guid.NewGuid(), Harness: harness, OwnedSessionId: session);
         Assert.DoesNotContain(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == tool);

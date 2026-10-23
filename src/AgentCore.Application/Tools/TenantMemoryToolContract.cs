@@ -61,7 +61,7 @@ public static class TenantMemoryToolContract
             TenantApprovalToolContract.Require(root, ["memoryId"]); var id = Id("memoryId"); return new(tool, JsonSerializer.Serialize(new { memoryId = id }), MemoryId: id, SourceIds: [id]);
         }
         TenantApprovalToolContract.Require(root, ["sourceMemoryIds", "kind", "subject", "content"]);
-        var sources = IdentityMaintenanceService.ReadIds(root, "sourceMemoryIds");
+        var sources = IdentityMaintenanceContract.ReadIds(root, "sourceMemoryIds");
         if (!Enum.TryParse<MemoryKind>(Text("kind", 16), false, out var kind) || !Enum.IsDefined(kind)) throw new ArgumentException("Use an exact Memory kind.");
         var subject = StructuredMemoryItem.CollapseSubject(Text("subject", MemoryLimits.MaxSubjectCharacters)); var content = Text("content", MemoryLimits.MaxContentCharacters).Trim();
         if (subject.Length == 0 || content.Length == 0) throw new ArgumentException("A nonempty bounded replacement is required.");

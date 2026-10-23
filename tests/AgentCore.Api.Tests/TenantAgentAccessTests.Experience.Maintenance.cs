@@ -39,18 +39,26 @@ public sealed partial class TenantAgentAccessTests
     }
     private static async Task<AgentRun> ExperienceMaintenanceFinal(RuntimeStateFactory factory, Guid tenant, Guid run)
     {
-        AgentRun? last = null;
+        var clock = factory.Services.GetRequiredService<TimeProvider>();
+        AgentRun? last = null; var deferrals = 0;
         for (var pass = 0; pass < 800; pass++)
         {
             var current = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, run))!;
             last = current;
             if (current.Result?.ContinuationRunId is { } next) { run = next; continue; }
             if (current.IsTerminal) return current;
+            if (current.Status == AgentRunStatus.WaitingToRetry && current.NextRetryAtUtc is { } retry && retry > clock.GetUtcNow())
+            {
+                Assert.True(current.Failure is null, $"Unexpected failure before retry: {current.Failure?.Code}; {current.Failure?.Summary}");
+                Assert.True(++deferrals <= 8, "Experience continuation repeatedly refused runtime admission.");
+                Console.WriteLine($"Experience admission deferral {deferrals}: attempt={current.AttemptCount}; checkpoint={current.Checkpoint is not null}; effect={current.SideEffect.Disposition}; failure=none; advance={retry - clock.GetUtcNow()}");
+                Assert.IsType<FakeTimeProvider>(clock).Advance(retry - clock.GetUtcNow() + TimeSpan.FromMilliseconds(1));
+            }
             // This fixture freezes TimeProvider; drive the same durable dispatcher explicitly.
             await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync();
             await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8); await Task.Delay(25);
         }
-        throw new TimeoutException($"The approved Experience maintenance did not settle its exact successor: {last?.Status}; retry={last?.NextRetryAtUtc:O}; progress={last?.Progress?.Summary}; effect={last?.SideEffect.Disposition}; {last?.KnownEffectSummary}");
+        throw new TimeoutException($"The approved Experience maintenance did not settle its exact successor: {last?.Status}; retry={last?.NextRetryAtUtc:O}; failure={last?.Failure?.Code} {last?.Failure?.Summary}; progress={last?.Progress?.Summary}; effect={last?.SideEffect.Disposition}; {last?.KnownEffectSummary}");
     }
     public static TheoryData<bool, string> ExperienceMaintenanceCases => new() {
         { false, "approve" }, { true, "approve" }, { false, "scheduled" }, { true, "scheduled" },

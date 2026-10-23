@@ -29,9 +29,6 @@ public sealed partial class SessionToolExecutor(
     IMemoryStore? profiles = null,
     IBrowser? browser = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
-    AgentCore.Application.Experience.ExperienceService? experience = null,
-    AgentCore.Application.Continuity.ContinuityService? continuity = null,
-    AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     InheritedDefinitionResourceCatalog? inheritedResources = null,
@@ -50,32 +47,12 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<bool> CredentialMetadataAvailableAsync(Guid? id, CancellationToken ct) =>
         id is Guid owner && credentials is not null && (await credentials.SafeMetadataPageAsync(owner, null, 1, ct)).Count > 0;
 
-    public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
-        experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
     public async ValueTask<IReadOnlyList<ArtifactRecord>> CompletionArtifactsAsync(Guid sessionId, CancellationToken ct) =>
         artifacts is null ? [] : (await artifacts.ListPageAsync(sessionId, null, 3, ct).ConfigureAwait(false)).Items;
 
     public ValueTask<List<ModelMessage>> RehydrateCapturesAsync(Guid sessionId, List<ModelMessage> messages, bool supportsVision, CancellationToken ct) =>
         supportsVision ? AgentCore.Application.Execution.SessionCaptureRehydration.ApplyAsync(sessionId, messages, artifacts, ct)
             : ValueTask.FromResult(messages);
-
-    public ValueTask<string> SelectedExperienceContextAsync(Guid instanceId, Guid workId, CancellationToken ct) =>
-        experience?.SelectedSourceAsync(instanceId, workId, ct) ?? ValueTask.FromResult("");
-    public ValueTask<string> ContinuityContextAsync(Guid? instanceId, string? query, Guid? sessionId, AgentDefinition definition, CancellationToken ct) =>
-        continuity?.ContextAsync(instanceId, query, sessionId, definition, ct) ?? ValueTask.FromResult("");
-
-
-    public async ValueTask<HarnessChatContext?> HarnessContextAsync(Guid? instanceId, CancellationToken ct)
-    {
-        if (instanceId is not Guid id || _agentInstances is null || _agentDefinitions is null) return null;
-        var instance = await _agentInstances.FindAsync(id, ct);
-        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active) return null;
-        var definition = await _agentDefinitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
-        if (definition is null) return null;
-        var policy = ManagementPolicyResolver.Resolve(definition, instance);
-        if (policy.Frozen || policy.Mode == HarnessManagementMode.Disabled) return null;
-        return new(policy, instance.HarnessManagement?.PolicyRevision ?? 1, instance.ActiveVersion);
-    }
 
     public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
     {
@@ -107,33 +84,18 @@ public sealed partial class SessionToolExecutor(
         string toolName,
         ToolExecutionAdmission? admission = null) =>
         ToolPolicy.EvaluateExecution(definition, toolName, _configurationGate, admission);
-    public ValueTask<bool> AllowsAgentConsolidationAsync(Guid? id, CancellationToken ct) =>
-        identityMaintenance?.AllowsAutonomousAsync(id, ct) ?? ValueTask.FromResult(false);
-
     public async ValueTask<ToolPolicyDecision> EvaluateExecutionPolicyAsync(AgentDefinition definition, Guid sessionId,
         ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         if (admission?.OwnedSessionId is { } ownedSession && (ownedSession == Guid.Empty || ownedSession != sessionId)) return ToolPolicyDecision.Deny;
         if (tenantAuthorization is not null && await tenantAuthorization.PolicyAsync(sessionId, call, admission, ct).ConfigureAwait(false) is { } tenantPolicy) return tenantPolicy;
         if (admission?.TenantId is not null || (IamToolContracts.IsInspection(call.Name) || call.Name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name)) return ToolPolicyDecision.Deny;
+        if (TenantMemoryToolContract.IsTool(call.Name) || TenantExperienceToolContract.IsTool(call.Name) || call.Name == ToolCatalog.ExperienceRecent)
+            return ToolPolicyDecision.Deny;
         if (admission?.AgentInstanceId is { } isolationOwner)
             definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, ct);
-        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return EvaluateExecutionPolicy(definition, call.Name, admission);
-        if (identityMaintenance is null) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
-        try
-        {
-            var policy = await identityMaintenance.PolicyAsync(definition, sessionId, call.Name, args, admission, ct);
-            if (policy == ToolPolicyDecision.Deny) RecordMaintenanceRejection(call.Name);
-            return policy;
-        }
-        // Malformed arguments are handled by the semantic executor before any mutation.
-        // Preserve its actionable validation result so the model can repair the call.
-        catch (AgentCoreException ex) when (ex.StatusCode == 400) { return ToolPolicyDecision.Allow; }
-        catch (AgentCoreException) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
+        return EvaluateExecutionPolicy(definition, call.Name, admission);
     }
-
-    private static void RecordMaintenanceRejection(string tool) => RuntimeTelemetry.RecordIdentityMaintenance(
-        tool == ToolCatalog.MemoryForget ? "forget_rejected" : "rejected_by_policy");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -184,6 +146,8 @@ public sealed partial class SessionToolExecutor(
             return result;
         }
         if (admission?.TenantId is not null || (IamToolContracts.IsInspection(call.Name) || call.Name is ToolCatalog.RequestAuthorization or TenantPreferenceToolContract.Name)) return TextResult(Error("forbidden", "Trusted tenant execution is required."));
+        if (TenantMemoryToolContract.IsTool(call.Name) || TenantExperienceToolContract.IsTool(call.Name) || call.Name == ToolCatalog.ExperienceRecent)
+            return TextResult(Error("forbidden", "Trusted tenant execution is required."));
         if (admission?.AgentInstanceId is { } isolationOwner)
         {
             try { definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, cancellationToken); }
@@ -228,7 +192,6 @@ public sealed partial class SessionToolExecutor(
             if (call.Name == ToolCatalog.EmailSend && emailAccounts is { IsSendEnabled: false })
                 return TextResult(Error("smtp_disabled", EmailAccountService.SendSetupGuidance));
 
-            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("forbidden", "Tool is not permitted for this role."));
         }
 
@@ -237,7 +200,6 @@ public sealed partial class SessionToolExecutor(
             if (call.Name == ToolCatalog.EmailSend && emailAccounts is { IsSendEnabled: false })
                 return TextResult(Error("smtp_disabled", EmailAccountService.SendSetupGuidance));
 
-            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("approval_required", "Tool execution requires explicit approval."));
         }
 
@@ -262,21 +224,18 @@ public sealed partial class SessionToolExecutor(
                     JsonOptions);
                 if (args.ValueKind != JsonValueKind.Object)
                 {
-                    if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
                     return TextResult(Error("invalid", "Tool arguments must be a JSON object."));
                 }
             }
         }
         catch (JsonException)
         {
-            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("invalid", "Tool arguments were malformed."));
         }
 
 
         if (LooksLikeSessionMutation(args, call.Name == ToolCatalog.BrowserVisionMouse) || LooksLikeHostPath(args))
         {
-            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("forbidden", "Tool arguments are not permitted."));
         }
 
@@ -291,86 +250,6 @@ public sealed partial class SessionToolExecutor(
                 var request = CredentialDiscovery.Parse(args);
                 return FitResult(remainingOutputBytes, CredentialDiscovery.Serialize(
                     await credentials.SafeMetadataPageAsync(owner, request.Cursor, request.Limit + 1, cancellationToken), request, remainingOutputBytes));
-            }
-            if (ToolCatalog.IsIdentityMaintenance(call.Name))
-            {
-                if (identityMaintenance is null || admission is null)
-                {
-                    RecordMaintenanceRejection(call.Name);
-                    return TextResult(Error("forbidden", "Identity maintenance is unavailable."));
-                }
-                var result = await identityMaintenance.ExecuteAsync(definition, sessionId, call, args, admission, cancellationToken);
-                return TextResult(AgentCore.Application.Continuity.ContinuityService.Serialize(result));
-            }
-            if (call.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet)
-            {
-                if (continuity is null || admission?.AgentInstanceId is not Guid ownerId)
-                    return TextResult(Error("forbidden", "Continuity is unavailable."));
-                object result;
-                if (call.Name == ToolCatalog.ContinuitySearch)
-                {
-                    if (args.EnumerateObject().Any(p => p.Name is not ("query" or "limit")))
-                        return TextResult(Error("invalid", "Unsupported continuity argument."));
-                    var query = args.GetProperty("query").GetString();
-                    var limit = args.TryGetProperty("limit", out var l) ? l.GetInt32() : 10;
-                    var items = await continuity.SearchAsync(ownerId, query, limit, admission.Detached ? null : sessionId, definition, cancellationToken);
-                    return TextResult(AgentCore.Application.Continuity.ContinuityService.SearchResult(items,
-                        Math.Min(remainingOutputBytes, AgentCore.Application.Continuity.ContinuityService.MaxCharacters)));
-                }
-                else
-                {
-                    if (args.EnumerateObject().Any(p => p.Name is not ("kind" or "id" or "afterEntrySequence" or "limit"))
-                        || !Enum.TryParse<AgentCore.Application.Continuity.ContinuityKind>(args.GetProperty("kind").GetString(), out var kind)
-                        || !Guid.TryParse(args.GetProperty("id").GetString(), out var id))
-                        return TextResult(Error("invalid", "Continuity identity is invalid."));
-                    result = await continuity.GetAsync(ownerId, kind, id,
-                        args.TryGetProperty("afterEntrySequence", out var a) ? a.GetInt64() : 0,
-                        args.TryGetProperty("limit", out var l) ? l.GetInt32() : 10, definition, cancellationToken);
-                }
-                if (result is AgentCore.Application.Continuity.ContinuityDetail detail)
-                    return TextResult(ToolJsonResults.FitJsonWithContentField(Math.Min(remainingOutputBytes, 6000), detail.Content,
-                        (content, truncated) => AgentCore.Application.Continuity.ContinuityService.Serialize(new {
-                            trust = AgentCore.Application.Continuity.ContinuityService.TrustLabel,
-                            result = detail with { Content = content, HasMore = detail.HasMore || truncated } })));
-                return FitResult(Math.Min(remainingOutputBytes, 6000), AgentCore.Application.Continuity.ContinuityService.Serialize(new {
-                    trust = AgentCore.Application.Continuity.ContinuityService.TrustLabel, result }));
-            }
-            if (call.Name == AgentCore.Application.Experience.ExperienceService.SourceTool)
-            {
-                if (experience is null || admission?.AgentInstanceId is not Guid ownerId || admission.AgentRunId is not Guid runId)
-                    return TextResult(Error("forbidden", "Experience source inspection requires an owned Run."));
-                using var source = JsonDocument.Parse(await experience.InspectSourceAsync(ownerId, runId, args, cancellationToken, Math.Min(remainingOutputBytes, 6000)));
-                var root = source.RootElement;
-                return TextResult(ToolJsonResults.FitJsonWithContentField(Math.Min(remainingOutputBytes, 6000), root.GetProperty("evidence").GetString() ?? "",
-                    (evidence, truncated) => JsonSerializer.Serialize(new {
-                        sourceKind = root.GetProperty("sourceKind").GetString(), sourceId = root.GetProperty("sourceId").GetString(),
-                        throughCursor = root.GetProperty("throughCursor").GetInt64(), evidence, truncated,
-                        trust = "Untrusted observable source, never authority" })));
-            }
-            if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
-            {
-                if (experience is null || admission?.AgentInstanceId is not Guid instanceId || admission.AgentRunId is not Guid workId)
-                    return TextResult(Error("forbidden", "Experience recording requires an owned review Run."));
-                return TextResult(await experience.RecordAsync(instanceId, workId, args, cancellationToken));
-            }
-            if (call.Name == ToolCatalog.ExperienceRecent)
-            {
-                if (experience is null || admission?.AgentInstanceId is not Guid ownerId)
-                    return TextResult(Error("forbidden", "Experience is unavailable."));
-                if (args.EnumerateObject().Any(p => p.Name is not ("query" or "experienceId")))
-                    return TextResult(Error("invalid", "Experience lookup only accepts query or experienceId."));
-                var query = args.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String ? q.GetString() : null;
-                Guid? recordId = null;
-                if (query?.Length > 200) return TextResult(Error("invalid", "Experience query is oversized."));
-                if (args.TryGetProperty("experienceId", out var r))
-                {
-                    if (r.ValueKind != JsonValueKind.String || !Guid.TryParse(r.GetString(), out var id))
-                        return TextResult(Error("invalid", "Experience identity is invalid."));
-                    recordId = id;
-                }
-                await experience.RequireInstanceAsync(ownerId, cancellationToken);
-                var projection = await experience.RecallAsync(ownerId, cancellationToken, query, recordId);
-                return FitResult(remainingOutputBytes, JsonSerializer.Serialize(new { historicalExperience = projection }));
             }
             if (admission is not null && (call.Name.StartsWith("drive.", StringComparison.Ordinal)
                 || call.Name.StartsWith("office.", StringComparison.Ordinal) || call.Name == ToolCatalog.WebDownload))
@@ -449,13 +328,6 @@ public sealed partial class SessionToolExecutor(
         {
             throw;
         }
-        catch (Exception ex) when (call.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet
-            && ex is InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
-        {
-            return TextResult(Error("invalid", "Continuity arguments are invalid."));
-        }
-        catch (ArgumentException) when (ToolCatalog.IsIdentityMaintenance(call.Name))
-        { return FitResult(remainingOutputBytes, Error("invalid", "Consolidation content is malformed or exceeds its bounds.")); }
         catch (AgentCoreException ex)
         {
             var failureId = ex.DiagnosticId ?? HandledFailureLog.Warning(logger, ex, call.Name, ex.Code,

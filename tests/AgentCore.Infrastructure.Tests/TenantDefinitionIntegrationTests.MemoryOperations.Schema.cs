@@ -29,6 +29,11 @@ public sealed partial class TenantDefinitionIntegrationTests
             Assert.True(await db.Set<TenantApprovalRecord>().AnyAsync(r => r.RequestId == request.RequestId));
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantLearnedMemories SET SourceMemoryIdsJson='[]', Revision=Revision+1, Status=1 WHERE MemoryId={s.Sources[0].MemoryId}"));
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.MemoryOperation.UserPrincipalId',NULL) WHERE RequestId={request.RequestId}"));
+            // Safe later Down steps can commit before the retained-source guard refuses.
+            // Restore all current mappings before reopening the receipt/approval projection.
+            await db.GetService<IMigrator>().MigrateAsync();
+            Assert.Equal(db.Database.GetMigrations(), await db.Database.GetAppliedMigrationsAsync());
+            Assert.False(db.Database.HasPendingModelChanges());
         }
         var reloaded = MemoryServices(f, new SqliteIamStore(f.Contexts!, f.Content));
         var view = await reloaded.Approvals.ReadViewAsync(s.Owner.Tenant, request.RequestId, new(s.Owner.Human.AccountId, s.Owner.Human.AuthenticationSessionId, s.Owner.Human.PrincipalId));
