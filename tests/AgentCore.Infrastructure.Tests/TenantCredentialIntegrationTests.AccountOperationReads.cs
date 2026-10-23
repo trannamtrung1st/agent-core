@@ -93,7 +93,7 @@ public sealed partial class TenantCredentialIntegrationTests
         if (f.Contexts is not null)
         {
             await using var db = f.Contexts.CreateDbContext();
-            Assert.Equal(19, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
+            Assert.Equal(2, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_TenantApprovals_AccountOperationRead_%'").SingleAsync());
             if (mode is "schema-source" or "schema-native")
             {
                 var columns = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('TenantApprovalRequests')").ToArrayAsync();
@@ -106,7 +106,12 @@ public sealed partial class TenantCredentialIntegrationTests
                 Assert.Contains(mode == "schema-source" ? "canonical operation read source required" : "invalid native operation references", failure.Message);
             }
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_remove(PayloadJson,'$.Operation.AccountRead.Source') WHERE RequestId={request.RequestId}"));
+            var guardsBeforeVeto = await AccountConsentGuards(db);
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020160000_TenantAccountActionReview"));
+            // Earlier empty migrations may already be down; restore the current model after the populated-data veto.
+            await db.Database.MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
+            Assert.Equal(guardsBeforeVeto, await AccountConsentGuards(db));
         }
         if (mode == "forged-source")
         {
@@ -132,11 +137,23 @@ public sealed partial class TenantCredentialIntegrationTests
         Assert.Equal(originalReceipt.Outcome.ToString(), operation.GetProperty("recordedOutcome").GetString());
         Assert.False(operation.GetProperty("replayAllowed").GetBoolean());
         var items = operation.GetProperty("items").EnumerateArray().ToArray();
+        if (original.Operation.AccountAction!.ToolName == ToolCatalog.DriveTrashBatch)
+        {
+            using var manifest = JsonDocument.Parse(original.Operation.AccountAction.ArgumentsJson);
+            Assert.Equal(manifest.RootElement.GetProperty("files").EnumerateArray().Select(i => i.GetProperty("fileId").GetString()), items.Select(i => i.GetProperty("fileId").GetString()));
+        }
         if (original.Operation.AccountAction!.ToolName == ToolCatalog.DriveDownload) Assert.Empty(items);
         else if (mode == "missing" || originalReceipt.Outcome == TenantOperationOutcome.Denied)
             Assert.All(items, i => Assert.Equal("no_retained_evidence", i.GetProperty("evidence").GetString()));
         else if (mode == "unconfirmed") Assert.All(items, i => Assert.Equal("indeterminate", i.GetProperty("status").GetString()));
         else if (mode == "native-trashed") Assert.All(items, i => { Assert.Equal("failed", i.GetProperty("status").GetString()); Assert.Equal("current_remote_metadata:verified_target_trashed", i.GetProperty("evidence").GetString()); });
+        else if (mode is "batch-unknown-before" or "batch-unknown-after")
+        {
+            Assert.Equal("verified", items[0].GetProperty("status").GetString());
+            Assert.Equal("retained_verification", items[0].GetProperty("evidence").GetString());
+            Assert.Equal(mode == "batch-unknown-after" ? "verified" : "indeterminate", items[1].GetProperty("status").GetString());
+            Assert.All(items.Skip(2), i => { Assert.Equal("unknown", i.GetProperty("status").GetString()); Assert.Equal("no_retained_evidence", i.GetProperty("evidence").GetString()); });
+        }
         else if (mode == "uncertain")
         {
             Assert.Equal("current_remote_metadata", items[0].GetProperty("evidence").GetString());
@@ -145,7 +162,7 @@ public sealed partial class TenantCredentialIntegrationTests
                 Assert.All(items.Skip(1), i => Assert.Equal("unknown", i.GetProperty("status").GetString()));
         }
         else if (original.Operation.AccountAction.ToolName == ToolCatalog.DriveTrashBatch && originalReceipt.Outcome == TenantOperationOutcome.Indeterminate)
-            Assert.Equal(new[] { "verified", "not_applied", "unknown" }, items.Select(i => i.GetProperty("status").GetString()).ToArray());
+            Assert.Equal(items.Select((_, i) => i == 0 ? "verified" : i == 1 ? "not_applied" : "unknown"), items.Select(i => i.GetProperty("status").GetString()));
         else Assert.All(items, i => Assert.Equal("retained_verification", i.GetProperty("evidence").GetString()));
         Assert.DoesNotContain("ProtectedUploadSession", result.RootElement.GetRawText()); Assert.DoesNotContain("resumeAllowed", result.RootElement.GetRawText());
         Assert.Equal(count, writes.Count);

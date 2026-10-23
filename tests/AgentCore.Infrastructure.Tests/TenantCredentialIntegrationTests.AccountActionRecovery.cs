@@ -56,7 +56,12 @@ public sealed partial class TenantCredentialIntegrationTests
         if (sqlite)
         {
             await using var db = f.Contexts!.CreateDbContext();
+            var guardsBeforeVeto = await AccountConsentGuards(db);
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020150000_TenantAccountReadReview"));
+            // Earlier empty migrations may already be down; restore the current model after the populated-data veto.
+            await db.Database.MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
+            Assert.Equal(guardsBeforeVeto, await AccountConsentGuards(db));
         }
     }
     [Fact]
@@ -64,10 +69,11 @@ public sealed partial class TenantCredentialIntegrationTests
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true);
         await using var db = f.Contexts!.CreateDbContext(); var migrator = db.GetService<IMigrator>();
+        var currentGuards = await AccountConsentGuards(db);
         await migrator.MigrateAsync("20261020150000_TenantAccountReadReview");
         Assert.Equal(15, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
         await migrator.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(19, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
+        Assert.Equal(currentGuards, await AccountConsentGuards(db));
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Account_password_read_consent_accepts_epoch_zero_without_enabling_provider_io(bool sqlite)
@@ -88,7 +94,12 @@ public sealed partial class TenantCredentialIntegrationTests
         if (sqlite)
         {
             await using var db = f.Contexts!.CreateDbContext();
+            var guardsBeforeVeto = await AccountConsentGuards(db);
             await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020150000_TenantAccountReadReview"));
+            // Earlier empty migrations may already be down; restore the current model after the populated-data veto.
+            await db.Database.MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
+            Assert.Equal(guardsBeforeVeto, await AccountConsentGuards(db));
         }
     }
 

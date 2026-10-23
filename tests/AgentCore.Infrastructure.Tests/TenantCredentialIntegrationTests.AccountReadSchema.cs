@@ -25,12 +25,17 @@ public sealed partial class TenantCredentialIntegrationTests
         await using (var db = f.Contexts!.CreateDbContext())
         {
             Assert.False(db.Database.HasPendingModelChanges());
-            Assert.Equal(19, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
+            Assert.Equal(2, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_TenantApprovals_AccountRead_%'").SingleAsync());
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson = json_set(PayloadJson, '$.Operation.AccountRead.ArgumentsJson', '{{}}') WHERE RequestId={request.RequestId}"));
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET Kind=1, PayloadJson=json_set(PayloadJson,'$.Kind',1) WHERE RequestId={request.RequestId}"));
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Snapshot.Credential.DisplayName','Changed account') WHERE RequestId={request.RequestId}"));
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson,'$.Operation.CanonicalActionJson','{{}}') WHERE RequestId={request.RequestId}"));
+            var guardsBeforeVeto = await AccountConsentGuards(db);
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020140000_TenantReportSourceReadReview"));
+            // Earlier empty migrations may already be down; restore the current model after the populated-data veto.
+            await db.Database.MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
+            Assert.Equal(guardsBeforeVeto, await AccountConsentGuards(db));
         }
         // Immutable consent still permits its normal status/revision decision after rejected tampering.
         var view = await approvals.ReadViewAsync(s.Tenant, request.RequestId, s.Owner);
@@ -42,9 +47,13 @@ public sealed partial class TenantCredentialIntegrationTests
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true);
         await using var db = f.Contexts!.CreateDbContext(); var migrations = db.GetService<IMigrator>();
+        var currentGuards = await AccountConsentGuards(db);
         await migrations.MigrateAsync("20261020140000_TenantReportSourceReadReview");
         Assert.Equal(13, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
         await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(19, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%')").SingleAsync());
+        Assert.Equal(currentGuards, await AccountConsentGuards(db));
     }
+    private static Task<string[]> AccountConsentGuards(AgentCore.Infrastructure.Persistence.AgentCoreDbContext db) =>
+        db.Database.SqlQueryRaw<string>("SELECT name || ':' || sql AS Value FROM sqlite_master WHERE type='trigger' AND (name LIKE 'TR_TenantApprovals_%' OR name LIKE 'TR_TenantReceipts_%') ORDER BY name").ToArrayAsync();
+
 }

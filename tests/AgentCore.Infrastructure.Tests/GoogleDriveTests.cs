@@ -38,6 +38,33 @@ public sealed partial class GoogleDriveTests
         Assert.Equal(1, f.Transport.UploadPuts); Assert.DoesNotContain("opaque", (await f.Operations.GetAsync(f.Owner, op.OperationId, default))!.ProtectedUploadSession);
         using var canceled = new CancellationTokenSource(); canceled.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => p.GetAsync("file-1", canceled.Token).AsTask());
     }
+    [Theory]
+    [InlineData("text/plain; charset=utf-8")]
+    [InlineData("text/csv; charset=utf-8")]
+    [InlineData("application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+    [InlineData("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
+    public async Task Upload_protocol_normalizes_metadata_MIME_without_altering_original_binary_bytes(string mime)
+    {
+        using var f = new Fixture(); var credential = Guid.NewGuid(); var provider = f.Provider(credential);
+        byte[] original = [0, 255, 13, 10, 42, 200]; var starts = 0; var puts = 0;
+        f.Transport.UploadHandler = async (request, ct) => {
+            if (request.Method == HttpMethod.Post)
+            {
+                starts++; using var metadata = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+                Assert.Equal(System.Net.Http.Headers.MediaTypeHeaderValue.Parse(mime).MediaType, metadata.RootElement.GetProperty("mimeType").GetString());
+                Assert.Equal(mime, Assert.Single(request.Headers.GetValues("X-Upload-Content-Type")));
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") };
+                response.Headers.Location = new(f.Transport.UploadLocation); return response;
+            }
+            Assert.Equal(HttpMethod.Put, request.Method); puts++;
+            Assert.Equal(original, await request.Content!.ReadAsByteArrayAsync(ct)); Assert.Equal(mime, request.Content.Headers.ContentType!.ToString());
+            return new(HttpStatusCode.OK) { Content = new StringContent("{}") };
+        };
+        var op = new DriveOperation(Guid.NewGuid(), f.Owner, credential, "hash", 1, "drive.upload", "file-1", "{}", "Dispatched", 1, DateTimeOffset.UtcNow);
+        await f.Operations.ClaimAsync(op, default);
+        await provider.UploadAsync("file-1", "original.bin", "root", mime, original, op, default);
+        Assert.Equal(1, starts); Assert.Equal(1, puts);
+    }
     // A native-protocol fixture, not an account/OAuth authority owner. The
     // canonical tenant suites separately qualify proof, token and IAM handling.
     private sealed class Fixture : IDisposable

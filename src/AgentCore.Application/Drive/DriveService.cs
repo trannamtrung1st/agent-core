@@ -111,9 +111,8 @@ public sealed partial class DriveService(IDriveOperationStore operations, TimePr
         var known = await operations.GetAsync(access.InstanceId, operationId, ct);
         if (known is not null && (known.CredentialId != access.Credential.CredentialId || known.EffectHash != hash))
             throw AgentCoreErrors.Conflict("Drive operation identity is already claimed.");
-        // Exact identity takes precedence over coalescing a later matching effect.
-        // A terminal ID must never act as a different pending operation.
-        var previous = known ?? (access.TenantAuthority is null ? await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, ct) : null);
+        // Canonical tenant effects use only their approved exact operation ID.
+        var previous = known;
         if (previous is { State: "Planned" } && previous.AuthEpoch != expectedEpoch)
         { await operations.UpdateAsync(previous with { State = "Rejected", Revision = previous.Revision + 1 }, previous.Revision, ct); previous = null; }
         var op = previous ?? await operations.ClaimAsync(new(operationId, access.InstanceId, access.Credential.CredentialId, hash, expectedEpoch, tool, fileId ?? await access.Provider.GenerateIdAsync(ct), snapshot, "Planned", 1, time.GetUtcNow()), ct);
@@ -157,8 +156,7 @@ public sealed partial class DriveService(IDriveOperationStore operations, TimePr
                 case "drive.trash": await access.Provider.TrashAsync(op.FileId, ct); break;
                 default: throw Failure("drive_invalid", "Unsupported Drive effect.");
             }
-            op = (access.TenantAuthority is null ? await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, ct)
-                : await operations.GetAsync(access.InstanceId, op.OperationId, ct)) ?? op;
+            op = await operations.GetAsync(access.InstanceId, op.OperationId, ct) ?? op;
             return await Reconcile(access, op, effect, bytes, ct);
         }
         catch (DriveIndeterminateException) { throw; }
@@ -174,8 +172,7 @@ public sealed partial class DriveService(IDriveOperationStore operations, TimePr
         catch (Exception ex)
         {
             logger?.LogWarning("Drive operation uncertain. OperationId {OperationId} Tool {Tool} Stage {Stage} Code {Code}", op.OperationId, tool, "dispatch", (ex as AgentCoreException)?.Code ?? "drive_provider_unavailable");
-            var current = (access.TenantAuthority is null ? await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, CancellationToken.None)
-                : await operations.GetAsync(access.InstanceId, op.OperationId, CancellationToken.None)) ?? op;
+            var current = await operations.GetAsync(access.InstanceId, op.OperationId, CancellationToken.None) ?? op;
             if (current.State != "Indeterminate") await operations.UpdateAsync(current with { State = "Indeterminate", Revision = current.Revision + 1 }, current.Revision, CancellationToken.None);
             throw new DriveIndeterminateException(op.OperationId, op.FileId, (ex as AgentCoreException)?.Code, CanResume(access, current));
         }
