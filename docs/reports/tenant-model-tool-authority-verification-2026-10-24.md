@@ -70,3 +70,7 @@ Commands/evidence:
 - Infrastructure `dotnet test ... --no-build --no-restore` with affected-file method selectors plus the four new claim-boundary methods; exact selection `/private/tmp/tenant-tool-lease-regression-filter.txt`, collected set `/private/tmp/tenant-tool-lease-regression-discovery.log`, final results `/private/tmp/tenant-tool-lease-regression.log`.
 - API `dotnet test ... --no-build --no-restore --filter 'FullyQualifiedName~Actual_tenant_model_IAM_tools_keep_current_claims|FullyQualifiedName~Tenant_wait_keeps_one_Run|FullyQualifiedName~Independent_Automation_wait_preserves_same_Run'`; `/private/tmp/tenant-tool-lease-api-final.log`.
 - Pre-fix expiry reproduction `/private/tmp/tenant-tool-lease-repro.log`.
+
+## Subsequent application-message qualification
+
+The application-message gap recorded above describes this checkpoint's original state. It is superseded by the [tenant application-message module](tenant-application-messages-verification-2026-10-24.md), with 91 distinct focused cases passing. The registered set remains 150; the current dispatch owner is the existing Runtime mailbox behind tenant conversation/live-claim/current-source checks. Other remaining acceptance items above stay open.

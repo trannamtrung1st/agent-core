@@ -197,6 +197,11 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ExecutionContext is { } message && descriptor.Name == ToolCatalog.AppMessageSend)
+            return context is { ModelSupportsTools: true, DetachedExecution: false, IntermediateMessagingAllowed: true, ConfigurationContinuationTarget: null,
+                    AgentInstanceId: not null, OwnedSessionId: not null }
+                && context.Trigger.Kind == TriggerKind.UserTurn && message.SessionId == context.OwnedSessionId
+                && ApplicationMessageToolPolicy.AllowsConversation(message, context.OutputContract, context.RunTaskIntent);
         if (context?.ExecutionContext is { } discovery && descriptor.Name == ToolCatalog.CapabilitiesLoad)
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && discovery.SessionId == context.OwnedSessionId && definition.Environment?.Capabilities is not null && TenantTaskExecutionContract.Allows(context);

@@ -7,6 +7,15 @@ Canonical `SessionToolExecutor` is a tenant dispatch facade. It requires actual 
 `IOwnerCapabilityService`, `IOwnerCapabilityStore`, `IssuedOwnerCapability` and their implementations are removed. No issuer, validator or store is registered. Public owner header/response DTOs and the old `AttachPayload` are removed from Contracts. Account cookie/server-session authentication and exact tenant admission remain the supported boundary. The only old-header test fixture is a fixed adversarial value; it has no authority or issuance path. Earlier owner-capability descriptions in this document are historical implementation records, not current interfaces. [Measured retirement](reports/owner-credential-retirement-verification-2026-10-21.md).
 
 
+## Tenant application progress messages
+
+`app.message.send` retains the existing Session Runtime mailbox owner. Offering and execution require an actual tenant human conversation (UserMessage or its human ApprovalContinuation, ConversationResponse output), current live claim, substantive work in an earlier model generation and no configuration-continuation target. Detached work, Automation tasks and completion reports use their existing output contracts. A caller-supplied intermediate-work flag cannot make the generic executor append a notice.
+
+Before deduplication or admission, the mailbox repeats current Run/executor/requester and retained-source authorization through the existing Run authority owner. Notice text can quote private evidence just like a final reply. Ordinary mutable Workspace reads retain their existing observation semantics and current read checks; exact Composer/Resource sources retain their existing source-continuity rules. No new file-version authority scheme is introduced.
+
+Core chooses the current Session and response. Existing text-only validation, 2000-character message limit, twelve-message/8000-character execution budget, deduplication, no speech/heard text and omission from future prompt/compaction/completion context remain unchanged. Cancellation/steering cannot append a late notice or erase already admitted ones. These are conversation outputs with no new permission, approval kind, destination selector or wire record. The [scoped verification](reports/tenant-application-messages-verification-2026-10-24.md) owns actual evidence and limits.
+
+
 ## Model-tool live claim boundary
 
 `TenantToolAuthorization` uses the injected `TimeProvider` and current persisted Run claim for every tool family. Actual tenant Session ownership, a Running uncancelled Run, exact nonempty generation and an unexpired current deadline precede family eligibility, argument parsing and dispatch inside that adapter. IAM inspection repeats this check before returning its result. Runtime mailbox commands cannot borrow the generic IAM parser. Existing family capability, current IAM, policy, source/consent and effect-transaction checks remain independent. The [complete registered tool checkpoint](reports/tenant-model-tool-authority-verification-2026-10-24.md) records scope and outstanding parity work.

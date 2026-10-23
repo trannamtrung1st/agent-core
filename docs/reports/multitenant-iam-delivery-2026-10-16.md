@@ -584,3 +584,9 @@ This adds Phase 4/7 progress. Runtime refresh/use and effect permission checks, 
 ## Common model-tool claim fence
 
 The [complete 150-name tool checkpoint](tenant-model-tool-authority-verification-2026-10-24.md) maps canonical dispatch owners and records the shared live-claim fix, with 966 distinct focused cases passing and a warning-free solution build. The original goal remains active. This closes no final store/effect matrix or proposal-wide acceptance gate; registered application-message tenant parity and safe historical Harness serialization reconciliation remain open.
+
+## Tenant application progress messages
+
+The existing application-message feature now has [canonical tenant qualification](tenant-application-messages-verification-2026-10-24.md): actual human conversation eligibility, previous-generation substantive-work gating, current Run/source checks before mailbox admission, Runtime-only writes, existing budgets/dedupe, cancellation/steering, future-prompt exclusion and SQLite reopen. **91 distinct focused cases passed** and the solution build passed without warnings or errors. Obsolete positive tool-effect fixtures were replaced with actual tenant integration coverage, preserving local rules and unowned refusal.
+
+This supersedes the application-message parity gap in the preceding tool checkpoint only. Ordinary mutable Workspace observations retain their incumbent current-read semantics; exact Composer source invalidation is tested separately. No permission/default, schema, migration, wire or frontend source changed. The full original goal remains active; historical Harness/schema reconciliation, complete permission/store/effect closure and final security/isolation/design acceptance remain open.

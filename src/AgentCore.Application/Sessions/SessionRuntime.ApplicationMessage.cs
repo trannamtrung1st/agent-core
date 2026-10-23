@@ -3,6 +3,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Sessions;
@@ -108,6 +109,15 @@ public sealed partial class SessionRuntime
                 ApplicationMessageAdmission.Error("invalid", "Application message effect identity is too long."),
                 "denied");
         }
+
+        if (_runAuthority is null || !ApplicationMessageToolPolicy.AllowsTenantRun(current)
+            || !_intermediateMessagingAllowed || ContinuationTarget(current) is not null)
+            return ApplicationMessageMailboxResult.Failed(
+                ApplicationMessageAdmission.Error("forbidden", "Application messages require substantive work in the current tenant conversation."), "denied");
+        // A notice can quote retained private observations just like a final reply.
+        // Recheck their current authority before either dedupe or visible admission.
+        await RequireProviderRunAuthorityAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false);
+        if (ApplicationMessageFence(input) is { } retired) return retired;
 
         var existing = _snapshot.Entries
             .Where(entry => entry.Role == ConversationRole.ApplicationMessage && entry.ResponseId == input.ResponseId)

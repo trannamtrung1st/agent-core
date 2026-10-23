@@ -41,6 +41,14 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                 return new(true, false, reference, "tenant_runtime_unavailable");
             if (claim.LeaseExpiresAtUtc <= time.GetUtcNow())
                 return new(true, false, reference, "execution_claim_expired");
+            if (tool == ToolCatalog.AppMessageSend)
+            {
+                var allowedMessage = ApplicationMessageToolPolicy.AllowsTenantRun(run)
+                    && admission is { Detached: false, TriggerKind: TriggerKind.UserTurn, IntermediateMessagingAllowed: true,
+                        ConfigurationContinuationTarget: null }
+                    && TenantConfigurationContinuationRules.Target(run) is null;
+                return new(true, allowedMessage, reference, allowedMessage ? "allowed" : "application_message_unavailable");
+            }
             if (TenantManagementMutationContract.IsTool(tool))
             {
                 var allowedChange = TenantManagementReadContract.Allows(run);

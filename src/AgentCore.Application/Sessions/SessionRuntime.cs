@@ -2476,7 +2476,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var tools = ApplicationMessageToolOffer.Apply(
             authorizedTools,
-            _intermediateMessagingAllowed && ContinuationTarget(_boundAgentRun) is null,
+            _intermediateMessagingAllowed && _boundAgentRun is { } messagingRun
+                && ApplicationMessageToolPolicy.AllowsTenantRun(messagingRun) && ContinuationTarget(messagingRun) is null,
             ApplicationMessageBudgetFor(request.ResponseId),
             ExecutionDefinition,
             trigger,
