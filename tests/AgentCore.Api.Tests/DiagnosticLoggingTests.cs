@@ -33,7 +33,7 @@ public sealed class DiagnosticLoggingTests
     }
 
     [Fact]
-    public async Task Hosted_passes_log_the_exception_and_one_diagnostic_id()
+    public async Task Hosted_passes_log_content_free_cause_evidence_and_one_diagnostic_id()
     {
         await AssertPassAsync<TriggerSchedulerHostedService>(
             "Trigger scheduler pass failed.",
@@ -88,7 +88,9 @@ public sealed class DiagnosticLoggingTests
 
         var entry = Assert.Single(logs.Entries);
         Assert.Equal(LogLevel.Warning, entry.Level);
-        Assert.Same(failure, entry.Exception);
+        Assert.NotSame(failure, entry.Exception);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, entry.Exception!.Message);
+        Assert.DoesNotContain("hosted-secret", entry.Exception.ToString(), StringComparison.Ordinal);
         Assert.Equal(DiagnosticId, entry.Properties["DiagnosticId"]);
         Assert.Equal(activity.TraceId.ToHexString(), entry.Properties["TraceId"]);
         Assert.Contains(DiagnosticId.ToString(), entry.Message, StringComparison.Ordinal);

@@ -920,7 +920,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
                     catch (Exception ex) when (brain.Trigger.Kind != TriggerKind.UserTurn && ex is not OperationCanceledException)
                     {
-                        _logger.LogError(ex, "Proactive brain handling failed for session {SessionId}", SessionId);
+                        LogUnexpectedRuntimeFailure(ex, "Proactive brain handling failed.");
                         await RecoverProactiveHandleFailureAsync(brain, cancellationToken).ConfigureAwait(false);
                     }
                     finally
@@ -1104,7 +1104,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
+            LogUnexpectedRuntimeFailure(ex, "Mailbox processing failed.");
             if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or RenameReceived or SpeechLocaleReceived or ModelSelectionReceived or DetachReceived)
             {
                 CompleteInputWaiters(input, false);
@@ -2144,7 +2144,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Attachment processing failed for {SessionId}", SessionId);
+                    LogUnexpectedRuntimeFailure(ex, "Attachment processing failed.");
                     results = [];
                     failed = true;
                 }
@@ -4643,6 +4643,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             diagnosticId,
             message,
             new DiagnosticContext(
+                TenantId: _runtimeOwner?.TenantId,
+                ActorPrincipalId: _runtimeOwner?.ExecutorPrincipalId,
                 CorrelationId: CorrelationOrNull(context),
                 SessionId: SessionId,
                 ResponseId: responseId,
@@ -4653,11 +4655,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 FailureReason: failureReason,
                 ProviderResponseChannel: providerResponseChannel));
 
+    private void LogUnexpectedRuntimeFailure(Exception exception, string message)
+    {
+        if (!_logger.IsEnabled(LogLevel.Error)) return;
+        DiagnosticLog.Error(_logger, exception, _diagnostics.NewId(), message,
+            new(SessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId,
+                TenantId: _runtimeOwner?.TenantId, ActorPrincipalId: _runtimeOwner?.ExecutorPrincipalId,
+                ErrorCategory: "runtime", ErrorCode: "unexpected"));
+    }
+
     private void LogHandledRuntimeFailure(Exception exception, string operation, string code)
     {
         if (exception is OperationCanceledException) return;
         HandledFailureLog.Warning(_logger, exception, operation, code,
-            new DiagnosticContext(SessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId), diagnostics: _diagnostics);
+            new DiagnosticContext(SessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId,
+                TenantId: _runtimeOwner?.TenantId, ActorPrincipalId: _runtimeOwner?.ExecutorPrincipalId), diagnostics: _diagnostics);
     }
 
     private static Guid? CorrelationOrNull(EventContext context) =>

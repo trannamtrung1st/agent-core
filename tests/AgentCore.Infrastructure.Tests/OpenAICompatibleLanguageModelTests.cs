@@ -1463,13 +1463,13 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
-    public async Task Rejected_follow_up_logs_sanitized_provider_reason_and_request_telemetry()
+    public async Task Rejected_follow_up_logs_only_classified_provider_reason_and_request_telemetry()
     {
         var png = "img"u8.ToArray();
         var handler = new ErrorBodyHandler(
             HttpStatusCode.BadRequest,
             """
-            {"error":{"message":"invalid message sequence data:image/png;base64,QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo= bearer sk-live-secret user@example.com","code":"invalid_request_error","type":"invalid_request_error"}}
+            {"error":{"message":"invalid message sequence private-file-body short-secret-value data:image/png;base64,QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo= bearer sk-live-secret user@example.com","code":"invalid_request_error","type":"invalid_request_error"}}
             """);
         var logger = new ListLogger();
         var model = new OpenAICompatibleLanguageModel(
@@ -1506,12 +1506,11 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Equal("Provider rejected follow-up request (400).", failed.Failure.SafeMessage);
         Assert.DoesNotContain("QUJD", failed.Failure.SafeMessage, StringComparison.Ordinal);
         var logged = Assert.Single(logger.Messages);
-        Assert.Contains("invalid message sequence", logged, StringComparison.Ordinal);
+        Assert.Contains("invalid_message_sequence", logged, StringComparison.Ordinal);
         Assert.Contains("openai/gpt-4o-mini-2024-07-18", logged, StringComparison.Ordinal);
         Assert.Contains("follow-up", logged, StringComparison.Ordinal);
-        Assert.Contains("[image]", logged, StringComparison.Ordinal);
-        Assert.Contains("[secret]", logged, StringComparison.Ordinal);
-        Assert.Contains("[email]", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-file-body", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("short-secret-value", logged, StringComparison.Ordinal);
         Assert.DoesNotContain("QUJD", logged, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-live-secret", logged, StringComparison.Ordinal);
         Assert.DoesNotContain("user@example.com", logged, StringComparison.Ordinal);

@@ -20,7 +20,9 @@ public readonly record struct DiagnosticContext(
     string? FailureReason = null,
     string? ProviderResponseChannel = null,
     string? Operation = null,
-    Guid? CredentialId = null)
+    Guid? CredentialId = null,
+    Guid? TenantId = null,
+    Guid? ActorPrincipalId = null)
 {
     public IReadOnlyList<KeyValuePair<string, object?>> ToFields(Guid diagnosticId, string? traceId)
     {
@@ -28,6 +30,8 @@ public readonly record struct DiagnosticContext(
         {
             new("DiagnosticId", diagnosticId)
         };
+        AddGuid(items, "TenantId", TenantId);
+        AddGuid(items, "ActorPrincipalId", ActorPrincipalId);
         AddGuid(items, "CorrelationId", CorrelationId);
         AddText(items, "TraceId", traceId);
         AddGuid(items, "SessionId", SessionId);
@@ -99,11 +103,13 @@ public static class DiagnosticLog
     {
         ArgumentNullException.ThrowIfNull(logger);
         MarkActivity(context);
+        if (!logger.IsEnabled(level)) return;
         IReadOnlyList<KeyValuePair<string, object?>> fields = diagnosticId == Guid.Empty
             ? []
             : context.ToFields(diagnosticId, CurrentTraceId());
         var record = DiagnosticLogRecord.Create(SafeMessage(message), fields);
-        logger.Log(level, default, record, exception, static (state, _) => state.ToString());
+        logger.Log(level, default, record, exception is null ? null : DiagnosticExceptionSnapshot.Capture(exception),
+            static (state, _) => state.ToString());
     }
 
     internal static void MarkActivity(DiagnosticContext context)

@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Http;
@@ -887,7 +886,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                     phase,
                     diagnostic.Code,
                     diagnostic.Type,
-                    diagnostic.Message);
+                    diagnostic.Reason);
             }
             else
             {
@@ -992,65 +991,10 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
     private static ProviderErrorDiagnostic ParseProviderError(ReadOnlyMemory<byte> body)
     {
         var parsed = HttpErrorDiagnostics.Parse(body);
-        if (parsed.State != "parsed") return ProviderErrorDiagnostic.Empty;
-        using var document = JsonDocument.Parse(body, new JsonDocumentOptions { MaxDepth = 16 });
-        if (!document.RootElement.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
-            return ProviderErrorDiagnostic.Empty;
-        return new ProviderErrorDiagnostic(SanitizeProviderText(ReadScalar(error, "message"), 240), parsed.Code, parsed.Type);
+        return parsed.State == "parsed" ? new(parsed.Reason, parsed.Code, parsed.Type) : ProviderErrorDiagnostic.Empty;
     }
 
-    private static string? ReadScalar(JsonElement element, string name)
-    {
-        if (!element.TryGetProperty(name, out var value))
-        {
-            return null;
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.String => value.GetString(),
-            JsonValueKind.Number => value.GetRawText(),
-            _ => null
-        };
-    }
-
-    private static string SanitizeProviderText(string? value, int maxLength)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        var sanitized = DataUrlPattern.Replace(value, "[image]");
-        sanitized = BearerPattern.Replace(sanitized, "[secret]");
-        sanitized = SecretKeyPattern.Replace(sanitized, "[secret]");
-        sanitized = EmailPattern.Replace(sanitized, "[email]");
-        sanitized = LongTokenPattern.Replace(sanitized, "[redacted]");
-        sanitized = sanitized.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
-        return sanitized.Length <= maxLength ? sanitized : sanitized[..maxLength];
-    }
-
-    private static readonly Regex DataUrlPattern = new(
-        @"data:[^\s""]{0,120};base64,[A-Za-z0-9+/=]+",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex BearerPattern = new(
-        @"bearer\s+\S+",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex SecretKeyPattern = new(
-        @"sk-[A-Za-z0-9_\-]+",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex EmailPattern = new(
-        @"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex LongTokenPattern = new(
-        @"[A-Za-z0-9+/=]{40,}",
-        RegexOptions.Compiled);
-
-    private readonly record struct ProviderErrorDiagnostic(string Message, string Code, string Type)
+    private readonly record struct ProviderErrorDiagnostic(string Reason, string Code, string Type)
     {
         public static ProviderErrorDiagnostic Empty { get; } = new(string.Empty, string.Empty, string.Empty);
     }

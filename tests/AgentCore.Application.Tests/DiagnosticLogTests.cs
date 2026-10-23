@@ -11,7 +11,7 @@ public sealed class DiagnosticLogTests
     private static readonly Guid SessionId = Guid.Parse("019944af-00d7-7000-8000-0000000000a1");
 
     [Fact]
-    public void Diagnosed_failure_logs_the_exception_and_allowlisted_fields_only()
+    public void Diagnosed_failure_logs_content_free_exception_evidence_and_allowlisted_fields_only()
     {
         var failure = new InvalidOperationException("api_key=log-secret");
         var logs = new DiagnosticLogCapture<DiagnosticLogTests>();
@@ -33,7 +33,10 @@ public sealed class DiagnosticLogTests
 
         var entry = Assert.Single(logs.Entries);
         Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Warning, entry.Level);
-        Assert.Same(failure, entry.Exception);
+        Assert.NotSame(failure, entry.Exception);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, entry.Exception!.Message);
+        Assert.DoesNotContain("api_key", entry.Exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("log-secret", entry.Exception.ToString(), StringComparison.Ordinal);
         Assert.Equal(DiagnosticId, entry.Properties["DiagnosticId"]);
         Assert.Equal(CorrelationId, entry.Properties["CorrelationId"]);
         Assert.Equal(SessionId, entry.Properties["SessionId"]);
@@ -92,5 +95,27 @@ public sealed class DiagnosticLogTests
         var entry = Assert.Single(logs.Entries);
         Assert.False(entry.Properties.ContainsKey("TraceId"));
         Assert.DoesNotContain("hidden", entry.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Untrusted_exception_renderers_and_stack_overrides_cannot_inject_payloads()
+    {
+        var logs = new DiagnosticLogCapture<DiagnosticLogTests>();
+        var tenant = Guid.NewGuid(); var actor = Guid.NewGuid();
+        DiagnosticLog.Error(logs, new HostileException(), DiagnosticId, "Execution failed.",
+            new(TenantId: tenant, ActorPrincipalId: actor));
+        var entry = Assert.Single(logs.Entries);
+        Assert.Equal(tenant, entry.Properties["TenantId"]);
+        Assert.Equal(actor, entry.Properties["ActorPrincipalId"]);
+        Assert.Contains(nameof(HostileException), entry.Exception!.ToString());
+        Assert.DoesNotContain("private", entry.Exception.ToString());
+        Assert.DoesNotContain("secret", entry.Exception.ToString());
+    }
+
+    private sealed class HostileException : Exception
+    {
+        public override string Message => throw new InvalidOperationException("private-message-secret");
+        public override string? StackTrace => throw new InvalidOperationException("private-stack-secret");
+        public override string ToString() => throw new InvalidOperationException("private-renderer-secret");
     }
 }

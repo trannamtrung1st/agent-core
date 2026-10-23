@@ -92,8 +92,8 @@ public sealed class HttpErrorDiagnosticsTests
     [InlineData("openai-speech-tts")]
     [InlineData("BraveWebSearch")]
     [InlineData("GmailEmail")]
-    [InlineData("GoogleEmailOAuth")]
-    public async Task All_production_named_clients_use_the_shared_handler(string name)
+    [InlineData("GoogleDrive")]
+    public async Task Body_safe_provider_named_clients_use_the_shared_handler(string name)
     {
         var logs = new Logs();
         var services = new ServiceCollection();
@@ -108,6 +108,31 @@ public sealed class HttpErrorDiagnosticsTests
         using var response = await client.GetAsync("https://example.test", HttpCompletionOption.ResponseHeadersRead);
         Assert.Contains("invalid_api_key", Assert.Single(logs.Warnings));
         Assert.Contains(name, logs.Warnings[0]);
+    }
+
+    [Fact]
+    public async Task Current_OAuth_client_never_reads_or_logs_authorization_error_bodies_or_purpose_URLs()
+    {
+        var logs = new Logs();
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddProvider(logs));
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
+        services.AddAgentCoreInfrastructure(Path.Combine(directory!.FullName, "agents"), "Synthetic");
+        const string name = AgentCore.Infrastructure.Credentials.TenantGoogleOAuthProvider.HttpClientName;
+        var body = Encoding.UTF8.GetBytes("{\"error\":\"invalid_grant\",\"error_description\":\"private-body-sentinel\"}");
+        var content = new CountingContent(body);
+        services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new ResponseHandler(400, content));
+        using var provider = services.BuildServiceProvider();
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(name);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://example.test/?code=private-purpose-sentinel")
+            { Content = new StringContent("refresh_token=private-token-sentinel") };
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, content.Reads);
+        Assert.Empty(logs.Levels);
+        Assert.Equal(body, await response.Content.ReadAsByteArrayAsync());
+        Assert.Empty(logs.Levels);
     }
 
     [Fact]
@@ -283,11 +308,12 @@ public sealed class HttpErrorDiagnosticsTests
     private sealed class Logs : ILoggerProvider, ILogger<HttpErrorDiagnostics>
     {
         public List<string> Warnings { get; } = [];
+        public List<LogLevel> Levels { get; } = [];
         public ILogger CreateLogger(string categoryName) => this;
         public void Dispose() { }
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        { if (logLevel == LogLevel.Warning) Warnings.Add(formatter(state, exception)); }
+        { Levels.Add(logLevel); if (logLevel == LogLevel.Warning) Warnings.Add(formatter(state, exception)); }
     }
 }

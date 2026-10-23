@@ -260,7 +260,9 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
         catch (Exception ex)
         {
             if (entered) { if (state.Current is { } failed) RetireVoice(failed); state.Current = null; }
-            DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant recipient delivery unavailable.");
+            DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant recipient delivery unavailable.",
+                new(SessionId: source.Run.SessionId, AgentRunId: source.Run.AgentRunId,
+                    TenantId: source.Run.Owner.TenantId, ActorPrincipalId: source.Run.Owner.ExecutorPrincipalId));
         }
         finally { if (entered) state.Gate.Release(); }
     }

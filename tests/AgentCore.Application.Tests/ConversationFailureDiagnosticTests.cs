@@ -100,7 +100,7 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.Equal("Unknown", failed.Failure.Code);
         var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
-        Assert.IsType<InvalidOperationException>(logged.Exception);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, logged.Exception!.Message);
         Assert.Contains("Language model pump failed.", logged.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("InvalidOperationException", logged.Message, StringComparison.Ordinal);
         var error = Assert.IsType<ErrorOutput>(Assert.Single(Items(runtime), item => item.Payload is ErrorOutput).Payload);
@@ -220,7 +220,7 @@ public sealed class ConversationFailureDiagnosticTests
         var failed = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("InvalidEnvelope", failed.Failure!.Code);
         var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
-        Assert.IsType<ArgumentException>(logged.Exception);
+        Assert.Contains(typeof(ArgumentException).FullName!, logged.Exception!.Message);
         Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
         var error = Assert.IsType<ErrorOutput>(Assert.Single(Items(runtime), item => item.Payload is ErrorOutput).Payload);
         Assert.Equal("The response could not be completed.", error.SafeMessage);
@@ -319,7 +319,7 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.Equal(DiagnosticId, failed.Failure!.DiagnosticId);
         Assert.Equal("Unknown", failed.Failure.Code);
         var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
-        Assert.IsType<InvalidOperationException>(logged.Exception);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, logged.Exception!.Message);
         Assert.Contains("TTS pump failed.", logged.Message, StringComparison.Ordinal);
         Assert.Equal(SecondDiagnosticId, diagnostics.NewId());
     }
@@ -382,10 +382,11 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.DoesNotContain("provider-body-secret", error.SafeMessage, StringComparison.Ordinal);
 
         var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
-        var failure = Assert.IsType<InvalidOperationException>(logged.Exception);
-        Assert.Contains("/private/database/path", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("api_key=secret", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("provider-body-secret", failure.Message, StringComparison.Ordinal);
+        var failure = Assert.IsAssignableFrom<Exception>(logged.Exception);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, failure.Message);
+        Assert.DoesNotContain("/private/database/path", failure.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("api_key=secret", failure.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("provider-body-secret", failure.ToString(), StringComparison.Ordinal);
         Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
         Assert.Equal(runtime.SessionId, logged.Properties["SessionId"]);
         Assert.DoesNotContain("/private/database/path", logged.Message, StringComparison.Ordinal);

@@ -231,7 +231,8 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         catch (OperationCanceledException) when (live.Lifetime.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant Runtime stopped before settling.", new(AgentRunId: live.Run.AgentRunId));
+            DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant Runtime stopped before settling.", new(AgentRunId: live.Run.AgentRunId,
+                TenantId: live.Run.Owner.TenantId, ActorPrincipalId: live.Run.Owner.ExecutorPrincipalId));
             try
             {
                 var current = await runs.FindTenantRunAsync(live.Run.Owner.TenantId!.Value, live.Run.AgentRunId).ConfigureAwait(false);
@@ -239,12 +240,14 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
                     await storage.ApplyTenantRuntimeCommandAsync(current.Owner, current.AgentRunId,
                         new AgentRunCommand.DeadlineExceeded(current.Revision, time.GetUtcNow(), claim.Generation), ids.NewId()).ConfigureAwait(false);
             }
-            catch (Exception failure) { DiagnosticLog.Warning(logger, failure, ids.NewId(), "Tenant Runtime cleanup could not settle.", new(AgentRunId: live.Run.AgentRunId)); }
+            catch (Exception failure) { DiagnosticLog.Warning(logger, failure, ids.NewId(), "Tenant Runtime cleanup could not settle.", new(AgentRunId: live.Run.AgentRunId,
+                TenantId: live.Run.Owner.TenantId, ActorPrincipalId: live.Run.Owner.ExecutorPrincipalId)); }
         }
         finally
         {
             try { await live.Runtime.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception ex) { DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant Runtime disposal failed.", new(AgentRunId: live.Run.AgentRunId)); }
+            catch (Exception ex) { DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant Runtime disposal failed.", new(AgentRunId: live.Run.AgentRunId,
+                TenantId: live.Run.Owner.TenantId, ActorPrincipalId: live.Run.Owner.ExecutorPrincipalId)); }
             finally
             {
                 await live.Output.CloseAsync().ConfigureAwait(false);

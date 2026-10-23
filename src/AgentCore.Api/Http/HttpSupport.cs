@@ -1,6 +1,7 @@
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Api.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -51,7 +52,10 @@ public static class ProblemResults
 
     internal static DiagnosticContext RouteContext(HttpContext httpContext, string category, string code)
     {
+        var tenant = httpContext.Items.TryGetValue(IdentityHttp.TenantItem, out var value) ? value as AuthenticatedTenant : null;
         return new DiagnosticContext(
+            TenantId: tenant?.TenantId,
+            ActorPrincipalId: tenant?.PrincipalId,
             SessionId: RouteGuid(httpContext, "sessionId"),
             AgentRunId: RouteGuid(httpContext, "agentRunId"),
             ErrorCategory: category,

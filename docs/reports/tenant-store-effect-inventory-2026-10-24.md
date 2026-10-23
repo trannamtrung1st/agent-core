@@ -242,6 +242,8 @@ Public research/downloads use bounded network/DNS/redirect/content policies and 
 
 ## Files, catalogs and process-local state
 
+The [diagnostic/process-state follow-up](tenant-diagnostics-isolation-verification-2026-10-24.md) records the selected current cache key/owner call chains, actual native tenant-profile isolation and the common content-free exception sink correction. It supersedes the prior raw-exception logging behavior; its 187 scoped cases do not establish complete method/effect acceptance.
+
 - Workspace directories use the actual Instance/Session physical layout. `FileAgentInstanceWorkspaceStore.Tenant` resolves the supplied tenant/Instance/Session against current tenant stores before selecting that layout. A TenantId path segment is not substituted for this ownership proof.
 - Persistent Browser profiles explicitly use `tenants/{tenant}/agents/{agent}` under the configured profile root. Provider epoch, executor/owner identity, current profile/reset/command observations and no-link checks constrain reuse and deletion.
 - Definition-resource blobs are immutable digest-addressed physical bytes. The digest is neither a private source ID nor a read grant. Current typed resource ownership/binding/read checks select eligible bytes; `ReadVerifiedResourceSourceAsync` also applies bounded no-follow/hard-link and hash/size validation.
