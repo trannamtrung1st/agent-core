@@ -208,27 +208,6 @@ public sealed class ReliabilityJourneyTests
         public ValueTask PublishAsync(SessionOutput item, CancellationToken ct = default) => ValueTask.CompletedTask;
     }
 
-    private sealed class ConcurrentCompletionModel(ILanguageModel background) : ILanguageModel
-    {
-        public ModelCapabilities Capabilities => background.Capabilities;
-        public TaskCompletionSource ParentStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource ReleaseParent { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public int ParentRequests { get; private set; }
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
-        {
-            if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text == "Hold the foreground reply")
-            {
-                ParentRequests++;
-                ParentStarted.TrySetResult();
-                await ReleaseParent.Task.WaitAsync(ct);
-                yield return new ModelDisplayDelta("Foreground reply finished.");
-                yield return new ModelSemanticResponseReady(new("Foreground reply finished.", new(ModelSpeechMode.None, null), []));
-                yield return new ModelCompleted(ModelStopReason.Completed);
-            }
-            else await foreach (var item in background.GenerateAsync(request, ct)) yield return item;
-        }
-    }
-
     private sealed class AllowingClassifier : ILanguageModel
     {
         public int Calls { get; private set; }
@@ -300,85 +279,6 @@ public sealed class ReliabilityJourneyTests
         }
     }
 
-    private sealed class CompletionModel(string mode, AutomationClock clock) : ILanguageModel
-    {
-        public int Writes { get; private set; }
-        public int Artifacts { get; private set; }
-        private bool failed;
-        public List<ModelRequest> RecoveryRequests { get; } = [];
-        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
-        {
-            await Task.CompletedTask;
-            if (request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreBackgroundFinalization) == true)
-            {
-                RecoveryRequests.Add(request);
-                if (mode is "semantic" or "incomplete-tool" or "authentication")
-                {
-                    yield return new ModelFailed(mode switch
-                    {
-                        "semantic" => new(ProviderErrorCode.InvalidResponse, "Invalid structured response.", FailureReason: ProviderFailureReason.InvalidJson, ResponseChannel: ProviderResponseChannel.StructuredOutput),
-                        "incomplete-tool" => new(ProviderErrorCode.InvalidResponse, "Incomplete tool arguments.", FailureReason: ProviderFailureReason.IncompleteToolCall, ResponseChannel: ProviderResponseChannel.ToolCall),
-                        _ => new(ProviderErrorCode.Authentication, "Provider authentication failed.")
-                    });
-                    yield break;
-                }
-                if (mode == "transport" && !failed)
-                {
-                    failed = true;
-                    yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Provider unavailable."));
-                    yield break;
-                }
-                if (mode == "prose")
-                {
-                    yield return new ModelTextDelta("This prose must never become a successful outcome.");
-                    yield return new ModelCompleted(ModelStopReason.Completed);
-                    yield break;
-                }
-                if (mode.StartsWith("oversized"))
-                {
-                    var correcting = request.Messages.Any(message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.WorkComplete);
-                    if (correcting && mode.Contains("transport") && !failed)
-                    {
-                        failed = true;
-                        yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Provider unavailable."));
-                        yield break;
-                    }
-                    yield return Call(ToolCatalog.WorkComplete, new
-                    {
-                        summary = !correcting || mode.EndsWith("twice") ? new string('x', 4442) : "Verified fixture saved.",
-                        attentionRequired = false, outcome = "Response"
-                    });
-                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
-                    yield break;
-                }
-                yield return mode == "wrong-tool" ? Call(ToolCatalog.WorkspaceWrite, new { path = "/working/replay.txt", content = "must not execute" })
-                    : Call(ToolCatalog.WorkComplete, new { summary = "Verified fixture saved.", attentionRequired = false, outcome = "Response" });
-                yield return new ModelCompleted(ModelStopReason.ToolCalls);
-                yield break;
-            }
-            var tool = !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.WorkspaceWrite) ? ToolCatalog.WorkspaceWrite
-                : !request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.ArtifactsCreateFromWorkspace) ? ToolCatalog.ArtifactsCreateFromWorkspace : null;
-            if (tool is null)
-            {
-                if (mode == "reserve")
-                {
-                    // Enter the pinned completion reserve with an unexecuted substantive call.
-                    clock.Advance(TimeSpan.FromSeconds(190));
-                    yield return Call(ToolCatalog.WorkspaceWrite, new { path = "/working/replay.txt", content = "must not execute" });
-                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
-                    yield break;
-                }
-                yield return new ModelTextDelta("Verified fixture saved.");
-                yield return new ModelCompleted(ModelStopReason.Completed);
-                yield break;
-            }
-            if (!request.Tools!.Any(t => t.Name == tool)) yield return Call(ToolCatalog.CapabilitiesLoad, new { query = tool, limit = 1 });
-            else if (tool == ToolCatalog.WorkspaceWrite) { Writes++; yield return Call(tool, new { path = "/working/verified.txt", content = "verified fixture" }); }
-            else { Artifacts++; yield return Call(tool, new { path = "/working/verified.txt", displayName = "verified.txt" }); }
-            yield return new ModelCompleted(ModelStopReason.ToolCalls);
-        }
-    }
 
     private static ModelToolCallEvent Call(string name, object args) => new(new(Guid.NewGuid().ToString("N"), name, JsonSerializer.Serialize(args)));
 }

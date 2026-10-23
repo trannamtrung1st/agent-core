@@ -40,6 +40,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     private bool _stopping;
     // Deterministic fixture barrier around the existing claim/snapshot registration race.
     internal Func<Guid, Task>? BeforeDispatchRegistration { get; set; }
+    internal Func<AgentRun, Task>? BeforeRuntimeRelease { get; set; }
 
     // Deterministic fixture barrier: a durable wait is visible before its supervised
     // generation has finished releasing the provider/runtime and capacity slot.
@@ -93,6 +94,8 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         if (collision is not null)
         {
             await CancelStaleLiveAsync(collision, cancellationToken).ConfigureAwait(false);
+            if (await DrainPreviousAttemptAsync(run, collision, cancellationToken).ConfigureAwait(false))
+                return await DispatchClaimAsync(run, attempt, cancellationToken).ConfigureAwait(false);
             await DeferUnacceptedAsync(run, cancellationToken).ConfigureAwait(false); return false;
         }
         if (await authority.CurrentDefinitionAsync(run, cancellationToken).ConfigureAwait(false) is null)
@@ -134,7 +137,12 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         if (existing is not null) return await existing.Accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         if (refused)
         {
-            if (collision is not null) await CancelStaleLiveAsync(collision, cancellationToken).ConfigureAwait(false);
+            if (collision is not null)
+            {
+                await CancelStaleLiveAsync(collision, cancellationToken).ConfigureAwait(false);
+                if (await DrainPreviousAttemptAsync(run, collision, cancellationToken).ConfigureAwait(false))
+                    return await DispatchClaimAsync(run, attempt, cancellationToken).ConfigureAwait(false);
+            }
             await DeferUnacceptedAsync(run, cancellationToken).ConfigureAwait(false); return false;
         }
         var live = admitted ?? throw new InvalidOperationException("Tenant Runtime admission was not resolved.");
@@ -163,6 +171,16 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         }
         catch { live.Accepted.TrySetResult(false); throw; }
         finally { _ = SuperviseAsync(run.SessionId, live); }
+    }
+    private static async ValueTask<bool> DrainPreviousAttemptAsync(AgentRun run, Live previous, CancellationToken ct)
+    {
+        if (previous.Run.AgentRunId != run.AgentRunId || previous.Run.Claim!.Generation == run.Claim!.Generation
+            || run.AttemptCount <= previous.Run.AttemptCount) return false;
+        // A persisted provider retry can be claimed before its old Runtime has
+        // finished disposal. Retain this claim until that generation releases
+        // the Session, then reload authority/checkpoint before admission.
+        await previous.Stopped.Task.WaitAsync(ct).ConfigureAwait(false);
+        return true;
     }
     private async ValueTask CancelStaleLiveAsync(Live candidate, CancellationToken ct)
     {
@@ -213,6 +231,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
             finally
             {
                 await live.Output.CloseAsync().ConfigureAwait(false);
+                if (BeforeRuntimeRelease is { } beforeRelease) await beforeRelease(live.Run).ConfigureAwait(false);
                 var release = false;
                 lock (_gate)
                 {

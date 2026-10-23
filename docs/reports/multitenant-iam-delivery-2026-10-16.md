@@ -40,7 +40,7 @@ These checkpoints qualify their own source versions and focused checks. They do 
 | [Global Memory recall](memory-recall-retirement-verification-2026-10-23.md) | Removed Runtime/factory global readers and unused recall meter; actual owned learning/recall and close/repeat qualify both stores. |
 | [Global Admin Memory/Automation](admin-memory-automation-retirement-verification-2026-10-23.md) | Removed local-Profile facades, parallel history transaction adapter and unused transport/replay helpers; historical event decoding remains. |
 | [Global Memory admission/service](global-memory-service-retirement-verification-2026-10-23.md) | Removed service/port/admission and global loop resolution, preserved static content rules and qualified actual tenant staging/retention boundaries. |
-| [Global Experience/Automation roots](experience-automation-authority-retirement-verification-2026-10-23.md) | Removed global Experience/admission/repair, Admin Automation authoring and local-Profile catalogs; retained canonical schema/checkpoint owners and unchanged effective presets. Canonical busy-parent/completion-recovery parity remains explicitly required. |
+| [Global Experience/Automation roots](experience-automation-authority-retirement-verification-2026-10-23.md) | Removed global Experience/admission/repair, Admin Automation authoring and local-Profile catalogs; retained canonical schema/checkpoint owners and unchanged effective presets. The [successor recovery slice](tenant-completion-recovery-verification-2026-10-23.md) owns canonical twelve-mode/busy-parent qualification and the same-Run retirement handoff fix. |
 
 ## Approval semantic matching and event recovery
 
