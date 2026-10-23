@@ -21,7 +21,7 @@ public sealed class SelfManagementCompletionTests
     {
         await using var host=new DiagnosisHost(configured);
         var s=host.Services;
-        var owner=await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant",24);
+        var owner=await NativeInstanceConfigurationSeed.CreateAsync(s, "general-assistant",24);
         await NativeInstanceConfigurationSeed.PolicyAsync(s, owner.InstanceId,owner.Revision,
             new(new(HarnessManagementMode.Assisted),new([HarnessManagementScope.Settings,HarnessManagementScope.Connections])));
         var definition=(await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
@@ -50,7 +50,7 @@ public sealed class SelfManagementCompletionTests
     public async Task Unowned_Skill_delegation_cannot_replace_canonical_tenant_authority(string name)
     {
         await using var host = new AgentCoreApiFactory(); var s = host.Services;
-        var owner = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
+        var owner = await NativeInstanceConfigurationSeed.CreateAsync(s, "general-assistant", 24);
         await NativeInstanceConfigurationSeed.PolicyAsync(s, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Skills]), new([ManagementAutoApply.SkillChanges])));
         var definition = (await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;

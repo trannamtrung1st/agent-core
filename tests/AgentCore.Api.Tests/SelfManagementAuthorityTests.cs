@@ -25,7 +25,7 @@ public sealed class SelfManagementAuthorityTests
         {
             await using AgentCoreApiFactory host = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
             var services = host.Services;
-            var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22);
+            var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 22);
             var history = new HarnessPreparation(Guid.NewGuid(), Guid.NewGuid(), owner.ActiveVersion, "Historical only", 1,
                 HarnessPreparationStatus.AwaitingApproval,
                 [new(Guid.NewGuid(), new string('a', 64), new("instructions.update", 1, Content: "historical-private-instructions"), "Pending")], []);
@@ -83,8 +83,8 @@ public sealed class SelfManagementAuthorityTests
             await using (AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory())
             {
                 var services = factory.Services;
-                var admin = services.GetRequiredService<AdminAgentInstanceService>();
-                var owner = await admin.CreateManagedAsync("general-assistant", 22); id = owner.InstanceId;
+                var admin = services;
+                var owner = await NativeInstanceConfigurationSeed.CreateAsync(admin, "general-assistant", 22); id = owner.InstanceId;
                 var service = services;
                 Assert.Equal(HarnessManagementMode.Disabled, (await NativeInstanceConfigurationSeed.PolicyViewAsync(service, id)).Effective.Mode);
                 var changed = await NativeInstanceConfigurationSeed.PolicyAsync(service, id, owner.Revision, new(new(HarnessManagementMode.Managed),
@@ -96,7 +96,7 @@ public sealed class SelfManagementAuthorityTests
                 Assert.True(reset.Effective.BuiltInSkills!.ConfigurationAssistance);
                 changed = await NativeInstanceConfigurationSeed.PolicyAsync(service, id, reset.InstanceRevision, new(new(HarnessManagementMode.Assisted),
                     new([HarnessManagementScope.Settings])), frozen: true);
-                await admin.ReassociateActiveVersionAsync(id, 23, changed.InstanceRevision);
+                await NativeInstanceConfigurationSeed.AdoptAsync(admin, id, 23, changed.InstanceRevision);
                 var adopted = await NativeInstanceConfigurationSeed.PolicyViewAsync(service, id);
                 Assert.True(adopted.Effective.Frozen);
                 Assert.Equal(HarnessManagementMode.Assisted, adopted.Effective.Mode);
@@ -123,8 +123,8 @@ public sealed class SelfManagementAuthorityTests
         {
             await using AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
             var services = factory.Services;
-            var admin = services.GetRequiredService<AdminAgentInstanceService>();
-            var owner = await admin.CreateManagedAsync("general-assistant", 23);
+            var admin = services;
+            var owner = await NativeInstanceConfigurationSeed.CreateAsync(admin, "general-assistant", 23);
             var skills = services;
             var builtin = await NativeInstanceConfigurationSeed.InspectSkillAsync(skills, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
             await NativeInstanceConfigurationSeed.WriteBuiltInChoiceAsync(skills, owner.InstanceId, "set_enabled", builtin.Key, builtin.Revision, enabled: false);
@@ -141,7 +141,7 @@ public sealed class SelfManagementAuthorityTests
                 Environment = candidate.Environment! with { KnowledgeSources = [] },
                 SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
             var published = await services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
-            await admin.ReassociateActiveVersionAsync(owner.InstanceId, published.Version, policy.InstanceRevision);
+            await NativeInstanceConfigurationSeed.AdoptAsync(admin, owner.InstanceId, published.Version, policy.InstanceRevision);
             policy = await NativeInstanceConfigurationSeed.PolicyViewAsync(services, owner.InstanceId);
             Assert.Equal(HarnessManagementMode.Managed, policy.Effective.Mode);
             Assert.Equal([HarnessManagementScope.Settings], policy.Effective.Scopes);
@@ -172,7 +172,7 @@ public sealed class SelfManagementAuthorityTests
                 Environment = candidate.Environment! with { KnowledgeSources = [] },
                 SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
             var published = await host.Services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
-            var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", published.Version);
+            var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "general-assistant", published.Version);
             var policy = await NativeInstanceConfigurationSeed.FreezeAsync(host.Services, owner.InstanceId, owner.Revision);
             Assert.True(policy.Effective.Frozen);
             Assert.Equal("definition", policy.Source);
@@ -185,7 +185,7 @@ public sealed class SelfManagementAuthorityTests
     public async Task Native_Admin_builtin_catalog_discloses_missing_authority_without_runtime_grant()
     {
         await using var host = new AgentCoreApiFactory();
-        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
+        var owner = await NativeInstanceConfigurationSeed.CreateAsync(host.Services, "general-assistant", 21);
         var skill = await NativeInstanceConfigurationSeed.InspectSkillAsync(host.Services, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
         Assert.False(skill.Enabled);
         Assert.Contains("configuration.inspect", skill.MissingCapabilities);

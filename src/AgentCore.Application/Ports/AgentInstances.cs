@@ -77,39 +77,7 @@ public sealed record AgentInstanceRevisionUpdate(
     bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
     IReadOnlyList<InstanceAutomationPolicyChange>? AutomationPolicyChanges = null);
 
-public interface IAgentInstanceService
-{
-    ValueTask<AgentInstance> CreateAsync(
-        string definitionId,
-        int? version = null,
-        CancellationToken cancellationToken = default);
 
-
-    ValueTask<AgentInstance> UpgradeAsync(
-        Guid instanceId,
-        int version,
-        long expectedRevision,
-        CancellationToken cancellationToken = default);
-
-    ValueTask<AgentInstance> UpdatePersonaAsync(
-        Guid instanceId,
-        AgentIdentity persona,
-        long expectedRevision,
-        long expectedPersonaRevision,
-        CancellationToken cancellationToken = default);
-
-    ValueTask<AgentInstance> SetLifecycleAsync(
-        Guid instanceId,
-        AgentInstanceLifecycle lifecycle,
-        long expectedRevision,
-        CancellationToken cancellationToken = default);
-
-    ValueTask<AgentInstance> RequireAsync(Guid instanceId, CancellationToken cancellationToken = default);
-
-    ValueTask<IReadOnlyList<AgentInstance>> ListChatEligibleAsync(
-        CancellationToken cancellationToken = default);
-
-}
 
 public sealed record InstanceSkillSnapshot(IReadOnlyList<AgentDefinitionSkillState> DefinitionStates, IReadOnlyList<AgentInstanceSkill> InstanceSkills);
 public sealed record SkillMutation(Guid InstanceId, long ExpectedInstanceRevision,

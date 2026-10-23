@@ -44,7 +44,7 @@ public sealed class SelfManagementOperationTests
         {
             await using AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
             var services = factory.Services;
-            var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
+            var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 23);
             var policy = services;
             var view = await NativeInstanceConfigurationSeed.PolicyAsync(policy, owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
                 new(Enum.GetValues<HarnessManagementScope>()), new(Enum.GetValues<ManagementAutoApply>())));
@@ -75,7 +75,7 @@ public sealed class SelfManagementOperationTests
     {
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
-        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
+        var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 23);
         var view = await NativeInstanceConfigurationSeed.PolicyAsync(services, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Settings]), new(Enum.GetValues<ManagementAutoApply>())));
         var definition = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
@@ -93,7 +93,7 @@ public sealed class SelfManagementOperationTests
     {
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
-        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
+        var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 23);
         var policy = services;
         var view = await NativeInstanceConfigurationSeed.PolicyAsync(policy, owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
             new([HarnessManagementScope.Settings, HarnessManagementScope.Skills, HarnessManagementScope.Instructions]), new([])));

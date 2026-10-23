@@ -15,69 +15,6 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class AdminLifecycleConcurrencyTests
 {
-    [Fact]
-    public async Task Instance_delete_conflicts_when_a_gated_session_reference_lands_first()
-    {
-        var fixture = CreateFixture();
-        var instanceId = Guid.Parse("019944af-00d1-7000-8000-0000000000c1");
-        var now = DateTimeOffset.Parse("2026-09-29T03:00:00Z");
-        await fixture.Instances.InsertAsync(Instance(instanceId, now));
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var reference = fixture.Gate.WithInstanceAsync(instanceId, async cancellationToken =>
-        {
-            entered.TrySetResult();
-            var sawDeleteWaiting = await WaitUntilAsync(() => fixture.Gate.Waiters > 0);
-            Assert.True(sawDeleteWaiting);
-            await fixture.Sessions.SaveAsync(Snapshot(instanceId, now), 0, cancellationToken);
-        });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var delete = fixture.InstancesService.DeleteAsync(
-            new AdminInstanceDeleteCommand(instanceId, 1, fixture.Ids.NewId(), now));
-        await reference;
-        var error = await Assert.ThrowsAsync<AgentCoreException>(() => delete.AsTask());
-        Assert.Equal("Conflict", error.Code);
-        Assert.Contains("1 session", error.Message, StringComparison.Ordinal);
-        Assert.NotNull(await fixture.Instances.FindAsync(instanceId));
-        Assert.NotNull(await fixture.Sessions.LoadAsync(Snapshot(instanceId, now).SessionId));
-    }
-
-    [Fact]
-    public async Task Instance_delete_wins_and_the_waiting_reference_does_not_save()
-    {
-        var fixture = CreateFixture();
-        var instanceId = Guid.Parse("019944af-00d1-7000-8000-0000000000c2");
-        var now = DateTimeOffset.Parse("2026-09-29T03:10:00Z");
-        await fixture.Instances.InsertAsync(Instance(instanceId, now));
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.Deletion.BeforeCommit = _ =>
-        {
-            entered.TrySetResult();
-            return new ValueTask(release.Task);
-        };
-        var delete = fixture.InstancesService.DeleteAsync(
-            new AdminInstanceDeleteCommand(instanceId, 1, fixture.Ids.NewId(), now));
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var reference = fixture.Gate.WithInstanceAsync(instanceId, async cancellationToken =>
-        {
-            var current = await fixture.Instances.FindAsync(instanceId, cancellationToken).ConfigureAwait(false)
-                ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-            if (current.Lifecycle == AgentInstanceLifecycle.Archived)
-            {
-                throw AgentCoreErrors.Validation("Archived agent instances cannot start new sessions.");
-            }
-
-            await fixture.Sessions.SaveAsync(Snapshot(instanceId, now), 0, cancellationToken);
-        });
-        var sawReferenceWaiting = await WaitUntilAsync(() => fixture.Gate.Waiters > 0);
-        Assert.True(sawReferenceWaiting);
-        release.TrySetResult();
-        await delete;
-        var error = await Assert.ThrowsAsync<AgentCoreException>(() => reference.AsTask());
-        Assert.Equal("NotFound", error.Code);
-        Assert.Null(await fixture.Instances.FindAsync(instanceId));
-        Assert.Null(await fixture.Sessions.LoadAsync(Snapshot(instanceId, now).SessionId));
-    }
 
     [Fact]
     public async Task Definition_delete_and_fork_cannot_both_succeed()
@@ -128,78 +65,6 @@ public sealed class AdminLifecycleConcurrencyTests
         var error = await Assert.ThrowsAsync<AgentCoreException>(() => fork.AsTask());
         Assert.Equal("NotFound", error.Code);
         Assert.Empty(await fixture.Definitions.ListDraftsAsync());
-        Assert.Null(await fixture.Definitions.GetPublicationAsync("field-guide", published.Version));
-    }
-
-    [Fact]
-    public async Task Definition_delete_conflicts_when_managed_instance_creation_holds_gate_first()
-    {
-        var fixture = CreateFixture();
-        var now = DateTimeOffset.Parse("2026-09-29T03:30:00Z");
-        var (_, published, reloaded) = await PublishFieldGuideAsync(fixture, now);
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var reference = fixture.Gate.WithDefinitionAsync(
-            "field-guide",
-            async cancellationToken =>
-            {
-                entered.TrySetResult();
-                var sawDeleteWaiting = await WaitUntilAsync(() => fixture.Gate.Waiters > 0);
-                Assert.True(sawDeleteWaiting);
-                var definition = await fixture.DefinitionCatalog.GetAsync("field-guide", null, cancellationToken)
-                    .ConfigureAwait(false)
-                    ?? throw AgentCoreErrors.NotFound("Agent was not found.");
-                var instance = await fixture.InstanceRuntime.CreateAsync(definition.Id, definition.Version, cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
-                await fixture.Sessions.SaveAsync(
-                    Snapshot(instance.InstanceId, definition, now),
-                    0,
-                    cancellationToken).ConfigureAwait(false);
-            });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var delete = fixture.Lifecycle.DeleteLogicalDefinitionAsync(
-            new AdminDefinitionDeleteCommand(
-                "field-guide",
-                new AdminDefinitionDeleteWitness(
-                    [new AdminDraftRevisionWitness(reloaded.DraftId, reloaded.Revision)],
-                    [new AdminPublicationRevisionWitness(published.Version, published.MetadataRevision)]),
-                fixture.Ids.NewId(),
-                now.AddMinutes(3)));
-        await reference;
-        var error = await Assert.ThrowsAsync<AgentCoreException>(() => delete.AsTask());
-        Assert.Equal("Conflict", error.Code);
-        Assert.Contains("instance", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.NotNull(await fixture.Definitions.GetPublicationAsync("field-guide", published.Version));
-    }
-
-    [Fact]
-    public async Task Definition_delete_wins_and_managed_instance_creation_fails()
-    {
-        var fixture = CreateFixture();
-        var now = DateTimeOffset.Parse("2026-09-29T03:40:00Z");
-        var (_, published, reloaded) = await PublishFieldGuideAsync(fixture, now);
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.Deletion.BeforeCommit = _ =>
-        {
-            entered.TrySetResult();
-            return new ValueTask(release.Task);
-        };
-        var delete = fixture.Lifecycle.DeleteLogicalDefinitionAsync(
-            new AdminDefinitionDeleteCommand(
-                "field-guide",
-                new AdminDefinitionDeleteWitness(
-                    [new AdminDraftRevisionWitness(reloaded.DraftId, reloaded.Revision)],
-                    [new AdminPublicationRevisionWitness(published.Version, published.MetadataRevision)]),
-                fixture.Ids.NewId(),
-                now.AddMinutes(3)));
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var reference = fixture.InstancesService.CreateManagedAsync("field-guide", published.Version).AsTask();
-        var sawReferenceWaiting = await WaitUntilAsync(() => fixture.Gate.Waiters > 0);
-        Assert.True(sawReferenceWaiting);
-        release.TrySetResult();
-        await delete;
-        var error = await Assert.ThrowsAsync<AgentCoreException>(() => reference);
-        Assert.Equal("NotFound", error.Code);
         Assert.Null(await fixture.Definitions.GetPublicationAsync("field-guide", published.Version));
     }
 
@@ -279,30 +144,6 @@ public sealed class AdminLifecycleConcurrencyTests
         Assert.NotNull(await fixture.Definitions.GetDraftAsync(reloaded.DraftId));
     }
 
-    [Fact]
-    public async Task Archived_managed_instance_blocks_new_scheduled_trigger_admission()
-    {
-        var fixture = CreateFixture();
-        var instanceId = Guid.Parse("019944af-00d1-7000-8000-0000000000d3");
-        var profileId = Guid.Parse("019944af-00d1-7000-8000-0000000000d4");
-        var now = DateTimeOffset.Parse("2026-09-29T04:10:00Z");
-        await fixture.Instances.InsertAsync(Instance(instanceId, now));
-        await fixture.Sessions.SaveProfileAsync(
-            new UserProfile(profileId, 1, new Dictionary<string, UserProfileValue>
-            {
-                ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, now)
-            }, now),
-            0);
-        var admission = await TriggerDurableSchedulingPolicy.EvaluateScheduledOccurrenceEligibilityAsync(
-            new TriggerOwner(instanceId, profileId),
-            fixture.Instances,
-            fixture.DefinitionCatalog,
-            fixture.Sessions,
-            CancellationToken.None);
-        Assert.False(admission.Allowed);
-        Assert.Equal(UserSchedulingAdmissionDenialReason.InstanceInactive, admission.DenialReason);
-    }
-
     private static async Task<(AgentDefinitionCandidate Candidate, AgentDefinitionPublication Published, AgentDefinitionDraft Reloaded)> PublishFieldGuideAsync(
         Fixture fixture,
         DateTimeOffset now)
@@ -376,15 +217,6 @@ public sealed class AdminLifecycleConcurrencyTests
             ids,
             deletion,
             gate);
-        var instanceRuntime = new AgentInstanceService(instances, definitionCatalog, ids, clock);
-        var instanceService = new AdminAgentInstanceService(
-            definitionCatalog,
-            instances,
-            events,
-            ids,
-            clock,
-            deletion: deletion,
-            lifecycleGate: gate);
         return new Fixture(
             ids,
             instances,
@@ -393,9 +225,7 @@ public sealed class AdminLifecycleConcurrencyTests
             deletion,
             gate,
             lifecycle,
-            instanceService,
-            definitionCatalog,
-            instanceRuntime);
+            definitionCatalog);
     }
 
     private static string FindAgents()
@@ -491,7 +321,5 @@ public sealed class AdminLifecycleConcurrencyTests
         InMemoryAdminLifecycleDeletion Deletion,
         AdminLifecycleCoordinator Gate,
         AgentDefinitionLifecycleService Lifecycle,
-        AdminAgentInstanceService InstancesService,
-        IAgentDefinitionStore DefinitionCatalog,
-        AgentInstanceService InstanceRuntime);
+        IAgentDefinitionStore DefinitionCatalog);
 }

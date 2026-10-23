@@ -403,11 +403,6 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
         }
         services.TryAddSingleton<IEventFilterEvaluator, AgentCore.Infrastructure.Events.RestrictedEventFilter>();
-        services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
-            provider.GetRequiredService<IAgentInstanceStore>(),
-            provider.GetRequiredService<IAgentDefinitionStore>(),
-            provider.GetRequiredService<IIdGenerator>(),
-            provider.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
 
         WebSearchProviderRegistration.AddPublicWeb(services, profile);

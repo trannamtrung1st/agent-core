@@ -82,14 +82,13 @@ public sealed class InstanceSettingsResolverTests
         IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) };
         var spec = new SkillSpec("review", "Review", "Review", "Review carefully", SkillProjection.OnDemand, true, [], []);
         var v1 = SkillActivationTests.Definition(1, spec); var v2 = SkillActivationTests.Definition(2, spec with { DefaultEnabled = false });
-        var defs = new SkillActivationTests.Definitions(v1, v2); var service = new AgentInstanceService(store, defs, ids, clock);
-        var owner = await service.CreateAsync(v1.Id, 1);
+        var defs = new SkillActivationTests.Definitions(v1, v2); var owner = await NativeInstanceSeed.CreateAsync(store, defs, ids, clock, v1.Id, 1);
         Assert.Null(Assert.Single((await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates).EnabledOverride);
-        await service.UpgradeAsync(owner.InstanceId, 2, owner.Revision);
+        await NativeInstanceSeed.UpgradeAsync(store, defs, clock, owner.InstanceId, 2, owner.Revision);
         Assert.Empty(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, v2));
         var disabled = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "set_enabled", "definition:review", 1, enabled: false, actor: SkillAuthor.Agent);
         owner = (await store.FindAsync(owner.InstanceId))!;
-        await service.UpgradeAsync(owner.InstanceId, 1, owner.Revision);
+        await NativeInstanceSeed.UpgradeAsync(store, defs, clock, owner.InstanceId, 1, owner.Revision);
         Assert.Empty(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, v1));
         await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "reset_enabled", disabled.Key, disabled.Revision, actor: SkillAuthor.Agent);
         Assert.Single(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, v1));

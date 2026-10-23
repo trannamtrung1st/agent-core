@@ -29,9 +29,9 @@ public sealed class ManagedInstanceP7DRegressionTests
         var instances = new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
         var clock = new FakeTimeProvider(Now);
-        var service = Service(instances, definitions, memory, clock);
-        var first = await service.CreateAsync("examiner", 1);
-        var second = await service.CreateAsync("examiner", 1);
+        var seedIds = Ids(8, "019944af-00f6-7000-8000-");
+        var first = await NativeInstanceSeed.CreateAsync(instances, definitions, seedIds, clock, "examiner", 1);
+        var second = await NativeInstanceSeed.CreateAsync(instances, definitions, seedIds, clock, "examiner", 1);
         Assert.NotEqual(first.InstanceId, second.InstanceId);
 
         var store = new InMemoryTriggerStore();
@@ -68,8 +68,8 @@ public sealed class ManagedInstanceP7DRegressionTests
             var instances = new InMemoryAgentInstanceStore();
             var sessions = new InMemoryMemoryStore();
             var clock = new FakeTimeProvider(Now);
-            var service = Service(instances, definitions, sessions, clock);
-            var managed = await service.CreateAsync("examiner", 1);
+            var seedIds = Ids(8, "019944af-00f6-7000-8000-");
+            var managed = await NativeInstanceSeed.CreateAsync(instances, definitions, seedIds, clock, "examiner", 1);
             var owner = new AgentRunOwner(managed.InstanceId, ProfileId);
             var workItemId = Guid.Parse("019944af-00f5-7000-8000-000000000001");
             var sourceId = Guid.Parse("019944af-00f5-7000-8000-000000000002");
@@ -80,7 +80,7 @@ public sealed class ManagedInstanceP7DRegressionTests
             Assert.NotNull(running);
             Assert.Equal(AgentRunStatus.Running, running.Status);
 
-            var archived = await service.SetLifecycleAsync(
+            var archived = await NativeInstanceSeed.LifecycleAsync(instances, clock,
                 managed.InstanceId,
                 AgentInstanceLifecycle.Archived,
                 managed.Revision);
@@ -152,13 +152,6 @@ public sealed class ManagedInstanceP7DRegressionTests
             }
         }
     }
-
-    private static AgentInstanceService Service(
-        IAgentInstanceStore instances,
-        IAgentDefinitionStore definitions,
-        IMemoryStore sessions,
-        TimeProvider clock) =>
-        new(instances, definitions, Ids(8, "019944af-00f6-7000-8000-"), clock);
 
     private static DeterministicIdGenerator Ids(int count, string prefix) =>
         new(

@@ -10,6 +10,21 @@ namespace AgentCore.Api.Tests;
 // Canonical mutation and disclosure are qualified separately through tenant HTTP/model tests.
 internal static class NativeInstanceConfigurationSeed
 {
+    internal static async ValueTask<AgentInstance> CreateAsync(IServiceProvider services, string definitionId, int version)
+    {
+        var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(definitionId, version))!;
+        var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
+        var instance = new AgentInstance(services.GetRequiredService<IIdGenerator>().NewId(), definition.Id, definition.Version,
+            definition.Identity, AgentInstanceLifecycle.Active, now, now);
+        await services.GetRequiredService<IAgentInstanceStore>().InsertAsync(instance, initialSkills: definition.SkillList);
+        return instance;
+    }
+    internal static async ValueTask<AgentInstance> AdoptAsync(IServiceProvider services, Guid id, int version, long revision)
+    {
+        var (store, owner, _) = await Read(services, id);
+        var target = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(owner.DefinitionId, version))!;
+        return await store.UpdateWithExpectedRevisionAsync(new(id, revision, ActiveVersion: version, DefinitionSkills: target.SkillList), services.GetRequiredService<TimeProvider>().GetUtcNow());
+    }
     private static async ValueTask<(IAgentInstanceStore Store, AgentInstance Owner, AgentDefinition Definition)> Read(IServiceProvider services, Guid id)
     {
         var store = services.GetRequiredService<IAgentInstanceStore>();
