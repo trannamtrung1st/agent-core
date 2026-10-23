@@ -46,39 +46,6 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
         }
     }
 
-    internal AgentInstance RemoveForDeletion(Guid instanceId, long expectedRevision)
-    {
-        lock (_gate)
-        {
-            if (_tenantOwnedInstances.Contains(instanceId)) throw AgentCoreErrors.Conflict("Tenant-owned Instance identity must be retained; use its tenant lifecycle.");
-            if (!_instances.TryGetValue(instanceId, out var instance))
-            {
-                throw AgentCoreErrors.NotFound("Agent instance was not found.");
-            }
-
-            if (instance.Lifecycle != AgentInstanceLifecycle.Archived)
-            {
-                throw AgentCoreErrors.Validation("Archive this instance before deleting it.");
-            }
-
-            if (instance.Revision != expectedRevision)
-            {
-                throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
-            }
-
-            _instances.Remove(instanceId);
-            return instance;
-        }
-    }
-
-    internal void Restore(AgentInstance instance)
-    {
-        lock (_gate)
-        {
-            _instances[instance.InstanceId] = CopyInstance(instance);
-        }
-    }
-
     public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

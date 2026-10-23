@@ -169,10 +169,6 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IAdminEventStore>(provider => new SqliteAdminEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>()));
-            services.AddSingleton<IAdminLifecycleDeletion>(provider => new SqliteAdminLifecycleDeletion(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                provider.GetRequiredService<IIdGenerator>(),
-                provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetService<IBrowser>()));
             services.AddSingleton<IEmailStore, SqliteEmailStore>();
             services.AddSingleton<IEmailWatchStore, SqliteEmailWatchStore>();
             services.AddSingleton<SqliteDriveStore>();
@@ -247,20 +243,7 @@ public static class InfrastructureServiceCollectionExtensions
             });
             services.TryAddSingleton<IDefinitionDraftEvaluationStore>(provider =>
                 new InMemoryDefinitionDraftEvaluationStore(provider.GetRequiredService<IAgentDefinitionAdminStore>()));
-            services.AddSingleton<IAdminLifecycleDeletion>(provider =>
-            {
-                _ = provider.GetRequiredService<IAgentDefinitionAdminStore>();
-                _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
-                return new InMemoryAdminLifecycleDeletion(
-                    provider.GetRequiredService<InMemoryAgentInstanceStore>(),
-                    provider.GetRequiredService<InMemoryMemoryStore>(),
-                    (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(),
-                    provider.GetRequiredService<InMemoryTriggerStore>(),
-                    provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
-                    provider.GetRequiredService<InMemoryAdminEventStore>(),
-                    (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(),
-                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetRequiredService<IAgentCredentialBindingStore>(), provider.GetService<IBrowser>(), provider.GetRequiredService<InMemoryCoreEventStore>(), provider.GetRequiredService<IDriveOperationStore>());
-            });
+
         }
         services.TryAddSingleton<ICredentialProtector>(p => new LocalCredentialProtector(persistence.CredentialProtectionKeyRoot));
         services.TryAddSingleton<AgentCore.Application.Drive.DriveService>();

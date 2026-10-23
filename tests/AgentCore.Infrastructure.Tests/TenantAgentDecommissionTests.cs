@@ -104,6 +104,62 @@ public sealed class TenantAgentDecommissionTests
         } finally {await browser.StopAsync(CancellationToken.None);}
     }
 
+    private sealed class FailingWorkspaceCleanup(IAgentInstanceWorkspaceStore inner) : IAgentInstanceWorkspaceStore, ITenantAgentWorkspaceCleanup
+    {
+        internal bool Fail = true;
+        public ValueTask PurgeDecommissionedAgentAsync(TenantBrowserAgentOwner owner, Func<CancellationToken, ValueTask<bool>> still, CancellationToken ct = default) =>
+            Fail ? ValueTask.FromException(new IOException("Controlled owned workspace purge failure")) : ((ITenantAgentWorkspaceCleanup)inner).PurgeDecommissionedAgentAsync(owner, still, ct);
+        public ValueTask DeleteInstanceAsync(Guid id, CancellationToken ct = default) => inner.DeleteInstanceAsync(id, ct);
+        public ValueTask DeleteInstanceContentAsync(Guid id, CancellationToken ct = default) => inner.DeleteInstanceContentAsync(id, ct);
+        public ValueTask<AgentWorkspacePage> ListAsync(Guid id, string prefix, string? after, int limit, CancellationToken ct = default) => inner.ListAsync(id, prefix, after, limit, ct);
+        public ValueTask RequireDirectoryAsync(Guid id, string path, CancellationToken ct = default) => inner.RequireDirectoryAsync(id, path, ct);
+        public ValueTask<AgentWorkspacePage> FindFilesAsync(Guid id, string query, string? after, int limit, CancellationToken ct = default) => inner.FindFilesAsync(id, query, after, limit, ct);
+        public ValueTask<AgentWorkspaceContent> ReadAsync(Guid id, string path, CancellationToken ct = default) => inner.ReadAsync(id, path, ct);
+        public ValueTask<AgentWorkspaceContent> InspectAsync(Guid id, string path, int maxBytes, CancellationToken ct = default) => inner.InspectAsync(id, path, maxBytes, ct);
+        public ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid id, string path, ReadOnlyMemory<byte> bytes, CancellationToken ct = default) => inner.WriteFileAsync(id, path, bytes, ct);
+        public ValueTask DeleteAsync(Guid id, string path, CancellationToken ct = default) => inner.DeleteAsync(id, path, ct);
+        public ValueTask<WorkspaceStructureResult> StructureAsync(Guid id, IReadOnlyList<WorkspaceStructuralOperation> operations, CancellationToken ct = default) => inner.StructureAsync(id, operations, ct);
+    }
+
+    [Theory]
+    [InlineData(false, false)] [InlineData(true, false)]
+    [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Decommission_workspace_purge_failure_recovers_exact_retirement_by_retry_or_cold_sweep_without_touching_active_owner(bool sqlite, bool sweep)
+    {
+        await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var s = await Prepare(f); var browser = Browser(f);
+        try
+        {
+            var workspace = new FailingWorkspaceCleanup(Workspace(f)); var service = Service(f, browser, workspace);
+            var sibling = await f.Agents.CreateAsync(s.Human.PrincipalId, s.Tenant, "examiner", 1, (await State(f,s))!.Tenant.Revision, initiator:s.Human);
+            var home = Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),s.Agent.Instance.InstanceId));
+            var siblingFile = Seed(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(f.Root,"workspaces"),sibling.Instance.InstanceId), "preserve active owner");
+            await Archive(f,s); var view = await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human); var operation = f.Ids.NewId();
+            var result = await service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,operation);
+            Assert.Equal("pending",result.CleanupStatus); Assert.Equal("private retained state",File.ReadAllText(home));
+            var store = (ITenantAgentDecommissionStore)f.Iam;
+            Assert.True(await store.IsAgentDecommissionedAsync(new(s.Tenant,s.Agent.Instance.InstanceId,s.Agent.PrincipalId)));
+            Assert.Null(await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId));
+            workspace.Fail = false;
+            if (sweep)
+            {
+                IIamStore reopened = sqlite ? new SqliteIamStore(f.Contexts!,builtIns:f.BuiltIns,clock:f.Clock) : f.Iam;
+                var cold = Browser(f);
+                try { Assert.Equal(1,await Cleanup(f,cold,Workspace(f),(ITenantAgentDecommissionStore)reopened).RecoverAsync()); }
+                finally { await cold.StopAsync(CancellationToken.None); }
+            }
+            else Assert.Equal("completed",(await service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,operation)).CleanupStatus);
+            Assert.False(File.Exists(home)); Assert.Equal("preserve active owner",File.ReadAllText(siblingFile));
+            var cleanup = Cleanup(f,browser,Workspace(f));
+            Assert.False(await cleanup.ReconcileAsync(new(s.Tenant,sibling.Instance.InstanceId,sibling.PrincipalId)));
+            Assert.False(await cleanup.ReconcileAsync(new(s.Tenant,s.Agent.Instance.InstanceId,Guid.NewGuid())));
+            Assert.True(await cleanup.ReconcileAsync(new(s.Tenant,s.Agent.Instance.InstanceId,s.Agent.PrincipalId)));
+            Assert.Equal("preserve active owner",File.ReadAllText(siblingFile));
+            var receipt = Assert.Single(await f.Iam.ReadAuditAsync(s.Tenant,200),a=>a.Action==TenantAgentDecommissionRules.Action);
+            Assert.Equal(operation,receipt.AuditId);
+        }
+        finally { await browser.StopAsync(CancellationToken.None); }
+    }
+
     private sealed class CommitBoundary(ITenantAgentDecommissionStore inner, Func<Task> before, Func<int,Task>? duringRead=null) : ITenantAgentDecommissionStore
     {
         private int reads;
@@ -137,7 +193,7 @@ public sealed class TenantAgentDecommissionTests
             });
             var service=Service(f,browser,workspace,store);var view=await service.ReadAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human);
             await Assert.ThrowsAnyAsync<Exception>(()=>service.DecommissionAsync(s.Tenant,s.Agent.Instance.InstanceId,s.Human,view.SecurityRevision,view.InstanceRevision,f.Ids.NewId()).AsTask());
-            Assert.True(File.Exists(home));Assert.NotNull(await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId));Assert.DoesNotContain(await f.Iam.ReadAuditAsync(s.Tenant,200),a=>a.Action==TenantAgentDecommissionRules.Action);
+            Assert.Equal("private retained state", File.ReadAllText(home)); var kept = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(s.Tenant,s.Agent.Instance.InstanceId))!; Assert.Equal(AgentInstanceLifecycle.Archived, kept.Instance.Lifecycle); Assert.DoesNotContain(await f.Iam.ReadAuditAsync(s.Tenant,200),a=>a.Action==TenantAgentDecommissionRules.Action);
         }finally{await browser.StopAsync(CancellationToken.None);}
     }
     [Theory] [InlineData(false)] [InlineData(true)]

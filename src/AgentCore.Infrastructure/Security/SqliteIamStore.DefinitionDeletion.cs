@@ -55,7 +55,7 @@ public sealed partial class SqliteIamStore
     }
     private static async Task RequireDefinitionUnreferenced(AgentCoreDbContext db, string id, CancellationToken ct)
     {
-        if ((await SqliteAdminLifecycleDeletion.CountDefinitionAsync(db, id, ct).ConfigureAwait(false)).HasReferences)
+        if ((await TenantDeletionReferenceQueries.CountDefinitionAsync(db, id, ct).ConfigureAwait(false)).HasReferences)
             throw new SecurityConflictException("definition_in_use");
     }
     private static async Task RetireDefinition(AgentCoreDbContext db, Guid tenant, Guid id, DateTimeOffset at, CancellationToken ct)

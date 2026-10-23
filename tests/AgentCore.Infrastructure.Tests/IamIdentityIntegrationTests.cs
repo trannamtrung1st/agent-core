@@ -349,8 +349,7 @@ public sealed partial class IamIdentityIntegrationTests
         }
         else
         {
-            Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() =>
-                ((InMemoryAgentInstanceStore)f.Instances).RemoveForDeletion(first.Instance.InstanceId, restored.Instance.Revision));
+            Assert.True(await f.Instances.HasBackingInstanceAsync(first.Instance.InstanceId));
         }
     }
 

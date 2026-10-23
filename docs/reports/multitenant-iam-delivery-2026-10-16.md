@@ -1,6 +1,6 @@
 # Multi-tenant IAM and durable approvals delivery ledger
 
-## Current delivery state — 2026-10-23
+## Current delivery state — 2026-10-24
 
 [Canonical public downloads](tenant-public-download-verification-2026-10-23.md) now use existing tenant workspace effects, exact consent and body-free durable receipts. Both stores qualify the model download→DOCX edit→Artifact journey, automatic destinations and boundary failures; the saved download review is also exercised through the actual Synthetic UI. [Public search/fetch](tenant-public-web-read-verification-2026-10-23.md) now use the current read-only tenant boundary and atomic source checks. [Generic public HTTP](tenant-public-http-verification-2026-10-23.md) restores exact-operation consent, reserved dispatch and factual receipts through the current tenant owners. Generic Composer Resource references and proposal-wide acceptance remain open.
 
@@ -42,6 +42,7 @@ These checkpoints qualify their own source versions and focused checks. They do 
 | [Generic Automation](automation-executor-retirement-verification-2026-10-23.md) | Removed local execution/preparation and caller verification context; canonical clarification uses bounded owning-conversation evidence. |
 | [Generic identity](identity-executor-retirement-verification-2026-10-23.md) | Removed Profile-based identity/continuity/maintenance execution and unowned context callbacks; eligibility uses current tenant settings. |
 | [Tenant-only executor](tenant-executor-cutover-verification-2026-10-23.md) | Removed remaining generic provider effects and callbacks, retained fenced lifecycle cleanup and actual native Browser qualification. Other historical positive fixtures still need reconciliation. |
+| [Global lifecycle deletion](global-lifecycle-deletion-retirement-verification-2026-10-24.md) | Removed the unused global deletion port/executors, LocalOwner commands, receipt sweep and raw in-memory remove/restore helpers. Canonical transactions retain read-only reference queries and actual owned native cleanup/recovery qualification. |
 | [Global Memory recall](memory-recall-retirement-verification-2026-10-23.md) | Removed Runtime/factory global readers and unused recall meter; actual owned learning/recall and close/repeat qualify both stores. |
 | [Global Admin Memory/Automation](admin-memory-automation-retirement-verification-2026-10-23.md) | Removed local-Profile facades, parallel history transaction adapter and unused transport/replay helpers; historical event decoding remains. |
 | [Global Memory admission/service](global-memory-service-retirement-verification-2026-10-23.md) | Removed service/port/admission and global loop resolution, preserved static content rules and qualified actual tenant staging/retention boundaries. |

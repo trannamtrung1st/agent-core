@@ -16,7 +16,7 @@ public sealed partial class SqliteIamStore : ITenantAgentDecommissionStore
         await using var db = await contexts.CreateDbContextAsync(ct); await using var tx = await db.Database.BeginTransactionAsync(ct);
         var row = await OwnedAgents(db, tenant, true).SingleOrDefaultAsync(a => a.Instance.InstanceId == instance.ToString("D"), ct);
         if (row is null) return null;
-        return new(Owned(row), row.Identity.Status, await SqliteAdminLifecycleDeletion.CountInstanceAsync(db, instance.ToString("D"), ct, tenant),
+        return new(Owned(row), row.Identity.Status, await TenantDeletionReferenceQueries.CountInstanceAsync(db, instance.ToString("D"), ct, tenant),
             await DecommissionReceipt(db, tenant, instance, ct));
     }
     private static Task<AuthorizationAudit?> DecommissionReceipt(AgentCoreDbContext db, Guid tenant, Guid instance, CancellationToken ct) =>
@@ -35,7 +35,7 @@ public sealed partial class SqliteIamStore : ITenantAgentDecommissionStore
                 && receipt.Target == key && receipt.ActorPrincipalId == human.PrincipalId && row.Instance.Revision == expectedInstanceRevision + 1;
         if (state.Tenant.Revision != expectedSecurityRevision || row.Instance.Revision != expectedInstanceRevision || row.Identity.Status == IdentityStatus.Removed) return false;
         if (row.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Archived)) throw new SecurityConflictException("archive_required");
-        if ((await SqliteAdminLifecycleDeletion.CountInstanceAsync(db, key, ct, tenant)).HasReferences) throw new SecurityConflictException("agent_in_use");
+        if ((await TenantDeletionReferenceQueries.CountInstanceAsync(db, key, ct, tenant)).HasReferences) throw new SecurityConflictException("agent_in_use");
         if (SqliteAgentInstanceStore.Map(row.Instance).BrowserProfileReset?.Status == "pending") throw new SecurityConflictException("browser_profile_busy");
         var next = TenantAgentDecommissionRules.Retire(state, instance, row.Identity.PrincipalId);
         db.Attach(row.Instance); row.Instance.Revision++; row.Instance.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();

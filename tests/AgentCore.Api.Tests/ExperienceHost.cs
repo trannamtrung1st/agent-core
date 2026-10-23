@@ -39,7 +39,6 @@ internal sealed class ExperienceHost : DurableSqliteHostFactory
             services.RemoveAll<IExperienceStore>(); services.AddSingleton<IExperienceStore, SqliteExperienceStore>();
             if (experienceStore is not null) { services.RemoveAll<IExperienceStore>(); services.AddSingleton(experienceStore); }
             configure?.Invoke(services);
-            services.RemoveAll<IAdminLifecycleDeletion>(); services.AddSingleton<IAdminLifecycleDeletion, SqliteAdminLifecycleDeletion>();
             services.RemoveAll<IAdminEventStore>(); services.AddSingleton<IAdminEventStore, SqliteAdminEventStore>();
             services.RemoveAll<IAgentDefinitionAdminStore>(); services.AddSingleton<IAgentDefinitionAdminStore, SqliteAgentDefinitionAdminStore>();
             services.RemoveAll<IAgentDefinitionResourceAdminStore>(); services.AddSingleton<IAgentDefinitionResourceAdminStore, SqliteAgentDefinitionResourceAdminStore>();
