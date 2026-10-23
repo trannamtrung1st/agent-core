@@ -32,7 +32,7 @@ public static class TenantPublicWebReadRules
         }
         catch(Exception e) when(e is JsonException or ArgumentException or InvalidOperationException) { throw new AccessDeniedException("public_web_source_changed"); }
     }
-    private static bool CoreError(JsonElement root, ModelToolCall call)
+    internal static bool CoreError(JsonElement root, ModelToolCall call)
     {
         if (!root.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.String || !ErrorCodes.Contains(error.GetString()!)
             || root.EnumerateObject().Any(p => p.Name is not ("error" or "reasonCode" or "message" or "untrusted" or "truncated" or "invalidCallRecovery"))) return false;

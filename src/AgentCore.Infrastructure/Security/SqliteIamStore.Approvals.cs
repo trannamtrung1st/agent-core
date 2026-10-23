@@ -34,7 +34,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (row.Domain().Operation.OperationFingerprint == fingerprint) return row;
         return null;
     }
-    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null, TenantManagementApprovalVisibility? managementVisibility = null)
+    public async ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null, TenantManagementApprovalVisibility? managementVisibility = null, TenantHttpApprovalVisibility? httpVisibility = null)
     {
         page.Validate();
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -322,6 +322,12 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
                 """).Any(parent => parent.RequestId == r.RequestId));
         }
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
+        if(httpVisibility is null)query=query.Where(r=>r.Permission!="http.request");
+        else
+        {
+            if(httpVisibility.Instances is not null) { var httpIds=httpVisibility.Instances.Select(id=>id.ToString("D")).ToArray();query=query.Where(r=>r.Permission!="http.request" || httpIds.Contains(r.InstanceId)); }
+            if(httpVisibility.Sessions is not null) { var httpSessions=httpVisibility.Sessions.Select(id=>id.ToString("D")).ToArray();query=query.Where(r=>r.Permission!="http.request" || httpSessions.Contains(r.SessionId!)); }
+        }
         if (allowedInstances is not null)
         { var ids = allowedInstances.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.Permission != "agents.update" || ids.Contains(r.InstanceId)); }
         if (sandboxVisibility?.Instances is not null)
@@ -526,6 +532,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             if (request.Operation.ReportSourceRead is not null) await RequireReportSourceReadOperation(db, request, ct, pending: true).ConfigureAwait(false);
             if (request.Operation.CompletionRead is not null) await RequireCompletionReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.ArtifactVerification is not null) await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);
+            if(request.Operation.HttpRequest is not null)await RequireHttpOperation(db,request,run,agent,ct).ConfigureAwait(false);
             if (request.Operation.AccountAction is not null) await RequireAccountActionOperation(db, request, run, agent, ct).ConfigureAwait(false);
         if (request.Operation.AccountRead is not null) await RequireAccountReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
             if (request.Operation.CredentialRead is not null) await RequireCredentialReadOperation(db, request, run, agent, ct).ConfigureAwait(false);
@@ -684,6 +691,11 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
             {
                 await RequireArtifactVerificationOperation(db, request, run, agent, ct).ConfigureAwait(false);
                 await TenantArtifactVerificationRules.ReviewerAsync(state, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).ConfigureAwait(false);
+            }
+            if(request.Operation.HttpRequest is not null)
+            {
+                await RequireHttpOperation(db,request,run,agent,ct).ConfigureAwait(false);
+                await TenantHttpOperationRules.ReviewerAsync(state,request,decision.HumanPrincipalId,new IamAuthorizer(this),ct).ConfigureAwait(false);
             }
             if (request.Operation.AccountAction is not null)
             {

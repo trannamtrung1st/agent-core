@@ -106,7 +106,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IWebSearchProvider>(),
             provider.GetService<IPublicWebFetcher>(),
             provider.GetService<IBrowser>(),
-            provider.GetRequiredService<BrowserOptions>().Enabled, provider.GetRequiredService<EmailTransportOptions>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase), provider.GetService<ITenantCredentialOAuthProvider>(), provider.GetService<ISandboxReadiness>()));
+            provider.GetRequiredService<BrowserOptions>().Enabled, provider.GetRequiredService<EmailTransportOptions>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase), provider.GetService<ITenantCredentialOAuthProvider>(), provider.GetService<ISandboxReadiness>(), provider.GetService<IHttpRequestClient>()));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
             new PromptContextBuilder(
                 provider.GetRequiredService<IToolConfigurationGate>(),

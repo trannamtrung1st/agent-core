@@ -85,7 +85,7 @@ public sealed class TenantAgentRunStore(ITenantRuntimeStore storage, ITenantRunS
             var continuation = authority is null ? null : await authority.PrepareConfigurationContinuationAsync(frame, snapshot, completion, ids, cancellationToken).ConfigureAwait(false);
             return await storage.CommitTenantOutcomeAsync(frame, snapshot, expectedSessionRevision, completion, draftEntryId, ids.NewId(), cancellationToken, continuation).ConfigureAwait(false);
         }
-        catch (AccessDeniedException e) when (authority is not null && (e.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)))
+        catch (AccessDeniedException e) when (authority is not null && (e.ReasonCode.StartsWith("http_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || e.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)))
         {
             if (e.ReasonCode.StartsWith("memory_", StringComparison.Ordinal)) await authority.RecordMemoryOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false);
             else if (e.ReasonCode.StartsWith("profile_", StringComparison.Ordinal)) await authority.RecordProfileOutputFailureAsync(new(owner.TenantId!.Value, agentRunId), e.ReasonCode, cancellationToken).ConfigureAwait(false);

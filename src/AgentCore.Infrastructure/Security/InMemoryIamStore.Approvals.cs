@@ -18,12 +18,14 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash)
         .OrderBy(r => r.Status is TenantApprovalStatus.Rejected or TenantApprovalStatus.Expired or TenantApprovalStatus.Cancelled ? 0 : r.Status == TenantApprovalStatus.Pending ? 1 : 2)
         .ThenBy(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId).FirstOrDefault();
-    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null, TenantManagementApprovalVisibility? managementVisibility = null)
+    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null, TenantBrowserApprovalVisibility? browserVisibility = null, TenantCredentialReadApprovalVisibility? credentialReadVisibility = null, IReadOnlyList<Guid>? artifactCreateSessions = null, TenantArtifactReadApprovalVisibility? artifactReadVisibility = null, TenantWorkspaceReadApprovalVisibility? workspaceReadVisibility = null, TenantWorkspaceMutationApprovalVisibility? workspaceMutationVisibility = null, TenantAttachmentReadApprovalVisibility? attachmentReadVisibility = null, bool backgroundCreationReadable = true, TenantBackgroundReportApprovalVisibility? reportVisibility = null, TenantAutomationApprovalVisibility? automationVisibility = null, TenantMemoryApprovalVisibility? memoryVisibility = null, TenantContinuityApprovalVisibility? continuityVisibility = null, TenantManagementApprovalVisibility? managementVisibility = null, TenantHttpApprovalVisibility? httpVisibility = null)
     {
         ct.ThrowIfCancellationRequested(); page.Validate();
         lock (_gate)
         {
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
+                && (r.Operation.HttpRequest is null || httpVisibility is not null && (httpVisibility.Instances is null || httpVisibility.Instances.Contains(r.Operation.InstanceId))
+                    && (httpVisibility.Sessions is null || httpVisibility.Sessions.Contains(r.SessionId)))
                 && (r.Operation.ManagementRead is null && r.Operation.ManagementMutation is null || managementVisibility is not null && (managementVisibility.Agents is null || managementVisibility.Agents.Contains(r.Operation.InstanceId)))
                 && TenantManagementInspectionSources.Visible(r.Operation.ManagementRead, managementVisibility)
                 && (r.Operation.ManagementMutation?.Binding is not { } bindingChange || managementVisibility?.Bindings is { } bindingVisibility
@@ -162,6 +164,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (request.Operation.ReportSourceRead is not null) RequireReportSourceReadOperation(request, pending: true);
             if (request.Operation.CompletionRead is not null) RequireCompletionReadOperation(request, run, agent);
             if (request.Operation.ArtifactVerification is not null) RequireArtifactVerificationOperation(request, run, agent);
+            if(request.Operation.HttpRequest is not null)RequireHttpOperation(request,run,agent);
             if (request.Operation.AccountAction is not null) RequireAccountActionOperation(request, run, agent);
             if (request.Operation.AccountRead is not null) RequireAccountReadOperation(request, run, agent);
             if (request.Operation.CredentialRead is not null) RequireCredentialReadOperation(request, run, agent);
@@ -314,6 +317,11 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             {
                 RequireArtifactVerificationOperation(request, run, agent);
                 TenantArtifactVerificationRules.ReviewerAsync(before, request.Operation.ArtifactVerification, request.OriginalInitiatorPrincipalId, decision.HumanPrincipalId, new IamAuthorizer(this), ct).GetAwaiter().GetResult();
+            }
+            if(request.Operation.HttpRequest is not null && request.Status!=TenantApprovalStatus.Cancelled)
+            {
+                RequireHttpOperation(request,run,agent);
+                TenantHttpOperationRules.ReviewerAsync(before,request,decision.HumanPrincipalId,new IamAuthorizer(this),ct).GetAwaiter().GetResult();
             }
             if (request.Operation.AccountAction is not null && request.Status != TenantApprovalStatus.Cancelled)
             {

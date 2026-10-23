@@ -22,7 +22,9 @@ public sealed record TenantApprovalDecisionDto(Guid PrincipalId, string Status, 
 public sealed record TenantApprovalOperationResultDto(Guid OperationId, string Outcome, string ReasonCode,
     long InstanceRevision, long PersonaRevision, DateTimeOffset RecordedAt,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantBrowserArtifactPublicationDto? BrowserArtifacts = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantAccountActionResultDto? AccountAction = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantAccountActionResultDto? AccountAction = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] TenantHttpReceiptDto? Http = null);
+public sealed record TenantHttpReceiptDto(int StatusCode,string FinalUrl,string? ContentType,long ProjectedBodyBytes,string BodySha256,bool Truncated);
 public sealed record TenantAccountActionResultDto(string Status, string? DraftId, string? FileId, string? Path, long? ByteSize, string? Sha256, IReadOnlyList<TenantAccountActionItemResultDto>? Items);
 public sealed record TenantAccountActionItemResultDto(string FileId, string Status);
 public sealed record TenantBrowserArtifactPublicationDto(string Status, string? ReasonCode, IReadOnlyList<TenantBrowserArtifactReferenceDto> Files);

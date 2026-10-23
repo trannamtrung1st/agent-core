@@ -68,7 +68,7 @@ public sealed class TenantApprovalRecord
         run.HasAlternateKey(r => new { r.AgentRunId, r.RootActivationId });
         var e = model.Entity<TenantApprovalRecord>();
         e.ToTable("TenantApprovalRequests", t => t.HasCheckConstraint("CK_TenantApprovalRequest_Values",
-            AgentCore.Infrastructure.Persistence.Migrations.TenantPublicDownloads.ValuesConstraint));
+            AgentCore.Infrastructure.Persistence.Migrations.TenantPublicHttp.ValuesConstraint));
         e.HasKey(r => r.RequestId); e.HasAlternateKey(r => new { r.TenantId, r.RequestId });
         e.HasAlternateKey(r => new { r.TenantId, r.RequestId, r.ExecutorPrincipalId, r.OperationId, r.Fingerprint });
         e.HasIndex(r => new { r.TenantId, r.RootActivationId, r.ExecutorPrincipalId, r.Fingerprint }).IsUnique();

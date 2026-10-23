@@ -2,7 +2,7 @@
 
 ## Current delivery state — 2026-10-23
 
-[Canonical public downloads](tenant-public-download-verification-2026-10-23.md) now use existing tenant workspace effects, exact consent and body-free durable receipts. Both stores qualify the model download→DOCX edit→Artifact journey, automatic destinations and boundary failures; the saved download review is also exercised through the actual Synthetic UI. [Public search/fetch](tenant-public-web-read-verification-2026-10-23.md) now use the current read-only tenant boundary and atomic source checks. Generic HTTP exact-operation approval/dispatch, generic Composer Resource references and proposal-wide acceptance remain open.
+[Canonical public downloads](tenant-public-download-verification-2026-10-23.md) now use existing tenant workspace effects, exact consent and body-free durable receipts. Both stores qualify the model download→DOCX edit→Artifact journey, automatic destinations and boundary failures; the saved download review is also exercised through the actual Synthetic UI. [Public search/fetch](tenant-public-web-read-verification-2026-10-23.md) now use the current read-only tenant boundary and atomic source checks. [Generic public HTTP](tenant-public-http-verification-2026-10-23.md) restores exact-operation consent, reserved dispatch and factual receipts through the current tenant owners. Generic Composer Resource references and proposal-wide acceptance remain open.
 
 The [credential/profile authority retirement](global-credential-authority-retirement-verification-2026-10-23.md) removes the global actors and unowned registry secret fallback. Canonical long SSO, large-page discovery and reserved-cleanup journey qualification remain explicit final acceptance work.
 

@@ -35,6 +35,7 @@ public sealed partial class InMemoryIamStore
         if (TenantRuntimeRules.PublishesResponse(producer, snapshot, id => sessionBacking.FindEntry(frame.SessionId, id)))
         {
             RequirePublicWebSources(producer, CancellationToken.None);
+            RequireHttpSources(producer, CancellationToken.None);
             RequireStoredProfileSource(producer, CancellationToken.None);
             RequireStoredMemorySources(producer, CancellationToken.None);
         }

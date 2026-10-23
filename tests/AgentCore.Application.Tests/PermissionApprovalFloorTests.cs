@@ -85,6 +85,7 @@ public sealed class PermissionApprovalFloorTests
         ["security.audit.read", "tenant", PermissionApprovalClass.ReadOnly, true, false, false],
         ["tenant.governance.read", "tenant", PermissionApprovalClass.ReadOnly, false, true, false],
         ["tenant.governance.manage", "tenant", PermissionApprovalClass.Mutation, true, false, false],
+        ["http.request", "agent", PermissionApprovalClass.Sensitive, false, true, false],
     ];
 
     [Theory] [MemberData(nameof(ExpectedCatalog))]
@@ -110,6 +111,8 @@ public sealed class PermissionApprovalFloorTests
         var roles = BuiltinAccessRoles.ForTenant(Guid.NewGuid(), Guid.NewGuid);
         foreach (var role in roles.Where(r => !r.HumanOnly))
             Assert.All(role.Permissions, key => Assert.False(PermissionCatalog.Get(key).HumanOnly || PermissionCatalog.Get(key).SystemOnly));
+        Assert.Contains("http.request",roles.Single(r=>r.Key==BuiltinAccessRoles.Owner).Permissions);
+        Assert.DoesNotContain(roles.Where(r=>r.Key!=BuiltinAccessRoles.Owner),r=>r.Permissions.Contains("http.request"));
         Assert.All(PermissionCatalog.All.Where(p => p.HumanOnly || p.SystemOnly), p => Assert.False(p.Delegatable));
     }
 }

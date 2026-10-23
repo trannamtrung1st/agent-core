@@ -11,8 +11,7 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantOperationAuthorizationTests
 {
-    private static TenantPublicWebReadService PublicReads(Fixture f, PublicReadPort native) => new(Operations(f), (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam,
-        f.RunConfiguration(), f.Authorizer, f.Iam, native, native, f.Clock, ToolConfigurationGates.AllowAll);
+    private static TenantPublicWebReadService PublicReads(Fixture f, PublicReadPort native) => new(new(Operations(f), (ITenantRunStore)f.Iam, (ITenantSessionStore)f.Iam, f.RunConfiguration(), f.Authorizer, f.Iam, f.Clock, ToolConfigurationGates.AllowAll), native, native, f.Clock);
     private static ModelToolCall PublicCall(string tool) => new("public-observation", tool, tool==ToolCatalog.WebSearch?"{\"query\":\"public source\",\"limit\":2}":"{\"url\":\"https://public.example/page\"}");
     [Theory]
     [InlineData(false,"web.search")] [InlineData(true,"web.search")] [InlineData(false,"web.fetch")] [InlineData(true,"web.fetch")]

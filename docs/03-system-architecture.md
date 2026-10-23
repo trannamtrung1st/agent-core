@@ -1016,3 +1016,8 @@ Terminal Run Experience sources retain transitive private evidence ownership. Co
 ## Tenant Automation recipe ownership
 
 The canonical tenant editor exposes versioned recipe metadata through its existing owned read. Its prerequisite projection uses the selected Agent's current Definition/isolation/model state; recipes do not introduce a store, scheduler, runtime owner or permission source. Immutable origin records where an editable Automation began. Actual configured admission, ordinary protected tools and exact approvals remain authoritative after customization. Independent continuity recipes use Instance-owned Experience without adopting a human's private identity or facts.
+
+
+## Generic public HTTP authority cutover
+
+The preserved HTTP escape hatch maps to explicit agent-scoped `http.request` authority with mandatory exact review, independently of Definition capability eligibility and raw Agent/Session source reads. The existing typed approval, Run dispatch fence, one-off grant, immutable receipt and continuation owners remain authoritative; no second execution engine is introduced. Shared public-web source checks serve read-only research and exact-approved HTTP. The [HTTP contract](04-backend-interfaces.md#canonical-generic-public-http-contract) owns the request/result and privilege-upgrade details. Scoped local evidence is tracked in the [HTTP qualification report](reports/tenant-public-http-verification-2026-10-23.md); proposal-wide acceptance remains open.

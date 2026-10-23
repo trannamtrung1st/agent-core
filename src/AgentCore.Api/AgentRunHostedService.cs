@@ -23,7 +23,7 @@ public sealed class AgentRunHostedService : BackgroundService
         AgentCore.Application.Security.TenantCredentialCheckService credentialChecks,
         AgentCore.Application.Security.TenantBrowserEffectService browserEffects,
         ITenantRunExecution tenantExecution, AgentCore.Application.Security.TenantWorkspaceMutationEffectService workspaceEffects,
-        AgentCore.Application.Security.TenantAccountEffectService accountEffects)
+        AgentCore.Application.Security.TenantAccountEffectService accountEffects, AgentCore.Application.Security.TenantHttpEffectService httpEffects)
         : this(
             async cancellationToken =>
             {
@@ -32,6 +32,7 @@ public sealed class AgentRunHostedService : BackgroundService
                 await browserEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await workspaceEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 await accountEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
+                await httpEffects.RecoverAsync(cancellationToken).ConfigureAwait(false);
                 var executed = await tenantExecution.ExecuteRunnableAsync(AgentRunCoordinator.DefaultBatchSize, cancellationToken).ConfigureAwait(false);
                 if (executed > 0)
                 {

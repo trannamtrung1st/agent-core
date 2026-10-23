@@ -48,7 +48,11 @@ public sealed record HttpToolRequest(
     Uri Url,
     IReadOnlyList<HttpRequestHeader> Headers,
     byte[] Body,
-    bool FollowRedirects);
+    bool FollowRedirects)
+{
+    // Trusted Core callback; it is never model input or serialized authority.
+    public Func<CancellationToken, ValueTask>? AuthorizeDispatch { get; init; }
+}
 
 public sealed record HttpToolResponse(
     int StatusCode,
@@ -63,6 +67,7 @@ public sealed record HttpToolResponse(
 
 public interface IHttpRequestClient
 {
+    bool SupportsTenantDispatchChecks => false;
     ValueTask<HttpToolResponse> SendAsync(
         HttpToolRequest request,
         CancellationToken cancellationToken = default);

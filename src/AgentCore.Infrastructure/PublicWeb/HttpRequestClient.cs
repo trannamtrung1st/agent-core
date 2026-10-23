@@ -7,6 +7,7 @@ namespace AgentCore.Infrastructure.PublicWeb;
 
 internal sealed class HttpRequestClient(IPublicWebTransport transport, ILogger<HttpRequestClient>? logger = null, IDiagnosticIdSource? diagnosticIds = null) : IHttpRequestClient
 {
+    public bool SupportsTenantDispatchChecks => true;
     public async ValueTask<HttpToolResponse> SendAsync(
         HttpToolRequest request,
         CancellationToken cancellationToken = default)
@@ -32,7 +33,7 @@ internal sealed class HttpRequestClient(IPublicWebTransport transport, ILogger<H
                 }
 
                 var response = await transport.SendAsync(
-                        new PublicWebOutboundRequest(request.Method, current, request.Headers, hop == 0 ? body : []),
+                        new PublicWebOutboundRequest(request.Method, current, request.Headers, hop == 0 ? body : []) { AuthorizeDispatch = request.AuthorizeDispatch },
                         token)
                     .ConfigureAwait(false);
                 string? redirect = null;

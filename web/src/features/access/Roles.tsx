@@ -9,7 +9,7 @@ import { identityRequest, tenantApi, IdentityError, type Permission, type Role, 
 import { AccessError, AccessLoading, accessErrorMessage } from './AccessFeedback';
 import { useIdentityQuery } from './useIdentityQuery';
 
-const families: Record<string, string> = { agents: 'Agents', 'agent-definitions': 'Agent definitions', 'agent-runs': 'Agent runs', 'iam.roles': 'Roles and assignments', 'security.audit': 'Security audit', 'tenant.governance': 'Organization governance', 'core-events': 'Events' };
+const families: Record<string, string> = { http: 'Public HTTP', agents: 'Agents', 'agent-definitions': 'Agent definitions', 'agent-runs': 'Agent runs', 'iam.roles': 'Roles and assignments', 'security.audit': 'Security audit', 'tenant.governance': 'Organization governance', 'core-events': 'Events' };
 export function permissionFamily(key: string) { const family = key.slice(0, key.lastIndexOf('.')); return families[family] ?? (family.charAt(0).toUpperCase() + family.slice(1).replaceAll('-', ' ')); }
 export function permissionLabel(key: string) { const action = key.slice(key.lastIndexOf('.') + 1).replaceAll('_', ' '); return action === 'grant exception' ? 'Authorize an exact action once' : action.charAt(0).toUpperCase() + action.slice(1); }
 

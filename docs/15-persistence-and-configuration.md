@@ -4,6 +4,12 @@
 
 SQLite root lookup, local effect conflict checks and rolling operation quotas use the Domain's `PreparedTenantOperation.OperationFingerprint`, matching InMemory for every typed family. The incumbent tenant/root/executor index bounds lineage lookup; tenant/actor/root quotas are checked before loading the remaining recent operation candidates. The `TenantApprovalRequests.Fingerprint` column continues to store exact `ActionHash` for immutable foreign-key witnesses. No migration, column, index or permission/default changes accompany this consolidation. [Qualification and historical inventory cleanup](reports/multitenant-iam-delivery-2026-10-16.md#approval-semantic-matching-and-event-recovery).
 
+## Canonical public HTTP persistence
+
+`20261023190000_TenantPublicHttp` extends the existing approval payload with one closed HTTP variant and adds nullable receipt `HttpJson`. Old payloads omit the HTTP member without changing serialized bytes or hashes. The forward upgrade inserts the explicit `http.request` permission only into built-in human Owner roles and advances affected tenant security revisions. Existing operational, Contributor and custom roles retain their permissions.
+
+The migration reuses frozen predecessor composition, retains all 135 prior guard bodies/indexes and adds three HTTP receipt guards, for 138 guards. Completed metadata requires the exact approved request/decision and its owned reserved dispatch; HTTP receipts reject updates and deletes. Empty Down/Up restores the previous schema. Retained HTTP requests, receipts, new checkpoint markers or explicit non-Owner HTTP role permissions refuse lossy Down before disabling foreign keys. Definition capability strings alone do not block downgrade. The [qualification report](reports/tenant-public-http-verification-2026-10-23.md) owns focused evidence and remaining acceptance limits.
+
 ## Canonical configuration remedy and binding persistence
 
 `20261023140000_TenantConfigurationRemedyAuthoring` adds optional closed Remedy and Binding variants to the incumbent management plan. Remedy metadata retains exact original arguments and the qualified inspection reference; Binding metadata contains only the existing association, safe credential revision/metadata and before/after witnesses. Old plans omit both members. Human and model binding effects share the incumbent association writer; settings/bindings, Instance revision, consent settlement, redacted audit and immutable factual receipt retain their existing transaction owners.

@@ -7,7 +7,10 @@ internal sealed record PublicWebOutboundRequest(
     Uri Uri,
     IReadOnlyList<HttpRequestHeader> Headers,
     byte[] Body,
-    int MaxResponseBytes = PublicWebLimits.MaxBodyBytes);
+    int MaxResponseBytes = PublicWebLimits.MaxBodyBytes)
+{
+    internal Func<CancellationToken,ValueTask>? AuthorizeDispatch { get; init; }
+}
 
 internal sealed record PublicWebTransportResponse(
     int StatusCode,

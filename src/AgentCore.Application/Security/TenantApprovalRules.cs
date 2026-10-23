@@ -47,6 +47,7 @@ public static partial class TenantApprovalRules
     public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => op.Kind switch
     {
         TenantOperationKind.AutomationMutation => PrepareAutomationMutation(op.OperationId, op.InstanceId, op.AutomationMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        TenantOperationKind.HttpRequest => PrepareHttpRequest(op.OperationId, op.InstanceId, op.HttpRequest!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ManagementMutation => PrepareManagementMutation(op.OperationId, op.InstanceId, op.ManagementMutation!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.ManagementRead => PrepareManagementRead(op.OperationId, op.InstanceId, op.ManagementRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         TenantOperationKind.AutomationRead => PrepareAutomationRead(op.OperationId, op.InstanceId, op.AutomationRead!, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
@@ -84,6 +85,7 @@ public static partial class TenantApprovalRules
         if (op.ReportSourceRead is not null) TenantReportSourceReadRules.Source(request, run);
         else if (op.BackgroundReport is not null) TenantBackgroundReportRules.Source(request, run);
         else TenantApprovalContinuationRules.Require(request, run, source);
+        if (op.HttpRequest is { } http && http.SessionId != request.SessionId) throw new ArgumentException("Use the actual HTTP request Session.");
         if (op.ManagementMutation is { } managementMutation && managementMutation.SessionId != request.SessionId) throw new ArgumentException("Use the actual management change Session.");
         if (op.AutomationMutation is { } automationMutation && automationMutation.SessionId != request.SessionId) throw new ArgumentException("Use the actual Automation authoring Session.");
         if (op.ManagementRead is { } managementRead && managementRead.SessionId != request.SessionId) throw new ArgumentException("Use the actual management read Session.");

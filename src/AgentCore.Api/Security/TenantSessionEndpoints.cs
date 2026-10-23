@@ -34,6 +34,7 @@ public static class TenantSessionEndpoints
                     AgentCore.Domain.Security.TenantOperationKind.ArtifactVerification => "verify_artifact",
                     AgentCore.Domain.Security.TenantOperationKind.ArtifactPublication => "publish_artifact",
                     AgentCore.Domain.Security.TenantOperationKind.AccountAction => "use_connected_account",
+            AgentCore.Domain.Security.TenantOperationKind.HttpRequest => "send_http_request",
                     AgentCore.Domain.Security.TenantOperationKind.AccountRead => "read_connected_account",
                     AgentCore.Domain.Security.TenantOperationKind.CredentialRead => "inspect_credential_metadata",
                     AgentCore.Domain.Security.TenantOperationKind.BrowserCommand => "browser_command",

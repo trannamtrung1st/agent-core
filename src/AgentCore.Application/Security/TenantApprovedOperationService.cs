@@ -45,6 +45,7 @@ public sealed partial class TenantApprovedOperationService(IIamStore security, I
         if (existing is not null) return Existing(existing, request, run);
         if (request.Operation.BackgroundStart is not null) return await ExecuteBackgroundStartAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);
         if (request.Operation.WorkspaceMutation is not null) throw new SecurityConflictException("workspace_effect_unsettled");
+        if (request.Operation.HttpRequest is not null) throw new SecurityConflictException("http_effect_unsettled");
         if (request.Operation.AccountAction is not null) throw new SecurityConflictException("account_effect_unsettled");
         if (request.Operation.ArtifactPublication is not null) return await ExecuteArtifactAsync(reference, request, run, source, state, agent, generation, ct).ConfigureAwait(false);
         if (request.Operation.AutomationMutation is not null) return await ExecuteAutomationMutationAsync(reference, request, run, source, state, generation, ct).ConfigureAwait(false);

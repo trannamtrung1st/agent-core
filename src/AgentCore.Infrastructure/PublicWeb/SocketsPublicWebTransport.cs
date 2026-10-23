@@ -20,7 +20,8 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpE
         PublicWebOutboundRequest outbound,
         CancellationToken cancellationToken)
     {
-        using var handler = PublicWebSocketsHttpFactory.CreateHandler(dns, connect);
+        if (outbound.AuthorizeDispatch is { } authorize) await authorize(cancellationToken).ConfigureAwait(false);
+        using var handler = PublicWebSocketsHttpFactory.CreateHandler(dns, connect, outbound.AuthorizeDispatch);
 
         try
         {
@@ -72,7 +73,7 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpE
             request.Headers.TryAddWithoutValidation(header.Name, header.Value);
         }
 
-        if (outbound.Body.Length > 0)
+        if (outbound.Body.Length > 0 || contentType is not null)
         {
             request.Content = new ByteArrayContent(outbound.Body);
             MediaTypeHeaderValue mediaType;

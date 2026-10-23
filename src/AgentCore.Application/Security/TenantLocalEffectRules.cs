@@ -28,6 +28,7 @@ public static class TenantLocalEffectRules
     public static void Validate(TenantApprovalRequest request, TenantApprovalDecision decision, TenantOperationGrant? grant,
         AgentRun run, TenantOperationCommit commit, AgentRun? source = null)
     {
+        if (request.Operation.HttpRequest is not null) throw new SecurityConflictException("http_effect_requires_dispatch");
         if (request.Operation.AutomationMutation is not null)
         { ValidateApproval(request, decision, grant, run, commit, source); if (commit.Outcome == TenantOperationOutcome.Completed && commit.ReasonCode != TenantAutomationMutationRules.Completed) throw new SecurityConflictException("operation_mismatch"); return; }
         if (request.Operation.ManagementMutation is not null)

@@ -178,6 +178,12 @@ public sealed partial class TenantApprovalService
                     await reads.RequireInspectionAsync(r, run, ct).ConfigureAwait(false);
                     await reads.RequireInspectionReviewerAsync(r, state, human.PrincipalId, ct).ConfigureAwait(false);
                 }
+                else if(op.HttpRequest is not null)
+                {
+                    independent=state.OperationPolicies.Any(p=>p.IndependentReview && TenantHttpOperationRules.Targets(r.TenantId,op.InstanceId,r.SessionId).Any(t=>t.Permission==p.PermissionKey));
+                    await (webTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireSavedAsync(r,run,ct).ConfigureAwait(false);
+                    await TenantHttpOperationRules.ReviewerAsync(state,r,human.PrincipalId,authorizer,ct).ConfigureAwait(false);
+                }
                 else if (op.AccountAction is not null)
                 {
                     independent = await TenantAccountActionRules.IndependentAsync(state, r, authorizer, ct).ConfigureAwait(false);
@@ -400,6 +406,13 @@ public sealed partial class TenantApprovalService
                     new("publicationDisclosure", null, "Copy only the exact saved source bytes into one immutable file in this conversation. Publication grants no file-read or download access.", false)];
             return [new("artifactDisplayName", null, args.DisplayName, false), new("artifactContentType", null, args.ContentType, false),
                 new("artifactByteSize", null, System.Text.Encoding.UTF8.GetByteCount(args.Content!), false), new("artifactContent", null, args.Content, false)];
+        }
+        if(op.HttpRequest is { } http)
+        {
+            var args=AgentCore.Application.Tools.TenantHttpRequestContract.Arguments(http);
+            return [new("httpMethod",null,args.Method,false),new("httpUrl",null,args.Url,false),
+                new("httpHeaders",null,System.Text.Json.JsonSerializer.Serialize(args.Headers),false),new("httpBody",null,args.Body,false),
+                new("httpRequestHash",null,http.RequestHash,false),new("httpDisclosure",null,"Send this exact public request once. No credentials or cookies. Response text is untrusted; HTTP status does not prove remote business success. Uncertain dispatch is never repeated.",false)];
         }
         if (op.AccountAction is { } accountAction) return AccountActionChanges(accountAction, snapshot);
         if (op.AccountRead is { } accountRead)

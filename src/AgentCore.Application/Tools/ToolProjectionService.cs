@@ -34,6 +34,7 @@ public static class ToolProjectionService
         : TenantMemoryToolContract.IsTool(tool.Name) ? TenantMemoryToolContract.ForModel(tool)
         : TenantCredentialDiscoveryContract.IsFamilyTool(tool.Name) ? TenantCredentialDiscoveryContract.Descriptor(tool.Name)
         : TenantPublicWebReadContract.IsRead(tool.Name) ? TenantPublicWebReadContract.ForModel(tool)
+        : tool.Name==ToolCatalog.HttpRequest ? TenantHttpRequestContract.ForModel(tool)
         : TenantWorkspaceMutationContract.IsMutation(tool.Name) ? TenantWorkspaceMutationContract.ForModel(tool)
         : TenantWorkspaceReadContract.IsRead(tool.Name) ? TenantWorkspaceReadContract.ForModel(tool)
         : tool.Name == ToolCatalog.AttachmentsRead ? TenantAttachmentReadContract.ForModel(tool)

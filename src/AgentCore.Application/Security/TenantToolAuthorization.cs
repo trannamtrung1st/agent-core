@@ -72,7 +72,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                 && (run.Admission.ExecutionContext?.Origin == AgentCore.Domain.Conversation.ExecutionOrigin.CompletionReport
                     || TenantTaskExecutionContract.IsBackground(run) && !TenantTaskExecutionContract.IsTool(tool) && !TenantTaskExecutionContract.IsNativeInspection(tool) && tool != ToolCatalog.RequestAuthorization))
                 return new(true, false, reference, "tenant_effect_unavailable");
-            var allowed = IamToolContracts.IsInspection(tool) || (TenantPublicWebReadContract.IsRead(tool) && TenantTaskExecutionContract.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration) || TenantAutomationMutationContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantAutomationReadContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantExperienceToolContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantMemoryToolContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || TenantCredentialDiscoveryContract.IsTool(tool) || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool) || tool == ToolCatalog.AgentStateInspect)
+            var allowed = IamToolContracts.IsInspection(tool) || ((tool==ToolCatalog.HttpRequest || TenantPublicWebReadContract.IsRead(tool)) && TenantTaskExecutionContract.Allows(run) && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration) || TenantAutomationMutationContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantAutomationReadContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantExperienceToolContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || TenantMemoryToolContract.IsTool(tool) && TenantTaskExecutionContract.Allows(run) || (TenantWorkspaceMutationContract.IsMutation(tool) || TenantWorkspaceReadContract.IsRead(tool) || tool is ToolCatalog.AttachmentsRead or ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify || TenantCredentialDiscoveryContract.IsTool(tool) || tool == ToolCatalog.RequestAuthorization || tool == TenantPreferenceToolContract.Name || TenantSandboxInspectionContract.IsInspection(tool) || TenantBrowserInspectionContract.IsInspection(tool) || tool == ToolCatalog.AgentStateInspect)
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
@@ -191,6 +191,11 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                 if (result.Receipt?.PublicDownload is { } download) output!["download"] = JsonSerializer.SerializeToNode(TenantPublicDownloadRules.Project(download));
                 return output!.ToJsonString();
             }
+            if(call.Name==ToolCatalog.HttpRequest)
+            {
+                _=TenantHttpRequestContract.Parse(call.ArgumentsJson);
+                return System.Text.Json.JsonSerializer.Serialize(new { requiresApproval=true,reasonCode="http_exact_review_required" });
+            }
             if (TenantPublicWebReadContract.IsRead(call.Name))
             {
                 if (publicWebReads is null || admission?.AgentRunGeneration is not { } generation) return Error("forbidden", "tenant_effect_unavailable");
@@ -273,7 +278,7 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
         if (run.Status != AgentCore.Domain.Conversation.AgentRunStatus.Running || run.Claim?.Generation != admission.AgentRunGeneration)
             throw new AccessDeniedException("tenant_runtime_unavailable");
         if (TenantTaskExecutionContract.IsBackground(run) && intent.WorkspaceRead is null && intent.AttachmentArguments is null && intent.ArtifactId is null
-            && intent.ManagementMutation is null && intent.ManagementRead is null && intent.AutomationMutation is null && intent.AutomationRead is null && intent.Experience is null && intent.Continuity is null && intent.Memory is null && intent.WorkspaceMutation is null && intent.ArtifactArguments is null && intent.CompletionArguments is null && intent.BackgroundArguments is null
+            && intent.HttpArguments is null && intent.ManagementMutation is null && intent.ManagementRead is null && intent.AutomationMutation is null && intent.AutomationRead is null && intent.Experience is null && intent.Continuity is null && intent.Memory is null && intent.WorkspaceMutation is null && intent.ArtifactArguments is null && intent.CompletionArguments is null && intent.BackgroundArguments is null
             && intent.MetadataArguments is null && intent.AccountAction is null && intent.AccountRead is null && intent.Browser is null && intent.Sandbox is null && intent.SandboxRead is null && intent.SandboxControl is null)
         {
             await authorizer.RecordFailureAsync(boundary.Reference, "", "tenant_effect_unavailable", AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ApprovalPreparation, ct, session).ConfigureAwait(false);
@@ -317,6 +322,8 @@ public sealed partial class TenantToolAuthorization(ITenantRunStore runs, Tenant
                 : await approvals.PrepareArtifactAsync(boundary.Reference, artifact, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.BackgroundArguments is { } background)
             return await approvals.PrepareBackgroundStartAsync(boundary.Reference, background, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
+        if(intent.HttpArguments is { } http)
+            return await approvals.PrepareHttpRequestAsync(boundary.Reference,http,run.Revision,run.Claim!.Generation,ct).ConfigureAwait(false);
         if (intent.AccountAction is { } accountAction)
             return await approvals.PrepareAccountActionAsync(boundary.Reference, accountAction, run.Revision, run.Claim!.Generation, ct).ConfigureAwait(false);
         if (intent.AccountRead is { } accountRead)

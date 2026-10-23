@@ -9,7 +9,7 @@ public sealed class ToolConfigurationGate(
     IWebSearchProvider? webSearch,
     IPublicWebFetcher? publicWebFetcher,
     IBrowser? browserSession = null,
-    bool browserEnabled = false, EmailTransportOptions? emailOptions = null, bool synthetic = false, ITenantCredentialOAuthProvider? oauth = null, ISandboxReadiness? sandbox = null) : IToolConfigurationGate
+    bool browserEnabled = false, EmailTransportOptions? emailOptions = null, bool synthetic = false, ITenantCredentialOAuthProvider? oauth = null, ISandboxReadiness? sandbox = null, IHttpRequestClient? http = null) : IToolConfigurationGate
 {
     public bool IsExecutionConfigured(string toolName) => toolName == ToolCatalog.BrowserConfiguration
         ? browserSession is not null
@@ -25,6 +25,7 @@ public sealed class ToolConfigurationGate(
             ToolCatalog.SandboxStatus or ToolCatalog.SandboxProcessStatus or ToolCatalog.SandboxProfiles => true,
             _ when toolName.StartsWith("sandbox.", StringComparison.Ordinal) => sandbox?.IsAvailable == true,
             ToolCatalog.WebSearch => webSearch?.IsAvailable == true,
+            ToolCatalog.HttpRequest => http?.SupportsTenantDispatchChecks == true,
             ToolCatalog.WebFetch => publicWebFetcher is not null,
             ToolCatalog.WebDownload => publicWebFetcher?.SupportsDownloads == true,
             ToolCatalog.EmailAccounts or ToolCatalog.EmailRequestAccount or ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft

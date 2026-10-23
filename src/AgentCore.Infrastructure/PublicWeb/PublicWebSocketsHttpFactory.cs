@@ -6,7 +6,8 @@ namespace AgentCore.Infrastructure.PublicWeb;
 internal static class PublicWebSocketsHttpFactory
 {
     internal static SocketsHttpHandler CreateHandler(IPublicWebDnsResolver dns,
-        Func<IPAddress, int, CancellationToken, ValueTask<Stream>>? connect = null) =>
+        Func<IPAddress, int, CancellationToken, ValueTask<Stream>>? connect = null,
+        Func<CancellationToken,ValueTask>? authorize = null) =>
         new()
         {
             AllowAutoRedirect = false,
@@ -15,10 +16,18 @@ internal static class PublicWebSocketsHttpFactory
             ConnectCallback = async (context, token) =>
             {
                 var addresses = await dns.ResolveAsync(context.DnsEndPoint.Host, token).ConfigureAwait(false);
+                if (authorize is not null) await authorize(token).ConfigureAwait(false);
+                async ValueTask<Stream> Connect(IPAddress address, int port, CancellationToken ct)
+                {
+                    if (authorize is not null) await authorize(ct).ConfigureAwait(false);
+                    var stream = await (connect ?? ConnectSocketAsync)(address, port, ct).ConfigureAwait(false);
+                    try { if (authorize is not null) await authorize(ct).ConfigureAwait(false); return stream; }
+                    catch { await stream.DisposeAsync().ConfigureAwait(false); throw; }
+                }
                 return await ConnectFirstPermittedAsync(
                         addresses,
                         context.DnsEndPoint.Port,
-                        connect ?? ConnectSocketAsync,
+                        Connect,
                         token)
                     .ConfigureAwait(false);
             }
@@ -47,6 +56,7 @@ internal static class PublicWebSocketsHttpFactory
             {
                 throw;
             }
+            catch (Exception e) when(e is AgentCore.Application.Security.AccessDeniedException or AgentCore.Application.Security.SecurityConflictException) { throw; }
             catch (PublicWebFetchException)
             {
                 throw;

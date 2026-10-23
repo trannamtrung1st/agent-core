@@ -64,6 +64,7 @@ public static class TenantApprovalEndpoints
             TenantOperationKind.ArtifactVerification => ("Verify file metadata", "verify_artifact"),
             TenantOperationKind.ArtifactPublication => ("Publish exact file", "publish_artifact"),
             TenantOperationKind.AccountAction => ("Use exact connected account", "use_connected_account"),
+            TenantOperationKind.HttpRequest => ("Send exact public HTTP request", "send_http_request"),
             TenantOperationKind.AccountRead => ("Read exact connected account", "read_connected_account"),
             TenantOperationKind.CredentialRead => ("Read bound Credential metadata", "inspect_credential_metadata"),
             TenantOperationKind.BrowserCommand => ("Review exact Browser command", "browser_command"),
@@ -85,7 +86,7 @@ public static class TenantApprovalEndpoints
                 op.SandboxCommand is { } sandbox ? new(sandbox.SessionId, sandbox.ProfileId, sandbox.ProfileRevision, sandbox.CommandJson,
                     sandbox.ExpectedLeaseRevision, sandbox.ExpectedGeneration, sandbox.HomeAccess.ToString()) : null),
             view.Decision is { } d ? new(d.HumanPrincipalId, Camel(d.Status), d.DecidedAt) : null,
-            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson), view.AccountResult is { } account ? new(account.Status, account.DraftId, account.FileId, account.Path, account.ByteSize, account.Sha256, account.Items?.Select(i => new TenantAccountActionItemResultDto(i.FileId, i.Status)).ToArray()) : null) : null,
+            view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt, BrowserArtifactResult(result.BrowserArtifactsJson), view.AccountResult is { } account ? new(account.Status, account.DraftId, account.FileId, account.Path, account.ByteSize, account.Sha256, account.Items?.Select(i => new TenantAccountActionItemResultDto(i.FileId, i.Status)).ToArray()) : null, result.Http is { } http ? new(http.StatusCode,http.FinalUrl,http.ContentType,http.ProjectedBodyBytes,http.BodySha256,http.Truncated) : null) : null,
             review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,
                 review.Changes.Select(c => new TenantApprovalChangeDto(c.Field, c.Before, c.After, c.BeforeAvailable, c.AfterAvailable, c.RestoresDefault)).ToArray(),
                 review.CanDecide, review.CanCancel, review.DecisionUnavailableReason, review.IndependentReview, review.ServerNow, review.ExecutionState), op.ReportSourceRead?.ParentSessionId ?? op.BackgroundReport?.ParentSessionId);

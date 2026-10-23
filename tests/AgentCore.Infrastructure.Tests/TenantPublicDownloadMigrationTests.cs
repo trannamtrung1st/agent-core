@@ -28,6 +28,7 @@ public sealed class TenantPublicDownloadMigrationTests
     }
     private static void AssertExtended(SortedDictionary<string,string> before, SortedDictionary<string,string> after)
     {
+        after=new(after.Where(p=>!p.Key.StartsWith("trigger:TR_TenantOperationReceipts_Http_",StringComparison.Ordinal)).ToDictionary(p=>p.Key,p=>p.Value));
         Assert.Equal(before.Keys, after.Keys);
         foreach (var item in before)
         {

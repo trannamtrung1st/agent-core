@@ -7,6 +7,44 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SocketsPublicWebTransportTests
 {
+    [Theory] [InlineData("GET")] [InlineData("HEAD")] [InlineData("POST")] [InlineData("DELETE")]
+    public async Task Exact_empty_body_Content_Type_reaches_the_wire_after_all_dispatch_checks(string method)
+    {
+        var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();
+        try
+        {
+            var server=Task.Run(async()=> {
+                using var client=await listener.AcceptTcpClientAsync();await using var stream=client.GetStream();var captured=new System.Text.StringBuilder();var buffer=new byte[4096];
+                while(!captured.ToString().Contains("\r\n\r\n",StringComparison.Ordinal)) { var read=await stream.ReadAsync(buffer);if(read==0)break;captured.Append(System.Text.Encoding.ASCII.GetString(buffer,0,read)); }
+                await stream.WriteAsync("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"u8.ToArray());return captured.ToString();
+            });
+            var checks=0;var transport=new SocketsPublicWebTransport(new ScriptedDnsResolver(IPAddress.Parse("8.8.8.8")),connect:async(_,_,token)=> {
+                var socket=new Socket(AddressFamily.InterNetwork,SocketType.Stream,ProtocolType.Tcp);await socket.ConnectAsync((IPEndPoint)listener.LocalEndpoint,token);return new NetworkStream(socket,true);
+            });
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var response=await transport.SendAsync(new(method,new Uri("http://public.example/submit"),[new("Content-Type","text/plain")],[]) { AuthorizeDispatch=_=> { checks++;return ValueTask.CompletedTask; } },deadline.Token);
+            var wire=await server.WaitAsync(deadline.Token);Assert.Equal(204,response.StatusCode);Assert.StartsWith(method+" /submit HTTP/1.1",wire);Assert.Contains("Content-Type: text/plain",wire,StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Cookie:",wire,StringComparison.OrdinalIgnoreCase);Assert.DoesNotContain("Authorization:",wire,StringComparison.OrdinalIgnoreCase);Assert.Equal(4,checks);
+        }
+        finally { listener.Stop(); }
+    }
+    [Theory] [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)]
+    public async Task Tenant_dispatch_check_refuses_before_HTTP_bytes_after_DNS_and_after_connect(int refuseAt)
+    {
+        var dns=new ScriptedDnsResolver(IPAddress.Parse("8.8.8.8"),IPAddress.Parse("1.1.1.1"));var checks=0;var connects=0;var stream=new TrackingStream();
+        var transport=new SocketsPublicWebTransport(dns,connect:(_,_,_)=> { connects++;return ValueTask.FromResult<Stream>(stream); });
+        var outbound=new PublicWebOutboundRequest("POST",new Uri("http://public.example/submit"),[],[1,2,3]) {
+            AuthorizeDispatch=_=>++checks==refuseAt?throw new AgentCore.Application.Security.AccessDeniedException("permission_denied"):ValueTask.CompletedTask };
+        await Assert.ThrowsAnyAsync<Exception>(()=>transport.SendAsync(outbound,CancellationToken.None).AsTask());
+        Assert.Equal(refuseAt,checks);Assert.Equal(refuseAt==4?1:0,connects);Assert.Equal(0,stream.Writes);
+        if(refuseAt==4)Assert.True(stream.Disposed);
+    }
+    private sealed class TrackingStream:MemoryStream
+    {
+        public int Writes;public bool Disposed;
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,CancellationToken ct=default) { Writes++;return base.WriteAsync(buffer,ct); }
+        protected override void Dispose(bool disposing) { Disposed=true;base.Dispose(disposing); }
+    }
     [Theory]
     [InlineData("10.0.0.1")]
     [InlineData("127.0.0.1")]

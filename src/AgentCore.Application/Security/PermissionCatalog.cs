@@ -93,6 +93,7 @@ public static class PermissionCatalog
         Add("security.audit", "tenant", "read", PermissionApprovalClass.ReadOnly, true);
         Add("tenant.governance", "tenant", "read", PermissionApprovalClass.ReadOnly);
         Add("tenant.governance", "tenant", "manage", PermissionApprovalClass.Mutation, true);
+        Add("http", "agent", "request", PermissionApprovalClass.Sensitive);
         return result.AsReadOnly();
     }
 }
@@ -110,7 +111,7 @@ public static class BuiltinAccessRoles
         return [
             Role(Owner, "Owner", true, tenant),
             Role("access-administrator", "Access Administrator", true, tenant.Where(p => p.Key.StartsWith("members.", StringComparison.Ordinal) || p.Key.StartsWith("iam.roles.", StringComparison.Ordinal) || p.Key == "security.audit.read")),
-            Role("contributor", "Contributor", false, tenant.Where(p => !p.HumanOnly && !p.Key.StartsWith("approvals.", StringComparison.Ordinal) && !p.Key.StartsWith("tenant.governance.", StringComparison.Ordinal))),
+            Role("contributor", "Contributor", false, tenant.Where(p => !p.HumanOnly && p.Key != "http.request" && !p.Key.StartsWith("approvals.", StringComparison.Ordinal) && !p.Key.StartsWith("tenant.governance.", StringComparison.Ordinal))),
             Role("reader", "Reader", false, tenant.Where(p => !p.HumanOnly && p.Key.EndsWith(".read", StringComparison.Ordinal))),
             Role("agent-operator", "Agent Operator", false, tenant.Where(p => p.Key is "agents.read" or "agents.chat" or "agent-runs.read" or "agent-runs.cancel" or "sessions.read" or "sessions.create" or "sessions.manage")),
             Role("agent-administrator", "Agent Administrator", false, tenant.Where(p => !p.HumanOnly && (p.Key.StartsWith("agents.", StringComparison.Ordinal) || p.Key.StartsWith("agent-definitions.", StringComparison.Ordinal) || p.Key.StartsWith("skills.", StringComparison.Ordinal)))),

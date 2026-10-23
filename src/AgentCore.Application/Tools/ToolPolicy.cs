@@ -233,6 +233,8 @@ public static class ToolPolicy
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && TenantTaskExecutionContract.Allows(context) && publicRead.SessionId == context.OwnedSessionId
                 && TenantPublicWebReadContract.Allows(definition, descriptor.Name);
+        if(context?.ExecutionContext is not null && descriptor.Name==ToolCatalog.HttpRequest)
+            return context is { ModelSupportsTools:true,AgentInstanceId:not null,OwnedSessionId:not null } && TenantTaskExecutionContract.Allows(context) && TenantHttpRequestContract.Allows(definition);
         if (context?.ExecutionContext is { } mutation && TenantWorkspaceMutationContract.IsMutation(descriptor.Name))
             return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null }
                 && TenantTaskExecutionContract.Allows(context)

@@ -6072,7 +6072,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 if (_runtimeOwner?.TenantId is not null && _boundAgentRun is not null
                     && input.Error is AgentCore.Application.Security.AccessDeniedException denied
-                    && (denied.ReasonCode.StartsWith("public_web_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("experience_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("automation_", StringComparison.Ordinal)
+                    && (denied.ReasonCode.StartsWith("http_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("public_web_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("account_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("profile_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("memory_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("continuity_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("experience_", StringComparison.Ordinal) || denied.ReasonCode.StartsWith("automation_", StringComparison.Ordinal)
                         || AgentCore.Application.Security.TenantAutomationConversationRules.IsConversationRoot(_boundAgentRun)))
                 {
                     var source = new[] { "public_web", "automation", "experience", "continuity", "memory", "profile", "account" }
