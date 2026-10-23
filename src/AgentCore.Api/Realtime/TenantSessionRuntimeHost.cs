@@ -196,9 +196,16 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     {
         var current = await runs.FindTenantRunAsync(candidate.Run.Owner.TenantId!.Value, candidate.Run.AgentRunId, ct).ConfigureAwait(false);
         if (current is { Status: AgentRunStatus.Running, Claim: { } claim } && claim.Generation == candidate.Run.Claim!.Generation) return;
+        // A durable completion commit precedes its final transport publication. Receipts
+        // and new admissions must await that owning attempt's normal drain; cancelling
+        // it here can abort publication and retire the attachment for its successor.
+        var draining = current is { Status: AgentRunStatus.Completed } && current.Owner == candidate.Run.Owner
+            && current.AttemptCount == candidate.Run.AttemptCount;
         bool currentLive; lock (_gate) currentLive = _live.GetValueOrDefault(candidate.Run.SessionId) == candidate;
-        if (currentLive) StopTokens(candidate);
+        if (currentLive && !draining) StopTokens(candidate);
+        RuntimeRetirementObserved?.Invoke(candidate.Run);
     }
+    internal Action<AgentRun>? RuntimeRetirementObserved { get; set; }
     private async ValueTask DeferUnacceptedAsync(AgentRun run, CancellationToken ct)
     {
         var signal = run.WaitCount > 0 && run.Checkpoint?.AwaitingSignalAdmission == true;

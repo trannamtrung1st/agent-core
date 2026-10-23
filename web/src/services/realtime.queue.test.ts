@@ -16,6 +16,23 @@ describe("Codex-style pending send queue", () => {
     hooks.resetOutput();
     useSessionStore.setState(emptySession());
   });
+  it("recovers a refused Steer once when intentional stop raises the close callback, retaining the queue without replay", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string) => method === "SendText"
+      ? { accepted: false, error: { code: "stale_revision", message: "State changed." } }
+      : { accepted: true });
+    const stop = vi.fn().mockResolvedValue(undefined);
+    stop.mockImplementationOnce(async () => { hooks.handleHubClosed(); });
+    const start = vi.fn().mockResolvedValue(undefined);
+    hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Retain this objective" });
+    await sendDraft();
+    const localId = useSessionStore.getState().pendingSendQueue[0].localId;
+    await steerQueuedSend(localId);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("AttachTenant", expect.anything()));
+    expect(stop).toHaveBeenCalledTimes(1); expect(start).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls.filter(([method]) => method === "SendText")).toHaveLength(1);
+    expect(useSessionStore.getState().pendingSendQueue).toEqual([expect.objectContaining({ localId, text: "Retain this objective", dispatching: false, error: "State changed." })]);
+  });
   it("omits empty editor parts for attachment-only sends", async () => {
     const invoke=vi.fn().mockResolvedValue({accepted:true}); hooks.setConnection({invoke,send:vi.fn()} as never);
     const file={localId:"file1",displayName:"notes.txt",contentType:"text/plain",byteSize:4,status:"ready" as const,progress:100,attachmentId:"att1",error:null};
@@ -75,6 +92,28 @@ describe("Codex-style pending send queue", () => {
     expect(useSessionStore.getState().pendingSendQueue).toEqual(queue);
     expect(useSessionStore.getState().draft).toBe("");
     expect(useSessionStore.getState().entries.some(entry => entry.role === "user" && entry.text === "Change direction")).toBe(true);
+  });
+
+  it("keeps awaiting the steered response when the retired response terminates after admission", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), agentRunId: "run-current", connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", outputState: "generating", draft: "Later" });
+    await sendDraft();
+    useSessionStore.setState({ draft: "Change direction" });
+    await sendDraft("interrupt");
+    const event = (sequence: number, responseId: string, type: string, payload: Record<string, unknown>) => ({
+      protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: `evt-${sequence}`, sequence,
+      timestamp: new Date().toISOString(), correlationId: `evt-${sequence}`, causationId: null, responseId, type, payload
+    });
+    hooks.handleEvent(event(1, "r1", "agent.response.interrupted", { reason: "userSteer" }));
+    expect(composerSendLabel()).toBe("Queue");
+    expect(useSessionStore.getState().pendingSendQueue.map(item => item.text)).toEqual(["Later"]);
+    expect(invoke.mock.calls.filter(call => call[0] === "SendText")).toHaveLength(1);
+
+    hooks.handleEvent(event(2, "r2", "agent.response.started", { runId: "run-steered" }));
+    hooks.handleEvent(event(3, "r2", "agent.response.completed", { status: "completed" }));
+    await vi.waitFor(() => expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0));
+    expect(invoke.mock.calls.filter(call => call[0] === "SendText").map(call => call[1].payload.text)).toEqual(["Change direction", "Later"]);
   });
 
   it("does not send an empty steer or consume the queue when idle", async () => {

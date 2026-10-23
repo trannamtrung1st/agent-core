@@ -1,0 +1,182 @@
+{
+  "date": "2026-10-24",
+  "preimage": "95b954ca",
+  "profile": "Synthetic",
+  "persistence": "Disposable SQLite for browser; InMemory and SQLite for native owning checks",
+  "uniqueCases": 276,
+  "frontendCases": 190,
+  "infrastructureCases": 26,
+  "nativeApiCases": 23,
+  "browserCases": 37,
+  "repeatRunsExcluded": true,
+  "browserGroups": [
+    {
+      "scope": "Account foundation",
+      "protocol": "json",
+      "sourceResult": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/access-results.json",
+      "sourceSha256": "532707f339237e6893c2f1855eff56cc15ab9bc597c31d7f134453b04435823b",
+      "passed": 1,
+      "cases": [
+        "owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery"
+      ]
+    },
+    {
+      "scope": "Agent Access",
+      "protocol": "json",
+      "sourceResult": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/batch-results.json",
+      "sourceSha256": "09f2a234292689d623c13c7bea007a6561d669c4947e87a22b1ea208a6a7a306",
+      "passed": 2,
+      "cases": [
+        "create, grant exact chat and independent execution, inspect permissions, recover stale revoke and lifecycle",
+        "a resource-scoped reader can inspect only that agent and loses private content after revocation"
+      ]
+    },
+    {
+      "scope": "Management and Automation presets",
+      "protocol": "json",
+      "sourceResult": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/corrected-results.json",
+      "sourceSha256": "ec05c2abc54c4fb5b383ba3ec7bba8809408bc514a4f222a28a9669739e5e7d1",
+      "passed": 18,
+      "cases": [
+        "management command settings.patch approve 1440",
+        "management command settings.patch reject 1440",
+        "management command settings.patch approve 390",
+        "management command settings.patch reject 390",
+        "management command management.policy.update approve 1440",
+        "management command management.policy.update reject 1440",
+        "management command management.policy.update approve 390",
+        "management command management.policy.update reject 390",
+        "management command management.freeze approve 1440",
+        "management command management.freeze reject 1440",
+        "management command management.freeze approve 390",
+        "management command management.freeze reject 390",
+        "management command automation.preferences.patch approve 1440",
+        "management command automation.preferences.patch reject 1440",
+        "management command automation.preferences.patch approve 390",
+        "management command automation.preferences.patch reject 390",
+        "tenant preset disabled draft provenance uncertain acknowledgement and customized execution 1440",
+        "tenant preset disabled draft provenance uncertain acknowledgement and customized execution 390"
+      ]
+    },
+    {
+      "scope": "Chat",
+      "protocol": "messagepack",
+      "sourceResult": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/chat-messagepack-results.json",
+      "sourceSha256": "5f8460dc7f06e4fcd748b56ad2f3af2eacbb38001034c8544c110c54941b7d43",
+      "passed": 12,
+      "cases": [
+        "tenant text, rendered receipt, reload, rename, archive and read-only completion",
+        "organization switch and logout retire prior history, draft and transport",
+        "tenant attachment-only input retains the original file after reload",
+        "real websocket reconnect preserves unsent draft and does not duplicate admitted text",
+        "local queue drains once and Stop cancels the delivered canonical Run",
+        "Chat-only member has no management controls and revoked Chat clears protected content",
+        "original Chat recovers a durable approve decision and remains usable while waiting",
+        "original Chat recovers a durable reject decision and remains usable while waiting",
+        "tenant Steer atomically interrupts the current Run with row and keyboard controls",
+        "Chat permission permits Queue while Steer requires independent Run cancellation authority",
+        "authenticated entry and retired browser routes at 1440px",
+        "authenticated entry and retired browser routes at 390px"
+      ]
+    },
+    {
+      "scope": "Different-human approvals",
+      "protocol": "messagepack",
+      "sourceResult": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/independent-messagepack-results.json",
+      "sourceSha256": "478e0dcb0b404ad28966a39a717bbe7a91633b94e965ac2e201765cc257b5dc2",
+      "passed": 4,
+      "cases": [
+        "a different person decides Review after requester logout: approve",
+        "a different person decides Review after requester logout: reject",
+        "a different person decides Authorize once after requester logout: approve",
+        "a different person decides Authorize once after requester logout: reject"
+      ]
+    }
+  ],
+  "focusedChecks": [
+    {
+      "source": "/private/tmp/tenant-recovery-singleflight-final-20261024.log",
+      "sha256": "09621a44b1cd975d93b343522d59a3b9f72de35b3423197e4c23232833099b8b",
+      "passed": 190
+    },
+    {
+      "source": "/private/tmp/tenant-recipient-authorization-final-20261024.log",
+      "sha256": "a8f887a8cacf47f2c49976f7f3fdfaf7ecccbd39bfb31e66fa3ddcbff127e703",
+      "passed": 26
+    },
+    {
+      "source": "/private/tmp/tenant-terminal-delivery-exact-20261024.log",
+      "sha256": "bf0a719f88390b391ea0dca86c607cf3542836e78fa215d814f0c39e36521866",
+      "passed": 23
+    },
+    {
+      "source": "/private/tmp/tenant-recovery-singleflight-web-build-final-20261024.log",
+      "sha256": "e5a9df2512e2437087329d7133525eaf7fe58c152b753c2afd8415f9f3fd52cb",
+      "passed": null
+    },
+    {
+      "source": "/private/tmp/tenant-terminal-delivery-build-exact-20261024.log",
+      "sha256": "1059e346c8702e2dff8f8ca44a921048f4dc4ecffe6897d380db7d4a67b18e0c",
+      "passed": null
+    }
+  ],
+  "scope": "Scoped module evidence; predecessor JSON groups qualify unchanged functional owners, final MessagePack checks separately qualify affected transport. Original proposal remains active.",
+  "wireConfirmation": {
+    "protocol": "messagepack",
+    "evidence": [
+      {
+        "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/steer-messagepack-confirmation-frames-0.json",
+        "sha256": "4ca1aafd4fd8e1919f9baaf00e42bac1263439024e9056cbe765fc8d25cde108",
+        "handshakes": 1,
+        "binaryFrames": 104
+      },
+      {
+        "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/steer-messagepack-confirmation-frames-1.json",
+        "sha256": "8ac2806cae598b570203a33044d74b2b39a4ac9210a0126f87757d2337bdea9c",
+        "handshakes": 3,
+        "binaryFrames": 107
+      },
+      {
+        "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/steer-messagepack-confirmation-frames-2.json",
+        "sha256": "764e21bd511471642fc7404a3ed788e31e75033005e6f06fddf61e56e63c4ad0",
+        "handshakes": 2,
+        "binaryFrames": 117
+      }
+    ]
+  },
+  "preFixWitnesses": [
+    {
+      "source": "/private/tmp/tenant-steer-start-regression-before-20261024.log",
+      "sha256": "197c8745f779e810bd1e16d926650067adf40d24bcc39fecfa0b5a38a27bc6cd"
+    },
+    {
+      "source": "/private/tmp/tenant-recovery-singleflight-before-20261024.log",
+      "sha256": "6262fa095a58297d832035c3ba73b31b5b6d3639ee2529eede25e786d2c68d00"
+    },
+    {
+      "source": "/private/tmp/tenant-recipient-authorization-before-20261024.log",
+      "sha256": "fa7e5a870e7d19b2936d91eec7977aa49130f05036b4ca83493b126e52d4396d"
+    },
+    {
+      "source": "/private/tmp/tenant-terminal-delivery-before-20261024.log",
+      "sha256": "7379979086731105f90a90a5644abaf70f01307d9599994cfa9c363077db16a1"
+    }
+  ],
+  "repeatConfirmations": [
+    {
+      "protocol": "messagepack",
+      "passedTrials": 3,
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/steer-messagepack-settled-cli.log",
+      "sha256": "f76e891964b711eac258c5697fabec43c8f263aab00bd2a5ab7199ec5fc738ca",
+      "countedAsNewCases": false
+    },
+    {
+      "protocol": "json",
+      "passedTrials": 3,
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/steer-json-confirmed-cli.log",
+      "sha256": "4f3380e991a7ba283717836224d3d8e81f527d0758c7eaaeda472bb9c39ec287",
+      "countedAsNewCases": false
+    }
+  ],
+  "finalHostDeliveryRetirements": 0
+}

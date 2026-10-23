@@ -6,7 +6,13 @@ const password = 'synthetic-tenant-chat-password';
 let fixtureIdentity: Awaited<ReturnType<APIRequestContext['storageState']>>;
 async function call<T>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  let response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  // Active Run/receipt commits can invalidate an otherwise authorized read.
+  // Obtain a new coherent snapshot; never retry a write or another refusal.
+  for (let retry = 0; method === 'GET' && response.status() === 409 && retry < 2; retry++) {
+    if ((await response.json()).reasonCode !== 'stale_revision') break;
+    response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token } });
+  }
   expect(response.ok(), `${method} ${path}: ${response.status()}`).toBeTruthy();
   return response.status() === 204 ? undefined as T : response.json();
 }
@@ -42,6 +48,22 @@ function watch(page: Page) {
   return { errors, legacy };
 }
 async function reply(page: Page, count = 1) { await expect(page.getByText('Hello from synthetic.', { exact: true })).toHaveCount(count); }
+async function steerWithFreshRetry(page: Page, action: () => Promise<void>, replies: number, text: string, queued: boolean) {
+  await action();
+  const refusal = page.getByText(/^(State changed\. Reload before trying again\.|That response changed\. Check the current response before steering again\.)$/);
+  await expect.poll(async () => await page.getByText('Hello from synthetic.', { exact: true }).count() === replies
+    ? 'accepted' : await refusal.count() > 0 ? 'refused' : 'pending').not.toBe('pending');
+  if (await refusal.count() > 0) {
+    // A definitive CAS refusal is safe. Verify retained input, then act as a human
+    // making one deliberate fresh attempt; the product must not replay it itself.
+    if (queued) await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toContainText(text);
+    else await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText(text);
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeEnabled();
+    await action();
+  }
+  await reply(page, replies);
+}
 
 test.beforeAll(async () => {
   // One private setup identity avoids spending the production login limiter on fixture calls.
@@ -101,7 +123,7 @@ test('organization switch and logout retire prior history, draft and transport',
     await page.getByRole('dialog', { name: 'Switch organization', exact: true }).getByRole('textbox', { name: /Search/ }).fill(b.name);
     await page.getByRole('button', { name: `Open ${b.name}`, exact: true }).click();
     await expect(page).toHaveURL(b.path);
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText('');
     await expect(page.locator('body')).not.toContainText('Alpha private transcript');
     await send(page, 'Beta private transcript'); await reply(page);
     const beta = page.url();
@@ -113,6 +135,27 @@ test('organization switch and logout retire prior history, draft and transport',
   } finally { await a.api.dispose(); await b.api.dispose(); }
 });
 
+test('tenant attachment-only input retains the original file after reload', async ({ page }) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    await signIn(page); await page.goto(f.path);
+    const name = 'attachment-only-tenant-proof.txt';
+    await page.getByRole('button', { name: 'Add content', exact: true }).click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('menuitem', { name: /Attach file/ }).click();
+    await (await chooser).setFiles({ name, mimeType: 'text/plain', buffer: Buffer.from('Owned attachment without a text task.') });
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText('');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Send', exact: true }).click(); await reply(page);
+    const original = page.locator('.entry-files').getByRole('group', { name, exact: true });
+    await expect(original).toBeVisible(); await page.reload(); await expect(original).toBeVisible();
+    await original.getByRole('button', { name: `Preview ${name}`, exact: true }).click();
+    await expect(page.getByRole('dialog', { name, exact: true })).toContainText('Owned attachment without a text task.');
+    await page.keyboard.press('Escape');
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});
+
 test('real websocket reconnect preserves unsent draft and does not duplicate admitted text', async ({ page }) => {
   const f = await fixture(); let socket: WebSocketRoute | undefined, connections = 0;
   await page.routeWebSocket('**/hubs/session*', route => { connections++; socket = route; route.connectToServer(); });
@@ -122,7 +165,7 @@ test('real websocket reconnect preserves unsent draft and does not duplicate adm
     const initial = connections; await socket!.close({ code: 1012, reason: 'Synthetic reconnect verification' });
     await expect.poll(() => connections).toBeGreaterThan(initial);
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeEnabled();
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('My preserved draft');
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText('My preserved draft');
     await expect(page.getByText('Admitted before reconnect', { exact: true })).toHaveCount(1);
     await page.getByRole('button', { name: 'Send', exact: true }).click(); await reply(page, 2);
   } finally { await f.api.dispose(); }
@@ -238,8 +281,8 @@ test('tenant Steer atomically interrupts the current Run with row and keyboard c
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Steer queued message 1' })).toBeEnabled();
     await page.screenshot({ path: testInfo.outputPath('steer-wide.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Steer queued message 1' }).click();
-    await reply(page); await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toHaveCount(0);
+    await steerWithFreshRetry(page, () => page.getByRole('button', { name: 'Steer queued message 1' }).click(), 1, 'Steered exact human objective', true);
+    await expect(page.getByRole('region', { name: 'Queued messages', exact: true })).toHaveCount(0);
     await expect.poll(async () => (await call<{ status: string }>(f.api, `${f.prefix}/agent-runs/${original.runId}`)).status).toBe('cancelled');
     const history = await call<{ items: { text: string; status: string; interruptReason?: string }[] }>(f.api, `${f.prefix}/sessions/${session}/messages?limit=100`);
     expect(history.items.filter(item => item.text === 'Steered exact human objective')).toHaveLength(1);
@@ -252,8 +295,9 @@ test('tenant Steer atomically interrupts the current Run with row and keyboard c
     await expect(page.getByRole('button', { name: 'Steer queued message 1' })).toBeEnabled();
     await page.screenshot({ path: testInfo.outputPath('steer-narrow.png'), fullPage: true });
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Keyboard steered objective');
-    await page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+Enter'); await reply(page, 3);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await steerWithFreshRetry(page, () => page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+Enter'), 3, 'Keyboard steered objective', false);
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.reload(); await reply(page, 3);
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }

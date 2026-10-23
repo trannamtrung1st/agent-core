@@ -13,7 +13,7 @@ const web = `http://127.0.0.1:${process.env.TENANT_CHAT_WEB_PORT ?? '5179'}`;
 process.env.TENANT_CHAT_TEST_BASE_URL = web;
 
 export default defineConfig({
-  testDir: './e2e', testMatch: ['tenant-chat.spec.ts', 'memory-semantics.spec.ts', 'tenant-memory-management.spec.ts', 'tenant-management-mutations.spec.ts', 'tenant-management-inspections.spec.ts'], fullyParallel: false, workers: 1, retries: 0,
+  testDir: './e2e', testMatch: ['tenant-chat.spec.ts', 'memory-semantics.spec.ts', 'tenant-memory-management.spec.ts', 'tenant-management-mutations.spec.ts', 'tenant-management-inspections.spec.ts', 'tenant-approval-independence.spec.ts'], fullyParallel: false, workers: 1, retries: 0,
   timeout: 60_000, expect: { timeout: 15_000 }, reporter: 'list',
   outputDir: path.join(root, 'results'), use: { baseURL: web, trace: 'retain-on-failure' },
   webServer: [{
@@ -32,6 +32,6 @@ export default defineConfig({
   }, {
     command: `pnpm exec vite --host 127.0.0.1 --port ${new URL(web).port} --strictPort`, cwd: webDir,
     url: web, reuseExistingServer: false, timeout: 120_000,
-    env: { VITE_API_PROXY_TARGET: api, VITE_DEV_PORT: new URL(web).port, VITE_CACHE_DIR: path.join(root, 'vite') }
+    env: { VITE_API_PROXY_TARGET: api, VITE_DEV_PORT: new URL(web).port, VITE_CACHE_DIR: path.join(root, 'vite'), VITE_AGENTCORE_REALTIME_PROTOCOL: 'messagepack' }
   }]
 });

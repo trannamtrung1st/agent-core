@@ -31,6 +31,18 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
     }
     public async ValueTask<TenantConversationRecipient> AuthorizeRecipientAsync(Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct = default)
     {
+        // Input admission can advance tenant security while this read is in flight.
+        // Rebuild the complete witness from current authority; never reuse a grant
+        // from the failed snapshot or retry an actual authorization denial.
+        for (var attempt = 0; ; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try { return await AuthorizeRecipientOnceAsync(tenant, session, human, ct).ConfigureAwait(false); }
+            catch (SecurityConflictException ex) when (ex.ReasonCode == "stale_revision" && attempt < 2) { }
+        }
+    }
+    private async ValueTask<TenantConversationRecipient> AuthorizeRecipientOnceAsync(Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct)
+    {
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var saved = await RequireAsync(state, session, human, ct).ConfigureAwait(false);
         if (!saved.Snapshot.Surfaces.HasFlag(SessionSurface.ChatList)) throw new AccessDeniedException("resource_unavailable");

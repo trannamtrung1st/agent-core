@@ -1,0 +1,119 @@
+{
+  "preimage": "95b954ca",
+  "profile": "Synthetic",
+  "persistence": "Disposable SQLite",
+  "browser": "Playwright Chromium CLI fallback after MCP transport closure",
+  "visualChanges": "None; existing Ant Design v6 layout/recipes/tokens remain. Only transport behavior and test/docs change.",
+  "sources": {
+    "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
+    "web/src/features/admin/AdminShell.tsx": "45776c04135cbdcedb708e42ecf6119b94cc58057444c4377b54607c2e444b02",
+    "web/src/features/chat/Composer.tsx": "176ec946ebb74983b50f5f248ef7100f9f37db63390989dd87ac99c11e070cfb",
+    "web/src/features/access/TenantApprovals.tsx": "b9e1e535db8a59d7b3caf53effbcff6af2f38ee30023b7e4adbe637568213d53",
+    "web/src/app.css": "bf4c133b24e164054e32f59b2652f0f3c8a12d23982bf7da56d6506971ad2168",
+    "web/src/services/realtime.ts": "5e8c9ff08a83045c74b58044b2d0ac84d5d5c7d45b93fa8086bd19d8fe4da939",
+    "web/e2e/tenant-approval-independence.spec.ts": "2d534dc4872ed02581030f8d99c8abdba2e857f8bc1e0590fbf1f2540697b6ea"
+  },
+  "captures": [
+    {
+      "file": "role-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "5c468ad252f4bf001cc71c3931ba6cd1d3346b6d4226591ea6b47ac1c35ea7a9",
+      "capturedAtUtc": "2026-10-23T21:08:09.310169+00:00",
+      "scenario": "Existing role creation/search/draft flow; fixture identity/capture paths only",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/captures/role-320.png"
+    },
+    {
+      "file": "role-390.png",
+      "width": 390,
+      "height": 900,
+      "sha256": "a5a628f5c9494e0b94f6e104ea699b88bc8c4d799609eed60607f0f7e6eedd51",
+      "capturedAtUtc": "2026-10-23T21:08:09.343060+00:00",
+      "scenario": "Existing role creation/search/draft flow; fixture identity/capture paths only",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/captures/role-390.png"
+    },
+    {
+      "file": "role-768.png",
+      "width": 768,
+      "height": 900,
+      "sha256": "c4afbedb2fba8ee95f2228039ebeedaec89f2940afae89f7fef2565de9e05fcd",
+      "capturedAtUtc": "2026-10-23T21:08:09.393685+00:00",
+      "scenario": "Existing role creation/search/draft flow; fixture identity/capture paths only",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/captures/role-768.png"
+    },
+    {
+      "file": "role-1024.png",
+      "width": 1024,
+      "height": 900,
+      "sha256": "6e8144bcd866e9ad7f069df5afb518f7cc8f64e3c5bca9d33099fafae27093bd",
+      "capturedAtUtc": "2026-10-23T21:08:09.482343+00:00",
+      "scenario": "Existing role creation/search/draft flow; fixture identity/capture paths only",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/captures/role-1024.png"
+    },
+    {
+      "file": "role-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "cf2b9b8303aefc68530c632fdd1d9c90ac6cb0481b64e8af9fddf056a9992ae2",
+      "capturedAtUtc": "2026-10-23T21:08:09.538224+00:00",
+      "scenario": "Existing role creation/search/draft flow; fixture identity/capture paths only",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/captures/role-1440.png"
+    },
+    {
+      "file": "independent-review-approve-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "04e19361818f8db191e80f42087571c4758f9087c2b5c49660076f9f7ab9a305",
+      "capturedAtUtc": "2026-10-23T21:41:47.458048+00:00",
+      "scenario": "Actual different-human approval after requester logout on corrected transport",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/independent-final-browser-results/50-independent-a-different-4f2e0-er-requester-logout-approve/independent-review-approve-320.png"
+    },
+    {
+      "file": "independent-review-approve-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "6f4875ff8d48021b2d8c6919e82244a0b7c384ab70647cc80e877d2cfaf905f2",
+      "capturedAtUtc": "2026-10-23T21:41:47.805427+00:00",
+      "scenario": "Actual different-human approval after requester logout on corrected transport",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/independent-final-browser-results/50-independent-a-different-4f2e0-er-requester-logout-approve/independent-review-approve-1440.png"
+    },
+    {
+      "file": "independent-exception-approve-320.png",
+      "width": 320,
+      "height": 900,
+      "sha256": "7f98de8e31376d081ffcb00e0ccd71a3b9342b466f7303da90a560fb803430b8",
+      "capturedAtUtc": "2026-10-23T21:43:11.850223+00:00",
+      "scenario": "Actual different-human approval after requester logout on corrected transport",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/independent-final-browser-results/50-independent-a-different-f7ef8-er-requester-logout-approve/independent-exception-approve-320.png"
+    },
+    {
+      "file": "independent-exception-approve-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "21955e5ee5f95ccb12ac6284c8514eac598eca35da4b79f1883dc7605aa1c9c6",
+      "capturedAtUtc": "2026-10-23T21:43:12.117267+00:00",
+      "scenario": "Actual different-human approval after requester logout on corrected transport",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/independent-final-browser-results/50-independent-a-different-f7ef8-er-requester-logout-approve/independent-exception-approve-1440.png"
+    },
+    {
+      "file": "independent-review-reject-390.png",
+      "width": 390,
+      "height": 900,
+      "sha256": "23ef4e5be381c35592a4aebcd77bc0b8bc32217bc32fde1ee4f5257c13ae34b3",
+      "capturedAtUtc": "2026-10-23T21:41:59.879974+00:00",
+      "scenario": "Actual different-human approval after requester logout on corrected transport",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/independent-final-browser-results/50-independent-a-different-189e9-ter-requester-logout-reject/independent-review-reject-390.png"
+    },
+    {
+      "file": "independent-exception-reject-390.png",
+      "width": 390,
+      "height": 900,
+      "sha256": "1b79fe9873123925bb200e20d0ae759cf26b7966cc5ee070201be54ba63e4997",
+      "capturedAtUtc": "2026-10-23T21:43:24.212479+00:00",
+      "scenario": "Actual different-human approval after requester logout on corrected transport",
+      "source": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-final-ui-20261024-1xb969a5/independent-final-browser-results/50-independent-a-different-3117d-ter-requester-logout-reject/independent-exception-reject-390.png"
+    }
+  ],
+  "realtimeProtocol": "JSON on predecessor manual Vite fixture; later MessagePack functional evidence is separate.",
+  "sourceHashScope": "Source snapshot at capture preparation; subsequent transport-only fixes do not alter pictured visual owners. Current source hashes are in the scoped design inspection."
+}

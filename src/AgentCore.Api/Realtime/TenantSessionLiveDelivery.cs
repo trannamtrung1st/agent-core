@@ -63,6 +63,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     }
     private readonly ConcurrentDictionary<string, Connection> _connections = new();
     private readonly ConcurrentDictionary<(Guid Tenant, Guid Session), Source> _sources = new();
+    internal Func<AgentRun, OutputPayload, CancellationToken, Task>? BeforeRecipientDelivery { get; set; }
 
     public sealed class Source(TenantSessionLiveDelivery delivery, AgentRun run, TenantVoiceLease? voice = null) : ISessionOutput, ISessionAudioOutput
     {
@@ -210,6 +211,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             await state.Gate.WaitAsync(bounded.Token).ConfigureAwait(false); entered = true;
             var subscription = state.Current;
             if (state.Closed || subscription is null || subscription.Tenant != source.Run.Owner.TenantId || subscription.Session != source.Run.SessionId) return;
+            if (BeforeRecipientDelivery is { } beforeDelivery) await beforeDelivery(source.Run, output.Payload, bounded.Token).ConfigureAwait(false);
             var recipient = await access.AuthorizeRecipientAsync(subscription.Tenant, subscription.Session, subscription.Human, bounded.Token).ConfigureAwait(false);
             if (output.ResponseId is not null && output.Payload is not (StateChangedOutput or ErrorOutput))
             {
@@ -249,7 +251,12 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             }
         }
         catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException or OperationCanceledException)
-        { if (entered) { if (state.Current is { } failed) RetireVoice(failed); state.Current = null; } }
+        {
+            logger.LogDebug("Tenant recipient delivery retired for {OutputType}: {Reason}; source cancelled {SourceCancelled}, deadline elapsed {DeadlineElapsed}.",
+                output.Payload.GetType().Name, ex is AccessDeniedException denied ? denied.ReasonCode
+                    : ex is SecurityConflictException conflict ? conflict.ReasonCode : "cancelled", ct.IsCancellationRequested, deadline.IsCancellationRequested);
+            if (entered) { if (state.Current is { } failed) RetireVoice(failed); state.Current = null; }
+        }
         catch (Exception ex)
         {
             if (entered) { if (state.Current is { } failed) RetireVoice(failed); state.Current = null; }

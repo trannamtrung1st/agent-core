@@ -544,6 +544,7 @@ const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 
 let reconnectBudgetStarted = 0;
 let attachLoop = 0;
+let transportRecovery: Promise<void> | null = null;
 let awaitingAgentResponseStart = false;
 
 function setCaptureAuthorized(authorized: boolean): void {
@@ -717,6 +718,8 @@ async function attachWithBusyRetry(): Promise<boolean> {
 }
 
 function handleHubClosed(): void {
+  // stop() during explicit recovery also raises onclose. The existing recovery owns it.
+  if (transportRecovery) return;
   disarmCapture("hubClosed");
   attachLoop += 1;
   if (disposed) {
@@ -726,56 +729,41 @@ function handleHubClosed(): void {
   void recoverFromTransientDisconnect();
 }
 
-async function recoverFromTransientDisconnect(): Promise<void> {
-  const snapshot = useSessionStore.getState();
-  if (!connection || !snapshot.sessionId) {
+function recoverFromTransientDisconnect(): Promise<void> {
+  if (!connection || !useSessionStore.getState().sessionId) {
     markConnectionFailed("Connection lost. Retry to continue.", { force: true });
-    return;
+    return Promise.resolve();
   }
-
-  beginReconnectBudget();
-  dropLiveTransport("reconnecting");
-  try {
-    await connection.stop();
-  } catch {
-    // ignored
-  }
-
-  try {
-    await connection.start();
-    const attached = await attachWithBusyRetry();
-    if (!attached && useSessionStore.getState().connection === "reconnecting") {
-      markConnectionFailed("Connection lost. Retry to continue.", { force: true });
-    }
-  } catch (error) {
-    markConnectionFailed(error instanceof Error ? error.message : "Connection lost. Retry to continue.", { force: true });
-  }
+  return recoverFromSequenceGap("hubClosed");
 }
 
-async function recoverFromSequenceGap(cause: ReconnectCause): Promise<void> {
+function recoverFromSequenceGap(cause: ReconnectCause): Promise<void> {
+  if (transportRecovery) return transportRecovery;
   disarmCapture(cause);
   const snapshot = useSessionStore.getState();
-  if (!connection || !snapshot.sessionId) {
-    return;
-  }
+  const active = connection; const epoch = connectionEpoch;
+  if (!active || !snapshot.sessionId) return Promise.resolve();
 
   beginReconnectBudget();
   dropLiveTransport("reconnecting");
-  try {
-    await connection.stop();
-  } catch {
-    // ignored
-  }
-
-  try {
-    await connection.start();
-    const attached = await attachWithBusyRetry();
-    if (!attached && useSessionStore.getState().connection === "reconnecting") {
-      markConnectionFailed("Connection lost. Retry to continue.", { force: true });
+  // Install ownership before stop() can synchronously raise the close callback.
+  const recovery = Promise.resolve().then(async () => {
+    try { await active.stop(); } catch { /* Recovery still attempts a fresh connection. */ }
+    if (connection !== active || connectionEpoch !== epoch) return;
+    try {
+      await active.start();
+      if (connection !== active || connectionEpoch !== epoch) return;
+      const attached = await attachWithBusyRetry();
+      if (!attached && connection === active && connectionEpoch === epoch && useSessionStore.getState().connection === "reconnecting") {
+        markConnectionFailed("Connection lost. Retry to continue.", { force: true });
+      }
+    } catch (error) {
+      if (connection === active && connectionEpoch === epoch)
+        markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.", { force: true });
     }
-  } catch (error) {
-    markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.", { force: true });
-  }
+  }).finally(() => { if (transportRecovery === recovery) transportRecovery = null; });
+  transportRecovery = recovery;
+  return recovery;
 }
 
 function handleEvent(raw: ServerEvent): void {
@@ -897,7 +885,9 @@ function handleEvent(raw: ServerEvent): void {
     startReceipts(raw.responseId);
   }
   if ((raw.type === "agent.response.completed" || raw.type === "agent.response.interrupted") && raw.responseId) {
-    clearAwaitingAgentResponseStart();
+    // The retiring response can terminate after a new input/Steer was accepted.
+    // Its terminal event does not start that replacement response. Keep the
+    // composer/queue admission hold until response.started (or explicit recovery).
     void sendReceipt(true, raw.responseId);
     stopReceipts();
     void tryResumeClientTranscriptAfterAgentOutput();
@@ -1700,6 +1690,7 @@ export const realtimeTestHooks =
           navigationVoiceResetSessionId = null;
           attachLoop += 1;
           reconnectBudgetStarted = 0;
+          transportRecovery = null;
           lastReconnectCause = null;
           voiceModeRequested = false;
           clientOwnsVoice = false;
@@ -1881,6 +1872,7 @@ async function stopConnection(options?: { keepPreparedCapture?: boolean }): Prom
     capture.release();
   }
   connectionEpoch += 1;
+  transportRecovery = null;
   useSessionStore.setState({ captureLive: false });
   if (!connection) {
     return;
@@ -3098,7 +3090,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
           }
           if (pendingUserText?.eventId === eventId) pendingUserText.interruption = { interruptedRunId: interruptedRun, expectedRunRevision: Number(witness.expectedRunRevision) };
         } else witness = await tenantTextWitness(snapshot.sessionId!);
-        payload = { text, ...(message.parts ? { parts: wireParts(message.parts) } : {}), ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...witness, ...(behavior === 'interrupt' ? { behavior } : {}) };
+        payload = { text, ...(message.parts?.length ? { parts: wireParts(message.parts) } : {}), ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...witness, ...(behavior === 'interrupt' ? { behavior } : {}) };
       });
       if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
       if (!ack?.accepted) {

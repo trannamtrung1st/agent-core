@@ -548,6 +548,23 @@
         ],
         "verificationReport": "docs/reports/tenant-automation-ui-verification-2026-10-21.md",
         "observed": "Synthetic MCP and isolated E2E desktop/narrow save, enable, manual completion, registration cancellation and retained Activity; current scoped reader/revocation; shared 16px inset/section gaps, zero duplicated Form.Item margins, 40px mobile actions and full-width narrow Drawer."
+      },
+      "tenantIntegratedIamRefresh": {
+        "date": "2026-10-24",
+        "scope": "Integrated Account/Role, Agent Access, structured Chat, management and different-human Review/ExceptionalGrant verification. No visual component, theme, font, spacing recipe or token changes. Historical inspection fingerprints remain unchanged.",
+        "verificationReport": "docs/reports/tenant-iam-integrated-ui-verification-2026-10-24.md",
+        "captureProvenance": "docs/reports/assets/tenant-iam-integrated-ui-2026-10-24/provenance.json",
+        "sources": {
+          "web/src/features/access/TenantApprovals.tsx": "b9e1e535db8a59d7b3caf53effbcff6af2f38ee30023b7e4adbe637568213d53",
+          "web/src/features/chat/Composer.tsx": "176ec946ebb74983b50f5f248ef7100f9f37db63390989dd87ac99c11e070cfb",
+          "web/src/services/realtime.ts": "a55b6bb1f0c43d99f335e4ff77413ea8dc49647d8dd6f4610e442f3c255e05fd",
+          "web/src/app.css": "bf4c133b24e164054e32f59b2652f0f3c8a12d23982bf7da56d6506971ad2168",
+          "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
+          "web/e2e/tenant-approval-independence.spec.ts": "2d534dc4872ed02581030f8d99c8abdba2e857f8bc1e0590fbf1f2540697b6ea",
+          "docs/13-frontend-implementation-spec.md": "c88063f06ff93d0992ccd979226ba5d372d31f3939b8432cdb87a53274cdaa55"
+        },
+        "observed": "Actual Synthetic SQLite CLI browser journeys after MCP transport closure. Roles and saved-action approval controls at 320/390/768/1024/1440px; long literal action text, native scroll/footer and document overflow assertions. Individually inspected role320, Review1440 and ExceptionalGrant320 captures.",
+        "limits": "Scoped inspection only; no fresh detector/reviewer, broad visual acceptance, full WCAG, physical touch/audio or performance claim. Earlier JSON captures are historical; canonical MessagePack functional results are recorded separately. Original proposal remains active."
       }
     }
   },
