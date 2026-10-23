@@ -26,8 +26,6 @@ public static partial class TriggerScheduleCommands
         string? Setting(string key, string? prior) => args.TryGetProperty(key, out _) ? Text(key) : prior;
         var instructions = args.TryGetProperty("instructions", out _) ? RequireInstructions(args) : current?.Instructions ?? preset?.Instructions ?? throw new ArgumentException("Instructions are required.");
         var name = args.TryGetProperty("name", out _) ? RequireString(args, "name") : current?.Name ?? preset?.Name ?? instructions[..Math.Min(80, instructions.Length)];
-        var enabled = input.Tool == ToolCatalog.AutomationEnable || input.Tool != ToolCatalog.AutomationDisable &&
-            (args.TryGetProperty("enabled", out var enable) ? enable.GetBoolean() : current?.Status == AutomationStatus.Active || current is null && preset is null);
         IReadOnlyList<TenantAutomationTriggerChange>? events = null; TriggerSchedule? schedule = null;
         if (args.TryGetProperty("triggers", out var collection))
         {
@@ -97,6 +95,8 @@ public static partial class TriggerScheduleCommands
             else events = [new(null, new CoreEventTrigger(preset.CoreEventKey!, preset.FilterExpression, preset.Dispatch))];
         }
         else throw new ArgumentException("Select one explicit Schedule or typed Event collection.");
+        var enabled = input.Tool == ToolCatalog.AutomationEnable || input.Tool != ToolCatalog.AutomationDisable &&
+            (args.TryGetProperty("enabled", out var enable) ? enable.GetBoolean() : current?.Status == AutomationStatus.Active || current is null && preset is null && schedule is not null);
         var target = ChatTarget(args, session, current); var delivery = ChatDelivery(args, session, current);
         return new(enabled, name, instructions, schedule, Setting("modelKey", current?.ModelOverrideCatalogKey), Setting("reasoningEffort", current?.ModelOverrideReasoningEffort),
             OptionalRequirement(args, "requiresTools") ?? current?.RequiresTools ?? true, OptionalRequirement(args, "requiresVision") ?? current?.RequiresVision ?? false,

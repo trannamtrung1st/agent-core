@@ -34,7 +34,8 @@ public sealed partial class TenantAgentAccessTests
         public ConcurrentQueue<ModelRequest> Requests { get; } = new(); public bool Hold = false; public bool Blocked; public bool CreateOnly; public bool Background = false;
         public TaskCompletionSource Observed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private const string CreateArguments = """{"enabled":false,"name":"Model-authored owned task","instructions":"Retain the canonical exact task.","relativeDelaySeconds":3600,"executionTarget":"backgroundSession","requiresTools":false}""";
+        private const string DefaultCreateArguments = """{"enabled":false,"name":"Model-authored owned task","instructions":"Retain the canonical exact task.","relativeDelaySeconds":3600,"executionTarget":"backgroundSession","requiresTools":false}""";
+        public string CreateArguments { get; init; } = DefaultCreateArguments;
         public Guid CreatedId; public long SavedRevision;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
@@ -81,20 +82,21 @@ public sealed partial class TenantAgentAccessTests
             Observed.TrySetResult(); if (Hold) await Release.Task.WaitAsync(ct);
             if (Background)
             {
-                yield return new ModelToolCallEvent(new("complete-automation-authoring", ToolCatalog.WorkComplete, JsonSerializer.Serialize(new { outcome = "Response", summary = "Saved and updated the exact owned Automation.", attentionRequired = false })));
+                yield return new ModelToolCallEvent(new("complete-automation-authoring", ToolCatalog.WorkComplete, JsonSerializer.Serialize(new { outcome = Blocked ? "NoAction" : "Response", summary = Blocked ? "The Automation change was withheld." : "Saved and updated the exact owned Automation.", attentionRequired = false })));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             yield return new ModelSemanticResponseReady(new(Blocked ? "The Automation change was withheld." : "Saved and updated the exact owned Automation.", new(ModelSpeechMode.None, null), []));
             yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
-    private static async Task<(Guid Tenant, Guid Instance, Guid Grant)> MutationAgent(RuntimeStateFactory factory, HttpClient owner, bool write = true)
+    private static async Task<(Guid Tenant, Guid Instance, Guid Grant)> MutationAgent(RuntimeStateFactory factory, HttpClient owner, bool write = true, bool events = false, bool eventSourceRead = true)
     {
         foreach (var host in factory.Services.GetServices<IHostedService>().Where(s => s is AgentCore.Api.AgentRunHostedService or AgentCore.Api.TriggerSchedulerHostedService)) await host.StopAsync(CancellationToken.None);
-        var (tenant, instance) = await OwnedMemoryAgent(owner, enabled: false, automation: true, automationMutations: true);
+        var (tenant, instance) = await OwnedMemoryAgent(owner, enabled: false, automation: true, events: events, automationMutations: true);
         await MemoryExecutor(owner, tenant, instance, read: false, manage: false, operations: true);
         var api = $"/api/v2/tenants/{tenant}"; var principal = (await Json(await owner.GetAsync(api + $"/agents/{instance}"))).GetProperty("principalId").GetGuid();
         var permissions = write ? new[] { "automations.read", "automations.create", "automations.update", "automations.delete" } : new[] { "automations.read" };
+        if (events && eventSourceRead) permissions = [.. permissions, "core-events.read"];
         var role = await Json(await owner.PostAsJsonAsync(api + "/roles", new { name = "Owned Automation author", permissions, expectedRevision = await Revision(owner, tenant) }));
         var grant = await Json(await owner.PostAsJsonAsync(api + "/role-assignments", new { principalId = principal, roleId = role.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
         return (tenant, instance, grant.GetProperty("assignmentId").GetGuid());

@@ -92,6 +92,8 @@ The saved request is Review only. Its shared inspector displays the bounded exac
 
 Tenant `automation.create`, `automation.update`, `automation.enable`, `automation.disable` and `automation.delete` use the canonical authoring owner. Create requires explicit `executionTarget: currentSession|backgroundSession`; existing-resource tools require `automationId` and `expectedRevision`. Canonical arguments are bounded to 16 KiB and reject extra/duplicate ownership fields. Create/update retain incumbent schedule and typed Event argument forms, exact child revisions, disabled preset versioning and current-session-only destination selection. No arbitrary tenant, owner, requester or recipient selector is accepted.
 
+For model `automation.create`, omitted parent `enabled` means Disabled for Event sources/collections and presets, and Active for ordinary Schedule timing. An explicit Boolean overrides that construction default; existing-resource updates preserve omitted activation. Enabled child Event subscriptions do not activate a disabled parent. Actual current intent, independent source reads and tenant/Core consent remain required; these defaults supply no permission or exceptional grant.
+
 When required, the model requests exact authorization through the existing tool:
 
 ```json
