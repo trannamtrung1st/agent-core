@@ -31,7 +31,7 @@ public sealed partial class TenantCredentialIntegrationTests
             Assert.Equal("synthetic-only-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
             var path = http.Request.Path.Value!;
             if (path == "/agent-core/generations/capabilities")
-                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true });
+                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true, verificationScopeVersion = 2 });
             else if (path == "/agent-core/verifications/retire")
             {
                 fences++; Assert.Equal(foreign ? 1 : 3, creates); Assert.Equal(foreign ? 0 : 3, kills);
@@ -43,14 +43,15 @@ public sealed partial class TenantCredentialIntegrationTests
             {
                 Assert.Equal(0, fences); creates++;
                 using var body = await JsonDocument.ParseAsync(http.Request.Body); metadata = body.RootElement.GetProperty("metadata").Deserialize<Dictionary<string,string>>()!;
-                owners.Add(metadata["agent-core-image-verification"]);
+                Assert.All(metadata.Values, value => Assert.InRange(value.Length, 1, 63));
+                owners.Add(metadata["agent-core-verification-tenant"] + "." + metadata["agent-core-image-verification"]);
                 await http.Response.WriteAsJsonAsync(new { id = "verify-environment", entrypoint = new[] { "/bin/sh" }, status = new { state = "Running" }, createdAt = DateTimeOffset.UtcNow, metadata });
             }
             else if (path.Contains("/endpoints/")) await http.Response.WriteAsJsonAsync(new { endpoint = new Uri(server.Urls.Single()).Authority });
             else if (path == "/ping") await http.Response.WriteAsJsonAsync(new { status = "ok" });
             else if (http.Request.Method == "GET" && path == "/v1/sandboxes/verify-environment")
                 await http.Response.WriteAsJsonAsync(new { id = "verify-environment", entrypoint = new[] { "/bin/sh" }, status = new { state = "Running" }, createdAt = DateTimeOffset.UtcNow,
-                    metadata = foreign ? new Dictionary<string,string>(metadata) { ["agent-core-image-verification"] = Guid.Empty.ToString("N") + "." + Guid.Empty.ToString("N") } : metadata });
+                    metadata = foreign ? new Dictionary<string,string>(metadata) { ["agent-core-verification-tenant"] = Guid.Empty.ToString("N") } : metadata });
             else if (http.Request.Method == "DELETE") { kills++; http.Response.StatusCode = 204; }
             else if (path.StartsWith("/agent-core/mounts/", StringComparison.Ordinal))
             {
@@ -82,8 +83,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var options = new OpenSandboxOptions { Enabled = true, AllowLocalImageIds = true, CanonicalWorkspaceRoot = root, WorkspaceDockerHostRoot = root, Endpoint = server.Urls.Single(), ApiKey = "synthetic-only-key" };
         var seed = VerificationServices(f, options: options); var store = (ITenantSandboxVerificationStore)f.Iam;
         var guard = new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer);
-        var real = new OpenSandboxService(options, f.Sandboxes, null!, f.Memory, new InMemoryAgentRunStore(new InMemoryMemoryStore(), new SystemDiagnosticIdSource()), f.Clock,
-            imageAuthority: seed.Images, tenantVerifications: store, verificationAuthority: guard);
+        var real = new OpenSandboxService(options,f.Sandboxes,null!,f.Memory,f.Clock,            imageAuthority: seed.Images,tenantVerifications: store,verificationAuthority: guard);
         var v = VerificationServices(f, real, options);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var p = (await v.Profiles.SaveAsync(owner.TenantId, null, human, SandboxInput() with { ImageReference = "sha256:" + new string('a', 64), InitializationScript = "printf verification-init" }, await Revision(), 0)).Profile;
@@ -122,7 +122,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var attempt = (await v.Service.VerifyAsync(owner.TenantId, p.Id, human, await Revision(), 1)).Attempt!;
         var mounts = new CanonicalSandboxMountResolver(options).Verification(attempt.AttemptId);
         var store = (ITenantSandboxVerificationStore)f.Iam; var claim = Assert.Single(await store.ClaimSandboxVerificationCleanupAsync(clock.GetUtcNow(), f.Ids.NewId()));
-        var real = new OpenSandboxService(options, f.Sandboxes, null!, f.Memory, null!, clock, tenantVerifications: store);
+        var real = new OpenSandboxService(options,f.Sandboxes,null!,f.Memory,clock,tenantVerifications: store);
         foreach (var mode in new[] { "pending", "unavailable", "malformed", "oversized", "foreign", "attempt", "version", "hostChanged", "expired" })
         {
             var originalRoot = options.WorkspaceDockerHostRoot;
@@ -135,6 +135,7 @@ public sealed partial class TenantCredentialIntegrationTests
     }
 
     [Theory] [InlineData(false, "unsupported")] [InlineData(true, "unsupported")]
+    [InlineData(false, "unscoped")] [InlineData(true, "unscoped")]
     [InlineData(false, "revoked")] [InlineData(true, "revoked")]
     [InlineData(false, "canceled")] [InlineData(true, "canceled")]
     public async Task Tenant_sandbox_verification_denies_old_server_and_interrupts_stalled_create_without_replay(bool sqlite, string mode)
@@ -148,7 +149,7 @@ public sealed partial class TenantCredentialIntegrationTests
         {
             Assert.Equal("synthetic-only-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
             if (http.Request.Path == "/agent-core/generations/capabilities")
-                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, retirementFencing = true, verificationFencing = mode != "unsupported" });
+                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, retirementFencing = true, verificationFencing = mode != "unsupported", verificationScopeVersion = mode == "unscoped" ? 1 : 2 });
             else if (http.Request.Path == "/agent-core/verifications/retire")
             {
                 fences++; using var body = await JsonDocument.ParseAsync(http.Request.Body); var value = body.RootElement;
@@ -169,8 +170,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var options = new OpenSandboxOptions { Enabled = true, AllowLocalImageIds = true, CanonicalWorkspaceRoot = root, WorkspaceDockerHostRoot = root, Endpoint = server.Urls.Single(), ApiKey = "synthetic-only-key" };
         var seed = VerificationServices(f, options: options); var store = (ITenantSandboxVerificationStore)f.Iam;
         var guard = new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer);
-        var real = new OpenSandboxService(options, f.Sandboxes, null!, f.Memory, new InMemoryAgentRunStore(new InMemoryMemoryStore(), new SystemDiagnosticIdSource()), f.Clock,
-            imageAuthority: seed.Images, tenantVerifications: store, verificationAuthority: guard);
+        var real = new OpenSandboxService(options,f.Sandboxes,null!,f.Memory,f.Clock,            imageAuthority: seed.Images,tenantVerifications: store,verificationAuthority: guard);
         var v = VerificationServices(f, real, options);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var p = (await v.Profiles.SaveAsync(owner.TenantId, null, human, SandboxInput() with { ImageReference = "sha256:" + new string('a', 64) }, await Revision(), 0)).Profile;
@@ -180,7 +180,7 @@ public sealed partial class TenantCredentialIntegrationTests
         else Assert.Equal("retirementUnavailable", (await work.WaitAsync(TimeSpan.FromSeconds(10))).Attempt!.Result!.FailureCode);
         var receipt = (await store.FindSandboxVerificationAsync(owner.TenantId, p.Id))!;
         Assert.False(receipt.Active); Assert.False(receipt.Result!.Passed);
-        if (mode == "unsupported")
+        if (mode is "unsupported" or "unscoped")
         { Assert.Equal((0, 0), (creates, fences)); Assert.False(Directory.Exists(Path.Combine(root, ".verification"))); }
         else
         {

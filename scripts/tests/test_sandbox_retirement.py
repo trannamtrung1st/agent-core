@@ -108,7 +108,7 @@ class VerificationRetirementTests(unittest.TestCase):
     owner = (OWNER[0], OWNER[-1])
 
     def labels(self):
-        return {"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "4", "opensandbox.io/id": "verification-provider"}
+        return {"agent-core-image-verification": self.owner[1], retirement.VERIFICATION_TENANT: self.owner[0], retirement.CONTRACT: "4", "opensandbox.io/id": "verification-provider"}
 
     def test_sequential_probes_then_durable_attempt_seal_with_independent_runtime_scope(self):
         with tempfile.TemporaryDirectory() as root:
@@ -154,21 +154,37 @@ class VerificationRetirementTests(unittest.TestCase):
     def test_scope_rejects_mixed_or_malformed_owners_without_adopting_legacy(self):
         self.assertIsNone(retirement.verification_scope({"agent-core-image-verification": OWNER[-1]}))
         self.assertEqual(self.owner, retirement.verification_scope(self.labels()))
+        self.assertTrue(all(len(value) <= 63 for value in self.labels().values()))
+        with self.assertRaises(ValueError): retirement.verification_scope({"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "4"})
         for key in retirement.LABELS:
             with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), key: OWNER[0]})
         for value in ("bad", ".".join(self.owner).upper(), 5):
             with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), "agent-core-image-verification": value})
         with self.assertRaises(ValueError): retirement.verification_scope({**self.labels(), retirement.CONTRACT: "3"})
 
+    def test_historical_long_label_is_cleanup_only_and_requires_the_exact_old_owner(self):
+        old = {"agent-core-image-verification": ".".join(self.owner), retirement.CONTRACT: "4", "opensandbox.io/id": "old-provider"}
+        with self.assertRaises(ValueError): retirement.verification_scope(old)
+        pending = [{"Id": "old-container", "Labels": old}]; deleted = []
+        def listing(**options):
+            return pending if options["filters"]["label"][0] == "agent-core-image-verification=" + ".".join(self.owner) else []
+        def delete(identity):
+            deleted.append(identity); pending.clear()
+        service = SimpleNamespace(docker_client=SimpleNamespace(api=SimpleNamespace(containers=listing),
+            containers=SimpleNamespace(get=lambda _: SimpleNamespace(attrs={"Config": {"Labels": old}}))), delete_sandbox=delete)
+        self.assertTrue(retirement.retire_verification(service, self.owner)); self.assertEqual(["old-provider"], deleted)
+        self.assertTrue(retirement.retire_verification(service, self.owner)); self.assertEqual(["old-provider"], deleted)
+
     def test_exact_cleanup_rechecks_labels_and_bounded_partial_batches(self):
         current = [{"Id": str(i), "Labels": {**self.labels(), "opensandbox.io/id": str(i)}} for i in range(102)]
         foreign = True; deleted = []
         def listing(**options):
-            self.assertEqual(["agent-core-image-verification=" + ".".join(self.owner), retirement.CONTRACT + "=4"], options["filters"]["label"])
+            if options["filters"]["label"] == ["agent-core-image-verification=" + ".".join(self.owner), retirement.CONTRACT + "=4"]: return []
+            self.assertEqual(["agent-core-image-verification=" + self.owner[1], retirement.VERIFICATION_TENANT + "=" + self.owner[0], retirement.CONTRACT + "=4"], options["filters"]["label"])
             return current[:options["limit"]]
         def get(identity):
             labels = next(item["Labels"] for item in current if item["Id"] == identity)
-            return SimpleNamespace(attrs={"Config": {"Labels": {**labels, "agent-core-image-verification": "e" * 32 + "." + self.owner[-1]} if foreign else labels}})
+            return SimpleNamespace(attrs={"Config": {"Labels": {**labels, retirement.VERIFICATION_TENANT: "e" * 32} if foreign else labels}})
         def delete(identity):
             deleted.append(identity); current[:] = [item for item in current if item["Id"] != identity]
         service = SimpleNamespace(docker_client=SimpleNamespace(api=SimpleNamespace(containers=listing), containers=SimpleNamespace(get=get)), delete_sandbox=delete)

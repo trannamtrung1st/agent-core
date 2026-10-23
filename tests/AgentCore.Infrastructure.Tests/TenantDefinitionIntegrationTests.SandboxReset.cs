@@ -93,7 +93,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             await f.Identity.SignOutAsync(s.Human.AuthenticationSessionId);
             var reopened = sqlite ? new SqliteIamStore(f.Contexts!, f.Content) : f.Iam; storage = (ITenantSandboxRuntimeStore)reopened;
             services = SandboxApprovalServices(f, s, reopened, options);
-            var sdk = new OpenSandboxService(options, f.Sandbox, null!, f.SessionStore, null!, TimeProvider.System, tenantRuntime: storage, approvedSandbox: services.Execution);
+            var sdk = new OpenSandboxService(options,f.Sandbox,null!,f.SessionStore,TimeProvider.System,tenantRuntime: storage,approvedSandbox: services.Execution);
             var originalMapping = options.WorkspaceDockerHostRoot;
             if (mode == "hostChanged") options.WorkspaceDockerHostRoot += "-changed";
             await sdk.ReconcileAsync(default);

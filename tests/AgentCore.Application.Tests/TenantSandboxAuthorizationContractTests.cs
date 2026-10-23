@@ -64,6 +64,11 @@ public sealed class TenantSandboxAuthorizationContractTests
         Assert.DoesNotContain(ToolCatalog.For(definition, context with { ExecutionContext = null }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
         foreach (var blocked in new[] { definition with { ExecutionSandboxProfiles = [] }, definition with { ExecutionSandboxProfiles = [profile with { AdmittedForExecution = false }] },
             definition with { Environment = definition.Environment with { Capabilities = new("Selected", []) } } })
-            Assert.DoesNotContain(ToolCatalog.For(blocked, context with { Definition = blocked }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.RequestAuthorization);
+        {
+            var blockedTools = ToolCatalog.For(blocked, context with { Definition = blocked }, ToolConfigurationGates.AllowAll);
+            Assert.DoesNotContain(blockedTools, t => t.Name == ToolCatalog.SandboxExec);
+            var authorization = blockedTools.SingleOrDefault(t => t.Name == ToolCatalog.RequestAuthorization);
+            if (authorization is not null) Assert.DoesNotContain("run_sandbox_command", authorization.ParametersJson);
+        }
     }
 }

@@ -190,7 +190,7 @@ public sealed class RegistryAuthorizationProbeTests
             var profile=new SandboxProfile("anonymous",1,"Anonymous","",true,host+"/acme/tool@sha256:"+new string('a',64));
             await profiles.SaveProfileAsync(profile,0);
             var options=new OpenSandboxOptions {Enabled=true,Endpoint=app.Urls.Single(),ApiKey="fixture-key",InsecureRegistryHosts=[host],AllowedImagePrefixes=[host+"/acme"]};
-            var adapter=new OpenSandboxService(options,profiles,null!,null!,null!,TimeProvider.System);
+            var adapter=new OpenSandboxService(options,profiles,null!,null!,TimeProvider.System);
             Assert.False((await adapter.VerifyProfileAsync(profile,CancellationToken.None)).Passed);Assert.Equal(0,creates);
         }
         finally {await app.StopAsync();}
@@ -219,7 +219,7 @@ public sealed class RegistryAuthorizationProbeTests
             var mounts=Path.Combine(root,"mounts");
             var options=new OpenSandboxOptions {Enabled=true,Endpoint=app.Urls.Single(),ApiKey="fixture-key",InsecureRegistryHosts=[host],AllowedImagePrefixes=[host+"/acme"],CanonicalWorkspaceRoot=mounts,WorkspaceDockerHostRoot=mounts};
             var authority=new SandboxImageAuthority(options,profiles,TimeProvider.System,credentials,protector);
-            var adapter=new OpenSandboxService(options,profiles,null!,null!,null!,TimeProvider.System,imageAuthority:authority);
+            var adapter=new OpenSandboxService(options,profiles,null!,null!,TimeProvider.System,imageAuthority:authority);
             var result=await adapter.VerifyProfileAsync(profile,CancellationToken.None);
             Assert.False(result.Passed);Assert.Equal(1,probes);Assert.Equal(0,creates);Assert.DoesNotContain("probe-sentinel",result.Message);
             Assert.Equal(2,(await credentials.GetAsync(credential.CredentialId))!.Revision);

@@ -118,8 +118,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 Assert.Null(await storage.TryStartTenantSandboxProcessStopAsync(s.Tenant, frame.SessionId, running.Id, pending.Execution.ProcessStop.RequestId,
                     pending.Execution.Revision, pending.Lease.Revision, DateTimeOffset.UtcNow));
             }
-            var sdk = new OpenSandboxService(options, f.Sandbox, null!, f.SessionStore, null!, TimeProvider.System,
-                tenantRuntime: storage, approvedSandbox: services.Execution, tenantGenerationAuthority: generation, tenantRuns: (ITenantRunStore)current);
+            var sdk = new OpenSandboxService(options,f.Sandbox,null!,f.SessionStore,TimeProvider.System,                tenantRuntime: storage,approvedSandbox: services.Execution,tenantGenerationAuthority: generation,tenantRuns: (ITenantRunStore)current);
             var originalMapping = options.WorkspaceDockerHostRoot;
             if (mode == "hostChanged") options.WorkspaceDockerHostRoot += "-changed";
             await sdk.ReconcileAsync();

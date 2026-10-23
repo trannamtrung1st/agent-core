@@ -145,8 +145,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 await Assert.ThrowsAsync<ArgumentException>(() => storage.TrySaveTenantSandboxLeaseFactsAsync(s.Tenant,
                     pinned with { Revision = pinned.Revision + 1, ProviderHostScope = new SandboxVerificationHost(options).Scope }, pinned.Revision).AsTask());
             }
-            var worker = new OpenSandboxService(options, f.Sandbox, null!, f.SessionStore, null!, recoveryTime, tenantRuntime: storage,
-                approvedSandbox: services.Execution, tenantRuns: (ITenantRunStore)f.Iam, tenantGenerationAuthority: generation);
+            var worker = new OpenSandboxService(options,f.Sandbox,null!,f.SessionStore,recoveryTime,tenantRuntime: storage,                approvedSandbox: services.Execution,tenantRuns: (ITenantRunStore)f.Iam,tenantGenerationAuthority: generation);
             await worker.ReconcileAsync();
             var facts = (await storage.ReadTenantSandboxExecutionFactsAsync(s.Tenant, frame.SessionId, execution.Id))!;
             var kept = outcome is "background" or "backgroundCompleted" or "readyUnsettled";

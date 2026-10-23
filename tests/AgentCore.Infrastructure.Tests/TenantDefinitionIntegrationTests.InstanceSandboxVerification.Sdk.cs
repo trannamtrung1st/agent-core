@@ -29,9 +29,9 @@ public sealed partial class TenantDefinitionIntegrationTests
             {
                 Assert.Equal("synthetic-only-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
                 var attempt = (await store.FindSandboxVerificationAsync(owner.TenantId, profileId!, instanceId: instance))!;
-                var label = owner.TenantId.ToString("N") + "." + attempt.AttemptId.ToString("N");
+                var label = attempt.AttemptId.ToString("N");
                 if (http.Request.Path == "/agent-core/generations/capabilities")
-                    await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true });
+                    await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true, verificationScopeVersion = 2 });
                 else if (http.Request.Path == "/agent-core/verifications/retire")
                 {
                     retirements++;
@@ -46,6 +46,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                     creates++;
                     using var body = await System.Text.Json.JsonDocument.ParseAsync(http.Request.Body);
                     Assert.Equal(label, body.RootElement.GetProperty("metadata").GetProperty("agent-core-image-verification").GetString());
+                    Assert.Equal(owner.TenantId.ToString("N"), body.RootElement.GetProperty("metadata").GetProperty("agent-core-verification-tenant").GetString());
                     if (duringCreate is { } change) await change();
                     http.Response.StatusCode = 500; await http.Response.WriteAsync("private-instance-upstream-body");
                 }
@@ -56,8 +57,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             var profile = (await p.Profiles.SaveAsync(owner.TenantId, null, human, SetupInput("SDK setup") with { ImageReference = "sha256:" + new string('a', 64) }, await Revision(), 0)).Profile;
             var s = await SetupAgent(f, owner.TenantId, human.PrincipalId, new(profile.Id, [profile.Id]), p.Images, p.Ready); instance = s.Agent.Instance.InstanceId; profileId = profile.Id;
             var guard = new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer, SetupResolver(f));
-            var real = new OpenSandboxService(p.Options, new InMemorySandboxStore(), null!, f.SessionStore, new InMemoryAgentRunStore(new InMemoryMemoryStore(), new SystemDiagnosticIdSource()),
-                TimeProvider.System, imageAuthority: p.Images, tenantVerifications: store, verificationAuthority: guard);
+            var real = new OpenSandboxService(p.Options,new InMemorySandboxStore(),null!,f.SessionStore,                TimeProvider.System,imageAuthority: p.Images,tenantVerifications: store,verificationAuthority: guard);
             duringCreate = async () => { _ = await s.Configuration.PatchSettingsAsync(human.PrincipalId, owner.TenantId, instance, "sandboxPolicy", await Revision(), 1, Fields(new { cpu = .5 }), [], initiator: human); };
             var result = await InstanceVerification(f, p, real).VerifyAsync(owner.TenantId, instance, profile.Id, human, await Revision(), 1, 1);
             Assert.Equal(1, creates); Assert.Equal(1, retirements); Assert.Equal(SandboxVerificationStatus.Retired, result.Attempt!.Status); Assert.Null(result.Observation);

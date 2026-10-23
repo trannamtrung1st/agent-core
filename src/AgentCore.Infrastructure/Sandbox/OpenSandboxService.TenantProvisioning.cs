@@ -30,7 +30,7 @@ public sealed partial class OpenSandboxService
         try
         {
             await Require(token);
-            await (workspace as ITenantSandboxWorkspacePreparer ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(frame, receipt.Id, token);
+            await (workspace ?? throw new AccessDeniedException("tenant_effect_unavailable")).PrepareAsync(frame, receipt.Id, token);
             await Require(token);
             var mounted = MountResolver.Resolve(frame.Owner.AgentInstanceId, frame.SessionId,
                 (await TenantExecution.RequireAsync(frame, receipt.Id, token)).Request.Operation.SandboxCommand!.HomeAccess, create: true, ct: token);

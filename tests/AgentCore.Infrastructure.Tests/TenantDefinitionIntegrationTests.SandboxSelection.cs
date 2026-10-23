@@ -101,7 +101,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 new("printf must-wait", TimeoutSeconds: 30), s.Run.Revision, s.Run.Claim!.Generation).AsTask());
             Assert.Equal(0, contacts); await f.Identity.SignOutAsync(s.Human.AuthenticationSessionId);
             var current = sqlite ? new SqliteIamStore(f.Contexts!, f.Content) : f.Iam; storage = (ITenantSandboxRuntimeStore)current;
-            var worker = new OpenSandboxService(options, f.Sandbox, null!, f.SessionStore, null!, TimeProvider.System, tenantRuntime: storage);
+            var worker = new OpenSandboxService(options,f.Sandbox,null!,f.SessionStore,TimeProvider.System,tenantRuntime: storage);
             await worker.ReconcileAsync();
             if (!execute)
             {
@@ -131,8 +131,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 var target = new TenantSandboxOperationTarget((ITenantSessionStore)current, (ITenantSandboxProfileStore)current, storage, s.Resolver, new IamAuthorizer(current), current, p.Images, p.Ready, TimeProvider.System, p.Host);
                 var authority = new TenantSandboxExecutionAuthority(operations, storage, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current, (ITenantRunStore)current, target, new IamAuthorizer(current), TimeProvider.System);
                 var files = new FileSessionWorkspace(root, Path.Combine(root, "templates"), publicationResources: new DefinitionPublicationResourceReader(f.Resources, f.Content), sessions: f.SessionStore, instances: f.Instances, sandboxes: f.Sandbox, tenantAuthority: authority);
-                var sdk = new OpenSandboxService(options, f.Sandbox, files, f.SessionStore, null!, TimeProvider.System, imageAuthority: p.Images,
-                    tenantRuntime: storage, approvedSandbox: services.Execution, tenantExecutionAuthority: authority, tenantRuns: (ITenantRunStore)current);
+                var sdk = new OpenSandboxService(options,f.Sandbox,files,f.SessionStore,TimeProvider.System,imageAuthority: p.Images,                    tenantRuntime: storage,approvedSandbox: services.Execution,tenantExecutionAuthority: authority,tenantRuns: (ITenantRunStore)current);
                 var result = await sdk.ExecuteApprovedAsync(frame, review.RequestId); Assert.Equal("Completed", result.Status); Assert.Equal("selected output", result.Stdout);
                 var total = contacts; Assert.Equal(result.ExecutionId, (await sdk.ExecuteApprovedAsync(frame, review.RequestId)).ExecutionId); Assert.Equal(total, contacts);
             }

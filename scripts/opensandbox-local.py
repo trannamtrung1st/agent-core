@@ -182,11 +182,11 @@ def accept(args):
         state, env = up(args)
         run("dotnet", "run", "--project", "scripts/opensandbox-proof/OpenSandboxProof.csproj", "--", env=env)
         run("dotnet", "test", "tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj",
-            "--filter", "FullyQualifiedName~OpenSandboxIntegrationTests|FullyQualifiedName~SandboxStoreTests|FullyQualifiedName~WorkspaceStructureTests",
+            "--filter", "FullyQualifiedName~Tenant_Docker_Sandbox_|FullyQualifiedName~OpenSandboxIntegrationTests|FullyQualifiedName~SandboxStoreTests|FullyQualifiedName~WorkspaceStructureTests",
             "--nologo", "-m:1", "--logger", "trx;LogFileName=opensandbox-acceptance.trx", env=env)
         if args.ui:
             ui_acceptance(args, state, env)
-        print("Real SDK, durable lifecycle, Workbench and canonical filesystem acceptance passed.")
+        print("Real SDK, canonical tenant command and native filesystem checks passed.")
     finally:
         down(args)
 

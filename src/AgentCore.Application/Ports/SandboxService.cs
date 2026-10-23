@@ -4,8 +4,6 @@ using AgentCore.Application.Admin;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record SandboxAccess(Guid SessionId, Guid AgentInstanceId, Guid AgentRunId, Guid ClaimGeneration,
-    string ToolCallId, SandboxProfile Profile, AgentDefinition Definition);
 public sealed record SandboxCommandRequest(string? Command, IReadOnlyList<string>? Argv = null,
     string Cwd = "/working", int? TimeoutSeconds = null, bool Background = false, string? ProfileId = null);
 public sealed record SandboxCommandResult(Guid ExecutionId, string Status, int? ExitCode, string Stdout,
@@ -22,10 +20,6 @@ public enum SandboxStopIntent { SessionLifecycle, OwnerReset, PolicyChanged }
 
 public interface ISandboxService
 {
-    ValueTask<SandboxCommandResult> ExecuteAsync(SandboxAccess access, SandboxCommandRequest command, CancellationToken ct = default);
-    ValueTask<SandboxCommandResult> InspectProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default);
-    ValueTask<SandboxCommandResult> StopProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default);
-    ValueTask<SandboxEnvironmentInfo?> InspectAsync(Guid trustedSessionId, CancellationToken ct = default);
     ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct = default, Guid? expectedGeneration = null, SandboxStopIntent intent = SandboxStopIntent.SessionLifecycle);
     ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct, Guid? expectedGeneration, Guid? expectedExecutionId, bool checkExecutionIdentity, SandboxStopIntent intent = SandboxStopIntent.SessionLifecycle)
         => StopSessionAsync(trustedSessionId, ct, expectedGeneration, intent);

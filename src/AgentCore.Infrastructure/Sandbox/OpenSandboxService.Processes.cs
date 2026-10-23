@@ -7,30 +7,6 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed partial class OpenSandboxService
 {
-    public async ValueTask<SandboxCommandResult> InspectProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default)
-    {
-        var execution = await store.GetExecutionAsync(trustedSessionId, processId, ct) ?? throw AgentCoreErrors.NotFound("Owned execution was not found.");
-        // GET/status observes durable receipts. Only reconciliation or explicit
-        // stop may finalize a process; reading never imports files or interrupts it.
-        return Result(execution);
-    }
-    public ValueTask<SandboxCommandResult> StopProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default) => ProcessAsync(trustedSessionId, processId, true, ct);
-    private async ValueTask<SandboxCommandResult> ProcessAsync(Guid sessionId, Guid processId, bool stop, CancellationToken ct)
-    {
-        var observed = await store.GetExecutionAsync(sessionId, processId, ct) ?? throw AgentCoreErrors.NotFound("Owned execution was not found.");
-        if (!stop && (!observed.Background || observed.State is SandboxExecutionState.Completed or SandboxExecutionState.Canceled or SandboxExecutionState.Indeterminate))
-            return Result(observed);
-        var gate = Gate(sessionId); await gate.WaitAsync(ct);
-        try
-        {
-            var execution = await store.GetExecutionAsync(sessionId, processId, ct) ?? throw AgentCoreErrors.NotFound("Owned process was not found.");
-            if (execution.State is SandboxExecutionState.Completed or SandboxExecutionState.Canceled or SandboxExecutionState.Indeterminate) return Result(execution);
-            var lease = await store.GetLeaseAsync(sessionId, ct);
-            if (lease is null || lease.Generation != execution.Generation || lease.ActiveExecutionId != execution.Id) throw AgentCoreErrors.NotFound("Active process generation was not found.");
-            return await RefreshProcessLockedAsync(lease, execution, stop, ct);
-        }
-        finally { gate.Release(); }
-    }
     private async ValueTask<SandboxCommandResult> RefreshProcessLockedAsync(SandboxLease lease, SandboxExecution execution, bool stop, CancellationToken ct)
     {
         try
@@ -79,16 +55,7 @@ public sealed partial class OpenSandboxService
         await ValidateProcessAuthorityAsync(lease, execution, ct);
         if (status.Running == false)
         {
-            AgentCore.Domain.Definitions.AgentDefinition definition;
-            if (lease.TenantId is not null)
-                definition = (await TenantGeneration.RequireAsync(lease, execution, ct)).Admission.Configuration!.Definition;
-            else
-            {
-                var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);
-                if (session is null || session.DurablyDeletedAt is not null || session.ArchivedAt is not null || session.LifecycleStatus != SessionLifecycleStatus.Active)
-                    throw AgentCoreErrors.Conflict("Process owner is no longer active; no further process execution is authorized; files retain any writes.");
-                definition = session.Definition;
-            }
+            var definition = (await TenantGeneration.RequireAsync(lease, execution, ct)).Admission.Configuration!.Definition;
             // The pinned execd reports Go's -1 when an explicitly interrupted
             // process was signal-terminated. Running=false is confirmed termination;
             // preserve that provider evidence without inventing a normal exit code.
@@ -107,30 +74,8 @@ public sealed partial class OpenSandboxService
     }
     private async ValueTask ValidateProcessAuthorityAsync(SandboxLease lease, SandboxExecution execution, CancellationToken ct)
     {
-        if (lease.TenantId is not null) { RequireTenantProviderScope(lease); await TenantGeneration.RequireAsync(lease, execution, ct); return; }
-        var owner = await sessions.LoadMetadataAsync(lease.SessionId, ct);
-        var run = owner?.ProfileId is { } profile ? await runs.GetAsync(new(lease.AgentInstanceId, profile), execution.AgentRunId, ct) : null;
-        if (lease.ExpiresAt <= time.GetUtcNow() || (execution.DeadlineAt ?? execution.StartedAt.AddSeconds(lease.Profile.MaxCommandSeconds)) <= time.GetUtcNow())
-            throw AgentCoreErrors.Conflict("Process deadline expired; no further process execution is authorized; files retain any writes.");
-        if (run is null || run.CancellationRequested || run.Status is AgentRunStatus.Cancelled or AgentRunStatus.Failed)
-            throw AgentCoreErrors.Conflict("Process Run was canceled or revoked; no further process execution is authorized; files retain any writes.");
-        await ValidateLiveProfileAuthorityAsync(run, lease.Profile, ct);
-        var eligibility = await Images.InspectAsync(lease.Profile, ct);
-        if (!eligibility.Eligible || eligibility.CredentialRevision != lease.Profile.RegistryCredentialRevision || eligibility.SecretRevision != lease.Profile.RegistrySecretRevision)
-            throw AgentCoreErrors.Forbidden("Background profile verification or source authority changed; no further process execution is authorized; files retain any writes.");
-        if (instances is not null)
-        {
-            var instance = await instances.FindAsync(lease.AgentInstanceId,ct);
-            if (instance?.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active)
-                throw AgentCoreErrors.Conflict("Process Instance is no longer active; no further process execution is authorized; files retain any writes.");
-            if (instance.SettingsOverrides?.SandboxAllowedProfileIds is { } narrowed
-                && !narrowed.Value.Contains(lease.Profile.Id, StringComparer.Ordinal))
-                throw AgentCoreErrors.Forbidden("Instance profile authority was narrowed; no further process execution is authorized; files retain any writes.");
-        }
-        if ((await Images.InspectAsync(lease.Profile, ct, requireVerification:false)).Status != "SourceAuthorized" || !options.Enabled || owner?.AgentInstanceId != lease.AgentInstanceId || owner.DurablyDeletedAt is not null || owner.ArchivedAt is not null
-            || owner.LifecycleStatus != SessionLifecycleStatus.Active || owner.Status is SessionStatus.Ended or SessionStatus.Ending
-            || (await store.GetProfileAsync(lease.Profile.Id, ct: ct))?.Enabled != true)
-            throw AgentCoreErrors.Conflict("Process authority was revoked; no further process execution is authorized; files retain any writes.");
+        if (lease.TenantId is null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
+        RequireTenantProviderScope(lease); await TenantGeneration.RequireAsync(lease, execution, ct);
     }
     // SDK 1.1.1 accumulates the entire background log HTTP body. This narrow shim
     // uses the same authenticated server proxy and a bounded stream instead.

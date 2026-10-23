@@ -41,7 +41,10 @@ public sealed partial class OpenSandboxService
         if (!options.Enabled) return Observation(false, "OpenSandbox is disabled in host configuration.", "disabled");
         var budget = 3 * 45 + profile.MaxCommandSeconds + ProcessCleanupGraceSeconds;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(budget));
-        var owner = VerificationOwner(profile.TenantId, id); var phase = "mountPreparation";
+        var owner = VerificationOwner(id); var phase = "mountPreparation";
+        var metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = owner, ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) };
+        if (profile.TenantId is { } tenantOwner) metadata["agent-core-verification-tenant"] = tenantOwner.ToString("N");
+
         CanonicalSandboxMountResolver.Mounts? mounted = null;
         SdkSandbox? sdk = null;
         var result = Observation(false, "Direct mount verification has not completed.", "mountCompatibility");
@@ -76,11 +79,11 @@ public sealed partial class OpenSandboxService
                     ConnectionConfig = connection, Image = profile.ImageReference, ImageAuth = auth,
                     TimeoutSeconds = Math.Min(profile.MaxLifetimeSeconds, 45 + profile.MaxCommandSeconds + ProcessCleanupGraceSeconds), ReadyTimeoutSeconds = 45,
                     Resource = new Dictionary<string,string> { ["cpu"] = profile.Cpu.ToString(CultureInfo.InvariantCulture), ["memory"] = profile.MemoryMiB + "Mi" },
-                    Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = owner, ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) },
+                    Metadata = metadata,
                     Volumes = mounted.Volumes, NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] } }, deadline.Token);
                 auth = null;
                 if (require is not null) await require(deadline.Token);
-                if (profile.TenantId is not null && !VerificationMetadata((await sdk.GetInfoAsync(deadline.Token)).Metadata, owner))
+                if (profile.TenantId is not null && !VerificationMetadata((await sdk.GetInfoAsync(deadline.Token)).Metadata, profile.TenantId, owner))
                     throw new AccessDeniedException("verification_unavailable");
                 phase = "mountValidation";
                 var translated = await AttestMountsAsync(sdk.Id, mounted, profile.ImageReference, "agent-core-image-verification", owner, deadline.Token);
@@ -112,7 +115,7 @@ public sealed partial class OpenSandboxService
                 CanonicalSandboxMountResolver.CheckUsage(mounted, profile.StorageBytes, deadline.Token);
                 phase = "cleanup";
                 using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                if (profile.TenantId is not null && !VerificationMetadata((await sdk.GetInfoAsync(cleanup.Token)).Metadata, owner))
+                if (profile.TenantId is not null && !VerificationMetadata((await sdk.GetInfoAsync(cleanup.Token)).Metadata, profile.TenantId, owner))
                     throw new AccessDeniedException("verification_unavailable");
                 await sdk.KillAsync(cleanup.Token); safeToPurge = true;
                 await sdk.DisposeAsync(); sdk = null;
@@ -154,10 +157,10 @@ public sealed partial class OpenSandboxService
                 else if (!safeToPurge)
                 {
                     await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = connection });
-                    var candidates = await manager.ListSandboxInfosAsync(new SandboxFilter { Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = owner, ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) }, PageSize = 100 }, cleanup.Token);
+                    var candidates = await manager.ListSandboxInfosAsync(new SandboxFilter { Metadata = metadata, PageSize = 100 }, cleanup.Token);
                     foreach (var candidate in candidates.Items)
                     {
-                        if (profile.TenantId is not null && !VerificationMetadata(candidate.Metadata, owner)) throw new AccessDeniedException("verification_unavailable");
+                        if (!VerificationMetadata(candidate.Metadata, profile.TenantId, owner)) throw new AccessDeniedException("verification_unavailable");
                         await manager.KillSandboxAsync(candidate.Id, cleanup.Token);
                     }
                     safeToPurge = candidates.Items.Count < 100;

@@ -160,8 +160,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             if (outcome == "occupiedTemplate") { Directory.CreateDirectory(working); await File.WriteAllTextAsync(Path.Combine(working, "welcome.txt"), "retained user bytes"); }
             var sdkImages = new SandboxImageAuthority(options, f.Sandbox, TimeProvider.System, protector: protector,
                 tenantCredentials: (ITenantCredentialStore)f.Iam, tenantVerifications: (ITenantSandboxVerificationStore)f.Iam, verificationHost: p.Host);
-            var sdk = new OpenSandboxService(options, f.Sandbox, workspace, f.SessionStore, null!, TimeProvider.System, imageAuthority: sdkImages,
-                tenantRuntime: storage, approvedSandbox: services.Execution, tenantExecutionAuthority: authority, tenantRuns: (ITenantRunStore)f.Iam);
+            var sdk = new OpenSandboxService(options,f.Sandbox,workspace,f.SessionStore,TimeProvider.System,imageAuthority: sdkImages,                tenantRuntime: storage,approvedSandbox: services.Execution,tenantExecutionAuthority: authority,tenantRuns: (ITenantRunStore)f.Iam);
             var result = await sdk.ExecuteApprovedAsync(frame, request.RequestId);
             var saved = (await storage.ReadTenantSandboxRuntimeAsync(s.Tenant, frame.SessionId))!;
             Assert.True(saved.Execution!.InitializesGeneration); Assert.Equal(saved.Execution.Generation, saved.Lease!.Generation);

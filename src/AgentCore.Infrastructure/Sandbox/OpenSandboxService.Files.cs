@@ -21,9 +21,6 @@ public sealed partial class OpenSandboxService
         if (mounted.Authority != authority with { TranslatedOwnership = false }) throw CanonicalSandboxMountResolver.Incompatible("Canonical root identity or execution identity changed. Retire the old generation before dispatch.");
         return mounted;
     }
-    private async ValueTask<HomeAccess> EffectiveHomeAsync(SandboxAccess access, CancellationToken ct) =>
-        (await StateIsolationAccess.ResolveAsync(access.Definition, access.AgentInstanceId, instances, definitions, ct)).HomeAccess;
-
     private async ValueTask CheckMountedAuthorityAsync(SandboxLease lease, CancellationToken ct)
     {
         if (lease.TenantId is not null)
@@ -45,37 +42,7 @@ public sealed partial class OpenSandboxService
             }
             _ = ResolveMounts(lease); return;
         }
-        var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);
-        if (session?.AgentInstanceId != lease.AgentInstanceId || session.DurablyDeletedAt is not null || session.ArchivedAt is not null
-            || session.Status is SessionStatus.Ended or SessionStatus.Ending)
-            throw AgentCoreErrors.Forbidden("Sandbox owner is no longer active.");
-        var run = session.ProfileId is { } profile && lease.AdmissionRunId is { } id ? await runs.GetAsync(new(lease.AgentInstanceId, profile), id, ct) : null;
-        if (lease.ActiveExecutionId is { } executionId)
-        {
-            if (session.LifecycleStatus != SessionLifecycleStatus.Active) throw AgentCoreErrors.Forbidden("Active process Session was deactivated.");
-            var execution = await store.GetExecutionAsync(lease.SessionId, executionId, ct);
-            if (run is null || run.CancellationRequested || run.Status is AgentRunStatus.Cancelled or AgentRunStatus.Failed
-                || execution is null || !execution.Background && (run.Status != AgentRunStatus.Running
-                    || run.Claim?.Generation != execution.ClaimGeneration || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow()))
-                throw AgentCoreErrors.Forbidden("The active process no longer has its admitted Run authority.");
-        }
-        var admitted = run?.Admission.Configuration?.Definition ?? session.Definition;
-        var policy = await StateIsolationAccess.ResolveAsync(admitted, lease.AgentInstanceId, instances, definitions, ct);
-        if (lease.MountAuthority?.HomeAccess != policy.HomeAccess)
-            throw AgentCoreErrors.Forbidden("Home policy changed; the previous mounted generation must be terminated.");
-        var instance = instances is null ? null : await instances.FindAsync(lease.AgentInstanceId, ct);
-        if (instance?.Lifecycle != AgentInstanceLifecycle.Active)
-            throw AgentCoreErrors.Forbidden("Sandbox Instance is archived or deleted.");
-        if (instance.SettingsOverrides?.SandboxAllowedProfileIds is { } narrowed && !narrowed.Value.Contains(lease.Profile.Id, StringComparer.Ordinal))
-            throw AgentCoreErrors.Forbidden("Sandbox Profile was revoked from the Instance subset.");
-        if (!options.Enabled || (await store.GetProfileAsync(lease.Profile.Id, ct: ct))?.Enabled != true)
-            throw AgentCoreErrors.Forbidden("Sandbox Profile is revoked.");
-        if (run is not null) await ValidateLiveProfileAuthorityAsync(run, lease.Profile, ct);
-        var source = await Images.InspectAsync(lease.Profile, ct, requireVerification: false);
-        if (source.Status != "SourceAuthorized" || source.CredentialRevision != lease.Profile.RegistryCredentialRevision
-            || source.SecretRevision != lease.Profile.RegistrySecretRevision)
-            throw AgentCoreErrors.Forbidden("Sandbox source authority changed.");
-        _ = ResolveMounts(lease);
+        throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
     }
 
     private RunCommandOptions CommandOptions(SandboxLease lease, string cwd, int timeout, bool background = false)

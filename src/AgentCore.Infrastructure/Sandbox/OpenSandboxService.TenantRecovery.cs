@@ -21,7 +21,8 @@ public sealed partial class OpenSandboxService
             using var response = await RetirementClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!response.IsSuccessStatusCode) throw new AccessDeniedException("tenant_sandbox_recovery_unavailable");
             using var document = await ReadRetirementResponseAsync(response, ct);
-            if (document is null || document.RootElement.GetProperty("contractVersion").GetInt32() != 1 || !document.RootElement.GetProperty(verification ? "verificationFencing" : "retirementFencing").GetBoolean())
+            if (document is null || document.RootElement.GetProperty("contractVersion").GetInt32() != 1 || !document.RootElement.GetProperty(verification ? "verificationFencing" : "retirementFencing").GetBoolean()
+                || verification && (!document.RootElement.TryGetProperty("verificationScopeVersion", out var scopeVersion) || scopeVersion.GetInt32() != 2))
                 throw new AccessDeniedException("tenant_sandbox_recovery_unavailable");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

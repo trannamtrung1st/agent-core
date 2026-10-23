@@ -9,9 +9,10 @@ namespace AgentCore.Infrastructure.Sandbox;
 public sealed partial class OpenSandboxService
 {
     public string HostScope => SandboxVerificationHost.Fingerprint(options);
-    private static string VerificationOwner(Guid? tenant, Guid id) => tenant is { } owner ? owner.ToString("N") + "." + id.ToString("N") : id.ToString("N");
-    private static bool VerificationMetadata(IReadOnlyDictionary<string, string>? metadata, string owner) => metadata is not null
+    private static string VerificationOwner(Guid id) => id.ToString("N");
+    private static bool VerificationMetadata(IReadOnlyDictionary<string, string>? metadata, Guid? tenant, string owner) => metadata is not null
         && metadata.GetValueOrDefault("agent-core-image-verification") == owner
+        && metadata.GetValueOrDefault("agent-core-verification-tenant") == tenant?.ToString("N")
         && metadata.GetValueOrDefault("agent-core-filesystem-contract") == SandboxProfileVerification.CurrentContractVersion.ToString();
     private async ValueTask RequireVerificationAsync(SandboxVerificationAttempt attempt, SandboxProfile profile, SandboxImageAuthorization proof, CancellationToken ct)
     {

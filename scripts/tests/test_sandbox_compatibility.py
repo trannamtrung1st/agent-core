@@ -60,15 +60,16 @@ class CompatibilityTests(unittest.TestCase):
 
     def test_tenant_verification_owner_is_prepared_and_attested_without_accepting_a_composite_runtime_generation(self):
         kwargs, _, attrs, expected, info = fixture()
-        owner = "a" * 32 + "." + "b" * 32
-        owned = {compat.MARKER: "4", "agent-core-image-verification": owner}
+        owner = "b" * 32
+        owned = {compat.MARKER: "4", "agent-core-image-verification": owner, "agent-core-verification-tenant": "a" * 32}
+        self.assertTrue(all(len(value) <= 63 for value in owned.values()))
         prepared = compat.prepare_create({**kwargs, "labels": owned}, 501, 20, ROOTS,
             lambda _: {"Id": IMAGE_ID, "Os": "linux", "Config": {"User": "1000:1000"}})
         self.assertEqual("501:20", prepared["user"])
         attrs["Config"]["Labels"] = prepared["labels"]
         expected.update(ownerLabel="agent-core-image-verification", ownerValue=owner)
         self.assertEqual(4, compat.attest(attrs, expected, info, 501, 20, ROOTS)["contractVersion"])
-        self.assertFalse(compat.managed({compat.MARKER: "4", "agent-core-generation": owner}))
+        self.assertFalse(compat.managed({compat.MARKER: "4", "agent-core-generation": "a" * 32 + "." + owner}))
 
     def test_unowned_container_creation_is_unchanged(self):
         kwargs = {"labels": {"unrelated": "true"}}

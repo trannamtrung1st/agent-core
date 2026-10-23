@@ -182,8 +182,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 s.Resolver, f.Authorizer, f.Iam, p.Images, p.Ready, TimeProvider.System);
             var authority = new TenantSandboxExecutionAuthority(operations, storage, (ITenantApprovalStore)f.Iam,
                 (ITenantApprovedOperationStore)f.Iam, (ITenantRunStore)f.Iam, target, f.Authorizer, TimeProvider.System);
-            var sdk = new OpenSandboxService(options, f.Sandbox, null!, f.SessionStore, null!, TimeProvider.System,
-                tenantRuntime: storage, approvedSandbox: services.Execution, tenantExecutionAuthority: authority, tenantRuns: (ITenantRunStore)f.Iam);
+            var sdk = new OpenSandboxService(options,f.Sandbox,null!,f.SessionStore,TimeProvider.System,                tenantRuntime: storage,approvedSandbox: services.Execution,tenantExecutionAuthority: authority,tenantRuns: (ITenantRunStore)f.Iam);
             var local = new TenantApprovedOperationService(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, (ITenantApprovalStore)f.Iam,
                 (ITenantApprovedOperationStore)f.Iam, operations, s.Resolver, f.Ids, TimeProvider.System, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
             var continuation = new TenantRunContinuationService((ITenantRunStore)f.Iam, (ITenantApprovalStore)f.Iam, local, TimeProvider.System,

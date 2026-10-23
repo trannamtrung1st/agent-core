@@ -472,7 +472,6 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IDiagnosticIdSource>());
         });
         services.TryAddSingleton<AgentCore.Application.Composer.ComposerReferenceService>();
-        services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();
         return services;
     }
 }

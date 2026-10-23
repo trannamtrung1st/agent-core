@@ -12,18 +12,6 @@ public sealed partial class OpenSandboxService
     private static bool HasPendingFinalization(SandboxExecution execution) => execution.ExitCode is not null
         && execution.Phase is "processInspection" or "retirementRequested" or "retired";
 
-    private async ValueTask ReconcileFinalizationAsync(SandboxLease lease, SandboxExecution execution, CancellationToken ct)
-    {
-        // Recovery settles process ownership only. Canonical filesystem effects
-        // already happened and are never imported, rolled back or replayed.
-        if (await TryTerminateRemoteAsync(lease, ct))
-        {
-            execution = execution with { GenerationRecycled = true };
-            await SettleTerminatedExecutionAsync(lease, execution, ct);
-        }
-        else await SaveAsync(lease with { State = SandboxLeaseState.NeedsReconciliation }, ct);
-    }
-
     private async ValueTask<(SandboxLease Lease, SandboxExecution Execution)> FinalizeCompletedExecutionAsync(
         SdkSandbox? sdk, SandboxLease lease, SandboxExecution execution, AgentDefinition definition, Func<CancellationToken, ValueTask> fence, CancellationToken ct)
     {
@@ -77,8 +65,7 @@ public sealed partial class OpenSandboxService
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var remote = execution.RemoteTerminationConfirmed || await TryTerminateRemoteAsync(lease, cleanup.Token);
         var runCancelled = lease.TenantId is { } tenant
-            ? (await TenantRuntime.ReadTenantSandboxExecutionFactsAsync(tenant, lease.SessionId, execution.Id, CancellationToken.None))?.RunCancellationRequested == true
-            : await RunCancellationRequestedAsync(lease.SessionId, lease.AgentInstanceId, execution.AgentRunId, CancellationToken.None);
+            && (await TenantRuntime.ReadTenantSandboxExecutionFactsAsync(tenant, lease.SessionId, execution.Id, CancellationToken.None))?.RunCancellationRequested == true;
         var cancelled = error is OperationCanceledException || runCancelled || execution.ProcessStop is not null || lease.CleanupReason == "reset";
         execution = execution with {
             State = execution.ExitCode is not null && execution.State is SandboxExecutionState.Completed or SandboxExecutionState.Canceled ? execution.State

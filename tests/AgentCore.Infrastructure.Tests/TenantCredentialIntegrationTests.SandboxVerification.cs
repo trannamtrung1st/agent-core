@@ -203,10 +203,10 @@ public sealed partial class TenantCredentialIntegrationTests
         {
             Assert.Equal("synthetic-only-key", http.Request.Headers["OPEN-SANDBOX-API-KEY"]);
             var attempt = (await store.FindSandboxVerificationAsync(owner.TenantId, profileId!))!;
-            var metadataOwner = owner.TenantId.ToString("N") + "." + attempt.AttemptId.ToString("N");
+            var metadataOwner = attempt.AttemptId.ToString("N");
             if (http.Request.Path == "/agent-core/generations/capabilities")
             {
-                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true });
+                await http.Response.WriteAsJsonAsync(new { contractVersion = 1, verificationFencing = true, verificationScopeVersion = 2 });
             }
             else if (http.Request.Path == "/agent-core/verifications/retire")
             {
@@ -222,6 +222,7 @@ public sealed partial class TenantCredentialIntegrationTests
                 creates++; dispatched = attempt.AttemptId;
                 using var body = await System.Text.Json.JsonDocument.ParseAsync(http.Request.Body);
                 Assert.Equal(metadataOwner, body.RootElement.GetProperty("metadata").GetProperty("agent-core-image-verification").GetString());
+                Assert.Equal(owner.TenantId.ToString("N"), body.RootElement.GetProperty("metadata").GetProperty("agent-core-verification-tenant").GetString());
                 await f.Identity.SignOutAsync(human.AuthenticationSessionId);
                 http.Response.StatusCode = 500; await http.Response.WriteAsync("private-upstream-sentinel");
             }
@@ -231,8 +232,7 @@ public sealed partial class TenantCredentialIntegrationTests
             WorkspaceDockerHostRoot = Path.Combine(f.Root, "working"), Endpoint = server.Urls.Single(), ApiKey = "synthetic-only-key" };
         var seed = VerificationServices(f, options: options);
         var guard = new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer);
-        var real = new OpenSandboxService(options, f.Sandboxes, null!, f.Memory, new InMemoryAgentRunStore(new InMemoryMemoryStore(), new SystemDiagnosticIdSource()),
-            f.Clock, imageAuthority: seed.Images, tenantVerifications: store, verificationAuthority: guard);
+        var real = new OpenSandboxService(options,f.Sandboxes,null!,f.Memory,            f.Clock,imageAuthority: seed.Images,tenantVerifications: store,verificationAuthority: guard);
         var v = VerificationServices(f, real, options);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var p = (await v.Profiles.SaveAsync(owner.TenantId, null, human, SandboxInput() with { ImageReference = "sha256:" + new string('a', 64) }, await Revision(), 0)).Profile;
@@ -267,7 +267,7 @@ public sealed partial class TenantCredentialIntegrationTests
         var mounts = new CanonicalSandboxMountResolver(options).Verification(attempt.AttemptId); var sibling = new CanonicalSandboxMountResolver(options).Verification(f.Ids.NewId());
         var store = (ITenantSandboxVerificationStore)f.Iam; var claim = Assert.Single(await store.ClaimSandboxVerificationCleanupAsync(clock.GetUtcNow(), f.Ids.NewId()));
         var files = new FileSessionWorkspace(options.CanonicalWorkspaceRoot, Path.Combine(f.Root, "templates"), sessions: f.Memory, instances: f.Instances, sandboxes: f.Sandboxes);
-        var real = new OpenSandboxService(options, f.Sandboxes, files, f.Memory, new InMemoryAgentRunStore(new InMemoryMemoryStore(), new SystemDiagnosticIdSource()), f.Clock, tenantVerifications: store);
+        var real = new OpenSandboxService(options,f.Sandboxes,files,f.Memory,f.Clock,tenantVerifications: store);
         Assert.False(await real.CleanupAsync(claim with { TenantId = f.Ids.NewId() })); Assert.Equal(0, calls);
         Assert.False(await real.CleanupAsync(claim with { ClaimId = f.Ids.NewId() })); Assert.Equal(0, calls); Assert.True(Directory.Exists(mounts.VerificationRoot));
         Assert.False(await real.CleanupAsync(claim with { HostScope = new string('a', 64) })); Assert.Equal(0, calls);

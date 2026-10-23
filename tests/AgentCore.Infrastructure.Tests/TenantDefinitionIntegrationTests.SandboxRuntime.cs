@@ -19,7 +19,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         SandboxLease Lease, TenantSandboxRuntimeWrite Write, Guid ExecutionGrant, TenantRunConfigurationResolver Resolver, SandboxProfile? Alternate = null);
 
     private static async Task<RuntimeSandboxSetup> PrepareRuntimeSandbox(Fixture f, bool verify = true, HomeAccess? home = null, Func<Guid, HumanSessionReference, ValueTask<Guid>>? registry = null,
-        AgentCore.Infrastructure.Sandbox.OpenSandboxOptions? options = null, string? initialization = null, bool template = false, string? instanceInitialization = null, string? imageReference = null, bool alternate = false, bool inspection = false, bool controls = false)
+        AgentCore.Infrastructure.Sandbox.OpenSandboxOptions? options = null, string? initialization = null, bool template = false, string? instanceInitialization = null, string? imageReference = null, bool alternate = false, bool inspection = false, bool controls = false,
+        ITenantSandboxVerifier? verifier = null)
     {
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
         var human = await SetupHuman(f, owner.AccountId, owner.OwnerPrincipalId); var p = SetupProfiles(f, options);
@@ -27,7 +28,14 @@ public sealed partial class TenantDefinitionIntegrationTests
         var sourceCredential = registry is null ? (Guid?)null : await registry(owner.TenantId, human);
         var profile = (await p.Profiles.SaveAsync(owner.TenantId, null, human, SetupInput("Runtime source") with { RegistryCredentialId = sourceCredential, InitializationScript = initialization,
                 ImageReference = imageReference ?? (options?.AllowLocalImageIds == true ? "sha256:" + new string('b', 64) : SetupInput("Runtime source").ImageReference) }, await Revision(), 0)).Profile;
-        if (verify) await p.Verify.VerifyAsync(owner.TenantId, profile.Id, human, await Revision(), 1);
+        if (verify)
+        {
+            var verification = verifier is null ? p.Verify : new TenantSandboxVerificationService(f.Iam, (ITenantSandboxVerificationStore)f.Iam,
+                p.Profiles, new TenantSandboxImageAuthorization(f.Iam, (ITenantSandboxProfileStore)f.Iam, f.Identity, f.Authorizer, SetupResolver(f)),
+                p.Images, verifier, f.Identity, f.Authorizer, f.Ids, TimeProvider.System);
+            var observed = await verification.VerifyAsync(owner.TenantId, profile.Id, human, await Revision(), 1);
+            if (verifier is not null) Assert.True(observed.Attempt?.Status == SandboxVerificationStatus.Succeeded, JsonSerializer.Serialize(observed.Attempt));
+        }
         SandboxProfile? other = null;
         if (alternate)
         {

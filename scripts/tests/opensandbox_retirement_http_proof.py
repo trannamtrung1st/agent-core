@@ -49,7 +49,7 @@ async def proof():
         headers = {"OPEN-SANDBOX-API-KEY": "synthetic-retirement-proof-key"}
         assert (await client.post(path, json={**payload, "extra": True}, headers=headers)).status_code == 422
         capabilities = await client.get("/agent-core/generations/capabilities", headers=headers)
-        assert capabilities.status_code == 200 and capabilities.json() == {"contractVersion": 1, "retirementFencing": True, "verificationFencing": True}
+        assert capabilities.status_code == 200 and capabilities.json() == {"contractVersion": 1, "retirementFencing": True, "verificationFencing": True, "verificationScopeVersion": 2}
         try:
             provider._provision_sandbox("invalid-provider", SimpleNamespace(metadata={"agent-core-generation": "5" * 32}))
             raise AssertionError("original provider error was swallowed")
@@ -73,7 +73,7 @@ async def proof():
         verify_path = "/agent-core/verifications/retire"
         assert (await client.post(verify_path, json=verification)).status_code == 401
         assert (await client.post(verify_path, json={**verification, "session": owner[1]}, headers=headers)).status_code == 422
-        verify_labels = {"agent-core-image-verification": owner[0] + "." + owner[3], retirement.CONTRACT: "4"}
+        verify_labels = {"agent-core-image-verification": owner[3], retirement.VERIFICATION_TENANT: owner[0], retirement.CONTRACT: "4"}
         for index in range(3):
             provider._provision_sandbox("verify-" + str(index), SimpleNamespace(metadata=verify_labels))
         result = await client.post(verify_path, json=verification, headers=headers)

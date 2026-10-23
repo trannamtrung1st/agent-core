@@ -15,7 +15,7 @@ SCOPE = re.compile(r"(?:[0-9a-f]{32}/)?(?:agent-[0-9a-f]{32}/(?:home|sessions/se
 
 def managed(labels):
     return labels.get(MARKER) == CONTRACT and sum(k in labels for k in OWNER_LABELS) == 1 and all(
-        re.fullmatch(r"[0-9a-f]{32}" if key == "agent-core-generation" else r"(?:[0-9a-f]{32}\.)?[0-9a-f]{32}", labels[key])
+        re.fullmatch(r"[0-9a-f]{32}", labels[key])
         for key in OWNER_LABELS if key in labels)
 
 

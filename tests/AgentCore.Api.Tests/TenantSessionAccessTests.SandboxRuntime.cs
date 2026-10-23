@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Sandbox;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
 
@@ -9,6 +12,14 @@ public sealed partial class TenantSessionAccessTests
     public async Task Tenant_Sandbox_HTTP_returns_scoped_stored_observations_and_rejects_foreign_or_legacy_authority()
     {
         await using var factory = new AgentCoreApiFactory(); using var owner = Client(factory);
+        Assert.Null(factory.Services.GetService<IAgentRunAuthority>());
+        Assert.Null(typeof(IAgentRunAuthority).Assembly.GetType("AgentCore.Application.Execution.AgentRunAuthority"));
+        Assert.Null(typeof(ISandboxService).Assembly.GetType("AgentCore.Application.Ports.SandboxAccess"));
+        foreach (var retired in new[] { "ExecuteAsync", "InspectAsync", "InspectProcessAsync", "StopProcessAsync" })
+            Assert.Null(typeof(OpenSandboxService).GetMethod(retired));
+        Assert.DoesNotContain(typeof(OpenSandboxService).GetConstructors().Single().GetParameters(), p =>
+            p.ParameterType == typeof(IAgentRunStore) || p.ParameterType == typeof(IAgentRunAuthority)
+            || p.ParameterType == typeof(IAgentInstanceStore) || p.ParameterType == typeof(IAgentDefinitionStore));
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
         var api = $"/api/v2/tenants/{tenant}";
