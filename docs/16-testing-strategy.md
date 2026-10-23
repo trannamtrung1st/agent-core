@@ -878,6 +878,8 @@ Use the current tenant policy/freeze approve/reject browser journeys rather than
 
 ## Unified Automation and continuity verification
 
+[Canonical integration qualification](reports/canonical-automation-integration-verification-2026-10-23.md) exercises private Skill loading for all four independent origins, actual Core/webhook producers and pending read-consent restart. Current occurrence configuration tests use tenant-owned publication/adoption, settings/resources, due admission and worker completion for fresh and existing Session targets; the four obsolete global-router configuration fixtures are retired. Downgrade-refusal fixtures restore the full current migration sequence before current-model reopen.
+
 Domain/store gates cover the Schedule/Event union, bounds, immutable provenance, CAS, overlap/coalescing, event dedupe, frozen model/instructions and destructive migration/reopen. API journeys reject mixed triggers, foreign/revoked sources, stale revisions and unsupported models, then exercise generic Schedule/manual/Event completion and SQLite restart. Source tests cover stable observable cursor selection, secret redaction, foreign/ineligible sources, unchanged-source record/dedupe and stale cursor refusal. NoAction excludes substantive review and accepted effects.
 
 Application/infrastructure gates preserve existing scheduler DST, ownership, current-turn authoring, checkpoint capacity, exact approval/retry, leases and uncertain-effect fences. Experience outbox repair only fixes missing admission; lifecycle hooks do not automatically synthesize observations. Maintenance permission remains independent and current policy is rechecked before approval resume.

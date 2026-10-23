@@ -71,8 +71,14 @@ public sealed partial class TenantSessionAccessTests
                         db.Entry(invalid).State = EntityState.Detached;
                     }
                 }
+                var currentMigrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261022110000_TenantManagementSkillAuthoring"));
-                Assert.Contains("20261022120000_TenantPrivateSkillActivation", await db.Database.GetAppliedMigrationsAsync()); Assert.False(db.Database.HasPendingModelChanges());
+                Assert.Contains("20261022120000_TenantPrivateSkillActivation", await db.Database.GetAppliedMigrationsAsync());
+                // Later safe Down steps may commit before the retained-source guard refuses.
+                // Restore the exact current schema before exercising current-model reopen.
+                await db.GetService<IMigrator>().MigrateAsync();
+                Assert.Equal(currentMigrations, (await db.Database.GetAppliedMigrationsAsync()).ToArray());
+                Assert.False(db.Database.HasPendingModelChanges());
             }
             var model = new PrivateSkillModel(false);
             await using var second = new TenantApprovalSqliteFactory(root, model);
