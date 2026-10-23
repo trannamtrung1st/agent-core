@@ -1,0 +1,2694 @@
+{
+  "sourceCommit": "33ab693bccfb0b1e603d8f7b83cb441dbc61c7db",
+  "scope": "Current source census and existing scoped evidence index; not new runtime or final proposal acceptance. Source references are navigation, not proof of a reachable authority path.",
+  "families": {
+    "identity-iam": {
+      "owner": "IdentityService; TenantAccessService; IamAuthorizer; SystemOperatorService",
+      "enforcement": "Global Account/authentication and explicit System scope are separate from tenant membership. Current principal, owning resource, scope/role validity, last-owner protections, revision and audit are checked by the current service/store transaction.",
+      "portFiles": [
+        "Iam.cs",
+        "SystemAdministration.cs",
+        "SystemOperators.cs"
+      ],
+      "tables": [
+        "Accounts",
+        "AuthenticationSessions",
+        "Tenants",
+        "TenantUsers",
+        "Principals",
+        "SystemIdentities",
+        "AccessRoles",
+        "AccessRolePermissions",
+        "AccessRoleAssignments",
+        "TenantInvitations",
+        "IdentityBootstrap",
+        "AuthorizationAudit"
+      ],
+      "evidence": [
+        "tenant-resource-scope-verification-2026-10-16.md",
+        "tenant-system-audit-verification-2026-10-21.md"
+      ],
+      "storePorts": [
+        "IIamStore",
+        "ISystemAdministrationStore",
+        "ISystemOperatorStore"
+      ]
+    },
+    "definitions": {
+      "owner": "TenantDefinitionService; isolated Synthetic evaluation runner",
+      "enforcement": "TenantAgentDefinitions is the mutable ownership root. Drafts/publications/resources/evaluation join the actual root; exact child/source reads and independent mutation/publish/evaluate permissions precede I/O and commit. Approved immutable built-ins are read-only sources. Global authoring actors are retired.",
+      "portFiles": [
+        "AgentDefinitionAdminStore.cs",
+        "DefinitionDraftEvaluationStore.cs",
+        "DefinitionResourceStores.cs",
+        "TenantDefinitions.cs"
+      ],
+      "tables": [
+        "TenantAgentDefinitions",
+        "AgentDefinitionDrafts",
+        "AgentDefinitionPublications",
+        "AgentDefinitionDraftResources",
+        "AgentDefinitionPublicationResources",
+        "AgentDefinitionDraftEvaluationScenarios",
+        "AgentDefinitionDraftEvaluationResults"
+      ],
+      "evidence": [
+        "global-definition-authority-retirement-verification-2026-10-23.md",
+        "tenant-definition-resource-iam-verification-2026-10-17.md"
+      ],
+      "storePorts": [
+        "IAgentDefinitionAdminStore",
+        "IDefinitionDraftEvaluationStore",
+        "IDefinitionResourceContentStore",
+        "IAgentDefinitionResourceAdminStore",
+        "ITenantDefinitionStore"
+      ]
+    },
+    "agent-configuration": {
+      "owner": "TenantAgentService; TenantAgentConfigurationService; TenantRunConfigurationResolver",
+      "enforcement": "SystemIdentity binds the actual tenant/Instance/executor. Parent and child IAM, source reads, current revisions, Definition maxima, sparse overrides, freeze and pinned Run policy remain independent. Retained Harness history is inert hash-bound data, not consent authority.",
+      "portFiles": [
+        "AgentInstances.cs",
+        "StateIsolationConfiguration.cs",
+        "TenantAgents.cs",
+        "TenantManagementStore.cs"
+      ],
+      "tables": [
+        "AgentInstances",
+        "AgentInstanceSkills",
+        "AgentInstanceResources",
+        "AgentDefinitionSkillStates",
+        "AgentDefinitionResourceStates"
+      ],
+      "evidence": [
+        "global-instance-configuration-authority-retirement-verification-2026-10-23.md",
+        "tenant-instance-child-iam-verification-2026-10-17.md",
+        "tenant-harness-history-verification-2026-10-24.md"
+      ],
+      "storePorts": [
+        "IAgentInstanceStore",
+        "IStateIsolationConfigurationStore",
+        "ITenantAgentStore",
+        "ITenantManagementStore"
+      ]
+    },
+    "session-runtime": {
+      "owner": "TenantSessionService; TenantRunService; TenantSessionRuntimeHost; SessionRuntime",
+      "enforcement": "TenantSessions joins physical Session/Instance/executor. Current human login/membership/chat/read/manage permissions and trusted claimed Runtime frames fence reads/admission/input/foreground/receipts/voice. One mailbox owns live state. Raw global Session/Profile actors and factory fallback are retired.",
+      "portFiles": [
+        "TenantSessions.cs",
+        "TenantRuns.cs",
+        "TenantRuntime.cs",
+        "TenantRuntimeState.cs",
+        "TenantSessionInput.cs",
+        "TenantSessionForeground.cs",
+        "TenantDeliveryReceipts.cs",
+        "TenantVoice.cs",
+        "TenantConversations.cs",
+        "AgentRunStore.cs"
+      ],
+      "tables": [
+        "TenantSessions",
+        "Sessions",
+        "SessionSnapshots",
+        "ConversationEntries",
+        "Activations",
+        "AgentRuns",
+        "ActivationSourceEntries",
+        "BackgroundCompletionReceipts"
+      ],
+      "evidence": [
+        "global-session-profile-authority-retirement-verification-2026-10-23.md",
+        "tenant-run-admission-verification-2026-10-17.md",
+        "tenant-background-runtime-verification-2026-10-20.md",
+        "tenant-application-messages-verification-2026-10-24.md"
+      ],
+      "storePorts": [
+        "IAgentRunStore",
+        "ITenantConversationStore",
+        "ITenantDeliveryReceiptStore",
+        "ITenantRunStore",
+        "ITenantCompletionRuntimeStore",
+        "ITenantRuntimeStore",
+        "ITenantRuntimeStateStore",
+        "ITenantSessionForegroundStore",
+        "ITenantRuntimeInputStore",
+        "ITenantSessionStore",
+        "ITenantVoiceModeStore"
+      ]
+    },
+    "approval-operation": {
+      "owner": "TenantApprovalService; TenantApprovedOperationService; typed operation owners",
+      "enforcement": "Actual saved Run preparation binds exact tenant/executor/arguments/source and current primary/secondary authority. Review and eligible ExceptionalGrant are distinct. Decision CAS, fresh human qualification, root dedupe, grant validity and receipt/dispatch fences constrain continuation; unknown effects are not replayed.",
+      "portFiles": [
+        "TenantApprovals.cs",
+        "TenantApprovedOperations.cs",
+        "TenantOperationPolicies.cs"
+      ],
+      "tables": [
+        "TenantApprovalRequests",
+        "TenantApprovalDecisions",
+        "TenantOperationGrants",
+        "ApprovalProcessedSignals",
+        "TenantOperationPolicies",
+        "TenantOperationReceipts",
+        "TenantCredentialCheckDispatches"
+      ],
+      "evidence": [
+        "tenant-durable-approval-verification-2026-10-17.md",
+        "tenant-approval-loop-verification-2026-10-17.md",
+        "tenant-approval-defaults-audit-2026-10-24.md",
+        "tenant-readback-consolidation-verification-2026-10-23.md"
+      ],
+      "storePorts": [
+        "ITenantApprovalStore",
+        "ITenantDirectOperationStore",
+        "ITenantApprovedOperationStore",
+        "ITenantOperationPolicyStore"
+      ]
+    },
+    "automation-event": {
+      "owner": "TenantAutomationService; TenantAutomationMutationService; TenantEventProcessor; TenantWebhookService; TenantEmailMonitoringService",
+      "enforcement": "Actual tenant/executor owns Automation, trigger, occurrence and event rows. Human or no-human source attribution, accepted lineage, source/destination authority, semantic intent, current claims and atomic dedupe are explicit. Worker enumeration supplies no ambient human or default tenant.",
+      "portFiles": [
+        "CoreEvents.cs",
+        "ExternalEvents.cs",
+        "EmailMonitoring.cs",
+        "Triggers.cs",
+        "TenantAutomations.cs",
+        "TenantAutomationReads.cs",
+        "TenantAutomationMutations.cs",
+        "TenantEvents.cs",
+        "TenantWebhooks.cs",
+        "TenantEmailMonitoring.cs"
+      ],
+      "tables": [
+        "Automations",
+        "AutomationTriggers",
+        "TriggerOccurrences",
+        "WebhookEvents",
+        "ExternalEvents",
+        "ExternalEventDeliveries",
+        "CoreEvents",
+        "CoreEventBuckets",
+        "CoreEventDeliveries",
+        "EmailWatches",
+        "EmailWatchEvents"
+      ],
+      "evidence": [
+        "tenant-event-automation-verification-2026-10-21.md",
+        "tenant-webhook-verification-2026-10-21.md",
+        "tenant-automation-authoring-verification-2026-10-22.md",
+        "tenant-automation-presets-verification-2026-10-22.md"
+      ],
+      "storePorts": [
+        "ICoreEventStore",
+        "IEmailWatchStore",
+        "IExternalEventStore",
+        "ITenantAutomationMutationStore",
+        "ITenantAutomationReadStore",
+        "ITenantAutomationStore",
+        "ITenantEmailWatchStore",
+        "ITenantEventStore",
+        "ITenantWebhookStore",
+        "ITriggerStore"
+      ]
+    },
+    "credential-account": {
+      "owner": "TenantCredentialService; TenantCredentialBindingService; TenantCredentialOAuthService; TenantConnectedAccountReader; TenantAccountRuntimeReadService; TenantAccountEffectService",
+      "enforcement": "TenantCredentials owns physical protected credentials and account profiles; binding also fixes tenant/Instance/executor. Purpose, live scopes/binding epoch/current identity/source reads, exact compound consent and secret maintenance/dispatch receipts fence access. OAuth binds original login, tenant, purpose and nonce. Raw global adapters exclude owned rows.",
+      "portFiles": [
+        "Credentials.cs",
+        "EmailAccounts.cs",
+        "Drive.cs",
+        "TenantCredentials.cs",
+        "TenantCredentialBindings.cs",
+        "TenantCredentialChecks.cs",
+        "TenantCredentialOAuth.cs",
+        "TenantConnectedAccounts.cs",
+        "TenantAccountOperations.cs"
+      ],
+      "tables": [
+        "TenantCredentials",
+        "Credentials",
+        "AgentCredentialBindings",
+        "EmailAccountProfiles",
+        "DriveAccountProfiles",
+        "EmailAccountSelections",
+        "EmailDrafts",
+        "EmailSendOperations",
+        "DriveOperations",
+        "SyntheticDriveFiles",
+        "CredentialOAuthAttempts"
+      ],
+      "evidence": [
+        "global-credential-authority-retirement-verification-2026-10-23.md",
+        "global-email-authority-retirement-verification-2026-10-23.md",
+        "global-drive-authority-retirement-verification-2026-10-23.md",
+        "tenant-account-action-model-ui-verification-2026-10-20.md"
+      ],
+      "storePorts": [
+        "ICredentialStore",
+        "IAgentCredentialBindingStore",
+        "IDriveOperationStore",
+        "ISyntheticDriveStore",
+        "IEmailStore",
+        "ITenantAccountOperationStore",
+        "ITenantConnectedAccountReadStore",
+        "ITenantCredentialBindingStore",
+        "ITenantCredentialCheckStore",
+        "ITenantCredentialOAuthStore",
+        "ITenantCredentialStore"
+      ]
+    },
+    "profile-memory-experience": {
+      "owner": "TenantUserProfileService; TenantRunProfileService; TenantMemoryService; TenantMemoryManagementService; TenantContinuityReadService; TenantExperienceOperationService",
+      "enforcement": "Actual tenant/User/Account and Agent/source ownership controls independent current reads/manage. Per-Run pin/opt-in/isolation can narrow sources. Learning/forget/consolidation/review use their own exact operation rules. Historical global state tables are not canonical tenant source fallbacks.",
+      "portFiles": [
+        "StructuredMemory.cs",
+        "Experience.cs",
+        "TenantUserProfiles.cs",
+        "TenantRunProfiles.cs",
+        "TenantLearnedMemory.cs",
+        "TenantContinuity.cs",
+        "TenantMemoryManagement.cs",
+        "TenantMemoryOperations.cs",
+        "TenantPreferenceOperations.cs",
+        "TenantExperience.cs"
+      ],
+      "tables": [
+        "TenantUserProfiles",
+        "TenantLearnedMemories",
+        "TenantExperiences",
+        "UserProfiles",
+        "StructuredMemories",
+        "Experiences",
+        "ExperienceSettings",
+        "IdentityMaintenanceSettings"
+      ],
+      "evidence": [
+        "global-memory-service-retirement-verification-2026-10-23.md",
+        "global-session-profile-authority-retirement-verification-2026-10-23.md",
+        "tenant-user-profile-verification-2026-10-21.md",
+        "tenant-memory-management-verification-2026-10-22.md",
+        "tenant-experience-maintenance-verification-2026-10-22.md"
+      ],
+      "storePorts": [
+        "IExperienceStore",
+        "IStructuredMemoryStore",
+        "ITenantContinuityStore",
+        "ITenantExperienceStore",
+        "ITenantExperienceManagementStore",
+        "ITenantExperienceReviewStore",
+        "ITenantLearnedMemoryStore",
+        "ITenantMemoryManagementStore",
+        "ITenantMemoryOperationStore",
+        "ITenantPreferenceOperationStore",
+        "ITenantRunProfileStore",
+        "ITenantUserProfileStore"
+      ]
+    },
+    "files-artifacts": {
+      "owner": "TenantWorkspaceReadService; TenantWorkspaceMutationService; TenantArtifactService; TenantAttachmentService; typed source/publication/cleanup owners",
+      "enforcement": "Actual tenant/Instance/Session resolves canonical roots and source bindings. Read/manage/publish/recipient authority remains separate; current witnesses surround byte I/O. Physical content/digest keys grant no access. Cleanup requires exact saved ownership/reference/lifetime proof, not absence from an unowned lookup.",
+      "portFiles": [
+        "AgentInstanceWorkspace.cs",
+        "ArtifactReference.cs",
+        "TenantArtifacts.cs",
+        "TenantArtifactOperations.cs",
+        "TenantArtifactCleanup.cs",
+        "TenantAttachments.cs",
+        "TenantResourceSourceContent.cs",
+        "TenantWorkspaceReads.cs",
+        "TenantWorkspaceMutations.cs",
+        "TenantWorkspaceOperations.cs",
+        "TenantWorkspaceMutationObservations.cs",
+        "TenantWorkspaceArtifactSources.cs",
+        "TenantWorkingCleanup.cs"
+      ],
+      "tables": [
+        "Artifacts",
+        "Attachments",
+        "MessageAttachments"
+      ],
+      "evidence": [
+        "global-resource-workspace-authority-retirement-verification-2026-10-23.md",
+        "tenant-workspace-effects-verification-2026-10-19.md",
+        "tenant-attachment-context-verification-2026-10-19.md",
+        "tenant-workspace-artifact-source-verification-2026-10-19.md",
+        "tenant-artifact-cleanup-verification-2026-10-19.md",
+        "tenant-composer-references-verification-2026-10-24.md"
+      ],
+      "storePorts": [
+        "IAgentInstanceWorkspaceStore",
+        "IArtifactStore",
+        "ITenantArtifactCleanupStore",
+        "ITenantArtifactOperationStore",
+        "ITenantArtifactStore",
+        "ITenantAttachmentStore",
+        "ITenantAttachmentMutationStore",
+        "ITenantAttachmentCleanupStore",
+        "ITenantResourceSourceContentStore",
+        "ITenantWorkingCleanupStore",
+        "ITenantWorkspaceArtifactSourceStore",
+        "ITenantAttachmentArtifactSourceStore",
+        "ITenantWorkspaceMutationObservationStore",
+        "ITenantWorkspaceMutationStore",
+        "ITenantWorkspaceOperationStore",
+        "ITenantWorkspaceReadStore"
+      ]
+    },
+    "sandbox": {
+      "owner": "TenantSandboxProfileService; TenantSandboxVerificationService; TenantSandboxControlService; TenantSandboxApprovedOperationService; OpenSandboxService",
+      "enforcement": "Actual owned profile/image and verified setup precede claimed Session environment/lease/generation/process/workspace dispatch. Human reset/Stop and model command/read/consent are separate owners. Cleanup preserves uncertainty and requires reference/quiescence proof; external shell identity is a coarse privileged capability.",
+      "portFiles": [
+        "SandboxService.cs",
+        "TenantSandboxProfiles.cs",
+        "TenantSandboxRuntime.cs",
+        "TenantSandboxVerification.cs"
+      ],
+      "tables": [
+        "TenantSandboxProfiles",
+        "TenantSandboxVerificationAttempts",
+        "SandboxProfiles",
+        "SandboxProfileVerifications",
+        "SandboxInstanceVerifications",
+        "SandboxSessionLeases",
+        "SandboxExecutions"
+      ],
+      "evidence": [
+        "global-sandbox-authority-retirement-verification-2026-10-23.md",
+        "tenant-sandbox-command-approval-verification-2026-10-18.md",
+        "tenant-sandbox-recovery-verification-2026-10-18.md"
+      ],
+      "storePorts": [
+        "ISandboxStore",
+        "ITenantSandboxProfileStore",
+        "ITenantSandboxRuntimeStore",
+        "ITenantSandboxVerificationStore"
+      ]
+    },
+    "browser": {
+      "owner": "TenantBrowserEffectService; TenantBrowserReadService; TenantBrowserRetirementService; TenantBrowserProfileService; SystemBrowserPrivacyService; NativePlaywrightBrowser",
+      "enforcement": "Actual tenant/Agent/Session/executor/profile/handle ownership and current claim, target/origin, binding/read/consent proofs fence native use. Persistent directories are tenant/Agent partitioned. Privacy administration and explicit human profile reset grant no model effect authority. Coordinate/geolocation are unavailable in the tenant adapter.",
+      "portFiles": [
+        "BrowserPrivacy.cs",
+        "TenantBrowserProfile.cs"
+      ],
+      "tables": [
+        "BrowserPrivacy"
+      ],
+      "evidence": [
+        "tenant-browser-ownership-verification-2026-10-18.md",
+        "tenant-browser-retirement-verification-2026-10-20.md",
+        "system-browser-privacy-verification-2026-10-20.md",
+        "tenant-native-browser-journeys-verification-2026-10-23.md"
+      ],
+      "storePorts": [
+        "IBrowserPrivacyStore",
+        "ISystemBrowserPrivacyStore",
+        "ITenantBrowserProfileStore"
+      ]
+    },
+    "audit": {
+      "owner": "AuthorizationAuditQueryService; SystemAdministrationService; bounded redacted diagnostics",
+      "enforcement": "Current human tenant/security.audit.read or explicit aggregate System authority selects authorized audit facts. Global Admin history remains historical data; it is not the tenant audit API. Logs/metrics cannot confer private access or carry protected payloads.",
+      "portFiles": [
+        "IAdminEventStore.cs",
+        "AuthorizationAuditQueries.cs",
+        "TenantAuthorizationAudit.cs"
+      ],
+      "tables": [
+        "AdminEvents"
+      ],
+      "evidence": [
+        "tenant-system-audit-verification-2026-10-21.md",
+        "admin-memory-automation-retirement-verification-2026-10-23.md"
+      ],
+      "storePorts": [
+        "IAuthorizationAuditQueryStore",
+        "IAdminEventStore",
+        "ITenantAuthorizationAuditStore"
+      ]
+    },
+    "cleanup-isolation": {
+      "owner": "TenantAgentDecommissionService; TenantAgentDecommissionCleanup; TenantRequestIsolationService; tenant file/Browser retirement owners",
+      "enforcement": "Exact original-human or trusted cleanup proof, current source/security revisions, causal-child accounting and host quiescence constrain logical deletion and physical retirement. Cleanup cannot adopt foreign resources or call absence in an unowned store abandonment.",
+      "portFiles": [
+        "TenantAgentDecommission.cs",
+        "TenantRequestIsolation.cs"
+      ],
+      "tables": [],
+      "evidence": [
+        "global-lifecycle-deletion-retirement-verification-2026-10-24.md",
+        "tenant-agent-decommission-verification-2026-10-20.md",
+        "tenant-isolation-configuration-verification-2026-10-21.md"
+      ],
+      "storePorts": [
+        "ITenantAgentDecommissionStore",
+        "ITenantRequestIsolationStore"
+      ]
+    },
+    "raw-session-template": {
+      "owner": "Canonical tenant Runtime adapters; immutable approved built-in templates; retained physical store primitives",
+      "enforcement": "IMemoryStore is physical storage behind the canonical tenant adapter, not a public authorizer. Canonical Runtime source is tenant-bound. IBuiltInAgentDefinitionStore is approved read-only shared configuration. Unowned snapshots/Profile/test primitives cannot admit a current tenant Run or become a private fallback.",
+      "portFiles": [
+        "Stores.cs"
+      ],
+      "tables": [],
+      "evidence": [
+        "global-session-profile-authority-retirement-verification-2026-10-23.md",
+        "global-definition-authority-retirement-verification-2026-10-23.md"
+      ],
+      "storePorts": [
+        "IAgentDefinitionStore",
+        "IBuiltInAgentDefinitionStore",
+        "IMemoryStore",
+        "IAttachmentStore"
+      ]
+    },
+    "public-http": {
+      "owner": "TenantHttpEffectService; TenantPublicWebReadService",
+      "enforcement": "Public research/downloads use bounded network/DNS/redirect/content policies and current task/source controls. General public HTTP mutation additionally requires the exact current operation/consent and durable dispatch/receipt boundary; no bound private account or raw provider fallback.",
+      "portFiles": [
+        "TenantHttpOperations.cs"
+      ],
+      "tables": [],
+      "evidence": [
+        "tenant-public-http-verification-2026-10-23.md",
+        "tenant-public-web-read-verification-2026-10-23.md"
+      ],
+      "storePorts": [
+        "ITenantHttpOperationStore"
+      ]
+    }
+  },
+  "storePorts": [
+    {
+      "port": "IAgentDefinitionAdminStore",
+      "family": "definitions",
+      "declaration": "src/AgentCore.Application/Ports/AgentDefinitionAdminStore.cs:6",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAgentDefinitionAdminStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/CompositeAgentDefinitionStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/InMemoryDefinitionDraftEvaluationStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/DefinitionBoundKnowledgeContentResolver.cs",
+        "src/AgentCore.Infrastructure/Definitions/InMemoryAgentDefinitionAdminStore.cs",
+        "src/AgentCore.Application/Admin/AgentDefinitionExactSourceResolver.cs"
+      ]
+    },
+    {
+      "port": "IAgentInstanceWorkspaceStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/AgentInstanceWorkspace.cs:10",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.cs",
+        "src/AgentCore.Application/Security/TenantAgentDecommissionCleanup.cs"
+      ]
+    },
+    {
+      "port": "IAgentInstanceStore",
+      "family": "agent-configuration",
+      "declaration": "src/AgentCore.Application/Ports/AgentInstances.cs:7",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAgentInstanceStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryAgentInstanceStore.cs",
+        "src/AgentCore.Application/Triggers/TriggerDurableSchedulingPolicy.cs",
+        "src/AgentCore.Application/Agents/StateIsolationAccess.cs",
+        "src/AgentCore.Application/Agents/EffectiveSkillCatalogResolver.cs",
+        "src/AgentCore.Application/Models/ExecutionModelPolicy.cs"
+      ]
+    },
+    {
+      "port": "IAgentRunStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/AgentRunStore.cs:13",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAgentRunStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryExperienceStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryAgentRunStore.cs",
+        "src/AgentCore.Application/Security/TenantAgentRunStore.cs",
+        "src/AgentCore.Application/Workspaces/SessionWorkingCleanupService.cs",
+        "src/AgentCore.Application/Sessions/SessionRuntime.AgentRuns.cs",
+        "src/AgentCore.Application/Sessions/SessionRuntime.cs",
+        "src/AgentCore.Application/Execution/AgentRunAdmissionFactory.cs",
+        "src/AgentCore.Application/Execution/AgentRunCoordinator.cs"
+      ]
+    },
+    {
+      "port": "IArtifactStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/ArtifactReference.cs:21",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryArtifactStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteArtifactStore.cs",
+        "src/AgentCore.Application/Execution/AgentRunToolCallCheckpoint.cs",
+        "src/AgentCore.Application/Execution/SessionCaptureRehydration.cs"
+      ]
+    },
+    {
+      "port": "IAuthorizationAuditQueryStore",
+      "family": "audit",
+      "declaration": "src/AgentCore.Application/Ports/AuthorizationAuditQueries.cs:11",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.AuditQueries.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.AuditQueries.cs",
+        "src/AgentCore.Application/Security/AuthorizationAuditQueryService.cs"
+      ]
+    },
+    {
+      "port": "IBrowserPrivacyStore",
+      "family": "browser",
+      "declaration": "src/AgentCore.Application/Ports/BrowserPrivacy.cs:25",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/BrowserPrivacyStore.cs",
+        "src/AgentCore.Application/Admin/BrowserPrivacyService.cs"
+      ]
+    },
+    {
+      "port": "ISystemBrowserPrivacyStore",
+      "family": "browser",
+      "declaration": "src/AgentCore.Application/Ports/BrowserPrivacy.cs:36",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.BrowserPrivacy.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.BrowserPrivacy.cs",
+        "src/AgentCore.Application/Security/SystemBrowserPrivacyService.cs"
+      ]
+    },
+    {
+      "port": "ICoreEventStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/CoreEvents.cs:18",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryCoreEventStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteCoreEventStore.cs"
+      ]
+    },
+    {
+      "port": "ICredentialStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/Credentials.cs:6",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryCredentialStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteCredentialStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryEmailWatchStore.cs"
+      ]
+    },
+    {
+      "port": "IAgentCredentialBindingStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/Credentials.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryCredentialStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteCredentialStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryEmailWatchStore.cs"
+      ]
+    },
+    {
+      "port": "IDefinitionDraftEvaluationStore",
+      "family": "definitions",
+      "declaration": "src/AgentCore.Application/Ports/DefinitionDraftEvaluationStore.cs:5",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteDefinitionDraftEvaluationStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/InMemoryDefinitionDraftEvaluationStore.cs"
+      ]
+    },
+    {
+      "port": "IDefinitionResourceContentStore",
+      "family": "definitions",
+      "declaration": "src/AgentCore.Application/Ports/DefinitionResourceStores.cs:6",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/DefinitionResourcePersistence.cs",
+        "src/AgentCore.Infrastructure/Persistence/FileDefinitionResourceContentStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAgentDefinitionAdminStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAgentDefinitionResourceAdminStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/InMemoryAgentDefinitionResourceAdminStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/InMemoryDefinitionResourceContentStore.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.cs",
+        "src/AgentCore.Application/Security/TenantManagementInspectionProjection.cs",
+        "src/AgentCore.Application/Security/TenantDefinitionService.cs",
+        "src/AgentCore.Application/Admin/DefinitionResourceBatch.cs",
+        "src/AgentCore.Application/Admin/DefinitionResourceStoredContent.cs",
+        "src/AgentCore.Application/Agents/DefinitionPublicationResourceReader.cs",
+        "src/AgentCore.Application/Agents/InheritedDefinitionResourceCatalog.cs"
+      ]
+    },
+    {
+      "port": "IAgentDefinitionResourceAdminStore",
+      "family": "definitions",
+      "declaration": "src/AgentCore.Application/Ports/DefinitionResourceStores.cs:13",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAgentDefinitionResourceAdminStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/InMemoryAgentDefinitionResourceAdminStore.cs",
+        "src/AgentCore.Application/Agents/DefinitionPublicationResourceReader.cs",
+        "src/AgentCore.Application/Agents/InheritedDefinitionResourceCatalog.cs"
+      ]
+    },
+    {
+      "port": "IDriveOperationStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/Drive.cs:18",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteDriveStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryDriveStore.cs",
+        "src/AgentCore.Infrastructure/Drive/GoogleDriveProvider.cs",
+        "src/AgentCore.Infrastructure/Credentials/TenantConnectedAccountReader.cs",
+        "src/AgentCore.Infrastructure/Credentials/TenantOAuthRegistration.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs",
+        "src/AgentCore.Application/Drive/DriveService.cs"
+      ]
+    },
+    {
+      "port": "ISyntheticDriveStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/Drive.cs:40",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteDriveStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryDriveStore.cs",
+        "src/AgentCore.Infrastructure/Drive/SyntheticGoogleDriveProvider.cs",
+        "src/AgentCore.Infrastructure/Credentials/TenantConnectedAccountReader.cs",
+        "src/AgentCore.Infrastructure/Credentials/TenantOAuthRegistration.cs"
+      ]
+    },
+    {
+      "port": "IEmailStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/EmailAccounts.cs:13",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryEmailStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteEmailStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryAgentRunStore.cs",
+        "src/AgentCore.Application/Security/TenantAccountActionTarget.cs",
+        "src/AgentCore.Application/Security/TenantAccountEffectService.cs"
+      ]
+    },
+    {
+      "port": "IEmailWatchStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/EmailMonitoring.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteEmailWatchStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryEmailWatchStore.cs"
+      ]
+    },
+    {
+      "port": "IExperienceStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/Experience.cs:6",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteExperienceStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryExperienceStore.cs"
+      ]
+    },
+    {
+      "port": "IExternalEventStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/ExternalEvents.cs:17",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteExternalEventStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryExternalEventStore.cs"
+      ]
+    },
+    {
+      "port": "IAdminEventStore",
+      "family": "audit",
+      "declaration": "src/AgentCore.Application/Ports/IAdminEventStore.cs:5",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Admin/InMemoryAdminEventStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAdminEventStore.cs"
+      ]
+    },
+    {
+      "port": "IIamStore",
+      "family": "identity-iam",
+      "declaration": "src/AgentCore.Application/Ports/Iam.cs:5",
+      "sourceReferences": [
+        "src/AgentCore.Api/Program.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentService.cs",
+        "src/AgentCore.Application/Security/AuthorizationAuditQueryService.cs",
+        "src/AgentCore.Application/Security/TenantActivityService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxGenerationAuthority.cs",
+        "src/AgentCore.Application/Security/TenantRunCancellationService.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxProfileService.cs",
+        "src/AgentCore.Application/Security/TenantOperationPolicyService.cs",
+        "src/AgentCore.Application/Security/TenantHumanInputRules.cs",
+        "src/AgentCore.Application/Security/TenantAutomationService.cs",
+        "src/AgentCore.Application/Security/TenantExperienceReviewService.cs",
+        "src/AgentCore.Application/Security/TenantHttpEffectService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceReadService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserReadService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserProfileService.cs",
+        "src/AgentCore.Application/Security/TenantAgentAccessService.cs",
+        "src/AgentCore.Application/Security/IdentityService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantMemoryManagementService.cs",
+        "src/AgentCore.Application/Security/TenantExperienceManagementService.cs",
+        "src/AgentCore.Application/Security/TenantOperationAuthorizer.cs",
+        "src/AgentCore.Application/Security/TenantAccountActionTarget.cs",
+        "src/AgentCore.Application/Security/TenantConnectedAccountService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOAuthAuthority.cs",
+        "src/AgentCore.Application/Security/TenantCoreEventReadService.cs",
+        "src/AgentCore.Application/Security/TenantVoiceService.cs",
+        "src/AgentCore.Application/Security/TenantAutomationOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantBrowserEffectService.cs",
+        "src/AgentCore.Application/Security/TenantAccessService.cs",
+        "src/AgentCore.Application/Security/TenantAccountEffectService.cs",
+        "src/AgentCore.Application/Security/TenantEventActivityService.cs",
+        "src/AgentCore.Application/Security/TenantHumanSessionAuthority.cs",
+        "src/AgentCore.Application/Security/TenantSandboxImageAuthorization.cs",
+        "src/AgentCore.Application/Security/TenantChatService.cs",
+        "src/AgentCore.Application/Security/TenantEmailMonitoringService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantReportReadAuthority.cs",
+        "src/AgentCore.Application/Security/SystemOperatorService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOAuthService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxControlOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantUserProfileService.cs",
+        "src/AgentCore.Application/Security/TenantAgentService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialCheckService.cs",
+        "src/AgentCore.Application/Security/TenantRunService.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantPublicWebOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantAgentReadService.cs",
+        "src/AgentCore.Application/Security/SystemBrowserPrivacyService.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.cs",
+        "src/AgentCore.Application/Security/AccountAdministrationService.cs",
+        "src/AgentCore.Application/Security/TenantAgentDecommissionService.cs",
+        "src/AgentCore.Application/Security/TenantBackgroundReportTarget.cs",
+        "src/AgentCore.Application/Security/TenantManagementReadService.cs",
+        "src/AgentCore.Application/Security/SystemAdministrationService.cs",
+        "src/AgentCore.Application/Security/TenantWaitSourceAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationEffectService.cs",
+        "src/AgentCore.Application/Security/TenantReportSourceReadService.cs",
+        "src/AgentCore.Application/Security/TenantSessionForegroundService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxInstanceVerificationService.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantCompletionReadService.cs",
+        "src/AgentCore.Application/Security/TenantRunExecutionAuthority.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/IamAuthorizer.cs",
+        "src/AgentCore.Application/Security/TenantSandboxControlService.cs",
+        "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserRetirementService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOAuthCheckService.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeStateService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialBindingService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxVerificationService.cs",
+        "src/AgentCore.Application/Security/TenantConversationService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserStateService.cs",
+        "src/AgentCore.Application/Security/TenantDefinitionService.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWebhookService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantApprovedOperationService.cs",
+        "src/AgentCore.Application/Events/TenantEventProcessor.cs",
+        "src/AgentCore.Api/Security/IdentityHttp.cs",
+        "src/AgentCore.Api/Security/TenantAccessEndpoints.cs",
+        "src/AgentCore.Api/Security/SystemBrowserPrivacyEndpoints.cs",
+        "src/AgentCore.Api/Security/SystemAdministrationEndpoints.cs",
+        "src/AgentCore.Api/Security/IdentityEndpoints.cs",
+        "src/AgentCore.Api/Security/AuthorizationAuditEndpoints.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.cs"
+      ]
+    },
+    {
+      "port": "ISandboxStore",
+      "family": "sandbox",
+      "declaration": "src/AgentCore.Application/Ports/SandboxService.cs:29",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.cs",
+        "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.cs",
+        "src/AgentCore.Infrastructure/Sandbox/SandboxImageAuthority.cs",
+        "src/AgentCore.Infrastructure/Sandbox/OpenSandboxReadiness.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemorySandboxStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteSandboxStore.cs",
+        "src/AgentCore.Application/Tools/SessionToolExecutor.cs",
+        "src/AgentCore.Application/Admin/SandboxPolicyEnforcement.cs",
+        "src/AgentCore.Application/Workspaces/SessionWorkingCleanupService.cs"
+      ]
+    },
+    {
+      "port": "IStateIsolationConfigurationStore",
+      "family": "agent-configuration",
+      "declaration": "src/AgentCore.Application/Ports/StateIsolationConfiguration.cs:11",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryStateIsolationConfigurationStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAgentInstanceStore.Isolation.cs"
+      ]
+    },
+    {
+      "port": "IAgentDefinitionStore",
+      "family": "raw-session-template",
+      "declaration": "src/AgentCore.Application/Ports/Stores.cs:6",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Definitions/CompositeAgentDefinitionStore.cs",
+        "src/AgentCore.Application/Triggers/TriggerDurableSchedulingPolicy.cs",
+        "src/AgentCore.Application/Agents/StateIsolationAccess.cs",
+        "src/AgentCore.Application/Models/ExecutionModelPolicy.cs"
+      ]
+    },
+    {
+      "port": "IBuiltInAgentDefinitionStore",
+      "family": "raw-session-template",
+      "declaration": "src/AgentCore.Application/Ports/Stores.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/FileBuiltInDefinitionTemplateSource.cs",
+        "src/AgentCore.Infrastructure/Definitions/FileAgentDefinitionStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/DefinitionBoundKnowledgeContentResolver.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantChatService.cs",
+        "src/AgentCore.Application/Security/TenantAgentService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxSetupResolver.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialBindingService.cs",
+        "src/AgentCore.Application/Security/TenantRunConfigurationResolver.cs",
+        "src/AgentCore.Application/Admin/AgentDefinitionExactSourceResolver.cs",
+        "src/AgentCore.Application/Agents/InheritedDefinitionResourceCatalog.cs"
+      ]
+    },
+    {
+      "port": "IMemoryStore",
+      "family": "raw-session-template",
+      "declaration": "src/AgentCore.Application/Ports/Stores.cs:18",
+      "sourceReferences": [
+        "src/AgentCore.Api/Program.cs",
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.cs",
+        "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteMemoryStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryMemoryStore.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeMemoryStore.cs",
+        "src/AgentCore.Application/Triggers/TriggerDurableSchedulingPolicy.cs",
+        "src/AgentCore.Application/Triggers/AutomationDestinationPolicy.cs",
+        "src/AgentCore.Application/Triggers/InstanceAutomationPolicy.cs",
+        "src/AgentCore.Application/Agents/ConversationCompactor.cs",
+        "src/AgentCore.Application/Workspaces/SessionWorkingCleanupService.cs",
+        "src/AgentCore.Application/Testing/PausedSessionReopen.cs",
+        "src/AgentCore.Application/Sessions/SessionRuntime.cs"
+      ]
+    },
+    {
+      "port": "IAttachmentStore",
+      "family": "raw-session-template",
+      "declaration": "src/AgentCore.Application/Ports/Stores.cs:134",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAttachmentStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryAttachmentStore.cs",
+        "src/AgentCore.Infrastructure/Attachments/AttachmentProcessor.cs",
+        "src/AgentCore.Application/Models/UserTurnCapabilityValidator.cs",
+        "src/AgentCore.Application/Sessions/SessionRuntime.cs"
+      ]
+    },
+    {
+      "port": "IStructuredMemoryStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/StructuredMemory.cs:23",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteStructuredMemoryStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryStructuredMemoryStore.cs"
+      ]
+    },
+    {
+      "port": "ISystemAdministrationStore",
+      "family": "identity-iam",
+      "declaration": "src/AgentCore.Application/Ports/SystemAdministration.cs:9",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.SystemAdministration.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.SystemAdministration.cs",
+        "src/AgentCore.Application/Security/SystemAdministrationService.cs"
+      ]
+    },
+    {
+      "port": "ISystemOperatorStore",
+      "family": "identity-iam",
+      "declaration": "src/AgentCore.Application/Ports/SystemOperators.cs:8",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.SystemOperators.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.SystemOperators.cs",
+        "src/AgentCore.Application/Security/SystemOperatorService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAccountOperationStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/TenantAccountOperations.cs:14",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.AccountEffects.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.AccountEffects.cs",
+        "src/AgentCore.Application/Security/TenantAccountEffectService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAgentDecommissionStore",
+      "family": "cleanup-isolation",
+      "declaration": "src/AgentCore.Application/Ports/TenantAgentDecommission.cs:9",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Decommission.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Decommission.cs",
+        "src/AgentCore.Application/Security/TenantAgentDecommissionService.cs",
+        "src/AgentCore.Application/Security/TenantAgentDecommissionCleanup.cs"
+      ]
+    },
+    {
+      "port": "ITenantAgentStore",
+      "family": "agent-configuration",
+      "declaration": "src/AgentCore.Application/Ports/TenantAgents.cs:26",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentService.cs",
+        "src/AgentCore.Application/Security/TenantActivityService.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantAutomationService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceReadService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserProfileService.cs",
+        "src/AgentCore.Application/Security/TenantAgentAccessService.cs",
+        "src/AgentCore.Application/Security/TenantOperationAuthorizer.cs",
+        "src/AgentCore.Application/Security/TenantCoreEventReadService.cs",
+        "src/AgentCore.Application/Security/TenantVoiceService.cs",
+        "src/AgentCore.Application/Security/TenantChatService.cs",
+        "src/AgentCore.Application/Security/TenantAgentService.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxSetupResolver.cs",
+        "src/AgentCore.Application/Security/TenantAgentReadService.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.cs",
+        "src/AgentCore.Application/Security/TenantSessionForegroundService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxInstanceVerificationService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs",
+        "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserRetirementService.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeStateService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialBindingService.cs",
+        "src/AgentCore.Application/Security/TenantRunConfigurationResolver.cs",
+        "src/AgentCore.Application/Security/TenantApprovedOperationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantApprovalStore",
+      "family": "approval-operation",
+      "declaration": "src/AgentCore.Application/Ports/TenantApprovals.cs:32",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Approvals.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Approvals.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Application/Security/TenantSandboxGenerationAuthority.cs",
+        "src/AgentCore.Application/Security/TenantSandboxExecutionAuthority.cs",
+        "src/AgentCore.Application/Security/TenantConversationApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactOperationService.cs",
+        "src/AgentCore.Application/Security/TenantHttpEffectService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxApprovedOperationService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantRunContinuationService.cs",
+        "src/AgentCore.Application/Security/TenantPreferenceOperationService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserEffectService.cs",
+        "src/AgentCore.Application/Security/TenantAccountEffectService.cs",
+        "src/AgentCore.Application/Security/TenantEventActivityService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialCheckService.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantRunExecutionAuthority.Configuration.cs",
+        "src/AgentCore.Application/Security/TenantAutomationMutationService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationEffectService.cs",
+        "src/AgentCore.Application/Security/TenantReportSourceReadService.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantCompletionReadService.cs",
+        "src/AgentCore.Application/Security/TenantExperienceOperationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentRuntimeContextService.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantApprovedOperationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantDirectOperationStore",
+      "family": "approval-operation",
+      "declaration": "src/AgentCore.Application/Ports/TenantApprovedOperations.cs:17",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Application/Security/TenantManagementOperationTarget.cs",
+        "src/AgentCore.Application/Ports/TenantArtifactOperations.cs",
+        "src/AgentCore.Application/Ports/TenantWorkspaceOperations.cs",
+        "src/AgentCore.Application/Ports/TenantAutomationMutations.cs",
+        "src/AgentCore.Application/Ports/TenantPreferenceOperations.cs",
+        "src/AgentCore.Application/Ports/TenantExperience.cs"
+      ]
+    },
+    {
+      "port": "ITenantApprovedOperationStore",
+      "family": "approval-operation",
+      "declaration": "src/AgentCore.Application/Ports/TenantApprovedOperations.cs:22",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.ApprovedOperations.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.ApprovedOperations.cs",
+        "src/AgentCore.Application/Security/TenantSandboxGenerationAuthority.cs",
+        "src/AgentCore.Application/Security/TenantSandboxExecutionAuthority.cs",
+        "src/AgentCore.Application/Security/TenantConversationApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantHttpEffectService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxApprovedOperationService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserEffectService.cs",
+        "src/AgentCore.Application/Security/TenantAccountEffectService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialCheckService.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantRunExecutionAuthority.Configuration.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationEffectService.cs",
+        "src/AgentCore.Application/Security/TenantReportSourceReadService.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantCompletionReadService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentRuntimeContextService.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantApprovedOperationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantArtifactCleanupStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantArtifactCleanup.cs:8",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryArtifactStore.Cleanup.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteArtifactStore.Cleanup.cs",
+        "src/AgentCore.Application/Workspaces/TenantArtifactCleanupService.cs"
+      ]
+    },
+    {
+      "port": "ITenantArtifactOperationStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantArtifactOperations.cs:10",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.ArtifactOperations.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.ArtifactOperations.cs",
+        "src/AgentCore.Application/Security/TenantArtifactOperationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantArtifactStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantArtifacts.cs:5",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryArtifactStore.Tenant.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteArtifactStore.Tenant.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserEffectService.cs",
+        "src/AgentCore.Application/Security/TenantCompletionRules.cs",
+        "src/AgentCore.Application/Security/TenantBrowserUploadRules.cs",
+        "src/AgentCore.Application/Security/TenantArtifactRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantWaitSourceAuthority.cs",
+        "src/AgentCore.Application/Security/TenantCompletionReadService.cs",
+        "src/AgentCore.Application/Security/TenantComposerReferenceService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAttachmentStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantAttachments.cs:13",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryAttachmentStore.Tenant.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAttachmentStore.Tenant.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentService.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactSourceTarget.cs",
+        "src/AgentCore.Application/Security/TenantRunService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentRuntimeContextService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceRuntimeReadService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAttachmentMutationStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantAttachments.cs:22",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Attachments.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Attachments.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAttachmentCleanupStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantAttachments.cs:29",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryAttachmentStore.Cleanup.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAttachmentStore.Cleanup.cs",
+        "src/AgentCore.Application/Workspaces/TenantAttachmentCleanupService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAuthorizationAuditStore",
+      "family": "audit",
+      "declaration": "src/AgentCore.Application/Ports/TenantAuthorizationAudit.cs:5",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.AuthorizationAudit.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.AuthorizationAudit.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+        "src/AgentCore.Application/Security/TenantOperationAudit.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAutomationMutationStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/TenantAutomationMutations.cs:19",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.AutomationMutations.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.AutomationMutations.cs",
+        "src/AgentCore.Application/Security/TenantAutomationMutationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAutomationReadStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/TenantAutomationReads.cs:7",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.AutomationReads.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.AutomationReads.cs",
+        "src/AgentCore.Application/Security/TenantAutomationReadService.cs"
+      ]
+    },
+    {
+      "port": "ITenantAutomationStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/TenantAutomations.cs:14",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Automations.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Automations.cs",
+        "src/AgentCore.Application/Security/TenantAutomationService.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.ManagementCommands.cs",
+        "src/AgentCore.Application/Security/TenantAutomationOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantExecutionLineage.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.Versions.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.Isolation.cs",
+        "src/AgentCore.Application/Triggers/InstanceAutomationPolicy.cs",
+        "src/AgentCore.Application/Events/TenantEventProcessor.cs"
+      ]
+    },
+    {
+      "port": "ITenantBrowserProfileStore",
+      "family": "browser",
+      "declaration": "src/AgentCore.Application/Ports/TenantBrowserProfile.cs:23",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.BrowserProfile.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.BrowserProfile.cs",
+        "src/AgentCore.Application/Security/TenantBrowserProfileService.cs"
+      ]
+    },
+    {
+      "port": "ITenantConnectedAccountReadStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/TenantConnectedAccounts.cs:45",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.ConnectedAccountReads.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.ConnectedAccountReads.cs",
+        "src/AgentCore.Application/Security/TenantConnectedAccountService.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs"
+      ]
+    },
+    {
+      "port": "ITenantContinuityStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantContinuity.cs:17",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Continuity.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Continuity.cs",
+        "src/AgentCore.Application/Security/TenantContinuityReadService.cs"
+      ]
+    },
+    {
+      "port": "ITenantConversationStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantConversations.cs:7",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Conversation.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Conversation.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Application/Security/TenantRunExecutionAuthority.Configuration.cs",
+        "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantConversationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantCredentialBindingStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/TenantCredentialBindings.cs:10",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOperationRules.cs",
+        "src/AgentCore.Application/Security/TenantCredentialRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantAccountActionTarget.cs",
+        "src/AgentCore.Application/Security/TenantConnectedAccountService.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserCredentialRules.cs",
+        "src/AgentCore.Application/Security/TenantCredentialBindingService.cs",
+        "src/AgentCore.Application/Security/TenantRunConfigurationResolver.cs"
+      ]
+    },
+    {
+      "port": "ITenantCredentialCheckStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/TenantCredentialChecks.cs:7",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.CredentialChecks.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.CredentialChecks.cs",
+        "src/AgentCore.Application/Security/TenantCredentialCheckService.cs"
+      ]
+    },
+    {
+      "port": "ITenantCredentialOAuthStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/TenantCredentialOAuth.cs:34",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/CredentialOAuthExpiryWorker.cs",
+        "src/AgentCore.Application/Security/TenantConnectedAccountService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOAuthService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOAuthCheckService.cs"
+      ]
+    },
+    {
+      "port": "ITenantCredentialStore",
+      "family": "credential-account",
+      "declaration": "src/AgentCore.Application/Ports/TenantCredentials.cs:12",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Sandbox/SandboxImageAuthority.cs",
+        "src/AgentCore.Application/Security/TenantEmailMonitoringService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOAuthService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialOAuthCheckService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialBindingService.cs"
+      ]
+    },
+    {
+      "port": "ITenantDefinitionStore",
+      "family": "definitions",
+      "declaration": "src/AgentCore.Application/Ports/TenantDefinitions.cs:31",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantChatService.cs",
+        "src/AgentCore.Application/Security/TenantAgentService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxSetupResolver.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialBindingService.cs",
+        "src/AgentCore.Application/Security/TenantDefinitionService.cs",
+        "src/AgentCore.Application/Security/TenantRunConfigurationResolver.cs"
+      ]
+    },
+    {
+      "port": "ITenantDeliveryReceiptStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantDeliveryReceipts.cs:11",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.DeliveryReceipts.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.DeliveryReceipts.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeMemoryStore.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.DeliveryReceipts.cs"
+      ]
+    },
+    {
+      "port": "ITenantEmailWatchStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/TenantEmailMonitoring.cs:13",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.EmailWatches.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.EmailWatches.cs",
+        "src/AgentCore.Application/Security/TenantAutomationService.cs",
+        "src/AgentCore.Application/Security/TenantAutomationOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantEmailMonitoringService.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Events/TenantEventProcessor.cs"
+      ]
+    },
+    {
+      "port": "ITenantEventStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/TenantEvents.cs:25",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Events.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Events.cs",
+        "src/AgentCore.Application/Security/TenantCoreEventReadService.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.AutomationAdmission.cs",
+        "src/AgentCore.Application/Security/TenantAutomationOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantEventActivityService.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Events/TenantEventProcessor.cs"
+      ]
+    },
+    {
+      "port": "ITenantExperienceStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantExperience.cs:24",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Experience.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Experience.cs",
+        "src/AgentCore.Application/Security/TenantExperienceService.cs",
+        "src/AgentCore.Application/Security/TenantContinuityReadService.cs",
+        "src/AgentCore.Application/Security/TenantExperienceOperationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantExperienceManagementStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantExperience.cs:47",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.ExperienceManagement.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.ExperienceManagement.cs",
+        "src/AgentCore.Application/Security/TenantExperienceManagementService.cs"
+      ]
+    },
+    {
+      "port": "ITenantExperienceReviewStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantExperience.cs:60",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.ExperienceReview.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.ExperienceReview.cs",
+        "src/AgentCore.Application/Security/TenantExperienceReviewService.cs"
+      ]
+    },
+    {
+      "port": "ITenantHttpOperationStore",
+      "family": "public-http",
+      "declaration": "src/AgentCore.Application/Ports/TenantHttpOperations.cs:12",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.HttpEffects.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.HttpEffects.cs",
+        "src/AgentCore.Application/Security/TenantHttpEffectService.cs"
+      ]
+    },
+    {
+      "port": "ITenantLearnedMemoryStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantLearnedMemory.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.LearnedMemory.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.LearnedMemory.cs",
+        "src/AgentCore.Application/Security/TenantMemoryOperationService.cs",
+        "src/AgentCore.Application/Security/TenantContinuityReadService.cs",
+        "src/AgentCore.Application/Security/TenantMemoryService.cs"
+      ]
+    },
+    {
+      "port": "ITenantManagementStore",
+      "family": "agent-configuration",
+      "declaration": "src/AgentCore.Application/Ports/TenantManagementStore.cs:22",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.ManagementReads.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.ManagementReads.cs",
+        "src/AgentCore.Application/Security/TenantManagementOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantResourceSourceTarget.cs",
+        "src/AgentCore.Application/Security/TenantManagementReadService.cs"
+      ]
+    },
+    {
+      "port": "ITenantMemoryManagementStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantMemoryManagement.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.MemoryManagement.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.MemoryManagement.cs",
+        "src/AgentCore.Application/Security/TenantMemoryManagementService.cs"
+      ]
+    },
+    {
+      "port": "ITenantMemoryOperationStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantMemoryOperations.cs:11",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.MemoryOperations.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.MemoryOperations.cs",
+        "src/AgentCore.Application/Security/TenantMemoryOperationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantOperationPolicyStore",
+      "family": "approval-operation",
+      "declaration": "src/AgentCore.Application/Ports/TenantOperationPolicies.cs:5",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Application/Security/TenantOperationPolicyService.cs"
+      ]
+    },
+    {
+      "port": "ITenantPreferenceOperationStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantPreferenceOperations.cs:8",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.PreferenceOperations.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.PreferenceOperations.cs",
+        "src/AgentCore.Application/Security/TenantPreferenceOperationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantRequestIsolationStore",
+      "family": "cleanup-isolation",
+      "declaration": "src/AgentCore.Application/Ports/TenantRequestIsolation.cs:8",
+      "sourceReferences": [
+        "src/AgentCore.Api/TenantRequestIsolationHostedService.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.RequestIsolation.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.RequestIsolation.cs",
+        "src/AgentCore.Application/Security/TenantRequestIsolationService.cs",
+        "src/AgentCore.Application/Security/TenantRunService.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.cs"
+      ]
+    },
+    {
+      "port": "ITenantResourceSourceContentStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantResourceSourceContent.cs:5",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Persistence/FileDefinitionResourceContentStore.cs",
+        "src/AgentCore.Infrastructure/Definitions/InMemoryDefinitionResourceContentStore.cs",
+        "src/AgentCore.Application/Security/TenantResourceSourceTarget.cs"
+      ]
+    },
+    {
+      "port": "ITenantRunProfileStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantRunProfiles.cs:9",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.RunProfile.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.RunProfile.cs",
+        "src/AgentCore.Application/Security/TenantRunProfileService.cs"
+      ]
+    },
+    {
+      "port": "ITenantRunStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantRuns.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.EventReads.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.EventReads.cs",
+        "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.cs",
+        "src/AgentCore.Application/Security/TenantActivityService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxGenerationAuthority.cs",
+        "src/AgentCore.Application/Security/TenantRunCancellationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxExecutionAuthority.cs",
+        "src/AgentCore.Application/Security/TenantConversationApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantHumanInputRules.cs",
+        "src/AgentCore.Application/Security/TenantBackgroundAdmissionRules.cs",
+        "src/AgentCore.Application/Security/TenantHttpEffectService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxApprovedOperationService.cs",
+        "src/AgentCore.Application/Security/TenantToolAuthorization.cs",
+        "src/AgentCore.Application/Security/TenantBrowserReadService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantRunContinuationService.cs",
+        "src/AgentCore.Application/Security/TenantOperationAuthorizer.cs",
+        "src/AgentCore.Application/Security/TenantAccountActionTarget.cs",
+        "src/AgentCore.Application/Security/TenantBrowserEffectService.cs",
+        "src/AgentCore.Application/Security/TenantAccountEffectService.cs",
+        "src/AgentCore.Application/Security/TenantEventActivityService.cs",
+        "src/AgentCore.Application/Security/TenantExecutionLineage.cs",
+        "src/AgentCore.Application/Security/TenantReportReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantAgentRunStore.cs",
+        "src/AgentCore.Application/Security/TenantCredentialCheckService.cs",
+        "src/AgentCore.Application/Security/TenantRunService.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantPublicWebOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantBackgroundCreationTarget.cs",
+        "src/AgentCore.Application/Security/TenantRunExecutionAuthority.Configuration.cs",
+        "src/AgentCore.Application/Security/TenantBackgroundReportTarget.cs",
+        "src/AgentCore.Application/Security/TenantWaitSourceAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationEffectService.cs",
+        "src/AgentCore.Application/Security/TenantReportSourceReadService.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantCompletionReadService.cs",
+        "src/AgentCore.Application/Security/TenantRunExecutionAuthority.cs",
+        "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserCredentialRules.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantApprovedOperationService.cs",
+        "src/AgentCore.Application/Sessions/SessionRuntimeFactory.cs",
+        "src/AgentCore.Application/Execution/TenantRunExecution.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionLiveDelivery.cs"
+      ]
+    },
+    {
+      "port": "ITenantCompletionRuntimeStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantRuntime.cs:19",
+      "sourceReferences": [
+        "src/AgentCore.Application/Security/TenantAgentRunStore.cs",
+        "src/AgentCore.Application/Sessions/SessionRuntime.TenantCompletions.cs"
+      ]
+    },
+    {
+      "port": "ITenantRuntimeStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantRuntime.cs:28",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Runtime.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Runtime.cs",
+        "src/AgentCore.Application/Security/TenantRunContinuationService.cs",
+        "src/AgentCore.Application/Security/TenantBackgroundCompletion.cs",
+        "src/AgentCore.Application/Security/TenantReportReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantAgentRunStore.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.cs",
+        "src/AgentCore.Application/Security/TenantBackgroundReportTarget.cs",
+        "src/AgentCore.Application/Security/TenantReportSourceReadService.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeMemoryStore.cs",
+        "src/AgentCore.Application/Sessions/SessionRuntimeFactory.cs",
+        "src/AgentCore.Application/Execution/TenantRunExecution.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.cs"
+      ]
+    },
+    {
+      "port": "ITenantRuntimeStateStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantRuntimeState.cs:15",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.RuntimeState.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.RuntimeState.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeStateService.cs"
+      ]
+    },
+    {
+      "port": "ITenantSandboxProfileStore",
+      "family": "sandbox",
+      "declaration": "src/AgentCore.Application/Ports/TenantSandboxProfiles.cs:11",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Application/Security/TenantSandboxProfileService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxImageAuthorization.cs",
+        "src/AgentCore.Application/Security/TenantSandboxOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantSandboxSetupResolver.cs",
+        "src/AgentCore.Application/Security/TenantAgentConfigurationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxInstanceVerificationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantRunConfigurationResolver.cs"
+      ]
+    },
+    {
+      "port": "ITenantSandboxRuntimeStore",
+      "family": "sandbox",
+      "declaration": "src/AgentCore.Application/Ports/TenantSandboxRuntime.cs:23",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.cs",
+        "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.TenantExecution.cs",
+        "src/AgentCore.Application/Security/TenantSandboxExecutionAuthority.cs",
+        "src/AgentCore.Application/Security/TenantSandboxApprovedOperationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantSandboxControlOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantSandboxRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxControlService.cs"
+      ]
+    },
+    {
+      "port": "ITenantSandboxVerificationStore",
+      "family": "sandbox",
+      "declaration": "src/AgentCore.Application/Ports/TenantSandboxVerification.cs:24",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.cs",
+        "src/AgentCore.Infrastructure/Sandbox/SandboxImageAuthority.cs",
+        "src/AgentCore.Application/Security/TenantSandboxProfileService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxInstanceVerificationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxVerificationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantSessionForegroundStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantSessionForeground.cs:10",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Foreground.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Foreground.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeMemoryStore.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.Foreground.cs"
+      ]
+    },
+    {
+      "port": "ITenantRuntimeInputStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantSessionInput.cs:13",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Input.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Input.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeMemoryStore.cs"
+      ]
+    },
+    {
+      "port": "ITenantSessionStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantSessions.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentService.cs",
+        "src/AgentCore.Application/Security/TenantActivityService.cs",
+        "src/AgentCore.Application/Security/TenantSessionService.cs",
+        "src/AgentCore.Application/Security/TenantHumanInputRules.cs",
+        "src/AgentCore.Application/Security/TenantAutomationService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceReadService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserReadService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactService.cs",
+        "src/AgentCore.Application/Security/TenantCredentialRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantAccountActionTarget.cs",
+        "src/AgentCore.Application/Security/TenantArtifactReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantVoiceService.cs",
+        "src/AgentCore.Application/Security/TenantAutomationOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantResourceSourceTarget.cs",
+        "src/AgentCore.Application/Security/TenantArtifactSourceTarget.cs",
+        "src/AgentCore.Application/Security/TenantSandboxOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantSandboxControlOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantRunService.cs",
+        "src/AgentCore.Application/Security/TenantArtifactRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantPublicWebOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantBackgroundCreationTarget.cs",
+        "src/AgentCore.Application/Security/TenantWaitSourceAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationEffectService.cs",
+        "src/AgentCore.Application/Security/TenantSessionForegroundService.cs",
+        "src/AgentCore.Application/Security/TenantAccountRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantCompletionReadService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantSandboxControlService.cs",
+        "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserRetirementService.cs",
+        "src/AgentCore.Application/Security/TenantBrowserOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentRuntimeContextService.cs",
+        "src/AgentCore.Application/Security/TenantRuntimeStateService.cs",
+        "src/AgentCore.Application/Security/TenantApprovedOperationService.Artifact.cs",
+        "src/AgentCore.Application/Security/TenantConversationService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationTarget.cs",
+        "src/AgentCore.Application/Security/TenantBrowserStateService.cs",
+        "src/AgentCore.Application/Security/TenantEventReadAuthority.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceRuntimeReadService.cs",
+        "src/AgentCore.Application/Security/TenantApprovalService.Artifact.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.cs"
+      ]
+    },
+    {
+      "port": "ITenantUserProfileStore",
+      "family": "profile-memory-experience",
+      "declaration": "src/AgentCore.Application/Ports/TenantUserProfiles.cs:10",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.UserProfile.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.UserProfile.cs",
+        "src/AgentCore.Application/Security/TenantUserProfileService.cs"
+      ]
+    },
+    {
+      "port": "ITenantVoiceModeStore",
+      "family": "session-runtime",
+      "declaration": "src/AgentCore.Application/Ports/TenantVoice.cs:70",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Voice.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Voice.cs",
+        "src/AgentCore.Application/Security/TenantVoiceService.cs",
+        "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.Voice.cs"
+      ]
+    },
+    {
+      "port": "ITenantWebhookStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/TenantWebhooks.cs:15",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.Webhooks.cs",
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.Webhooks.cs",
+        "src/AgentCore.Application/Security/TenantAutomationService.cs",
+        "src/AgentCore.Application/Security/TenantAutomationOperationTarget.cs",
+        "src/AgentCore.Application/Security/TenantEventActivityService.cs",
+        "src/AgentCore.Application/Security/TenantWebhookService.cs",
+        "src/AgentCore.Application/Events/TenantEventProcessor.cs"
+      ]
+    },
+    {
+      "port": "ITenantWorkingCleanupStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantWorkingCleanup.cs:14",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.WorkingCleanup.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.WorkingCleanup.cs",
+        "src/AgentCore.Application/Workspaces/TenantWorkingCleanupService.cs"
+      ]
+    },
+    {
+      "port": "ITenantWorkspaceArtifactSourceStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantWorkspaceArtifactSources.cs:16",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.ArtifactSources.cs",
+        "src/AgentCore.Application/Security/TenantAccountActionTarget.cs",
+        "src/AgentCore.Application/Security/TenantArtifactSourceTarget.cs"
+      ]
+    },
+    {
+      "port": "ITenantAttachmentArtifactSourceStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantWorkspaceArtifactSources.cs:21",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Persistence/InMemoryAttachmentStore.ArtifactSource.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteAttachmentStore.ArtifactSource.cs",
+        "src/AgentCore.Application/Security/TenantArtifactSourceTarget.cs"
+      ]
+    },
+    {
+      "port": "ITenantWorkspaceMutationObservationStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantWorkspaceMutationObservations.cs:9",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.MutationObservations.cs",
+        "src/AgentCore.Application/Security/TenantAccountActionTarget.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationTarget.cs"
+      ]
+    },
+    {
+      "port": "ITenantWorkspaceMutationStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantWorkspaceMutations.cs:11",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.Mutations.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+        "src/AgentCore.Application/Security/TenantAccountEffectService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationEffectService.cs",
+        "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs"
+      ]
+    },
+    {
+      "port": "ITenantWorkspaceOperationStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantWorkspaceOperations.cs:13",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/Security/IdentityRegistration.cs",
+        "src/AgentCore.Infrastructure/Security/InMemoryIamStore.WorkspaceEffects.cs",
+        "src/AgentCore.Infrastructure/Security/SqliteIamStore.WorkspaceEffects.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceMutationEffectService.cs"
+      ]
+    },
+    {
+      "port": "ITenantWorkspaceReadStore",
+      "family": "files-artifacts",
+      "declaration": "src/AgentCore.Application/Ports/TenantWorkspaceReads.cs:12",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.Tenant.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceReadService.cs",
+        "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+        "src/AgentCore.Application/Security/TenantWorkspaceRuntimeReadService.cs"
+      ]
+    },
+    {
+      "port": "ITriggerStore",
+      "family": "automation-event",
+      "declaration": "src/AgentCore.Application/Ports/Triggers.cs:109",
+      "sourceReferences": [
+        "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+        "src/AgentCore.Infrastructure/Persistence/SqliteTriggerStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryEmailWatchStore.cs",
+        "src/AgentCore.Infrastructure/Persistence/InMemoryTriggerStore.cs",
+        "src/AgentCore.Application/Triggers/InstanceAutomationPolicy.cs",
+        "src/AgentCore.Application/Models/ExecutionModelPolicy.cs"
+      ]
+    }
+  ],
+  "mappedTables": [
+    {
+      "table": "Accounts",
+      "entity": "AgentCore.Domain.Security.Account",
+      "family": "identity-iam"
+    },
+    {
+      "table": "ApprovalProcessedSignals",
+      "entity": "AgentCore.Domain.Security.ApprovalProcessedSignal",
+      "family": "approval-operation"
+    },
+    {
+      "table": "AuthenticationSessions",
+      "entity": "AgentCore.Domain.Security.AuthenticationSession",
+      "family": "identity-iam"
+    },
+    {
+      "table": "AuthorizationAudit",
+      "entity": "AgentCore.Domain.Security.AuthorizationAudit",
+      "family": "identity-iam"
+    },
+    {
+      "table": "Principals",
+      "entity": "AgentCore.Domain.Security.Principal",
+      "family": "identity-iam"
+    },
+    {
+      "table": "Tenants",
+      "entity": "AgentCore.Domain.Security.Tenant",
+      "family": "identity-iam"
+    },
+    {
+      "table": "TenantApprovalDecisions",
+      "entity": "AgentCore.Domain.Security.TenantApprovalDecision",
+      "family": "approval-operation"
+    },
+    {
+      "table": "TenantInvitations",
+      "entity": "AgentCore.Domain.Security.TenantInvitation",
+      "family": "identity-iam"
+    },
+    {
+      "table": "TenantOperationGrants",
+      "entity": "AgentCore.Domain.Security.TenantOperationGrant",
+      "family": "approval-operation"
+    },
+    {
+      "table": "TenantOperationPolicies",
+      "entity": "AgentCore.Domain.Security.TenantOperationPolicy",
+      "family": "approval-operation"
+    },
+    {
+      "table": "TenantUsers",
+      "entity": "AgentCore.Domain.Security.TenantUser",
+      "family": "identity-iam"
+    },
+    {
+      "table": "Activations",
+      "entity": "AgentCore.Infrastructure.Persistence.ActivationRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "ActivationSourceEntries",
+      "entity": "AgentCore.Infrastructure.Persistence.ActivationSourceEntryRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "AdminEvents",
+      "entity": "AgentCore.Infrastructure.Persistence.AdminEventRecord",
+      "family": "audit"
+    },
+    {
+      "table": "AgentCredentialBindings",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentCredentialBindingRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "AgentDefinitionDraftEvaluationResults",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionDraftEvaluationResultRecord",
+      "family": "definitions"
+    },
+    {
+      "table": "AgentDefinitionDraftEvaluationScenarios",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionDraftEvaluationScenarioRecord",
+      "family": "definitions"
+    },
+    {
+      "table": "AgentDefinitionDrafts",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionDraftRecord",
+      "family": "definitions"
+    },
+    {
+      "table": "AgentDefinitionDraftResources",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionDraftResourceRecord",
+      "family": "definitions"
+    },
+    {
+      "table": "AgentDefinitionPublications",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionPublicationRecord",
+      "family": "definitions"
+    },
+    {
+      "table": "AgentDefinitionPublicationResources",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionPublicationResourceRecord",
+      "family": "definitions"
+    },
+    {
+      "table": "AgentDefinitionResourceStates",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionResourceStateRecord",
+      "family": "agent-configuration"
+    },
+    {
+      "table": "AgentDefinitionSkillStates",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentDefinitionSkillStateRecord",
+      "family": "agent-configuration"
+    },
+    {
+      "table": "AgentInstances",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentInstanceRecord",
+      "family": "agent-configuration"
+    },
+    {
+      "table": "AgentInstanceResources",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentInstanceResourceRecord",
+      "family": "agent-configuration"
+    },
+    {
+      "table": "AgentInstanceSkills",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentInstanceSkillRecord",
+      "family": "agent-configuration"
+    },
+    {
+      "table": "AgentRuns",
+      "entity": "AgentCore.Infrastructure.Persistence.AgentRunRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "Artifacts",
+      "entity": "AgentCore.Infrastructure.Persistence.ArtifactRecordRow",
+      "family": "files-artifacts"
+    },
+    {
+      "table": "Attachments",
+      "entity": "AgentCore.Infrastructure.Persistence.AttachmentRecordRow",
+      "family": "files-artifacts"
+    },
+    {
+      "table": "Automations",
+      "entity": "AgentCore.Infrastructure.Persistence.AutomationRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "AutomationTriggers",
+      "entity": "AgentCore.Infrastructure.Persistence.AutomationTriggerRecordEntity",
+      "family": "automation-event"
+    },
+    {
+      "table": "BackgroundCompletionReceipts",
+      "entity": "AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "BrowserPrivacy",
+      "entity": "AgentCore.Infrastructure.Persistence.BrowserPrivacyRecord",
+      "family": "browser"
+    },
+    {
+      "table": "CoreEventBuckets",
+      "entity": "AgentCore.Infrastructure.Persistence.CoreEventBucketRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "CoreEventDeliveries",
+      "entity": "AgentCore.Infrastructure.Persistence.CoreEventDeliveryRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "CoreEvents",
+      "entity": "AgentCore.Infrastructure.Persistence.CoreEventRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "Credentials",
+      "entity": "AgentCore.Infrastructure.Persistence.CredentialRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "DriveAccountProfiles",
+      "entity": "AgentCore.Infrastructure.Persistence.DriveAccountProfileRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "DriveOperations",
+      "entity": "AgentCore.Infrastructure.Persistence.DriveOperationRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "EmailAccountProfiles",
+      "entity": "AgentCore.Infrastructure.Persistence.EmailAccountProfileRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "EmailAccountSelections",
+      "entity": "AgentCore.Infrastructure.Persistence.EmailAccountSelectionRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "EmailDrafts",
+      "entity": "AgentCore.Infrastructure.Persistence.EmailDraftRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "EmailSendOperations",
+      "entity": "AgentCore.Infrastructure.Persistence.EmailSendOperationRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "EmailWatchEvents",
+      "entity": "AgentCore.Infrastructure.Persistence.EmailWatchEventRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "EmailWatches",
+      "entity": "AgentCore.Infrastructure.Persistence.EmailWatchRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "ConversationEntries",
+      "entity": "AgentCore.Infrastructure.Persistence.EntryRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "Experiences",
+      "entity": "AgentCore.Infrastructure.Persistence.ExperienceRecord",
+      "family": "profile-memory-experience"
+    },
+    {
+      "table": "ExperienceSettings",
+      "entity": "AgentCore.Infrastructure.Persistence.ExperienceSettingsRecord",
+      "family": "profile-memory-experience"
+    },
+    {
+      "table": "ExternalEventDeliveries",
+      "entity": "AgentCore.Infrastructure.Persistence.ExternalEventDeliveryRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "ExternalEvents",
+      "entity": "AgentCore.Infrastructure.Persistence.ExternalEventRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "IdentityMaintenanceSettings",
+      "entity": "AgentCore.Infrastructure.Persistence.IdentityMaintenanceSettingsRecord",
+      "family": "profile-memory-experience"
+    },
+    {
+      "table": "MessageAttachments",
+      "entity": "AgentCore.Infrastructure.Persistence.MessageAttachmentRow",
+      "family": "files-artifacts"
+    },
+    {
+      "table": "UserProfiles",
+      "entity": "AgentCore.Infrastructure.Persistence.ProfileRecord",
+      "family": "profile-memory-experience"
+    },
+    {
+      "table": "SandboxExecutions",
+      "entity": "AgentCore.Infrastructure.Persistence.SandboxExecutionRow",
+      "family": "sandbox"
+    },
+    {
+      "table": "SandboxInstanceVerifications",
+      "entity": "AgentCore.Infrastructure.Persistence.SandboxInstanceVerificationRow",
+      "family": "sandbox"
+    },
+    {
+      "table": "SandboxSessionLeases",
+      "entity": "AgentCore.Infrastructure.Persistence.SandboxLeaseRow",
+      "family": "sandbox"
+    },
+    {
+      "table": "SandboxProfiles",
+      "entity": "AgentCore.Infrastructure.Persistence.SandboxProfileRow",
+      "family": "sandbox"
+    },
+    {
+      "table": "SandboxProfileVerifications",
+      "entity": "AgentCore.Infrastructure.Persistence.SandboxVerificationRow",
+      "family": "sandbox"
+    },
+    {
+      "table": "Sessions",
+      "entity": "AgentCore.Infrastructure.Persistence.SessionRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "SessionSnapshots",
+      "entity": "AgentCore.Infrastructure.Persistence.SnapshotRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "StructuredMemories",
+      "entity": "AgentCore.Infrastructure.Persistence.StructuredMemoryRecord",
+      "family": "profile-memory-experience"
+    },
+    {
+      "table": "SyntheticDriveFiles",
+      "entity": "AgentCore.Infrastructure.Persistence.SyntheticDriveFileRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "TriggerOccurrences",
+      "entity": "AgentCore.Infrastructure.Persistence.TriggerOccurrenceRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "WebhookEvents",
+      "entity": "AgentCore.Infrastructure.Persistence.WebhookEventRecord",
+      "family": "automation-event"
+    },
+    {
+      "table": "CredentialOAuthAttempts",
+      "entity": "AgentCore.Infrastructure.Security.CredentialOAuthAttemptRow",
+      "family": "credential-account"
+    },
+    {
+      "table": "AccessRoleAssignments",
+      "entity": "AgentCore.Infrastructure.Security.IamAssignmentRow",
+      "family": "identity-iam"
+    },
+    {
+      "table": "IdentityBootstrap",
+      "entity": "AgentCore.Infrastructure.Security.IamBootstrapRow",
+      "family": "identity-iam"
+    },
+    {
+      "table": "AccessRolePermissions",
+      "entity": "AgentCore.Infrastructure.Security.IamRolePermissionRow",
+      "family": "identity-iam"
+    },
+    {
+      "table": "AccessRoles",
+      "entity": "AgentCore.Infrastructure.Security.IamRoleRow",
+      "family": "identity-iam"
+    },
+    {
+      "table": "SystemIdentities",
+      "entity": "AgentCore.Infrastructure.Security.IamSystemIdentityRow",
+      "family": "identity-iam"
+    },
+    {
+      "table": "TenantApprovalRequests",
+      "entity": "AgentCore.Infrastructure.Security.TenantApprovalRecord",
+      "family": "approval-operation"
+    },
+    {
+      "table": "TenantCredentialCheckDispatches",
+      "entity": "AgentCore.Infrastructure.Security.TenantCredentialCheckDispatchRecord",
+      "family": "approval-operation"
+    },
+    {
+      "table": "TenantCredentials",
+      "entity": "AgentCore.Infrastructure.Security.TenantCredentialRecord",
+      "family": "credential-account"
+    },
+    {
+      "table": "TenantAgentDefinitions",
+      "entity": "AgentCore.Infrastructure.Security.TenantDefinitionRecord",
+      "family": "definitions"
+    },
+    {
+      "table": "TenantExperiences",
+      "entity": "AgentCore.Infrastructure.Security.TenantExperienceRecord",
+      "family": "profile-memory-experience"
+    },
+    {
+      "table": "TenantLearnedMemories",
+      "entity": "AgentCore.Infrastructure.Security.TenantLearnedMemoryRecord",
+      "family": "profile-memory-experience"
+    },
+    {
+      "table": "TenantOperationReceipts",
+      "entity": "AgentCore.Infrastructure.Security.TenantOperationReceiptRecord",
+      "family": "approval-operation"
+    },
+    {
+      "table": "TenantSandboxProfiles",
+      "entity": "AgentCore.Infrastructure.Security.TenantSandboxProfileRecord",
+      "family": "sandbox"
+    },
+    {
+      "table": "TenantSandboxVerificationAttempts",
+      "entity": "AgentCore.Infrastructure.Security.TenantSandboxVerificationRecord",
+      "family": "sandbox"
+    },
+    {
+      "table": "TenantSessions",
+      "entity": "AgentCore.Infrastructure.Security.TenantSessionRecord",
+      "family": "session-runtime"
+    },
+    {
+      "table": "TenantUserProfiles",
+      "entity": "AgentCore.Infrastructure.Security.TenantUserProfileRecord",
+      "family": "profile-memory-experience"
+    }
+  ],
+  "migrationFiles": [
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261015154322_CanonicalFilesystemBaseline.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016105846_IdentityFoundation.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016120507_UniqueAgentTenantOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016122500_AgentIdentityBackingInstance.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016124642_TenantAgentDefinitionOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016131550_TenantDefinitionEvaluationCommitOrder.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016140347_TenantDefinitionRetirement.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016141917_TenantDefinitionTemplateProvenance.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016185556_TenantCredentialOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016195121_TenantCredentialBindings.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016211213_TenantCredentialOAuthAttempts.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261016233720_TenantSessionOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017001916_ActivationRootLineage.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017003304_TenantRunExecutionIdentity.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017010139_TenantOperationPolicies.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017015020_TenantDurableApprovals.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017020353_ReleaseTenantApprovalExecutionSlot.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017024144_TenantApprovedLocalOperationReceipts.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017052609_TenantDirectLocalOperationReceipts.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017071356_TenantExecutionAuthorizationAudit.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017090143_TenantCredentialApprovalTargets.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017092213_TenantCredentialCheckDispatchFences.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017200405_TenantSandboxProfileOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017203239_TenantSandboxVerificationOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017205857_TenantSandboxInstanceVerification.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017213309_TenantSandboxRuntimeOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261017220217_TenantSandboxCommandApprovals.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018021925_TenantSandboxControlReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018025233_TenantSandboxReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018053723_TenantBrowserCommandReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018123638_TenantCredentialMetadataReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018140554_TenantArtifactOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018153150_TenantArtifactReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018183653_TenantArtifactVerification.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018221227_TenantWorkspaceReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261018225721_TenantWorkspaceSearchReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019013030_TenantWorkspaceDirectEffects.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019023004_TenantWorkspaceMutationReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019035251_TenantWorkspaceOfficeReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019041906_TenantWorkspaceOfficeMutation.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019053112_TenantArtifactWorkspaceSourceReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019071133_TenantResourceReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019075545_TenantResourceNamespaceReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019082753_TenantKnowledgeReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019085021_TenantArtifactResourceSourceReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019092834_TenantAttachmentOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019114545_TenantAttachmentReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019132944_TenantAttachmentArtifactSource.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019151350_TenantAttachmentNamespaceReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019160245_TenantHumanMaterializedArtifact.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261019200000_TenantBrowserUploadSources.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020000100_TenantBrowserArtifactPublication.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020040000_TenantBrowserArtifactDrops.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020060000_TenantBrowserProfileReset.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020080000_SystemBrowserPrivacyAuthority.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020090000_TenantAgentDecommission.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020100000_TenantBackgroundRuntime.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020110000_TenantBackgroundCreationReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020120000_TenantBackgroundReportReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020130000_TenantCompletionReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020140000_TenantReportSourceReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020150000_TenantAccountReadReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020160000_TenantAccountActionReview.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020170000_TenantAccountOperationRead.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020180000_TenantAutonomousAutomation.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020190000_TenantIndependentAccountConsent.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261020200000_TenantIndependentChildControls.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021010000_TenantAutomationAdmissionApproval.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021020000_TenantWebhookOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021030000_TenantEventOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021040000_TenantEmailWatchOwnership.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021050000_TenantAutomationCompletionDestination.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021060000_TenantAutomationConversation.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021102840_RetireOwnerCapabilityStore.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021144350_TenantUserProfiles.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021164125_TenantLearnedMemory.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021185601_TenantMemoryOperations.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021201045_TenantContinuityRead.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021212948_TenantExperience.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021214545_TenantExperienceConsent.Metadata.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261021214545_TenantExperienceConsent.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022020346_TenantAutomationReadConsent.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022041619_TenantAutomationMutations.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022060000_TenantAutomationInvocations.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022070000_TenantManagementReadConsent.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022080000_TenantManagementMutations.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022090000_TenantManagementInspections.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022100000_TenantManagementChildReads.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022110000_TenantManagementSkillAuthoring.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261022120000_TenantPrivateSkillActivation.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261023100000_TenantManagementResourceAuthoring.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261023120000_TenantHarnessCommandAuthoring.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261023140000_TenantConfigurationRemedyAuthoring.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261023160000_RetireEmbeddedRunApproval.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261023180000_TenantPublicDownloads.cs",
+    "src/AgentCore.Infrastructure/Persistence/Migrations/20261023190000_TenantPublicHttp.cs"
+  ],
+  "hostedEntries": [
+    {
+      "owner": "OpenSandboxHostedService",
+      "source": "src/AgentCore.Api/OpenSandboxHostedService.cs",
+      "family": "sandbox",
+      "boundary": "Refreshes readiness and reconciles durable Sandbox evidence; never admits a model task."
+    },
+    {
+      "owner": "TenantRequestIsolationHostedService",
+      "source": "src/AgentCore.Api/TenantRequestIsolationHostedService.cs",
+      "family": "cleanup-isolation",
+      "boundary": "Pages exact tenant request owners; canonical host reservation settles each current quiescent Session."
+    },
+    {
+      "owner": "SessionShutdownHostedService",
+      "source": "src/AgentCore.Api/SessionShutdownHostedService.cs",
+      "family": "session-runtime",
+      "boundary": "Drains the same canonical TenantSessionRuntimeHost; no independent registry/authority."
+    },
+    {
+      "owner": "WorkspaceCleanupHostedService",
+      "source": "src/AgentCore.Api/WorkspaceCleanupHostedService.cs",
+      "family": "cleanup-isolation",
+      "boundary": "Calls exact Agent decommission, Browser retirement, working-file, Artifact and Attachment cleanup owners. Saved proofs survive commit-to-filesystem gaps."
+    },
+    {
+      "owner": "TriggerSchedulerHostedService",
+      "source": "src/AgentCore.Api/TriggerSchedulerHostedService.cs",
+      "family": "automation-event",
+      "boundary": "Calls TenantAutomationService and TenantEventProcessor; current source/owner admission replaces global live-event authority."
+    },
+    {
+      "owner": "EmailWatchHostedService",
+      "source": "src/AgentCore.Api/EmailWatchHostedService.cs",
+      "family": "automation-event",
+      "boundary": "Uses TenantEmailMonitoringService and current bound account/watch authority; no global author or Profile fallback."
+    },
+    {
+      "owner": "AgentRunHostedService",
+      "source": "src/AgentCore.Api/AgentRunHostedService.cs",
+      "family": "session-runtime",
+      "boundary": "Processes current pending approvals, owned credential/Browser/workspace/account/HTTP receipts and ITenantRunExecution; only exact saved operations may resume."
+    },
+    {
+      "owner": "NativePlaywrightBrowser",
+      "source": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.cs",
+      "family": "browser",
+      "boundary": "Native process/profile lifecycle implements the current binding/target/retirement contracts. Possessing its instance does not authorize a model operation."
+    },
+    {
+      "owner": "TenantSandboxVerificationCleanupWorker",
+      "source": "src/AgentCore.Infrastructure/Security/TenantSandboxVerificationCleanupWorker.cs",
+      "family": "sandbox",
+      "boundary": "Retires saved technical verification claims independently of catalog/readiness; unknown files/initialization are not repeated."
+    },
+    {
+      "owner": "CredentialOAuthExpiryWorker",
+      "source": "src/AgentCore.Infrastructure/Security/CredentialOAuthExpiryWorker.cs",
+      "family": "credential-account",
+      "boundary": "Only expires private OAuth attempts; carries no copied human or effect grant."
+    }
+  ],
+  "externalBoundaries": [
+    {
+      "name": "Language-model generation",
+      "portFiles": [
+        "LanguageModel.cs"
+      ],
+      "family": "session-runtime",
+      "boundary": "Canonical Runtime uses its pinned configuration/current execution/source fence. Isolated Definition evaluation is a separately authorized Synthetic use case."
+    },
+    {
+      "name": "Speech recognition and synthesis",
+      "portFiles": [
+        "Speech.cs"
+      ],
+      "family": "session-runtime",
+      "boundary": "Owned voice lease/resources, normalized callbacks, response/utterance/generation retirement and received/heard delivery; raw audio bypasses the domain mailbox."
+    },
+    {
+      "name": "Browser commands and observations",
+      "portFiles": [
+        "Browser.cs",
+        "TenantBrowser.cs"
+      ],
+      "family": "browser",
+      "boundary": "Current exact native owner/handle/target/origin and command/read/consent gates. Arbitrary browser interaction is coarse privileged external access, not proof of a typed business action."
+    },
+    {
+      "name": "Browser password resolution",
+      "portFiles": [
+        "Browser.cs",
+        "TenantBrowser.cs"
+      ],
+      "family": "credential-account",
+      "boundary": "Bound Password is resolved inside trusted Core/native target fencing; no secret/callback in model arguments or receipts."
+    },
+    {
+      "name": "Browser profile reset and retirement",
+      "portFiles": [
+        "TenantBrowserProfile.cs",
+        "TenantBrowser.cs"
+      ],
+      "family": "browser",
+      "boundary": "Original-human reset or saved exact retirement proof, current references and provider observation; cannot grant model command authority."
+    },
+    {
+      "name": "Sandbox setup/image verification",
+      "portFiles": [
+        "TenantSandboxVerification.cs",
+        "SandboxImageAuthority.cs"
+      ],
+      "family": "sandbox",
+      "boundary": "Owned verified candidate, registry identity and technical cleanup claim; network/image access does not grant model shell execution."
+    },
+    {
+      "name": "Sandbox command/process/reset",
+      "portFiles": [
+        "TenantSandboxRuntime.cs",
+        "SandboxService.cs"
+      ],
+      "family": "sandbox",
+      "boundary": "Actual tenant/Session environment lease/generation, exact command/control proof and bounded factual receipts. Shell identity remains coarse; uncertainty is not success."
+    },
+    {
+      "name": "Sandbox file materialization",
+      "portFiles": [
+        "TenantSandboxRuntime.cs"
+      ],
+      "family": "sandbox",
+      "boundary": "Core chooses workload identity and exact eligible owned source paths before provider dispatch; no arbitrary host-root selection."
+    },
+    {
+      "name": "Workspace file/structure changes",
+      "portFiles": [
+        "TenantWorkspaceMutations.cs",
+        "TenantWorkspaceOperations.cs"
+      ],
+      "family": "files-artifacts",
+      "boundary": "Canonical resolved owner/path, exact source/read/write/consent witnesses and filesystem safety; truthful partial/unknown outcomes."
+    },
+    {
+      "name": "Attachment ingestion",
+      "portFiles": [
+        "Stores.cs",
+        "TenantAttachments.cs"
+      ],
+      "family": "files-artifacts",
+      "boundary": "Actual Session binding, bounded type/size/parser, current original human or trusted Runtime mutation witness; no private file adoption by ID."
+    },
+    {
+      "name": "Office inspect/render/export",
+      "portFiles": [
+        "Office.cs",
+        "TenantWorkspaceArtifactSources.cs"
+      ],
+      "family": "files-artifacts",
+      "boundary": "Current source reads and immutable output/source provenance. Processing a file grants no Artifact publication/recipient permission."
+    },
+    {
+      "name": "Artifact publish/delete/blob delivery",
+      "portFiles": [
+        "TenantArtifacts.cs",
+        "TenantArtifactOperations.cs",
+        "TenantArtifactCleanup.cs"
+      ],
+      "family": "files-artifacts",
+      "boundary": "Source verification, independent create/read/recipient permissions and exact cleanup proof surround physical byte I/O."
+    },
+    {
+      "name": "Public search",
+      "portFiles": [
+        "PublicWeb.cs",
+        "PublicNetworkPolicy.cs"
+      ],
+      "family": "public-http",
+      "boundary": "Typed public research owner applies current eligibility and bounded provider/DNS/redirect/content rules."
+    },
+    {
+      "name": "Public fetch and download",
+      "portFiles": [
+        "PublicWeb.cs",
+        "PublicNetworkPolicy.cs"
+      ],
+      "family": "public-http",
+      "boundary": "Current task/destination and network/source witnesses; published/downloaded bytes retain actual source evidence."
+    },
+    {
+      "name": "General public HTTP",
+      "portFiles": [
+        "PublicWeb.cs",
+        "TenantHttpOperations.cs"
+      ],
+      "family": "public-http",
+      "boundary": "Current http.request permission, exact sensitive operation consent, bounded public network rules, dispatch and recovery receipt; no private credential borrowing."
+    },
+    {
+      "name": "Email read/draft/send",
+      "portFiles": [
+        "Email.cs",
+        "TenantConnectedAccounts.cs",
+        "TenantAccountOperations.cs"
+      ],
+      "family": "credential-account",
+      "boundary": "Actual owned binding/purpose/scopes and current read/compound exact send consent; provider draft possession grants no authority."
+    },
+    {
+      "name": "Drive read/transfer/mutation",
+      "portFiles": [
+        "Drive.cs",
+        "TenantConnectedAccounts.cs",
+        "TenantAccountOperations.cs"
+      ],
+      "family": "credential-account",
+      "boundary": "Current owned account/source/target authority and exact compound operation; changed/revoked scope blocks old preparation."
+    },
+    {
+      "name": "Credential test, OAuth exchange/refresh/disconnect",
+      "portFiles": [
+        "TenantCredentialChecks.cs",
+        "TenantCredentialOAuth.cs"
+      ],
+      "family": "credential-account",
+      "boundary": "Current original login/tenant/purpose/state/binding epoch and exact saved dispatch; expiry can only retire proofs."
+    },
+    {
+      "name": "Protected value persistence",
+      "portFiles": [
+        "Credentials.cs"
+      ],
+      "family": "credential-account",
+      "boundary": "Credential protector/keys are physical mechanisms; current service owner decides use. No secret-bearing preview/log/model projection."
+    },
+    {
+      "name": "Private source/context reads",
+      "portFiles": [
+        "TenantResourceSourceContent.cs",
+        "TenantWorkspaceReads.cs",
+        "TenantContinuity.cs"
+      ],
+      "family": "files-artifacts",
+      "boundary": "Current exact source ownership/read rights and source-specific continuity around I/O; Composer Evidence does not activate private Skill procedures."
+    }
+  ]
+}

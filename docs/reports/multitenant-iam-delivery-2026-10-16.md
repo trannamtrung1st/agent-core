@@ -608,3 +608,9 @@ No format-only migration is justified here: current policy/freeze/assessment dat
 The [documentation consolidation](architecture-consolidation-verification-2026-10-24.md) replaces repetitive architecture progress snapshots with a current owner/invariant map, retains detailed contracts in their authoritative documents, and corrects eight obsolete Backend Interfaces status clauses. README keeps its exact working instructions while directing current users to canonical setup/contracts instead of repeated frozen feature/version summaries. Dated reports and their limitations remain historical evidence.
 
 Known architecture links, read-only design-context anchors, named source symbols, local targets/fragments and code fences are checked. This is documentation-only: no application/schema/wire/UI/design or agent-tooling source changed, and no runtime/CI/provider acceptance is claimed. Current detailed-interface cleanup, complete store/effect coverage and final proposal-wide security/isolation/UI qualification remain open.
+
+## Current store/effect source census
+
+The [current source inventory](tenant-store-effect-inventory-2026-10-24.md) assigns all 81 EF-snapshot tables/entities and 93 public store ports to 15 owner families, with current enforcement rules and dated evidence. It also indexes 10 hosted entries, 20 I/O boundary categories and all 96 migration sources. The old 42-DbSet baseline was incomplete as a count of mapped entities. Exact source/declaration/reference paths are saved in the linked JSON; references are not by themselves authority or functional proof.
+
+This is documentation-only census completion. No new runtime result, schema/reset or complete store/effect acceptance is claimed. Method-level negative/call-chain closure, disposable database/model/migration reconciliation, safe consolidation and final security/isolation/function/UI/design acceptance remain required on the original goal.
