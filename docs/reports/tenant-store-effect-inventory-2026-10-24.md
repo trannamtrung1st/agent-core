@@ -12,6 +12,10 @@ Source: `33ab693b`. This fills the current source-census gap left by the histori
 
 The [source index](tenant-store-effect-source-inventory-2026-10-24.json) contains all 81 entity/table names, 93 store symbols/declaration paths/source references, owner/enforcement/evidence grouping, migration paths, hosted sources and I/O port files. It is a dated census, not a second contract catalog. An ID, digest, raw store, provider or DI registration never supplies actor authority.
 
+## Catalog/planner follow-up
+
+The [catalog/scheduling consolidation](tenant-catalog-scheduling-consolidation-verification-2026-10-24.md) supersedes the dated composite-catalog and global admission/helper references in this census. It fixes built-in Resource collisions with retained unowned rows and qualifies all 241 private HTTP method/path pairs and 227 tenant pairs on both stores. The 93 interfaces remain; a syntax-based follow-up counts 548 declared methods without double-counting inheritance. Neither number establishes complete method-level authorization acceptance. The original machine-readable source census remains tied to its recorded commit.
+
 ## Persistence ownership and existing evidence
 
 Each table and public store port appears in exactly one family below. “Physical” or historical stores remain non-authorizing data mechanisms behind the current owner or isolated retained-data tests; their presence is not a compatibility API. Existing reports describe observed scenarios on their recorded commits. This inventory adds no new passing runtime result.

@@ -12,7 +12,7 @@ internal static class NativeInstanceConfigurationSeed
 {
     internal static async ValueTask<AgentDefinitionPublication> PublicationAsync(IServiceProvider services, string sourceId, int sourceVersion, HarnessManagementPolicy policy)
     {
-        var source = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(sourceId, sourceVersion))!;
+        var source = (await services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync(sourceId, sourceVersion))!;
         var candidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(AgentDefinitionCandidate.FromDefinition(source));
         candidate = candidate with { Environment = candidate.Environment! with { KnowledgeSources = [] }, SelfManagement = policy };
         var aliases = services.GetRequiredService<ProviderAliasSet>();
@@ -31,7 +31,7 @@ internal static class NativeInstanceConfigurationSeed
     }
     internal static async ValueTask<AgentInstance> CreateAsync(IServiceProvider services, string definitionId, int version)
     {
-        var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(definitionId, version))!;
+        var definition = await RetainedDefinition(services, definitionId, version);
         var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
         var instance = new AgentInstance(services.GetRequiredService<IIdGenerator>().NewId(), definition.Id, definition.Version,
             definition.Identity, AgentInstanceLifecycle.Active, now, now);
@@ -41,16 +41,20 @@ internal static class NativeInstanceConfigurationSeed
     internal static async ValueTask<AgentInstance> AdoptAsync(IServiceProvider services, Guid id, int version, long revision)
     {
         var (store, owner, _) = await Read(services, id);
-        var target = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(owner.DefinitionId, version))!;
+        var target = await RetainedDefinition(services, owner.DefinitionId, version);
         return await store.UpdateWithExpectedRevisionAsync(new(id, revision, ActiveVersion: version, DefinitionSkills: target.SkillList), services.GetRequiredService<TimeProvider>().GetUtcNow());
     }
     private static async ValueTask<(IAgentInstanceStore Store, AgentInstance Owner, AgentDefinition Definition)> Read(IServiceProvider services, Guid id)
     {
         var store = services.GetRequiredService<IAgentInstanceStore>();
         var owner = await store.FindAsync(id) ?? throw new InvalidOperationException("Expected an unowned native fixture.");
-        var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(owner.DefinitionId, owner.ActiveVersion))!;
+        var definition = await RetainedDefinition(services, owner.DefinitionId, owner.ActiveVersion);
         return (store, owner, definition);
     }
+    private static async ValueTask<AgentDefinition> RetainedDefinition(IServiceProvider services, string id, int version) =>
+        await services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync(id, version)
+        ?? (await services.GetRequiredService<IAgentDefinitionAdminStore>().GetPublicationAsync(id, version))?.Payload
+        ?? throw new InvalidOperationException("Expected an immutable built-in or retained unowned native publication.");
     internal static async ValueTask<ManagementPolicyView> PolicyViewAsync(IServiceProvider services, Guid id)
     {
         var (_, owner, definition) = await Read(services, id);

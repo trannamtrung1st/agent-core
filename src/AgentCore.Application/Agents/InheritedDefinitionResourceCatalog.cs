@@ -13,9 +13,12 @@ public sealed class InheritedDefinitionResourceCatalog(IAgentDefinitionResourceA
 {
     public async ValueTask<IReadOnlyList<AgentDefinitionPublicationResource>> ListAsync(AgentDefinition definition, CancellationToken ct = default)
     {
-        var items = (await publications.ListPublicationResourcesAsync(definition.Id, definition.Version, ct)).ToList();
         var builtIn = await builtIns.GetAsync(definition.Id, definition.Version, ct);
-        if (builtIn is null) return items;
+        if (builtIn is null)
+            return await publications.ListPublicationResourcesAsync(definition.Id, definition.Version, ct);
+        // Built-in identity/version pins the approved file source. Retained unowned
+        // publications with the same key cannot add or shadow inherited resources.
+        var items = new List<AgentDefinitionPublicationResource>();
         foreach (var source in RoleEnvironments.Of(builtIn).KnowledgeList)
         {
             var path = KnowledgeSourcePaths.ResolveBackingPath(source);

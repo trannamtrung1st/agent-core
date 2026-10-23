@@ -1,4 +1,3 @@
-using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Workspaces;
 using AgentCore.Domain.Definitions;
@@ -17,18 +16,6 @@ public static class StateIsolationAccess
                 oldMemory.IdentityUserPromotion && nowMemory.IdentityUserPromotion, oldMemory.IdentityUserRetrieval && nowMemory.IdentityUserRetrieval,
                 oldMemory.UserPromotion && nowMemory.UserPromotion, oldMemory.UserRetrieval && nowMemory.UserRetrieval)
         };
-    }
-
-    public static async ValueTask<StateIsolationPolicy> ResolveAsync(AgentDefinition admitted, Guid instanceId,
-        IAgentInstanceStore? instances, IAgentDefinitionStore? definitions, CancellationToken ct)
-    {
-        var pinned = admitted.StateIsolationPolicy ?? StateIsolationPolicy.Default;
-        if (instances is null || instanceId == Guid.Empty) return pinned;
-        var instance = await instances.FindAsync(instanceId, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
-        var baseline = definitions is null ? admitted : await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct)
-            ?? throw AgentCoreErrors.Persistence("Current Definition is unavailable.");
-        var current = InstanceSettingsResolver.Resolve(baseline, instance.SettingsOverrides).StateIsolationPolicy ?? StateIsolationPolicy.Default;
-        return StateIsolationPolicy.Restrict(pinned, current);
     }
 
     public static void RequireHome(StateIsolationPolicy policy, string path, bool write)

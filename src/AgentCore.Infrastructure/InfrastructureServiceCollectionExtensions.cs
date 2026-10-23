@@ -338,9 +338,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IBuiltInDefinitionTemplateSource>(provider => new FileBuiltInDefinitionTemplateSource(
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), agentDirectory, provider.GetRequiredService<PersistenceOptions>().TemplateRoot));
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
-            new CompositeAgentDefinitionStore(
-                provider.GetRequiredService<FileAgentDefinitionStore>(),
-                provider.GetRequiredService<IAgentDefinitionAdminStore>()));
+            provider.GetRequiredService<IBuiltInAgentDefinitionStore>());
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();

@@ -111,7 +111,7 @@ public sealed partial class TenantCredentialIntegrationTests
             new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, currentBuiltIns ?? BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam);
         public TenantAgentConfigurationService AgentConfiguration() => new(Iam, (ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam,
             BuiltIns, RunResourceCatalog(), Authorizer, ModelCatalogFactory.Synthetic(), AgentCore.Application.Tools.ToolConfigurationGates.AllowAll,
-            new(new AgentCore.Infrastructure.Persistence.InMemoryTriggerStore(), Memory), Ids, Clock, content: RunContent, identity: Identity);
+            new(), Ids, Clock, content: RunContent, identity: Identity);
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);

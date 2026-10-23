@@ -142,7 +142,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => store.TryChangeTenantAgentConfigurationAsync(next, state.Tenant.Revision, stalePlan, now, audit).AsTask());
         Assert.Equal(1, (await store.FindTenantAgentAsync(owner.TenantId, id))!.Instance.Revision);
         Assert.Equal(state.Tenant.Revision, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
-        ITriggerStore triggers = f.Contexts is not null ? new SqliteTriggerStore(f.Contexts) : ((InMemoryAgentInstanceStore)f.Instances).TriggerStore!;
+        ITriggerStore triggers = f.Contexts is not null ? new SqliteTriggerStore(f.Contexts) : (((InMemoryAgentInstanceStore)f.Instances).TriggerStore ??= new InMemoryTriggerStore());
         var triggerOwner = new TriggerOwner(id, Guid.NewGuid());
         await f.SessionStore.SaveProfileAsync(new UserProfile(triggerOwner.ProfileId, 1, new Dictionary<string, UserProfileValue>(), now), 0);
         var automation = await triggers.CreateAsync(new Automation(Guid.NewGuid(), triggerOwner, AutomationStatus.Active, "Review inventory",
@@ -172,13 +172,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         var root = Path.Combine(directory!.FullName, "agents"); IBuiltInAgentDefinitionStore builtIns = new FileAgentDefinitionStore(root, SyntheticProviderAliases.Default);
         if (wrapBuiltIns is not null) builtIns = wrapBuiltIns(builtIns);
         var store = reopened ?? f.Iam; var authorizer = new IamAuthorizer(store);
-        ITriggerStore triggers;
-        if (f.Contexts is not null) triggers = new SqliteTriggerStore(f.Contexts);
-        else triggers = ((InMemoryAgentInstanceStore)f.Instances).TriggerStore ??= new InMemoryTriggerStore();
         var resources = new InheritedDefinitionResourceCatalog(f.Resources, builtIns, new FileApprovedKnowledgeCatalog(root), f.Content);
         return (new(store, (ITenantAgentStore)store, builtIns, authorizer, f.Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)store),
             new(store, (ITenantAgentStore)store, (ITenantDefinitionStore)store, builtIns, resources, authorizer,
-                ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, new(triggers, f.SessionStore), f.Ids, TimeProvider.System, aliases: SyntheticProviderAliases.Default, content: content ?? f.Content, identity: f.Identity,
+                ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, new(), f.Ids, TimeProvider.System, aliases: SyntheticProviderAliases.Default, content: content ?? f.Content, identity: f.Identity,
                 sandboxProfiles: (ITenantSandboxProfileStore)store, sandboxImages: sandboxImages, sandboxReadiness: sandboxReadiness));
     }
 }

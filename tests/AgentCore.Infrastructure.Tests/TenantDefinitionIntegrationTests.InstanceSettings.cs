@@ -120,7 +120,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(1, (await store.FindTenantAgentAsync(owner.TenantId, id))!.Instance.Revision);
         Assert.Equal(state.Tenant.Revision, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         Assert.Equal(count, (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count);
-        ITriggerStore triggers = f.Contexts is not null ? new SqliteTriggerStore(f.Contexts) : ((InMemoryAgentInstanceStore)f.Instances).TriggerStore!;
+        ITriggerStore triggers = f.Contexts is not null ? new SqliteTriggerStore(f.Contexts) : (((InMemoryAgentInstanceStore)f.Instances).TriggerStore ??= new InMemoryTriggerStore());
         var triggerOwner = new TriggerOwner(id, Guid.NewGuid());
         await f.SessionStore.SaveProfileAsync(new UserProfile(triggerOwner.ProfileId, 1, new Dictionary<string, UserProfileValue>(), now), 0);
         var automation = await triggers.CreateAsync(new Automation(Guid.NewGuid(), triggerOwner, AutomationStatus.Active, "Review inventory",
