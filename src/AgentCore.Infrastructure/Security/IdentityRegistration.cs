@@ -144,6 +144,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantRunStore>(p => (ITenantRunStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantRunConfigurationResolver>();
         services.TryAddSingleton<TenantRunService>();
+        services.TryAddSingleton<TenantComposerReferenceService>();
         services.TryAddSingleton<TenantRunCancellationService>();
         services.TryAddSingleton<ITenantOperationPolicyStore>(p => (ITenantOperationPolicyStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantOperationPolicyService>();

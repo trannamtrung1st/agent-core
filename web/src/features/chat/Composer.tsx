@@ -1,11 +1,13 @@
 import { AudioFilled, AudioMutedOutlined, AudioOutlined, DeleteOutlined, DownOutlined, PaperClipOutlined, PhoneFilled, PhoneOutlined, PlusOutlined, RightOutlined, SendOutlined, StopOutlined, UnorderedListOutlined } from "@ant-design/icons";
-import { Alert, Button, Dropdown, Flex, Input, theme, Tooltip } from "antd";
+import { Alert, Button, Dropdown, Flex, theme, Tooltip } from "antd";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { PendingAttachment } from "../../services/attachments";
 import { composerSteerEnabled, queueComposerFiles, removeComposerFile, removeQueuedSend, retryComposerFile, steerQueuedSend } from "../../services/realtime";
 import type { PendingSendItem } from "../../state/sessionStore";
 import { PendingAttachmentView } from "./AttachmentPreview";
 import { MessageParts } from "./MessageParts";
+import { StructuredMessageEditor, type PickerRequest } from "./StructuredMessageEditor";
+import type { MessagePart } from "../../services/messageParts";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import type { SessionErrorView } from "./sessionError";
 
@@ -174,7 +176,7 @@ function MicrophoneControl({
 }
 
 export function Composer({
-  draft, fileAttachmentsEnabled = true,
+  draft, parts, instanceId, onPartsChange, fileAttachmentsEnabled = true,
   canSend: suppliedCanSend,
   canStop,
   sendLabel,
@@ -205,6 +207,9 @@ export function Composer({
   imageIncompatibilityMessage
 }: {
   draft: string;
+  parts?: MessagePart[] | null;
+  instanceId?: string | null;
+  onPartsChange?: (parts: MessagePart[]) => void;
 
   fileAttachmentsEnabled?: boolean;
 
@@ -242,7 +247,9 @@ export function Composer({
   const fileInput = useRef<HTMLInputElement>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [fileIntakes, setFileIntakes] = useState(0);
-  const canSend = suppliedCanSend && fileIntakes === 0;
+  const [pickerRequest, setPickerRequest] = useState<PickerRequest>(null);
+  const [editorValid, setEditorValid] = useState(true);
+  const canSend = suppliedCanSend && fileIntakes === 0 && editorValid;
   const [queueExpanded, setQueueExpanded] = useState(false);
 
   useEffect(() => {
@@ -399,7 +406,7 @@ export function Composer({
             ))}
           </ul>
         ) : null}
-        <Input.TextArea aria-label="Message" className="composer-editor" variant="borderless" value={draft} disabled={!ready} placeholder={placeholder} onPaste={event => { if (fileAttachmentsEnabled && event.clipboardData.files.length) { event.preventDefault(); takeFiles(event.clipboardData.files); } }} autoSize={{ minRows: 1, maxRows: 8 }} style={{ padding: token.paddingXS }} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!canSend) return; if (event.metaKey || event.ctrlKey) { if (canStop) onSend('interrupt'); } else onSend(); } }} />
+        <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={behavior => { if (behavior === "interrupt") { if (canStop) onSend(behavior); } else onSend(); }} onFiles={takeFiles} pickerRequest={pickerRequest} />
         <input
           ref={fileInput}
           className="attach-input"
@@ -415,18 +422,21 @@ export function Composer({
         <Flex justify="space-between" align="center" gap={token.paddingXS} wrap="wrap" className="composer-toolbar">
           <Flex gap={token.paddingXS} align="center" wrap="wrap" className="composer-toolbar-start">
             {modelControls}
-            {fileAttachmentsEnabled && <Dropdown
+            {<Dropdown
               open={addOpen}
               onOpenChange={setAddOpen}
               classNames={{ root: "composer-add-menu" }}
               trigger={["click"]}
               menu={{
                 items: [
-                  { key: "attach", label: "Attach file", icon: <PaperClipOutlined /> },
+                  ...(fileAttachmentsEnabled ? [{ key: "attach", label: "Attach file", icon: <PaperClipOutlined /> }] : []),
+                  { key: "reference", label: "Reference content (@)" },
+                  { key: "invocation", label: "Use Skill (/)" },
                 ],
                 onClick: ({ key }) => {
                   setAddOpen(false);
                   if (key === "attach") fileInput.current?.click();
+                  else setPickerRequest({ category: key === "invocation" ? "invocation" : "homeFile", nonce: Date.now() });
                 }
               }}
             >

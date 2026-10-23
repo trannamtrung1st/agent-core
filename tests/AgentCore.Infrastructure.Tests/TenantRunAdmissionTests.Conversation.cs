@@ -32,7 +32,7 @@ public sealed partial class TenantRunAdmissionTests
             new("text", ResponseBlockKind.Markdown, "Public markdown", "Public markdown", null, null, true),
             new("private-attachment", ResponseBlockKind.AttachmentReference, "Private attachment label", "Private attachment fallback", privateAttachment.ToString("D"), null, true),
             new("private-artifact", ResponseBlockKind.ArtifactReference, "Private artifact label", "Private artifact fallback", null, privateArtifact.ToString("D"), true)],
-            ResponseSpeechMode.Same, [new("saved", "upsert", "fixture", "Private memory label", ["private"], "indicator")],
+            ResponseSpeechMode.Same, [new("saved", "upsert", "fixture", "Private memory label", ["private"], "indicator", new(setup.Tenant, setup.Agent.Instance.InstanceId, setup.Owner.PrincipalId))],
             [new("private.effect", "completed", "Private effect label")]);
         var entries = new[] {
             new ConversationEntry(f.Ids.NewId(), 2, f.Ids.NewId(), ConversationRole.Assistant, "Completed generated answer", run.ResponseId,

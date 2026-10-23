@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 public sealed partial class SqliteIamStore
 {
     public async ValueTask<TenantRunAdmissionResult?> FindTenantAcceptedHumanInputAsync(TenantSessionRoot owner, Guid principal, Guid message,
-        string text, IReadOnlyList<Guid> attachments, TenantInputInterruption? interruption, AgentCore.Domain.Conversation.SessionMode mode, CancellationToken ct = default)
+        string text, IReadOnlyList<Guid> attachments, TenantInputInterruption? interruption, AgentCore.Domain.Conversation.SessionMode mode, CancellationToken ct = default, IReadOnlyList<AgentCore.Domain.Conversation.UserMessagePart>? parts = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var root = await OwnedSessions(db, owner.TenantId).AsNoTracking().SingleOrDefaultAsync(o => o.SessionId == owner.SessionId.ToString("D"), ct).ConfigureAwait(false);
@@ -22,7 +22,7 @@ public sealed partial class SqliteIamStore
             || run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId != principal) throw new AccessDeniedException("resource_unavailable");
         var entryId = run.Admission.Activation.SourceEntryIds.Single().ToString("D");
         var entry = SqliteMemoryStore.ToEntry(await db.Entries.AsNoTracking().SingleAsync(e => e.SessionId == root.SessionId && e.EntryId == entryId, ct).ConfigureAwait(false));
-        TenantInputReplayRules.Match(run, entry, text, attachments, interruption, mode);
+        TenantInputReplayRules.Match(run, entry, text, attachments, interruption, mode, parts);
         var revision = await db.Sessions.Where(s => s.SessionId == root.SessionId).Select(s => s.Revision).SingleAsync(ct).ConfigureAwait(false);
         return new(false, run, entry.EntryId, revision) { EntrySequence = entry.Sequence };
     }

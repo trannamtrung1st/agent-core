@@ -3098,7 +3098,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
           }
           if (pendingUserText?.eventId === eventId) pendingUserText.interruption = { interruptedRunId: interruptedRun, expectedRunRevision: Number(witness.expectedRunRevision) };
         } else witness = await tenantTextWitness(snapshot.sessionId!);
-        payload = { text, ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...witness, ...(behavior === 'interrupt' ? { behavior } : {}) };
+        payload = { text, ...(message.parts ? { parts: wireParts(message.parts) } : {}), ...(readyAttachmentIds.length ? { attachmentIds: readyAttachmentIds } : {}), ...witness, ...(behavior === 'interrupt' ? { behavior } : {}) };
       });
       if (chatTenantId && useSessionStore.getState().sessionId !== snapshot.sessionId) return;
       if (!ack?.accepted) {

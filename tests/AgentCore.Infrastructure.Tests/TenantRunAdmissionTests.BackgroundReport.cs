@@ -91,6 +91,11 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Equal(1, (await service.ListAsync(tenant, member, new(PageSize: 1))).Total);
         Assert.False((await service.ReadViewAsync(tenant, v.Request.RequestId, member)).Review!.CanDecide);
         await Grant("Report reviewer", ["approvals.approve"], AccessScope.ForTenant(tenant));
+        Assert.False((await service.ReadViewAsync(tenant, v.Request.RequestId, member)).Review!.CanDecide);
+        var deniedRevision = (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision;
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.DecideAsync(tenant, v.Request.RequestId, member, true,
+            v.Request.Operation.ActionHash, deniedRevision, 1).AsTask());
+        await Grant("Exact report communication", ["agents.chat"], AccessScope.ForResource(tenant, "agent", v.Request.Operation.InstanceId.ToString("D")));
         var request = await service.DecideAsync(tenant, v.Request.RequestId, member, true, v.Request.Operation.ActionHash, (await f.Iam.ReadTenantAsync(tenant))!.Tenant.Revision, 1);
         var current = await ReportTarget(f).RequireAsync(request, default); var report = TenantBackgroundReportRules.Build(request, current.Source, current.Configuration);
         var signal = Assert.Single(await ((ITenantApprovalStore)f.Iam).PendingApprovalSignalsAsync(100));

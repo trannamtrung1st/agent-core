@@ -1913,6 +1913,10 @@
     {
       "method": "GET",
       "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/automations/{automationId:guid}/unreviewed-sources"
+    },
+    {
+      "method": "GET",
+      "route": "/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/composer"
     }
   ]
 }

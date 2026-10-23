@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Security;
+using AgentCore.Api.Mapping;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Realtime;
@@ -42,12 +43,12 @@ public sealed partial class TenantSessionLiveDelivery
         {
             var body = command.Payload;
             if (body is null || body.ExpectedRevision is not >= 1 || body.ExpectedSessionRevision is not >= 1
-                || body.Parts is { Length: > 0 } || MessageAttachmentIds(body) is not { } attachmentIds
+                || MessageAttachmentIds(body) is not { } attachmentIds
                 || body.InterruptedRunId is not null && !Guid.TryParse(body.InterruptedRunId, out var parsedInterruption))
-                return Reject(command.EventId, "ValidationError", "Tenant messages require revision witnesses, exact input behavior, plain text and at most ten Attachment IDs.", "Validation");
+                return Reject(command.EventId, "ValidationError", "Tenant messages require revision witnesses, exact input behavior, structured text and at most ten Attachment IDs.", "Validation");
             var interruption = TenantInputInterruptionRules.Request(body.Behavior, body.InterruptedRunId is null ? null : Guid.Parse(body.InterruptedRunId), body.ExpectedRunRevision);
             var result = await service.SubmitMessageAsync(subscription.Tenant, subscription.Session, subscription.Human, Guid.Parse(command.EventId),
-                body.Text, attachmentIds, body.ExpectedRevision.Value, body.ExpectedSessionRevision.Value, token, interruption).ConfigureAwait(false);
+                body.Text, attachmentIds, body.ExpectedRevision.Value, body.ExpectedSessionRevision.Value, token, interruption, UserMessageMapping.FromWire(body.Parts)).ConfigureAwait(false);
             return new() { EventId = command.EventId, Accepted = true, Result = new() {
                 ["created"] = result.Created, ["runId"] = result.RunId.ToString("D"), ["entryId"] = result.EntryId.ToString("D"),
                 ["responseId"] = result.ResponseId.ToString("D"), ["activationId"] = result.ActivationId.ToString("D"),
@@ -56,6 +57,7 @@ public sealed partial class TenantSessionLiveDelivery
             if (command.Payload is { Behavior: "interrupt", ExpectedRunRevision: >= 1 } interrupted && Guid.TryParse(interrupted.InterruptedRunId, out var interruptedRun))
                 await service.RequireMessageInterruptionAsync(subscription.Tenant, subscription.Session, subscription.Human,
                     new(interruptedRun, interrupted.ExpectedRunRevision.Value), token).ConfigureAwait(false);
+            if (command.Payload?.Parts is not null) await service.RequireMessagePartsAsync(subscription.Tenant, subscription.Session, subscription.Human, UserMessageMapping.FromWire(command.Payload.Parts), token).ConfigureAwait(false);
             if (MessageAttachmentIds(command.Payload) is { Length: > 0 } ids)
                 await service.RequireMessageAttachmentsAsync(subscription.Tenant, subscription.Session, subscription.Human, ids, token).ConfigureAwait(false);
         });

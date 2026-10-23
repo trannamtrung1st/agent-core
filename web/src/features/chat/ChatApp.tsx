@@ -6,7 +6,7 @@ import { followAppLink } from "../../app/appLink";
 import { newChatPath } from '../../app/sessionRoute';
 import { getSession, type AgentRun } from "../../services/api";
 import type { TenantContext } from '../../services/identity';
-import { applySessionModel, beginNewChat, bootstrap, cancelRenderedResponse, cancelVoice, clearRouteNotice, composerSendEnabled, composerSendLabel, composerStopEnabled, hangUp, loadMoreChatAgents, loadOlderHistory, openCatalogSession, reloadChatAgentInstances, reportCommittedEntries, requestVoice, resumeCapture, resumeLiveSessionForNavigation, resumePausedSession, retryConnection, searchChatAgents, selectChatIdentity, sendDraft, setDraft, setMuted } from "../../services/realtime";
+import { applySessionModel, beginNewChat, bootstrap, cancelRenderedResponse, cancelVoice, clearRouteNotice, composerSendEnabled, composerSendLabel, composerStopEnabled, hangUp, loadMoreChatAgents, loadOlderHistory, openCatalogSession, reloadChatAgentInstances, reportCommittedEntries, requestVoice, resumeCapture, resumeLiveSessionForNavigation, resumePausedSession, retryConnection, searchChatAgents, selectChatIdentity, sendDraft, setDraft, setDraftParts, setMuted } from "../../services/realtime";
 import { tenantActivitySource } from "../../services/tenantActivity";
 import { tenantCanCreateChat, tenantMayManageSession, tenantRunControl } from '../../services/tenantChat';
 import { clientRecognitionSupported, clientSynthesisSupported } from "../../speech/clientSpeechSupport";
@@ -17,7 +17,7 @@ import { conversationStatusLabel, conversationStatusTone, mapAgentActivity, paus
 import { AgentPicker } from "./AgentPicker";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { ChatHeader } from "./ChatHeader";
-import { resolveNewChatIdentityPresentation } from "./chatIdentity";
+import { parseChatIdentityKey, resolveNewChatIdentityPresentation } from "./chatIdentity";
 import { messageTimestamp } from "./chatTime";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -448,6 +448,9 @@ export function ChatApp({ tenantContext, tenantActions, tenantError }: { tenantC
                   ) : (
                     <Composer
                       draft={state.draft}
+                      parts={state.draftParts}
+                      instanceId={inSession ? backgroundInstanceId : parseChatIdentityKey(state.newChatIdentityKey)?.instanceId}
+                      onPartsChange={setDraftParts}
                       canSend={canSend}
                       canStop={canStop}
                       sendLabel={sendLabel}

@@ -23,6 +23,7 @@ let createAllowed = false;
 const manageHints = new Map<string, boolean>();
 function path(suffix: string) { if (!chatTenantId) throw new Error('Choose an organization before opening Chat.'); return tenantApi(chatTenantId, suffix); }
 export const tenantChatAccess = () => request<TenantContext>(path('/access/me'));
+export const tenantComposerChoices = (instance: string, params: URLSearchParams) => request<{ items: import('./messageParts').ComposerChoice[]; nextCursor: string | null }>(path(`/agents/${encodeURIComponent(instance)}/composer?${params}`));
 export const tenantChatModels = () => request<ModelCatalog>(path('/chat/models'));
 export async function tenantSessionMetadata(id: string) {
   const value = await request<Metadata>(path(`/sessions/${encodeURIComponent(id)}`)); manageHints.set(id, value.canManage); return value;

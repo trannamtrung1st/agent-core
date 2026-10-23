@@ -3904,6 +3904,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ModelGenerationEvent evt,
         CancellationToken cancellationToken)
     {
+        // Referenced bodies are immutable admission evidence. Fence their current read authority
+        // on the worker before admitting generated content to the conversation mailbox/history.
+        if (_runtimeOwner is not null && _boundAgentRun?.Admission.ComposerInput is not null
+            && evt is ModelTextDelta or ModelDisplayDelta or ModelSemanticResponseReady or ModelCompleted)
+            await RequireProviderRunAuthorityAsync(cause, responseId, cancellationToken).ConfigureAwait(false);
         IArtifactReferenceAuthorizer? references = null;
         if (_runtimeOwner is not null && evt is ModelSemanticResponseReady ready)
         {

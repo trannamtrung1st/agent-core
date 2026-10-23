@@ -15,7 +15,7 @@ public sealed record TenantConversationView(TenantSessionRoot Owner, string Titl
     PublicAgentDescriptor Agent, SessionModelSelection? Model);
 
 public sealed class TenantConversationService(IIamStore security, ITenantSessionStore sessions, ITenantConversationStore content,
-    IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null, TenantAttachmentService? attachmentAccess = null, VoiceAvailability? voice = null)
+    IdentityService identity, IamAuthorizer authorizer, TenantArtifactService? artifactAccess = null, TenantAttachmentService? attachmentAccess = null, VoiceAvailability? voice = null, TenantComposerReferenceService? composer = null)
 {
     public async ValueTask<bool> CanReadArtifactReferenceAsync(Guid tenant, Guid session, TenantSessionInitiator human, string? reference, CancellationToken ct = default)
     {
@@ -100,9 +100,8 @@ public sealed class TenantConversationService(IIamStore security, ITenantSession
             foreach (var attachment in projected.Attachments ?? [])
                 if (await Attachment(attachment.AttachmentId.ToString("D")).ConfigureAwait(false) is { } attachmentSource)
                     attachments.Add(new(attachmentSource.AttachmentId, attachmentSource.DisplayName, attachmentSource.ContentType));
-            // Structured resource parts remain unconverted. Do not expose legacy resource labels,
-            // locators or untyped effect receipts as implicit authority for their underlying resources.
-            var parts = projected.Parts?.Select(p => p.Kind == "text" ? p : new UserMessagePart("text", "[Resource unavailable]")).ToArray();
+            var parts = composer is not null ? await composer.VisiblePartsAsync(tenant, saved.Owner.AgentInstanceId, human, projected.Parts, ct).ConfigureAwait(false)
+                : projected.Parts?.Select(p => p.Kind == "text" ? p : new UserMessagePart("text", "[Resource unavailable]")).ToArray();
             visible.Add(projected with {
                 SourceEventId = projected.SourceEventId is { } source && await CanRead("core-events.read", "event", source.ToString("D")).ConfigureAwait(false) ? source : null,
                 Blocks = blocks.ToArray(), Attachments = attachments.Count == 0 ? null : attachments.ToArray(),

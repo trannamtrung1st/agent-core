@@ -6,7 +6,7 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed partial class InMemoryMemoryStore
 {
     internal TenantRunAdmissionResult? AcceptedTenantInput(TenantSessionRoot owner, Guid principal, Guid message, string text,
-        IReadOnlyList<Guid> attachments, TenantInputInterruption? interruption, AgentCore.Domain.Conversation.SessionMode mode)
+        IReadOnlyList<Guid> attachments, TenantInputInterruption? interruption, AgentCore.Domain.Conversation.SessionMode mode, IReadOnlyList<AgentCore.Domain.Conversation.UserMessagePart>? parts = null)
     {
         lock (_gate)
         {
@@ -16,7 +16,7 @@ public sealed partial class InMemoryMemoryStore
             if (run.Owner.TenantId != owner.TenantId || run.Owner.ExecutorPrincipalId != owner.ExecutorPrincipalId || run.AgentInstanceId != owner.AgentInstanceId
                 || run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId != principal) throw new AccessDeniedException("resource_unavailable");
             var entry = _entries[owner.SessionId].Single(e => e.EntryId == run.Admission.Activation.SourceEntryIds.Single());
-            TenantInputReplayRules.Match(run, entry, text, attachments, interruption, mode);
+            TenantInputReplayRules.Match(run, entry, text, attachments, interruption, mode, parts);
             return new(false, run, entry.EntryId, session.Snapshot.Revision) { EntrySequence = entry.Sequence };
         }
     }

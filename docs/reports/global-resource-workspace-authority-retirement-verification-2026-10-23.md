@@ -29,3 +29,7 @@ Build command: `dotnet build AgentCore.sln --no-restore --nologo -m:1 -nodeReuse
 ## Remaining goal
 
 Reconcile the remaining native/store/tool callers and safe final schema consolidation, complete the explicit canonical integration combinations above, then perform the proposal-wide security/isolation/function/rendered UI acceptance audit. Historical milestone freezes remain unchanged.
+
+## Composer successor decision — 2026-10-24
+
+The user resolved the open specification conflict in favor of restoring the existing reference feature through tenant IAM. The [tenant Composer successor](tenant-composer-references-verification-2026-10-24.md) now restores all six typed categories and bounded source content under independent current human/executor reads. It does not restore the retired Profile owner, generic resolver or owner endpoint. The earlier qualification above remains evidence for the retirement itself.

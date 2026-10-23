@@ -88,6 +88,24 @@ try {
   const credited=await human.json(`/api/v2/tenants/${tenant}/sessions/${session}/messages`);
   const creditedEntry=credited.items.find(e=>e.responseId===receipt.responseId);
   assert.equal(creditedEntry.receivedTextEndExclusive,text.length);assert.equal(creditedEntry.heardTextEndExclusive,0);
+  // Structured reference identity survives actual MessagePack admission and replay. A selection
+  // of this conversation uses its existing context rather than copying its growing history.
+  const alphaPrefix=`/api/v2/tenants/${tenant}`;
+  const readRole=await human.json(alphaPrefix+'/roles',{name:'Composer exact source reader',permissions:['agents.read','sessions.read'],expectedRevision:await human.revision(tenant)});
+  await human.json(alphaPrefix+'/role-assignments',{principalId:context.context.agentPrincipalId,roleId:readRole.roleId,expectedRevision:await human.revision(tenant)});
+  const refMetadata=await human.json(alphaPrefix+`/sessions/${session}`);
+  const referenceCommand={protocolVersion:1,sessionId:session,eventId:crypto.randomUUID(),sequence:4,attachmentId:secondReady.attachmentId,type:'user.text',
+    payload:{text:`@session:${session}`,parts:[{kind:'reference',reference:{kind:'session',sessionId:session,selectedRevision:refMetadata.revision}}],expectedRevision:await human.revision(tenant),expectedSessionRevision:refMetadata.revision}};
+  const refAck=await live.hub.invoke('SendText',referenceCommand);assert.equal(refAck.accepted,true,JSON.stringify(refAck));
+  await human.finished(tenant,refAck.result.runId);
+  const refReplay=await live.hub.invoke('SendText',referenceCommand);assert.equal(refReplay.accepted,true,JSON.stringify(refReplay));assert.equal(refReplay.result.runId,refAck.result.runId);
+  const alteredRef=await live.hub.invoke('SendText',{...referenceCommand,payload:{...referenceCommand.payload,parts:[{kind:'reference',reference:{kind:'session',sessionId:session,selectedRevision:refMetadata.revision+1}}]}});
+  assert.equal(alteredRef.accepted,false);assert.equal(alteredRef.error.code,'ProtocolError');
+  const typedHistory=await human.json(alphaPrefix+`/sessions/${session}/messages`);
+  assert.equal(typedHistory.items.find(e=>e.entryId===refAck.result.entryId).parts[0].reference.sessionId,session);
+  const invalidRef=await live.hub.invoke('SendText',{...referenceCommand,eventId:crypto.randomUUID(),sequence:5,payload:{...referenceCommand.payload,expectedRevision:await human.revision(tenant),expectedSessionRevision:(await human.json(alphaPrefix+`/sessions/${session}`)).revision,
+    parts:[{kind:'reference',reference:{kind:'session',sessionId:session,unexpected:'not-authority'}}]}});
+  assert.equal(invalidRef.accepted,false);assert.equal(invalidRef.error.category,'Validation');
   const beta=(await human.json('/api/v2/system/tenants',{name:'Live beta',slug:'live-beta'})).tenantId;
   const second=await human.session(beta);
   assert.equal((await live.hub.invoke('AttachTenant',attach(second,beta))).accepted,true);

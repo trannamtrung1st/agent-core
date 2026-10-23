@@ -30,7 +30,7 @@ public static class TenantRunRules
             || (live ? input.Sequence <= current.DurableLastEntrySequence : input.Sequence != current.DurableLastEntrySequence + 1) || input.SourceEventId is null
             || a.SourceEventId != input.SourceEventId || a.DedupeKey != $"human:{initiator.PrincipalId:D}:{input.SourceEventId:D}"
             || input.Text.Length > 8000 || string.IsNullOrWhiteSpace(input.Text) && input.Attachments is not { Count: > 0 }
-            || input.Parts is not null || input.Envelope is not null || input.Failure is not null
+            || !ValidParts(input, run) || input.Envelope is not null || input.Failure is not null
             || run.Admission.Configuration?.InstanceRevision != agent.Instance.Revision || run.DefinitionId != agent.Instance.DefinitionId
             || run.DefinitionVersion != agent.Instance.ActiveVersion || run.PinnedPersona != agent.Instance.Persona
             || run.Admission.Configuration.PersonaRevision != agent.Instance.PersonaRevision)
@@ -52,5 +52,12 @@ public static class TenantRunRules
         && saved.Admission.ExecutionContext?.OriginalInitiatorPrincipalId == proposed.Run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId
         && savedInput.SourceEventId == proposed.Input.SourceEventId && savedInput.Text == proposed.Input.Text && savedInput.DeliveryMode == proposed.Input.DeliveryMode
         && saved.Admission.Activation.EvidenceJson == proposed.Run.Admission.Activation.EvidenceJson
-        && (savedInput.Attachments ?? []).SequenceEqual(proposed.Input.Attachments ?? []);
+        && (savedInput.Attachments ?? []).SequenceEqual(proposed.Input.Attachments ?? [])
+        && TenantInputReplayRules.SameParts(savedInput.Parts, proposed.Input.Parts);
+    private static bool ValidParts(ConversationEntry input, AgentRun run)
+    {
+        try { return input.Parts is null ? run.Admission.ComposerInput is null : UserMessageContent.DisplayText(UserMessageContent.Normalize(input.Parts)!) == input.Text
+            && run.Admission.ComposerInput is { } composer && composer.ExplicitSkillKeys.SequenceEqual(UserMessageContent.ExplicitSkills(input.Parts)); }
+        catch (ArgumentException) { return false; }
+    }
 }

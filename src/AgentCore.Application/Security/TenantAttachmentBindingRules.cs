@@ -8,7 +8,7 @@ namespace AgentCore.Application.Security;
 public static class TenantAttachmentBindingRules
 {
     public static TenantHumanRunAdmission Freeze(TenantHumanRunAdmission value) => value with {
-        Input = value.Input with { Attachments = value.Input.Attachments?.ToArray() }, Attachments = value.Attachments?.ToArray() };
+        Input = value.Input with { Parts = UserMessageContent.Normalize(value.Input.Parts), Attachments = value.Input.Attachments?.ToArray() }, Attachments = value.Attachments?.ToArray() };
 
     public static void Shape(TenantHumanRunAdmission value)
     {

@@ -12,7 +12,7 @@ namespace AgentCore.Api.Realtime;
 
 // Recipient transport state only. Mutable conversation state remains in the owning Runtime mailbox.
 public sealed partial class TenantSessionLiveDelivery(TenantConversationService access, ITenantRunStore runs,
-    IHubContext<SessionHub> hubs, IIdGenerator ids, TimeProvider time, ILogger<TenantSessionLiveDelivery> logger, VoiceAvailability? speech = null, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null, TenantContinuityReadService? continuitySources = null)
+    IHubContext<SessionHub> hubs, IIdGenerator ids, TimeProvider time, ILogger<TenantSessionLiveDelivery> logger, VoiceAvailability? speech = null, TenantRunProfileService? profiles = null, TenantMemoryService? memories = null, TenantContinuityReadService? continuitySources = null, TenantComposerReferenceService? composer = null)
 {
     private sealed class Connection
     {

@@ -14,7 +14,7 @@ public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid Age
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
     TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null, ITenantAttachmentStore? attachments = null, ITenantSessionInputControl? inputs = null,
-    ITenantRequestIsolationStore? requestIsolation = null)
+    ITenantRequestIsolationStore? requestIsolation = null, TenantComposerReferenceService? composer = null)
 {
     public async ValueTask<TenantRunReceipt> SubmitTextAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
@@ -22,8 +22,8 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
 
     public async ValueTask<TenantRunReceipt> SubmitMessageAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default,
-        TenantInputInterruption? interruption = null)
-        => (await SubmitInputAsync(tenant, sessionId, initiator, messageId, text, attachmentIds, expectedSecurityRevision, expectedSessionRevision, ct, interruption, null).ConfigureAwait(false)).Run;
+        TenantInputInterruption? interruption = null, IReadOnlyList<UserMessagePart>? parts = null)
+        => (await SubmitInputAsync(tenant, sessionId, initiator, messageId, text, attachmentIds, expectedSecurityRevision, expectedSessionRevision, ct, interruption, null, parts).ConfigureAwait(false)).Run;
 
     public async ValueTask<TenantHumanInputReceipt> SubmitSpeechAsync(TenantVoiceLease lease, Guid streamId, Guid utteranceId, string text, CancellationToken ct = default)
     {
@@ -38,8 +38,9 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
     }
     private async ValueTask<TenantHumanInputReceipt> SubmitInputAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, IReadOnlyList<Guid> attachmentIds, long expectedSecurityRevision, long expectedSessionRevision,
-        CancellationToken ct, TenantInputInterruption? interruption, TenantSpeechAdmission? speech)
+        CancellationToken ct, TenantInputInterruption? interruption, TenantSpeechAdmission? speech, IReadOnlyList<UserMessagePart>? parts = null)
     {
+        parts = TenantComposerReferenceService.Normalize(text, parts);
         var requested = attachmentIds.ToArray();
         if (requested.Length > AttachmentLimits.MaxPerMessage || requested.Any(id => id == Guid.Empty) || requested.Distinct().Count() != requested.Length)
             throw AgentCoreErrors.Validation("Use at most ten distinct attachment IDs.");
@@ -48,11 +49,12 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false);
         await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", session.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
         if (text is null || messageId == Guid.Empty || string.IsNullOrWhiteSpace(text) && requested.Length == 0 || text.Length > 8000) throw AgentCoreErrors.Validation("A message ID and text up to 8000 characters or an attachment are required.");
-        var replay = await runs.FindTenantAcceptedHumanInputAsync(session.Owner, initiator.PrincipalId, messageId, text, requested, interruption, speech is null ? SessionMode.Text : SessionMode.Voice, ct).ConfigureAwait(false);
+        var replay = await runs.FindTenantAcceptedHumanInputAsync(session.Owner, initiator.PrincipalId, messageId, text, requested, interruption, speech is null ? SessionMode.Text : SessionMode.Voice, ct, parts).ConfigureAwait(false);
         if (replay is not null)
         {
             await RequireMessageInterruptionAsync(tenant, sessionId, initiator, interruption, ct).ConfigureAwait(false);
             await RequireMessageAttachmentsAsync(tenant, sessionId, initiator, requested, ct).ConfigureAwait(false);
+            await RequireMessagePartsAsync(tenant, sessionId, initiator, parts, ct).ConfigureAwait(false);
             var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
             await Require(current, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, sessionId), ct).ConfigureAwait(false);
             await Require(current, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", session.Owner.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
@@ -80,28 +82,41 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
         if (speech is not null && (!speech.Lease.InputActive || speech.StreamId != speech.Lease.StreamId || speech.Lease.Owner != session.Owner || speech.Lease.Human != initiator
             || speech.UtteranceId != messageId || session.Snapshot.Mode != SessionMode.Voice || requested.Length != 0))
             throw new AccessDeniedException("voice_lease_unavailable");
+        parts = parts is null ? null : await (composer ?? throw new AccessDeniedException("composer_unavailable"))
+            .ValidateAsync(tenant, session.Owner.AgentInstanceId, sessionId, initiator, parts, ct).ConfigureAwait(false);
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
         var activationId = ids.NewId(); var runId = ids.NewId(); var entryId = ids.NewId(); var responseId = ids.NewId();
         var input = new ConversationEntry(entryId, session.Snapshot.DurableLastEntrySequence + 1, messageId, ConversationRole.User,
             text, null, EntryStatus.Completed, speech is null ? SessionMode.Text : SessionMode.Voice, 0, text.Length, now,
-            Attachments: sources.Count == 0 ? null : sources.Select(a => new ConversationAttachmentRef(a.AttachmentId, a.DisplayName, a.ContentType)).ToArray());
+            Parts: parts, Attachments: sources.Count == 0 ? null : sources.Select(a => new ConversationAttachmentRef(a.AttachmentId, a.DisplayName, a.ContentType)).ToArray());
         var activation = Activation.Start(activationId, sessionId, ActivationKind.UserTurn, [entryId], messageId, null, null, null,
             $"human:{initiator.PrincipalId:D}:{messageId:D}", now, TenantInputInterruptionRules.Evidence(interruption));
         var context = new TrustedExecutionContext(tenant, agent.PrincipalId, initiator.PrincipalId, sessionId, runId, activationId, activationId, null, null, ExecutionOrigin.UserMessage);
         var definition = resolved.Configuration.Definition;
         var selected = SessionModelBinder.RefreshDefault(models, definition, session.Snapshot.ModelSelection)
             ?? throw AgentCoreErrors.Validation("A resolved model is required.");
+        var composerInput = parts is null ? null : await composer!.PinAsync(agent.Instance.InstanceId, context, definition, resolved.Skills, parts, ct).ConfigureAwait(false);
+        var active = composerInput is null ? resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray()
+            : AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(definition, resolved.Skills, composerInput.ExplicitSkillKeys);
         var run = AgentRun.Create(runId, AgentRunOwner.ForTenant(tenant, agent.Instance.InstanceId, agent.PrincipalId),
             new(activation, definition.Id, definition.Version, resolved.Persona, responseId, AgentRunOutputContract.ConversationResponse,
-                AgentRunAdmissionFactory.WithCleanupIntent(ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, true), text), resolved.Configuration, executionContext: context),
+                AgentRunAdmissionFactory.WithCleanupIntent(ExecutionBudgetResolver.Resolve(definition, resolved.InstanceBudgets, true), text), resolved.Configuration, composerInput, executionContext: context),
             new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort), AgentRunLimits.DefaultMaxAttempts, now,
-            resolved.Skills, resolved.Skills.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
+            resolved.Skills, active);
         var admission = new TenantHumanRunAdmission(run, input, expectedSessionRevision, agent.Instance.Revision, sources.Count == 0 ? null : sources.ToArray(), interruption, speech);
         var prepared = new TenantHumanInput(session.Owner, initiator, state.Tenant.Revision, TenantAttachmentBindingRules.Freeze(admission));
         await TenantHumanInputRules.RequireAsync(prepared, session, agent, state, authorizer, live: inputs is not null, ct).ConfigureAwait(false);
         var committed = inputs is not null ? await inputs.SubmitAsync(prepared, ct).ConfigureAwait(false)
             : await TenantHumanInputRules.CommitQuiescentAsync(prepared, security, runs, sessions, ids, time, ct).ConfigureAwait(false);
         return new(TenantHumanInputRules.Receipt(committed), committed.Admission.EntrySequence);
+    }
+    public async ValueTask RequireMessagePartsAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
+        IReadOnlyList<UserMessagePart>? parts, CancellationToken ct = default)
+    {
+        if (parts is null) return;
+        var session = await sessions.FindTenantSessionAsync(tenant, sessionId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        await (composer ?? throw new AccessDeniedException("composer_unavailable")).ValidateAsync(tenant, session.Owner.AgentInstanceId, sessionId, initiator,
+            parts.Select(p => p.Reference is { } reference ? p with { Reference = reference with { SelectedRevision = null } } : p).ToArray(), ct).ConfigureAwait(false);
     }
     // A cached transport acknowledgement is a fact about earlier admission, never a file-read token.
     public async ValueTask RequireMessageInterruptionAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,

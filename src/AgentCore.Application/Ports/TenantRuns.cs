@@ -16,7 +16,7 @@ public sealed record TenantRunPage(IReadOnlyList<AgentRun> Items, int Total, int
 public interface ITenantRunStore
 {
     ValueTask<TenantRunAdmissionResult?> FindTenantAcceptedHumanInputAsync(TenantSessionRoot owner, Guid principal, Guid message,
-        string text, IReadOnlyList<Guid> attachments, TenantInputInterruption? interruption, AgentCore.Domain.Conversation.SessionMode mode, CancellationToken ct = default) => ValueTask.FromResult<TenantRunAdmissionResult?>(null);
+        string text, IReadOnlyList<Guid> attachments, TenantInputInterruption? interruption, AgentCore.Domain.Conversation.SessionMode mode, CancellationToken ct = default, IReadOnlyList<AgentCore.Domain.Conversation.UserMessagePart>? parts = null) => ValueTask.FromResult<TenantRunAdmissionResult?>(null);
     ValueTask<TenantRunPage> ListTenantSessionRunsAsync(Guid tenant, Guid? session, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default, Guid? instanceId = null, IReadOnlyList<Guid>? allowedSessions = null) => throw new NotSupportedException();
     ValueTask<CompletionInboxItem?> FindTenantCompletionAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TenantSessionRoot?> ResolveTenantSessionOwnerAsync(Guid sessionId, CancellationToken ct = default);

@@ -233,12 +233,20 @@ public sealed partial class TenantRunAdmissionTests
     {
         await using var f = await Fixture.Create(true, builtInAuthority: true);
         await using var db = f.Contexts!.CreateDbContext();
+        async Task<string[]> Guards() => (await db.Database.SqlQueryRaw<string>("SELECT name || ':' || sql AS Value FROM sqlite_master WHERE type='trigger'").ToArrayAsync()).Order(StringComparer.Ordinal).ToArray();
+        var retained = await Guards();
+        Assert.Contains(retained, sql => sql.StartsWith("TR_TenantApprovals_ReportSourceRead_Insert:", StringComparison.Ordinal));
+        Assert.Contains(retained, sql => sql.StartsWith("TR_TenantApprovals_ReportSourceRead_Update:", StringComparison.Ordinal));
         await db.GetService<IMigrator>().MigrateAsync("20261020130000_TenantCompletionReadReview"); await db.Database.MigrateAsync();
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(13, await db.Database.SqlQueryRaw<int>("SELECT count(*) AS Value FROM sqlite_master WHERE type='trigger' AND name LIKE 'TR_Tenant%'").SingleAsync());
+        Assert.Equal(retained, await Guards());
         var v = await ReportSourceConsent(f); var id = v.Request.RequestId;
         await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson=json_set(PayloadJson, '$.Operation.ReportSourceRead.SourceRevision', 999) WHERE RequestId={id}"));
         await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020130000_TenantCompletionReadReview"));
+        // Newer safe Down steps may precede the retained guard. Restore the current model
+        // before readback, and prove every trigger body survives both upgrade paths.
+        await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+        Assert.Equal(retained, await Guards());
         Assert.Equal(v.Request.Operation, (await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(v.Request.TenantId, id))!.Operation);
     }
 }

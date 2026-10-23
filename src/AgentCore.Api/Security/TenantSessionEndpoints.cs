@@ -11,10 +11,16 @@ public static class TenantSessionEndpoints
     public sealed record Witness(long ExpectedRevision, long ExpectedSessionRevision);
     public sealed record RenameRequest(string Title, long ExpectedRevision, long ExpectedSessionRevision);
     public sealed record MessageRequest(Guid MessageId, string Text, long ExpectedRevision, long ExpectedSessionRevision, IReadOnlyList<Guid>? AttachmentIds = null, string? Behavior = null,
-        Guid? InterruptedRunId = null, long? ExpectedRunRevision = null);
+        Guid? InterruptedRunId = null, long? ExpectedRunRevision = null, AgentCore.Contracts.Realtime.UserMessagePartDto[]? Parts = null);
     public sealed record RunWitness(long ExpectedRevision, long ExpectedRunRevision);
     public static void Map(WebApplication app)
     {
+        app.MapGet("/api/v2/tenants/{tenantId:guid}/agents/{instanceId:guid}/composer", (Guid instanceId, string category, string? search, string? cursor, HttpContext http,
+            TenantComposerReferenceService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await service.DiscoverAsync(actor.TenantId, instanceId, Initiator(http, actor), category, search, cursor, ct).ConfigureAwait(false));
+        })).RequireAuthorization();
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions").RequireAuthorization();
         group.MapGet("/{sessionId:guid}/approvals", (Guid sessionId, int? page, int? pageSize, HttpContext http,
             TenantConversationApprovalService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
@@ -76,7 +82,7 @@ public static class TenantSessionEndpoints
             var actor = IdentityHttp.TenantContext(http);
             var interruption = TenantInputInterruptionRules.Request(body.Behavior, body.InterruptedRunId, body.ExpectedRunRevision);
             var receipt = await service.SubmitMessageAsync(actor.TenantId, sessionId, Initiator(http, actor), body.MessageId, body.Text, body.AttachmentIds ?? [],
-                body.ExpectedRevision, body.ExpectedSessionRevision, ct, interruption).ConfigureAwait(false);
+                body.ExpectedRevision, body.ExpectedSessionRevision, ct, interruption, UserMessageMapping.FromWire(body.Parts)).ConfigureAwait(false);
             return Results.Json(receipt, statusCode: receipt.Created ? StatusCodes.Status202Accepted : StatusCodes.Status200OK);
         }));
         app.MapGet("/api/v2/tenants/{tenantId:guid}/agent-runs/{runId:guid}", (Guid runId, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
