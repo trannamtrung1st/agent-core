@@ -39,7 +39,7 @@ public sealed class InMemoryDefinitionResourceContentStore : IDefinitionResource
         if (contentSha256.Length != 64 || contentSha256.Any(c => !char.IsAsciiHexDigit(c)) || contentSha256 != contentSha256.ToLowerInvariant())
             throw AgentCore.Application.Sessions.AgentCoreErrors.Validation("Use a canonical content hash.");
         var bytes = await ReadAsync(contentSha256, ct).ConfigureAwait(false);
-        if (bytes is not null) AgentCore.Application.Admin.AgentInstanceResourceService.Verify(contentSha256, expectedByteSize, bytes);
+        if (bytes is not null) AgentCore.Application.Admin.InstanceResourceRules.Verify(contentSha256, expectedByteSize, bytes);
         return bytes;
     }
 }

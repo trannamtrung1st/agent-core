@@ -57,7 +57,7 @@ public sealed partial class TenantAgentConfigurationService
         var next = IsolationConfigurationPlanner.Patch(snapshot.Agent.Instance.SettingsOverrides ?? new(), draft);
         var effective = InstanceSettingsResolver.Resolve(definition, next);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
-        _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, definition, token).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
+        _ = InstanceResourceRules.Resolve(effective, await Resources(tenant, definition, token).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
         var automations = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore
             ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), snapshot.Agent.Instance, effective, time.GetUtcNow(), token).ConfigureAwait(false);
         var updated = await Commit(actor, tenant, state, new(id, expected.Instance, SetSettingsOverrides: true, SettingsOverrides: next,

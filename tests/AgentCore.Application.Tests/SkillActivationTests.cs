@@ -43,7 +43,7 @@ public sealed class SkillActivationTests
         Assert.Contains(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current), s => s.Key == allowed.Key && s.Projection == SkillProjection.OnDemand);
         Assert.Equal("OLD", Assert.Single(pin).Procedure);
         var fresh = await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current);
-        var explicitBudgetError = Assert.Throws<AgentCoreException>(() => AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(current, fresh, [allowed.Key]));
+        var explicitBudgetError = Assert.Throws<AgentCoreException>(() => AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(current, fresh, [allowed.Key]));
         Assert.Contains("8000-character", explicitBudgetError.Message);
         Assert.Equal(8000, fresh.Where(s => s.Projection == SkillProjection.Always).Sum(s => s.Procedure.Length));
     }

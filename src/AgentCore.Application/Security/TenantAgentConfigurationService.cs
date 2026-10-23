@@ -30,7 +30,7 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         var resources = await Resources(tenant, baseline, ct).ConfigureAwait(false);
         var effective = InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides) with
             { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };
-        var manifest = AgentInstanceResourceService.Resolve(effective, resources, snapshot.Resources, snapshot.Skills);
+        var manifest = InstanceResourceRules.Resolve(effective, resources, snapshot.Resources, snapshot.Skills);
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var parent = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.read"), Scope(tenant, id), ct).ConfigureAwait(false);
         if (!parent.Allowed) throw new AccessDeniedException(parent.ReasonCode);

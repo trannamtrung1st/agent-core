@@ -48,7 +48,7 @@ public sealed class SelfManagementOperationTests
             var policy = services;
             var view = await NativeInstanceConfigurationSeed.PolicyAsync(policy, owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
                 new(Enum.GetValues<HarnessManagementScope>()), new(Enum.GetValues<ManagementAutoApply>())));
-            var admitted = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration;
+            var admitted = (await NativeInstanceConfigurationSeed.ResolveAsync(services, owner.InstanceId)).Configuration;
             var executor = services.GetRequiredService<SessionToolExecutor>(); var session = Guid.NewGuid();
             var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId,
                 OwnerTurnText: "Keep this concise review procedure.", Harness: new(new(HarnessManagementMode.Managed, Enum.GetValues<HarnessManagementScope>(), [], [], ManagedAutoApply: Enum.GetValues<ManagementAutoApply>()), 1, 23), OwnedSessionId: session);
@@ -61,7 +61,7 @@ public sealed class SelfManagementOperationTests
             }
             Assert.Equal(view.InstanceRevision, (await NativeInstanceConfigurationSeed.PolicyViewAsync(policy, owner.InstanceId)).InstanceRevision);
             Assert.Equal("balanced", (await NativeInstanceConfigurationSeed.SettingsViewAsync(services, owner.InstanceId, "conversationPolicy")).Effective["responseLength"]);
-            Assert.DoesNotContain((await services.GetRequiredService<AgentInstanceResourceService>().ListAsync(owner.InstanceId)).Resources, r => r.Origin == "Instance");
+            Assert.Empty((await services.GetRequiredService<IAgentInstanceStore>().ReadResourcesAsync(owner.InstanceId)).InstanceResources);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -78,7 +78,7 @@ public sealed class SelfManagementOperationTests
         var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 23);
         var view = await NativeInstanceConfigurationSeed.PolicyAsync(services, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Settings]), new(Enum.GetValues<ManagementAutoApply>())));
-        var definition = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
+        var definition = (await NativeInstanceConfigurationSeed.ResolveAsync(services, owner.InstanceId)).Configuration.Definition;
         var args = JsonSerializer.SerializeToElement(new { expectedInstanceRevision = view.InstanceRevision, section, set = new Dictionary<string, object> { [field] = section == "capabilities" ? new[] { value } : value }, clear = Array.Empty<string>() });
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId);
@@ -97,7 +97,7 @@ public sealed class SelfManagementOperationTests
         var policy = services;
         var view = await NativeInstanceConfigurationSeed.PolicyAsync(policy, owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
             new([HarnessManagementScope.Settings, HarnessManagementScope.Skills, HarnessManagementScope.Instructions]), new([])));
-        var resolved = await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId);
+        var resolved = await NativeInstanceConfigurationSeed.ResolveAsync(services, owner.InstanceId);
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var context = new AgentContext(resolved.Configuration.Definition, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "Hello"), AgentInstanceId: owner.InstanceId,

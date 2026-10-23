@@ -53,7 +53,7 @@ public sealed partial class TenantAgentConfigurationService
             return new(prepared.Skill, prepared.DefinitionSkill, owner.Revision, state.Tenant.Revision, false);
         }
         var definition = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
-        _ = AgentInstanceResourceService.Resolve(definition, await Resources(tenant, baseline, token).ConfigureAwait(false), snapshot.Resources, prepared.Next);
+        _ = InstanceResourceRules.Resolve(definition, await Resources(tenant, baseline, token).ConfigureAwait(false), snapshot.Resources, prepared.Next);
         var saved = await Commit(actor, tenant, state, prepared.Change, key?.StartsWith("builtin:", StringComparison.Ordinal) == true ? "skills.choice.update" : "skills." + operation, token, initiator).ConfigureAwait(false);
         return new(prepared.Skill with { InstanceRevision = saved.Instance.Revision }, prepared.DefinitionSkill, saved.Instance.Revision, state.Tenant.Revision + 1, true);
     }, ct);

@@ -54,7 +54,7 @@ public sealed partial class TenantManagementInspectionProjection
                 var hash = metadata.GetProperty("contentSha256").GetString()!;
                 var bytes = await (content ?? throw new AccessDeniedException("management_resource_content_unavailable")).ReadAsync(hash, ct).ConfigureAwait(false)
                     ?? throw new AccessDeniedException("management_resource_content_unavailable");
-                AgentInstanceResourceService.Verify(hash, metadata.GetProperty("byteLength").GetInt64(), bytes);
+                InstanceResourceRules.Verify(hash, metadata.GetProperty("byteLength").GetInt64(), bytes);
                 try { text = new UTF8Encoding(false, true).GetString(bytes); }
                 catch (DecoderFallbackException) { throw new AccessDeniedException("management_resource_encoding_unavailable"); }
                 var excerpt = ToolJsonResults.ClipUtf8Prefix(text, 2048); truncated = excerpt != text; text = excerpt;

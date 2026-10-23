@@ -37,10 +37,10 @@ internal static class TenantAgentResourcePreparation
                 || source.DefinitionId != baseline.Id || source.Version != baseline.Version || !published.Contains(source)
                 || input.Kind != source.Kind || input.MediaType != source.MediaType)
                 throw AgentCoreErrors.Validation("Copy requires the current Definition resource and its immutable content.");
-            AgentInstanceResourceService.Verify(source.ContentSha256, source.ByteLength, bytes);
+            InstanceResourceRules.Verify(source.ContentSha256, source.ByteLength, bytes);
         }
         var previous = snapshot.InstanceResources.SingleOrDefault(r => r.ResourceId == input.ResourceId);
-        var resource = AgentInstanceResourceService.PrepareUpsert(owner, snapshot, input.ResourceId, input.ExpectedResourceRevision,
+        var resource = InstanceResourceRules.PrepareUpsert(owner, snapshot, input.ResourceId, input.ExpectedResourceRevision,
             input.LogicalPath, input.Kind, input.MediaType, bytes, input.Enabled ?? previous?.Enabled ?? true, actor, allocatedId, at, source);
         if (previous is not null && (resource with { Revision = previous.Revision, UpdatedAt = previous.UpdatedAt }) == previous)
             return new(null, snapshot, View(definition, published, snapshot, skills, "instance:" + previous.ResourceId.ToString("D")));
@@ -55,7 +55,7 @@ internal static class TenantAgentResourcePreparation
         var definition = Definition(owner, baseline, actor, scope);
         var view = View(definition, published, snapshot, skills, key);
         if (view.Revision != expectedRevision) throw new SecurityConflictException("stale_revision");
-        var parsed = AgentInstanceResourceService.ParseKey(key); InstanceResourceMutation mutation;
+        var parsed = InstanceResourceRules.ParseKey(key); InstanceResourceMutation mutation;
         if (delete)
         {
             if (parsed.Origin != "instance") throw AgentCoreErrors.Validation("Inherited resource bytes are read-only.");
@@ -86,15 +86,15 @@ internal static class TenantAgentResourcePreparation
 
     private static InstanceResourceView View(AgentDefinition definition, IReadOnlyList<AgentDefinitionPublicationResource> published,
         InstanceResourceSnapshot snapshot, InstanceSkillSnapshot skills, string key) =>
-        AgentInstanceResourceService.Views(definition, published, snapshot, skills).SingleOrDefault(r => r.Key == key)
+        InstanceResourceRules.Views(definition, published, snapshot, skills).SingleOrDefault(r => r.Key == key)
             ?? throw new AccessDeniedException("resource_unavailable");
 
     private static TenantPreparedResourceChange Finish(AgentInstance owner, AgentDefinition definition, InstanceResourceSnapshot snapshot,
         InstanceSkillSnapshot skills, IReadOnlyList<AgentDefinitionPublicationResource> published, InstanceResourceMutation mutation)
     {
         var next = After(snapshot, mutation);
-        AgentInstanceResourceService.ValidateCollection(next.InstanceResources);
-        _ = AgentInstanceResourceService.Resolve(definition, published, next, skills);
+        InstanceResourceRules.ValidateCollection(next.InstanceResources);
+        _ = InstanceResourceRules.Resolve(definition, published, next, skills);
         var deleted = mutation.DeleteResourceId is { } id ? "instance:" + id.ToString("D") : null;
         var key = mutation.Resource is { } local ? "instance:" + local.ResourceId.ToString("D")
             : mutation.DefinitionState is { } inherited ? "definition:" + inherited.ResourceId.ToString("D") : deleted!;

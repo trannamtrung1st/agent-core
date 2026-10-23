@@ -29,12 +29,12 @@ public sealed class SelfManagementRemediationTests
         var owner = await NativeInstanceConfigurationSeed.CreateAsync(services, "general-assistant", 23);
         var policy = await NativeInstanceConfigurationSeed.PolicyAsync(services, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Assisted), new([HarnessManagementScope.Settings])));
-        var resolver = services.GetRequiredService<AgentRunConfigurationResolver>();
-        var baseline = (await resolver.ResolveAsync(owner.InstanceId)).Configuration.Definition;
+        var resolver = services;
+        var baseline = (await NativeInstanceConfigurationSeed.ResolveAsync(resolver, owner.InstanceId)).Configuration.Definition;
         var selected = RoleEnvironments.Of(baseline).ToolList.Where(name => name != "workspace.read").ToArray();
         await NativeInstanceConfigurationSeed.SettingsAsync(services, owner.InstanceId, "capabilities", policy.InstanceRevision,
             new Dictionary<string, JsonElement> { ["selected"] = JsonSerializer.SerializeToElement(selected) }, []);
-        var current = (await resolver.ResolveAsync(owner.InstanceId)).Configuration.Definition;
+        var current = (await NativeInstanceConfigurationSeed.ResolveAsync(resolver, owner.InstanceId)).Configuration.Definition;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId);
         async Task<JsonDocument> Inspect(string target) => JsonDocument.Parse((await executor.ExecuteAsync(current, Guid.NewGuid(),

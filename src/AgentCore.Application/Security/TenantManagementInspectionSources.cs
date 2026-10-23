@@ -38,7 +38,7 @@ public static class TenantManagementInspectionSources
     {
         var owner = reader.Agent.Instance;
         var definition = reader.Current with { SelfManagement = ManagementPolicyResolver.Resolve(reader.Baseline, owner) };
-        return AgentInstanceResourceService.Views(definition, inherited, resources, skills).Select(resource => new TenantManagementInspectionItem(
+        return InstanceResourceRules.Views(definition, inherited, resources, skills).Select(resource => new TenantManagementInspectionItem(
             "resource", resource.Key, TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(new {
                 resource.Key, resource.Origin, resource.LogicalPath, resource.Kind, resource.MediaType, resource.ContentSha256,
                 resource.ByteLength, resource.EnabledOverride, resource.Revision })),

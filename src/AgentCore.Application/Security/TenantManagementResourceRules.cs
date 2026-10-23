@@ -25,7 +25,7 @@ public static class TenantManagementResourceRules
     public static void Validate(PreparedManagementMutation value, TenantManagementMutationArguments args)
     {
         var plan = value.Resource ?? throw new ArgumentException("Use a typed Resource plan.");
-        bool Key(string key) { try { _ = AgentInstanceResourceService.ParseKey(key); return true; } catch (Sessions.AgentCoreException) { return false; } }
+        bool Key(string key) { try { _ = InstanceResourceRules.ParseKey(key); return true; } catch (Sessions.AgentCoreException) { return false; } }
         if (!IsTool(args.Tool) || plan.TenantId == Guid.Empty || plan.AllocatedId == Guid.Empty || !TenantMemoryOperationRules.ValidHash(plan.SnapshotHash)
             || plan.Result is null || !Key(plan.Result.Key) || plan.Result.Revision < (plan.Result.Key.StartsWith("definition:", StringComparison.Ordinal) ? 0 : 1)
             || plan.Result.Deleted != (args.Tool == "resources.delete") || plan.CreateScope != Creates(args)
@@ -81,7 +81,7 @@ public static class TenantManagementResourceRules
             || !TenantMemoryOperationRules.ValidHash(value.BeforeStableHash) || !TenantMemoryOperationRules.ValidHash(value.AfterStableHash)
             || value.BeforeSources is null || value.AfterSources is null || value.BeforeSources.Count > 2 || value.AfterSources.Count > 2
             || value.Result is null || value.Result.Deleted != (value.ToolName == "resources.delete")) throw new ArgumentException("Use exact Resource effect evidence.");
-        var parsed = AgentInstanceResourceService.ParseKey(value.Result.Key);
+        var parsed = InstanceResourceRules.ParseKey(value.Result.Key);
         if (value.Result.Revision < (parsed.Origin == "definition" ? 0 : 1)) throw new ArgumentException("Use an exact Resource revision.");
         if (value.HarnessChangeId is { } harnessId && (harnessId == Guid.Empty || value.Result.Kind != AgentDefinitionResourceKind.Knowledge)
             || value.HarnessChangeId is null && value.Before is not null) throw new ArgumentException("Use the exact Harness Resource evidence.");
@@ -150,7 +150,7 @@ public static class TenantManagementResourceRules
         var reader = source.Reader; var owner = reader.Agent.Instance; var value = args.Value;
         var area = TenantHarnessCommandRules.IsResource(args.AuthorityTool) ? HarnessManagementScope.KnowledgeResources : HarnessManagementScope.Resources;
         if (area == HarnessManagementScope.KnowledgeResources && value.TryGetProperty("key", out var selectedKey)
-            && AgentInstanceResourceService.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills).Single(r => r.Key == selectedKey.GetString()).Kind != AgentDefinitionResourceKind.Knowledge)
+            && InstanceResourceRules.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills).Single(r => r.Key == selectedKey.GetString()).Kind != AgentDefinitionResourceKind.Knowledge)
             throw new AccessDeniedException("resource_unavailable");
         if (args.Tool is "resources.set_enabled" or "resources.delete")
             return TenantAgentResourcePreparation.Choice(owner, reader.Baseline, source.Snapshot.Resources, source.Snapshot.Skills, published,
@@ -159,13 +159,13 @@ public static class TenantManagementResourceRules
                 value.GetProperty("expectedResourceRevision").GetInt64(), SkillAuthor.Agent, at, scope: area);
         if (args.Tool == "resources.copy")
         {
-            var key = AgentInstanceResourceService.ParseKey(value.GetProperty("key").GetString()!);
+            var key = InstanceResourceRules.ParseKey(value.GetProperty("key").GetString()!);
             var original = published.SingleOrDefault(r => r.ResourceId == key.Id) ?? throw new AccessDeniedException("resource_unavailable");
             return TenantAgentResourcePreparation.Upsert(owner, reader.Baseline, source.Snapshot.Resources, source.Snapshot.Skills, published,
                 new(null, null, value.GetProperty("logicalPath").GetString()!, original.Kind, original.MediaType, null),
                 copiedBytes ?? throw new AccessDeniedException("resource_content_unavailable"), SkillAuthor.Agent, allocated, at, original);
         }
-        var parsed = value.TryGetProperty("key", out var target) ? AgentInstanceResourceService.ParseKey(target.GetString()!).Id : (Guid?)null;
+        var parsed = value.TryGetProperty("key", out var target) ? InstanceResourceRules.ParseKey(target.GetString()!).Id : (Guid?)null;
         return TenantAgentResourcePreparation.Upsert(owner, reader.Baseline, source.Snapshot.Resources, source.Snapshot.Skills, published,
             new(parsed, parsed is null ? null : value.GetProperty("expectedResourceRevision").GetInt64(), value.GetProperty("logicalPath").GetString()!,
                 Enum.Parse<AgentDefinitionResourceKind>(value.GetProperty("kind").GetString()!, false), value.GetProperty("mediaType").GetString()!, null),
@@ -183,7 +183,7 @@ public static class TenantManagementResourceRules
         args = TenantHarnessCommandRules.Mark(args, reader, prepared.Change);
         var after = prepared.Change is null ? owner : TenantAgentConfigurationRules.Apply(owner, TenantHarnessCommandRules.Attach(args, reader, prepared.Change), at);
         var key = args.Value.TryGetProperty("key", out var selected) ? selected.GetString() : null;
-        var views = AgentInstanceResourceService.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills);
+        var views = InstanceResourceRules.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills);
         var before = key is null ? null : views.Single(r => r.Key == key);
         var result = Result(prepared.Resource ?? before!, args.Tool == "resources.delete");
         var affected = new[] { key, result.Key }.Where(k => k is not null).ToHashSet(StringComparer.Ordinal);

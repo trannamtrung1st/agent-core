@@ -204,7 +204,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IUserTurnCapabilityValidator? turnCapabilities = null,
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
-        IAgentRunAuthority? runAuthority = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null, AgentRunOwner? runtimeOwner = null,
+        IAgentRunAuthority? runAuthority = null, AgentRunOwner? runtimeOwner = null,
         AgentCore.Application.Security.TenantRunContinuationService? tenantContinuations = null,
         AgentCore.Application.Security.TenantAttachmentRuntimeContextService? tenantAttachments = null, TenantVoiceRuntimeBinding? tenantVoice = null, TenantRunProfileService? tenantProfiles = null, TenantMemoryService? tenantMemory = null, TenantExperienceService? tenantExperience = null)
     {
@@ -221,7 +221,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 throw new InvalidOperationException("Tenant Runtime requires its owned snapshot and current execution authority.");
         }
         _runAuthority = runAuthority;
-        _composer = composer;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
         _catalog = catalog;
         _brain = brain;
@@ -1447,10 +1446,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             try
             {
-                if (_composer is not null) admittedParts = await _composer.ValidateInputAsync(_snapshot, input.Parts, cancellationToken);
-                else if (input.Parts.Any(p => p.Kind == "reference")) throw AgentCoreErrors.Validation("Resource references are unavailable.");
+                if (input.Parts.Any(p => p.Kind == "reference")) throw AgentCoreErrors.Validation("Resource references are unavailable.");
                 var (_, configuration) = await ResolveNewRunAsync(cancellationToken);
-                AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(configuration.Configuration.Definition, configuration.Skills,
+                AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(configuration.Configuration.Definition, configuration.Skills,
                     PendingUserBatch().SelectMany(u => UserMessageContent.ExplicitSkills(u.Parts)).Concat(UserMessageContent.ExplicitSkills(input.Parts)));
             }
             catch (AgentCoreException exception) { input.Persisted?.TrySetException(exception); return; }

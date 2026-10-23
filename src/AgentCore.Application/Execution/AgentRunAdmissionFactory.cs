@@ -113,7 +113,7 @@ public static class AgentRunAdmissionFactory
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc,
             pinnedSkillCatalog: catalog,
             activeSkillKeys: composerInput?.Error is not null ? catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray()
-                : AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(snapshot.Definition, catalog,
+                : AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(snapshot.Definition, catalog,
                     users.SelectMany(user => UserMessageContent.ExplicitSkills(user.Parts))));
     }
 }

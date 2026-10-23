@@ -60,7 +60,7 @@ public sealed partial class TenantRunConfigurationResolver(ITenantAgentStore age
             published = await inheritedResources.ListAsync(baseline, ct).ConfigureAwait(false);
         }
         var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
-        var manifest = AgentInstanceResourceService.Resolve(effective, published, state.Resources, state.Skills);
+        var manifest = InstanceResourceRules.Resolve(effective, published, state.Resources, state.Skills);
         var environment = RoleEnvironments.Of(effective);
         var disabled = published.Where(p => !manifest.Any(r => r.Key == "definition:" + p.ResourceId.ToString("D"))).Select(p => p.LogicalPath).ToHashSet(StringComparer.Ordinal);
         var knowledge = environment.KnowledgeList.Where(k => !disabled.Contains(KnowledgeSourcePaths.ResolveBackingPath(k)))

@@ -70,7 +70,7 @@ public static class TenantManagementMutationContract
                 var root = doc.RootElement;
                 if (root.TryGetProperty("key", out var key))
                 {
-                    var parsed = AgentCore.Application.Admin.AgentInstanceResourceService.ParseKey(key.GetString()!);
+                    var parsed = AgentCore.Application.Admin.InstanceResourceRules.ParseKey(key.GetString()!);
                     if (tool is "resources.upsert" or "resources.delete" && parsed.Origin != "instance"
                         || tool == "resources.copy" && parsed.Origin != "definition") throw new ArgumentException("Use the offered Resource origin.");
                 }

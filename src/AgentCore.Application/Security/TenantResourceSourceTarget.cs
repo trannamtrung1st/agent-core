@@ -58,7 +58,7 @@ public sealed class TenantResourceSourceTarget(TenantOperationAuthorizer operati
         {
             bytes = await content.ReadVerifiedResourceSourceAsync(resource.ContentSha256, resource.ByteLength, ct).ConfigureAwait(false)
                 ?? throw new AccessDeniedException("resource_content_unavailable");
-            AgentInstanceResourceService.Verify(resource.ContentSha256, resource.ByteLength, bytes);
+            InstanceResourceRules.Verify(resource.ContentSha256, resource.ByteLength, bytes);
         }
         catch (SecurityConflictException e) when (e.ReasonCode == "workspace_source_changed")
         { throw new SecurityConflictException("resource_source_changed"); }

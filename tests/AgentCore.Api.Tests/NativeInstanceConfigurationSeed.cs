@@ -22,6 +22,13 @@ internal static class NativeInstanceConfigurationSeed
         var occupied = (await services.GetRequiredService<IBuiltInAgentDefinitionStore>().ListAsync()).Where(d => d.Id == sourceId).Select(d => d.Version).ToArray();
         return await store.PublishDraftAsync(new(draft.DraftId, draft.Revision, occupied, now));
     }
+    internal static async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveAsync(IServiceProvider services, Guid id)
+    {
+        var (store, owner, baseline) = await Read(services, id);
+        var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
+        var skills = EffectiveSkillCatalogResolver.Resolve(effective, await store.ReadSkillsAsync(id));
+        return new(new(effective, owner.Revision, owner.PersonaRevision, []), owner.Persona, skills, owner.ExecutionBudgets);
+    }
     internal static async ValueTask<AgentInstance> CreateAsync(IServiceProvider services, string definitionId, int version)
     {
         var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(definitionId, version))!;

@@ -15,7 +15,7 @@ public sealed partial class TenantAgentConfigurationService
     {
         if (args.Tool != "resources.copy") return null;
         var key = args.Value.GetProperty("key").GetString()!;
-        var view = AgentInstanceResourceService.Views(EffectiveChildDefinition(context.Source.Snapshot, context.Source.Reader.Baseline), context.Published,
+        var view = InstanceResourceRules.Views(EffectiveChildDefinition(context.Source.Snapshot, context.Source.Reader.Baseline), context.Published,
             context.Source.Snapshot.Resources, context.Source.Snapshot.Skills).SingleOrDefault(r => r.Key == key) ?? throw new AccessDeniedException("resource_unavailable");
         return await Content(view, ct).ConfigureAwait(false);
     }
@@ -24,7 +24,7 @@ public sealed partial class TenantAgentConfigurationService
         if (value is not { ToolName: "resources.upsert", Resource: { Changed: true, InstanceResource: { } resource } }) return;
         var args = TenantManagementMutationContract.Parse(value.ToolName, value.ArgumentsJson);
         var bytes = System.Text.Encoding.UTF8.GetBytes(args.Value.GetProperty("content").GetString()!);
-        AgentInstanceResourceService.Verify(resource.ContentSha256, resource.ByteLength, bytes);
+        InstanceResourceRules.Verify(resource.ContentSha256, resource.ByteLength, bytes);
         try { await (content ?? throw new AccessDeniedException("resource_content_unavailable")).StoreVerifiedAsync(resource.ContentSha256, bytes, ct).ConfigureAwait(false); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new AccessDeniedException("resource_content_unavailable"); }
     }
@@ -32,7 +32,7 @@ public sealed partial class TenantAgentConfigurationService
     {
         var prepared = TenantManagementSkillRules.Prepare(source, args, at);
         var definition = EffectiveChildDefinition(source.Snapshot, source.Reader.Baseline);
-        _ = AgentInstanceResourceService.Resolve(definition, await Resources(source.Reader.Security.Tenant.TenantId, source.Reader.Baseline, ct).ConfigureAwait(false),
+        _ = InstanceResourceRules.Resolve(definition, await Resources(source.Reader.Security.Tenant.TenantId, source.Reader.Baseline, ct).ConfigureAwait(false),
             source.Snapshot.Resources, prepared.Next);
     }
     // Human HTTP and model exact-operation preparation use the same validation and reconciliation.
@@ -52,7 +52,7 @@ public sealed partial class TenantAgentConfigurationService
         var (next, effective) = InstanceSettingsRules.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
         InstanceSettingsRules.ValidateBrowser(effective, browser);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
-        _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, definition, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
+        _ = InstanceResourceRules.Resolve(effective, await Resources(tenant, definition, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
         var plan = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), current, effective, time.GetUtcNow(), ct).ConfigureAwait(false);
         return new(current.InstanceId, current.Revision, SetSettingsOverrides: true, SettingsOverrides: next, AutomationPolicyChanges: plan);
     }

@@ -281,7 +281,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceMutationService>();
         services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceReadService>();
         services.TryAddSingleton<AdminLifecycleCoordinator>();
-        services.TryAddSingleton<AgentInstanceWorkspaceService>();
         services.TryAddSingleton<AgentCore.Application.Workspaces.SessionWorkingCleanupService>();
         services.TryAddSingleton<ISessionWorkspace>(provider =>
         {
@@ -425,8 +424,6 @@ public static class InfrastructureServiceCollectionExtensions
             ? sqlite : new InMemoryStateIsolationConfigurationStore((InMemoryAgentInstanceStore)p.GetRequiredService<IAgentInstanceStore>(), (InMemoryExperienceStore)p.GetRequiredService<IExperienceStore>()));
         services.TryAddSingleton<SandboxPolicyEnforcement>();
         services.TryAddSingleton<InheritedDefinitionResourceCatalog>();
-        services.TryAddSingleton<AgentInstanceResourceService>();
-        services.TryAddSingleton<AgentCore.Application.Execution.AgentRunConfigurationResolver>();
         services.TryAddSingleton<IOfficeProcessor, AgentCore.Infrastructure.Office.OfficeProcessor>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             configurationGate: provider.GetRequiredService<IToolConfigurationGate>(),
@@ -460,7 +457,6 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IModelCatalog>(),
                 provider.GetRequiredService<IDiagnosticIdSource>());
         });
-        services.TryAddSingleton<AgentCore.Application.Composer.ComposerReferenceService>();
         return services;
     }
 }

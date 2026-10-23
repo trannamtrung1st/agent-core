@@ -27,7 +27,7 @@ public sealed partial class TenantAgentConfigurationService
         await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var (snapshot, baseline) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
         var definition = EffectiveChildDefinition(snapshot, baseline);
-        var views = AgentInstanceResourceService.Views(definition, await Resources(tenant, baseline, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
+        var views = InstanceResourceRules.Views(definition, await Resources(tenant, baseline, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
         var state = await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var visible = await VisibleChildren(state, actor, tenant, id, "resources.read", views, r => r.Key, ct, true).ConfigureAwait(false);
         return new(snapshot.Agent, await SafeResourceViews(state, actor, tenant, id, visible.Items, ct).ConfigureAwait(false), state, visible.All);
@@ -64,11 +64,11 @@ public sealed partial class TenantAgentConfigurationService
         var state = await ChildChangeState(actor, tenant, id, "resources.manage", "resources.read", securityRevision, token).ConfigureAwait(false);
         await RequireChildPermission(state, actor, "resources.read", ChildScope(tenant, id, "resources.read", key), token).ConfigureAwait(false);
         var (snapshot, baseline) = await ResourceWritable(actor, tenant, id, instanceRevision, state, token).ConfigureAwait(false);
-        var parsed = AgentInstanceResourceService.ParseKey(key);
+        var parsed = InstanceResourceRules.ParseKey(key);
         if (parsed.Origin != "definition") throw AgentCoreErrors.Validation("Copy requires a Definition resource.");
         var source = (await Resources(tenant, baseline, token).ConfigureAwait(false)).SingleOrDefault(r => r.ResourceId == parsed.Id)
             ?? throw new AccessDeniedException("resource_unavailable");
-        var view = AgentInstanceResourceService.Views(EffectiveChildDefinition(snapshot, baseline), [source], snapshot.Resources, snapshot.Skills).Single(r => r.Key == key);
+        var view = InstanceResourceRules.Views(EffectiveChildDefinition(snapshot, baseline), [source], snapshot.Resources, snapshot.Skills).Single(r => r.Key == key);
         return await SaveResource(actor, tenant, state, snapshot, baseline,
             new(null, null, path, source.Kind, source.MediaType, await Content(view, token).ConfigureAwait(false)), source, token, initiator).ConfigureAwait(false);
     }, ct);
@@ -135,7 +135,7 @@ public sealed partial class TenantAgentConfigurationService
         DefinitionResourcePolicies.ValidateContentSize(view.ByteLength);
         var bytes = await (content ?? throw new AccessDeniedException("resource_content_unavailable")).ReadAsync(view.ContentSha256, ct).ConfigureAwait(false)
             ?? throw AgentCoreErrors.Persistence("Resource bytes are unavailable.");
-        AgentInstanceResourceService.Verify(view.ContentSha256, view.ByteLength, bytes); return bytes;
+        InstanceResourceRules.Verify(view.ContentSha256, view.ByteLength, bytes); return bytes;
     }
     private static AgentDefinition EffectiveChildDefinition(TenantAgentConfigurationSnapshot snapshot, AgentDefinition baseline) =>
         InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };

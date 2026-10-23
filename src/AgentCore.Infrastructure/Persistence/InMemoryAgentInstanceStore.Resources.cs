@@ -46,7 +46,7 @@ public sealed partial class InMemoryAgentInstanceStore
                 resources[resource.ResourceId] = resource;
             }
             if (m.DeleteResourceId is Guid deleted && !resources.Remove(deleted)) throw AgentCoreErrors.NotFound("Instance resource was not found.");
-            AgentCore.Application.Admin.AgentInstanceResourceService.ValidateCollection(resources.Values);
+            AgentCore.Application.Admin.InstanceResourceRules.ValidateCollection(resources.Values);
             if (m.DefinitionState is { } state)
             {
                 if (state.InstanceId != m.InstanceId || state.ResourceId == Guid.Empty) throw AgentCoreErrors.Validation("Resource state owner/identity is invalid.");

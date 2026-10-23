@@ -24,7 +24,7 @@ public sealed class SelfManagementCompletionTests
         var owner=await NativeInstanceConfigurationSeed.CreateAsync(s, "general-assistant",24);
         await NativeInstanceConfigurationSeed.PolicyAsync(s, owner.InstanceId,owner.Revision,
             new(new(HarnessManagementMode.Assisted),new([HarnessManagementScope.Settings,HarnessManagementScope.Connections])));
-        var definition=(await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
+        var definition=(await NativeInstanceConfigurationSeed.ResolveAsync(s, owner.InstanceId)).Configuration.Definition;
         using var observed=JsonDocument.Parse((await s.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition,Guid.NewGuid(),
             new("inspect","configuration.inspect",JsonSerializer.Serialize(new{goal})),100000,
             admission:new(false,TriggerKind.UserTurn,AgentInstanceId:owner.InstanceId))).Text);
@@ -53,7 +53,7 @@ public sealed class SelfManagementCompletionTests
         var owner = await NativeInstanceConfigurationSeed.CreateAsync(s, "general-assistant", 24);
         await NativeInstanceConfigurationSeed.PolicyAsync(s, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Skills]), new([ManagementAutoApply.SkillChanges])));
-        var definition = (await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
+        var definition = (await NativeInstanceConfigurationSeed.ResolveAsync(s, owner.InstanceId)).Configuration.Definition;
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:owner.InstanceId,
             Harness:new(new(HarnessManagementMode.Managed, Enum.GetValues<HarnessManagementScope>(), [], [], ManagedAutoApply: Enum.GetValues<ManagementAutoApply>()), 1, 23));
         Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(definition, name, ToolConfigurationGates.Unconfigured, admission:admission));

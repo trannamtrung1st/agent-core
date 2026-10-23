@@ -37,7 +37,7 @@ public sealed class DefinitionPublicationResourceReader(IAgentDefinitionResource
     {
         var bytes = content is null ? null : await content.ReadAsync(resource.ContentSha256, ct).ConfigureAwait(false);
         if (bytes is null) throw AgentCore.Application.Sessions.AgentCoreErrors.Persistence("Pinned resource bytes are unavailable.");
-        AgentCore.Application.Admin.AgentInstanceResourceService.Verify(resource.ContentSha256, resource.ByteLength, bytes);
+        AgentCore.Application.Admin.InstanceResourceRules.Verify(resource.ContentSha256, resource.ByteLength, bytes);
         return bytes;
     }
 

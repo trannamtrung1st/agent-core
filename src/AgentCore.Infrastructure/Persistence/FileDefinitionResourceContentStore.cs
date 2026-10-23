@@ -62,7 +62,7 @@ public sealed class FileDefinitionResourceContentStore(string root) : IDefinitio
         byte[] bytes;
         try { bytes = await new CanonicalWorkspaceFilesystem(root, "/home").ReadUnlinkedAsync("/home/" + contentSha256, expectedByteSize, ct).ConfigureAwait(false); }
         catch (AgentCoreException e) when (e.Code == "NotFound") { return null; }
-        AgentInstanceResourceService.Verify(contentSha256, expectedByteSize, bytes);
+        InstanceResourceRules.Verify(contentSha256, expectedByteSize, bytes);
         var current = await new CanonicalWorkspaceFilesystem(root, "/home").CaptureArtifactSourceAsync("/home/" + contentSha256, expectedByteSize, false, ct).ConfigureAwait(false);
         if (current.ByteSize != expectedByteSize || current.Sha256Hex != contentSha256)
             throw AgentCoreErrors.Persistence("Resource content changed during its read.");

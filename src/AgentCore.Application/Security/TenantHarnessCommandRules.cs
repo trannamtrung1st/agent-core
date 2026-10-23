@@ -27,7 +27,7 @@ public static class TenantHarnessCommandRules
             var id = Text("id");
             if (args.TryGetProperty("source", out var provenance) && Uri.TryCreate(provenance.GetString(), UriKind.Absolute, out var uri)
                 && uri.Scheme is "https" or "http" && !string.IsNullOrEmpty(uri.UserInfo)) throw new ArgumentException("Source URLs cannot contain credentials.");
-            if (tool == "harness.knowledge.remove" && id.Contains(':')) _ = AgentInstanceResourceService.ParseKey(id);
+            if (tool == "harness.knowledge.remove" && id.Contains(':')) _ = InstanceResourceRules.ParseKey(id);
             else if (tool == "harness.knowledge.upsert" && id.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_'))) throw new ArgumentException("Use a simple knowledge name.");
         }
         if (tool == "harness.tool.select" && (Text("id") == ToolCatalog.AttachmentsRead || !ToolRegistry.TryGet(Text("id"), out var descriptor) || !descriptor.DefinitionAuthorizable))
@@ -46,7 +46,7 @@ public static class TenantHarnessCommandRules
         if (IsResource(tool))
         {
             var id = args.GetProperty("id").GetString()!;
-            var views = AgentInstanceResourceService.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills);
+            var views = InstanceResourceRules.Views(reader.Current, published, source.Snapshot.Resources, source.Snapshot.Skills);
             if (tool == "harness.knowledge.upsert")
             {
                 var previous = views.SingleOrDefault(r => r.Origin == "Instance" && r.LogicalPath == "knowledge/" + id);
