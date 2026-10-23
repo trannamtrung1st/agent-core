@@ -59,28 +59,6 @@ public sealed class SessionMemoryPromptTests
     }
 
     [Fact]
-    public async Task Disabled_policy_and_other_sessions_do_not_enter_the_prompt()
-    {
-        var store = new InMemoryStructuredMemoryStore();
-        var service = Service(store);
-        await service.WriteAsync(
-            new TrustedMemoryOwner(SessionA),
-            new MemoryWriteProposal(MemoryKind.Fact, "Ship the report", "by Monday", []),
-            Admission());
-        await service.WriteAsync(
-            new TrustedMemoryOwner(SessionB),
-            new MemoryWriteProposal(MemoryKind.Fact, "Other session fact", "hidden", []),
-            Admission());
-
-        var disabled = await SessionMemoryPrompt.LoadAsync(service, SessionA, SampleDefinitions.Examiner, Profile(), []);
-        Assert.Empty(disabled);
-        var enabled = await SessionMemoryPrompt.LoadAsync(service, SessionA, Enabled(), Profile(), []);
-        var only = Assert.Single(enabled);
-        Assert.Equal("Ship the report", only.Subject);
-        Assert.DoesNotContain(enabled, item => item.Content == "hidden");
-    }
-
-    [Fact]
     public async Task Projection_drops_secrets_tails_and_trusted_subjects()
     {
         var now = new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
@@ -107,12 +85,8 @@ public sealed class SessionMemoryPromptTests
         RuntimeTelemetry.Configure(64, contentLogging: true);
         try
         {
-            var projected = await SessionMemoryPrompt.LoadAsync(
-                Service(store),
-                SessionA,
-                Enabled(),
-                Profile(),
-                [entry]);
+            var projected = SessionMemoryPrompt.Project(await store.ListActiveAsync(SessionA),
+                SessionMemoryPrompt.CreateAdmissionContext("session", Enabled(), Profile(), [entry]));
             var only = Assert.Single(projected);
             Assert.Equal("Ship the report", only.Subject);
             Assert.DoesNotContain(
@@ -150,138 +124,12 @@ public sealed class SessionMemoryPromptTests
             now,
             new ResponseEnvelope("Visible caption only", speech, [], ResponseSpeechMode.Custom));
 
-        var projected = await SessionMemoryPrompt.LoadAsync(
-            Service(store),
-            SessionA,
-            Enabled(),
-            Profile(),
-            [entry]);
+        var projected = SessionMemoryPrompt.Project(await store.ListActiveAsync(SessionA),
+                SessionMemoryPrompt.CreateAdmissionContext("session", Enabled(), Profile(), [entry]));
 
         var only = Assert.Single(projected);
         Assert.Equal("Ship the report", only.Subject);
         Assert.DoesNotContain(projected, item => item.Content.Contains("UNHEARD_SPEECH_SENTINEL", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task Saturated_session_memory_still_includes_cross_session_scopes()
-    {
-        const string identityMarker = "SCOPE_IDENTITY_USER_SENTINEL";
-        const string userMarker = "SCOPE_USER_WIDE_SENTINEL";
-        var now = new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
-        var store = new InMemoryStructuredMemoryStore();
-        var service = Service(store);
-        var instanceId = Guid.Parse("019944af-0012-7000-8000-0000000000e1");
-        for (var index = 0; index < MemoryLimits.PromptMaxItems; index++)
-        {
-            await store.InsertAsync(Item(
-                $"019944af-0012-7000-8000-0000000000{index + 30:D2}",
-                $"session-{index}",
-                $"session-only-{index}",
-                now));
-        }
-
-        await store.InsertAsync(Item(
-            "019944af-0012-7000-8000-000000000050",
-            "identity fact",
-            identityMarker,
-            now,
-            MemoryScope.IdentityUser,
-            instanceId,
-            LocalUserProfile.Id));
-        await store.InsertAsync(Item(
-            "019944af-0012-7000-8000-000000000051",
-            "user fact",
-            userMarker,
-            now,
-            MemoryScope.User,
-            null,
-            LocalUserProfile.Id));
-
-        var definition = SampleDefinitions.Examiner with
-        {
-            MemoryPolicy = new MemoryPolicy(
-                SessionMemory: true,
-                IdentityUserRetrieval: true,
-                UserRetrieval: true)
-        };
-        var projected = await SessionMemoryPrompt.LoadAsync(
-            service,
-            SessionA,
-            definition,
-            Profile(now),
-            [],
-            agentInstanceId: instanceId);
-
-        Assert.Contains(projected, item => item.Content.Contains(identityMarker, StringComparison.Ordinal));
-        Assert.Contains(projected, item => item.Content.Contains(userMarker, StringComparison.Ordinal));
-        Assert.Equal(MemoryLimits.PromptMaxItems, projected.Count);
-    }
-
-    [Fact]
-    public async Task Heavy_session_memory_still_renders_cross_session_scopes_in_model_prompt()
-    {
-        const string identityMarker = "SCOPE_CHAR_IDENTITY_USER_SENTINEL";
-        const string userMarker = "SCOPE_CHAR_USER_WIDE_SENTINEL";
-        var now = new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
-        var store = new InMemoryStructuredMemoryStore();
-        var service = Service(store);
-        var instanceId = Guid.Parse("019944af-0012-7000-8000-0000000000f1");
-        var heavy = new string('x', MemoryLimits.MaxContentCharacters - 1);
-        for (var index = 0; index < MemoryLimits.PromptMaxItems; index++)
-        {
-            await store.InsertAsync(Item(
-                $"019944af-0012-7000-8000-0000000000{index + 60:D2}",
-                $"session-{index}",
-                heavy,
-                now));
-        }
-
-        await store.InsertAsync(Item(
-            "019944af-0012-7000-8000-000000000070",
-            "identity fact",
-            identityMarker,
-            now,
-            MemoryScope.IdentityUser,
-            instanceId,
-            LocalUserProfile.Id));
-        await store.InsertAsync(Item(
-            "019944af-0012-7000-8000-000000000071",
-            "user fact",
-            userMarker,
-            now,
-            MemoryScope.User,
-            null,
-            LocalUserProfile.Id));
-
-        var definition = SampleDefinitions.Examiner with
-        {
-            MemoryPolicy = new MemoryPolicy(
-                SessionMemory: true,
-                IdentityUserRetrieval: true,
-                UserRetrieval: true)
-        };
-        var profile = Profile(now);
-        var learned = await SessionMemoryPrompt.LoadAsync(
-            service,
-            SessionA,
-            definition,
-            profile,
-            [],
-            agentInstanceId: instanceId);
-        Assert.Contains(learned, item => item.Content.Contains(identityMarker, StringComparison.Ordinal));
-        Assert.Contains(learned, item => item.Content.Contains(userMarker, StringComparison.Ordinal));
-        Assert.True(CharacterWeight(learned) <= MemoryLimits.PromptMaxCharacters);
-
-        var rendered = SessionMemoryPrompt.Render(learned);
-        Assert.Contains(identityMarker, rendered, StringComparison.Ordinal);
-        Assert.Contains(userMarker, rendered, StringComparison.Ordinal);
-
-        var request = new PromptContextBuilder().Build(
-            Context(definition, profile, learned),
-            Guid.NewGuid());
-        var learnedBlock = request.Context!.Text(ContextSectionId.Memory);
-        Assert.Contains(identityMarker, learnedBlock, StringComparison.Ordinal);
-        Assert.Contains(userMarker, learnedBlock, StringComparison.Ordinal);
     }
 
     private static int CharacterWeight(IReadOnlyList<StructuredMemoryItem> items)
@@ -293,67 +141,6 @@ public sealed class SessionMemoryPromptTests
         }
 
         return characters;
-    }
-
-    [Fact]
-    public async Task Enabled_runtime_prompt_includes_only_that_sessions_learned_fact()
-    {
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero));
-        var sessions = new InMemoryMemoryStore();
-        var memories = new InMemoryStructuredMemoryStore();
-        var service = Service(memories);
-        var now = time.GetUtcNow();
-        await sessions.SaveProfileAsync(Profile(now), 0);
-        var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-0013-7000-8000-{index:D12}")),
-            [Guid.Parse("019944af-0013-7000-8000-0000000000aa")]);
-        var sessionId = ids.NewSessionId();
-        var snapshot = new SessionSnapshot(
-            1,
-            sessionId,
-            1,
-            Enabled(),
-            SessionMode.Text,
-            null,
-            SessionStatus.Created,
-            [],
-            string.Empty,
-            0,
-            null,
-            LocalUserProfile.Id,
-            now,
-            now, AgentInstanceId: Guid.NewGuid());
-        await sessions.SaveAsync(snapshot, 0);
-        await service.WriteAsync(
-            new TrustedMemoryOwner(sessionId),
-            new MemoryWriteProposal(MemoryKind.Fact, "Ship the report", "by Monday", []),
-            Admission());
-        await service.WriteAsync(
-            new TrustedMemoryOwner(SessionB),
-            new MemoryWriteProposal(MemoryKind.Fact, "Other session fact", "hidden", []),
-            Admission());
-        var model = new RecordingLanguageModel(new ScriptedLanguageModel());
-        await using var runtime = SessionRuntimeFixture.Create(
-            snapshot,
-            model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
-            sessions,
-            new CapturingSessionOutput(),
-            ids,
-            time,
-            NullLogger<SessionRuntime>.Instance,
-            structuredMemory: service);
-        await runtime.AttachAsync();
-        await runtime.SubmitUserTextAsync("Hello");
-        await runtime.WaitUntilIdleAsync();
-
-        var request = model.LastRequest!;
-        var learned = request.Context!.Text(ContextSectionId.Memory);
-        Assert.Contains("Ship the report", learned, StringComparison.Ordinal);
-        Assert.DoesNotContain("Other session fact", learned, StringComparison.Ordinal);
-        Assert.Contains("preferredName=Pat", request.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
-        Assert.Contains("Identity: Alex", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
-        Assert.DoesNotContain("Ship the report", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
     }
 
     private static AgentDefinition Enabled() =>

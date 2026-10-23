@@ -57,7 +57,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IAttachmentStore? _attachments;
     private readonly IAttachmentProcessor? _processor;
     private readonly IUserTurnCapabilityValidator? _turnCapabilities;
-    private readonly IStructuredMemoryService? _structuredMemory;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
     private readonly IBrowserLease? _browserLease;
@@ -209,7 +208,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ILanguageModelResolver? modelResolver = null,
         IModelCatalog? catalog = null,
         IUserTurnCapabilityValidator? turnCapabilities = null,
-        IStructuredMemoryService? structuredMemory = null,
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
@@ -251,7 +249,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _tenantMemory = tenantMemory;
         _tenantExperience = tenantExperience;
         _turnCapabilities = turnCapabilities;
-        _structuredMemory = structuredMemory;
         _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
         _artifacts = artifacts ?? (runtimeOwner is null ? new FixtureArtifactReferenceAuthorizer() : new PreparedArtifactReferences(snapshot.SessionId, new HashSet<Guid>()));
         _tools = tools ?? new SessionToolExecutor();
@@ -2523,14 +2520,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         .PrepareAsync(capturedRun, capturedSnapshot, model.Capabilities.Vision, evaluationToken).ConfigureAwait(false) : null;
                 var promptHistory = tenantFiles?.History ?? capturedSnapshot.Entries;
                 var sessionAttachments = tenantFiles?.Manifest ?? await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
-                var learned = await SessionMemoryPrompt.LoadAsync(
-                    _structuredMemory,
-                    capturedSnapshot.SessionId,
-                    executionDefinition,
-                    _profile,
-                    promptHistory,
-                    evaluationToken,
-                    capturedSnapshot.AgentInstanceId).ConfigureAwait(false);
                 var skillCatalog = capturedRun is { } execution && execution.ResponseId == responseId
                     ? execution.PinnedSkillCatalog : resolved!.Skills;
                 var tenantSkills = await SkillContextAsync(capturedRun, skillCatalog, evaluationToken).ConfigureAwait(false);
@@ -2559,7 +2548,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ReasoningEffort: selection?.ReasoningEffort,
                     SummarizedThroughEntrySequence: capturedSnapshot.SummarizedThroughEntrySequence,
                     LastEntrySequence: capturedSnapshot.DurableLastEntrySequence,
-                    LearnedMemories: learned,
                     Persona: persona,
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,

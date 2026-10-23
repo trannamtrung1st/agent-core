@@ -21,7 +21,7 @@ public sealed class MemoryProposalAdmissionTests
     [Theory]
     [InlineData(MemoryProposalSource.UserExplicit)]
     [InlineData(MemoryProposalSource.AgentInferred)]
-    public async Task Unowned_inline_proposals_cannot_write_private_memory_even_with_a_configured_store(MemoryProposalSource source)
+    public async Task Unowned_inline_proposals_report_unavailable_without_a_global_memory_dependency(MemoryProposalSource source)
     {
         var memories = Service();
         var model = new ScriptedLanguageModel(["Noted."], memoryTurns:
@@ -30,9 +30,8 @@ public sealed class MemoryProposalAdmissionTests
         await runtime.SubmitPersistedUserTextAsync("Remember the Atlas example project.", Guid.NewGuid());
         await runtime.WaitUntilIdleAsync();
         Assert.Equal("unavailable", AssistantReceipt(runtime).Outcome);
-        Assert.Empty(await memories.SearchAsync(new(SessionA), new(null, null), Admission("agent_inferred")));
-        Assert.Empty(await memories.SearchIdentityUserAsync(new(InstanceA, ProfileId), new(null, null), true, Admission("agent_inferred")));
-        Assert.Empty(await memories.SearchUserAsync(new(ProfileId), new(null, null), true, Admission("agent_inferred")));
+        Assert.DoesNotContain(typeof(SessionRuntime).GetConstructors().SelectMany(c => c.GetParameters()),
+            parameter => parameter.ParameterType == typeof(IStructuredMemoryService));
     }
 
     [Fact]
@@ -853,17 +852,9 @@ public sealed class MemoryProposalAdmissionTests
         ILanguageModel model,
         IAgentBrain? brain = null) =>
         SessionRuntimeFixture.Create(
-            snapshot,
-            model,
-            brain ?? new DefaultAgentBrain(new PromptContextBuilder()),
-            sessions,
-            new CapturingSessionOutput(),
-            new DeterministicIdGenerator(
+            snapshot,            model,            brain ?? new DefaultAgentBrain(new PromptContextBuilder()),            sessions,            new CapturingSessionOutput(),            new DeterministicIdGenerator(
                 Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-0032-7000-8000-{index:D12}")),
-                [Guid.Parse("019944af-0030-7000-8000-0000000000fe")]),
-            new FakeTimeProvider(Now),
-            NullLogger<SessionRuntime>.Instance,
-            structuredMemory: memories);
+                [Guid.Parse("019944af-0030-7000-8000-0000000000fe")]),            new FakeTimeProvider(Now),            NullLogger<SessionRuntime>.Instance);
 
     private static AgentDefinition Enabled() =>
         SampleDefinitions.Support with

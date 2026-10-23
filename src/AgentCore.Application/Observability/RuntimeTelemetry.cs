@@ -34,7 +34,6 @@ public static class RuntimeTelemetry
         RecordDiagnostic("email", duration, $"provider={boundedProvider};operation={boundedOperation};outcome={boundedOutcome};profile={profile}");
     }
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
-    private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
     private static readonly Counter<long> EventFilters = Meter.CreateCounter<long>("automation_event_filters");
     private static readonly Counter<long> EventFilterEvaluations = Meter.CreateCounter<long>("automation_event_filter_evaluations");
@@ -120,11 +119,6 @@ public static class RuntimeTelemetry
     public static void RecordDropped(string kind)
     {
         Dropped.Add(1, new KeyValuePair<string, object?>("kind", kind));
-    }
-
-    public static void RecordMemoryRetrieval(string result)
-    {
-        MemoryRetrieval.Add(1, new KeyValuePair<string, object?>("result", result));
     }
 
     public static void RecordResponseRepair(string reason, string outcome, string phase)

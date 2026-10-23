@@ -45,7 +45,6 @@ internal static class SessionRuntimeFixture
         ILanguageModelResolver? modelResolver = null,
         IModelCatalog? catalog = null,
         IUserTurnCapabilityValidator? turnCapabilities = null,
-        IStructuredMemoryService? structuredMemory = null,
         IAgentRunStore? agentRuns = null,
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
@@ -74,7 +73,7 @@ internal static class SessionRuntimeFixture
         }
         var runtime = new SessionRuntime(snapshot, languageModel, brain, store, output, ids, time, logger, agentRuns,
             classifier, recognition, policy, recognizer, synthesizer, audioOutput, attachments, processor,
-            artifacts, tools, voice, modelResolver, catalog, turnCapabilities, structuredMemory,
+            artifacts, tools, voice, modelResolver, catalog, turnCapabilities,
             diagnostics, browserLease, runAuthority, triggerOccurrences);
         Contexts.Add(runtime, new(agentRuns, time));
         return runtime;

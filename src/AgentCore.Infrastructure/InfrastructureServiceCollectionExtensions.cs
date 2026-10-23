@@ -501,7 +501,6 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<ILanguageModelResolver>(),
                 provider.GetRequiredService<IModelCatalog>(),
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
-                provider.GetRequiredService<IStructuredMemoryService>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(),
                 provider.GetService<IBrowserLease>(), provider.GetRequiredService<IAgentRunAuthority>(),
                 composer: provider.GetRequiredService<AgentCore.Application.Composer.ComposerReferenceService>(),

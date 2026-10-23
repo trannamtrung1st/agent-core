@@ -1016,7 +1016,6 @@ public sealed class SessionRuntimeFactory(
     ILanguageModelResolver? models = null,
     IModelCatalog? catalog = null,
     IUserTurnCapabilityValidator? turnCapabilities = null,
-    IStructuredMemoryService? structuredMemory = null,
     IDiagnosticIdSource? diagnostics = null,
     IBrowserLease? browserLease = null,
     IAgentRunAuthority? runAuthority = null,
@@ -1078,7 +1077,6 @@ public sealed class SessionRuntimeFactory(
             modelResolver: models,
             catalog: catalog,
             turnCapabilities: turnCapabilities,
-            structuredMemory: structuredMemory,
             diagnostics: diagnostics,
             browserLease: browserLease, runAuthority: runAuthority, triggerOccurrences: triggerOccurrences, composer: composer);
 }

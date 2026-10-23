@@ -399,15 +399,7 @@ public sealed class ExplicitUserMemoryTests
         ILanguageModel model,
         TimeProvider time) =>
         SessionRuntimeFixture.Create(
-            snapshot,
-            model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
-            sessions,
-            new CapturingSessionOutput(),
-            Ids(32, "019944af-0021-7000-8000-"),
-            time,
-            NullLogger<SessionRuntime>.Instance,
-            structuredMemory: memories);
+            snapshot,            model,            new DefaultAgentBrain(new PromptContextBuilder()),            sessions,            new CapturingSessionOutput(),            Ids(32, "019944af-0021-7000-8000-"),            time,            NullLogger<SessionRuntime>.Instance);
 
     private static StructuredMemoryService Service(IStructuredMemoryStore store, TimeProvider time, int count) =>
         new(store, Ids(count, "019944af-0022-7000-8000-"), time);
