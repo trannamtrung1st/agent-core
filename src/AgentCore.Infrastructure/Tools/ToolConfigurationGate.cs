@@ -1,15 +1,15 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Browser;
+using AgentCore.Infrastructure.Email;
 
 namespace AgentCore.Infrastructure.Tools;
 
 public sealed class ToolConfigurationGate(
     IWebSearchProvider? webSearch,
     IPublicWebFetcher? publicWebFetcher,
-    IEmailProvider? emailProvider,
     IBrowser? browserSession = null,
-    bool browserEnabled = false, IEmailProviderFactory? emailFactory = null, IGoogleDriveProviderFactory? driveFactory = null, ISandboxReadiness? sandbox = null) : IToolConfigurationGate
+    bool browserEnabled = false, EmailTransportOptions? emailOptions = null, bool synthetic = false, IGoogleDriveProviderFactory? driveFactory = null, ISandboxReadiness? sandbox = null) : IToolConfigurationGate
 {
     public bool IsExecutionConfigured(string toolName) => toolName == ToolCatalog.BrowserConfiguration
         ? browserSession is not null
@@ -28,8 +28,8 @@ public sealed class ToolConfigurationGate(
             ToolCatalog.WebFetch => publicWebFetcher is not null,
             ToolCatalog.WebDownload => publicWebFetcher?.SupportsDownloads == true,
             ToolCatalog.EmailAccounts or ToolCatalog.EmailRequestAccount or ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft
-                => emailFactory?.IsEnabled ?? emailProvider?.IsAvailable == true,
-            ToolCatalog.EmailSend => emailFactory?.IsSendEnabled ?? emailProvider?.IsAvailable == true,
+                => emailOptions?.Enabled == true,
+            ToolCatalog.EmailSend => emailOptions is { Enabled: true } && (synthetic ? emailOptions.SendEnabled != false : emailOptions.EffectiveSendEnabled),
             ToolCatalog.BrowserConfiguration => browserSession?.Provider.Supports(BrowserFeature.Configuration) == true,
             _ when ToolCatalog.IsBrowserTool(toolName) =>
                 browserEnabled

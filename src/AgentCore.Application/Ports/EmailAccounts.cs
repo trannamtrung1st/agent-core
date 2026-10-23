@@ -5,17 +5,6 @@ namespace AgentCore.Application.Ports;
 // Safe identity only. Protected authentication is resolved inside Infrastructure at use time.
 public sealed record EmailAccountContext(Guid AgentInstanceId, Guid AccountId, string AccountRef, string DisplayName,
     long AccountRevision, Guid BindingId, long BindingRevision, EmailAccountProfile Profile);
-public sealed record BoundEmailAccount(string AccountRef, string DisplayName, string EmailAddress, string Provider, string Authentication = "Password", string Connection = "Configured", bool ReadAvailable = true, bool SendAvailable = true);
-public interface IEmailProviderFactory
-{
-    bool IsEnabled { get; }
-    bool IsSendEnabled { get; }
-    bool CanUse(EmailAccountProfile profile) => profile.IsUsable;
-    bool CanSend(EmailAccountContext account) => IsSendEnabled && account.Profile.CanSend;
-    IEmailProvider Create(EmailAccountContext account);
-    ValueTask<EmailConnectionTest> TestAsync(Guid accountId, long expectedRevision, string protocol, CancellationToken ct = default);
-}
-public sealed record EmailConnectionTest(string Protocol, string Status, DateTimeOffset ObservedAtUtc, string? Error);
 public sealed record StoredEmailDraft(Guid AgentInstanceId, Guid SessionId, EmailDraftSnapshot Draft, DateTimeOffset CreatedAtUtc);
 public sealed record EmailSendOperation(string DraftId, Guid AccountId, long DraftRevision, Guid ApprovalId,
     string ActionHash, EmailSendResult? Result, DateTimeOffset ClaimedAtUtc);

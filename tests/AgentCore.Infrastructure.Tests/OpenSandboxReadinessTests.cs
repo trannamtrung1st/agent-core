@@ -21,7 +21,7 @@ public sealed class OpenSandboxReadinessTests
         await readiness.RefreshAsync(default);
         Assert.Equal("MountIncompatible",readiness.State);Assert.False(readiness.IsAvailable);Assert.Contains("mount configuration",readiness.SafeMessage);
         Assert.DoesNotContain("127.0.0.1",readiness.SafeMessage);Assert.DoesNotContain("fixture",readiness.SafeMessage);
-        var gate = new ToolConfigurationGate(null,null,null,sandbox:readiness);
+        var gate = new ToolConfigurationGate(null,null,sandbox:readiness);
         Assert.True(gate.IsExecutionConfigured(ToolCatalog.SandboxStatus));Assert.True(gate.IsExecutionConfigured(ToolCatalog.SandboxProcessStatus));
         Assert.True(gate.IsConfigured(ToolCatalog.SandboxProfiles));Assert.False(gate.IsExecutionConfigured(ToolCatalog.SandboxExec));
     }

@@ -602,20 +602,19 @@ public sealed class BrowserToolTests
     {
         var options = new BrowserOptions { Enabled = true, InteractionMode = "HeadedPlease", TargetOrigins = FixtureOrigin };
         Assert.Equal(BrowserInteractionMode.ReadNavigation, options.ToHostPolicy().InteractionMode);
-        var disabled = new ToolConfigurationGate(null, null, null, new ReadyBrowser(), browserEnabled: false);
+        var disabled = new ToolConfigurationGate(null, null, new ReadyBrowser(), browserEnabled: false);
         Assert.False(disabled.IsConfigured(ToolCatalog.BrowserNavigate));
-        var enabled = new ToolConfigurationGate(null, null, null, new ReadyBrowser(), browserEnabled: true);
+        var enabled = new ToolConfigurationGate(null, null, new ReadyBrowser(), browserEnabled: true);
         Assert.True(enabled.IsConfigured(ToolCatalog.BrowserClick));
-        var unready = new ToolConfigurationGate(null, null, null, new ReadyBrowser { IsRuntimeReady = false }, browserEnabled: true);
+        var unready = new ToolConfigurationGate(null, null, new ReadyBrowser { IsRuntimeReady = false }, browserEnabled: true);
         Assert.False(unready.IsConfigured(ToolCatalog.BrowserSnapshot));
         var unavailable = new ToolConfigurationGate(
-            null,
             null,
             null,
             new ReadyBrowser { IsAvailable = false },
             browserEnabled: true);
         Assert.False(unavailable.IsConfigured(ToolCatalog.BrowserNavigate));
-        var objectOnly = new ToolConfigurationGate(null, null, null, new FakeBrowser(), browserEnabled: true);
+        var objectOnly = new ToolConfigurationGate(null, null, new FakeBrowser(), browserEnabled: true);
         Assert.False(objectOnly.IsConfigured(ToolCatalog.BrowserClick));
     }
 

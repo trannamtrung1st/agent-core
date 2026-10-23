@@ -318,7 +318,7 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
         {
             Assert.False(session.IsRuntimeReady);
             Assert.False(session.IsAvailable);
-            var gate = new ToolConfigurationGate(null, null, null, session, browserEnabled: true);
+            var gate = new ToolConfigurationGate(null, null, session, browserEnabled: true);
             Assert.False(gate.IsConfigured(ToolCatalog.BrowserNavigate));
             Assert.False(gate.IsConfigured(ToolCatalog.BrowserSnapshot));
             Assert.False(gate.IsConfigured(ToolCatalog.BrowserClick));

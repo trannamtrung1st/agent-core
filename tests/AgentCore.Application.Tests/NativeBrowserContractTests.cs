@@ -9,7 +9,7 @@ namespace AgentCore.Application.Tests;
 public sealed class NativeBrowserContractTests
 {
     [Fact]
-    public async Task Malformed_configuration_is_rejected_before_provider_execution_using_the_empty_object_schema()
+    public async Task Malformed_configuration_schema_rejects_bad_payloads_and_unowned_execution_never_dispatches()
     {
         var browser = new Subset(true);
         var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
@@ -18,17 +18,24 @@ public sealed class NativeBrowserContractTests
         {
             var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, args), ToolLimits.MaxOutputBytes,
                 admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
-            Assert.Contains("invalid", result.Text);
+            Assert.Contains("forbidden", result.Text);
             Assert.Contains("message", result.Text);
+            if (args == "{bad") Assert.ThrowsAny<JsonException>(() => JsonDocument.Parse(args));
+            else
+            {
+                using var parsed = JsonDocument.Parse(args);
+                Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserConfiguration, parsed.RootElement, out _, out _));
+            }
         }
         Assert.Equal(0, browser.Commands);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("valid", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes,
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserConfiguration, JsonSerializer.Deserialize<JsonElement>("{}"), out _, out _));
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("valid", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn))).Text);
-        Assert.Equal(1, browser.Commands);
+        Assert.Equal(0, browser.Commands);
     }
 
     [Fact]
-    public async Task Browser_admission_checks_only_this_executions_active_skills()
+    public async Task Pinned_active_Skill_validation_does_not_authorize_unowned_browser_execution()
     {
         var browser = new Subset(true);
         var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
@@ -36,12 +43,14 @@ public sealed class NativeBrowserContractTests
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, PinnedSkillCatalog: [old], ActiveSkillKeys: []);
         var call = new AgentCore.Application.Ports.ModelToolCall("config", ToolCatalog.BrowserConfiguration, "{}");
         var definition = Definition(ToolCatalog.BrowserConfiguration);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.Equal(1, browser.Commands);
+        Assert.Null(BrowserContractCutover.Diagnostic(definition, [old], []));
+        var diagnostic = BrowserContractCutover.Diagnostic(definition, [old], [old.Key]);
+        Assert.Contains(old.Key, diagnostic!); Assert.Contains("retired", diagnostic!);
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Equal(0, browser.Commands);
         var rejected = await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission with { ActiveSkillKeys = [old.Key] });
-        Assert.Contains(old.Key, rejected.Text);
-        Assert.Contains("retired", rejected.Text);
-        Assert.Equal(1, browser.Commands);
+        Assert.Contains("forbidden", rejected.Text);
+        Assert.Equal(0, browser.Commands);
     }
 
     [Theory]
@@ -108,7 +117,7 @@ public sealed class NativeBrowserContractTests
     [Fact]
     public async Task Subset_provider_filters_unsupported_tools_without_losing_navigation()
     {
-        var subset=new Subset();var gate=new ToolConfigurationGate(null,null,null,subset,true);
+        var subset=new Subset();var gate=new ToolConfigurationGate(null,null,subset,true);
         Assert.True(gate.IsConfigured("browser.navigate"));Assert.False(gate.IsConfigured("browser.hover"));
         var result=await subset.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(Guid.NewGuid(),"browser.hover",JsonSerializer.SerializeToElement(new { target = new { by = "role", value = "button", name = "Submit" } })));
         Assert.Equal("unsupported_operation",result.ErrorCode);
@@ -117,50 +126,59 @@ public sealed class NativeBrowserContractTests
         var executor = new SessionToolExecutor(browser: subset, configurationGate: gate);
         var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"),
             ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
-        Assert.Contains("unsupported_operation", forced.Text);
+        Assert.Contains("forbidden", forced.Text);
         var unauthorized = await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: ["browser.navigate"]) },
             Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("forbidden", unauthorized.Text);
+        Assert.Equal(1, subset.Commands); // Only the explicit low-level adapter fixture navigation ran.
     }
     [Fact]
     public async Task Unowned_privileged_browser_effects_cannot_dispatch_and_coordinate_authority_remains_required()
     {
-        var browser = new Subset(true); var gate = new ToolConfigurationGate(null, null, null, browser, true);
+        var browser = new Subset(true); var gate = new ToolConfigurationGate(null, null, browser, true);
         var definition = Definition("browser.route", "browser.mouse");
         var executor = new SessionToolExecutor(browser: browser, configurationGate: gate);
         var call = new ModelToolCall("route", "browser.route", "{\"url\":\"http://127.0.0.1/mock\",\"action\":\"abort\"}");
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn);
-        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
         var changed = call with { ArgumentsJson = "{\"url\":\"http://127.0.0.1/changed\",\"action\":\"abort\"}" };
-        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), changed, ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), changed, ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Equal(0, browser.Commands);
         var mouse = new ModelToolCall("mouse", "browser.mouse", "{\"operation\":\"click\",\"x\":1,\"y\":1}");
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), mouse, ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Equal(0, browser.Commands);
     }
     [Fact]
-    public async Task Environment_tools_preserve_negotiation_approval_and_direct_turn_boundaries()
+    public async Task Environment_argument_contracts_and_unowned_execution_preserve_independent_boundaries()
     {
         var subset = new Subset();
-        var subsetGate = new ToolConfigurationGate(null, null, null, subset, true);
+        var subsetGate = new ToolConfigurationGate(null, null, subset, true);
         Assert.False(subsetGate.IsConfigured(ToolCatalog.BrowserConfiguration));
         Assert.False(subsetGate.IsConfigured(ToolCatalog.BrowserGeolocation));
         var browser = new Subset(true);
-        var executor = new SessionToolExecutor(browser: browser, configurationGate: new ToolConfigurationGate(null, null, null, browser, true));
+        var executor = new SessionToolExecutor(browser: browser, configurationGate: new ToolConfigurationGate(null, null, browser, true));
         var definition = Definition(ToolCatalog.BrowserConfiguration, ToolCatalog.BrowserGeolocation, ToolCatalog.BrowserMedia, ToolCatalog.BrowserType);
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn);
         var call = new ModelToolCall("geo", ToolCatalog.BrowserGeolocation, "{\"operation\":\"set\",\"origin\":\"http://127.0.0.1\",\"latitude\":10,\"longitude\":20}");
-        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call with { ArgumentsJson = call.ArgumentsJson.Replace(":10", ":11") }, ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call with { ArgumentsJson = call.ArgumentsJson.Replace(":10", ":11") }, ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes,
             admission: new(false, TriggerKind.ScheduledOccurrence))).Text);
         Assert.Equal(0, browser.Commands);
         foreach (var json in new[] { "{\"reducedMotion\":\"reduce\"}", "{\"colorScheme\":null}", "{\"forcedColors\":\"active\",\"contrast\":\"more\"}" })
-            Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        {
+            Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserMedia, JsonSerializer.Deserialize<JsonElement>(json), out _, out _));
+            Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        }
         foreach (var json in new[] { "{\"colorScheme\":true}", "{\"contrast\":\"wrong\"}", "{\"colorScheme\":null,\"colorScheme\":\"light\"}" })
-            Assert.Contains("invalid", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789012345678901\"},\"text\":\"abc\",\"slowly\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789012345678901\"},\"text\":\"abc\",\"slowly\":false}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+            Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserMedia, JsonSerializer.Deserialize<JsonElement>(json), out _, out _));
+        foreach (var slowly in new[] { false, true })
+        {
+            var json = JsonSerializer.Serialize(new { target = new { by = "role", value = "button", name = "el_0123456789012345678901" }, text = "abc", slowly });
+            Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserType, JsonSerializer.Deserialize<JsonElement>(json), out _, out _));
+            Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        }
+        Assert.Equal(0, browser.Commands);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{\"enabled\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: []) }, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
     }

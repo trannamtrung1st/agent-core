@@ -98,7 +98,7 @@ public sealed class TenantEventProcessor(ITenantEventStore events, IIamStore sec
         {
             if (core.Event.Key == "email.message.received" && !await emailWatches.CanDeliverTenantEmailEventAsync(source.TenantId, source.EventId, ct))
                 throw new AccessDeniedException("email_event_source_unavailable");
-            return CoreEventDispatcher.Project(core);
+            return ProjectCore(core);
         }
         var receipt = source.Webhook ?? throw new AccessDeniedException("event_source_unavailable");
         var webhook = await webhooks.FindTenantWebhookAsync(source.TenantId, receipt.ResourceId, ct);
@@ -109,4 +109,16 @@ public sealed class TenantEventProcessor(ITenantEventStore events, IIamStore sec
             data = JsonSerializer.Deserialize<JsonElement>(receipt.EvidenceJson).GetProperty("data") });
     }
     private void Log(Guid tenant, Guid source, Guid trigger, string code) => logger?.LogWarning("Tenant event processing deferred: tenant {TenantId}, source {EventId}, trigger {TriggerId}, code {Code}.", tenant, source, trigger, code);
+    private static JsonElement ProjectCore(CoreEventReceipt receipt) => JsonSerializer.SerializeToElement(new
+    {
+        schemaVersion = 1,
+        id = receipt.Event.EventId,
+        type = "core." + receipt.Event.Key,
+        occurredAtUtc = receipt.Event.OccurredAtUtc,
+        receivedAtUtc = receipt.ReceivedAtUtc,
+        source = new { kind = "core", key = receipt.Event.Key },
+        scope = new { agentInstanceId = receipt.Event.Owner.AgentInstanceId },
+        causation = new { rootAgentRunId = receipt.Event.RootAgentRunId, triggerDepth = receipt.Event.TriggerDepth },
+        data = JsonSerializer.Deserialize<JsonElement>(receipt.Event.DataJson)
+    });
 }

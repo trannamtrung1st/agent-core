@@ -76,3 +76,8 @@ public interface IEmailProvider
 
     ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default);
 }
+
+public interface IEmailSendPreflight
+{
+    ValueTask PrepareSendAsync(CancellationToken ct);
+}

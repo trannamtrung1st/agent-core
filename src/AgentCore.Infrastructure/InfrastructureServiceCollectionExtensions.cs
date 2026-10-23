@@ -105,9 +105,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IToolConfigurationGate>(provider => new ToolConfigurationGate(
             provider.GetService<IWebSearchProvider>(),
             provider.GetService<IPublicWebFetcher>(),
-            provider.GetService<IEmailProvider>(),
             provider.GetService<IBrowser>(),
-            provider.GetRequiredService<BrowserOptions>().Enabled, provider.GetService<IEmailProviderFactory>(), provider.GetService<IGoogleDriveProviderFactory>(), provider.GetService<ISandboxReadiness>()));
+            provider.GetRequiredService<BrowserOptions>().Enabled, provider.GetRequiredService<EmailTransportOptions>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase), provider.GetService<IGoogleDriveProviderFactory>(), provider.GetService<ISandboxReadiness>()));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
             new PromptContextBuilder(
                 provider.GetRequiredService<IToolConfigurationGate>(),
@@ -425,7 +424,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
 
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
-        EmailProviderRegistration.AddEmail(services, profile);
+        EmailProviderRegistration.AddEmail(services);
         AgentCore.Infrastructure.Drive.DriveRegistration.AddDrive(services, profile);
         AgentCore.Infrastructure.Credentials.TenantOAuthRegistration.Add(services, profile);
         services.TryAddSingleton(browser.PrivacyAuthority());

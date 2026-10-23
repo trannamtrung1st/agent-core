@@ -86,13 +86,13 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
         using var client = clients.CreateClient(HttpClientName);
         HttpRequestMessage Request(string value)
         { var request = new HttpRequestMessage(HttpMethod.Get, "https://gmail.googleapis.com/gmail/v1/users/me/" + path); request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", value); return request; }
-        var response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct, recheck);
+        var response = await SendBoundedAsync(client, () => Request(access), true, time, ct, recheck);
         try
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 response.Dispose(); access = await (freshToken ?? token)(ct); await recheck(ct);
-                response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct, recheck);
+                response = await SendBoundedAsync(client, () => Request(access), true, time, ct, recheck);
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     if (rejectAuthorization is not null) await rejectAuthorization(ct);
@@ -100,7 +100,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
                 }
             }
             if (!response.IsSuccessStatusCode) throw new HttpRequestException("Google mailbox is unavailable.", null, response.StatusCode);
-            var json = await GoogleEmailOAuthService.ReadJson(response, 2 * 1024 * 1024, ct);
+            var json = await ReadJson(response, 2 * 1024 * 1024, ct);
             try { await recheck(ct); return json; } catch { json.Dispose(); throw; }
         }
         finally { response.Dispose(); }
@@ -137,7 +137,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
                 return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
             }
             if (!response.IsSuccessStatusCode) { observation.Complete("failed"); return new(EmailSendOutcome.Failed, null, "email_send_rejected", "Google rejected the message."); }
-            using var json = await GoogleEmailOAuthService.ReadJson(response, 64 * 1024, cancellationToken);
+            using var json = await ReadJson(response, 64 * 1024, cancellationToken);
             if (json.RootElement.TryGetProperty("id", out var id) && id.GetString() is { Length: > 0 } accepted)
             { observation.Complete(); return new(EmailSendOutcome.Sent, accepted, null, null); }
             observation.Complete("indeterminate");
@@ -216,6 +216,31 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
                 CollectBody(part, builder);
             }
         }
+    }
+
+    private static async Task<HttpResponseMessage> SendBoundedAsync(HttpClient client, Func<HttpRequestMessage> request, bool retrySafe, TimeProvider time, CancellationToken ct,
+        Func<CancellationToken, ValueTask>? recheck = null)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            if (recheck is not null) await recheck(ct);
+            using var outgoing = request();
+            try
+            {
+                var response = await client.SendAsync(outgoing, HttpCompletionOption.ResponseHeadersRead, ct);
+                if (!retrySafe || attempt >= 1 || (int)response.StatusCode != 429 && (int)response.StatusCode < 500) return response;
+                response.Dispose();
+            }
+            catch (HttpRequestException) when (retrySafe && attempt < 1) { }
+            await Task.Delay(TimeSpan.FromMilliseconds(250), time, ct);
+        }
+    }
+    private static async Task<JsonDocument> ReadJson(HttpResponseMessage response, int limit, CancellationToken ct)
+    {
+        if (response.Content.Headers.ContentLength > limit) throw new AgentCoreException("email_provider_response_invalid", "Google response exceeded the safe limit.", 502);
+        await using var input = await response.Content.ReadAsStreamAsync(ct); using var output = new MemoryStream(); var buffer = new byte[8192];
+        while (true) { var count = await input.ReadAsync(buffer, ct); if (count == 0) break; if (output.Length + count > limit) throw new AgentCoreException("email_provider_response_invalid", "Google response exceeded the safe limit.", 502); output.Write(buffer, 0, count); }
+        return JsonDocument.Parse(output.ToArray());
     }
 
 }

@@ -13,12 +13,6 @@ public sealed record EmailWatchNotification(CoreEventOccurrence Event, Guid Bind
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? WatchRuntimeRevision = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? AccountRevision = null);
 public sealed record SafeEmailWatchFailure(string Code, Guid? DiagnosticId, bool Permanent);
-public interface IEmailChangeFeed
-{
-    bool IsSynthetic => false;
-    ValueTask<EmailWatchCursor> BaselineAsync(Credential account, CancellationToken ct);
-    ValueTask<EmailWatchBatch> PollAsync(Credential account, EmailWatchCursor cursor, CancellationToken ct);
-}
 public interface IEmailWatchStore
 {
     ValueTask<EmailWatchState> GetAsync(Guid accountId, CancellationToken ct = default);

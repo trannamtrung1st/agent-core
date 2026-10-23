@@ -30,7 +30,7 @@ public sealed class BrowserEnvironmentJourneyTests
         var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = enabled, FixtureEnabled = false,
             ProfileRoot = "private-profile-must-not-be-exposed" }, null, _ => { probes++; return Task.FromResult(false); });
         await browser.StartAsync(CancellationToken.None);
-        var gate = new ToolConfigurationGate(null, null, null, browser, enabled);
+        var gate = new ToolConfigurationGate(null, null, browser, enabled);
         var executor = new SessionToolExecutor(browser: browser, configurationGate: gate);
         var definition = new AgentDefinition(2, "inspection", 1, new("Inspection", "Role", "Description", "Tone"), [], "instructions",
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048),

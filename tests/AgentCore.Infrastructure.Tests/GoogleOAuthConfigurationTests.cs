@@ -6,7 +6,7 @@ public sealed class GoogleOAuthConfigurationTests
 {
     private static GoogleOAuthConfiguration Config(params (string Key, string Value)[] values) => new(new ConfigurationBuilder().AddInMemoryCollection(values.Select(v => new KeyValuePair<string, string?>(v.Key, v.Value))).Build());
     [Fact]
-    public void Canonical_uppercase_settings_are_shared_but_callbacks_and_legacy_refresh_clients_are_independent()
+    public void Canonical_uppercase_settings_are_shared_but_refresh_clients_are_independent()
     {
         var config = Config(("GOOGLE_OAUTH_CLIENT_ID", "shared"), ("GOOGLE_OAUTH_CLIENT_SECRET", "secret"), ("GOOGLE_OAUTH_PUBLIC_APP_URL", "https://app.example.test"),
             ("GoogleEmailOAuth:ClientId", "old-email"), ("GoogleEmailOAuth:ClientSecret", "old-email-secret"), ("GoogleEmailOAuth:PublicAppUrl", "https://app.example.test"),
@@ -18,7 +18,6 @@ public sealed class GoogleOAuthConfigurationTests
         Assert.Equal("shared", config.Drive.RefreshGrant(GoogleOAuthRefreshGrant.Write("new-drive", "shared"), "drive").Client.ClientId);
         Assert.Equal("old-drive", config.Drive.RefreshGrant(GoogleOAuthRefreshGrant.Write("old-token", "old-drive"), "drive").Client.ClientId);
         Assert.Throws<AgentCoreException>(() => config.Email.RefreshGrant(GoogleOAuthRefreshGrant.Write("drive-token", "old-drive"), "email"));
-        Assert.NotEqual(AgentCore.Infrastructure.Email.GoogleEmailOAuthOptions.CallbackPath, AgentCore.Infrastructure.Drive.GoogleDriveOAuthOptions.CallbackPath);
     }
     [Theory]
     [InlineData("plain-old-refresh")]

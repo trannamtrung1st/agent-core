@@ -33,7 +33,7 @@ public sealed partial class TenantSessionAccessTests
             await using WebApplicationFactory<Program> factory=sqlite?new TenantApprovalSqliteFactory(root,model):new ApprovalExecutionFactory();
             await using var host=factory.WithWebHostBuilder(b=>b.ConfigureTestServices(s=> {
                 s.Replace(ServiceDescriptor.Singleton<ILanguageModel>(model));
-                if(scenario=="host_setup")s.Replace(ServiceDescriptor.Singleton<IToolConfigurationGate>(new AgentCore.Infrastructure.Tools.ToolConfigurationGate(null,null,null)));
+                if(scenario=="host_setup")s.Replace(ServiceDescriptor.Singleton<IToolConfigurationGate>(new AgentCore.Infrastructure.Tools.ToolConfigurationGate(null,null)));
             }));
             using var owner=host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress=new("https://localhost"),AllowAutoRedirect=false });
             var (tenant,instance)=await SetupManagementInspection(host,owner);var api=$"/api/v2/tenants/{tenant}";var revision=6;

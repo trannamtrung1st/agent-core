@@ -55,7 +55,7 @@ public sealed class BrowserPrivacyTests
                 var semantic = await browser.ExecuteAsync(new(id, new BrowserObserve()));
                 Assert.Null(semantic.ErrorCode); Assert.DoesNotContain("private-fixture-secret", semantic.Observation!.Content);
                 Assert.False(browser.HostPolicy.ScreenshotAvailable);
-                var gate = new AgentCore.Infrastructure.Tools.ToolConfigurationGate(null,null,null,browser,true);
+                var gate = new AgentCore.Infrastructure.Tools.ToolConfigurationGate(null,null,browser,true);
                 Assert.False(gate.IsConfigured(AgentCore.Application.Tools.ToolCatalog.BrowserScreenshot));
                 Assert.False(gate.IsConfigured(AgentCore.Application.Tools.ToolCatalog.BrowserVisionMouse));
                 Assert.True(gate.IsConfigured(AgentCore.Application.Tools.ToolCatalog.BrowserSnapshot)); return;

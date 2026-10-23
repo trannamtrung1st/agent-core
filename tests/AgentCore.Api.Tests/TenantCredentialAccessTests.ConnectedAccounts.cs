@@ -42,6 +42,12 @@ public sealed partial class TenantCredentialAccessTests
     public async Task Tenant_connected_account_HTTP_reads_exact_bound_mail_or_Drive_original_without_legacy_owner_or_Agent_grants(bool sqlite, string purpose)
     {
         await using var factory = new OAuthFactory(sqlite: sqlite); using var owner = ConnectedClient(factory);
+        var application = typeof(TenantConnectedAccountService).Assembly;
+        foreach (var retired in new[] { "Email.EmailAccountService", "Email.EmailMonitoringService", "Events.CoreEventDispatcher", "Ports.IEmailProviderFactory", "Ports.IEmailOAuthService", "Ports.IEmailChangeFeed" })
+            Assert.Null(application.GetType("AgentCore.Application." + retired));
+        var infrastructure = typeof(AgentCore.Infrastructure.Credentials.TenantConnectedAccountReader).Assembly;
+        foreach (var retired in new[] { "AccountEmailProviderFactory", "AccountEmailChangeFeed", "GoogleEmailOAuthService" })
+            Assert.Null(infrastructure.GetType("AgentCore.Infrastructure.Email." + retired));
         var s = await ConnectedReadAccount(factory, owner, purpose);
         var inventory = await owner.GetAsync(s.Root); Assert.Equal(HttpStatusCode.OK, inventory.StatusCode); Assert.True(inventory.Headers.CacheControl?.NoStore);
         var page = await Json(inventory); Assert.Equal(1, page.GetProperty("total").GetInt32()); Assert.True(page.GetProperty("items")[0].GetProperty("readAvailable").GetBoolean()); Safe(page);
