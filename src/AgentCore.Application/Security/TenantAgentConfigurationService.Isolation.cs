@@ -71,8 +71,8 @@ public sealed partial class TenantAgentConfigurationService
     {
         var current = snapshot.Agent.Instance; var metadata = snapshot.Isolation;
         return new(new(current.Revision, metadata.ExperienceRevision, metadata.MaintenanceRevision),
-            new[] { "stateIsolationPolicy", "memoryPolicy", "voice" }.Select(section => AgentInstanceSettingsService.WithHostConstraints(
-                AgentInstanceSettingsService.View(current, definition, section), browser)).ToArray(),
+            new[] { "stateIsolationPolicy", "memoryPolicy", "voice" }.Select(section => InstanceSettingsRules.WithHostConstraints(
+                InstanceSettingsRules.View(current, definition, section), browser)).ToArray(),
             metadata.ExperienceEnabled, metadata.AllowMaintenance, browser?.HostPolicy.ProfileMode.ToString() ?? "Unavailable", browser?.HostPolicy.Enabled ?? false, "NotObserved");
     }
 }

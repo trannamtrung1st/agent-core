@@ -10,6 +10,11 @@ namespace AgentCore.Application.Admin;
 // Shared recipes and validation only. Authorization and atomic ownership remain at each caller.
 public static class IsolationConfigurationPlanner
 {
+    public const string AuditSection = "stateIsolationConfiguration";
+    public static IReadOnlyList<string> AuditFields => InstanceSettingsResolver.Fields("stateIsolationPolicy").Select(f => "stateIsolationPolicy." + f)
+        .Concat(InstanceSettingsResolver.Fields("memoryPolicy").Select(f => "memoryPolicy." + f))
+        .Concat(["voice.enabled", "experience.enabled", "identityMaintenance.allowAgentConsolidation"]).ToArray();
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly string[] Sections = ["stateIsolationPolicy", "memoryPolicy", "voice"];
     public static IsolationDraft Preset(IsolationConfigurationView view, string preset)

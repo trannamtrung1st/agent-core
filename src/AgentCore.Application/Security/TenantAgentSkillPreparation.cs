@@ -25,7 +25,7 @@ internal static class TenantAgentSkillPreparation
         if (key?.StartsWith("builtin:", StringComparison.Ordinal) == true)
         {
             if (operation is not ("set_enabled" or "reset_enabled")) throw AgentCoreErrors.Forbidden("Built-in procedures are read-only.");
-            var existing = AgentInstanceSkillService.BuiltIns(definition, definition.SelfManagement!, owner).SingleOrDefault(s => s.Key == key)
+            var existing = InstanceSkillRules.BuiltIns(definition, definition.SelfManagement!, owner).SingleOrDefault(s => s.Key == key)
                 ?? throw AgentCoreErrors.NotFound("Skill was not found.");
             if (existing.Revision != expectedRevision) throw new SecurityConflictException("stale_revision");
             var overrides = owner.HarnessManagement is { } stored ? stored.Overrides ?? ManagementPolicyOverrides.FromLegacy(definition.SelfManagement!) : new();
@@ -39,12 +39,12 @@ internal static class TenantAgentSkillPreparation
                 _ => throw AgentCoreErrors.Validation("Unknown Built-in Skill.")
             };
             // A Skill choice cannot enable management or remove the local frozen lock.
-            var policy = SelfManagementService.Prepare(owner, baseline, overrides, null, false);
+            var policy = HarnessManagementRules.Prepare(owner, baseline, overrides, null, false);
             var future = owner with { HarnessManagement = policy };
-            var written = AgentInstanceSkillService.BuiltIns(definition, ManagementPolicyResolver.Resolve(baseline, future), future).Single(s => s.Key == key);
+            var written = InstanceSkillRules.BuiltIns(definition, ManagementPolicyResolver.Resolve(baseline, future), future).Single(s => s.Key == key);
             return new(new(owner.InstanceId, owner.Revision, HarnessManagement: policy), snapshot, written, null);
         }
-        var prepared = AgentInstanceSkillService.Prepare(owner, definition, snapshot, operation, key, expectedRevision, input, enabled, actor, at);
+        var prepared = InstanceSkillRules.Prepare(owner, definition, snapshot, operation, key, expectedRevision, input, enabled, actor, at);
         if (prepared.Mutation is { } mutation)
         {
             var unchangedLocal = mutation.InstanceSkill is { } local && snapshot.InstanceSkills.SingleOrDefault(s => s.SkillId == local.SkillId) is { } previous
@@ -52,7 +52,7 @@ internal static class TenantAgentSkillPreparation
             var unchangedChoice = mutation.InstanceSkill is null && mutation.DefinitionState is { } choice
                 && snapshot.DefinitionStates.Single(s => s.DefinitionSkillId == choice.DefinitionSkillId).EnabledOverride == choice.EnabledOverride;
             if (unchangedLocal || unchangedChoice)
-                return new(null, snapshot, AgentInstanceSkillService.Views(definition, snapshot).Single(s => s.Key == key), null);
+                return new(null, snapshot, InstanceSkillRules.Views(definition, snapshot).Single(s => s.Key == key), null);
         }
         _ = EffectiveSkillCatalogResolver.Resolve(definition, prepared.Next);
         return new(prepared.Mutation is null ? null : new(owner.InstanceId, owner.Revision, Skill: prepared.Mutation),

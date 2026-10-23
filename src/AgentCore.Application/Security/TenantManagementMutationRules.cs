@@ -41,8 +41,8 @@ public static class TenantManagementMutationRules
         if (args.Tool == "settings.patch")
         {
             var section = args.Value.GetProperty("section").GetString()!;
-            var beforeView = AgentInstanceSettingsService.View(owner, reader.Baseline, section);
-            var afterView = AgentInstanceSettingsService.View(after, reader.Baseline, section);
+            var beforeView = InstanceSettingsRules.View(owner, reader.Baseline, section);
+            var afterView = InstanceSettingsRules.View(after, reader.Baseline, section);
             var fields = args.Value.GetProperty("set").EnumerateObject().Select(p => p.Name).Concat(args.Value.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!)).Order(StringComparer.Ordinal).ToArray();
             foreach (var field in fields)
                 rows.Add(new(field, beforeView.Effective[field], afterView.Effective[field], RestoresDefault: args.Value.GetProperty("clear").EnumerateArray().Any(p => p.GetString() == field)));
@@ -58,7 +58,7 @@ public static class TenantManagementMutationRules
         }
         else
         {
-            var beforePolicy = SelfManagementService.View(owner, reader.Baseline); var afterPolicy = SelfManagementService.View(after, reader.Baseline);
+            var beforePolicy = HarnessManagementRules.View(owner, reader.Baseline); var afterPolicy = HarnessManagementRules.View(after, reader.Baseline);
             rows.Add(new("Management mode", beforePolicy.Effective.Mode.ToString(), afterPolicy.Effective.Mode.ToString()));
             rows.Add(new("Management scopes", Choices(beforePolicy.Effective.Scopes), Choices(afterPolicy.Effective.Scopes)));
             rows.Add(new("Managed allowances", Choices(beforePolicy.Effective.ManagedAutoApply ?? []), Choices(afterPolicy.Effective.ManagedAutoApply ?? [])));
@@ -134,7 +134,7 @@ public static class TenantManagementMutationRules
         }
         else
         {
-            var policy = value.ToolName == "management.freeze" ? SelfManagementService.PrepareFreeze(owner, reader.Baseline) : Policy(owner, reader.Baseline, args.Value);
+            var policy = value.ToolName == "management.freeze" ? HarnessManagementRules.PrepareFreeze(owner, reader.Baseline) : Policy(owner, reader.Baseline, args.Value);
             if (JsonSerializer.Serialize(policy) != JsonSerializer.Serialize(value.Management)) throw new AccessDeniedException("management_source_changed");
             change = new(owner.InstanceId, owner.Revision, HarnessManagement: policy);
         }
@@ -152,11 +152,11 @@ public static class TenantManagementMutationRules
     }
     private static HarnessManagementState Policy(AgentInstance owner, AgentDefinition baseline, JsonElement args)
     {
-        var view = SelfManagementService.View(owner, baseline); var overrides = view.Overrides ?? (view.Source == "instance" ? ManagementPolicyOverrides.FromLegacy(view.Effective) : new());
+        var view = HarnessManagementRules.View(owner, baseline); var overrides = view.Overrides ?? (view.Source == "instance" ? ManagementPolicyOverrides.FromLegacy(view.Effective) : new());
         overrides = overrides with { Mode = new(Enum.Parse<HarnessManagementMode>(args.GetProperty("mode").GetString()!, false)),
             Scopes = new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
             AutoApply = new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()) };
-        return SelfManagementService.Prepare(owner, baseline, overrides, null, agent: true);
+        return HarnessManagementRules.Prepare(owner, baseline, overrides, null, agent: true);
     }
     public static async ValueTask PrimaryAsync(TenantApprovalRequest request, TenantManagementReader reader, IamAuthorizer iam, CancellationToken ct)
     {

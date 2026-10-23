@@ -34,7 +34,7 @@ public sealed partial class TenantAgentConfigurationService
         var selected = policy?.DefaultProfileId;
         var bound = definition with { ExecutionSandboxProfile = selected is null ? null : readable.GetValueOrDefault(selected), ExecutionSandboxProfiles = null };
         // Partial catalogs do not project hidden profile IDs, defaults, ceilings or scripts.
-        var section = policy?.AllowedProfileIds.All(readable.ContainsKey) != false ? AgentInstanceSettingsService.View(snapshot.Agent.Instance, bound, "sandboxPolicy") : null;
+        var section = policy?.AllowedProfileIds.All(readable.ContainsKey) != false ? InstanceSettingsRules.View(snapshot.Agent.Instance, bound, "sandboxPolicy") : null;
         if (section is not null && !complete)
         {
             var defaults = section.DefinitionDefaults.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);

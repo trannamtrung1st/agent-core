@@ -49,8 +49,8 @@ public sealed partial class TenantAgentConfigurationService
             definition = await PrepareSandboxPatch(actor, tenant, current, definition, set, clear, ct).ConfigureAwait(false);
         }
         if (aliases is null) throw Sessions.AgentCoreErrors.Validation("Configured provider choices are unavailable.");
-        var (next, effective) = AgentInstanceSettingsService.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
-        AgentInstanceSettingsService.ValidateBrowser(effective, browser);
+        var (next, effective) = InstanceSettingsRules.ResolvePatch(definition, current.SettingsOverrides ?? new(), section, set, clear, models, aliases);
+        InstanceSettingsRules.ValidateBrowser(effective, browser);
         _ = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills);
         _ = AgentInstanceResourceService.Resolve(effective, await Resources(tenant, definition, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
         var plan = await automationPolicy.PlanTenantAsync(tenant, security as ITenantAutomationStore ?? throw new InvalidOperationException("Canonical Automation store is unavailable."), current, effective, time.GetUtcNow(), ct).ConfigureAwait(false);
@@ -73,12 +73,12 @@ public sealed partial class TenantAgentConfigurationService
             return new(owner.InstanceId, owner.Revision, SetUnattendedModel: true, UnattendedModelCatalogKey: model, UnattendedReasoningEffort: effort);
         }
         if (arguments.Tool == "management.freeze")
-            return new(owner.InstanceId, owner.Revision, HarnessManagement: SelfManagementService.PrepareFreeze(owner, reader.Baseline));
-        var view = SelfManagementService.View(owner, reader.Baseline);
+            return new(owner.InstanceId, owner.Revision, HarnessManagement: HarnessManagementRules.PrepareFreeze(owner, reader.Baseline));
+        var view = HarnessManagementRules.View(owner, reader.Baseline);
         var overrides = view.Overrides ?? (view.Source == "instance" ? ManagementPolicyOverrides.FromLegacy(view.Effective) : new());
         overrides = overrides with { Mode = new(Enum.Parse<HarnessManagementMode>(args.GetProperty("mode").GetString()!, false)),
             Scopes = new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
             AutoApply = new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()) };
-        return new(owner.InstanceId, owner.Revision, HarnessManagement: SelfManagementService.Prepare(owner, reader.Baseline, overrides, null, agent: true));
+        return new(owner.InstanceId, owner.Revision, HarnessManagement: HarnessManagementRules.Prepare(owner, reader.Baseline, overrides, null, agent: true));
     }
 }

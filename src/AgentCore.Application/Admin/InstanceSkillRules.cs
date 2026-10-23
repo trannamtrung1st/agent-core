@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -19,70 +18,8 @@ public sealed record InstanceSkillCustomization(InstanceSkillView InstanceSkill,
 internal sealed record PreparedInstanceSkill(SkillMutation? Mutation, InstanceSkillSnapshot Next,
     InstanceSkillView Skill, DefinitionSkillMutationState? DefinitionSkill);
 
-public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time,
-    IAgentDefinitionResourceAdminStore? publications = null, InheritedDefinitionResourceCatalog? inheritedResources = null)
+internal static class InstanceSkillRules
 {
-    public async ValueTask<IReadOnlyList<InstanceSkillView>> ListAsync(Guid instanceId, AgentDefinition? context = null, CancellationToken ct = default)
-    {
-        var owner = await RequireAsync(instanceId, ct);
-        var definition = context ?? await DefinitionAsync(owner, ct);
-        var state = await instances.ReadSkillsAsync(instanceId, ct);
-        var effective = ManagementPolicyResolver.Resolve(await DefinitionAsync(owner, ct), owner);
-        return Views(definition, state).Concat(BuiltIns(definition, effective, owner)).Select(s => s with { InstanceRevision = owner.Revision }).ToArray();
-    }
-    public async ValueTask<InstanceSkillView> InspectAsync(Guid instanceId, string key, AgentDefinition? context = null, CancellationToken ct = default) =>
-        (await ListAsync(instanceId, context, ct)).SingleOrDefault(s => s.Key == key) ?? throw AgentCoreErrors.NotFound("Skill was not found.");
-
-    public async ValueTask<InstanceSkillView> WriteAsync(Guid id, string operation, string? key = null, long? expectedRevision = null,
-        InstanceSkillInput? input = null, bool? enabled = null, SkillAuthor actor = SkillAuthor.Admin, AgentDefinition? context = null, CancellationToken ct = default, long? expectedInstanceRevision = null) =>
-        (await WriteCoreAsync(id, operation, key, expectedRevision, input, enabled, actor, context, ct, expectedInstanceRevision)).Skill;
-
-    public async ValueTask<InstanceSkillCustomization> CustomizeAsync(Guid id, string key, long expectedRevision,
-        SkillAuthor actor = SkillAuthor.Admin, AgentDefinition? context = null, CancellationToken ct = default, long? expectedInstanceRevision = null)
-    {
-        var result = await WriteCoreAsync(id, "customize", key, expectedRevision, actor: actor, context: context, ct: ct, expectedInstanceRevision: expectedInstanceRevision);
-        return new(result.Skill, result.DefinitionSkill ?? throw AgentCoreErrors.Persistence("Customization source state is missing."));
-    }
-
-    private async ValueTask<(InstanceSkillView Skill, DefinitionSkillMutationState? DefinitionSkill)> WriteCoreAsync(
-        Guid id, string operation, string? key = null, long? expectedRevision = null, InstanceSkillInput? input = null,
-        bool? enabled = null, SkillAuthor actor = SkillAuthor.Admin, AgentDefinition? context = null, CancellationToken ct = default, long? expectedInstanceRevision = null)
-    {
-        var owner = await RequireAsync(id, ct);
-        if (expectedInstanceRevision is { } guard && owner.Revision != guard) throw AgentCoreErrors.Conflict("Instance revision is stale; inspect before requesting approval.");
-        if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances cannot change Skills.");
-        var definition = context ?? await DefinitionAsync(owner, ct);
-        if (actor == SkillAuthor.Agent && !ManagementPolicyResolver.Resolve(await DefinitionAsync(owner, ct), owner).Allows(HarnessManagementScope.Skills))
-            throw AgentCoreErrors.Forbidden("Skill administration is outside the effective self-management grant.");
-        if (key?.StartsWith("builtin:", StringComparison.Ordinal) == true)
-        {
-            if (operation is not ("set_enabled" or "reset_enabled")) throw AgentCoreErrors.Forbidden("Built-in procedures are read-only and cannot be edited, deleted or customized.");
-            var existing = await InspectAsync(id, key, ct: ct);
-            if (existing.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Built-in policy revision is stale.");
-            _ = await new SelfManagementService(instances, definitions, ids, time).SetBuiltInAsync(id, owner.Revision, key,
-                operation == "reset_enabled" ? null : enabled ?? throw AgentCoreErrors.Validation("Enabled is required."), actor == SkillAuthor.Agent, ct);
-            return (await InspectAsync(id, key, ct: ct), null);
-        }
-        var snapshot = await instances.ReadSkillsAsync(id, ct);
-        var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
-        var prepared = Prepare(owner, definition, snapshot, operation, key, expectedRevision, input, enabled, actor, now);
-        if (prepared.Mutation is null) return (prepared.Skill, prepared.DefinitionSkill);
-        var next = prepared.Next;
-        var local = prepared.Mutation.InstanceSkill;
-        // Writes affect future executions: validate against the owner's current version,
-        // while the trusted execution context continues to govern authorization/copy content.
-        var futureDefinition = definition.Version == owner.ActiveVersion ? definition : await DefinitionAsync(owner, ct);
-        _ = EffectiveSkillCatalogResolver.Resolve(futureDefinition, next);
-        if (inheritedResources is not null || publications is not null)
-            _ = AgentInstanceResourceService.Resolve(futureDefinition, inheritedResources is not null ? await inheritedResources.ListAsync(futureDefinition, ct) : await publications!.ListPublicationResourcesAsync(futureDefinition.Id, futureDefinition.Version, ct),
-                await instances.ReadResourcesAsync(id, ct), next);
-        var history = new AdminEventAppend(ids.NewId(), now, actor == SkillAuthor.Admin ? AdminEventActorKind.LocalOwner : AdminEventActorKind.Agent,
-            AdminEventOperationKind.InstanceSkillsChanged, "agent.instance", id.ToString("D"), owner.Revision + 1,
-            definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId }));
-        ct.ThrowIfCancellationRequested();
-        await instances.MutateSkillsAsync(prepared.Mutation with { History = history }, ct);
-        return (prepared.Skill, prepared.DefinitionSkill);
-    }
     internal static PreparedInstanceSkill Prepare(AgentInstance owner, AgentDefinition definition, InstanceSkillSnapshot snapshot,
         string operation, string? key, long? expectedRevision, InstanceSkillInput? input, bool? enabled, SkillAuthor actor, DateTimeOffset now)
     {
@@ -193,7 +130,4 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
             SkillOrigin.Instance, s.Name, s.Description, s.Procedure, s.Projection, s.Enabled, s.RequiredCapabilities, s.Revision,
             null, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId, Missing(s.RequiredCapabilities), s.CreatedBy, s.CreatedAt, s.UpdatedAt))).ToArray();
     }
-    private async ValueTask<AgentInstance> RequireAsync(Guid id, CancellationToken ct) => await instances.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-    private async ValueTask<AgentDefinition> DefinitionAsync(AgentInstance owner, CancellationToken ct) =>
-        await definitions.GetAsync(owner.DefinitionId, owner.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
 }

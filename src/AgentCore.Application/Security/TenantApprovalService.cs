@@ -46,7 +46,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             snapshot = TenantApprovalSnapshotRules.Preferences(current, baseline);
             if (TenantLocalEffectRules.Eligibility(run, current, effective) is { } unavailable) return await PreparationOutcome(state, run, operation, OperationDecisionKind.Denied, unavailable, null, ct).ConfigureAwait(false);
             var patch = TenantPreferenceToolContract.Patch(preferences);
-            _ = AgentInstanceSettingsService.ResolvePatch(baseline, current.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
+            _ = InstanceSettingsRules.ResolvePatch(baseline, current.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
             managementReview = !TenantPreferenceToolContract.Allows(pinned) || !TenantPreferenceToolContract.Allows(effective);
         }
         return await PersistAsync(reference, run, state, agent, operation, snapshot, managementReview, expectedRunRevision, generation, ct).ConfigureAwait(false);

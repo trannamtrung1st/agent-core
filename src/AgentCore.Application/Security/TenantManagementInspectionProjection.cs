@@ -68,7 +68,7 @@ public sealed partial class TenantManagementInspectionProjection(IToolConfigurat
             var sections = Area(HarnessManagementScope.Settings) && (!targeted || supported) ? InstanceSettingsResolver.Sections
                 .Where(section => !targeted || section == (target == "settings.patch" ? "conversationPolicy" : "capabilities")) : [];
             var settings = sections.Select(section => {
-                var view = AgentInstanceSettingsService.View(owner, reader.Baseline, section);
+                var view = InstanceSettingsRules.View(owner, reader.Baseline, section);
                 return new { section, effective = view.Effective.Where(p => section != "sandboxPolicy" || p.Key == "profileId").ToDictionary(p => p.Key, p => p.Value),
                     sources = view.Sources.Where(p => section != "sandboxPolicy" || p.Key == "profileId").ToDictionary(p => p.Key, p => p.Value) };
             }).ToArray();
@@ -119,7 +119,7 @@ public sealed partial class TenantManagementInspectionProjection(IToolConfigurat
             if (!ToolRegistry.TryGet(target, out var descriptor) || !descriptor.DefinitionAuthorizable || !RolePermissions.AllowsTool(reader.Baseline, target)
                 || RolePermissions.AllowsTool(reader.Current, target) || !tools.IsConfigured(target)) return null;
             section = "capabilities";
-            var values = AgentInstanceSettingsService.View(owner, reader.Baseline, section).Effective["selected"];
+            var values = InstanceSettingsRules.View(owner, reader.Baseline, section).Effective["selected"];
             var selected = JsonSerializer.SerializeToElement(values).EnumerateArray().Select(v => v.GetString()!).Append(target).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
             set = new() { ["selected"] = JsonSerializer.SerializeToElement(selected) };
         }

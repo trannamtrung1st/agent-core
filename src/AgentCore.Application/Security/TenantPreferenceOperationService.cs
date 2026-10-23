@@ -56,7 +56,7 @@ public sealed class TenantPreferenceOperationService(ITenantPreferenceOperationS
             await RecordDenial(state, run, "management_unavailable", ct).ConfigureAwait(false);
             return new(OperationDecisionKind.Denied, "management_unavailable");
         }
-        _ = AgentInstanceSettingsService.ResolvePatch(baseline, target.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
+        _ = InstanceSettingsRules.ResolvePatch(baseline, target.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases);
         var at = time.GetUtcNow();
         var commit = new TenantPreferenceCommit(prepared.OperationId, run.AgentRunId, generation, run.Revision, callId, patch.CanonicalArguments,
             patch.ParametersHash, target.Instance.Revision, TenantPreferenceToolContract.ActionHash(run.AgentInstanceId, target.Instance.Revision, patch.ParametersHash));

@@ -87,12 +87,11 @@ public sealed class InstanceSettingsResolverTests
         Assert.Null(Assert.Single((await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates).EnabledOverride);
         await service.UpgradeAsync(owner.InstanceId, 2, owner.Revision);
         Assert.Empty(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, v2));
-        var skills = new AgentCore.Application.Admin.AgentInstanceSkillService(store, defs, ids, clock);
-        var disabled = await skills.WriteAsync(owner.InstanceId, "set_enabled", "definition:review", 1, enabled: false, actor: SkillAuthor.Agent);
+        var disabled = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "set_enabled", "definition:review", 1, enabled: false, actor: SkillAuthor.Agent);
         owner = (await store.FindAsync(owner.InstanceId))!;
         await service.UpgradeAsync(owner.InstanceId, 1, owner.Revision);
         Assert.Empty(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, v1));
-        await skills.WriteAsync(owner.InstanceId, "reset_enabled", disabled.Key, disabled.Revision, actor: SkillAuthor.Agent);
+        await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "reset_enabled", disabled.Key, disabled.Revision, actor: SkillAuthor.Agent);
         Assert.Single(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, v1));
     }
 }

@@ -32,8 +32,7 @@ public sealed class SkillActivationTests
         await instances.UpgradeAsync(owner.InstanceId, 2, owner.Revision);
         owner = (await store.FindAsync(owner.InstanceId))!;
         var before = await store.ReadSkillsAsync(owner.InstanceId);
-        var service = new AgentInstanceSkillService(store, defs, ids, clock);
-        var error = await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create",
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create",
             input: new("Local", "Local", "ONE", SkillProjection.Always, true, []), actor: SkillAuthor.Agent, context: original).AsTask());
         Assert.Contains("8000-character", error.Message);
         Assert.Equal(owner, await store.FindAsync(owner.InstanceId));
@@ -41,7 +40,7 @@ public sealed class SkillActivationTests
         Assert.Equal(before.DefinitionStates, after.DefinitionStates); Assert.Equal(before.InstanceSkills, after.InstanceSkills);
         Assert.Equal("OLD", Assert.Single(pin).Procedure);
         Assert.Equal(8000, (await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current)).Sum(s => s.Procedure.Length));
-        var allowed = await service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "DEFERRED", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent, context: original);
+        var allowed = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Local", "Local", "DEFERRED", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent, context: original);
         Assert.Contains(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current), s => s.Key == allowed.Key && s.Projection == SkillProjection.OnDemand);
         Assert.Equal("OLD", Assert.Single(pin).Procedure);
         var fresh = await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current);
@@ -64,8 +63,7 @@ public sealed class SkillActivationTests
             new SkillSpec("added", "Added", "Added", new string('b', 4000), SkillProjection.Always, true, [], []));
         var defs = new Definitions(original, upgraded); var instances = new AgentInstanceService(store, defs, ids, clock);
         var owner = await instances.CreateAsync(original.Id, 1);
-        var service = new AgentInstanceSkillService(store, defs, ids, clock);
-        await service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "LOCAL", SkillProjection.Always, true, []), actor: SkillAuthor.Agent);
+        await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Local", "Local", "LOCAL", SkillProjection.Always, true, []), actor: SkillAuthor.Agent);
         owner = (await store.FindAsync(owner.InstanceId))!;
         var before = await store.ReadSkillsAsync(owner.InstanceId);
         await Assert.ThrowsAsync<AgentCoreException>(() => instances.UpgradeAsync(owner.InstanceId, 2, owner.Revision).AsTask());
@@ -88,39 +86,38 @@ public sealed class SkillActivationTests
         var defs = new Definitions(original, upgraded, removed);
         var instances = new AgentInstanceService(store, defs, ids, clock);
         var owner = await instances.CreateAsync(original.Id, 1);
-        var service = new AgentInstanceSkillService(store, defs, ids, clock);
-        var initial = Assert.Single(await service.ListAsync(owner.InstanceId), s => s.Origin != SkillOrigin.BuiltIn);
+        var initial = Assert.Single(await NativeSkillSeed.ViewsAsync(store, defs, owner.InstanceId), s => s.Origin != SkillOrigin.BuiltIn);
         Assert.True(initial.Enabled); Assert.Equal("definition:review", initial.Key);
-        var customized = await service.CustomizeAsync(owner.InstanceId, initial.Key, initial.Revision, actor: SkillAuthor.Agent);
+        var customized = await NativeSkillSeed.CustomizeAsync(store, defs, clock, owner.InstanceId, initial.Key, initial.Revision, actor: SkillAuthor.Agent);
         var copied = customized.InstanceSkill;
         Assert.Equal(initial.Key, customized.DefinitionSkill.Key);
         Assert.False(customized.DefinitionSkill.Enabled);
         Assert.Equal(initial.Revision + 1, customized.DefinitionSkill.Revision);
         Assert.Equal(SkillOrigin.Instance, copied.Origin); Assert.Equal("review", copied.SourceDefinitionSkillId);
-        Assert.False((await service.InspectAsync(owner.InstanceId, initial.Key)).Enabled);
+        Assert.False((await NativeSkillSeed.InspectAsync(store, defs, owner.InstanceId, initial.Key)).Enabled);
         Assert.Equal("ORIGINAL", copied.Procedure);
-        var updated = await service.WriteAsync(owner.InstanceId, "update", copied.Key, copied.Revision,
+        var updated = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "update", copied.Key, copied.Revision,
             new("Review", "Local review", "LOCAL", SkillProjection.Always, true, []), actor: SkillAuthor.Agent);
         Assert.Equal(copied.Revision + 1, updated.Revision);
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "delete", copied.Key, copied.Revision, actor: SkillAuthor.Agent).AsTask());
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "delete", initial.Key, 2, actor: SkillAuthor.Agent).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "delete", copied.Key, copied.Revision, actor: SkillAuthor.Agent).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "delete", initial.Key, 2, actor: SkillAuthor.Agent).AsTask());
         owner = (await store.FindAsync(owner.InstanceId))!;
         await instances.UpgradeAsync(owner.InstanceId, 2, owner.Revision);
-        var afterUpgrade = await service.ListAsync(owner.InstanceId);
+        var afterUpgrade = await NativeSkillSeed.ViewsAsync(store, defs, owner.InstanceId);
         Assert.False(afterUpgrade.Single(s => s.Key == initial.Key).Enabled);
         Assert.Equal("UPSTREAM", afterUpgrade.Single(s => s.Key == initial.Key).Procedure);
         Assert.False(afterUpgrade.Single(s => s.Key == "definition:added").Enabled);
         Assert.Equal("LOCAL", afterUpgrade.Single(s => s.Key == copied.Key).Procedure);
         owner = (await store.FindAsync(owner.InstanceId))!;
         await instances.UpgradeAsync(owner.InstanceId, 3, owner.Revision);
-        Assert.Single(await service.ListAsync(owner.InstanceId), s => s.Origin != SkillOrigin.BuiltIn);
+        Assert.Single(await NativeSkillSeed.ViewsAsync(store, defs, owner.InstanceId), s => s.Origin != SkillOrigin.BuiltIn);
         Assert.Equal(2, (await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates.Count);
         owner = (await store.FindAsync(owner.InstanceId))!;
         await instances.UpgradeAsync(owner.InstanceId, 1, owner.Revision);
-        Assert.False((await service.InspectAsync(owner.InstanceId, initial.Key)).Enabled);
+        Assert.False((await NativeSkillSeed.InspectAsync(store, defs, owner.InstanceId, initial.Key)).Enabled);
         var readStore = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : store;
         Assert.Equal("LOCAL", Assert.Single((await readStore.ReadSkillsAsync(owner.InstanceId)).InstanceSkills).Procedure);
-        await service.WriteAsync(owner.InstanceId, "delete", copied.Key, updated.Revision, actor: SkillAuthor.Agent);
+        await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "delete", copied.Key, updated.Revision, actor: SkillAuthor.Agent);
         Assert.Empty((await store.ReadSkillsAsync(owner.InstanceId)).InstanceSkills);
     }
     [Fact]
@@ -129,12 +126,11 @@ public sealed class SkillActivationTests
         var store = new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) }; var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
         var d = Definition(1, new SkillSpec("review", "Review", "Definition review", "DEFINITION", SkillProjection.Always, true, [], []));
         var defs = new Definitions(d); var owner = await new AgentInstanceService(store, defs, ids, clock).CreateAsync(d.Id);
-        var service = new AgentInstanceSkillService(store, defs, ids, clock);
-        var local = await service.WriteAsync(owner.InstanceId, "create", input: new("Review", "Local", "OLD", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
+        var local = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Review", "Local", "OLD", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
         var resolver = new EffectiveSkillCatalogResolver(store); var pin = await resolver.ResolveAsync(owner.InstanceId, d);
         Assert.Equal(2, pin.Count); Assert.Equal(2, pin.Select(s => s.Key).Distinct().Count());
-        await service.WriteAsync(owner.InstanceId, "update", local.Key, local.Revision, new("Review", "Local", "NEW", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
-        var later = await service.WriteAsync(owner.InstanceId, "create", input: new("Later", "Later", "LATER", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
+        await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "update", local.Key, local.Revision, new("Review", "Local", "NEW", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
+        var later = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Later", "Later", "LATER", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
         var loaded = SkillLoadAdmission.Plan(pin, ["definition:review"], 0, [local.Key, later.Key]);
         Assert.Equal([local.Key], loaded.Admitted); Assert.Equal("unknown", Assert.Single(loaded.Rejected).Reason);
         Assert.Contains("OLD", PromptContextBuilder.BuildActiveSkillContext(pin, loaded.Admitted));
@@ -147,13 +143,12 @@ public sealed class SkillActivationTests
         var store = new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) }; var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
         var d = Definition(1, new SkillSpec("bound", "Bound", "Bound resource", "Read reference", SkillProjection.OnDemand, true, [], ["knowledge/reference"]));
         var defs = new Definitions(d); var instances = new AgentInstanceService(store, defs, ids, clock); var owner = await instances.CreateAsync(d.Id);
-        var service = new AgentInstanceSkillService(store, defs, ids, clock);
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "customize", "definition:bound", 1, actor: SkillAuthor.Agent).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "customize", "definition:bound", 1, actor: SkillAuthor.Agent).AsTask());
         Assert.Null(Assert.Single((await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates).EnabledOverride);
         Assert.Empty((await store.ReadSkillsAsync(owner.InstanceId)).InstanceSkills);
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create", input: new("Bad", "Bad", "No grant", SkillProjection.Always, true, ["shell"]), actor: SkillAuthor.Agent).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Bad", "Bad", "No grant", SkillProjection.Always, true, ["shell"]), actor: SkillAuthor.Agent).AsTask());
         await instances.SetLifecycleAsync(owner.InstanceId, AgentInstanceLifecycle.Archived, owner.Revision);
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "Local", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Local", "Local", "Local", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent).AsTask());
     }
     internal static AgentDefinition Definition(int version, params SkillSpec[] skills) => SampleDefinitions.Examiner with { Version = version, Skills = skills, Environment = RoleEnvironment.Empty, SelfManagement = new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills], [], [], BuiltInSkills: new(false, false)) };
     internal sealed class Definitions(params AgentDefinition[] versions) : IAgentDefinitionStore

@@ -53,7 +53,7 @@ public static class TenantManagementInspectionSources
         var items = new List<TenantManagementInspectionItem>();
         void Add(string kind, string key, AccessScope scope, object identity, object metadata) => items.Add(new(kind, key,
             TenantMemoryOperationRules.Hash(JsonSerializer.Serialize(identity)), scope, JsonSerializer.SerializeToElement(metadata, Json)));
-        foreach (var skill in AgentInstanceSkillService.Views(definition, skills).Concat(AgentInstanceSkillService.BuiltIns(definition, definition.SelfManagement!, owner)))
+        foreach (var skill in InstanceSkillRules.Views(definition, skills).Concat(InstanceSkillRules.BuiltIns(definition, definition.SelfManagement!, owner)))
         {
             object identity = skill.Origin switch {
                 SkillOrigin.Instance => new { skill.Key, skill.Name, skill.Description, skill.Projection, skill.EnabledChoice, skill.Revision },

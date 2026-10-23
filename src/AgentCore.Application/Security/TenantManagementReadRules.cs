@@ -42,13 +42,13 @@ public static class TenantManagementReadRules
         var owner = reader.Agent.Instance; object data;
         var excerpts = new List<string>();
         if (TenantManagementInspectionSources.IsInspection(args.Tool)) data = inspection ?? throw new AccessDeniedException("management_inspection_unavailable");
-        else if (args.Tool == "management.inspect") data = SelfManagementService.View(owner, baseline);
+        else if (args.Tool == "management.inspect") data = HarnessManagementRules.View(owner, baseline);
         else if (args.Tool == "automation.preferences.inspect") data = new { owner.UnattendedModelCatalogKey, owner.UnattendedReasoningEffort };
         else if (args.Tool == "settings.list") data = InstanceSettingsResolver.Sections.Select(section => new { section,
             hasOverrides = InstanceSettingsResolver.Overrides(owner.SettingsOverrides ?? new(), section).Count > 0 });
         else
         {
-            var view = AgentInstanceSettingsService.View(owner, baseline, args.Section!);
+            var view = InstanceSettingsRules.View(owner, baseline, args.Section!);
             // Host initialization, limits and setup never become model configuration facts.
             var body = JsonSerializer.SerializeToNode(view, Json)!.AsObject();
             foreach (var part in new[] { "overrides", "effective", "sources", "definitionDefaults", "constraints" })

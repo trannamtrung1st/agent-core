@@ -22,7 +22,7 @@ public sealed class SelfManagementCompletionTests
         await using var host=new DiagnosisHost(configured);
         var s=host.Services;
         var owner=await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant",24);
-        await s.GetRequiredService<SelfManagementService>().UpdateAsync(owner.InstanceId,owner.Revision,
+        await NativeInstanceConfigurationSeed.PolicyAsync(s, owner.InstanceId,owner.Revision,
             new(new(HarnessManagementMode.Assisted),new([HarnessManagementScope.Settings,HarnessManagementScope.Connections])));
         var definition=(await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
         using var observed=JsonDocument.Parse((await s.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition,Guid.NewGuid(),
@@ -51,7 +51,7 @@ public sealed class SelfManagementCompletionTests
     {
         await using var host = new AgentCoreApiFactory(); var s = host.Services;
         var owner = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
-        await s.GetRequiredService<SelfManagementService>().UpdateAsync(owner.InstanceId, owner.Revision,
+        await NativeInstanceConfigurationSeed.PolicyAsync(s, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Skills]), new([ManagementAutoApply.SkillChanges])));
         var definition = (await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:owner.InstanceId,

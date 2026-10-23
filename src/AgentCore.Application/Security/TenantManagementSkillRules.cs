@@ -103,8 +103,8 @@ public static class TenantManagementSkillRules
             new(prepared.Skill.Key, prepared.Skill.Revision, prepared.Skill.Enabled, args.Tool == "skills.delete",
                 prepared.DefinitionSkill?.Key, prepared.DefinitionSkill?.Revision, prepared.DefinitionSkill?.Enabled));
         var definition = InstanceSettingsResolver.Resolve(reader.Baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(reader.Baseline, owner) };
-        var before = plan.TargetKey is null ? null : AgentInstanceSkillService.Views(definition, source.Snapshot.Skills)
-            .Concat(AgentInstanceSkillService.BuiltIns(definition, definition.SelfManagement!, owner)).Single(s => s.Key == plan.TargetKey);
+        var before = plan.TargetKey is null ? null : InstanceSkillRules.Views(definition, source.Snapshot.Skills)
+            .Concat(InstanceSkillRules.BuiltIns(definition, definition.SelfManagement!, owner)).Single(s => s.Key == plan.TargetKey);
         var rows = new[] { new TenantApprovalFieldChange("Skill", before, args.Tool == "skills.delete" ? null : prepared.Skill),
             new TenantApprovalFieldChange("Inherited source choice", null, prepared.DefinitionSkill),
             new TenantApprovalFieldChange("Effect boundary", "Current Run remains pinned", "Only this Instance changes for future Runs. Skill requirements grant no capabilities or resource reads.") };

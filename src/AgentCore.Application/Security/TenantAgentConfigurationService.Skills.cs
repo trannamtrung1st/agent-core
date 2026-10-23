@@ -26,7 +26,7 @@ public sealed partial class TenantAgentConfigurationService
         var (snapshot, baseline) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
         var definition = EffectiveChildDefinition(snapshot, baseline);
         var policy = ManagementPolicyResolver.Resolve(definition, snapshot.Agent.Instance);
-        var items = AgentInstanceSkillService.Views(definition, snapshot.Skills).Concat(AgentInstanceSkillService.BuiltIns(definition, policy, snapshot.Agent.Instance))
+        var items = InstanceSkillRules.Views(definition, snapshot.Skills).Concat(InstanceSkillRules.BuiltIns(definition, policy, snapshot.Agent.Instance))
             .Select(s => s with { InstanceRevision = snapshot.Agent.Instance.Revision }).ToArray();
         var state = await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var visible = await VisibleChildren(state, actor, tenant, id, "skills.read", items, s => s.Key, ct, true).ConfigureAwait(false);

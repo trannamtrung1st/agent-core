@@ -425,13 +425,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<IBrowserStateReader>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.AddHostedService(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
-        services.TryAddSingleton<AgentInstanceSkillService>();
         services.TryAddSingleton<InstanceAutomationPolicy>();
-        services.TryAddSingleton<AgentInstanceSettingsService>();
         services.TryAddSingleton<IStateIsolationConfigurationStore>(p => p.GetRequiredService<IAgentInstanceStore>() is IStateIsolationConfigurationStore sqlite
             ? sqlite : new InMemoryStateIsolationConfigurationStore((InMemoryAgentInstanceStore)p.GetRequiredService<IAgentInstanceStore>(), (InMemoryExperienceStore)p.GetRequiredService<IExperienceStore>()));
         services.TryAddSingleton<SandboxPolicyEnforcement>();
-        services.TryAddSingleton<StateIsolationConfigurationService>();
         services.TryAddSingleton<InheritedDefinitionResourceCatalog>();
         services.TryAddSingleton<AgentInstanceResourceService>();
         services.TryAddSingleton<AgentCore.Application.Execution.AgentRunConfigurationResolver>();

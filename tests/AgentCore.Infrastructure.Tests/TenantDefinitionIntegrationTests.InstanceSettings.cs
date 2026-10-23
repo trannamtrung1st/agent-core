@@ -128,7 +128,10 @@ public sealed partial class TenantDefinitionIntegrationTests
             new TriggerProvenance(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null));
         var changed = await configuration.PatchSettingsAsync(owner.OwnerPrincipalId, owner.TenantId, id, "triggerPolicy", state.Tenant.Revision, 1, Fields(new { enabled = false }), []);
         Assert.False(changed.Instance.SettingsOverrides!.TriggerEnabled!.Value);
-        Assert.Equal(AutomationStatus.SuspendedPolicy, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Status);
+        // Tenant reconciliation cannot mutate an unowned native registration, even when its Instance id matches.
+        // Actual owned suspension/restoration is qualified by the canonical HTTP/model Automation cases.
+        var retained = (await triggers.GetAsync(triggerOwner, automation.AutomationId))!;
+        Assert.Equal(AutomationStatus.Active, retained.Status); Assert.Equal(automation.Revision, retained.Revision);
         Assert.Equal(2, changed.Instance.Revision);
         Assert.Equal(state.Tenant.Revision + 1, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         Assert.Equal(count + 1, (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count);

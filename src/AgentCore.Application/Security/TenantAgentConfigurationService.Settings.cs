@@ -19,8 +19,8 @@ public sealed partial class TenantAgentConfigurationService
     public async ValueTask<TenantAgentSettings> ReadSettingsAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {
         var (snapshot, definition) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
-        var sections = InstanceSettingsResolver.Sections.Select(section => AgentInstanceSettingsService.WithHostConstraints(
-            AgentInstanceSettingsService.View(snapshot.Agent.Instance, definition, section), browser)).ToArray();
+        var sections = InstanceSettingsResolver.Sections.Select(section => InstanceSettingsRules.WithHostConstraints(
+            InstanceSettingsRules.View(snapshot.Agent.Instance, definition, section), browser)).ToArray();
         return new(sections, await ReadRevision(actor, tenant, id, ct).ConfigureAwait(false));
     }
 
@@ -63,7 +63,7 @@ public sealed partial class TenantAgentConfigurationService
     public async ValueTask<TenantAgentManagement> ReadManagementAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {
         var (snapshot, definition) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
-        return new(SelfManagementService.View(snapshot.Agent.Instance, definition), await ReadRevision(actor, tenant, id, ct).ConfigureAwait(false));
+        return new(HarnessManagementRules.View(snapshot.Agent.Instance, definition), await ReadRevision(actor, tenant, id, ct).ConfigureAwait(false));
     }
     public ValueTask<TenantAgent> UpdateManagementAsync(Guid actor, Guid tenant, Guid id, long securityRevision, long instanceRevision,
         ManagementPolicyOverrides overrides, bool? frozen = null, CancellationToken ct = default, HumanSessionReference? initiator = null) => WithGate(id, async token =>
@@ -73,7 +73,7 @@ public sealed partial class TenantAgentConfigurationService
         RequireWritable(current, instanceRevision);
         var (definition, _, _) = await Definition(tenant, current.DefinitionId, current.ActiveVersion, token).ConfigureAwait(false);
         var agent = state.Principals.Single(p => p.PrincipalId == actor).Kind == PrincipalKind.SystemIdentity;
-        var next = SelfManagementService.Prepare(current, definition, overrides, frozen, agent);
+        var next = HarnessManagementRules.Prepare(current, definition, overrides, frozen, agent);
         return await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: next), "agents.self-management.update", token, initiator).ConfigureAwait(false);
     }, ct);
 
@@ -91,7 +91,7 @@ public sealed partial class TenantAgentConfigurationService
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var current = snapshot.Agent.Instance;
         RequireWritable(current, instanceRevision);
         var (definition, _, _) = await Definition(tenant, current.DefinitionId, current.ActiveVersion, token).ConfigureAwait(false);
-        return await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: SelfManagementService.PrepareFreeze(current, definition)),
+        return await Commit(actor, tenant, state, new(id, instanceRevision, HarnessManagement: HarnessManagementRules.PrepareFreeze(current, definition)),
             "agents.self-management.freeze", token, initiator).ConfigureAwait(false);
     }, ct);
     private async ValueTask<long> ReadRevision(Guid actor, Guid tenant, Guid id, CancellationToken ct)

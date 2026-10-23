@@ -27,12 +27,12 @@ public sealed class SelfManagementRemediationTests
         await using var host = new AgentCoreApiFactory();
         var services = host.Services;
         var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
-        var policy = await services.GetRequiredService<SelfManagementService>().UpdateAsync(owner.InstanceId, owner.Revision,
+        var policy = await NativeInstanceConfigurationSeed.PolicyAsync(services, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Assisted), new([HarnessManagementScope.Settings])));
         var resolver = services.GetRequiredService<AgentRunConfigurationResolver>();
         var baseline = (await resolver.ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var selected = RoleEnvironments.Of(baseline).ToolList.Where(name => name != "workspace.read").ToArray();
-        await services.GetRequiredService<AgentInstanceSettingsService>().PatchAsync(owner.InstanceId, "capabilities", policy.InstanceRevision,
+        await NativeInstanceConfigurationSeed.SettingsAsync(services, owner.InstanceId, "capabilities", policy.InstanceRevision,
             new Dictionary<string, JsonElement> { ["selected"] = JsonSerializer.SerializeToElement(selected) }, []);
         var current = (await resolver.ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var executor = services.GetRequiredService<SessionToolExecutor>();

@@ -87,7 +87,6 @@ builder.Services.AddSingleton<AdminReadService>();
 builder.Services.AddSingleton<AdminAuthoringOptionsService>();
 builder.Services.AddSingleton<AdminHistoryService>();
 builder.Services.AddSingleton<AdminAgentInstanceService>();
-builder.Services.AddSingleton<SelfManagementService>();
 builder.Services.AddSingleton<AgentDefinitionLifecycleService>();
 builder.Services.AddSingleton<AgentDefinitionDraftValidationService>();
 builder.Services.AddSingleton<AgentDefinitionDraftPublishService>();

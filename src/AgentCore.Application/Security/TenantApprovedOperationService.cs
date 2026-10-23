@@ -99,7 +99,7 @@ public sealed partial class TenantApprovedOperationService(IIamStore security, I
                 var (latest, baseline) = await configuration.BaselineAsync(reference.TenantId, run.AgentInstanceId, ct).ConfigureAwait(false);
                 if (latest.Instance.Revision != agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
                 var patch = TenantPreferenceToolContract.Patch(preferences);
-                try { _ = AgentInstanceSettingsService.ResolvePatch(baseline, latest.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases); }
+                try { _ = InstanceSettingsRules.ResolvePatch(baseline, latest.Instance.SettingsOverrides ?? new(), "conversationPolicy", patch.Set, patch.Clear, models, aliases); }
                 catch (AgentCoreException) { reason = "operation_configuration_changed"; }
             }
         }

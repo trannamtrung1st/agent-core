@@ -45,8 +45,8 @@ public sealed class SelfManagementOperationTests
             await using AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
             var services = factory.Services;
             var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
-            var policy = services.GetRequiredService<SelfManagementService>();
-            var view = await policy.UpdateAsync(owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
+            var policy = services;
+            var view = await NativeInstanceConfigurationSeed.PolicyAsync(policy, owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
                 new(Enum.GetValues<HarnessManagementScope>()), new(Enum.GetValues<ManagementAutoApply>())));
             var admitted = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration;
             var executor = services.GetRequiredService<SessionToolExecutor>(); var session = Guid.NewGuid();
@@ -59,8 +59,8 @@ public sealed class SelfManagementOperationTests
                 var result = await executor.ExecuteAsync(admitted.Definition, session, new("unowned", tool, arguments), 100000, admission: admission);
                 Assert.Contains("forbidden", result.Text);
             }
-            Assert.Equal(view.InstanceRevision, (await policy.ReadAsync(owner.InstanceId)).InstanceRevision);
-            Assert.Equal("balanced", (await services.GetRequiredService<AgentInstanceSettingsService>().ReadAsync(owner.InstanceId, "conversationPolicy")).Effective["responseLength"]);
+            Assert.Equal(view.InstanceRevision, (await NativeInstanceConfigurationSeed.PolicyViewAsync(policy, owner.InstanceId)).InstanceRevision);
+            Assert.Equal("balanced", (await NativeInstanceConfigurationSeed.SettingsViewAsync(services, owner.InstanceId, "conversationPolicy")).Effective["responseLength"]);
             Assert.DoesNotContain((await services.GetRequiredService<AgentInstanceResourceService>().ListAsync(owner.InstanceId)).Resources, r => r.Origin == "Instance");
         }
         finally { Directory.Delete(root, true); }
@@ -76,7 +76,7 @@ public sealed class SelfManagementOperationTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
-        var view = await services.GetRequiredService<SelfManagementService>().UpdateAsync(owner.InstanceId, owner.Revision,
+        var view = await NativeInstanceConfigurationSeed.PolicyAsync(services, owner.InstanceId, owner.Revision,
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Settings]), new(Enum.GetValues<ManagementAutoApply>())));
         var definition = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var args = JsonSerializer.SerializeToElement(new { expectedInstanceRevision = view.InstanceRevision, section, set = new Dictionary<string, object> { [field] = section == "capabilities" ? new[] { value } : value }, clear = Array.Empty<string>() });
@@ -85,7 +85,7 @@ public sealed class SelfManagementOperationTests
         Assert.Equal(ToolPolicyDecision.Deny, await executor.EvaluateExecutionPolicyAsync(definition, Guid.NewGuid(), new("change", "settings.patch", args.GetRawText()), args, admission, default));
         var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("change", "settings.patch", args.GetRawText()), 100000, admission: admission);
         Assert.Contains("forbidden", result.Text);
-        Assert.Equal(view.InstanceRevision, (await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId)).InstanceRevision);
+        Assert.Equal(view.InstanceRevision, (await NativeInstanceConfigurationSeed.PolicyViewAsync(services, owner.InstanceId)).InstanceRevision);
     }
 
     [Fact]
@@ -94,8 +94,8 @@ public sealed class SelfManagementOperationTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
-        var policy = services.GetRequiredService<SelfManagementService>();
-        var view = await policy.UpdateAsync(owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
+        var policy = services;
+        var view = await NativeInstanceConfigurationSeed.PolicyAsync(policy, owner.InstanceId, owner.Revision, new(new(HarnessManagementMode.Managed),
             new([HarnessManagementScope.Settings, HarnessManagementScope.Skills, HarnessManagementScope.Instructions]), new([])));
         var resolved = await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId);
         var executor = services.GetRequiredService<SessionToolExecutor>();
@@ -108,13 +108,13 @@ public sealed class SelfManagementOperationTests
         Assert.DoesNotContain("configuration.inspect", system);
         Assert.DoesNotContain("Configuration assistance", system);
         Assert.Contains(resolved.Skills, s => s.Key == ManagementBuiltInSkills.ConfigurationKey);
-        var builtin = (await services.GetRequiredService<AgentInstanceSkillService>().ListAsync(owner.InstanceId)).Single(s => s.Key == ManagementBuiltInSkills.ConfigurationKey);
+        var builtin = (await NativeInstanceConfigurationSeed.SkillsAsync(services, owner.InstanceId)).Single(s => s.Key == ManagementBuiltInSkills.ConfigurationKey);
         Assert.Null(builtin.DefinitionVersion);
         Assert.Null(builtin.SourceDefinitionId);
-        await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () => await services.GetRequiredService<AgentInstanceSkillService>().WriteAsync(owner.InstanceId, "delete", builtin.Key, builtin.Revision));
+        await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () => await NativeInstanceConfigurationSeed.WriteBuiltInChoiceAsync(services, owner.InstanceId, "delete", builtin.Key, builtin.Revision));
         using var query = JsonDocument.Parse("{\"query\":\"configuration.inspect\"}");
         Assert.Empty(CapabilityDiscoveryMatcher.Load(context.Definition, context, ToolConfigurationGates.Unconfigured, query.RootElement, 0).Loaded);
-        await policy.FreezeAsync(owner.InstanceId, view.InstanceRevision);
+        await NativeInstanceConfigurationSeed.FreezeAsync(policy, owner.InstanceId, view.InstanceRevision);
         context = context with { Harness = null };
         var unavailable = CapabilityDiscoveryMatcher.Load(context.Definition, context, ToolConfigurationGates.Unconfigured, query.RootElement, 0);
         Assert.Empty(unavailable.Loaded); Assert.Empty(unavailable.Unavailable);

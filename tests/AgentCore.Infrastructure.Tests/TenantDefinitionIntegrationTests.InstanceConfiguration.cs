@@ -154,8 +154,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(1, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Revision);
         var reconciled = await configuration.AdoptVersionAsync(owner.OwnerPrincipalId, owner.TenantId, id, 1, state.Tenant.Revision, 1);
         Assert.Equal(2, reconciled.Instance.Revision);
-        Assert.Equal(AutomationStatus.SuspendedPolicy, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Status);
-        Assert.Equal(2, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Revision);
+        // Adoption reconciles tenant-owned Automations; this native unowned registration is retained unchanged.
+        Assert.Equal(AutomationStatus.Active, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Status);
+        Assert.Equal(1, (await triggers.GetAsync(triggerOwner, automation.AutomationId))!.Revision);
         state = (await f.Iam.ReadTenantAsync(owner.TenantId))!;
         await f.Service.DeprecateAsync(owner.OwnerPrincipalId, owner.TenantId, definition, 1, state.Tenant.Revision, 1);
         state = (await f.Iam.ReadTenantAsync(owner.TenantId))!; next = state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } };

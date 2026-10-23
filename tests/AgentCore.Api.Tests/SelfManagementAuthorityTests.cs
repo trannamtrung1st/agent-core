@@ -17,7 +17,7 @@ public sealed class SelfManagementAuthorityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Policy_update_and_freeze_keep_inert_historical_preparation_bytes_private_and_unchanged(bool sqlite)
+    public async Task Native_Policy_update_and_freeze_keep_inert_historical_preparation_bytes_private_and_unchanged(bool sqlite)
     {
         var root = Path.Combine(Path.GetTempPath(), "inert-harness-history-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -35,12 +35,12 @@ public sealed class SelfManagementAuthorityTests
                 HarnessManagement: new(new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []), Preparation: history)),
                 services.GetRequiredService<TimeProvider>().GetUtcNow());
             var bytes = JsonSerializer.Serialize(owner.HarnessManagement!.Preparation);
-            var policy = services.GetRequiredService<SelfManagementService>();
-            var updated = await policy.UpdateAsync(owner.InstanceId, owner.Revision, new(Mode: new(HarnessManagementMode.Assisted)));
+            var policy = services;
+            var updated = await NativeInstanceConfigurationSeed.PolicyAsync(policy, owner.InstanceId, owner.Revision, new(Mode: new(HarnessManagementMode.Assisted)));
             Assert.Equal(HarnessManagementMode.Assisted, updated.Effective.Mode);
             Assert.DoesNotContain("historical-private-instructions", JsonSerializer.Serialize(updated));
             Assert.Equal(bytes, JsonSerializer.Serialize((await instances.FindAsync(owner.InstanceId))!.HarnessManagement!.Preparation));
-            var frozen = await policy.FreezeAsync(owner.InstanceId, updated.InstanceRevision);
+            var frozen = await NativeInstanceConfigurationSeed.FreezeAsync(policy, owner.InstanceId, updated.InstanceRevision);
             Assert.True(frozen.Effective.Frozen);
             Assert.DoesNotContain("historical-private-instructions", JsonSerializer.Serialize(frozen));
             var retained = (await instances.FindAsync(owner.InstanceId))!;
@@ -73,7 +73,7 @@ public sealed class SelfManagementAuthorityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Admin_policy_reset_and_definition_adoption_preserve_instance_freeze_on_reopen(bool sqlite)
+    public async Task Native_Admin_policy_reset_and_definition_adoption_preserve_instance_freeze_on_reopen(bool sqlite)
     {
         var root = Path.Combine(Path.GetTempPath(), "management-adoption-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -85,19 +85,19 @@ public sealed class SelfManagementAuthorityTests
                 var services = factory.Services;
                 var admin = services.GetRequiredService<AdminAgentInstanceService>();
                 var owner = await admin.CreateManagedAsync("general-assistant", 22); id = owner.InstanceId;
-                var service = services.GetRequiredService<SelfManagementService>();
-                Assert.Equal(HarnessManagementMode.Disabled, (await service.ReadAsync(id)).Effective.Mode);
-                var changed = await service.UpdateAsync(id, owner.Revision, new(new(HarnessManagementMode.Managed),
+                var service = services;
+                Assert.Equal(HarnessManagementMode.Disabled, (await NativeInstanceConfigurationSeed.PolicyViewAsync(service, id)).Effective.Mode);
+                var changed = await NativeInstanceConfigurationSeed.PolicyAsync(service, id, owner.Revision, new(new(HarnessManagementMode.Managed),
                     new([HarnessManagementScope.Settings]), ConfigurationAssistance: new(false)));
                 Assert.False(changed.Effective.BuiltInSkills!.ConfigurationAssistance);
-                var reset = await service.UpdateAsync(id, changed.InstanceRevision, new());
+                var reset = await NativeInstanceConfigurationSeed.PolicyAsync(service, id, changed.InstanceRevision, new());
                 Assert.Equal("definition", reset.Source);
                 Assert.Equal(HarnessManagementMode.Disabled, reset.Effective.Mode);
                 Assert.True(reset.Effective.BuiltInSkills!.ConfigurationAssistance);
-                changed = await service.UpdateAsync(id, reset.InstanceRevision, new(new(HarnessManagementMode.Assisted),
+                changed = await NativeInstanceConfigurationSeed.PolicyAsync(service, id, reset.InstanceRevision, new(new(HarnessManagementMode.Assisted),
                     new([HarnessManagementScope.Settings])), frozen: true);
                 await admin.ReassociateActiveVersionAsync(id, 23, changed.InstanceRevision);
-                var adopted = await service.ReadAsync(id);
+                var adopted = await NativeInstanceConfigurationSeed.PolicyViewAsync(service, id);
                 Assert.True(adopted.Effective.Frozen);
                 Assert.Equal(HarnessManagementMode.Assisted, adopted.Effective.Mode);
                 Assert.False(adopted.Effective.Allows(HarnessManagementScope.Settings));
@@ -105,7 +105,7 @@ public sealed class SelfManagementAuthorityTests
             if (sqlite)
             {
                 await using var reopened = new HarnessSqliteFactory(root);
-                Assert.True((await reopened.Services.GetRequiredService<SelfManagementService>().ReadAsync(id)).Effective.Frozen);
+                Assert.True((await NativeInstanceConfigurationSeed.PolicyViewAsync(reopened.Services, id)).Effective.Frozen);
                 Assert.Equal(23, (await reopened.Services.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
             }
         }
@@ -115,7 +115,7 @@ public sealed class SelfManagementAuthorityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Builtin_choice_changes_only_that_field_and_new_definition_defaults_still_inherit(bool sqlite)
+    public async Task Native_Builtin_choice_changes_only_that_field_and_new_definition_defaults_still_inherit(bool sqlite)
     {
         var root = Path.Combine(Path.GetTempPath(), "management-builtin-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -125,10 +125,10 @@ public sealed class SelfManagementAuthorityTests
             var services = factory.Services;
             var admin = services.GetRequiredService<AdminAgentInstanceService>();
             var owner = await admin.CreateManagedAsync("general-assistant", 23);
-            var skills = services.GetRequiredService<AgentInstanceSkillService>();
-            var builtin = await skills.InspectAsync(owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
-            await skills.WriteAsync(owner.InstanceId, "set_enabled", builtin.Key, builtin.Revision, enabled: false);
-            var policy = await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId);
+            var skills = services;
+            var builtin = await NativeInstanceConfigurationSeed.InspectSkillAsync(skills, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
+            await NativeInstanceConfigurationSeed.WriteBuiltInChoiceAsync(skills, owner.InstanceId, "set_enabled", builtin.Key, builtin.Revision, enabled: false);
+            var policy = await NativeInstanceConfigurationSeed.PolicyViewAsync(services, owner.InstanceId);
             Assert.Null(policy.Overrides!.Mode);
             Assert.Null(policy.Overrides.Scopes);
             Assert.Null(policy.Overrides.AutoApply);
@@ -142,13 +142,13 @@ public sealed class SelfManagementAuthorityTests
                 SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
             var published = await services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
             await admin.ReassociateActiveVersionAsync(owner.InstanceId, published.Version, policy.InstanceRevision);
-            policy = await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId);
+            policy = await NativeInstanceConfigurationSeed.PolicyViewAsync(services, owner.InstanceId);
             Assert.Equal(HarnessManagementMode.Managed, policy.Effective.Mode);
             Assert.Equal([HarnessManagementScope.Settings], policy.Effective.Scopes);
             Assert.False(policy.Effective.BuiltInSkills!.ConfigurationAssistance);
-            builtin = await skills.InspectAsync(owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
-            await skills.WriteAsync(owner.InstanceId, "reset_enabled", builtin.Key, builtin.Revision);
-            policy = await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId);
+            builtin = await NativeInstanceConfigurationSeed.InspectSkillAsync(skills, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
+            await NativeInstanceConfigurationSeed.WriteBuiltInChoiceAsync(skills, owner.InstanceId, "reset_enabled", builtin.Key, builtin.Revision);
+            policy = await NativeInstanceConfigurationSeed.PolicyViewAsync(services, owner.InstanceId);
             Assert.Equal("definition", policy.Source);
             Assert.True(policy.Effective.BuiltInSkills!.ConfigurationAssistance);
         }
@@ -158,7 +158,7 @@ public sealed class SelfManagementAuthorityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Freezing_fresh_owner_preserves_all_definition_inheritance(bool sqlite)
+    public async Task Native_Freezing_fresh_owner_preserves_all_definition_inheritance(bool sqlite)
     {
         var root = Path.Combine(Path.GetTempPath(), "management-freeze-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -173,7 +173,7 @@ public sealed class SelfManagementAuthorityTests
                 SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
             var published = await host.Services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
             var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", published.Version);
-            var policy = await host.Services.GetRequiredService<SelfManagementService>().FreezeAsync(owner.InstanceId, owner.Revision);
+            var policy = await NativeInstanceConfigurationSeed.FreezeAsync(host.Services, owner.InstanceId, owner.Revision);
             Assert.True(policy.Effective.Frozen);
             Assert.Equal("definition", policy.Source);
             Assert.Equal(new ManagementPolicyOverrides(), policy.Overrides);
@@ -182,11 +182,11 @@ public sealed class SelfManagementAuthorityTests
     }
 
     [Fact]
-    public async Task Admin_builtin_catalog_discloses_missing_authority_without_runtime_grant()
+    public async Task Native_Admin_builtin_catalog_discloses_missing_authority_without_runtime_grant()
     {
         await using var host = new AgentCoreApiFactory();
         var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
-        var skill = await host.Services.GetRequiredService<AgentInstanceSkillService>().InspectAsync(owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
+        var skill = await NativeInstanceConfigurationSeed.InspectSkillAsync(host.Services, owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
         Assert.False(skill.Enabled);
         Assert.Contains("configuration.inspect", skill.MissingCapabilities);
         Assert.Equal(SkillOrigin.BuiltIn, skill.Origin);
