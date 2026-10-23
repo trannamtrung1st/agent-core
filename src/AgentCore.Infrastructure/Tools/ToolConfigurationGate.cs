@@ -9,7 +9,7 @@ public sealed class ToolConfigurationGate(
     IWebSearchProvider? webSearch,
     IPublicWebFetcher? publicWebFetcher,
     IBrowser? browserSession = null,
-    bool browserEnabled = false, EmailTransportOptions? emailOptions = null, bool synthetic = false, IGoogleDriveProviderFactory? driveFactory = null, ISandboxReadiness? sandbox = null) : IToolConfigurationGate
+    bool browserEnabled = false, EmailTransportOptions? emailOptions = null, bool synthetic = false, ITenantCredentialOAuthProvider? oauth = null, ISandboxReadiness? sandbox = null) : IToolConfigurationGate
 {
     public bool IsExecutionConfigured(string toolName) => toolName == ToolCatalog.BrowserConfiguration
         ? browserSession is not null
@@ -21,7 +21,7 @@ public sealed class ToolConfigurationGate(
     public bool IsConfigured(string toolName) =>
         toolName switch
         {
-            _ when toolName.StartsWith("drive.", StringComparison.Ordinal) => driveFactory is { Enabled: true, Configured: true },
+            _ when toolName.StartsWith("drive.", StringComparison.Ordinal) => oauth?.Describe(AgentCore.Domain.Credentials.CredentialPurpose.GoogleDriveAccount) is { HostEnabled: true, Configured: true },
             ToolCatalog.SandboxStatus or ToolCatalog.SandboxProcessStatus or ToolCatalog.SandboxProfiles => true,
             _ when toolName.StartsWith("sandbox.", StringComparison.Ordinal) => sandbox?.IsAvailable == true,
             ToolCatalog.WebSearch => webSearch?.IsAvailable == true,

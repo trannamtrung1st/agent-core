@@ -18,16 +18,10 @@ internal static class DriveRegistration
         }
         return options;
     }
-    internal static void AddDrive(IServiceCollection services, string profile)
+    internal static void AddDrive(IServiceCollection services)
     {
         services.TryAddSingleton<GoogleDriveOptions>(sp => DriveHostOptions(sp.GetService<IConfiguration>()));
         services.TryAddSingleton<GoogleOAuthConfiguration>(sp => new(sp.GetService<IConfiguration>() ?? new ConfigurationBuilder().Build(), sp.GetService<Microsoft.Extensions.Logging.ILogger<GoogleOAuthConfiguration>>()));
-        services.TryAddSingleton<GoogleDriveOAuthOptions>(sp => sp.GetRequiredService<GoogleOAuthConfiguration>().Drive);
-        services.AddHttpClient(GoogleDriveOAuthService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20)).WithErrorDiagnostics().RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
         services.AddHttpClient(GoogleDriveProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30)).WithErrorDiagnostics().RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
-        var synthetic = string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase);
-        services.TryAddSingleton<GoogleDriveOAuthService>(sp => new(sp.GetRequiredService<ICredentialStore>(), sp.GetRequiredService<ICredentialProtector>(), sp.GetRequiredService<IHttpClientFactory>(), sp.GetRequiredService<GoogleDriveOptions>(), sp.GetRequiredService<GoogleDriveOAuthOptions>(), sp.GetRequiredService<TimeProvider>(), synthetic));
-        services.TryAddSingleton<IGoogleDriveOAuthService>(sp => sp.GetRequiredService<GoogleDriveOAuthService>());
-        services.TryAddSingleton<IGoogleDriveProviderFactory>(sp => new GoogleDriveProviderFactory(sp.GetRequiredService<GoogleDriveOptions>(), sp.GetRequiredService<GoogleDriveOAuthService>(), sp.GetRequiredService<IHttpClientFactory>(), sp.GetRequiredService<IDriveOperationStore>(), sp.GetRequiredService<ISyntheticDriveStore>(), sp.GetRequiredService<ICredentialProtector>(), sp.GetRequiredService<IIdGenerator>(), sp.GetRequiredService<TimeProvider>(), synthetic));
     }
 }

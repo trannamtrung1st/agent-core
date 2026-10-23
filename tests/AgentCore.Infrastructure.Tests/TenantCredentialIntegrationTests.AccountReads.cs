@@ -39,7 +39,7 @@ public sealed partial class TenantCredentialIntegrationTests
             new EmailTransportOptions { Enabled = true }, drive, http, f.Protector, files, (ISyntheticDriveStore)files, f.Ids, f.Clock, false, NullLoggerFactory.Instance, new SystemDiagnosticIdSource());
         return new(store, (ITenantRunStore)store, (ITenantSessionStore)store, (ITenantCredentialBindingStore)store, f.RunConfiguration(),
             new(store, (ITenantRunStore)store, (ITenantAgentStore)store, iam, new((ITenantAuthorizationAuditStore)store, f.Ids, f.Clock)),
-            iam, (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store, (ITenantConnectedAccountReadStore)store, native, f.Ids, f.Clock, files, new(f.Legacy, (IAgentCredentialBindingStore)f.Legacy, f.Instances, new NoLegacyDriveFactory(), files, f.Clock), native);
+            iam, (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store, (ITenantConnectedAccountReadStore)store, native, f.Ids, f.Clock, files, new(files, f.Clock), native);
     }
     private static TenantApprovalService AccountApprovals(Fixture f, TenantAccountRuntimeReadService reads, IIamStore? reopened = null)
     {

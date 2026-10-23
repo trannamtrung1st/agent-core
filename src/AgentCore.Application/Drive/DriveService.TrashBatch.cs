@@ -29,6 +29,7 @@ public sealed partial class DriveService
         if (manifest.Count is < 1 or > DriveMutationArguments.MaxBatchFiles || manifest.Select(t => t.FileId).Distinct(StringComparer.Ordinal).Count() != manifest.Count)
             throw AgentCoreErrors.Validation("Trash batch requires 1–20 distinct exact targets.");
         foreach (var target in manifest) { Id(target.FileId); DriveMutationArguments.Version(target.ExpectedVersion); }
+        await RecheckAsync(access, true, ct).ConfigureAwait(false);
         var gate = Gate(access); await gate.WaitAsync(ct);
         try
         {

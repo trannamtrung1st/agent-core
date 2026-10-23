@@ -65,8 +65,7 @@ public sealed partial class GoogleDriveTests
     }
     private static async Task<(GoogleDriveProvider Provider, DriveOperation Operation)> UploadFixture(Fixture f)
     {
-        var account = await f.Credentials.CreateGoogleDriveAccountAsync("Upload recovery");
-        await f.Complete(await f.Start(account));
+        var account = new { CredentialId = Guid.NewGuid() };
         var operation = new DriveOperation(Guid.NewGuid(), f.Owner, account.CredentialId, "hash", 1,
             "drive.upload", "file-1", "{}", "Dispatched", 1, DateTimeOffset.UtcNow);
         await f.Operations.ClaimAsync(operation, default);
@@ -116,8 +115,7 @@ public sealed partial class GoogleDriveTests
         };
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.UploadAsync("file-1", "report.bin", "root", "application/octet-stream", bytes, operation, cancellation.Token).AsTask());
         var saved = (await f.Operations.GetAsync(f.Owner, operation.OperationId, default))!;
-        var reopenedOAuth = f.NewService();
-        provider = new(saved.CredentialId, (ct, fresh) => reopenedOAuth.AccessTokenAsync(saved.CredentialId, 2, ct, fresh), ct => reopenedOAuth.RejectAuthorizationAsync(saved.CredentialId, 2, ct), f.Transport, f.Operations, f.Protector, TimeProvider.System);
+        provider = f.Provider(saved.CredentialId);
         await provider.UploadAsync("file-1", "report.bin", "root", "application/octet-stream", bytes, saved, default);
         Assert.Equal(1, starts); Assert.Equal(1, probes); Assert.Equal(bytes.Length, accepted);
     }

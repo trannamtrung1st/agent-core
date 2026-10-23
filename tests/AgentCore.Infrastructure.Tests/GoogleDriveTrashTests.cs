@@ -10,7 +10,7 @@ public sealed partial class GoogleDriveTests
     [InlineData(404, "drive_not_found")]
     public async Task Trash_is_one_recoverable_patch_with_safe_known_nonexecution(int status, string code)
     {
-        using var f = new Fixture(); var account = await f.Credentials.CreateGoogleDriveAccountAsync("Trash fixture"); await f.Complete(await f.Start(account));
+        using var f = new Fixture(); var account = new { CredentialId = Guid.NewGuid() };
         f.Transport.FileStatus = (HttpStatusCode)status;
         var failure = await Assert.ThrowsAsync<DriveEffectNotExecutedException>(() => f.Provider(account.CredentialId).TrashAsync("file-1", default).AsTask());
         Assert.Equal(code, failure.Code); Assert.DoesNotContain("provider-secret", failure.Message);

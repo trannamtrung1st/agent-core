@@ -12,8 +12,7 @@ public sealed partial class GoogleDriveTests
     public async Task Preview_transfer_checks_stream_and_headers_independently_of_metadata(int size, int? contentLength)
     {
         using var fixture = new Fixture();
-        var credential = await fixture.Credentials.CreateGoogleDriveAccountAsync("Preview");
-        await fixture.Complete(await fixture.Start(credential));
+        var credential = new { CredentialId = Guid.NewGuid() };
         var stream = new UnseekablePreviewStream(new byte[size]);
         fixture.Transport.DownloadHandler = (_, _) =>
         {

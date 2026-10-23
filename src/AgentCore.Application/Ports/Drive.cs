@@ -37,13 +37,6 @@ public interface IGoogleDriveProvider
     ValueTask MoveAsync(string fileId, string sourceParent, string destinationParent, CancellationToken ct);
     ValueTask TrashAsync(string fileId, CancellationToken ct);
 }
-public interface IGoogleDriveProviderFactory
-{
-    bool Enabled { get; }
-    bool Configured { get; }
-    bool Synthetic { get; }
-    IGoogleDriveProvider Create(Guid credentialId, long credentialRevision);
-}
 public interface ISyntheticDriveStore
 {
     ValueTask<DriveFile?> GetAsync(Guid credential, string id, CancellationToken ct);

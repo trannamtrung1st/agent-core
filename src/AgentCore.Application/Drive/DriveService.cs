@@ -10,12 +10,11 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Drive;
 
-public sealed record DriveAccountView(string AccountRef, string DisplayName, string EmailAddress, string Status, long AuthEpoch, bool Available, string? Recovery, Guid BindingId, bool Synthetic);
 public sealed record DriveAccess(Guid InstanceId, AgentCredentialBinding Binding, Credential Credential, IGoogleDriveProvider Provider)
 {
-    // Installed only by the canonical tenant service after resolving its actual owned
-    // Run/binding. The same native effect ledger never resolves a legacy credential
-    // when this live authority callback is present.
+    // Installed only by the canonical tenant service after resolving its actual
+    // owned Run/binding. Native ledger operations require this live authority;
+    // there is no global account, binding or credential resolver fallback.
     internal Func<bool, CancellationToken, ValueTask>? TenantAuthority { get; init; }
 }
 public sealed record DriveEffect(string Name, string Parent, string? SourceSha256 = null, long SourceBytes = 0, string? MimeType = null, string? ExpectedVersion = null, string? SourceParent = null, string? SourceMd5 = null);
@@ -31,8 +30,7 @@ public sealed class DriveIndeterminateException(Guid operationId, string fileId,
   public string RecoveryAction => ResumeAllowed ? "continue_same_upload" : VerificationFailures.Count > 0 ? "inspect_target_and_request_cleanup_approval" : "inspect_operation";
 }
 
-public sealed partial class DriveService(ICredentialStore credentials, IAgentCredentialBindingStore bindings, IAgentInstanceStore instances,
-    IGoogleDriveProviderFactory providers, IDriveOperationStore operations, TimeProvider time, ILogger<DriveService>? logger = null)
+public sealed partial class DriveService(IDriveOperationStore operations, TimeProvider time, ILogger<DriveService>? logger = null)
 {
     // Fixed stripes bound memory while serializing effect/inspection for this single host.
     private readonly SemaphoreSlim[] operationGates = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
@@ -49,50 +47,19 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     private static AgentCoreException Failure(string code, string message, int status = 400) => new(code, message, status);
     public static string Id(string value) => value is { Length: > 0 and <= 160 } && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_') ? value : throw Failure("drive_invalid", "Use a concrete Drive file/folder ID.");
     public static string Name(string value) => value is { Length: > 0 and <= 255 } && !value.Any(char.IsControl) && !value.Contains('/') && !value.Contains('\\') ? value : throw Failure("drive_invalid", "Use a safe file/folder name, without path separators.");
-    private async ValueTask<AgentInstance> Instance(Guid id, bool requireActive, CancellationToken ct) { var instance = await instances.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found."); if (requireActive && instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Forbidden("Archived Instances cannot use Drive bindings. Unarchive this Instance before using Drive."); return instance; }
-    public async ValueTask<IReadOnlyList<DriveAccountView>> AccountsAsync(Guid instance, IReadOnlyList<AgentCredentialBinding>? admitted, CancellationToken ct)
-    {
-        var owner = await Instance(instance, false, ct); var result = new List<DriveAccountView>();
-        foreach (var binding in await bindings.ListBindingsAsync(instance, ct))
-        {
-            if (admitted is not null && !admitted.Any(b => b.BindingId == binding.BindingId && b.Revision == binding.Revision && b.CredentialId == binding.CredentialId)) continue;
-            var c = await credentials.GetAsync(binding.CredentialId, ct); if (c is not { Purpose: CredentialPurpose.GoogleDriveAccount, DriveAccount: not null }) continue;
-            var status = owner.Lifecycle != AgentInstanceLifecycle.Active ? "Archived" : !providers.Enabled ? "HostDisabled" : !providers.Configured ? "NotConfigured" : c.Status == CredentialStatus.Disabled ? "Disabled" : c.DriveAccount.ConnectionStatus.ToString(); var available = owner.Lifecycle == AgentInstanceLifecycle.Active && providers.Enabled && providers.Configured && c.Status == CredentialStatus.Active && c.DriveAccount.IsUsable && c.DriveAccount.Synthetic == providers.Synthetic;
-            result.Add(new(binding.Reference, c.DisplayName, c.DriveAccount.EmailAddress, status, c.DriveAccount.AuthEpoch, available, available ? null : owner.Lifecycle != AgentInstanceLifecycle.Active ? "Unarchive this Instance before using its Drive bindings." : !providers.Enabled ? "Ask the operator to enable GoogleDrive:Enabled." : !providers.Configured ? "Ask the operator to configure GoogleOAuth." : "Connect/enable this Google Drive Account in Admin → Credentials.", binding.BindingId, providers.Synthetic));
-            if (result.Count == 20) break;
-        }
-        return result;
-    }
-    public async ValueTask<DriveAccess> ResolveAsync(Guid instance, string? reference, IReadOnlyList<AgentCredentialBinding>? admitted, bool write, CancellationToken ct)
-    {
-        if (!providers.Enabled) throw Failure("drive_host_disabled", "Google Drive is disabled on this host. Ask the operator to enable GoogleDrive:Enabled.", 403);
-        if (!providers.Configured) throw Failure("drive_oauth_not_configured", "Ask the operator to configure GoogleOAuth.", 403);
-        await Instance(instance, true, ct); var accounts = await AccountsAsync(instance, admitted, ct);
-        if (reference is null) { if (accounts.Count != 1) throw Failure("drive_not_connected", accounts.Count == 0 ? "Bind a connected Google Drive Account to this Instance in Admin → Credentials." : "Choose an accountRef from drive.accounts."); reference = accounts[0].AccountRef; }
-        var alias = CredentialRules.Reference(reference); var binding = (await bindings.ListBindingsAsync(instance, ct)).SingleOrDefault(b => b.Reference == alias) ?? throw Failure("drive_not_connected", "This Drive alias is not bound to the current Instance.", 403);
-        if (admitted is not null && !admitted.Any(b => b.BindingId == binding.BindingId && b.Revision == binding.Revision && b.CredentialId == binding.CredentialId)) throw Failure("drive_access_changed", "This binding was not admitted for this Run. Start a fresh owner turn.", 403);
-        var c = await credentials.GetAsync(binding.CredentialId, ct);
-        if (c is not { Purpose: CredentialPurpose.GoogleDriveAccount, Status: CredentialStatus.Active, DriveAccount: not null } || !c.DriveAccount.IsUsable || c.DriveAccount.Synthetic != providers.Synthetic)
-            throw Failure("drive_not_connected", "Enable/connect this Google Drive Account in Admin → Credentials. Email authorization does not grant Drive access.", 403);
-        return new(instance, binding, c, providers.Create(c.CredentialId, c.Revision));
-    }
     public async ValueTask RecheckAsync(DriveAccess access, bool write, CancellationToken ct)
     {
-        if (access.TenantAuthority is { } tenant)
-        {
-            await tenant(write, ct).ConfigureAwait(false); return;
-        }
-        var current = await ResolveAsync(access.InstanceId, access.Binding.Reference, [access.Binding], write, ct);
-        if (current.Credential.CredentialId != access.Credential.CredentialId || current.Credential.Revision != access.Credential.Revision || current.Credential.DriveAccount!.AuthEpoch != access.Credential.DriveAccount!.AuthEpoch)
-            throw Failure("drive_access_changed", "Drive authorization changed. Read the current account and file state before acting.", 403);
+        var authority = access.TenantAuthority ?? throw new AgentCore.Application.Security.AccessDeniedException("tenant_drive_authority_required");
+        await authority(write, ct).ConfigureAwait(false);
     }
     public static void Epoch(DriveAccess access, long expected) { if (expected != access.Credential.DriveAccount!.AuthEpoch) throw Failure("drive_access_changed", "Drive authorization epoch changed. Read drive.accounts again before acting.", 409); }
     public async ValueTask<DriveFilePage> ListAsync(DriveAccess access, string? folder, string? query, string? cursor, int limit, CancellationToken ct)
     {
         if (limit is < 1 or > 100 || query?.Length > 200 || cursor?.Length > 2048) throw Failure("drive_invalid", "Drive list/search exceeds bounds."); if (folder is not null) Id(folder);
+        await RecheckAsync(access, false, ct).ConfigureAwait(false);
         var page = await access.Provider.ListAsync(folder, query, cursor, limit, ct); await RecheckAsync(access, false, ct); return page;
     }
-    public async ValueTask<DriveFile> GetAsync(DriveAccess access, string id, CancellationToken ct) { var file = await access.Provider.GetAsync(Id(id), ct); await RecheckAsync(access, false, ct); return file; }
+    public async ValueTask<DriveFile> GetAsync(DriveAccess access, string id, CancellationToken ct) { await RecheckAsync(access, false, ct).ConfigureAwait(false); var file = await access.Provider.GetAsync(Id(id), ct); await RecheckAsync(access, false, ct); return file; }
     private async ValueTask<DriveFile> ReadForOperation(DriveAccess access, string id, DriveOperation op, string stage, CancellationToken ct)
     {
         try { return await GetAsync(access, id, ct); }
@@ -117,6 +84,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     }
     public async ValueTask<DriveReceipt> EffectAsync(DriveAccess access, Guid operationId, string tool, long expectedEpoch, string? fileId, DriveEffect effect, ReadOnlyMemory<byte> bytes, CancellationToken ct)
     {
+        await RecheckAsync(access, true, ct).ConfigureAwait(false);
         var gate = Gate(access); await gate.WaitAsync(ct);
         try { return await EffectCore(access, operationId, tool, expectedEpoch, fileId, effect, bytes, ct); }
         finally { gate.Release(); }
@@ -149,7 +117,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
         if (previous is { State: "Planned" } && previous.AuthEpoch != expectedEpoch)
         { await operations.UpdateAsync(previous with { State = "Rejected", Revision = previous.Revision + 1 }, previous.Revision, ct); previous = null; }
         var op = previous ?? await operations.ClaimAsync(new(operationId, access.InstanceId, access.Credential.CredentialId, hash, expectedEpoch, tool, fileId ?? await access.Provider.GenerateIdAsync(ct), snapshot, "Planned", 1, time.GetUtcNow()), ct);
-        if (op.State == "Succeeded") { await RecheckAsync(access, false, ct); return new(op.OperationId, "Succeeded", JsonSerializer.Deserialize<DriveFile>(op.ResultJson!)!, true, providers.Synthetic); }
+        if (op.State == "Succeeded") { await RecheckAsync(access, false, ct); return new(op.OperationId, "Succeeded", JsonSerializer.Deserialize<DriveFile>(op.ResultJson!)!, true, access.Credential.DriveAccount!.Synthetic); }
         if (op.State == "Failed") throw FailedOperation(op);
         if (op.State is "Dispatched" or "Indeterminate")
         {
@@ -214,6 +182,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     }
     public async ValueTask<DriveReceipt> InspectOperationAsync(DriveAccess access, Guid id, CancellationToken ct)
     {
+        await RecheckAsync(access, false, ct).ConfigureAwait(false);
         var gate = Gate(access); await gate.WaitAsync(ct);
         try { return await InspectCore(access, id, ct); }
         finally { gate.Release(); }
@@ -222,7 +191,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     {
         var op = await operations.GetAsync(access.InstanceId, id, ct);
         if (op is null || op.CredentialId != access.Credential.CredentialId) throw AgentCoreErrors.NotFound("Drive operation was not found.");
-        if (op.State == "Succeeded") { await RecheckAsync(access, false, ct); return new(op.OperationId, "Succeeded", JsonSerializer.Deserialize<DriveFile>(op.ResultJson!)!, true, providers.Synthetic); }
+        if (op.State == "Succeeded") { await RecheckAsync(access, false, ct); return new(op.OperationId, "Succeeded", JsonSerializer.Deserialize<DriveFile>(op.ResultJson!)!, true, access.Credential.DriveAccount!.Synthetic); }
         if (op.State == "Failed") { await RecheckAsync(access, false, ct); throw FailedOperation(op); }
         if (op.State is not ("Dispatched" or "Indeterminate")) throw Failure("drive_operation_pending", "This operation has not dispatched a remote effect; inspect the original task before acting.", 409);
         using var snapshot = JsonDocument.Parse(op.SnapshotJson); var effect = snapshot.RootElement.GetProperty("effect").Deserialize<DriveEffect>() ?? throw Failure("drive_invalid", "Drive receipt is invalid.");
@@ -258,7 +227,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
             var resume = CanResume(access, op) && (op.Tool != "drive.upload" || string.IsNullOrEmpty(file.Md5Checksum));
             throw new DriveIndeterminateException(op.OperationId, op.FileId, op.Tool == "drive.upload" ? "drive_upload_verification_failed" : null, resume, verificationFailures); }
         await RecheckAsync(access, false, ct); await operations.UpdateAsync(op with { State = "Succeeded", ResultJson = JsonSerializer.Serialize(file), ProtectedUploadSession = null, Revision = op.Revision + 1 }, op.Revision, ct);
-        return new(op.OperationId, "Succeeded", file, true, providers.Synthetic, op.Tool is "drive.rename" or "drive.move" or "drive.trash" ? "Remote preconditions are best effort against independent Google clients; no atomic conditional-write guarantee is claimed." : null);
+        return new(op.OperationId, "Succeeded", file, true, access.Credential.DriveAccount!.Synthetic, op.Tool is "drive.rename" or "drive.move" or "drive.trash" ? "Remote preconditions are best effort against independent Google clients; no atomic conditional-write guarantee is claimed." : null);
     }
 
     private static List<string> UploadVerificationFailures(DriveFile file, DriveEffect effect)

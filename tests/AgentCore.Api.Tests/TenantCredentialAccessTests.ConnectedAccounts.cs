@@ -43,11 +43,15 @@ public sealed partial class TenantCredentialAccessTests
     {
         await using var factory = new OAuthFactory(sqlite: sqlite); using var owner = ConnectedClient(factory);
         var application = typeof(TenantConnectedAccountService).Assembly;
-        foreach (var retired in new[] { "Email.EmailAccountService", "Email.EmailMonitoringService", "Events.CoreEventDispatcher", "Ports.IEmailProviderFactory", "Ports.IEmailOAuthService", "Ports.IEmailChangeFeed" })
+        foreach (var retired in new[] { "Email.EmailAccountService", "Email.EmailMonitoringService", "Events.CoreEventDispatcher", "Ports.IEmailProviderFactory", "Ports.IEmailOAuthService", "Ports.IEmailChangeFeed", "Ports.IGoogleDriveProviderFactory", "Ports.IGoogleDriveOAuthService" })
             Assert.Null(application.GetType("AgentCore.Application." + retired));
         var infrastructure = typeof(AgentCore.Infrastructure.Credentials.TenantConnectedAccountReader).Assembly;
         foreach (var retired in new[] { "AccountEmailProviderFactory", "AccountEmailChangeFeed", "GoogleEmailOAuthService" })
             Assert.Null(infrastructure.GetType("AgentCore.Infrastructure.Email." + retired));
+        Assert.Null(infrastructure.GetType("AgentCore.Infrastructure.Drive.GoogleDriveOAuthService"));
+        Assert.Null(infrastructure.GetType("AgentCore.Infrastructure.Drive.GoogleDriveProviderFactory"));
+        Assert.Null(typeof(AgentCore.Application.Drive.DriveService).GetMethod("ResolveAsync"));
+        Assert.Null(typeof(AgentCore.Application.Drive.DriveService).GetMethod("AccountsAsync"));
         var s = await ConnectedReadAccount(factory, owner, purpose);
         var inventory = await owner.GetAsync(s.Root); Assert.Equal(HttpStatusCode.OK, inventory.StatusCode); Assert.True(inventory.Headers.CacheControl?.NoStore);
         var page = await Json(inventory); Assert.Equal(1, page.GetProperty("total").GetInt32()); Assert.True(page.GetProperty("items")[0].GetProperty("readAvailable").GetBoolean()); Safe(page);

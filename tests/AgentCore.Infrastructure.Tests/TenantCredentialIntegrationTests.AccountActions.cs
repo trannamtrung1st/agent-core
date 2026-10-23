@@ -22,13 +22,6 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantCredentialIntegrationTests
 {
-    private sealed class NoLegacyDriveFactory : IGoogleDriveProviderFactory
-    {
-        public bool Enabled => true;
-        public bool Configured => true;
-        public bool Synthetic => false;
-        public IGoogleDriveProvider Create(Guid id, long revision) => throw new InvalidOperationException("Tenant execution must not resolve legacy credentials.");
-    }
     private sealed record AccountActionServices(TenantApprovalService Approvals, TenantAccountEffectService Effects, TenantRunContinuationService Continuations, FileAgentInstanceWorkspaceStore Files, TenantAccountRuntimeReadService Reads, IDriveOperationStore Ledger);
     private static AccountActionServices ActionServices(Fixture f, IHttpClientFactory http, IIamStore? reopened = null)
     {
@@ -47,7 +40,7 @@ public sealed partial class TenantCredentialIntegrationTests
             f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)store, accountReads: reads, accountActions: target);
         var effects = new TenantAccountEffectService(store, (ITenantRunStore)store, (ITenantApprovalStore)store, (ITenantApprovedOperationStore)store,
             (ITenantAccountOperationStore)store, target, iam, operations, native,
-            new(f.Legacy, (IAgentCredentialBindingStore)f.Legacy, f.Instances, new NoLegacyDriveFactory(), ledger, f.Clock), f.EmailDrafts, files, f.Ids, f.Clock);
+            new(ledger, f.Clock), f.EmailDrafts, files, f.Ids, f.Clock);
         var local = new TenantApprovedOperationService(store, (ITenantRunStore)store, (ITenantAgentStore)store, (ITenantApprovalStore)store,
             (ITenantApprovedOperationStore)store, operations, f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, accountReads: reads);
         return new(approvals, effects, new((ITenantRunStore)store, (ITenantApprovalStore)store, local, f.Clock,

@@ -28,7 +28,7 @@ public sealed class DrivePersistenceTests
             else { var i = new InMemoryAgentInstanceStore(); owners = i; var c = new InMemoryCredentialStore(i); credentials = c; bindings = c; var d = new InMemoryDriveStore(); operations = d; files = d; }
             var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 27, new("Test", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
             var protector = new LocalCredentialProtector(root + "/keys"); var service = new CredentialService(credentials, bindings, protector, owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System); var account = await service.CreateGoogleDriveAccountAsync("Drive"); await service.BindAsync(owner.InstanceId, account.CredentialId, "drive", 1);
-            var oauth = new GoogleDriveOAuthService(credentials, protector, new NoHttp(), new() { Enabled = true }, new(), TimeProvider.System, true); var start = await oauth.StartAsync(account.CredentialId, 1, owner.InstanceId, default); var state = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(start.AuthorizationUrl[start.AuthorizationUrl.IndexOf('?')..])["state"].ToString(); await oauth.CompleteAsync(state, start.Correlation, owner.InstanceId, "consent", null, default);
+            await SeedConnection(credentials, protector, account.CredentialId);
             var op = new DriveOperation(Guid.NewGuid(), owner.InstanceId, account.CredentialId, "effect-hash", 1, "drive.upload", "file-known", "{}", "Planned", 1, DateTimeOffset.UtcNow); await operations.ClaimAsync(op, default);
             await Assert.ThrowsAsync<AgentCoreException>(() => operations.ClaimAsync(op with { OperationId = Guid.NewGuid() }, default).AsTask()); await Assert.ThrowsAsync<AgentCoreException>(() => operations.ClaimAsync(op with { EffectHash = "different" }, default).AsTask());
             op = await operations.UpdateAsync(op with { State = "Dispatched", Revision = 2, ProtectedUploadSession = protector.Protect(account.CredentialId, 1, "opaque-session") }, 1, default); await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(op with { Revision = 3 }, 1, default).AsTask());
@@ -85,13 +85,13 @@ public sealed class DrivePersistenceTests
             var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 28, new("UAT", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
             var protector = new LocalCredentialProtector(root + "/keys"); var service = new CredentialService(credentials, credentials, protector, owners, ids, TimeProvider.System);
             var account = await service.CreateGoogleDriveAccountAsync("Batch Drive"); await service.BindAsync(owner.InstanceId, account.CredentialId, "drive", 1);
-            var oauth = new GoogleDriveOAuthService(credentials, protector, new NoHttp(), new(), new(), TimeProvider.System, true); var start = await oauth.StartAsync(account.CredentialId, 1, owner.InstanceId, default);
-            var state = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(start.AuthorizationUrl[start.AuthorizationUrl.IndexOf('?')..])["state"].ToString(); await oauth.CompleteAsync(state, start.Correlation, owner.InstanceId, "consent", null, default);
+            await SeedConnection(credentials, protector, account.CredentialId);
             var targets = new List<AgentCore.Application.Drive.DriveTrashTarget>();
             for (var i = 0; i < 8; i++) { var file = new DriveFile("exact-file-" + i, "sample-" + i + ".txt", "text/plain", 2, "1", "49f68a5c8493ec2c0bf489821c21fc3b", ["unavailable-parent"], false); await files.SaveAsync(account.CredentialId, file, "hi"u8.ToArray(), null, default); if (i < 7) targets.Add(new(file.Id, file.Version)); }
-            var provider = new BatchCountingFactory(new GoogleDriveProviderFactory(new(), oauth, new NoHttp(), files, files, protector, ids, TimeProvider.System, true));
+            var provider = new BatchCounter();
+            var native = new BatchCountingProvider(new SyntheticGoogleDriveProvider(account.CredentialId, files, ids), provider);
             var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
-            var drive = new AgentCore.Application.Drive.DriveService(credentials, credentials, owners, provider, files, clock); var access = await drive.ResolveAsync(owner.InstanceId, "drive", null, true, default); var batch = Guid.NewGuid();
+            var drive = new AgentCore.Application.Drive.DriveService(files, clock); var access = await StorageAccess(credentials, credentials, owner.InstanceId, account.CredentialId, native); var batch = Guid.NewGuid();
             AgentCore.Application.Drive.DriveTrashBatchResult result;
             if (deadline)
             {
@@ -103,22 +103,20 @@ public sealed class DrivePersistenceTests
             }
             else { result = await drive.TrashBatchAsync(access, batch, 1, targets, default); Assert.Equal(7, result.TrashedCount); Assert.Equal(7, provider.Trashes); }
             SqliteConnection.ClearAllPools(); factory = new Factory(dbOptions); files = new(factory); credentials = new(factory); owners = new(factory, ids);
-            oauth = new(credentials, new LocalCredentialProtector(root + "/keys"), new NoHttp(), new(), new(), TimeProvider.System, true);
-            provider = new(new GoogleDriveProviderFactory(new(), oauth, new NoHttp(), files, files, protector, ids, TimeProvider.System, true));
-            drive = new(credentials, credentials, owners, provider, files, TimeProvider.System); access = await drive.ResolveAsync(owner.InstanceId, "drive", null, true, default);
+            provider = new(); native = new(new SyntheticGoogleDriveProvider(account.CredentialId, files, ids), provider);
+            drive = new(files, TimeProvider.System); access = await StorageAccess(credentials, credentials, owner.InstanceId, account.CredentialId, native);
             var replay = await drive.TrashBatchAsync(access, batch, 1, targets, default); Assert.Equal(7, replay.TrashedCount); Assert.Equal(deadline ? 6 : 0, provider.Trashes);
             if (!deadline) Assert.Equal(result.Items.Select(i => i.OperationId), replay.Items.Select(i => i.OperationId));
             else Assert.Equal(result.Items[0].OperationId, replay.Items[0].OperationId); Assert.False((await files.GetAsync(account.CredentialId, "exact-file-7", default))!.Trashed);
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
-    private sealed class BatchCountingFactory(IGoogleDriveProviderFactory inner) : IGoogleDriveProviderFactory
+    private sealed class BatchCounter
     {
         public Func<string, CancellationToken, Task>? AfterTrash;
-        public int Trashes; public bool Enabled => inner.Enabled; public bool Configured => inner.Configured; public bool Synthetic => inner.Synthetic;
-        public IGoogleDriveProvider Create(Guid id, long revision) => new BatchCountingProvider(inner.Create(id, revision), this);
+        public int Trashes;
     }
-    private sealed class BatchCountingProvider(IGoogleDriveProvider inner, BatchCountingFactory count) : IGoogleDriveProvider
+    private sealed class BatchCountingProvider(IGoogleDriveProvider inner, BatchCounter count) : IGoogleDriveProvider
     {
         public ValueTask<string> GenerateIdAsync(CancellationToken ct) => inner.GenerateIdAsync(ct);
         public ValueTask<DriveFilePage> ListAsync(string? folder, string? query, string? cursor, int limit, CancellationToken ct) => inner.ListAsync(folder, query, cursor, limit, ct);
@@ -132,5 +130,17 @@ public sealed class DrivePersistenceTests
         public async ValueTask TrashAsync(string id, CancellationToken ct) { count.Trashes++; await inner.TrashAsync(id, ct); if (count.AfterTrash is not null) await count.AfterTrash(id, ct); }
     }
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }
-    private sealed class NoHttp : IHttpClientFactory { public HttpClient CreateClient(string name) => throw new InvalidOperationException("Synthetic must not use HTTP"); }
+    private static async Task SeedConnection(ICredentialStore credentials, ICredentialProtector protector, Guid id)
+    {
+        var current = (await credentials.GetAsync(id))!;
+        var profile = new DriveAccountProfile("storage@example.test", "storage-subject-" + id.ToString("N"), [DriveAccountProfile.Scope], DriveConnectionStatus.Connected, 1, DateTimeOffset.UtcNow, Synthetic: true);
+        await credentials.SaveAsync(current with { DriveAccount = profile, ProtectedPayload = protector.Protect(id, 1, "synthetic-drive-refresh"),
+            Revision = current.Revision + 1, SecretRevision = current.SecretRevision + 1 }, current.Revision, default, current.SecretRevision);
+    }
+    // This fixture qualifies physical native-ledger replay/CAS only. The owning
+    // tenant services and canonical suites supply real IAM/source authority.
+    private static async Task<AgentCore.Application.Drive.DriveAccess> StorageAccess(ICredentialStore credentials,
+        IAgentCredentialBindingStore bindings, Guid owner, Guid credential, IGoogleDriveProvider provider)
+        => new(owner, Assert.Single(await bindings.ListBindingsAsync(owner)), (await credentials.GetAsync(credential))!, provider)
+        { TenantAuthority = (_, token) => { token.ThrowIfCancellationRequested(); return ValueTask.CompletedTask; } };
 }

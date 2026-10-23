@@ -42,6 +42,7 @@ These checkpoints qualify their own source versions and focused checks. They do 
 | [Global Memory admission/service](global-memory-service-retirement-verification-2026-10-23.md) | Removed service/port/admission and global loop resolution, preserved static content rules and qualified actual tenant staging/retention boundaries. |
 | [Global Experience/Automation roots](experience-automation-authority-retirement-verification-2026-10-23.md) | Removed global Experience/admission/repair, Admin Automation authoring and local-Profile catalogs; retained canonical schema/checkpoint owners and unchanged effective presets. The [successor recovery slice](tenant-completion-recovery-verification-2026-10-23.md) owns canonical twelve-mode/busy-parent qualification and the same-Run retirement handoff fix. |
 | [Global Email authority](global-email-authority-retirement-verification-2026-10-23.md) | Removed global account/OAuth/provider factory/change feed/watch and Core Event dispatch roots; canonical tenant owners retain scoped transports, live source fences, exact effects and durable OAuth. Host tool readiness uses transport flags directly. |
+| [Global Drive authority](global-drive-authority-retirement-verification-2026-10-23.md) | Removed global OAuth/factory/account resolution; the native effect ledger requires canonical tenant bindings before I/O, with current descriptor-based readiness and retained upload/reconciliation behavior. |
 
 ## Approval semantic matching and event recovery
 

@@ -74,7 +74,7 @@ internal sealed partial class GoogleDriveProvider(Guid credential, Func<Cancella
     }
     public async ValueTask<string> GenerateIdAsync(CancellationToken ct)
     {
-        using var response = await Send(() => new(HttpMethod.Get, Api + "files/generateIds?count=1&space=drive&type=files"), true, ct); using var json = await GoogleDriveOAuthService.ReadJson(response, 65536, ct);
+        using var response = await Send(() => new(HttpMethod.Get, Api + "files/generateIds?count=1&space=drive&type=files"), true, ct); using var json = await ReadJson(response, 65536, ct);
         var id = json.RootElement.GetProperty("ids")[0].GetString(); return id is { Length: > 0 and <= 160 } && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_') ? id : throw Failure("drive_provider_response_invalid", "Google returned an invalid file identity.", 502);
     }
     public async ValueTask<DriveFilePage> ListAsync(string? folder, string? query, string? cursor, int limit, CancellationToken ct)
@@ -82,13 +82,13 @@ internal sealed partial class GoogleDriveProvider(Guid credential, Func<Cancella
         static string Literal(string value) => value.Replace("\\", "\\\\").Replace("'", "\\'");
         var filter = "trashed = false" + (folder is null ? "" : " and '" + Literal(folder) + "' in parents") + (query is null ? "" : " and name contains '" + Literal(query) + "'");
         var url = Api + "files?q=" + Enc(filter) + "&pageSize=" + limit + "&fields=" + Enc("nextPageToken,files(" + Fields + ")") + (cursor is null ? "" : "&pageToken=" + Enc(cursor));
-        using var response = await Send(() => new(HttpMethod.Get, url), true, ct); using var json = await GoogleDriveOAuthService.ReadJson(response, 512 * 1024, ct); var root = json.RootElement;
+        using var response = await Send(() => new(HttpMethod.Get, url), true, ct); using var json = await ReadJson(response, 512 * 1024, ct); var root = json.RootElement;
         var files = root.GetProperty("files").EnumerateArray().Take(limit + 1).Select(Map).ToArray(); if (files.Length > limit) throw Failure("drive_provider_response_invalid", "Drive listing exceeded its bound.", 502);
         return new(files, root.TryGetProperty("nextPageToken", out var next) ? next.GetString() : null);
     }
     public async ValueTask<DriveFile> GetAsync(string id, CancellationToken ct)
     {
-        using var response = await Send(() => new(HttpMethod.Get, Api + "files/" + Enc(id) + "?fields=" + Enc(Fields)), true, ct); using var json = await GoogleDriveOAuthService.ReadJson(response, 65536, ct); var file = Map(json.RootElement);
+        using var response = await Send(() => new(HttpMethod.Get, Api + "files/" + Enc(id) + "?fields=" + Enc(Fields)), true, ct); using var json = await ReadJson(response, 65536, ct); var file = Map(json.RootElement);
         if (file.Id != id) throw Failure("drive_provider_response_invalid", "Drive returned an unexpected identity.", 502); return file;
     }
     private static HttpContent Json(object value) => new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
@@ -122,4 +122,12 @@ internal sealed partial class GoogleDriveProvider(Guid credential, Func<Cancella
         if (size < 0 || string.IsNullOrEmpty(version) || version.Length > 64 || parents.Any(parent => parent.Length > 160 || parent.Any(char.IsControl))) throw Failure("drive_provider_response_invalid", "Drive metadata exceeds limits.", 502);
         return new(id, name, mime, size, version, root.TryGetProperty("md5Checksum", out var md5) ? md5.GetString() : null, parents, root.TryGetProperty("trashed", out var t) && t.GetBoolean(), link);
     }
+    private static async Task<JsonDocument> ReadJson(HttpResponseMessage response, int limit, CancellationToken ct)
+    {
+        if (response.Content.Headers.ContentLength > limit) throw new AgentCoreException("drive_provider_response_invalid", "Google response exceeded its limit.", 502);
+        await using var input = await response.Content.ReadAsStreamAsync(ct); using var output = new MemoryStream(); var buffer = new byte[8192];
+        while (true) { var count = await input.ReadAsync(buffer, ct); if (count == 0) break; if (output.Length + count > limit) throw new AgentCoreException("drive_provider_response_invalid", "Google response exceeded its limit.", 502); output.Write(buffer, 0, count); }
+        return JsonDocument.Parse(output.ToArray());
+    }
+
 }
