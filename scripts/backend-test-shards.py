@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Partition the complete Infrastructure discovery once; verify every shard's TRX count."""
+"""Partition a complete backend suite discovery once; verify every shard's TRX count."""
 import argparse
 from collections import Counter
 import hashlib
@@ -13,24 +13,25 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = 'tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj'
-METHOD = re.compile(r'AgentCore\.Infrastructure\.Tests\.[A-Za-z_]\w*(?:[.+][A-Za-z_]\w*)+\Z')
+SUITES = {'infrastructure': 'Infrastructure', 'api': 'Api'}
+PROJECTS = {key: f'tests/AgentCore.{name}.Tests/AgentCore.{name}.Tests.csproj' for key, name in SUITES.items()}
+METHODS = {key: re.compile(r'AgentCore\.' + name + r'\.Tests\.[A-Za-z_]\w*(?:[.+][A-Za-z_]\w*)+\Z') for key, name in SUITES.items()}
 
 
-def parse_discovery(output):
+def parse_discovery(output, suite='infrastructure'):
     marker = 'The following Tests are available:'
     if marker not in output:
-        raise ValueError('Infrastructure discovery did not produce a test catalog.')
+        raise ValueError('Backend discovery did not produce a test catalog.')
     methods = Counter()
     for line in output.split(marker, 1)[1].splitlines():
         if not line.strip():
             continue
         method = line.strip().split('(', 1)[0]
-        if not line.startswith('    ') or not METHOD.fullmatch(method):
+        if not line.startswith('    ') or not METHODS[suite].fullmatch(method):
             raise ValueError(f'Unrecognized discovered test: {line[:200]}')
         methods[method] += 1
     if not methods:
-        raise ValueError('Infrastructure discovery was empty.')
+        raise ValueError('Backend discovery was empty.')
     return dict(methods)
 
 
@@ -39,7 +40,7 @@ def digest(plan):
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def make_plan(methods, count, revision=None):
+def make_plan(methods, count, revision=None, suite='infrastructure'):
     if count < 1 or count > len(methods):
         raise ValueError('Shard count must be between one and the discovered method count.')
     shards, loads = [[] for _ in range(count)], [0] * count
@@ -48,30 +49,33 @@ def make_plan(methods, count, revision=None):
         index = min(range(count), key=lambda i: (loads[i], i))
         shards[index].append(method)
         loads[index] += methods[method]
-    plan = {'version': 1, 'revision': revision, 'method_cases': methods,
+    plan = {'version': 2, 'suite': suite, 'revision': revision, 'method_cases': methods,
             'shards': [sorted(shard) for shard in shards]}
     plan['sha256'] = digest(plan)
     validate_plan(plan)
     return plan
 
 
-def validate_plan(plan):
-    if not isinstance(plan, dict) or plan.get('version') != 1 or plan.get('sha256') != digest(plan):
-        raise ValueError('Infrastructure plan version or digest is invalid.')
+def validate_plan(plan, expected_suite=None):
+    if not isinstance(plan, dict) or plan.get('version') != 2 or plan.get('sha256') != digest(plan):
+        raise ValueError('Backend plan version or digest is invalid.')
+    suite = plan.get('suite')
+    if suite not in SUITES or expected_suite is not None and suite != expected_suite:
+        raise ValueError('Backend plan belongs to a different suite.')
     revision = os.environ.get('GITHUB_SHA')
     if revision and plan.get('revision') != revision:
-        raise ValueError('Infrastructure plan belongs to a different source commit.')
+        raise ValueError('Backend plan belongs to a different source commit.')
     methods, shards = plan.get('method_cases'), plan.get('shards')
     if not isinstance(methods, dict) or not methods or any(
-        not isinstance(name, str) or not METHOD.fullmatch(name) or type(count) is not int or count < 1
+        not isinstance(name, str) or not METHODS[suite].fullmatch(name) or type(count) is not int or count < 1
         for name, count in methods.items()
     ):
-        raise ValueError('Infrastructure plan has invalid methods or case counts.')
+        raise ValueError('Backend plan has invalid methods or case counts.')
     if not isinstance(shards, list) or not shards or any(not isinstance(shard, list) or not shard for shard in shards):
-        raise ValueError('Infrastructure plan has an empty or invalid shard.')
+        raise ValueError('Backend plan has an empty or invalid shard.')
     assigned = [method for shard in shards for method in shard]
     if any(not isinstance(method, str) for method in assigned) or Counter(assigned) != Counter({method: 1 for method in methods}):
-        raise ValueError('Infrastructure plan must cover every discovered method exactly once.')
+        raise ValueError('Backend plan must cover every discovered method exactly once.')
 
 
 def write_json(path, value):
@@ -79,20 +83,20 @@ def write_json(path, value):
     path.write_text(json.dumps(value, sort_keys=True, indent=2) + '\n')
 
 
-def execute_shard(plan, number, results_root):
-    validate_plan(plan)
+def execute_shard(plan, number, results_root, suite='infrastructure'):
+    validate_plan(plan, suite)
     if not 1 <= number <= len(plan['shards']):
         raise ValueError('Shard number is outside the plan.')
     selected = plan['shards'][number - 1]
     expected = sum(plan['method_cases'][method] for method in selected)
     results_root.mkdir(parents=True, exist_ok=True)
     results = Path(tempfile.mkdtemp(prefix=f'shard-{number:02d}-', dir=results_root)).resolve()
-    receipt = {'source_sha': plan['revision'], 'plan_sha256': plan['sha256'], 'shard': number,
+    receipt = {'suite': suite, 'source_sha': plan['revision'], 'plan_sha256': plan['sha256'], 'shard': number,
                'shard_count': len(plan['shards']), 'expected_cases': expected, 'actual_cases': None,
                'selected_methods': selected}
     write_json(results / 'receipt.json', receipt)
-    print(f"Infrastructure shard {number}/{len(plan['shards'])}: {len(selected)} methods, {expected} cases; plan {plan['sha256']}", flush=True)
-    result = subprocess.run(['dotnet', 'test', PROJECT, '--no-build', '--no-restore', '--nologo',
+    print(f"{SUITES[suite]} shard {number}/{len(plan['shards'])}: {len(selected)} methods, {expected} cases; plan {plan['sha256']}", flush=True)
+    result = subprocess.run(['dotnet', 'test', PROJECTS[suite], '--no-build', '--no-restore', '--nologo',
         '--filter', '|'.join('FullyQualifiedName=' + method for method in selected),
         '--blame-hang-timeout', '5m', '--blame-hang-dump-type', 'none',
         '--results-directory', str(results), '--logger', 'trx;LogFileName=results.trx'], cwd=ROOT)
@@ -100,7 +104,7 @@ def execute_shard(plan, number, results_root):
     if result.returncode == 0:
         counters = ET.parse(results / 'results.trx').getroot().find('.//{*}Counters')
         if counters is None:
-            raise ValueError('Infrastructure TRX has no result counters.')
+            raise ValueError('Backend TRX has no result counters.')
         receipt['actual_cases'] = int(counters.attrib['total'])
     write_json(results / 'receipt.json', receipt)
     if result.returncode:
@@ -121,21 +125,23 @@ def main(argv=None):
     running.add_argument('--plan', type=Path, required=True)
     running.add_argument('--shard', type=int, required=True)
     running.add_argument('--results-root', type=Path, required=True)
+    for mode in (planning, running):
+        mode.add_argument('--suite', choices=SUITES, default='infrastructure')
     args = parser.parse_args(argv)
     try:
         if args.mode == 'plan':
-            discovered = subprocess.run(['dotnet', 'test', PROJECT, '--no-build', '--no-restore', '--nologo', '--list-tests'],
+            discovered = subprocess.run(['dotnet', 'test', PROJECTS[args.suite], '--no-build', '--no-restore', '--nologo', '--list-tests'],
                 cwd=ROOT, env={**os.environ, 'DOTNET_CLI_UI_LANGUAGE': 'en'}, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             if discovered.returncode:
                 print(discovered.stdout[-3000:], file=sys.stderr)
                 return discovered.returncode
-            plan = make_plan(parse_discovery(discovered.stdout), args.shards, os.environ.get('GITHUB_SHA'))
+            plan = make_plan(parse_discovery(discovered.stdout, args.suite), args.shards, os.environ.get('GITHUB_SHA'), args.suite)
             write_json(args.output, plan)
             print(f"Planned {sum(plan['method_cases'].values())} cases across {len(plan['shards'])} shards; digest {plan['sha256']}")
             return 0
-        return execute_shard(json.loads(args.plan.read_text()), args.shard, args.results_root)
+        return execute_shard(json.loads(args.plan.read_text()), args.shard, args.results_root, args.suite)
     except (ValueError, KeyError, TypeError, OSError, ET.ParseError) as error:
-        print(f'Infrastructure shards: {error}', file=sys.stderr)
+        print(f'Backend shards: {error}', file=sys.stderr)
         return 2
 
 

@@ -86,12 +86,19 @@ public sealed partial class TenantSessionAccessTests
             instanceRevision = changed.GetProperty("instance").GetProperty("revision").GetInt64();
         }
         var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = instanceRevision,
-            modelKey = format == "png" ? "scripted-vision" : null }))).GetProperty("sessionId").GetGuid();
+            modelKey = format is "png" or "jpeg" or "gif" or "webp" ? "scripted-vision" : null }))).GetProperty("sessionId").GetGuid();
         byte[] bytes; string name, type; var office = services.GetRequiredService<IOfficeProcessor>();
         if (format == "docx") { bytes = office.CreateDocument(new("Read document", [new(null, ["Private read body", "Second source paragraph"], null)]), default).Bytes; name = "read.docx"; type = OfficeLimits.DocumentMime; }
         else if (format.StartsWith("xlsx", StringComparison.Ordinal)) { bytes = office.CreateWorkbook(new([new("Data", [[new("number", Number: 0), new("text", Text: "Private read body")]])]), default).Bytes; name = "read.xlsx"; type = OfficeLimits.SpreadsheetMime; }
         else if (format == "pdf") { bytes = "%PDF-1.7\n1 0 obj << /Type /Page >> endobj\nBT (Private read body) Tj ET\n%%EOF"u8.ToArray(); name = "read.pdf"; type = "application/pdf"; }
         else if (format.StartsWith("png", StringComparison.Ordinal)) { using var bitmap = new SKBitmap(2, 2); bitmap.Erase(SKColors.Red); using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100); bytes = encoded.ToArray(); name = "read.png"; type = "image/png"; }
+        else if (format is "jpeg" or "webp")
+        {
+            using var bitmap = new SKBitmap(2, 2); bitmap.Erase(SKColors.Red);
+            using var encoded = bitmap.Encode(format == "jpeg" ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Webp, 90);
+            bytes = encoded.ToArray(); name = format == "jpeg" ? "read.jpg" : "read.webp"; type = "image/" + format;
+        }
+        else if (format == "gif") { bytes = Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"); name = "read.gif"; type = "image/gif"; }
         else if (format == "binary") { bytes = [0, 1, 2, 255, 254]; name = "read.bin"; type = "application/octet-stream"; }
         else { bytes = format == "large-text" ? System.Text.Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("Private read body → thử nghiệm\n", 300))) : "Private read body → thử nghiệm"u8.ToArray(); name = "read.txt"; type = "text/plain"; }
         name = displayNameOverride ?? name;
@@ -107,6 +114,8 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "docx")] [InlineData(true, "docx")] [InlineData(false, "xlsx")] [InlineData(true, "xlsx")]
     [InlineData(false, "xlsx-range")] [InlineData(true, "xlsx-range")] [InlineData(false, "pdf")] [InlineData(true, "pdf")]
     [InlineData(false, "png")] [InlineData(true, "png")] [InlineData(false, "png-no-vision")] [InlineData(true, "png-no-vision")]
+    [InlineData(false, "jpeg")] [InlineData(true, "jpeg")] [InlineData(false, "gif")] [InlineData(true, "gif")]
+    [InlineData(false, "webp")] [InlineData(true, "webp")]
     [InlineData(false, "binary")] [InlineData(true, "binary")]
     public async Task Tenant_attachment_model_reads_historical_source_through_actual_tool_loop_and_keeps_original_bytes(bool sqlite, string format)
     {
@@ -132,7 +141,16 @@ public sealed partial class TenantSessionAccessTests
             var result = model.Requests.Last().Messages.Single(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AttachmentsRead);
             using var doc = JsonDocument.Parse(result.Text); Assert.True(doc.RootElement.GetProperty("tenantAttachmentRead").GetBoolean());
             Assert.Equal(v.Id, doc.RootElement.GetProperty("attachmentId").GetGuid());
-            if (format == "png") { var image = Assert.Single(result.Parts!.OfType<ModelImageContent>()); using var bitmap = SKBitmap.Decode(image.Bytes.ToArray()); Assert.Equal(2, bitmap.Width); Assert.Equal(2, bitmap.Height); }
+            if (format is "png" or "jpeg" or "gif" or "webp")
+            {
+                var image = Assert.Single(result.Parts!.OfType<ModelImageContent>());
+                Assert.Equal(format == "jpeg" ? "image/jpeg" : "image/png", image.ContentType);
+                if (format == "png") Assert.Equal("read.png", image.FileName);
+                using var bitmap = SKBitmap.Decode(image.Bytes.ToArray());
+                Assert.Equal(format == "gif" ? 1 : 2, bitmap.Width); Assert.Equal(format == "gif" ? 1 : 2, bitmap.Height);
+                if (format == "jpeg") Assert.True(image.Bytes.Length >= 3 && image.Bytes[0] == 0xFF && image.Bytes[1] == 0xD8);
+                Assert.DoesNotContain(Convert.ToBase64String(image.Bytes.AsSpan()), result.Text);
+            }
             else
             {
                 Assert.True(result.Parts is null or { Count: 0 });

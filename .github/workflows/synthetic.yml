@@ -113,13 +113,7 @@ jobs:
 
       - name: Backend Application tests
         id: application-tests
-        run: dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --nologo --blame-hang --blame-hang-timeout 5m
-
-      - name: Backend API tests
-        # Collect both suite results when Application assertions fail, while
-        # preserving the failed job and refusing to run after setup was skipped.
-        if: ${{ !cancelled() && steps.application-tests.outcome != 'skipped' }}
-        run: dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
+        run: dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --nologo --blame-hang --blame-hang-timeout 5m --blame-hang-dump-type none
 
       - name: Preserve backend test diagnostics
         if: failure()
@@ -127,9 +121,9 @@ jobs:
         with:
           name: backend-test-diagnostics
           path: |
-            tests/AgentCore.Infrastructure.Tests/TestResults/**/*Sequence.xml
+            tests/AgentCore.Infrastructure.Tests/TestResults/**/Sequence_*.xml
             tests/AgentCore.Infrastructure.Tests/TestResults/**/*.trx
-            tests/AgentCore.Application.Tests/TestResults/**/*Sequence.xml
+            tests/AgentCore.Application.Tests/TestResults/**/Sequence_*.xml
           if-no-files-found: ignore
 
   infrastructure-plan:
@@ -159,7 +153,7 @@ jobs:
       - run: sudo python3 scripts/prepare-ci-apt.py
       - run: pwsh tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
       - name: Discover complete Infrastructure selection
-        run: python3 scripts/infrastructure-shards.py plan --shards 16 --output local/test-results/infrastructure-plan.json
+        run: python3 scripts/backend-test-shards.py plan --shards 16 --output local/test-results/infrastructure-plan.json
       - uses: actions/upload-artifact@v4
         with:
           name: infrastructure-test-plan
@@ -202,7 +196,7 @@ jobs:
           name: infrastructure-test-plan
           path: local/test-results
       - name: Execute and account for Infrastructure partition
-        run: python3 scripts/infrastructure-shards.py run --plan local/test-results/infrastructure-plan.json --shard ${{ matrix.shard }} --results-root local/test-results/infrastructure
+        run: python3 scripts/backend-test-shards.py run --plan local/test-results/infrastructure-plan.json --shard ${{ matrix.shard }} --results-root local/test-results/infrastructure
       - name: Preserve exact partition receipts
         if: always()
         uses: actions/upload-artifact@v4
@@ -211,7 +205,89 @@ jobs:
           path: |
             local/test-results/infrastructure/**/receipt.json
             local/test-results/infrastructure/**/*.trx
-            local/test-results/infrastructure/**/*Sequence.xml
+            local/test-results/infrastructure/**/Sequence_*.xml
+          if-no-files-found: ignore
+
+  api-plan:
+    name: Synthetic API plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      Browser__Headless: "true"
+      AGENTCORE_LIVE_PROVIDER_TESTS: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/realtime-js/package-lock.json
+      - run: npm ci --prefix tests/realtime-js
+      - run: dotnet build tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
+      - run: sudo python3 scripts/prepare-ci-apt.py
+      - run: pwsh tests/AgentCore.Api.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Discover complete API selection
+        run: python3 scripts/backend-test-shards.py plan --suite api --shards 16 --output local/test-results/api-plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-test-plan
+          path: local/test-results/api-plan.json
+          if-no-files-found: error
+
+  api:
+    name: Synthetic API (${{ matrix.shard }}/16)
+    needs: api-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      Browser__Headless: "true"
+      AGENTCORE_LIVE_PROVIDER_TESTS: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/realtime-js/package-lock.json
+      - run: npm ci --prefix tests/realtime-js
+      - run: dotnet build tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
+      - run: sudo python3 scripts/prepare-ci-apt.py
+      - run: pwsh tests/AgentCore.Api.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-test-plan
+          path: local/test-results
+      - name: Execute and account for API partition
+        run: python3 scripts/backend-test-shards.py run --suite api --plan local/test-results/api-plan.json --shard ${{ matrix.shard }} --results-root local/test-results/api
+      - name: Preserve exact partition receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-shard-${{ matrix.shard }}-of-16
+          path: |
+            local/test-results/api/**/receipt.json
+            local/test-results/api/**/*.trx
+            local/test-results/api/**/Sequence_*.xml
           if-no-files-found: ignore
 
   frontend:

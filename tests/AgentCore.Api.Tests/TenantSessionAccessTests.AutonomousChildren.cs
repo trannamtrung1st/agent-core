@@ -312,13 +312,13 @@ public sealed partial class TenantSessionAccessTests
                     if (origin == "manual")
                     {
                         var spoof = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET OriginalInitiatorPrincipalId = NULL, PayloadJson = json_set(PayloadJson, '$.OriginalInitiatorPrincipalId', NULL) WHERE RequestId = {request.RequestId}"));
-                        Assert.Contains("independent task consent requires its exact owned scheduled lineage", spoof.Message);
+                        Assert.Contains("independent task consent requires its exact owned independent lineage", spoof.Message);
                     }
                     else
                     {
                         var otherRoot = Guid.NewGuid().ToString("D");
                         var spoof = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET RootActivationId = {otherRoot}, PayloadJson = json_set(PayloadJson, '$.RootActivationId', {otherRoot}) WHERE RequestId = {request.RequestId}"));
-                        Assert.Contains("independent task consent requires its exact owned scheduled lineage", spoof.Message);
+                        Assert.Contains("independent task consent requires its exact owned independent lineage", spoof.Message);
                     }
                 }
                 if (admitted.Length == 0 && decisions.Count == 0)

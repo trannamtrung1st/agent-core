@@ -72,6 +72,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             var builder = WebApplication.CreateSlimBuilder(); builder.Logging.ClearProviders();
             await using var host = builder.Build(); host.Urls.Add("http://127.0.0.1:0");
             var dispatches = 0; var deletes = 0; var contacts = 0; JsonElement commandBody = default;
+            var deletionCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             host.Run(async http =>
             {
                 contacts++;
@@ -133,6 +134,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                         var current = (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(s.Tenant, s.Session.SessionId))!;
                         await sessions.ChangeAsync(s.Tenant, SandboxHuman(s), new(s.Session.SessionId, current.Snapshot.Revision, TenantSessionAction.Delete),
                             (await f.Iam.ReadTenantAsync(s.Tenant))!.Tenant.Revision);
+                        deletionCompleted.TrySetResult();
                     }
                     if (userCommand && outcome is "uncertain" or "deleted" or "cleanupForeign" or "absent") { http.Response.StatusCode = 500; await http.Response.WriteAsync("PRIVATE_SDK_BODY"); return; }
                     http.Response.ContentType = "text/event-stream";
@@ -209,6 +211,9 @@ public sealed partial class TenantDefinitionIntegrationTests
                     retained.DurationMs ?? 0, retained.FilesystemEffectsMayHaveOccurred, TerminationConfirmed: retained.TerminationConfirmed);
             }
             else result = await sdk.ExecuteApprovedAsync(frame, request.RequestId);
+            // A bounded SDK call may settle before the server-side SQLite
+            // deletion finishes. Await that actual commit, never a delay guess.
+            if (outcome == "deleted") await deletionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30));
             var denied = outcome is "foreign" or "revoked" or "instanceChanged";
             var uncertain = outcome is "uncertain" or "deleted" or "callerCanceled" or "duringCommandRevoked" or "cleanupForeign" or "absent" or "backgroundIncomplete" or "backgroundError" or "humanStop" or "humanReset";
             Assert.Equal(denied ? 0 : 1, dispatches);

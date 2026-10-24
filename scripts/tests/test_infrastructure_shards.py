@@ -1,4 +1,4 @@
-"""Coverage and CLI receipts for the complete Infrastructure CI partition."""
+"""Coverage and CLI receipts for complete backend CI partitions."""
 import importlib.util
 import json
 import os
@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'infrastructure-shards.py'
+SCRIPT = Path(__file__).resolve().parents[1] / 'backend-test-shards.py'
 spec = importlib.util.spec_from_file_location('infrastructure_shards', SCRIPT)
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
@@ -22,7 +22,7 @@ CATALOG = '''The following Tests are available:
 '''
 
 
-class InfrastructureShardTests(unittest.TestCase):
+class BackendShardTests(unittest.TestCase):
     def setUp(self):
         self.source = patch.dict(os.environ, {'GITHUB_SHA': SOURCE})
         self.source.start()
@@ -57,18 +57,30 @@ class InfrastructureShardTests(unittest.TestCase):
         for count in (0, 4):
             with self.assertRaises(ValueError): helper.make_plan(methods, count, SOURCE)
 
+    def test_api_plans_are_suite_bound_and_never_accept_infrastructure_methods(self):
+        catalog = CATALOG.replace('Infrastructure', 'Api')
+        methods = helper.parse_discovery(catalog, 'api')
+        plan = helper.make_plan(methods, 2, SOURCE, 'api')
+        self.assertEqual(plan['suite'], 'api')
+        helper.validate_plan(plan, 'api')
+        with self.assertRaises(ValueError): helper.validate_plan(plan, 'infrastructure')
+        with self.assertRaises(ValueError): helper.parse_discovery(CATALOG, 'api')
+        changed = dict(plan, suite='infrastructure'); changed['sha256'] = helper.digest(changed)
+        with self.assertRaises(ValueError): helper.validate_plan(changed)
+
     def cli_fixture(self, root):
         executable = root / 'bin/dotnet'; executable.parent.mkdir()
         executable.write_text(f'#!{sys.executable}\n' + f'''
 import json, os, pathlib, sys
 args = sys.argv[1:]
 if '--list-tests' in args:
-    print({CATALOG!r})
+    print({CATALOG!r}.replace('Infrastructure', os.environ.get('SHARD_NAMESPACE', 'Infrastructure')))
     sys.exit(0)
 pathlib.Path(os.environ['SHARD_CALL']).write_text(json.dumps(args))
 code = int(os.environ.get('SHARD_EXIT', '0'))
 if code: sys.exit(code)
 counts = {{'AgentCore.Infrastructure.Tests.A.One': 2, 'AgentCore.Infrastructure.Tests.B.Two': 1, 'AgentCore.Infrastructure.Tests.C.Three': 1}}
+counts = {{name.replace('Infrastructure', os.environ.get('SHARD_NAMESPACE', 'Infrastructure')): count for name, count in counts.items()}}
 selected = args[args.index('--filter') + 1].split('|')
 count = sum(counts[item.removeprefix('FullyQualifiedName=')] for item in selected) + int(os.environ.get('SHARD_COUNT_DELTA', '0'))
 results = pathlib.Path(args[args.index('--results-directory') + 1])
@@ -102,6 +114,21 @@ results = pathlib.Path(args[args.index('--results-directory') + 1])
             self.assertEqual(failed.returncode, 7)
             invalid = self.cli(env, 'run', '--plan', plan, '--shard', 3, '--results-root', results)
             self.assertEqual(invalid.returncode, 2)
+
+    def test_api_cli_selects_its_project_and_refuses_a_foreign_suite_before_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); env = {**self.cli_fixture(root), 'SHARD_NAMESPACE': 'Api'}
+            plan = root / 'plan.json'; results = root / 'results'
+            prepared = self.cli(env, 'plan', '--suite', 'api', '--shards', 2, '--output', plan)
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            refused = self.cli(env, 'run', '--plan', plan, '--shard', 1, '--results-root', results)
+            self.assertEqual(refused.returncode, 2); self.assertFalse((root / 'call.json').exists())
+            run = self.cli(env, 'run', '--suite', 'api', '--plan', plan, '--shard', 1, '--results-root', results)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            args = json.loads((root / 'call.json').read_text())
+            self.assertEqual(args[1], 'tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj')
+            receipt = json.loads(next(results.glob('*/receipt.json')).read_text())
+            self.assertEqual(receipt['suite'], 'api'); self.assertEqual(receipt['actual_cases'], 2)
 
 
 if __name__ == '__main__':

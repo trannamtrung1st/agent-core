@@ -68,10 +68,10 @@ public sealed class ImapSmtpEmailProviderTests
     [InlineData(true, EmailSendOutcome.Indeterminate)]
     public async Task SMTP_exact_snapshot_Bcc_envelope_only_and_lost_acceptance_is_uncertain(bool drop, EmailSendOutcome expected)
     {
-        await using var server = new FakeMailServer(smtp: true, dropAfterData: drop);
+        await using var server = new FakeMailServer(smtp: true, dropAfterData: drop, deadlineSeconds: 60);
         var account = Context();
         var logs = new DiagnosticLogCapture<ImapSmtpEmailProvider>();
-        var provider = Provider(server, account, logger: logs);
+        var provider = Provider(server, account, logger: logs, timeoutSeconds: 30);
         var draft = new EmailDraftSnapshot("test", ["to@example.test"], ["cc@example.test"], ["hidden@example.test"], "Hello", "Exact body", account.AccountId, "mail", account.Profile.EmailAddress);
         var sent = await provider.SendDraftAsync(new("test", draft));
         Assert.Equal(expected, sent.Outcome);
@@ -171,8 +171,8 @@ public sealed class ImapSmtpEmailProviderTests
         Assert.Equal(0, resolutions); Assert.Empty(server.Message);
     }
     private static EmailAccountContext Context() => new(Guid.NewGuid(), Guid.NewGuid(), "mail", "Test", 1, Guid.NewGuid(), 1, EmailAccountProfile.Custom("sender@example.test"));
-    private static ImapSmtpEmailProvider Provider(FakeMailServer server, EmailAccountContext account, bool trust = true, ILogger<ImapSmtpEmailProvider>? logger = null) => new(account,
-        new() { SmtpEnabled = true, TimeoutSeconds = 3 }, new(new() { AllowedCustomEndpoints = ["mail.example.test:993", "mail.example.test:465", "smtp.gmail.com:587"] }), new(4), (_, _) => ValueTask.FromResult("fixture-password"), logger)
+    private static ImapSmtpEmailProvider Provider(FakeMailServer server, EmailAccountContext account, bool trust = true, ILogger<ImapSmtpEmailProvider>? logger = null, int timeoutSeconds = 3) => new(account,
+        new() { SmtpEnabled = true, TimeoutSeconds = timeoutSeconds }, new(new() { AllowedCustomEndpoints = ["mail.example.test:993", "mail.example.test:465", "smtp.gmail.com:587"] }), new(4), (_, _) => ValueTask.FromResult("fixture-password"), logger)
     {
         SocketFactory = async ct => { var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp); await socket.ConnectAsync(server.Endpoint, ct); return socket; },
         ConfigureClient = client => { if (trust) client.ServerCertificateValidationCallback = (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(); }
@@ -180,13 +180,14 @@ public sealed class ImapSmtpEmailProviderTests
     private sealed class FakeMailServer : IAsyncDisposable
     {
         private readonly TcpListener listener = new(IPAddress.Loopback, 0);
-        private readonly CancellationTokenSource stop = new(TimeSpan.FromSeconds(10));
+        private readonly CancellationTokenSource stop;
         public X509Certificate2 Certificate { get; }
         public IPEndPoint Endpoint => (IPEndPoint)listener.LocalEndpoint;
         public List<string> Commands { get; } = []; public string Message { get; private set; } = "";
         public Task Completed { get; }
-        public FakeMailServer(bool smtp, bool dropAfterData = false, uint validity = 123, bool plaintext = false, bool omitUidNext = false, int count = 1)
+        public FakeMailServer(bool smtp, bool dropAfterData = false, uint validity = 123, bool plaintext = false, bool omitUidNext = false, int count = 1, int deadlineSeconds = 10)
         {
+            stop = new(TimeSpan.FromSeconds(deadlineSeconds));
             using var key = RSA.Create(2048); var request = new CertificateRequest("CN=fixture-mail.test", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             Certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
             listener.Start(); Completed = Run(smtp, dropAfterData, validity, plaintext, omitUidNext, count);

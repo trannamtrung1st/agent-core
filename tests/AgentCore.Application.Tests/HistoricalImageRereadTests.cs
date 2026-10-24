@@ -27,56 +27,6 @@ namespace AgentCore.Application.Tests;
 public sealed class HistoricalImageRereadTests
 {
     [Fact]
-    public async Task Attachments_read_returns_sanitized_image_part_for_historical_png()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(PngBytes()),
-            false);
-        var result = await executor.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        var part = Assert.IsType<ModelImageContent>(Assert.Single(result.Parts!));
-        Assert.Equal("image/png", part.ContentType);
-        Assert.Equal("photo.png", part.FileName);
-        Assert.DoesNotContain(Convert.ToBase64String(part.Bytes.AsSpan()), result.Text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Attachments_read_normalizes_webp_to_png_bytes_with_truthful_mime()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        using var image = new SKBitmap(3, 3);
-        using var webp = new MemoryStream();
-        using var encoded = image.Encode(SKEncodedImageFormat.Webp, 90);
-        encoded.SaveTo(webp);
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "shot.webp",
-            "image/webp",
-            new MemoryStream(webp.ToArray()),
-            false);
-        var result = await executor.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        var part = Assert.IsType<ModelImageContent>(Assert.Single(result.Parts!));
-        Assert.Equal("image/png", part.ContentType);
-    }
-
-    [Fact]
     public async Task Cross_session_attachment_id_is_not_found()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
@@ -139,52 +89,6 @@ public sealed class HistoricalImageRereadTests
         var toolMessage = model.LastToolMessage!;
         Assert.Contains("vision_required", toolMessage.Text, StringComparison.Ordinal);
         Assert.Null(toolMessage.Parts);
-    }
-
-    [Fact]
-    public async Task Attachments_read_returns_sanitized_image_part_for_historical_jpeg()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "photo.jpg",
-            "image/jpeg",
-            new MemoryStream(JpegBytes()),
-            false);
-        var result = await executor.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        var part = Assert.IsType<ModelImageContent>(Assert.Single(result.Parts!));
-        Assert.Equal("image/jpeg", part.ContentType);
-        Assert.True(part.Bytes.Length >= 3 && part.Bytes[0] == 0xFF && part.Bytes[1] == 0xD8);
-    }
-
-    [Fact]
-    public async Task Attachments_read_normalizes_gif_to_png_bytes_with_truthful_mime()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "anim.gif",
-            "image/gif",
-            new MemoryStream(GifBytes()),
-            false);
-        var result = await executor.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        var part = Assert.IsType<ModelImageContent>(Assert.Single(result.Parts!));
-        Assert.Equal("image/png", part.ContentType);
-        Assert.Contains("\"contentType\":\"image/png\"", result.Text, StringComparison.Ordinal);
     }
 
     [Fact]
