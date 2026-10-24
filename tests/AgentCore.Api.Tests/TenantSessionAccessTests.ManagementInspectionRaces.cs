@@ -48,7 +48,7 @@ public sealed partial class TenantSessionAccessTests
             var submitted=await owner.PostAsJsonAsync(api+$"/sessions/{session}/messages",new { messageId=Guid.NewGuid(),text="Read this exact compound snapshot before a child changes.",expectedRevision=await Revision(owner,tenant),expectedSessionRevision=1 });
             Assert.Equal(HttpStatusCode.Accepted,submitted.StatusCode);var runId=(await Json(submitted)).GetProperty("runId").GetGuid();if(factory is ApprovalExecutionFactory memory)Volatile.Write(ref memory.Enabled,true);
             var final=await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(),tenant,runId);
-            Assert.True(race.Applied==1,$"{final.Status}: {final.Failure?.Code}: {final.Failure?.Summary}");Assert.Equal(AgentRunStatus.Failed,final.Status);Assert.Equal(2,model.Requests.Count);Assert.Empty(TenantManagementReadReferences.Read(final.Checkpoint));
+            Assert.True(race.Applied==1,$"{final.Status}: {final.Failure?.Code}: {final.Failure?.Summary}");Assert.Equal(AgentRunStatus.Failed,final.Status);Assert.Equal(2,model.Requests.Count);Assert.Empty(AssertManagementPreludeAndGetInspections(final));
             Assert.DoesNotContain(model.Requests.SelectMany(r=>r.Messages),m=>m.Text.Contains("\"tenantManagementRead\":true",StringComparison.Ordinal));
             Assert.Equal(6,(await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant,instance))!.Instance.Revision);
         }

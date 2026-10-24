@@ -24,6 +24,8 @@ public sealed partial class TenantSessionAccessTests
         public int Armed;
         public int ReadCaptured;
         public long BeforeRevision, AfterRevision;
+        public Exception? LoggedError;
+        public IReadOnlyList<KeyValuePair<string, object?>> LoggedFields = [];
         public bool Race => kind == "progress-race";
         public bool Late => kind == "late-io";
         public bool ApprovedOnly => kind == "consent-io";
@@ -56,8 +58,29 @@ public sealed partial class TenantSessionAccessTests
         public ValueTask<TenantSessionPage> ListTenantSessionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default, bool includeArchived = true, SessionSurface? surface = null, Guid? instanceId = null, bool recentFirst = false) => inner.ListTenantSessionsAsync(tenantId, allowedIds, page, pageSize, ct, includeArchived, surface, instanceId, recentFirst);
         public ValueTask<bool> TryCreateTenantSessionAsync(TenantSecurityState next, long expectedSecurityRevision, TenantSessionRoot owner, SessionSnapshot snapshot, TenantSessionInitiator initiator, long expectedInstanceRevision, AuthorizationAudit audit, CancellationToken ct = default) => inner.TryCreateTenantSessionAsync(next, expectedSecurityRevision, owner, snapshot, initiator, expectedInstanceRevision, audit, ct);
     }
-    private sealed class ModelPreparationStorage(ITenantRuntimeStore inner, ModelPreparationGate gate) : ITenantRuntimeStore
+    private sealed class ModelPreparationStorage(ITenantRuntimeStore inner, ModelPreparationGate gate) : ITenantRuntimeStore, ITenantRuntimeInputStore, ITenantDeliveryReceiptStore, ITenantSessionForegroundStore
     {
+        public ValueTask<TenantCompletionPage> ReadTenantCompletionsAsync(TenantRuntimeFrame frame, string tool, Guid? child, Guid? cursor, bool pending, int limit, CancellationToken ct = default) => inner.ReadTenantCompletionsAsync(frame, tool, child, cursor, pending, limit, ct);
+        public ValueTask<TenantCompletionView> MutateTenantCompletionAsync(TenantRuntimeFrame frame, Guid child, long revision, string call, Guid token, string? usage, CancellationToken ct = default) => inner.MutateTenantCompletionAsync(frame, child, revision, call, token, usage, ct);
+        public ValueTask<bool> HasTenantCompletionClaimAsync(TenantRuntimeFrame frame, bool acknowledged, CancellationToken ct = default) => inner.HasTenantCompletionClaimAsync(frame, acknowledged, ct);
+        public ValueTask<TenantBackgroundCompletion?> ReadTenantBackgroundCompletionAsync(AgentRunOwner owner, Guid child, CancellationToken ct = default) => inner.ReadTenantBackgroundCompletionAsync(owner, child, ct);
+        public ValueTask<bool> SettleTenantReportSourceReadAsync(ApprovalProcessedSignal signal, Guid audit, CancellationToken ct = default) => inner.SettleTenantReportSourceReadAsync(signal, audit, ct);
+        public ValueTask<bool> SettleTenantBackgroundReportApprovalAsync(ApprovalProcessedSignal signal, AgentRun? report, string? refusal, Guid audit, CancellationToken ct = default) => inner.SettleTenantBackgroundReportApprovalAsync(signal, report, refusal, audit, ct);
+        public ValueTask<IReadOnlyList<TenantBackgroundCompletion>> ListTenantBackgroundCompletionsAsync(int limit, CancellationToken ct = default) => inner.ListTenantBackgroundCompletionsAsync(limit, ct);
+        public ValueTask<AgentRunAdmissionResult> AdmitTenantBackgroundCompletionAsync(AgentRun report, long revision, Guid audit, CancellationToken ct = default) => inner.AdmitTenantBackgroundCompletionAsync(report, revision, audit, ct);
+        public ValueTask SkipTenantBackgroundCompletionAsync(AgentRunOwner owner, Guid child, string reason, CancellationToken ct = default) => inner.SkipTenantBackgroundCompletionAsync(owner, child, reason, ct);
+        public ValueTask<AgentRunAdmissionResult> AdmitTenantImmediateAsync(TenantRuntimeFrame parent, SessionSnapshot snapshot, AgentRun child, Guid audit, CancellationToken ct = default) => inner.AdmitTenantImmediateAsync(parent, snapshot, child, audit, ct);
+        public ValueTask<AgentRun> CommitTenantOutcomeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long revision, AgentRunCommand.Complete completion, Guid? draft, Guid diagnostic, CancellationToken ct = default, TenantConfigurationContinuationAdmission? continuation = null) => inner.CommitTenantOutcomeAsync(frame, snapshot, revision, completion, draft, diagnostic, ct, continuation);
+        public ValueTask<TenantHumanInputCommit> SaveTenantRuntimeInputAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long revision, TenantHumanInput input, Guid audit, CancellationToken ct = default) =>
+            ((ITenantRuntimeInputStore)inner).SaveTenantRuntimeInputAsync(frame, snapshot, revision, input, audit, ct);
+        public ValueTask SaveTenantRuntimeReceiptAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long revision, TenantDeliveryReceipt receipt, CancellationToken ct = default) =>
+            ((ITenantDeliveryReceiptStore)inner).SaveTenantRuntimeReceiptAsync(frame, snapshot, revision, receipt, ct);
+        public ValueTask<long> SaveTenantQuiescentReceiptAsync(TenantDeliveryReceipt receipt, CancellationToken ct = default) =>
+            ((ITenantDeliveryReceiptStore)inner).SaveTenantQuiescentReceiptAsync(receipt, ct);
+        public ValueTask SaveTenantRuntimeForegroundAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long revision, TenantSessionForeground request, Guid audit, CancellationToken ct = default) =>
+            ((ITenantSessionForegroundStore)inner).SaveTenantRuntimeForegroundAsync(frame, snapshot, revision, request, audit, ct);
+        public ValueTask ContinueTenantQuiescentAsync(TenantSessionForeground request, Guid audit, CancellationToken ct = default) =>
+            ((ITenantSessionForegroundStore)inner).ContinueTenantQuiescentAsync(request, audit, ct);
         public ValueTask<SessionSnapshot?> LoadTenantRuntimeAsync(TenantRuntimeFrame frame, CancellationToken ct = default) => inner.LoadTenantRuntimeAsync(frame, ct);
         public async ValueTask SaveTenantRuntimeAsync(TenantRuntimeFrame frame, SessionSnapshot snapshot, long expectedRevision, CancellationToken ct = default)
         {
@@ -96,7 +119,16 @@ public sealed partial class TenantSessionAccessTests
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
             public bool IsEnabled(LogLevel level) => level >= LogLevel.Error;
             public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error, Func<TState, Exception?, string> format)
-            { if (ReferenceEquals(error, gate.Error)) gate.Observed.TrySetResult(); }
+            {
+                if (error is not null && error.HResult == gate.Error.HResult
+                    && error.Message.StartsWith(typeof(IOException).FullName + " HResult=", StringComparison.Ordinal)
+                    && error.StackTrace?.Contains(nameof(ModelPreparationSessions), StringComparison.Ordinal) == true)
+                {
+                    gate.LoggedError = error;
+                    gate.LoggedFields = state is IEnumerable<KeyValuePair<string, object?>> fields ? fields.ToArray() : [];
+                    gate.Observed.TrySetResult();
+                }
+            }
         }
     }
     [Theory] [InlineData(false, "progress-race")] [InlineData(true, "progress-race")]
@@ -106,16 +138,23 @@ public sealed partial class TenantSessionAccessTests
         var root = Path.Combine(Path.GetTempPath(), "tenant-model-preparation-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var gate = new ModelPreparationGate(kind); var model = new AttachmentReadModel();
+            var gate = new ModelPreparationGate(kind); var model = new AttachmentReadModel(); var logs = new DiagnosticLineLoggerProvider();
             void Configure(IServiceCollection services)
             {
+                services.AddLogging(logging => logging.AddProvider(logs));
                 services.Replace(ServiceDescriptor.Singleton<IAgentBrain>(new ModelPreparationBrain(gate)));
                 services.Replace(ServiceDescriptor.Singleton<ITenantSessionStore>(p => new ModelPreparationSessions((ITenantSessionStore)p.GetRequiredService<IIamStore>(), gate)));
                 services.Replace(ServiceDescriptor.Singleton<ITenantRuntimeStore>(p => new ModelPreparationStorage((ITenantRuntimeStore)p.GetRequiredService<IIamStore>(), gate)));
             }
             await using WebApplicationFactory<Program> host = sqlite ? new NativeTenantSqliteFactory(root, model, Configure) : new NativeTenantMemoryFactory(root, model, Configure);
             using var owner = host.CreateClient(); var value = await PrepareAttachmentRead(host.Services, owner, "text", virtualTool: AgentCore.Application.Tools.ToolCatalog.WorkspaceList); var v = value.Execution;
-            var runId = await SendNamespaceMessage(owner, v, host.Services, [v.Id]); await gate.Captured.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var runId = await SendNamespaceMessage(owner, v, host.Services, [v.Id]);
+            try { await gate.Captured.Task.WaitAsync(TimeSpan.FromSeconds(10)); }
+            catch (TimeoutException)
+            {
+                var observed = (await host.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(v.Tenant, runId))!;
+                throw new Xunit.Sdk.XunitException($"{kind}: source read not reached; armed={gate.Armed}; modelCalls={model.Requests.Count}; status={observed.Status}; failure={observed.Failure?.Code}: {observed.Failure?.Summary}; {string.Join("\n", logs.Errors.Select(e => e.ToString()))}");
+            }
             AgentRun done;
             using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
             {
@@ -170,6 +209,9 @@ public sealed partial class TenantSessionAccessTests
             Assert.False(gate.Release.Task.IsCompleted); Assert.Equal(0, model.Calls); Volatile.Write(ref gate.Enabled, false);
             var next = await SendNamespaceMessage(owner, v, host.Services); await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(15));
             gate.Release.TrySetResult(); await gate.Observed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.NotSame(gate.Error, gate.LoggedError); Assert.NotNull(gate.LoggedError);
+            Assert.DoesNotContain(gate.Error.Message, gate.LoggedError.ToString());
+            Assert.Contains(gate.LoggedFields, field => field.Key == "DiagnosticId" && field.Value is Guid diagnostic && diagnostic != Guid.Empty);
             Assert.Equal(AgentRunStatus.Cancelled, (await runs.FindTenantRunAsync(v.Tenant, first))!.Status);
             Assert.Equal(AgentRunStatus.Running, (await runs.FindTenantRunAsync(v.Tenant, next))!.Status);
             model.Release.TrySetResult(); var done = await AttachmentTerminal(runs, v.Tenant, next); Assert.Equal(AgentRunStatus.Completed, done.Status); Assert.Equal(1, model.Calls);

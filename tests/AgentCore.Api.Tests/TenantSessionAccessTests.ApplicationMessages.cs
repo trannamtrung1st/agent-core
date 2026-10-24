@@ -86,9 +86,9 @@ public sealed partial class TenantSessionAccessTests
                 yield return new ModelToolCallEvent(new("late-notice", ToolCatalog.AppMessageSend, "{\"text\":\"Late retired notice\"}"));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
-            if (mode == "reused-id")
+            if (mode is "reused-id" or "reused-same-id")
             {
-                yield return new ModelToolCallEvent(new("notice-a", ToolCatalog.AppMessageSend, "{\"text\":\"Changed duplicate\"}"));
+                yield return new ModelToolCallEvent(new("notice-a", ToolCatalog.AppMessageSend, JsonSerializer.Serialize(new { text = mode == "reused-same-id" ? ProgressNotice : "Changed duplicate" })));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             if (mode == "final-failed")
@@ -108,6 +108,7 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "cancel-after-notice")] [InlineData(true, "cancel-after-notice")]
     [InlineData(false, "steer-after-notice")] [InlineData(true, "steer-after-notice")]
     [InlineData(false, "reused-id")] [InlineData(true, "reused-id")]
+    [InlineData(false, "reused-same-id")] [InlineData(true, "reused-same-id")]
     [InlineData(false, "final-failed")] [InlineData(true, "final-failed")]
     public async Task Tenant_application_messages_use_owned_live_conversation_and_current_source_authority(bool sqlite, string mode)
     {
@@ -170,9 +171,9 @@ public sealed partial class TenantSessionAccessTests
             var notices = history.GetProperty("items").EnumerateArray().Where(i => i.GetProperty("role").GetString() == "applicationMessage").ToArray();
             Assert.Empty((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(0, 100))).Items);
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
-            if (mode is "allowed" or "budget" or "cancel-after-notice" or "steer-after-notice" or "reused-id" or "final-failed")
+            if (mode is "allowed" or "budget" or "cancel-after-notice" or "steer-after-notice" or "reused-id" or "reused-same-id" or "final-failed")
             {
-                var expected = mode is "cancel-after-notice" or "steer-after-notice" ? AgentRunStatus.Cancelled : mode is "reused-id" or "final-failed" ? AgentRunStatus.Failed : AgentRunStatus.Completed;
+                var expected = mode is "cancel-after-notice" or "steer-after-notice" ? AgentRunStatus.Cancelled : mode is "reused-id" or "reused-same-id" or "final-failed" ? AgentRunStatus.Failed : AgentRunStatus.Completed;
                 Assert.True(done.Status == expected, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}");
                 Assert.Equal(mode == "budget" ? 12 : 2, notices.Length);
                 Assert.Equal(ProgressNotice, notices[0].GetProperty("text").GetString());
@@ -188,6 +189,15 @@ public sealed partial class TenantSessionAccessTests
                 {
                     foreach (var call in new[] { "routing", "empty", "oversized" }) Assert.Contains("invalid", observed.Messages.Last(m => m.Role == ModelRole.Tool && m.ToolCallId == call).Text);
                     Assert.Contains("duplicate", observed.Messages.Last(m => m.Role == ModelRole.Tool && m.ToolCallId == "same-text").Text);
+                }
+                if (mode is "reused-id" or "reused-same-id")
+                {
+                    Assert.Contains(AgentRunToolCallCheckpoint.ReadExecutionState(done.Checkpoint).FailedAttempts!, failure => failure.Reason == "invalidToolCallIdentity");
+                    var beforeDuplicate = observed.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
+                    Assert.Equal(beforeDuplicate.Length, done.Checkpoint!.StepCount);
+                    Assert.True(AgentRunToolCallCheckpoint.TryRead(done.Checkpoint, out var retained));
+                    Assert.Equal(beforeDuplicate.Select(m => JsonSerializer.Serialize(m)), retained!.Where(m => m.Role == ModelRole.Tool).Select(m => JsonSerializer.Serialize(m)));
+                    Assert.Single(retained!, m => m.Role == ModelRole.Tool && m.ToolCallId == "notice-a");
                 }
                 if (mode is "allowed" or "budget") Assert.Contains(history.GetProperty("items").EnumerateArray(), i => i.GetProperty("role").GetString() == "assistant" && i.GetProperty("text").GetString()!.StartsWith("Order 91 is delayed.", StringComparison.Ordinal));
                 var assistant = Assert.Single(history.GetProperty("items").EnumerateArray(), i => i.GetProperty("role").GetString() == "assistant" && i.GetProperty("responseId").GetGuid() == running.ResponseId);

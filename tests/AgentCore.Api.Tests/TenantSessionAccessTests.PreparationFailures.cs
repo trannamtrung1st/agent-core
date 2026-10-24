@@ -20,6 +20,8 @@ public sealed partial class TenantSessionAccessTests
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Observed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Exception? LoggedError;
+        public IReadOnlyList<KeyValuePair<string, object?>> LoggedFields = [];
         public Exception Error { get; } = new IOException("Controlled private preparation failure; never publish this exception message.");
         public bool NullDecision => stage == "null-brain" && Volatile.Read(ref Enabled);
         public async ValueTask CheckAsync(string current)
@@ -55,7 +57,16 @@ public sealed partial class TenantSessionAccessTests
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
             public bool IsEnabled(LogLevel level) => level >= LogLevel.Error;
             public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error, Func<TState, Exception?, string> format)
-            { if (ReferenceEquals(error, failure.Error)) failure.Observed.TrySetResult(); }
+            {
+                if (error is not null && error.HResult == failure.Error.HResult
+                    && error.Message.StartsWith(failure.Error.GetType().FullName + " HResult=", StringComparison.Ordinal)
+                    && error.StackTrace?.Contains(nameof(PreparationFailure) + ".CheckAsync", StringComparison.Ordinal) == true)
+                {
+                    failure.LoggedError = error;
+                    failure.LoggedFields = state is IEnumerable<KeyValuePair<string, object?>> fields ? fields.ToArray() : [];
+                    failure.Observed.TrySetResult();
+                }
+            }
         }
     }
     private sealed class PreparationHoldModel : ILanguageModel
@@ -148,6 +159,9 @@ public sealed partial class TenantSessionAccessTests
             var next = await host.Services.GetRequiredService<TenantRunService>().SubmitTextAsync(v.Tenant, v.Session, v.Human, Guid.NewGuid(), "A new independent message", await Revision(owner, v.Tenant), snapshot.Revision);
             await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(15));
             failure.Release.TrySetResult(); await failure.Observed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.NotSame(failure.Error, failure.LoggedError); Assert.NotNull(failure.LoggedError);
+            Assert.DoesNotContain(failure.Error.Message, failure.LoggedError.ToString());
+            Assert.Contains(failure.LoggedFields, field => field.Key == "DiagnosticId" && field.Value is Guid diagnostic && diagnostic != Guid.Empty);
             Assert.Equal(AgentRunStatus.Cancelled, (await runs.FindTenantRunAsync(v.Tenant, initial.RunId))!.Status);
             Assert.Equal(AgentRunStatus.Running, (await runs.FindTenantRunAsync(v.Tenant, next.RunId))!.Status);
             model.Release.TrySetResult(); var done = await AttachmentTerminal(runs, v.Tenant, next.RunId);

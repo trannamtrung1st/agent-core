@@ -36,7 +36,8 @@ public sealed partial class TenantSessionAccessTests
             Assert.Equal(HttpStatusCode.Accepted,submitted.StatusCode);var runId=(await Json(submitted)).GetProperty("runId").GetGuid();if(factory is ApprovalExecutionFactory memory)Volatile.Write(ref memory.Enabled,true);
             var runs=host.Services.GetRequiredService<ITenantRunStore>();var pending=await AwaitManagementRun(runs,tenant,runId,true);
             Assert.True(pending.Status==AgentRunStatus.WaitingForApproval,$"{pending.Status}: {pending.Failure?.Code}: "+string.Join("\n",model.Requests.SelectMany(r=>r.Messages).Where(m=>m.Name==tool).Select(m=>m.Text)));
-            Assert.Empty(TenantManagementReadReferences.Read(pending.Checkpoint));Assert.DoesNotContain(model.Requests.SelectMany(r=>r.Messages),m=>m.Text.Contains("\"tenantManagementRead\":true",StringComparison.Ordinal));
+            var privateProcedures=permission is not ("skills.read" or "agents.read");
+            Assert.Empty(AssertManagementPreludeAndGetInspections(pending,privateProcedures));Assert.DoesNotContain(model.Requests.SelectMany(r=>r.Messages),m=>m.Text.Contains("\"tenantManagementRead\":true",StringComparison.Ordinal));
             var approvals=host.Services.GetRequiredService<ITenantApprovalStore>();var request=(await approvals.FindApprovalAsync(tenant,pending.ApprovalRequestId!.Value))!;
             Assert.Equal(ApprovalKind.Review,request.Kind);Assert.Equal("agents.read",request.Operation.Permission);Assert.NotEmpty(TenantManagementInspectionSources.Read(request.Operation.ManagementRead!.SourcesJson));
             var detail=await Json(await owner.GetAsync(api+$"/approvals/{request.RequestId}"));Assert.True(detail.GetProperty("review").GetProperty("canDecide").GetBoolean());
@@ -44,7 +45,9 @@ public sealed partial class TenantSessionAccessTests
             var decided=await owner.PostAsJsonAsync(api+$"/approvals/{request.RequestId}/decision",new { decision,actionHash=request.Operation.ActionHash,expectedRevision=await Revision(owner,tenant),expectedRequestRevision=request.Revision });
             Assert.True(decided.StatusCode==HttpStatusCode.OK,await decided.Content.ReadAsStringAsync());
             var final=await AwaitManagementSuccessor(runs,tenant,session,request.RequestId,runId);Assert.True(final.Status==AgentRunStatus.Completed,$"{final.Status}: {final.Failure?.Code}: {final.Failure?.Summary}");
-            Assert.Equal(decision=="approve"?1:0,TenantManagementReadReferences.Read(final.Checkpoint).Count);
+            var inspections=AssertManagementPreludeAndGetInspections(final,privateProcedures);
+            Assert.Equal(decision=="approve"?1:0,inspections.Count);
+            if(decision=="approve")Assert.Equal(tool,Assert.Single(inspections).ToolName);
             var receipt=await host.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant,request.Operation.OperationId);
             if(decision=="approve") { Assert.Equal(TenantManagementReadRules.Completed,receipt!.ReasonCode);await host.Services.GetRequiredService<ITenantManagementStore>().RequireTenantManagementReadSourcesAsync(new(tenant,final.AgentRunId),TenantManagementReadReferences.Read(final.Checkpoint),null); }
             else Assert.Null(receipt);

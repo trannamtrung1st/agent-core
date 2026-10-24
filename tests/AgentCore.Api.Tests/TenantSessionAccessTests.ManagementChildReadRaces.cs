@@ -4,6 +4,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
@@ -13,6 +14,25 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace AgentCore.Api.Tests;
 public sealed partial class TenantSessionAccessTests
 {
+    private static IReadOnlyList<TenantManagementReadReference> AssertManagementPreludeAndGetInspections(AgentRun run, bool privateProcedures = true)
+    {
+        var references = TenantManagementReadReferences.Read(run.Checkpoint);
+        var prelude = references.Where(r => r.ToolName == "skills.load").ToArray();
+        Assert.Equal(privateProcedures
+            ? new[] { "{\"ids\":[\"definition:browser.record.lookup\"]}", "{\"ids\":[\"instance:metadata-private\"]}" }
+            : [], prelude.Select(r => r.ArgumentsJson).Order(StringComparer.Ordinal));
+        foreach (var reference in prelude)
+        {
+            Assert.Equal(run.Owner.TenantId, reference.TenantId);
+            using var arguments = JsonDocument.Parse(reference.ArgumentsJson);
+            var key = Assert.Single(arguments.RootElement.GetProperty("ids").EnumerateArray()).GetString();
+            var source = Assert.Single(TenantManagementInspectionSources.Read(reference.SourcesJson));
+            Assert.Equal("skillProcedure", source.Kind); Assert.Equal(key, source.Key);
+            Assert.Equal(run.AgentInstanceId.ToString("D") + ":" + key, source.ResourceId); Assert.Equal(64, source.Fingerprint.Length);
+        }
+        return references.Where(r => r.ToolName != "skills.load").ToArray();
+    }
+
     public static IEnumerable<object[]> ManagementChildRaceCases =>
         from sqlite in new[] { false, true }
         from tool in new[] { "skills.list", "skills.inspect", "resources.list", "resources.inspect" }

@@ -89,7 +89,8 @@ public sealed partial class TenantSessionAccessTests
             else Assert.Empty(remedies);
             if(scenario is "unsupported_goal" or "unknown_target" or "no_settings_scope")Assert.Empty(data.GetProperty("settings").EnumerateArray());
             Assert.Equal(revision,(await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant,instance))!.Instance.Revision);
-            Assert.Empty(TenantManagementInspectionSources.Read(Assert.Single(TenantManagementReadReferences.Read(final.Checkpoint)).SourcesJson));
+            var inspection=Assert.Single(AssertManagementPreludeAndGetInspections(final,scenario!="definition_limit"));
+            Assert.Equal("configuration.inspect",inspection.ToolName);Assert.Empty(TenantManagementInspectionSources.Read(inspection.SourcesJson));
         }
         finally { SqliteConnection.ClearAllPools();Directory.Delete(root,true); }
     }

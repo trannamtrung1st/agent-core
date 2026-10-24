@@ -38,7 +38,8 @@ public sealed partial class TenantSessionAccessTests
             { await foreach (var item in base.GenerateAsync(request, ct)) yield return item; yield break; }
             ChildRequests.Enqueue(request); Entered.TrySetResult(); await Release.Task.WaitAsync(ct);
             Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.WorkComplete);
-            Assert.DoesNotContain(request.Tools!, t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate);
+            Assert.Equal(new[] { ToolCatalog.BackgroundStart }, request.Tools!
+                .Where(t => t.Name is ToolCatalog.BackgroundStart or ToolCatalog.SandboxExec or ToolCatalog.BrowserNavigate).Select(t => t.Name));
             var schema = Assert.Single(request.Tools!, t => t.Name == ToolCatalog.RequestAuthorization).ParametersJson;
             Assert.DoesNotContain("update_persona", schema); Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, schema);
             var refused = request.Messages.Where(m => m.Role == ModelRole.Tool && m.ToolCallId?.StartsWith("background-file-stage-", StringComparison.Ordinal) == true)

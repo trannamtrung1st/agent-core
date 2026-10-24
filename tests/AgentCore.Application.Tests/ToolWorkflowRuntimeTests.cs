@@ -19,30 +19,6 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ToolWorkflowRuntimeTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Reused_tool_call_id_fails_before_another_effect_or_checkpoint(bool sameArguments)
-    {
-        var definition = await Load("customer-support");
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var workspace = new CountingWorkspace();
-        var tools = new SessionToolExecutor();
-        var output = new CapturingSessionOutput();
-        await using var runtime = CreateRuntime(output, definition, new BoundedWriteLanguageModel(2, true, sameArguments), tools, artifacts);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Write two files."));
-        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await runtime.WaitUntilIdleAsync(wait.Token);
-        Assert.Single(workspace.Writes);
-        Assert.Equal(EntryStatus.Failed, runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant).Status);
-        var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime));
-        Assert.Equal(1, run.Checkpoint!.StepCount);
-        Assert.Contains(AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).FailedAttempts!, failure => failure.Reason == "invalidToolCallIdentity");
-        Assert.True(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var transcript));
-        Assert.Single(transcript!, m => m.Role == ModelRole.Tool);
-    }
-
     [Fact]
     public async Task Support_workflow_returns_markdown_and_authorized_artifact()
     {

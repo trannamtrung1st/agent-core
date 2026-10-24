@@ -102,14 +102,14 @@ public sealed partial class TenantSessionAccessTests
                 // Integrity failure aborts the Runtime before another model invocation,
                 // rather than returning corrupted bytes as a recoverable observation.
                 Assert.Equal(AgentRunStatus.Failed, final.Status); Assert.Equal(2, model.Requests.Count);
-                Assert.Empty(TenantManagementReadReferences.Read(final.Checkpoint)); Assert.True(hook!.Reads > 0);
+                Assert.Empty(AssertManagementPreludeAndGetInspections(final)); Assert.True(hook!.Reads > 0);
                 Assert.DoesNotContain(model.Requests.SelectMany(r => r.Messages), m => m.Role == ModelRole.Tool && m.Text.Contains("\"tenantManagementRead\":true", StringComparison.Ordinal));
             }
             else if (mode == "missing")
             {
                 var message = model.Requests.SelectMany(r => r.Messages).Last(m => m.Name == tool);
                 Assert.DoesNotContain("\"tenantManagementRead\":true", message.Text); Assert.DoesNotContain("PRIVATE-INSPECTION", message.Text);
-                Assert.Empty(TenantManagementReadReferences.Read(final.Checkpoint)); Assert.True(hook!.Reads > 0);
+                Assert.Empty(AssertManagementPreludeAndGetInspections(final)); Assert.True(hook!.Reads > 0);
             }
             else
             {
@@ -121,7 +121,7 @@ public sealed partial class TenantSessionAccessTests
                 if (mode == "procedure") Assert.Equal(procedure, data.GetProperty("skill").GetProperty("procedure").GetString());
                 else if (mode == "excerpt") { Assert.Equal(new string('λ', 1024), data.GetProperty("content").GetString()); Assert.True(data.GetProperty("truncated").GetBoolean()); }
                 else { Assert.Equal(JsonValueKind.Null, data.GetProperty("content").ValueKind); Assert.False(data.GetProperty("contentProvided").GetBoolean()); Assert.Equal(0, hook!.Reads); }
-                Assert.Single(TenantManagementReadReferences.Read(final.Checkpoint));
+                Assert.Equal(tool, Assert.Single(AssertManagementPreludeAndGetInspections(final)).ToolName);
             }
             Assert.DoesNotContain("instance:metadata-private", final.ActiveSkillKeys);
             Assert.Equal(instanceRevision, (await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance.Revision);
