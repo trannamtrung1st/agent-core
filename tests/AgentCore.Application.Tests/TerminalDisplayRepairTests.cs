@@ -91,50 +91,6 @@ public sealed partial class TerminalDisplayRepairTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
-    [Theory]
-    [InlineData(ProviderFailureReason.MissingDisplayText)]
-    [InlineData(ProviderFailureReason.InvalidBlocks)]
-    [InlineData(ProviderFailureReason.InvalidJson)]
-    [InlineData(ProviderFailureReason.ResponseFunctionArgumentsInvalid)]
-    [InlineData(ProviderFailureReason.InvalidMarkerEnvelope)]
-    [InlineData(ProviderFailureReason.OutputLimit)]
-    public async Task Terminal_presentation_failure_repairs_once_without_offering_browser_tools(string reason)
-    {
-        var browser = new CountingBrowser();
-        var model = new RecordingModel(
-            [
-                new ModelToolCallEvent(new ModelToolCall(
-                    "nav-1",
-                    ToolCatalog.BrowserNavigate,
-                    """{"url":"https://zigwheels.test/"}""")),
-                new ModelToolCallEvent(new ModelToolCall("obs-1", ToolCatalog.BrowserSnapshot, "{}")),
-                new ModelCompleted(ModelStopReason.ToolCalls)
-            ],
-            [Invalid(reason)],
-            Answer("Zigwheels lists the price."));
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot);
-        await runtime.AttachAsync();
-
-        Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
-        await runtime.WaitUntilIdleAsync();
-
-        Assert.Equal(3, model.Calls);
-        Assert.Equal(["https://zigwheels.test/"], browser.Navigated);
-        Assert.Equal(1, browser.ObserveCalls);
-        var repair = model.Requests[2];
-        AssertTerminalChannelOnly(repair);
-        Assert.Contains(repair.Messages, message => message.Text == ProtocolFailures.RepairInstruction(reason));
-        Assert.Contains(
-            repair.Messages,
-            message => message.Role == ModelRole.Tool
-                && message.Text.Contains("zigwheels.test", StringComparison.Ordinal));
-        Assert.Equal(8192, repair.MaxOutputTokens);
-        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Completed, assistant.Status);
-        Assert.Equal("Zigwheels lists the price.", assistant.Text);
-        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("application protocol", StringComparison.Ordinal));
-    }
-
     [Fact]
     public async Task A_direct_chat_shows_only_the_repaired_answer()
     {

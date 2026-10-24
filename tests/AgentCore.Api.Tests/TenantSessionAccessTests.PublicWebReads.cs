@@ -6,6 +6,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -37,11 +38,18 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "web.search", "journey")] [InlineData(true, "web.search", "journey")]
     [InlineData(false, "web.search", "bounded")] [InlineData(true, "web.fetch", "bounded")]
     [InlineData(false, "web.search", "history")] [InlineData(true, "web.search", "history")]
+    [InlineData(false, "web.search", "repair-missingDisplayText")] [InlineData(true, "web.search", "repair-missingDisplayText")]
+    [InlineData(false, "web.search", "repair-invalidBlocks")] [InlineData(true, "web.search", "repair-invalidBlocks")]
+    [InlineData(false, "web.search", "repair-invalidJson")] [InlineData(true, "web.search", "repair-invalidJson")]
+    [InlineData(false, "web.search", "repair-responseFunctionArgumentsInvalid")] [InlineData(true, "web.search", "repair-responseFunctionArgumentsInvalid")]
+    [InlineData(false, "web.search", "repair-invalidMarkerEnvelope")] [InlineData(true, "web.search", "repair-invalidMarkerEnvelope")]
+    [InlineData(false, "web.search", "repair-outputLimit")] [InlineData(true, "web.search", "repair-outputLimit")]
     public async Task Tenant_public_web_reads_use_current_executor_authority_and_never_release_revoked_observations(bool sqlite, string tool, string mode)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-public-web-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
+            var repairing = mode.StartsWith("repair-", StringComparison.Ordinal);
             var native = new TenantPublicWebProvider { Hold = mode == "revoked", Fail = mode == "failure", Available = mode != "unavailable", Large = mode == "bounded" };
             var model = new TenantPublicWebModel(tool, mode);
             void Configure(IServiceCollection services) { services.AddLogging(logging => logging.AddProvider(new PublicReadFailureLog(model))); services.Replace(ServiceDescriptor.Singleton<IWebSearchProvider>(native)); services.Replace(ServiceDescriptor.Singleton<IPublicWebFetcher>(native)); }
@@ -67,10 +75,10 @@ public sealed partial class TenantSessionAccessTests
             var done = await AwaitBrowserRestartRun(runs, tenant, id, false);
             if (mode == "revoke-output") Assert.Equal(AgentRunStatus.Failed, done.Status);
             else Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}; {string.Join(" | ",model.Failures)}; {string.Join(" | ", model.Requests.Last().Messages.Where(m=>m.Role==ModelRole.Tool).Select(m=>m.Text))}");
-            var expectedCalls = mode is "missing" or "review" or "invalid" or "unavailable" ? 0 : mode == "journey" ? 2 : 1;
+            var expectedCalls = mode is "missing" or "review" or "invalid" or "unavailable" ? 0 : mode == "journey" || repairing ? 2 : 1;
             Assert.Equal(expectedCalls, native.Calls);
             var results = model.Requests.Last().Messages.Where(m=>m.Role==ModelRole.Tool && TenantPublicWebReadContract.IsRead(m.Name ?? "")).ToArray();
-            var accepted = mode is "allowed" or "journey" or "bounded" or "revoke-output" or "history";
+            var accepted = repairing || mode is "allowed" or "journey" or "bounded" or "revoke-output" or "history";
             if (accepted)
             {
                 Assert.NotEmpty(results);
@@ -97,6 +105,17 @@ public sealed partial class TenantSessionAccessTests
                 Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains(TenantPublicWebProvider.Witness, StringComparison.Ordinal));
                 Assert.All(history, h => Assert.Contains(h.GetProperty("role").GetString(), new[] { "user", "assistant" }));
                 Assert.Equal(2, model.Requests.Count);
+            }
+            if (repairing)
+            {
+                Assert.Equal(4, model.Requests.Count);
+                var repaired = model.Requests.Last();
+                Assert.All(repaired.Tools ?? [], t => Assert.Equal(AssistantResponseSchema.ResponseFunctionName, t.Name));
+                Assert.Null(repaired.ResponseContract); Assert.Equal(8192, repaired.MaxOutputTokens);
+                Assert.Contains(repaired.Messages, m => m.Text == ProtocolFailures.RepairInstruction(mode[7..]));
+                Assert.Equal(2, repaired.Messages.Count(m => m.Role == ModelRole.Tool && TenantPublicWebReadContract.IsRead(m.Name ?? "")));
+                Assert.Single(history, h => h.GetProperty("text").GetString() == TenantPublicWebModel.RepairedAnswer);
+                Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains("previous response format", StringComparison.Ordinal));
             }
             if (!accepted || mode == "revoke-output") Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains(TenantPublicWebProvider.Witness, StringComparison.Ordinal));
             Assert.Empty((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(0,100))).Items);
@@ -128,16 +147,31 @@ public sealed partial class TenantSessionAccessTests
     }
     private sealed class TenantPublicWebModel(string tool, string mode) : ILanguageModel
     {
+        public const string RepairedAnswer = "Recovered the owned public research answer.";
+        private bool presentationFailed;
         public ModelCapabilities Capabilities=>new(true,true,true); public ConcurrentQueue<ModelRequest> Requests { get; }=new(); public ConcurrentQueue<string> Failures { get; }=new();
         public TaskCompletionSource OutputEntered { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously); public TaskCompletionSource OutputRelease { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct=default)
         {
             Requests.Enqueue(request); var results=request.Messages.Where(m=>m.Role==ModelRole.Tool && TenantPublicWebReadContract.IsRead(m.Name ?? "")).ToArray();
-            var current=results.Length==1 && mode=="journey"?ToolCatalog.WebFetch:tool;
-            if (results.Length<(mode=="journey"?2:1) && request.Tools!.Any(t=>t.Name==current))
+            var repairing = mode.StartsWith("repair-", StringComparison.Ordinal);
+            var journey = mode == "journey" || repairing;
+            var current=results.Length==1 && journey?ToolCatalog.WebFetch:tool;
+            if (results.Length<(journey?2:1) && request.Tools!.Any(t=>t.Name==current))
             {
                 var args=current==ToolCatalog.WebSearch ? mode=="invalid"?"{\"query\":\"public\",\"principalId\":\"forged\"}":"{\"query\":\"public source\",\"limit\":2}" : mode=="invalid"?"{\"url\":\"http://127.0.0.1/private\"}":"{\"url\":\"https://public.example/source\"}";
                 yield return new ModelToolCallEvent(new("public-read-"+results.Length,current,args)); yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            if (repairing)
+            {
+                if (!presentationFailed)
+                {
+                    presentationFailed = true;
+                    yield return new ModelFailed(new(ProviderErrorCode.InvalidResponse, "Controlled invalid terminal format after owned reads.",
+                        FailureReason: mode[7..], ResponseChannel: ProviderResponseChannel.StructuredOutput));
+                    yield break;
+                }
+                yield return new ModelTextDelta(RepairedAnswer); yield return new ModelCompleted(ModelStopReason.Completed); yield break;
             }
             if (mode=="revoke-output") { OutputEntered.TrySetResult(); await OutputRelease.Task.WaitAsync(ct); }
             yield return new ModelTextDelta(JsonSerializer.Serialize(new { disposition="Complete", action=new { kind="chat.respond" }, displayText=mode=="history"?"Finished controlled research.":results.Any(r=>r.Text.Contains(TenantPublicWebProvider.Witness,StringComparison.Ordinal))?TenantPublicWebProvider.Witness:"No public observation was released.", speech=new { mode="none" }, memory=Array.Empty<object>() }));
