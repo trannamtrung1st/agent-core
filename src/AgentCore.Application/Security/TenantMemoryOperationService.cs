@@ -77,6 +77,16 @@ public sealed class TenantMemoryOperationService(ITenantMemoryOperationStore mem
         var args = TenantMemoryToolContract.Parse(value.ToolName, value.ArgumentsJson);
         return await memories.ObserveTenantMemoryOperationAsync(new(request.TenantId, request.RunId), null, args, value, human, ct).ConfigureAwait(false);
     }
+    // The typed owner reobserves the saved operation and its feature-specific
+    // source/reviewer rights; the shared approval service owns lifecycle only.
+    public async ValueTask<bool> ReviewAsync(TenantApprovalRequest request, Guid human, CancellationToken ct = default)
+    {
+        var value = request.Operation.MemoryOperation ?? throw new AccessDeniedException("approval_unavailable");
+        var observed = await PrepareAsync(new(request.TenantId, request.RunId), null, value.ToolName, value.ArgumentsJson, ct, value).ConfigureAwait(false);
+        var independent = await IndependentAsync(request, observed, ct).ConfigureAwait(false);
+        await ReviewerAsync(request, observed, human, ct).ConfigureAwait(false);
+        return independent;
+    }
     public ValueTask ReviewerAsync(TenantApprovalRequest request, TenantMemoryOperationObservation observation, Guid human, CancellationToken ct = default)
         => TenantMemoryOperationReview.ReviewerAsync(request, observation, human, iam, ct);
     public async ValueTask<bool> IndependentAsync(TenantApprovalRequest request, TenantMemoryOperationObservation observation, CancellationToken ct = default)

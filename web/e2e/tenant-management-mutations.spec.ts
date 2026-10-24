@@ -1,8 +1,9 @@
+import { canonicalFetch, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
 const password = process.env.TENANT_MEMORY_PASSWORD ?? 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, path: string, data?: unknown, method = data === undefined ? 'GET' : 'POST'): Promise<T> {
-  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const r = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
+  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const r = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
   expect(r.ok(), `${method} ${path}: ${r.status()} ${await r.text()}`).toBeTruthy(); return r.status() === 204 ? undefined as T : r.json();
 }
 let authenticatedState: Awaited<ReturnType<APIRequestContext['storageState']>>;
@@ -10,8 +11,7 @@ test.beforeAll(async ({ browser }) => {
   const context = await browser.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL }); const page = await context.newPage();
   try {
     expect((await (await context.request.get('/health')).json()).profile).toBe('Synthetic');
-    await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(login); await page.getByLabel('Password', { exact: true }).fill(password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+    await signInTenant(page, login, password);
     authenticatedState = await context.storageState();
   } finally { await context.close(); }
 });

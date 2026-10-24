@@ -1,3 +1,4 @@
+import { signInTenant } from './support/tenant-auth';
 import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,8 +8,7 @@ test('tenant account monitoring saves, queues a scan, guards edits and recovers 
   page.on('pageerror', e => failures.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !m.text().includes('409')) failures.push(m.text()); });
   page.on('request', r => { if (new URL(r.url()).pathname.startsWith('/api/v2/admin/')) legacy.push(r.url()); });
   page.on('requestfailed', r => { if (r.failure()?.errorText !== 'net::ERR_ABORTED') failures.push(r.url()); });
-  await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill('tenant-chat-owner@example.test'); await page.getByLabel('Password', { exact: true }).fill('synthetic-tenant-chat-password');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
+  await signInTenant(page, 'tenant-chat-owner@example.test', 'synthetic-tenant-chat-password');
   const tenant = (await (await page.request.get('/api/v2/account/tenants')).json()).items[0].tenantId;
   const api = `/api/v2/tenants/${tenant}`; const csrf = (await (await page.request.get('/api/v2/auth/csrf')).json()).token;
   const revision = (await (await page.request.get(api + '/access/me')).json()).revision;

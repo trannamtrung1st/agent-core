@@ -8,7 +8,10 @@
       "applicationUrl": "http://127.0.0.1:5080",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "AgentCore__Profile": "Synthetic"
+        "AgentCore__Profile": "Synthetic",
+        "Security__Http__AllowInsecureLocalHttp": "true",
+        "Security__Http__AllowedOrigins__0": "http://localhost:5173",
+        "Security__Http__AllowedOrigins__1": "http://127.0.0.1:5173"
       }
     },
     "http-openrouter": {
@@ -19,6 +22,9 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "AgentCore__Profile": "Real",
+        "Security__Http__AllowInsecureLocalHttp": "true",
+        "Security__Http__AllowedOrigins__0": "http://localhost:5173",
+        "Security__Http__AllowedOrigins__1": "http://127.0.0.1:5173",
         "Providers__LanguageModels__primary-llm__Adapter": "OpenAICompatible",
         "Providers__LanguageModels__primary-llm__BaseUrl": "https://openrouter.ai/api/v1/",
         "Providers__LanguageModels__primary-llm__DefaultModel": "deepseek/deepseek-v4.1-flash",

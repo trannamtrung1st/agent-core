@@ -1,5 +1,7 @@
 # Backend Implementation Specification
 
+Current IAM implementation and local Synthetic proposal acceptance are complete in [final delivery](reports/tenant-final-delivery-2026-10-24.md); [repository stabilization](reports/iam-stabilization-2026-10-24.md) owns subsequent launcher/test and typed review-owner changes. Earlier checkpoint paragraphs describe their dated partial scope; their pending statements do not reopen completed successors or establish deployment/live-provider/CI acceptance.
+
 Canonical model Resource authoring shares the human Resource planner and the existing consent/local-effect owner. The four commands retain independent primary and source reads, actual root/checkpoint provenance, complete exact plans and immutable body-free receipts. New explicitly delegated Managed text creation shares the direct command transaction with Skill changes; other Resource effects keep exact consent. Exact own-effect receipt chains can retain original Run bytes without substituting future content. [Contract and scoped evidence](04-backend-interfaces.md#canonical-model-resource-authoring).
 
 ## Tenant runtime host composition checkpoint

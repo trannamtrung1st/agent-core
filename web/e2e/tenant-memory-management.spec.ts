@@ -1,7 +1,8 @@
+import { canonicalFetch } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 const login = 'tenant-chat-owner@example.test'; const password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, path: string, data?: unknown, method = data === undefined ? 'GET' : 'POST'): Promise<T> {
-  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const result = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
+  const csrf = await (await api.get('/api/v2/auth/csrf')).json(); const result = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
   expect(result.ok(), `${method} ${path}: ${result.status()} ${await result.text()}`).toBeTruthy(); return result.status() === 204 ? undefined as T : result.json();
 }
 for (const viewport of [{ width: 1400, height: 950 }, { width: 390, height: 844 }]) {

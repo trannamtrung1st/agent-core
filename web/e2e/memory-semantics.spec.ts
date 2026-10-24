@@ -1,3 +1,4 @@
+import { canonicalFetch } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 
 const login = process.env.TENANT_MEMORY_LOGIN ?? 'tenant-chat-owner@example.test';
@@ -5,7 +6,7 @@ const password = process.env.TENANT_MEMORY_PASSWORD ?? 'synthetic-tenant-chat-pa
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
 async function call<T>(api: APIRequestContext, path: string, data?: unknown, method = data === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
+  const response = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data });
   expect(response.ok(), `${method} ${path}: ${response.status()} ${await response.text()}`).toBeTruthy();
   return response.status() === 204 ? undefined as T : response.json();
 }

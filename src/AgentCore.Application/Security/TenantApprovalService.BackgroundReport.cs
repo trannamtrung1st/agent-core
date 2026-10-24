@@ -65,7 +65,7 @@ public sealed partial class TenantApprovalService
             try
             {
                 var current = await (backgroundReports ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request, ct).ConfigureAwait(false);
-                var decision = await (effects ?? throw new AccessDeniedException("tenant_effect_unavailable")).FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false)
+                var decision = await effects.FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false)
                     ?? throw new AccessDeniedException("approval_unavailable");
                 TenantBackgroundReportRules.Decision(request, decision, await approvals.FindOperationGrantAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false), time.GetUtcNow());
                 await TenantBackgroundReportRules.ReviewerAsync(current.State, request, decision.HumanPrincipalId, authorizer, ct).ConfigureAwait(false);

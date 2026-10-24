@@ -1,232 +1,25 @@
-import { defineConfig, devices } from '@playwright/test';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { defineConfig } from '@playwright/test';
+import chat from './playwright.tenant-chat.config';
 
-const webDir = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(webDir, '..');
-const playwrightData = path.join(root, 'data', 'playwright');
-const sqlitePath = process.env.PLAYWRIGHT_SQLITE_PATH
-  ? path.isAbsolute(process.env.PLAYWRIGHT_SQLITE_PATH)
-    ? process.env.PLAYWRIGHT_SQLITE_PATH
-    : path.resolve(webDir, process.env.PLAYWRIGHT_SQLITE_PATH)
-  : path.join(playwrightData, 'synthetic.db');
-process.env.PLAYWRIGHT_SQLITE_PATH = sqlitePath;
-fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
-const apiPort = process.env.PLAYWRIGHT_API_PORT ?? '5080';
-const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? '5173';
-const apiUrl = `http://127.0.0.1:${apiPort}`;
-const webUrl = `http://127.0.0.1:${webPort}`;
-const browserSttApiPort = process.env.PLAYWRIGHT_BROWSER_STT_API_PORT ?? '5081';
-const browserSttWebPort = process.env.PLAYWRIGHT_BROWSER_STT_WEB_PORT ?? '5174';
-const browserSttApiUrl = `http://127.0.0.1:${browserSttApiPort}`;
-const browserSttWebUrl = `http://127.0.0.1:${browserSttWebPort}`;
-const browserBrowserApiPort =
-  process.env.PLAYWRIGHT_BROWSER_BROWSER_API_PORT ?? '5082';
-const browserBrowserWebPort =
-  process.env.PLAYWRIGHT_BROWSER_BROWSER_WEB_PORT ?? '5175';
-const browserBrowserApiUrl = `http://127.0.0.1:${browserBrowserApiPort}`;
-const browserBrowserWebUrl = `http://127.0.0.1:${browserBrowserWebPort}`;
-const fixturePort = process.env.PLAYWRIGHT_FIXTURE_PORT ?? '5091';
-const browserSttFixturePort =
-  process.env.PLAYWRIGHT_BROWSER_STT_FIXTURE_PORT ?? '5092';
-const browserBrowserFixturePort =
-  process.env.PLAYWRIGHT_BROWSER_BROWSER_FIXTURE_PORT ?? '5093';
-const faithfulManualOnly = process.env.PLAYWRIGHT_FAITHFUL_MANUAL === '1';
-
-const chromium = devices['Desktop Chrome'];
-
+// Current canonical journeys only. Dedicated tenant configs retain the wider
+// feature matrix; pre-IAM specs are historical evidence, not runnable contracts.
 export default defineConfig({
-  testDir: './e2e',
-  fullyParallel: false,
-  workers: 1,
-  retries: 0,
-  reporter: process.env.CI
-    ? [['github'], ['line'], ['html', { open: 'never' }]]
-    : 'list',
-  use: {
-    ...chromium,
-    baseURL: webUrl,
-    trace: 'retain-on-failure',
-    permissions: ['microphone'],
-    launchOptions: {
-      ...chromium.launchOptions,
-      args: [
-        ...(chromium.launchOptions?.args ?? []),
-        '--use-fake-device-for-media-stream',
-        '--use-fake-ui-for-media-stream',
-        '--autoplay-policy=no-user-gesture-required',
-      ],
-    },
-  },
+  ...chat,
+  reporter: process.env.CI ? [['github'], ['line'], ['html', { open: 'never' }]] : 'list',
   projects: [
-    {
-      name: 'synthetic',
-      testIgnore:
-        /browser-privacy\.spec\.ts|browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts|admin-lifecycle\.spec\.ts|p76-admin-journey\.spec\.ts|p97-harness-management\.spec\.ts|secretary-demo\.spec\.ts|(?:p9899-continuity|continuity-enhancements|p910-continuity-maintenance)\.spec\.ts/,
-    },
-    {
-      name: 'faithful-manual',
-      testMatch: /manual-a-faithful-wall-clock\.spec\.ts/,
-    },
-    { name: 'admin-lifecycle', testMatch: /admin-lifecycle\.spec\.ts/ },
-    { name: 'p97-harness', testMatch: /p97-harness-management\.spec\.ts/ },
-    { name: 'p76-admin', testMatch: /p76-admin-journey\.spec\.ts/ },
-    {
-      name: 'browser-stt',
-      testMatch: /browser-stt\.spec\.ts/,
-      use: { baseURL: browserSttWebUrl },
-    },
-    {
-      name: 'browser-browser',
-      testMatch: /browser-browser\.spec\.ts/,
-      use: { baseURL: browserBrowserWebUrl },
-    },
-    {
-      name: 'p910-continuity-maintenance',
-      testMatch: /p910-continuity-maintenance\.spec\.ts/,
-    },
-    {
-      name: 'p9899-continuity',
-      testMatch: /(?:p9899-continuity|continuity-enhancements)\.spec\.ts/,
-    },
-    { name: 'secretary-demo', testMatch: /secretary-demo\.spec\.ts/ },
-  ],
-  webServer: [
-    {
-      command: `dotnet run --project src/AgentCore.Api --no-launch-profile --urls ${apiUrl}`,
-      cwd: root,
-      env: {
-        ASPNETCORE_ENVIRONMENT: 'Development',
-        AgentCore__Profile: 'Synthetic',
-        Providers__Speech__Recognition__Adapter: 'Synthetic',
-        Providers__Speech__Synthesis__Adapter: 'Synthetic',
-        // OAuth callbacks must return to this isolated host, including non-default test ports.
-        GoogleOAuth__PublicAppUrl: webUrl,
-        GoogleDrive__Enabled: 'true',
-        AGENTCORE_LIVE_PROVIDER_TESTS:
-          process.env.AGENTCORE_LIVE_PROVIDER_TESTS ?? '0',
-        AGENTCORE_LIVE_OPENAI_STT: process.env.AGENTCORE_LIVE_OPENAI_STT ?? '0',
-        AGENTCORE_LIVE_OPENAI_TTS: process.env.AGENTCORE_LIVE_OPENAI_TTS ?? '0',
-        Persistence__Provider: process.env.Persistence__Provider ?? 'Sqlite',
-        Persistence__ConnectionString:
-          process.env.Persistence__ConnectionString ??
-          `Data Source=${sqlitePath}`,
-        Persistence__AttachmentRoot:
-          process.env.Persistence__AttachmentRoot ??
-          path.join(playwrightData, 'attachments'),
-        Persistence__WorkspaceRoot:
-          process.env.Persistence__WorkspaceRoot ??
-          path.join(playwrightData, 'workspaces'),
-        Persistence__ArtifactRoot:
-          process.env.Persistence__ArtifactRoot ??
-          path.join(playwrightData, 'artifacts'),
-        Persistence__CredentialProtectionKeyRoot:
-          process.env.Persistence__CredentialProtectionKeyRoot ??
-          path.join(playwrightData, 'credential-protection-keys'),
-        // Keep the durability gate fast while still exercising grace expiry and headless continuation.
-        AgentCore__DetachGracePeriodSeconds: '2',
-        AgentCore__MaxActiveSessions: '32',
-        Browser__Enabled: 'true',
-        Browser__Headless: 'true',
-        Browser__PolicyMode: 'Restricted',
-        Browser__FixtureEnabled: 'true',
-        Browser__FixturePort: fixturePort,
-        Browser__NavigationOrigins__0: `http://127.0.0.1:${fixturePort}`,
-        Browser__InteractionOrigins__0: `http://127.0.0.1:${fixturePort}`,
-      },
-      url: `${apiUrl}/health`,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
-    {
-      command: `pnpm exec vite --host 127.0.0.1 --port ${webPort}`,
-      cwd: webDir,
-      env: {
-        VITE_API_PROXY_TARGET: apiUrl,
-        VITE_DEV_PORT: webPort,
-        VITE_CACHE_DIR: process.env.VITE_CACHE_DIR ?? path.join(playwrightData, `vite-${webPort}`),
-      },
-      url: webUrl,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
-    ...(faithfulManualOnly
-      ? []
-      : [
-          {
-            command: `dotnet run --project src/AgentCore.Api --no-launch-profile --urls ${browserSttApiUrl}`,
-            cwd: root,
-            env: {
-              ASPNETCORE_ENVIRONMENT: 'Development',
-              AgentCore__Profile: 'Synthetic',
-              GoogleOAuth__PublicAppUrl: browserSttWebUrl,
-              Persistence__Provider: 'InMemory',
-              Providers__Speech__Recognition__Adapter: 'Browser',
-              AGENTCORE_LIVE_PROVIDER_TESTS: '0',
-              AGENTCORE_LIVE_OPENAI_STT: '0',
-              AGENTCORE_LIVE_OPENAI_TTS: '0',
-              Browser__Enabled: 'true',
-              Browser__Headless: 'true',
-              Browser__PolicyMode: 'Restricted',
-              Browser__FixtureEnabled: 'true',
-              Browser__FixturePort: browserSttFixturePort,
-              Browser__NavigationOrigins__0: `http://127.0.0.1:${browserSttFixturePort}`,
-              Browser__InteractionOrigins__0: `http://127.0.0.1:${browserSttFixturePort}`,
-            },
-            url: `${browserSttApiUrl}/health`,
-            reuseExistingServer: false,
-            timeout: 120_000,
-          },
-          {
-            command: `pnpm exec vite --host 127.0.0.1 --port ${browserSttWebPort}`,
-            cwd: webDir,
-            env: {
-              VITE_API_PROXY_TARGET: browserSttApiUrl,
-              VITE_DEV_PORT: browserSttWebPort,
-              VITE_CACHE_DIR: path.join(playwrightData, `vite-${browserSttWebPort}`),
-            },
-            url: browserSttWebUrl,
-            reuseExistingServer: false,
-            timeout: 120_000,
-          },
-          {
-            command: `dotnet run --project src/AgentCore.Api --no-launch-profile --urls ${browserBrowserApiUrl}`,
-            cwd: root,
-            env: {
-              ASPNETCORE_ENVIRONMENT: 'Development',
-              AgentCore__Profile: 'Synthetic',
-              GoogleOAuth__PublicAppUrl: browserBrowserWebUrl,
-              Persistence__Provider: 'InMemory',
-              Providers__Speech__Recognition__Adapter: 'Browser',
-              Providers__Speech__Synthesis__Adapter: 'Browser',
-              AGENTCORE_LIVE_PROVIDER_TESTS: '0',
-              AGENTCORE_LIVE_OPENAI_STT: '0',
-              AGENTCORE_LIVE_OPENAI_TTS: '0',
-              Browser__Enabled: 'true',
-              Browser__Headless: 'true',
-              Browser__PolicyMode: 'Restricted',
-              Browser__FixtureEnabled: 'true',
-              Browser__FixturePort: browserBrowserFixturePort,
-              Browser__NavigationOrigins__0: `http://127.0.0.1:${browserBrowserFixturePort}`,
-              Browser__InteractionOrigins__0: `http://127.0.0.1:${browserBrowserFixturePort}`,
-            },
-            url: `${browserBrowserApiUrl}/health`,
-            reuseExistingServer: false,
-            timeout: 120_000,
-          },
-          {
-            command: `pnpm exec vite --host 127.0.0.1 --port ${browserBrowserWebPort}`,
-            cwd: webDir,
-            env: {
-              VITE_API_PROXY_TARGET: browserBrowserApiUrl,
-              VITE_DEV_PORT: browserBrowserWebPort,
-              VITE_CACHE_DIR: path.join(playwrightData, `vite-${browserBrowserWebPort}`),
-            },
-            url: browserBrowserWebUrl,
-            reuseExistingServer: false,
-            timeout: 120_000,
-          },
-        ]),
+    { name: 'synthetic', testMatch: [
+      'text-conversation.spec.ts', 'tenant-approval-independence.spec.ts',
+      'tenant-auth-recovery.spec.ts',
+      'tenant-management-mutations.spec.ts', 'tenant-management-inspections.spec.ts',
+      'tenant-memory-management.spec.ts', 'memory-semantics.spec.ts',
+      'tenant-automations.spec.ts', 'tenant-email-watches.spec.ts',
+      'tenant-instance-editor.spec.ts', 'tenant-instance-controls.spec.ts',
+      'admin-lifecycle.spec.ts',
+    ] },
+    { name: 'tenant-voice', testMatch: 'tenant-voice.spec.ts', timeout: 90_000,
+      use: { permissions: ['microphone'], launchOptions: { args: [
+        '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+        '--autoplay-policy=no-user-gesture-required',
+      ] } } },
   ],
 });

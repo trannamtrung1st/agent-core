@@ -54,6 +54,16 @@ public sealed class TenantContinuityReadService(ITenantContinuityStore storage, 
     public ValueTask<TenantContinuityObservation> InspectionAsync(TenantApprovalRequest request, Guid human, CancellationToken ct = default) =>
         storage.ObserveTenantContinuityAsync(new(request.TenantId, request.RunId), null, TenantContinuityToolContract.Parse(request.Operation.ContinuityRead!.ToolName,
             request.Operation.ContinuityRead.ArgumentsJson), request.Operation.ContinuityRead, human, ct);
+    // The typed owner reobserves the saved operation and its feature-specific
+    // source/reviewer rights; the shared approval service owns lifecycle only.
+    public async ValueTask<bool> ReviewAsync(TenantApprovalRequest request, Guid human, CancellationToken ct = default)
+    {
+        var value = request.Operation.ContinuityRead ?? throw new AccessDeniedException("approval_unavailable");
+        var observed = await PrepareAsync(new(request.TenantId, request.RunId), null, value.ToolName, value.ArgumentsJson, ct, value).ConfigureAwait(false);
+        var independent = await IndependentAsync(request, observed, ct).ConfigureAwait(false);
+        await ReviewerAsync(request, observed, human, ct).ConfigureAwait(false);
+        return independent;
+    }
     public ValueTask ReviewerAsync(TenantApprovalRequest request, TenantContinuityObservation observed, Guid human, CancellationToken ct = default) => TenantContinuityReadRules.ReviewerAsync(request, observed, human, iam, ct);
     public async ValueTask<bool> IndependentAsync(TenantApprovalRequest request, TenantContinuityObservation observed, CancellationToken ct)
     {

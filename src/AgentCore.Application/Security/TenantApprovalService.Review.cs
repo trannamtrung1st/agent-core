@@ -128,28 +128,12 @@ public sealed partial class TenantApprovalService
                     independent = await service.IndependentAsync(r, observed, authorizer, ct).ConfigureAwait(false);
                     await TenantAutomationReadService.ReviewerAsync(r, observed, human.PrincipalId, authorizer, ct).ConfigureAwait(false);
                 }
-                else if (op.ExperienceOperation is { } experience)
-                {
-                    var service = experienceOperations ?? throw new AccessDeniedException("tenant_effect_unavailable");
-                    var observed = await service.PrepareAsync(new(r.TenantId, run.AgentRunId), null, experience.ToolName, experience.ArgumentsJson, ct, experience).ConfigureAwait(false);
-                    independent = await service.IndependentAsync(r, observed, ct).ConfigureAwait(false);
-                    await TenantExperienceConsentRules.ExecutorAsync(r, observed, authorizer, ct).ConfigureAwait(false);
-                    await service.ReviewerAsync(r, observed, human.PrincipalId, ct).ConfigureAwait(false);
-                }
-                else if (op.ContinuityRead is { } continuity)
-                {
-                    var reads = continuityReads ?? throw new AccessDeniedException("tenant_effect_unavailable");
-                    var observed = await reads.PrepareAsync(new(r.TenantId, run.AgentRunId), null, continuity.ToolName, continuity.ArgumentsJson, ct, continuity).ConfigureAwait(false);
-                    independent = await reads.IndependentAsync(r, observed, ct).ConfigureAwait(false);
-                    await reads.ReviewerAsync(r, observed, human.PrincipalId, ct).ConfigureAwait(false);
-                }
-                else if (op.MemoryOperation is { } memory)
-                {
-                    var service = memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable");
-                    var observed = await service.PrepareAsync(new(r.TenantId, run.AgentRunId), null, memory.ToolName, memory.ArgumentsJson, ct, memory).ConfigureAwait(false);
-                    independent = await service.IndependentAsync(r, observed, ct).ConfigureAwait(false);
-                    await service.ReviewerAsync(r, observed, human.PrincipalId, ct).ConfigureAwait(false);
-                }
+                else if (op.ExperienceOperation is not null)
+                    independent = await (experienceOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).ReviewAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
+                else if (op.ContinuityRead is not null)
+                    independent = await (continuityReads ?? throw new AccessDeniedException("tenant_effect_unavailable")).ReviewAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
+                else if (op.MemoryOperation is not null)
+                    independent = await (memoryOperations ?? throw new AccessDeniedException("tenant_effect_unavailable")).ReviewAsync(r, human.PrincipalId, ct).ConfigureAwait(false);
                 else if (op.WorkspaceRead is not null)
                 {
                     var reads = workspaceReads ?? throw new AccessDeniedException("tenant_effect_unavailable");

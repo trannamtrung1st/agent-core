@@ -19,12 +19,13 @@ services:
       Persistence__CredentialProtectionKeyRoot: /data/credential-protection-keys
       Persistence__WorkspaceRoot: /data/workspaces
       Persistence__DefinitionResourceRoot: /data/definition-resources
+      Persistence__AttachmentRoot: /data/attachments
+      Persistence__ArtifactRoot: /data/artifacts
       Providers__LanguageModels__primary-llm__Adapter: Scripted
       # This image does not install Chromium. Leave browser tools off until that runtime is packaged.
       Browser__Enabled: "false"
-      # Published 127.0.0.1:5080:8080 is SNATed to this container's default
-      # gateway. Trust that one hop, not private IP ranges.
-      Hosting__TrustPublishedPortGateway: "true"
+      # Cookie authentication requires HTTPS. Use docker-compose.https.yml with
+      # an operator-supplied certificate; HTTP alone exposes health/static only.
     volumes:
       - agent-core-data:/data
     # Native `dotnet run` + Vite remains the fast loop. This service is the

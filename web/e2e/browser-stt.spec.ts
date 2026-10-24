@@ -1,5 +1,7 @@
-import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
+import { openTenantConversation, prepareTenantVoiceIdentity } from "./support/tenant-voice-fixture";
 import { expect, test } from "@playwright/test";
+
+test.beforeAll(prepareTenantVoiceIdentity);
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -8,8 +10,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("fake Browser STT listens without PCM STT and keeps the composer", async ({ page }) => {
-  await page.goto("/");
-  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
+  await openTenantConversation(page);
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });

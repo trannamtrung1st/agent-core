@@ -41,7 +41,7 @@ public sealed partial class TenantApprovalService
             {
                 var current = await (automationAdmissions ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request, ct).ConfigureAwait(false);
                 if (current.State.Tenant.Revision != state.Tenant.Revision) return false;
-                var decision = await (effects ?? throw new AccessDeniedException("tenant_effect_unavailable")).FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false)
+                var decision = await effects.FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false)
                     ?? throw new AccessDeniedException("approval_unavailable");
                 TenantAutomationAdmissionApprovalRules.Decision(request, decision, await approvals.FindOperationGrantAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false), time.GetUtcNow());
                 await TenantAutomationAdmissionApprovalRules.ReviewerAsync(state, request, decision.HumanPrincipalId, authorizer, ct).ConfigureAwait(false);

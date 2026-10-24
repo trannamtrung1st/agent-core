@@ -2,6 +2,8 @@
 
 ## Current delivery state — 2026-10-24
 
+The [IAM stabilization follow-up](iam-stabilization-2026-10-24.md) owns subsequent launcher, Compose/HTTPS, canonical Playwright and approval-review integration evidence; earlier delivery fingerprints remain historical.
+
 **Implementation and local proposal acceptance are complete; the final 80-file scope is explicitly approved for direct commit to main.** [Final delivery](tenant-final-delivery-2026-10-24.md) consolidates exact source/commit status, operating instructions and measured limits. All **544 methods and 180 uncalled slots** have dispositions; [20 I/O / ten worker reconciliation](tenant-final-io-worker-reconciliation-2026-10-24.md) and [final rendered UI/design acceptance](tenant-final-ui-acceptance-2026-10-24.md) are complete. No deployment, live-provider, physical-device or CI claim follows.
 
 Earlier boundary closures remain independently qualified in their owning reports; their historical census totals are superseded by the current index above.

@@ -41,6 +41,7 @@ usage() {
   echo "usage: scripts/dev-real.sh start|restart [--api-only] [--with-sandbox] [--with-store] | start|restart --full"
   echo "       scripts/dev-real.sh restart [--full | --with-store | --api-only --with-sandbox] --recreate-sandbox"
   echo "       scripts/dev-real.sh stop [--with-store] [--with-sandbox] | stop --full | status"
+  echo "       scripts/dev-real.sh bootstrap-identity  # explicit one-use setup with operator-supplied AGENTCORE_BOOTSTRAP_* values"
   echo "Default start/restart: OpenSandbox infrastructure + native Real API + Vite. --with-store or --full adds the optional nopCommerce demo; --api-only disables OpenSandbox unless --with-sandbox is also selected. No app container is started."
   echo "Restart reuses infrastructure, including --full and --with-sandbox. --recreate-sandbox and stop --with-sandbox/--full request Session sandbox cleanup: container-local packages, processes and unsynchronized files may be lost. Canonical files are preserved."
 }
@@ -228,6 +229,10 @@ wait_for_url() {
       if [[ "$label" == API ]] && grep -q -F 'Stored Definition requires the three-layer context cutover.' "$api_log" 2>/dev/null; then
         echo "Existing database requires the three-layer context migration. Preserve it and follow docs/17-observability-and-operations.md#three-layer-context-maintenance (backup and drain/cancel pending Runs first). No migration was performed by the launcher." >&2
       fi
+      if [[ "$label" == API ]] && grep -q -F 'Identity is not initialized.' "$api_log" 2>/dev/null; then
+        echo "Identity is not initialized. Set AGENTCORE_BOOTSTRAP_LOGIN, DISPLAY_NAME, PASSWORD, TENANT_NAME and TENANT_SLUG (all with the AGENTCORE_BOOTSTRAP_ prefix), then run: scripts/dev-real.sh bootstrap-identity" >&2
+        echo "This uses the same .env and AGENTCORE_DEV_API_DATA_DIR as start. See docs/17-observability-and-operations.md#explicit-identity-bootstrap-foundation. No account was created by start." >&2
+      fi
       return 1
     fi
     if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then
@@ -244,8 +249,24 @@ start_nopcommerce() {
   (cd "$root" && ./scripts/nopcommerce-demo.sh start)
 }
 
-start_api() {
+configure_api() {
   load_env
+  # This launcher binds only 127.0.0.1. The API still rejects remote cleartext.
+  export Security__Http__AllowInsecureLocalHttp=true
+  export Security__Http__AllowedOrigins__0="http://localhost:$web_port" Security__Http__AllowedOrigins__1="http://127.0.0.1:$web_port"
+  if [[ -n "${AGENTCORE_DEV_API_DATA_DIR:-}" ]]; then
+    mkdir -p "$AGENTCORE_DEV_API_DATA_DIR"
+    local data_root
+    data_root="$(cd "$AGENTCORE_DEV_API_DATA_DIR" && pwd)"
+    export Persistence__Provider=Sqlite Persistence__ConnectionString="Data Source=$data_root/core.db"
+    export Persistence__WorkspaceRoot="$data_root/workspaces" Persistence__ArtifactRoot="$data_root/artifacts"
+    export Persistence__AttachmentRoot="$data_root/attachments" Persistence__CredentialProtectionKeyRoot="$data_root/keys"
+    export Persistence__DefinitionResourceRoot="$data_root/resources"
+  fi
+}
+
+start_api() {
+  configure_api
   if [[ "$sandbox_selected" == 1 ]]; then
     set -a
     source "$root/local/opensandbox-compose/$sandbox_project/native.env"
@@ -255,17 +276,14 @@ start_api() {
     export OpenSandbox__Enabled=false
   fi
   export Hosting__AllowedOrigins__0="http://localhost:$web_port" Hosting__AllowedOrigins__1="http://127.0.0.1:$web_port"
-  local data_args=()
-  if [[ -n "${AGENTCORE_DEV_API_DATA_DIR:-}" ]]; then
-    mkdir -p "$AGENTCORE_DEV_API_DATA_DIR"
-    data_args=("--Persistence:ConnectionString=Data Source=$AGENTCORE_DEV_API_DATA_DIR/core.db"
-      "--Persistence:WorkspaceRoot=$AGENTCORE_DEV_API_DATA_DIR/workspaces"
-      "--Persistence:ArtifactRoot=$AGENTCORE_DEV_API_DATA_DIR/artifacts"
-      "--Persistence:AttachmentRoot=$AGENTCORE_DEV_API_DATA_DIR/attachments"
-      "--Persistence:CredentialProtectionKeyRoot=$AGENTCORE_DEV_API_DATA_DIR/keys")
-  fi
+  local data_args=() key variable
+  for key in Provider ConnectionString WorkspaceRoot ArtifactRoot AttachmentRoot CredentialProtectionKeyRoot DefinitionResourceRoot; do
+    variable="Persistence__$key"
+    if [[ -n "${!variable:-}" ]]; then data_args+=("--Persistence:$key=${!variable}"); fi
+  done
   launch_service "$root" "$api_log" "$api_pid_file" \
-    dotnet run --project src/AgentCore.Api --launch-profile http-openrouter --urls "$api_origin" --AgentCore:Profile=Real ${data_args[@]+"${data_args[@]}"}
+    dotnet run --project src/AgentCore.Api --launch-profile http-openrouter --urls "$api_origin" --AgentCore:Profile=Real \
+    --Security:Http:AllowedOrigins:0="http://localhost:$web_port" --Security:Http:AllowedOrigins:1="http://127.0.0.1:$web_port" ${data_args[@]+"${data_args[@]}"}
 }
 
 start_web() {
@@ -444,6 +462,13 @@ main() {
   local cmd="${1:-}"
   shift || true
   case "$cmd" in
+    bootstrap-identity)
+      configure_api
+      # launch-profile values override environment variables; disable it and set
+      # the same default SQLite path explicitly for this offline command.
+      export Persistence__Provider="${Persistence__Provider:-Sqlite}"
+      export Persistence__ConnectionString="${Persistence__ConnectionString:-Data Source=data/agent-core.db}"
+      (cd "$root" && dotnet run --project src/AgentCore.Api --no-launch-profile -- bootstrap-identity) ;;
     start) cmd_start "$@" ;;
     restart)
       local full=0 sandbox=0 api_only=0 with_store=0 recreate=0 option

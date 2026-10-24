@@ -2,6 +2,8 @@
 
 The IAM successor has completed local implementation and Synthetic proposal acceptance in the final delivery. [Final delivery](reports/tenant-final-delivery-2026-10-24.md) owns the exact source/commit status, finite method/I/O/worker and UI acceptance, operating instructions and measured limits. The final 80-file scope is approved for direct commit to main. This does not imply deployment, live-provider/customer, physical-device or CI acceptance. Historical module reports below retain their original versions; earlier pending statements do not override their verified successors.
 
+The [IAM stabilization follow-up](reports/iam-stabilization-2026-10-24.md) owns subsequent launcher, Compose/HTTPS, canonical Playwright and approval-review integration evidence; earlier delivery fingerprints remain historical.
+
 ## Tenant workspace read Review checkpoint — 2026-10-19
 
 Historical scoped evidence is retained in the [workspace read Review report](reports/tenant-workspace-read-review-verification-2026-10-19.md); current delivery status belongs to the ledger above.

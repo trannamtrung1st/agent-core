@@ -100,6 +100,40 @@ class DevRealTests(unittest.TestCase):
         self.assertNotIn('private-sentinel', result.stderr + result.stdout)
         self.assertFalse((self.root / 'local/dev/web.pid').exists())
 
+    def test_missing_identity_reports_explicit_setup_without_printing_private_logs(self):
+        self.command('dotnet', "echo 'Identity is not initialized. private-sentinel' >&2; exit 1")
+        self.command('curl', 'exit 1')
+        result = self.run_script('start', '--api-only')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('scripts/dev-real.sh bootstrap-identity', result.stderr)
+        self.assertIn('AGENTCORE_DEV_API_DATA_DIR', result.stderr)
+        self.assertNotIn('private-sentinel', result.stderr + result.stdout)
+        self.assertFalse((self.root / 'local/dev/web.pid').exists())
+
+    def test_explicit_bootstrap_uses_selected_roots_without_starting_workers_or_infrastructure(self):
+        self.env['AGENTCORE_DEV_API_DATA_DIR'] = str(self.root / 'private selected data')
+        self.env['AGENTCORE_BOOTSTRAP_PASSWORD'] = 'operator-supplied-test-password'
+        self.command('dotnet', '''python3 - "$@" <<'PYTHON'
+import json, os, pathlib, sys
+pathlib.Path('bootstrap-call.json').write_text(json.dumps({
+    'args': sys.argv[1:], 'connection': os.environ['Persistence__ConnectionString'],
+    'workspace': os.environ['Persistence__WorkspaceRoot'],
+    'http': os.environ['Security__Http__AllowInsecureLocalHttp'],
+    'hasPassword': bool(os.environ.get('AGENTCORE_BOOTSTRAP_PASSWORD'))}))
+PYTHON''')
+        result = self.run_script('bootstrap-identity')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import json
+        called = json.loads((self.root / 'bootstrap-call.json').read_text())
+        self.assertEqual(called['args'], ['run', '--project', 'src/AgentCore.Api', '--no-launch-profile', '--', 'bootstrap-identity'])
+        self.assertEqual(called['connection'], f"Data Source={self.root / 'private selected data/core.db'}")
+        self.assertEqual(called['workspace'], str(self.root / 'private selected data/workspaces'))
+        self.assertEqual(called['http'], 'true')
+        self.assertTrue(called['hasPassword'])
+        self.assertNotIn(self.env['AGENTCORE_BOOTSTRAP_PASSWORD'], result.stdout + result.stderr)
+        self.assertFalse((self.root / 'local/dev/api.pid').exists())
+        self.assertFalse((self.root / 'local/dev/web.pid').exists())
+
     def test_denied_process_inspection_preserves_tracking_and_fails_stop(self):
         started = self.run_script("start", "--api-only")
         self.assertEqual(started.returncode, 0, started.stderr)

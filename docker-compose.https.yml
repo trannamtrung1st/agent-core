@@ -1,0 +1,13 @@
+# Explicit HTTPS entry for the packaged app. Supply a private, readable PFX and
+# password through the operator environment; never commit either value.
+# docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+services:
+  agent-core:
+    ports: !override
+      - "127.0.0.1:${AGENTCORE_COMPOSE_PORT:-5080}:8443"
+    environment:
+      ASPNETCORE_URLS: https://+:8443
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/agent-core.pfx
+      ASPNETCORE_Kestrel__Certificates__Default__Password: ${AGENTCORE_TLS_PASSWORD:?Set the private PFX password}
+    volumes:
+      - ${AGENTCORE_TLS_CERTIFICATE_PATH:?Set the absolute private PFX path}:/https/agent-core.pfx:ro

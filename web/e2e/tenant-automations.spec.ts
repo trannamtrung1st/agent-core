@@ -1,16 +1,14 @@
+import { canonicalFetch, signInTenant } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext, type Page } from '@playwright/test';
 
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 let identity: Awaited<ReturnType<APIRequestContext['storageState']>>;
 async function call<T>(api: APIRequestContext, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const response = await api.fetch(path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  const response = await canonicalFetch(api, path, { method, headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
   expect(response.ok(), `${method} ${path}: ${response.status()} ${await response.text()}`).toBeTruthy(); return response.status() === 204 ? undefined as T : response.json();
 }
-async function signIn(page: Page, email = login, secret = password) {
-  await page.goto('/sign-in'); await page.getByLabel('Email', { exact: true }).fill(email); await page.getByLabel('Password', { exact: true }).fill(secret);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
-}
+async function signIn(page: Page, email = login, secret = password) { await signInTenant(page, email, secret); }
 async function fixture() {
   const api = await requests.newContext({ baseURL: process.env.TENANT_CHAT_TEST_BASE_URL, storageState: identity }); const nonce = crypto.randomUUID().slice(0, 8);
   const tenant = (await call<{ tenantId: string }>(api, '/api/v2/system/tenants', { name: `Schedule ${nonce}`, slug: `schedule-${nonce}` })).tenantId;
@@ -40,7 +38,7 @@ test('Schedule management preserves stale drafts, admits saved work and cancels 
     await saved.getByRole('button', { name: 'Save Automation', exact: true }).click(); await expect(saved.getByText(/Access has changed since/)).toBeVisible();
     await expect(saved.getByRole('button', { name: 'Save Automation', exact: true })).toBeDisabled();
     await saved.getByRole('button', { name: 'Reload current Automation', exact: true }).click(); await expect(saved.getByRole('textbox', { name: 'Automation name', exact: true })).toHaveValue('Retained exact schedule after concurrent change');
-    await saved.getByRole('checkbox', { name: 'Enable scheduled occurrences', exact: true }).check();
+    await saved.getByRole('checkbox', { name: 'Enable automatic occurrences', exact: true }).check();
     await saved.getByRole('spinbutton', { name: 'Schedule maximum occurrences', exact: true }).fill('10');
     await page.screenshot({ path: info.outputPath('automation-narrow-editor.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

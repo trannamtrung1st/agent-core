@@ -2,7 +2,7 @@
 
 This document owns the current responsibility model, dependency boundaries and invariants. Detailed application contracts belong to [Backend Interfaces](04-backend-interfaces.md), browser/wire contracts to [Protocol](14-api-and-realtime-protocol.md), and durable schema/configuration to [Persistence](15-persistence-and-configuration.md). Dated reports qualify their recorded versions; they are evidence, not alternative current interfaces.
 
-The Account/tenant cutover is still under final qualification. The [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) records implemented slices and outstanding acceptance work. Describing an owner here does not claim proposal-wide acceptance, hosted-provider acceptance or a new milestone.
+The Account/tenant successor has completed local implementation and Synthetic proposal acceptance. [Final delivery](reports/tenant-final-delivery-2026-10-24.md) and the [stabilization follow-up](reports/iam-stabilization-2026-10-24.md) distinguish that scope from deployment, live-provider/customer, physical-device and optional CI qualification.
 
 ## Decision
 

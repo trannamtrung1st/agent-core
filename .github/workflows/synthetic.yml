@@ -43,8 +43,8 @@ jobs:
           pnpm install --frozen-lockfile
           sudo python3 ../scripts/prepare-ci-apt.py
           pnpm exec playwright install --with-deps chromium
-      - name: Real Docker SDK, Workspace, browser and restart acceptance
-        run: python3 scripts/opensandbox-local.py accept --ui --build-workbench --name agent-core-opensandbox-ci
+      - name: Real Docker SDK, tenant command, Workspace and restart acceptance
+        run: python3 scripts/opensandbox-local.py accept --build-workbench --name agent-core-opensandbox-ci
       - name: Preserve bounded evidence without private configuration
         if: always()
         uses: actions/upload-artifact@v4
@@ -218,8 +218,7 @@ jobs:
         run: |
           pnpm exec playwright test \
             --project=synthetic \
-            --project=browser-stt \
-            --project=browser-browser \
+            --project=tenant-voice \
             --shard=${{ matrix.shard }}/2
         # Chromium fake media devices only: text, capture PCM, playback, and duplex mute/disconnect. No keys, mic, speaker, or GPU.
 
@@ -231,12 +230,39 @@ jobs:
           path: |
             web/test-results
             web/playwright-report
+            /tmp/agent-core-tenant-*/results/
+            local/test-results/
           if-no-files-found: ignore
 
-  # Acceptance projects stay sequential on their own runner, retaining each
-  # project's dedicated database and server lifecycle. Do not merge the invocations.
+  # Canonical IAM suites retain their own credentials, roots and host lifecycle.
+  # Historical pre-IAM projects are superseded by these tenant-aware journeys.
   playwright-acceptance:
-    name: Synthetic Playwright acceptance
+    name: Synthetic Playwright acceptance (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - tenant-acceptance
+          - browser-stt
+          - browser-browser
+          - access
+          - audit
+          - system-administration
+          - system-browser-privacy
+          - system-operators
+          - tenant-agent-access
+          - tenant-agent-connections
+          - tenant-credentials
+          - tenant-definitions
+          - tenant-instance-version
+          - tenant-instance-skills
+          - tenant-instance-resources
+          - tenant-file-reads
+          - tenant-runtime-state
+          - tenant-events
+          - tenant-browser-profile
+          - tenant-isolation
+          - tenant-request-isolation
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -283,65 +309,20 @@ jobs:
         working-directory: web
         run: pnpm exec playwright install chromium --with-deps
 
-      - name: Faithful Manual-A wall-clock Playwright
+      - name: Canonical authenticated acceptance
         working-directory: web
-        run: |
-          rm -f ../data/playwright/manual-a.db
-          PLAYWRIGHT_SQLITE_PATH=../data/playwright/manual-a.db \
-          PLAYWRIGHT_FAITHFUL_MANUAL=1 \
-            pnpm exec playwright test --project=faithful-manual
-
-      - name: P7G whole-phase Admin lifecycle Playwright
-        working-directory: web
-        run: |
-          rm -f ../data/playwright/admin-lifecycle-isolated.db
-          PLAYWRIGHT_SQLITE_PATH=../data/playwright/admin-lifecycle-isolated.db \
-            pnpm exec playwright test --project=admin-lifecycle
-
-      - name: P7.6 Admin journey Playwright
-        working-directory: web
-        run: |
-          rm -f ../data/playwright/p76-admin.db
-          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p76-admin.db \
-            pnpm exec playwright test --project=p76-admin
-
-      - name: P9.7 harness management Playwright
-        working-directory: web
-        run: |
-          rm -f ../data/playwright/p97-harness.db
-          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p97-harness.db \
-          PLAYWRIGHT_FAITHFUL_MANUAL=1 \
-            pnpm exec playwright test --project=p97-harness
-
-      - name: P9.8/P9.9 continuity Playwright
-        working-directory: web
-        run: |
-          rm -f ../data/playwright/p9899-continuity.db
-          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p9899-continuity.db \
-            pnpm exec playwright test --project=p9899-continuity
-
-      - name: P9.10 identity maintenance Playwright
-        working-directory: web
-        run: |
-          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p910-maintenance.db \
-          PLAYWRIGHT_FAITHFUL_MANUAL=1 \
-            pnpm exec playwright test --project=p910-continuity-maintenance
-
-      - name: Secretary journey Playwright
-        working-directory: web
-        run: |
-          PLAYWRIGHT_SQLITE_PATH=../data/playwright/secretary-demo.db \
-          PLAYWRIGHT_FAITHFUL_MANUAL=1 \
-            pnpm exec playwright test --project=secretary-demo
+        run: pnpm exec playwright test --config playwright.${{ matrix.suite }}.config.ts
 
       - name: Upload Playwright failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-acceptance-failure
+          name: playwright-acceptance-failure-${{ matrix.suite }}
           path: |
             web/test-results
             web/playwright-report
+            /tmp/agent-core-tenant-*/results/
+            local/test-results/
           if-no-files-found: ignore
 
   compose-smoke:
@@ -356,7 +337,7 @@ jobs:
       - name: Restore JavaScript protocol fixture
         run: npm ci --prefix tests/realtime-js
 
-      - name: Owner-capability path and SQLite volume survival
+      - name: Explicit identity, HTTPS cookie/CSRF and SQLite volume survival
         run: ./scripts/compose-sqlite-volume.sh
 
       - name: Email monitoring cursor and generation survive recreation

@@ -1,3 +1,4 @@
+import { canonicalFetch } from './support/tenant-auth';
 import { expect, test, request as requests, type APIRequestContext } from '@playwright/test';
 import fs from 'node:fs';
 import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
@@ -5,7 +6,7 @@ import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
 const login = 'tenant-chat-owner@example.test', password = 'synthetic-tenant-chat-password';
 async function call<T>(api: APIRequestContext, path: string, body?: unknown): Promise<T> {
   const csrf = await (await api.get('/api/v2/auth/csrf')).json();
-  const response = await api.fetch(path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
+  const response = await canonicalFetch(api, path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-AgentCore-CSRF': csrf.token }, data: body });
   expect(response.ok(), `${path}: ${response.status()}`).toBeTruthy();
   return response.json();
 }

@@ -82,6 +82,17 @@ public sealed class TenantExperienceOperationService(ITenantExperienceStore stor
     }
     public ValueTask<TenantExperienceOperationObservation> InspectionAsync(TenantApprovalRequest request, Guid human, CancellationToken ct = default) =>
         storage.ObserveTenantExperienceOperationAsync(new(request.TenantId, request.RunId), null, TenantExperienceToolContract.Parse(request.Operation.ExperienceOperation!.ToolName, request.Operation.ExperienceOperation.ArgumentsJson), request.Operation.ExperienceOperation, human, ct);
+    // The typed owner reobserves the saved operation and its feature-specific
+    // source/reviewer rights; the shared approval service owns lifecycle only.
+    public async ValueTask<bool> ReviewAsync(TenantApprovalRequest request, Guid human, CancellationToken ct = default)
+    {
+        var value = request.Operation.ExperienceOperation ?? throw new AccessDeniedException("approval_unavailable");
+        var observed = await PrepareAsync(new(request.TenantId, request.RunId), null, value.ToolName, value.ArgumentsJson, ct, value).ConfigureAwait(false);
+        var independent = await IndependentAsync(request, observed, ct).ConfigureAwait(false);
+        await TenantExperienceConsentRules.ExecutorAsync(request, observed, iam, ct).ConfigureAwait(false);
+        await ReviewerAsync(request, observed, human, ct).ConfigureAwait(false);
+        return independent;
+    }
     public ValueTask ReviewerAsync(TenantApprovalRequest request, TenantExperienceOperationObservation observed, Guid human, CancellationToken ct = default) => TenantExperienceConsentRules.ReviewerAsync(request, observed, human, iam, ct);
     public async ValueTask<bool> IndependentAsync(TenantApprovalRequest request, TenantExperienceOperationObservation observed, CancellationToken ct)
     {

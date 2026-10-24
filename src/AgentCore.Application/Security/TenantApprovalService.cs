@@ -14,10 +14,36 @@ public sealed record TenantApprovalViewPage(IReadOnlyList<TenantApprovalView> It
 public sealed record TenantApprovalView(TenantApprovalRequest Request, long SecurityRevision,
     TenantOperationReceipt? OperationResult = null, TenantApprovalDecision? Decision = null, TenantApprovalReview? Review = null, TenantAccountActionResult? AccountResult = null);
 
-public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
+public sealed partial class TenantApprovalService(IIamStore security,
+    ITenantApprovalStore approvals,
+    ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null, TenantSandboxControlOperationTarget? controlTargets = null, TenantSandboxRuntimeReadService? sandboxReads = null, TenantBrowserOperationTarget? browserTargets = null, TenantCredentialRuntimeReadService? credentialReads = null, TenantArtifactRuntimeReadService? artifactReads = null, TenantWorkspaceRuntimeReadService? workspaceReads = null, TenantWorkspaceMutationTarget? workspaceMutations = null, TenantArtifactSourceTarget? artifactSources = null, TenantAttachmentRuntimeContextService? attachmentReads = null, TenantBackgroundCreationTarget? backgroundCreations = null, TenantBackgroundReportTarget? backgroundReports = null, ITenantRuntimeStore? reportRuntime = null, TenantCompletionReadService? completionReads = null, TenantReportSourceReadService? reportSourceReads = null, TenantAccountRuntimeReadService? accountReads = null, TenantAccountActionTarget? accountActions = null, ITenantRunStore? accountRuns = null, TenantAutomationOperationTarget? automationAdmissions = null, TenantMemoryOperationService? memoryOperations = null, TenantContinuityReadService? continuityReads = null, TenantExperienceOperationService? experienceOperations = null, TenantManagementOperationTarget? managementTargets = null, TenantPublicWebOperationTarget? webTargets = null)
+    ITenantApprovedOperationStore effects,
+    TenantCredentialOperationTarget? credentialTargets = null,
+    TenantSandboxOperationTarget? sandboxTargets = null,
+    TenantSandboxControlOperationTarget? controlTargets = null,
+    TenantSandboxRuntimeReadService? sandboxReads = null,
+    TenantBrowserOperationTarget? browserTargets = null,
+    TenantCredentialRuntimeReadService? credentialReads = null,
+    TenantArtifactRuntimeReadService? artifactReads = null,
+    TenantWorkspaceRuntimeReadService? workspaceReads = null,
+    TenantWorkspaceMutationTarget? workspaceMutations = null,
+    TenantArtifactSourceTarget? artifactSources = null,
+    TenantAttachmentRuntimeContextService? attachmentReads = null,
+    TenantBackgroundCreationTarget? backgroundCreations = null,
+    TenantBackgroundReportTarget? backgroundReports = null,
+    ITenantRuntimeStore? reportRuntime = null,
+    TenantCompletionReadService? completionReads = null,
+    TenantReportSourceReadService? reportSourceReads = null,
+    TenantAccountRuntimeReadService? accountReads = null,
+    TenantAccountActionTarget? accountActions = null,
+    TenantAutomationOperationTarget? automationAdmissions = null,
+    TenantMemoryOperationService? memoryOperations = null,
+    TenantContinuityReadService? continuityReads = null,
+    TenantExperienceOperationService? experienceOperations = null,
+    TenantManagementOperationTarget? managementTargets = null,
+    TenantPublicWebOperationTarget? webTargets = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -245,13 +271,12 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
 
     private async ValueTask<TenantApprovalView> Metadata(TenantApprovalRequest request, CancellationToken ct)
     {
-        if (effects is null) return new(request, 0);
         var receipt = await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
         var decision = await effects.FindApprovalDecisionAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false);
         if (request.Status == TenantApprovalStatus.Pending && (receipt is not null || decision is not null))
             request = await approvals.FindApprovalAsync(request.TenantId, request.RequestId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("approval_unavailable");
         var accountResult = request.Operation.AccountAction is not null && receipt is not null
-            ? TenantAccountActionResults.Read(request, receipt, accountRuns is null ? null : await accountRuns.FindTenantRunAsync(request.TenantId, receipt.RunId, ct).ConfigureAwait(false)) : null;
+            ? TenantAccountActionResults.Read(request, receipt, await operations.FindRunAsync(new(request.TenantId, receipt.RunId), ct).ConfigureAwait(false)) : null;
         return new(request, 0, receipt, decision, AccountResult: accountResult);
     }
 
@@ -534,7 +559,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             _ = await (automationAdmissions ?? throw new AccessDeniedException("approval_unavailable")).Mutations.InspectionAsync(request, human, ct).ConfigureAwait(false);
         if (request.Operation.ManagementMutation is not null)
         {
-            if (request.Status == TenantApprovalStatus.Approved && (request.Operation.ManagementMutation.Skill is not null || request.Operation.ManagementMutation.Resource is not null) && recorded is null && effects is not null)
+            if (request.Status == TenantApprovalStatus.Approved && (request.Operation.ManagementMutation.Skill is not null || request.Operation.ManagementMutation.Resource is not null) && recorded is null)
                 recorded = await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
             _ = await (managementTargets ?? throw new AccessDeniedException("approval_unavailable")).InspectionAsync(request, human, ct, recorded).ConfigureAwait(false);
         }
@@ -619,7 +644,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         var actionScope = TenantApprovalRules.Scope(request.TenantId, request.Operation);
         if (request is { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation.Skill.Result.Deleted: true })
         {
-            recorded ??= effects is null ? null : await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
+            recorded ??= await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
             if (TenantManagementSkillRules.CompletedDeletion(request, recorded))
             {
                 // The immutable receipt proves the old child address. Only current
@@ -631,7 +656,7 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         }
         if (request is { Status: TenantApprovalStatus.Approved, Operation.ManagementMutation.Resource.Result.Deleted: true })
         {
-            recorded ??= effects is null ? null : await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
+            recorded ??= await effects.FindOperationReceiptAsync(request.TenantId, request.Operation.OperationId, ct).ConfigureAwait(false);
             if (TenantManagementResourceRules.CompletedDeletion(request, recorded))
             {
                 actionScope = AccessScope.ForTenant(request.TenantId);

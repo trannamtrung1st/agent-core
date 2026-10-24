@@ -2,6 +2,8 @@
 
 The Account/tenant IAM successor has completed local implementation and Synthetic proposal acceptance in the final delivery. [Final delivery](docs/reports/tenant-final-delivery-2026-10-24.md) records exact source/commit status, all method/I/O/worker and UI evidence, operating instructions and measured limits. The final 80-file scope is approved for direct commit to main; live-provider/customer outcomes, physical-device certification, rollout and optional CI are not implied. Historical reports retain their own source versions.
 
+The [IAM stabilization follow-up](docs/reports/iam-stabilization-2026-10-24.md) owns subsequent launcher, Compose/HTTPS, canonical Playwright and approval-review integration evidence; earlier delivery fingerprints remain historical.
+
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.
 
 An agent can represent a customer service representative, examiner, tutor, friend, interviewer, receptionist, or another role. The goal of the MVP is not to build a general-purpose autonomous-agent platform. The goal is to prove that one reusable Agent Core can inhabit different identities and interact naturally through text and voice.
