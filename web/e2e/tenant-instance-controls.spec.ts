@@ -39,6 +39,9 @@ test('320px budgets retain stale drafts; policy freeze preserves drafts; model r
     // Follow the actual keyboard-active row, rather than assuming a fixed starting index.
     const listId = await input.getAttribute('aria-controls');
     const popup = page.locator('.ant-select-dropdown').filter({ has: page.locator(`[id="${listId}"]`) });
+    await expect(popup).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(popup).not.toHaveClass(/\bant-slide-up-(?:appear|enter)(?:-(?:prepare|start|active))?\b/);
     const active = popup.locator('.ant-select-item-option-active');
     for (let i = 0; i < 10; i++) {
       if (await active.getAttribute('title') === option) break;

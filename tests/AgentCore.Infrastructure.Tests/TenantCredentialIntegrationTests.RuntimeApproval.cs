@@ -204,7 +204,11 @@ public sealed partial class TenantCredentialIntegrationTests
         await using (var db = await f.Contexts!.CreateDbContextAsync())
         {
             var migrator = db.GetService<IMigrator>();
-            await migrator.MigrateAsync("20261017071356_TenantExecutionAuthorizationAudit");
+            // Current Runs retain public-download references. Roundtrip the safe
+            // predecessor, then require the deeper lossy downgrade to preserve them.
+            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
+            await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync("20261017071356_TenantExecutionAuthorizationAudit"));
+            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
             await migrator.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         }
         Assert.Equal(local, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(setup.Tenant, local.RequestId));
@@ -221,6 +225,7 @@ public sealed partial class TenantCredentialIntegrationTests
             // Completed safe Down steps remain applied when an older lossy step refuses.
             Assert.Equal(payload, await db.Database.SqlQuery<string>($"SELECT PayloadJson AS Value FROM TenantApprovalRequests WHERE RequestId={check.RequestId}").SingleAsync());
             Assert.Contains("20261017090143_TenantCredentialApprovalTargets", await db.Database.GetAppliedMigrationsAsync());
+            Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
             await db.GetService<IMigrator>().MigrateAsync();
             Assert.False(db.Database.HasPendingModelChanges());
         }

@@ -10,9 +10,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# These gates intentionally have no job dependencies: separate runners shorten the
-# critical path without changing test workers, project coverage, or SQLite isolation.
-# Repeated tool/dependency setup is cheaper than serial developer feedback.
+# Independent gates run concurrently. Infrastructure partitions share one discovery
+# plan and verify their actual case counts, preserving complete SQLite coverage.
 jobs:
   opensandbox:
     name: Trusted local OpenSandbox acceptance
@@ -92,8 +91,8 @@ jobs:
       - name: Event storage monitoring tests
         run: python3 -m unittest discover -s scripts/tests -p test_event_storage_snapshot.py -v
 
-      - name: Native launcher and nopCommerce reuse regressions
-        run: python3 -m unittest scripts.tests.test_dev_real scripts.tests.test_nopcommerce_progress scripts.tests.test_nopcommerce_reuse scripts.tests.test_opensandbox_config scripts.tests.test_sandbox_compatibility -v
+      - name: Native and CI operational regressions
+        run: python3 -m unittest scripts.tests.test_dev_real scripts.tests.test_nopcommerce_progress scripts.tests.test_nopcommerce_reuse scripts.tests.test_opensandbox_config scripts.tests.test_sandbox_compatibility scripts.tests.test_infrastructure_shards -v
 
       # Offline fixtures complement the real-Docker job when CI is requested.
       - name: OpenSandbox proof build and offline receipt tests
@@ -112,9 +111,6 @@ jobs:
       - name: Install .NET Playwright Chromium
         run: pwsh tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
 
-      - name: Backend Infrastructure tests
-        run: dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo --blame-hang-timeout 5m --blame-hang-dump-type none --logger "trx;LogFileName=infrastructure.trx"
-
       - name: Backend Application tests
         run: dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --nologo --blame-hang --blame-hang-timeout 5m
 
@@ -130,6 +126,88 @@ jobs:
             tests/AgentCore.Infrastructure.Tests/TestResults/**/*Sequence.xml
             tests/AgentCore.Infrastructure.Tests/TestResults/**/*.trx
             tests/AgentCore.Application.Tests/TestResults/**/*Sequence.xml
+          if-no-files-found: ignore
+
+  infrastructure-plan:
+    name: Synthetic Infrastructure plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      Browser__Headless: "true"
+      AGENTCORE_LIVE_PROVIDER_TESTS: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/realtime-js/package-lock.json
+      - run: npm ci --prefix tests/realtime-js
+      - run: dotnet build tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo
+      - run: sudo python3 scripts/prepare-ci-apt.py
+      - run: pwsh tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Discover complete Infrastructure selection
+        run: python3 scripts/infrastructure-shards.py plan --shards 16 --output local/test-results/infrastructure-plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-test-plan
+          path: local/test-results/infrastructure-plan.json
+          if-no-files-found: error
+
+  infrastructure:
+    name: Synthetic Infrastructure (${{ matrix.shard }}/16)
+    needs: infrastructure-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      Browser__Headless: "true"
+      AGENTCORE_LIVE_PROVIDER_TESTS: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/realtime-js/package-lock.json
+      - run: npm ci --prefix tests/realtime-js
+      - run: dotnet build tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo
+      - run: sudo python3 scripts/prepare-ci-apt.py
+      - run: pwsh tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: infrastructure-test-plan
+          path: local/test-results
+      - name: Execute and account for Infrastructure partition
+        run: python3 scripts/infrastructure-shards.py run --plan local/test-results/infrastructure-plan.json --shard ${{ matrix.shard }} --results-root local/test-results/infrastructure
+      - name: Preserve exact partition receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-shard-${{ matrix.shard }}-of-16
+          path: |
+            local/test-results/infrastructure/**/receipt.json
+            local/test-results/infrastructure/**/*.trx
+            local/test-results/infrastructure/**/*Sequence.xml
           if-no-files-found: ignore
 
   frontend:

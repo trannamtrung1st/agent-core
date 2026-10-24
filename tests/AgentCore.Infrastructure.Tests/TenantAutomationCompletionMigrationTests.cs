@@ -24,12 +24,15 @@ public sealed class TenantAutomationCompletionMigrationTests
                 null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, at, at), null,
                 completionDelivery: AutomationCompletionDelivery.ToSession(Guid.NewGuid()));
             var store = new SqliteTriggerStore(factory); await store.CreateAsync(legacy);
-            await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+            // The original 83-guard checkpoint includes the conversation-destination successor.
+            const string completionCheckpoint = "20261021060000_TenantAutomationConversation";
+            await db.GetService<IMigrator>().MigrateAsync(completionCheckpoint);
             var latest = await Guards(db); Assert.Equal(83, latest.Length); Assert.All(previous, name => Assert.Contains(name, latest));
             Assert.Contains("TR_TenantCompletion_Automation_Insert", latest); Assert.Contains("TR_TenantCompletion_Occurrence_Update", latest);
             Assert.Equal(legacy.CompletionDelivery, (await store.GetAsync(legacy.Owner, legacy.AutomationId))!.CompletionDelivery);
             await db.GetService<IMigrator>().MigrateAsync("20261021040000_TenantEmailWatchOwnership"); Assert.Equal(previous, await Guards(db));
-            await db.Database.MigrateAsync(); Assert.Equal(latest, await Guards(db)); Assert.False(db.Database.HasPendingModelChanges());
+            await db.GetService<IMigrator>().MigrateAsync(completionCheckpoint); Assert.Equal(latest, await Guards(db));
+            await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             Assert.Equal(legacy.CompletionDelivery, (await store.GetAsync(legacy.Owner, legacy.AutomationId))!.CompletionDelivery);
             await db.Database.OpenConnectionAsync(); using var check = db.Database.GetDbConnection().CreateCommand(); check.CommandText = "PRAGMA foreign_key_check";
             using var rows = await check.ExecuteReaderAsync(); Assert.False(await rows.ReadAsync());

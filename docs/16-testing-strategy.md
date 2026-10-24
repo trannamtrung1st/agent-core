@@ -643,6 +643,8 @@ Routine implementation, fix and review requests use focused local verification o
 
 CI is optional and runs only on explicit user request through the manual [Synthetic workflow](../.github/workflows/synthetic.yml). Requests to implement, review, commit, push or complete a milestone do not implicitly request CI dispatch, reruns or waiting. Optional unrun CI does not block completion of the requested change; report checks actually performed and any unverified behavior.
 
+Infrastructure CI discovers the complete built test catalog once and shares a source-bound plan across 16 partitions. Each discovered method belongs to exactly one partition, with all its parameter cases retained. Every partition verifies its actual TRX total, including explicit skips, against the plan and preserves its receipt. Missing discovery, duplicate assignments, mismatched source commits or incomplete case accounting fail the gate. Focused local verification remains the default for ordinary work.
+
 This policy supersedes older instructions below that require hosted CI or broad suites for routine tasks. Historical CI receipts and frozen acceptance records remain evidence for their original commits. An explicitly requested milestone acceptance still requires its applicable local acceptance criteria; hosted CI becomes an acceptance gate only when the user explicitly requests it for that acceptance. Never describe an unrun check as passed.
 
 ## OCI image onboarding checks
