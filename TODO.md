@@ -181,6 +181,8 @@ Always keep this section. These personal ideas are future direction, not approve
 
 Completed ideas remain covered by existing work: Skill/file mentions in the unified composer, Skill catalogs, bounded agent-assisted configuration, Experience and policy-governed initiative through Automations. Track future improvements against those owners rather than duplicating completed plans.
 
+- **Sub-agents management**: parent session to keep track of sub-agents? [TBD].
+
 **Unresolved design decisions:** Environment binding/default/switching semantics; safe removal of any remaining Turn concept; Decision Intelligence model choice and measured value; retrieval infrastructure only if justified. Resolve these through the owning specifications before implementation; this consolidation chooses no new architecture.
 
 ## Maintenance rules
