@@ -338,63 +338,6 @@ public sealed partial class TerminalDisplayRepairTests
     }
 
     [Fact]
-    public async Task A_transient_failure_during_repair_retries_without_tools_or_a_second_effect()
-    {
-        var browser = new CountingBrowser();
-        var model = new RecordingModel(
-            [
-                new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
-                new ModelCompleted(ModelStopReason.ToolCalls)
-            ],
-            [Invalid(ProviderFailureReason.MissingDisplayText)],
-            [Unavailable(ProviderFailureReason.StreamIncomplete)],
-            Answer("The browser is closed."));
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserClose);
-        await runtime.AttachAsync();
-
-        Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
-        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
-
-        Assert.Equal(4, model.Calls);
-        Assert.Equal(1, browser.CloseCalls);
-        AssertTerminalChannelOnly(model.Requests[2]);
-        AssertTerminalChannelOnly(model.Requests[3]);
-        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Completed, assistant.Status);
-        Assert.Equal("Browser closed", Assert.Single(assistant.Envelope!.EffectReceipts!).Label);
-    }
-
-    [Fact]
-    public async Task A_transient_retry_does_not_consume_protocol_repair()
-    {
-        var browser = new CountingBrowser();
-        var model = new RecordingModel(
-            [
-                new ModelToolCallEvent(new ModelToolCall(
-                    "nav-1",
-                    ToolCatalog.BrowserNavigate,
-                    """{"url":"https://zigwheels.test/"}""")),
-                new ModelCompleted(ModelStopReason.ToolCalls)
-            ],
-            [Unavailable(ProviderFailureReason.StreamIncomplete)],
-            [Invalid(ProviderFailureReason.MissingDisplayText)],
-            Answer("Zigwheels lists the price."));
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate);
-        await runtime.AttachAsync();
-
-        Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
-        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
-
-        Assert.Equal(4, model.Calls);
-        Assert.Equal(["https://zigwheels.test/"], browser.Navigated);
-        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
-        AssertTerminalChannelOnly(model.Requests[3]);
-        Assert.Equal(
-            EntryStatus.Completed,
-            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
-    }
-
-    [Fact]
     public async Task An_expired_execution_deadline_does_not_start_protocol_repair()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));

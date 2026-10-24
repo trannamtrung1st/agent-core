@@ -92,7 +92,7 @@ public sealed partial class TenantSessionAccessTests
         WebApplicationFactory<Program>? recreated = null; HttpClient? recreatedOwner = null;
         try
         {
-            var model = new BackgroundFileModel { Review = decision is not ("allowed" or "revoked" or "pending") || kind == "attachment", RepeatRefusal = decision is "reject" or "changed" };
+            var model = new BackgroundFileModel { Review = decision is not ("allowed" or "revoked" or "pending" or "bound") || kind == "attachment", RepeatRefusal = decision is "reject" or "changed" };
             await using WebApplicationFactory<Program> initial = sqlite ? new TenantBackgroundSqliteFactory(root, model) : new TenantBackgroundMemoryFactory(root, model);
             var factory = initial;
             using var initialOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); var owner = initialOwner;
@@ -133,9 +133,22 @@ public sealed partial class TenantSessionAccessTests
             }
             if (kind.StartsWith("attachment", StringComparison.Ordinal))
             {
+                // The held background Run can still commit its prepared context.
+                // Read a coherent public witness and retry only an explicit stale
+                // revision refusal, which has not applied the foreground change.
+                using var foregroundDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                while (true)
+                {
+                    var witness = await Json(await owner.GetAsync(api + $"/sessions/{child.Owner.SessionId}/messages?limit=1", foregroundDeadline.Token));
+                    using var foreground = await owner.PostAsJsonAsync(api + $"/sessions/{child.Owner.SessionId}/continue-in-chat", new {
+                        expectedRevision = witness.GetProperty("securityRevision").GetInt64(),
+                        expectedSessionRevision = witness.GetProperty("sessionRevision").GetInt64() }, foregroundDeadline.Token);
+                    if (foreground.StatusCode == HttpStatusCode.Conflict && (await Json(foreground)).GetProperty("reasonCode").GetString() == "stale_revision")
+                    { await Task.Delay(25, foregroundDeadline.Token); continue; }
+                    Assert.True(foreground.StatusCode == HttpStatusCode.OK, await foreground.Content.ReadAsStringAsync());
+                    break;
+                }
                 var currentChild = (await sessions.FindTenantSessionAsync(tenant, child.Owner.SessionId))!;
-                Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/sessions/{child.Owner.SessionId}/continue-in-chat", new { expectedRevision = await Revision(owner, tenant), expectedSessionRevision = currentChild.Snapshot.Revision })).StatusCode);
-                currentChild = (await sessions.FindTenantSessionAsync(tenant, child.Owner.SessionId))!;
                 using var upload = new MultipartFormDataContent(); var content = new ByteArrayContent(bytes); content.Headers.ContentType = new("text/plain"); upload.Add(content, "file", "observation.txt");
                 var attachment = (await Json(await owner.PostAsync(api + $"/sessions/{child.Owner.SessionId}/attachments?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision={currentChild.Snapshot.Revision}", upload))).GetProperty("attachmentId").GetGuid();
                 currentChild = (await sessions.FindTenantSessionAsync(tenant, child.Owner.SessionId))!;
@@ -172,7 +185,14 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal("tenant_effect_unavailable", denied.ReasonCode);
             }
             model.Release.TrySetResult();
-            var waiting = await AwaitBrowserRestartRun(runs, tenant, initialId, expectedConsent);
+            AgentRun waiting;
+            try { waiting = await AwaitBrowserRestartRun(runs, tenant, initialId, expectedConsent); }
+            catch (OperationCanceledException)
+            {
+                var stalled = (await CurrentApprovalExecution(runs, tenant, initialId))!;
+                Assert.Fail($"Background file {kind}/{decision}: status={stalled.Status}, failure={stalled.Failure?.Code}, review={model.Review}, expectedConsent={expectedConsent}; tools={string.Join(',', model.ChildRequests.SelectMany(r => r.Messages).Where(m => m.Role == ModelRole.Tool).Select(m => m.Name))}");
+                throw;
+            }
             TenantApprovalRequest? request = null;
             if (expectedConsent)
             {

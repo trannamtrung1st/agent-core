@@ -53,17 +53,35 @@ public sealed partial class TenantOperationAuthorizationTests
         Assert.Equal(0, await service.RecoverAsync());
         await Assert.ThrowsAsync<SecurityConflictException>(() => service.ExecuteAsync(v.Frame, v.Call with { ArgumentsJson = """{"path":"/working/saved.txt","content":"changed"}""" }).AsTask());
     }
-    [Theory] [InlineData(false)] [InlineData(true)]
-    public async Task Tenant_workspace_effects_commit_gate_blocks_current_permission_loss_and_records_uncertainty_without_retry(bool sqlite)
+    [Theory] [InlineData(false, false)] [InlineData(true, false)]
+    [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Tenant_workspace_effects_commit_gate_blocks_current_permission_loss_and_records_uncertainty_without_retry(bool sqlite, bool cancellation)
     {
         await using var f = await Fixture.Create(sqlite, builtInAuthority: true); var v = await WorkspaceEffectCase(f);
         await SeedRuntimeWorkspace(f, v.Setup, true, "saved.txt", "original"u8.ToArray());
+        var attempts = 0;
         var service = WorkspaceEffects(f, new WorkspaceMutationHook(WorkspaceReader(f), beforeCommit: async () =>
-            await f.Access.RevokeAssignmentAsync(v.Setup.Owner.PrincipalId, v.Setup.Tenant, v.Grant.AssignmentId, (await f.Iam.ReadTenantAsync(v.Setup.Tenant))!.Tenant.Revision)));
+        {
+            attempts++;
+            if (cancellation)
+            {
+                var active = (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(v.Setup.Tenant, v.Frame.RunId))!;
+                await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(active.Owner, active.AgentRunId,
+                    new AgentRunCommand.RequestCancellation(active.Revision, f.Clock.GetUtcNow(), null), f.Ids.NewId());
+            }
+            else await f.Access.RevokeAssignmentAsync(v.Setup.Owner.PrincipalId, v.Setup.Tenant, v.Grant.AssignmentId, (await f.Iam.ReadTenantAsync(v.Setup.Tenant))!.Tenant.Revision);
+        }));
         var result = await service.ExecuteAsync(v.Frame, v.Call); Assert.Equal(TenantOperationOutcome.Indeterminate, result.Receipt!.Outcome);
         var content = await WorkspaceReader(f).InspectTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working/saved.txt", 1024);
         Assert.Equal("original", System.Text.Encoding.UTF8.GetString(content.Bytes));
-        Assert.Equal(result, await service.ExecuteAsync(v.Frame, v.Call));
+        if (cancellation)
+        {
+            Assert.True((await ((ITenantRunStore)f.Iam).FindTenantRunAsync(v.Setup.Tenant, v.Frame.RunId))!.CancellationRequested);
+            Assert.Equal(result.Receipt, await ((ITenantDirectOperationStore)f.Iam).FindDirectOperationReceiptAsync(v.Setup.Tenant, v.Frame.RunId, v.Call.Id));
+            Assert.Equal(0, await service.RecoverAsync());
+        }
+        else Assert.Equal(result, await service.ExecuteAsync(v.Frame, v.Call));
+        Assert.Equal(1, attempts);
     }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_workspace_effects_reserved_abandoned_dispatch_recovers_uncertain_without_calling_files(bool sqlite)

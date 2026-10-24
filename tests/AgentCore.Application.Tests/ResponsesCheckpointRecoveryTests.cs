@@ -30,13 +30,9 @@ public sealed class ResponsesCheckpointRecoveryTests
         Environment = new(ToolAllowlist: [ToolCatalog.BrowserClick])
     };
 
-    [Fact]
-    public async Task Sqlite_reopen_resumes_only_the_unanswered_call_and_replays_both_results_with_reasoning()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "agent-core-responses-restart-" + Guid.NewGuid().ToString("N"));
-        try { await Prepare(root, live: false); await Resume(root, live: false); }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
-    }
+    // The unowned two-effect batch is retired. Current exact-consent SQLite
+    // reconstruction/no-replay belongs to TenantSessionAccessTests.BrowserRestart;
+    // opaque reasoning and call identity replay remain in ResponsesTransportTests.
 
     [ResponsesRestartLiveFact("prepare")]
     public Task Paid_background_prepare_before_process_exit() => Prepare(LiveRoot(), live: true);

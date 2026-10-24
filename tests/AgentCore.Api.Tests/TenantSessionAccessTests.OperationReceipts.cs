@@ -51,6 +51,7 @@ public sealed partial class TenantSessionAccessTests
         public string? ProposedArtifact { get; set; }
         public string ArtifactPublicationTool { get; set; } = AgentCore.Application.Tools.ToolCatalog.ArtifactsCreate;
         public bool EmitArtifactReference { get; set; }
+        public string? ArtifactMarkdown { get; set; }
         public bool VerifyPublishedArtifact { get; set; }
         public string? ProposedArtifactAuthorization { get; set; }
         public string? AuthorizationPreamble { get; set; }
@@ -143,7 +144,10 @@ public sealed partial class TenantSessionAccessTests
                     if (parsed.RootElement.TryGetProperty("operationId", out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String && value.TryGetGuid(out var id)
                         && parsed.RootElement.TryGetProperty("applied", out var applied) && applied.ValueKind == System.Text.Json.JsonValueKind.True)
                     {
-                        yield return new ModelSemanticResponseReady(new("The file was published.", new(ModelSpeechMode.None, null), [new(ModelResponseBlockKind.ArtifactReference, ArtifactId: id.ToString("N").ToUpperInvariant())]));
+                        var blocks = new List<ModelResponseBlock>();
+                        if (ArtifactMarkdown is { } markdown) blocks.Add(new(ModelResponseBlockKind.Markdown, Text: markdown));
+                        blocks.Add(new(ModelResponseBlockKind.ArtifactReference, ArtifactId: id.ToString("N").ToUpperInvariant()));
+                        yield return new ModelSemanticResponseReady(new("The file was published.", new(ModelSpeechMode.None, null), blocks));
                         yield return new ModelCompleted(ModelStopReason.Completed); yield break;
                     }
                 }

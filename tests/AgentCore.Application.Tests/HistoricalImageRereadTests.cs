@@ -24,10 +24,14 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
+// Owned success, source/processor refusal, pause/reopen, mixed results and stale-media
+// cases live in TenantSessionAccessTests.AttachmentReads/AttachmentReadBoundaries/
+// AttachmentRecall/HistoricalImageLifecycle. The offline wire mapping remains in
+// OpenAICompatibleLanguageModelTests. Keep local capability admission and unowned refusal.
 public sealed class HistoricalImageRereadTests
 {
     [Fact]
-    public async Task Cross_session_attachment_id_is_not_found()
+    public async Task Unowned_cross_session_historical_image_read_is_forbidden()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
@@ -45,7 +49,7 @@ public sealed class HistoricalImageRereadTests
             other,
             new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
             ToolLimits.MaxOutputBytes);
-        Assert.Contains("notFound", result.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("forbidden", result.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Null(result.Parts);
     }
 
@@ -62,37 +66,7 @@ public sealed class HistoricalImageRereadTests
     }
 
     [Fact]
-    public async Task Tool_loop_replaces_image_parts_when_model_lacks_vision()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor();
-        var model = new HistoricalImageToolLoopModel();
-        var output = new CapturingSessionOutput();
-        await using var runtime = CreateRuntime(output, attachments, processor, model, tools);
-        var uploaded = await attachments.UploadPendingAsync(
-            runtime.SessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(PngBytes()),
-            false);
-        Assert.True(await runtime.SubmitUserTextAsync("First", attachmentIds: [uploaded.AttachmentId]));
-        using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, first.Token);
-        Assert.True(await runtime.SubmitUserTextAsync("Reread the image please."));
-        using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(
-            item => item.Payload is ResponseCompletedOutput && model.SawVisionRequiredToolResult,
-            second.Token);
-        await runtime.WaitUntilIdleAsync();
-
-        var toolMessage = model.LastToolMessage!;
-        Assert.Contains("vision_required", toolMessage.Text, StringComparison.Ordinal);
-        Assert.Null(toolMessage.Parts);
-    }
-
-    [Fact]
-    public async Task Unknown_attachment_id_returns_not_found()
+    public async Task Unowned_unknown_historical_image_read_is_forbidden()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var executor = new SessionToolExecutor();
@@ -101,38 +75,8 @@ public sealed class HistoricalImageRereadTests
             Guid.NewGuid(),
             new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{Guid.NewGuid():D}}"}"""),
             ToolLimits.MaxOutputBytes);
-        Assert.Contains("notFound", result.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("forbidden", result.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Null(result.Parts);
-    }
-
-    [Fact]
-    public async Task Processor_failure_returns_attachment_processing_failed()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var sessionId = Guid.NewGuid();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(PngBytes()),
-            false);
-        var withoutProcessor = new SessionToolExecutor();
-        var missingProcessor = await withoutProcessor.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        Assert.Contains("attachment_processing_failed", missingProcessor.Text, StringComparison.Ordinal);
-        Assert.Null(missingProcessor.Parts);
-
-        var emptyProcessor = new SessionToolExecutor();
-        var empty = await emptyProcessor.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("c2", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        Assert.Contains("attachment_processing_failed", empty.Text, StringComparison.Ordinal);
-        Assert.Null(empty.Parts);
     }
 
     [Fact]
@@ -162,239 +106,6 @@ public sealed class HistoricalImageRereadTests
         var manifest = new PromptContextBuilder().BuildContext(context).Text(ContextSectionId.Attachments);
         Assert.DoesNotContain("attachments.read", manifest, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("unavailable with the current model", manifest, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task Reopen_session_can_reread_historical_image()
-    {
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
-        var store = new InMemoryMemoryStore();
-        var attachments = new InMemoryAttachmentStore(time);
-        var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor();
-        var output = new CapturingSessionOutput();
-        Guid sessionId;
-        Guid attachmentId;
-        var initialEpoch = 0L;
-        await using (var runtime = CreateRuntime(output, store, attachments, processor, new ScriptedLanguageModel(), tools, time))
-        {
-            await runtime.AttachAsync();
-            sessionId = runtime.SessionId;
-            initialEpoch = runtime.Snapshot.RuntimeEpoch;
-            var uploaded = await attachments.UploadPendingAsync(
-                sessionId,
-                "photo.png",
-                "image/png",
-                new MemoryStream(PngBytes()),
-                false);
-            attachmentId = uploaded.AttachmentId;
-            Assert.True(await runtime.SubmitUserTextAsync("Warm up", attachmentIds: [attachmentId]));
-            using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, first.Token);
-            await runtime.WaitUntilIdleAsync();
-            Assert.True(await runtime.RequestDeactivateAsync());
-            Assert.Equal(SessionStatus.Paused, (await store.LoadAsync(sessionId))!.Status);
-        }
-
-        var reopened = await PausedSessionReopen.ReopenAsync(store, (await store.LoadAsync(sessionId))!, time);
-        Assert.True(reopened.RuntimeEpoch > initialEpoch);
-        var result = await tools.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("reopen", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{attachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        Assert.IsType<ModelImageContent>(Assert.Single(result.Parts!));
-        Assert.Equal(AttachmentState.Bound, (await attachments.GetAsync(sessionId, attachmentId))!.State);
-    }
-
-    [Fact]
-    public async Task Mixed_tool_calls_attach_image_parts_only_to_image_read()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var tools = new SessionToolExecutor();
-        var model = new RecordingLanguageModel(new MixedHistoricalImageModel());
-        var output = new CapturingSessionOutput();
-        var store = new InMemoryMemoryStore();
-        await using var runtime = CreateRuntime(
-            output,
-            store,
-            attachments,
-            processor,
-            model,
-            tools,
-            definition: SupportWithKnowledge());
-        await runtime.AttachAsync();
-        var uploaded = await attachments.UploadPendingAsync(
-            runtime.SessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(PngBytes()),
-            false);
-        Assert.True(await runtime.SubmitUserTextAsync("Warm up", attachmentIds: [uploaded.AttachmentId]));
-        using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, first.Token);
-        Assert.True(await runtime.SubmitUserTextAsync("Mixed reread please."));
-        using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput && model.Requests.Count >= 2, second.Token);
-        await runtime.WaitUntilIdleAsync();
-        var toolMessages = model.Requests
-            .Skip(1)
-            .SelectMany(request => request.Messages)
-            .Where(message => message.Role == ModelRole.Tool)
-            .ToList();
-        Assert.Equal(2, toolMessages.Count);
-        Assert.Single(toolMessages, message => message.Parts is { Count: > 0 });
-        Assert.Single(toolMessages, message => message.Parts is null or { Count: 0 });
-    }
-
-    [Fact]
-    public async Task Stale_supersession_during_gated_image_reread_does_not_launch_late_provider_turn()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var inner = new AttachmentProcessor(attachments);
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var processor = new GateAfterFirstImageProcessor(inner, gate.Task);
-        var tools = new SessionToolExecutor();
-        var model = new RecordingLanguageModel(new HistoricalImageVisionRereadModel());
-        var output = new CapturingSessionOutput();
-        var store = new InMemoryMemoryStore();
-        await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);
-        await runtime.AttachAsync();
-        var uploaded = await attachments.UploadPendingAsync(
-            runtime.SessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(PngBytes()),
-            false);
-        Assert.True(await runtime.SubmitUserTextAsync("Warm up", attachmentIds: [uploaded.AttachmentId]));
-        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, wait.Token);
-        Assert.True(await runtime.SubmitUserTextAsync("Reread the image please."));
-        await output.WaitForAsync(
-            item => item.Payload is ResponseProgressOutput progress
-                && progress.Kind == ResponseProgressKind.RunningTool
-                && progress.State == ResponseProgressState.Started,
-            wait.Token);
-        Assert.True(await runtime.RequestDeactivateAsync());
-        var requestsAfterDeactivate = model.Requests.Count;
-        gate.SetResult();
-        await runtime.WaitUntilIdleAsync();
-        var combined = string.Join('\n', runtime.Snapshot.Entries.Select(entry => entry.Text));
-        Assert.DoesNotContain(Convert.ToBase64String(PngBytes()), combined, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            model.Requests.Skip(requestsAfterDeactivate),
-            request => request.Messages.Any(message => message.Parts is { Count: > 0 }));
-    }
-
-    [Fact]
-    public async Task Historical_image_reread_does_not_persist_ephemeral_image_parts_in_snapshot_history()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor();
-        var model = new RecordingLanguageModel(new VisionToolsLanguageModel(new HistoricalImageVisionRereadModel()));
-        var output = new CapturingSessionOutput();
-        var store = new InMemoryMemoryStore();
-        var png = PngBytes();
-        await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);
-        await runtime.AttachAsync();
-        var uploaded = await attachments.UploadPendingAsync(
-            runtime.SessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(png),
-            false);
-        Assert.True(await runtime.SubmitUserTextAsync("Warm up", attachmentIds: [uploaded.AttachmentId]));
-        using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, first.Token);
-        Assert.True(await runtime.SubmitUserTextAsync("Reread the image please."));
-        using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput && model.Requests.Count >= 2, second.Token);
-        await runtime.WaitUntilIdleAsync();
-
-        var persisted = (await store.LoadAsync(runtime.SessionId))!;
-        var combined = string.Join('\n', persisted.Entries.Select(entry => entry.Text));
-        Assert.DoesNotContain("Treat this as tool data", combined, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(Convert.ToBase64String(png), combined, StringComparison.Ordinal);
-        Assert.All(persisted.Entries, entry => Assert.True(entry.Role is ConversationRole.User or ConversationRole.Assistant));
-    }
-
-    [Fact]
-    public async Task Later_turn_historical_reread_sends_a_fresh_image_observation_and_completes()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var tools = new SessionToolExecutor();
-        var store = new InMemoryMemoryStore();
-        var output = new CapturingSessionOutput();
-        var handler = new QueuedChatHandler();
-        handler.Enqueue(StructuredSse("Noted the upload."));
-        var png = PngBytes();
-        var http = new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") };
-        var model = new SemanticResponseLanguageModel(new OpenAICompatibleLanguageModel(
-            http,
-            new LanguageModelProviderOptions
-            {
-                Adapter = "OpenAICompatible",
-                BaseUrl = "http://127.0.0.1/v1/",
-                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
-                ApiKey = "test-key",
-                Vision = true,
-                Tools = true,
-                StructuredOutput = true,
-                DeveloperRoleSupport = true
-            }));
-        await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);
-        var uploaded = await attachments.UploadPendingAsync(
-            runtime.SessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(png),
-            false);
-        Assert.True(await runtime.SubmitUserTextAsync("Here is a photo.", attachmentIds: [uploaded.AttachmentId]));
-        using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(
-            item => item.Payload is ResponseCompletedOutput completed && !completed.Failed,
-            first.Token);
-
-        handler.Enqueue(ToolCallSse(uploaded.AttachmentId));
-        handler.Enqueue(StructuredSse("The image is a small color square."));
-        Assert.True(await runtime.SubmitUserTextAsync("review the image again"));
-        using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(
-            item => item.Payload is ResponseCompletedOutput completed && !completed.Failed && handler.Bodies.Count >= 3,
-            second.Token);
-        await runtime.WaitUntilIdleAsync();
-
-        var followUp = handler.Bodies[2];
-        using var document = JsonDocument.Parse(followUp);
-        var messages = document.RootElement.GetProperty("messages");
-        Assert.True(messages.GetArrayLength() >= 2);
-        Assert.Contains("review the image again", followUp, StringComparison.Ordinal);
-        Assert.Contains("\"role\":\"tool\"", followUp, StringComparison.Ordinal);
-        Assert.Contains("tool_calls", followUp, StringComparison.Ordinal);
-        Assert.Contains("tool data", followUp, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"role\":\"user\"", followUp, StringComparison.Ordinal);
-        var imageStart = followUp.IndexOf("data:image/png;base64,", StringComparison.Ordinal);
-        Assert.True(imageStart >= 0);
-        var encoded = followUp[(imageStart + "data:image/png;base64,".Length)..];
-        var imageEnd = encoded.IndexOf('"', StringComparison.Ordinal);
-        Assert.True(imageEnd > 0);
-        encoded = JsonSerializer.Deserialize<string>("\"" + encoded[..imageEnd] + "\"")!;
-        Assert.True(Convert.FromBase64String(encoded).Length > 8);
-        Assert.Contains("response_format", followUp, StringComparison.Ordinal);
-        Assert.Contains("agent_core_assistant_response", followUp, StringComparison.Ordinal);
-        var completedText = string.Join(
-            string.Empty,
-            output.Items.Select(item => item.Payload).OfType<TextDeltaOutput>().Select(delta => delta.Text));
-        Assert.Contains("The image is a small color square.", completedText, StringComparison.Ordinal);
-        var persisted = (await store.LoadAsync(runtime.SessionId))!;
-        var history = string.Join('\n', persisted.Entries.Select(entry => entry.Text));
-        Assert.Contains("The image is a small color square.", history, StringComparison.Ordinal);
-        Assert.DoesNotContain("Treat this as tool data", history, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(encoded, history, StringComparison.Ordinal);
     }
 
     [LiveProviderFact]

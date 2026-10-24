@@ -20,6 +20,8 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
+// Owned tool progress/TTS isolation and actual Artifact reconnect receipt parity
+// are qualified by TenantSessionAccessTests.VoiceToolIsolation on both stores.
 public sealed class VoiceRealtimeRegressionTests
 {
     [Fact]
@@ -350,103 +352,6 @@ public sealed class VoiceRealtimeRegressionTests
         Assert.Equal(sessionId, runtime.SessionId);
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Contains(assistant.Envelope!.Blocks, block => block.ArtifactId == "fixture-artifact-1");
-    }
-
-    [Fact]
-    public async Task Tool_artifact_reconnect_shows_terminal_text_but_hides_undelivered_blocks()
-    {
-        var store = new InMemoryMemoryStore();
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var tools = new SessionToolExecutor();
-        var definition = await Load("customer-support");
-        Guid sessionId;
-        Guid responseId;
-        await using (var first = CreateVoice(
-                         new CapturingSessionOutput(),
-                         new ScriptedLanguageModel(),
-                         store: store,
-                         snapshotDefinition: definition,
-                         tools: tools,
-                         artifacts: artifacts))
-        {
-            await first.AttachAsync();
-            sessionId = first.SessionId;
-            Assert.True(await first.SubmitUserTextAsync("Run the support case for order 91."));
-            await first.WaitUntilIdleAsync();
-            var assistant = first.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-            responseId = assistant.ResponseId!.Value;
-            Assert.Contains(assistant.Envelope!.Blocks, block => block.Kind == ResponseBlockKind.ArtifactReference);
-            await first.DetachAsync();
-            await first.WaitUntilIdleAsync();
-        }
-
-        var restoredOutput = new CapturingSessionOutput();
-        var paused = (await store.LoadAsync(sessionId))!;
-        var loaded = await PausedSessionReopen.ReopenAsync(store, paused, TimeProvider.System);
-        await using var restored = CreateVoice(
-            restoredOutput,
-            new ScriptedLanguageModel(),
-            store: store,
-            snapshot: loaded,
-            snapshotDefinition: definition,
-            tools: tools,
-            artifacts: artifacts);
-        await restored.AttachAsync();
-        await restored.WaitUntilMailboxDrainedAsync();
-        var ready = Assert.IsType<ReadyOutput>(restoredOutput.Items.Single(item => item.Payload is ReadyOutput).Payload);
-        var history = ready.Ready.History.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(
-            paused.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text,
-            history.Text);
-        Assert.Empty(history.Blocks);
-        Assert.Equal(responseId, history.ResponseId);
-        Assert.Equal(sessionId, restored.SessionId);
-    }
-
-    [Fact]
-    public async Task Tool_progress_is_never_tts_or_speech_segment_input()
-    {
-        var output = new CapturingSessionOutput();
-        var synthesizer = new RecordingSynthesizer();
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var tools = new SessionToolExecutor(
-);
-        var definition = await Load("customer-support");
-        await using var runtime = CreateVoice(
-            output,
-            new ScriptedLanguageModel(),
-            synthesizer,
-            snapshotDefinition: definition,
-            tools: tools,
-            artifacts: artifacts);
-        await runtime.AttachAsync();
-        await runtime.SetModeAsync(SessionMode.Voice);
-        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
-        Assert.True(await runtime.SubmitUserTextAsync("Run the support case for order 91."));
-        await runtime.WaitUntilIdleAsync();
-
-        Assert.Contains(
-            output.Items,
-            item => item.Payload is ResponseProgressOutput progress && progress.Kind == ResponseProgressKind.RunningTool);
-        Assert.DoesNotContain(output.Items, item => item.Payload is ResponseProgressOutput progress
-            && progress.Kind is ResponseProgressKind.Preparing or ResponseProgressKind.Finalizing);
-        Assert.All(synthesizer.Texts, text =>
-        {
-            Assert.DoesNotContain("Running tools", text, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("Reading attachments", text, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("Preparing response", text, StringComparison.OrdinalIgnoreCase);
-        });
-        Assert.All(
-            output.Items.Select(item => item.Payload).OfType<SpeechOutputSegmentOutput>(),
-            segment =>
-            {
-                Assert.DoesNotContain("Running tools", segment.Text, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain("Reading attachments", segment.Text, StringComparison.OrdinalIgnoreCase);
-            });
-        Assert.DoesNotContain(
-            runtime.Snapshot.Entries,
-            entry => entry.Text.Contains("Running tools", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

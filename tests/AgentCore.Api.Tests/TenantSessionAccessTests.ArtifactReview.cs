@@ -52,7 +52,9 @@ public sealed partial class TenantSessionAccessTests
         try
         {
             var content = "# Exact proposed file\n<script>alert('literal')</script>\nUTF-8: thử nghiệm" + (proof ? "\n" + string.Join("\n", Enumerable.Range(1, 35).Select(i => $"{i}: Exact saved content for the operations team — literal UTF-8 thử nghiệm.")) + "\n" + new string('x', 600) : "");
+            const string reportMarkdown = "## Saved report\nThe exact reviewed file is available below.";
             var model = new ApprovalRecordingModel { ProposedArtifactAuthorization = JsonSerializer.Serialize(new { operation = "publish_artifact", artifact = new { displayName = "reviewed-report.md", contentType = "text/markdown", content } }), EmitArtifactReference = rich,
+                ArtifactMarkdown = rich ? reportMarkdown : null,
                 AuthorizationPreamble = failAfterConsent ? "The exact file is ready for review." : null };
             var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
             var enabled = true; var modelPreparation = new ModelPreparationGate("consent-io");
@@ -142,8 +144,13 @@ public sealed partial class TenantSessionAccessTests
             if (rich)
             {
                 var saved = (await factory.Services.GetRequiredService<ITenantConversationStore>().ReadTenantConversationAsync(tenant, session, null, null, 50))!.History.Items.Single(e => e.ResponseId == done.ResponseId);
-                Assert.Equal(request.Operation.OperationId.ToString("D"), Assert.Single(saved.Envelope!.Blocks).ArtifactId);
-                Assert.False(Assert.Single(saved.Envelope.Blocks).DisplayDelivered);
+                var blocks = saved.Envelope!.Blocks;
+                Assert.Equal(2, blocks.Count);
+                Assert.Equal(reportMarkdown, Assert.Single(blocks, b => b.Kind == ResponseBlockKind.Markdown).DisplayText);
+                var reference = Assert.Single(blocks, b => b.Kind == ResponseBlockKind.ArtifactReference);
+                Assert.Equal(request.Operation.OperationId.ToString("D"), reference.ArtifactId);
+                Assert.NotEqual(FixtureArtifactReferenceAuthorizer.AuthorizedId, reference.ArtifactId);
+                Assert.False(reference.DisplayDelivered);
             }
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
             if (failAfterConsent && sqlite)

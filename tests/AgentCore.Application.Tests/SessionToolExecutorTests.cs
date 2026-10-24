@@ -11,36 +11,11 @@ using AgentCore.Infrastructure.Persistence;
 
 namespace AgentCore.Application.Tests;
 
+// Actual image/charset/strict UTF-8/multipage PDF reads are qualified by the
+// both-store TenantSessionAccessTests.AttachmentReads model-loop matrix; current
+// exact Office refusal and knowledge JSON/citation budgets are in KnowledgeReadBudgets.
 public sealed class SessionToolExecutorTests
 {
-    [Fact]
-    public async Task Attachments_read_returns_image_metadata_without_utf8_garbage()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "photo.png",
-            "image/png",
-            new MemoryStream(PngBytes()),
-            false);
-        var typed = await executor.ExecuteAsync(
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        Assert.Contains("\"kind\":\"image\"", typed.Text, StringComparison.Ordinal);
-        Assert.Contains("contentProvided", typed.Text, StringComparison.Ordinal);
-        Assert.Contains("image/png", typed.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("\uFFFD", typed.Text, StringComparison.Ordinal);
-        var image = Assert.IsType<ModelImageContent>(Assert.Single(typed.Parts!));
-        Assert.Equal("image/png", image.ContentType);
-        Assert.NotEmpty(image.Bytes);
-        Assert.DoesNotContain(Convert.ToBase64String(image.Bytes.AsSpan()), typed.Text, StringComparison.Ordinal);
-    }
-
     [Fact]
     public async Task Host_paths_and_session_mutation_arguments_are_denied()
     {
@@ -144,91 +119,6 @@ public sealed class SessionToolExecutorTests
     }
 
     [Fact]
-    public async Task Attachments_read_accepts_text_plain_with_charset_parameter()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "note.txt",
-            "text/plain; charset=utf-8",
-            new MemoryStream("Retention policy excerpt."u8.ToArray()),
-            false);
-        var result = await ExecuteTextAsync(
-            executor,
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
-        using var json = JsonDocument.Parse(result);
-        Assert.Equal("Retention policy excerpt.", json.RootElement.GetProperty("content").GetString());
-    }
-
-    [Fact]
-    public async Task Attachments_read_reports_unsupported_reader_for_invalid_utf8_without_fabricated_text()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        // A valid intake prefix with invalid UTF-8 later exercises read-time decoding;
-        // an immediately invalid prefix is correctly rejected by upload classification.
-        var bytes = Enumerable.Repeat((byte)'a', 8192).Concat(new byte[] { 0xFF, 0xFE, 0xFD }).ToArray();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "note.bin",
-            "text/plain",
-            new MemoryStream(bytes),
-            false);
-        var result = await ExecuteTextAsync(
-            executor,
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
-        using var json = JsonDocument.Parse(result);
-        Assert.Equal("unsupported_reader", json.RootElement.GetProperty("error").GetString());
-        Assert.Contains("Original bytes remain available", result);
-        Assert.False(json.RootElement.TryGetProperty("content", out _));
-        Assert.DoesNotContain("\uFFFD", result, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Targeted_attachment_reads_never_silently_fall_back_to_another_excerpt()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var office = new AgentCore.Infrastructure.Office.OfficeProcessor();
-        var bytes = office.CreateWorkbook(new([new("Checklist", [[new("text", Text: "Wedding item")]])]), default).Bytes;
-        var sessionId = Guid.NewGuid();
-        var workbook = await attachments.UploadPendingAsync(sessionId, "checklist.xlsx", OfficeLimits.SpreadsheetMime, new MemoryStream(bytes), true);
-        var executor = new SessionToolExecutor();
-        var unavailable = await ExecuteTextAsync(executor, Support(), sessionId,
-            new("missing-office", ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(new { attachmentId = workbook.AttachmentId, sheet = "Checklist" })));
-        Assert.Contains("unavailable", unavailable);
-        Assert.Contains("not configured", unavailable);
-        var text = await attachments.UploadPendingAsync(sessionId, "note.txt", "text/plain", new MemoryStream("ordinary note"u8.ToArray()), false);
-        var invalid = await ExecuteTextAsync(executor, Support(), sessionId,
-            new("wrong-format", ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(new { attachmentId = text.AttachmentId, range = "A1" })));
-        Assert.Contains("invalid", invalid);
-        Assert.DoesNotContain("ordinary note", invalid);
-    }
-
-    [Fact]
-    public async Task Knowledge_retrieve_returns_valid_json_when_output_is_truncated()
-    {
-        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var executor = new SessionToolExecutor();
-        var result = await ExecuteTextAsync(
-            executor,
-            Compliance(),
-            Guid.NewGuid(),
-            new ModelToolCall("c1", ToolCatalog.KnowledgeRetrieve, """{"identity":"compliance-retention"}"""),
-            220);
-        using var json = JsonDocument.Parse(result);
-        Assert.True(json.RootElement.GetProperty("truncated").GetBoolean());
-        Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("content").GetString()));
-        Assert.Equal("compliance-retention@demo", json.RootElement.GetProperty("citation").GetString());
-    }
-
-    [Fact]
     public async Task Image_metadata_is_bounded_to_remaining_output_bytes()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
@@ -252,30 +142,6 @@ public sealed class SessionToolExecutorTests
         Assert.True(
             (json.RootElement.TryGetProperty("error", out var error) && error.GetString() == "output_limit")
             || json.RootElement.TryGetProperty("truncated", out _));
-    }
-
-    [Fact]
-    public async Task Attachments_read_reextracts_pdf_text_on_later_turns()
-    {
-        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var processor = new AttachmentProcessor(attachments);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
-        var uploaded = await attachments.UploadPendingAsync(
-            sessionId,
-            "doc.pdf",
-            "application/pdf",
-            new MemoryStream(PdfTwoPages()),
-            false);
-        var result = await ExecuteTextAsync(
-            executor,
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
-        using var json = JsonDocument.Parse(result);
-        Assert.Equal("pdf", json.RootElement.GetProperty("kind").GetString());
-        Assert.Contains("Alpha page", json.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
-        Assert.Contains("Beta page", json.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
     }
 
     private static async Task<string> ExecuteTextAsync(

@@ -44,12 +44,17 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "web.search", "repair-responseFunctionArgumentsInvalid")] [InlineData(true, "web.search", "repair-responseFunctionArgumentsInvalid")]
     [InlineData(false, "web.search", "repair-invalidMarkerEnvelope")] [InlineData(true, "web.search", "repair-invalidMarkerEnvelope")]
     [InlineData(false, "web.search", "repair-outputLimit")] [InlineData(true, "web.search", "repair-outputLimit")]
+    [InlineData(false, "web.search", "retry-read")] [InlineData(true, "web.search", "retry-read")]
+    [InlineData(false, "web.search", "retry-two-rounds")] [InlineData(true, "web.search", "retry-two-rounds")]
+    [InlineData(false, "web.search", "repair-retry-before")] [InlineData(true, "web.search", "repair-retry-before")]
+    [InlineData(false, "web.search", "repair-retry-during")] [InlineData(true, "web.search", "repair-retry-during")]
     public async Task Tenant_public_web_reads_use_current_executor_authority_and_never_release_revoked_observations(bool sqlite, string tool, string mode)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-public-web-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
             var repairing = mode.StartsWith("repair-", StringComparison.Ordinal);
+            var retrying = mode.Contains("retry-", StringComparison.Ordinal);
             var native = new TenantPublicWebProvider { Hold = mode == "revoked", Fail = mode == "failure", Available = mode != "unavailable", Large = mode == "bounded" };
             var model = new TenantPublicWebModel(tool, mode);
             void Configure(IServiceCollection services) { services.AddLogging(logging => logging.AddProvider(new PublicReadFailureLog(model))); services.Replace(ServiceDescriptor.Singleton<IWebSearchProvider>(native)); services.Replace(ServiceDescriptor.Singleton<IPublicWebFetcher>(native)); }
@@ -75,10 +80,10 @@ public sealed partial class TenantSessionAccessTests
             var done = await AwaitBrowserRestartRun(runs, tenant, id, false);
             if (mode == "revoke-output") Assert.Equal(AgentRunStatus.Failed, done.Status);
             else Assert.True(done.Status == AgentRunStatus.Completed, $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}; {string.Join(" | ",model.Failures)}; {string.Join(" | ", model.Requests.Last().Messages.Where(m=>m.Role==ModelRole.Tool).Select(m=>m.Text))}");
-            var expectedCalls = mode is "missing" or "review" or "invalid" or "unavailable" ? 0 : mode == "journey" || repairing ? 2 : 1;
+            var expectedCalls = mode is "missing" or "review" or "invalid" or "unavailable" ? 0 : mode is "journey" or "retry-two-rounds" || repairing ? 2 : 1;
             Assert.Equal(expectedCalls, native.Calls);
             var results = model.Requests.Last().Messages.Where(m=>m.Role==ModelRole.Tool && TenantPublicWebReadContract.IsRead(m.Name ?? "")).ToArray();
-            var accepted = repairing || mode is "allowed" or "journey" or "bounded" or "revoke-output" or "history";
+            var accepted = repairing || retrying || mode is "allowed" or "journey" or "bounded" or "revoke-output" or "history";
             if (accepted)
             {
                 Assert.NotEmpty(results);
@@ -108,14 +113,35 @@ public sealed partial class TenantSessionAccessTests
             }
             if (repairing)
             {
-                Assert.Equal(4, model.Requests.Count);
+                Assert.Equal(retrying ? 5 : 4, model.Requests.Count);
                 var repaired = model.Requests.Last();
                 Assert.All(repaired.Tools ?? [], t => Assert.Equal(AssistantResponseSchema.ResponseFunctionName, t.Name));
                 Assert.Null(repaired.ResponseContract); Assert.Equal(8192, repaired.MaxOutputTokens);
-                Assert.Contains(repaired.Messages, m => m.Text == ProtocolFailures.RepairInstruction(mode[7..]));
+                Assert.Contains(repaired.Messages, m => m.Text == ProtocolFailures.RepairInstruction(TenantPublicWebModel.RepairReason(mode)));
                 Assert.Equal(2, repaired.Messages.Count(m => m.Role == ModelRole.Tool && TenantPublicWebReadContract.IsRead(m.Name ?? "")));
                 Assert.Single(history, h => h.GetProperty("text").GetString() == TenantPublicWebModel.RepairedAnswer);
                 Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains("previous response format", StringComparison.Ordinal));
+            }
+            if (retrying)
+            {
+                var requests = model.Requests.ToArray();
+                Assert.Equal(mode == "retry-read" ? 3 : 5, requests.Length);
+                Assert.Equal(mode == "retry-two-rounds" ? 3 : 2, done.AttemptCount);
+                Assert.Equal(id, done.AgentRunId);
+                Assert.Equal(expectedCalls, results.Length);
+                Assert.Equal(expectedCalls, results.Select(m => m.ToolCallId).Distinct().Count());
+                Assert.Contains(requests[1].Tools ?? [], t => t.Name == ToolCatalog.WebSearch);
+                if (mode == "repair-retry-before")
+                    Assert.Contains(requests[3].Tools ?? [], t => t.Name == ToolCatalog.WebSearch);
+                if (mode == "repair-retry-during")
+                {
+                    var firstRepair = requests[^2];
+                    Assert.Null(firstRepair.ResponseContract);
+                    Assert.All(firstRepair.Tools ?? [], t => Assert.Equal(AssistantResponseSchema.ResponseFunctionName, t.Name));
+                    Assert.Equal(requests[^1].Messages.Where(m => m.Role == ModelRole.Tool), firstRepair.Messages.Where(m => m.Role == ModelRole.Tool));
+                    Assert.Contains(firstRepair.Messages, m => m.Text == ProtocolFailures.RepairInstruction(ProviderFailureReason.MissingDisplayText));
+                }
+                Assert.Single(history, h => h.GetProperty("role").GetString() == "assistant");
             }
             if (!accepted || mode == "revoke-output") Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains(TenantPublicWebProvider.Witness, StringComparison.Ordinal));
             Assert.Empty((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(0,100))).Items);
@@ -149,13 +175,26 @@ public sealed partial class TenantSessionAccessTests
     {
         public const string RepairedAnswer = "Recovered the owned public research answer.";
         private bool presentationFailed;
+        private readonly HashSet<int> transientRounds = [];
+        public static string RepairReason(string mode) => mode is "repair-retry-before" or "repair-retry-during"
+            ? ProviderFailureReason.MissingDisplayText : mode[7..];
         public ModelCapabilities Capabilities=>new(true,true,true); public ConcurrentQueue<ModelRequest> Requests { get; }=new(); public ConcurrentQueue<string> Failures { get; }=new();
         public TaskCompletionSource OutputEntered { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously); public TaskCompletionSource OutputRelease { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct=default)
         {
             Requests.Enqueue(request); var results=request.Messages.Where(m=>m.Role==ModelRole.Tool && TenantPublicWebReadContract.IsRead(m.Name ?? "")).ToArray();
             var repairing = mode.StartsWith("repair-", StringComparison.Ordinal);
-            var journey = mode == "journey" || repairing;
+            var journey = mode is "journey" or "retry-two-rounds" || repairing;
+            var transient = mode == "retry-read" && results.Length == 1
+                || mode == "retry-two-rounds" && results.Length is 1 or 2
+                || mode == "repair-retry-before" && results.Length == 2
+                || mode == "repair-retry-during" && presentationFailed;
+            if (transient && transientRounds.Add(results.Length))
+            {
+                yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Controlled transient follow-up failure.",
+                    FailureReason: results.Length == 1 ? ProviderFailureReason.StreamIncomplete : ProviderFailureReason.Http5xx));
+                yield break;
+            }
             var current=results.Length==1 && journey?ToolCatalog.WebFetch:tool;
             if (results.Length<(journey?2:1) && request.Tools!.Any(t=>t.Name==current))
             {
@@ -168,7 +207,7 @@ public sealed partial class TenantSessionAccessTests
                 {
                     presentationFailed = true;
                     yield return new ModelFailed(new(ProviderErrorCode.InvalidResponse, "Controlled invalid terminal format after owned reads.",
-                        FailureReason: mode[7..], ResponseChannel: ProviderResponseChannel.StructuredOutput));
+                        FailureReason: RepairReason(mode), ResponseChannel: ProviderResponseChannel.StructuredOutput));
                     yield break;
                 }
                 yield return new ModelTextDelta(RepairedAnswer); yield return new ModelCompleted(ModelStopReason.Completed); yield break;

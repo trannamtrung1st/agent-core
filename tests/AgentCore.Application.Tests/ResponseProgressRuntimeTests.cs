@@ -219,25 +219,9 @@ public sealed class ResponseProgressRuntimeTests
             entry => entry.Text.Contains("Reading attachments", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task Terminal_session_end_clears_live_progress()
-    {
-        var workspace = new GatedWorkspace();
-        var definition = await Load("customer-support");
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var tools = new SessionToolExecutor(
-);
-        var output = new CapturingSessionOutput();
-        await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Run the support case for order 91."));
-        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await workspace.Entered.WaitAsync(wait.Token);
-        Assert.True(await runtime.RequestEndAsync());
-        workspace.Release();
-        await runtime.WaitUntilIdleAsync();
-        Assert.Contains(Progress(output), item => item.State == ResponseProgressState.Failed);
-    }
+    // The retired unowned RequestEnd tool journey is covered at the current
+    // owner by PublicWebLifecycle's actual Stop/interrupt/host-retirement matrix.
+    // Retired sources cannot complete live progress after terminal ownership loss.
 
     private static IReadOnlyList<ResponseProgressOutput> Progress(CapturingSessionOutput output) =>
         output.Items.Select(item => item.Payload).OfType<ResponseProgressOutput>().ToArray();

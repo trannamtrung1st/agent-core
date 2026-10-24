@@ -90,6 +90,8 @@ public sealed partial class TenantSessionAccessTests
         byte[] bytes; string name, type; var office = services.GetRequiredService<IOfficeProcessor>();
         if (format == "docx") { bytes = office.CreateDocument(new("Read document", [new(null, ["Private read body", "Second source paragraph"], null)]), default).Bytes; name = "read.docx"; type = OfficeLimits.DocumentMime; }
         else if (format.StartsWith("xlsx", StringComparison.Ordinal)) { bytes = office.CreateWorkbook(new([new("Data", [[new("number", Number: 0), new("text", Text: "Private read body")]])]), default).Bytes; name = "read.xlsx"; type = OfficeLimits.SpreadsheetMime; }
+        else if (format == "pdf-two-pages") { bytes = AttachmentTwoPagePdf(); name = "read.pdf"; type = "application/pdf"; }
+        else if (format == "invalid-utf8") { bytes = Enumerable.Repeat((byte)'a', 8192).Concat(new byte[] { 0xFF, 0xFE, 0xFD }).ToArray(); name = "read.txt"; type = "text/plain"; }
         else if (format == "pdf") { bytes = "%PDF-1.7\n1 0 obj << /Type /Page >> endobj\nBT (Private read body) Tj ET\n%%EOF"u8.ToArray(); name = "read.pdf"; type = "application/pdf"; }
         else if (format.StartsWith("png", StringComparison.Ordinal)) { using var bitmap = new SKBitmap(2, 2); bitmap.Erase(SKColors.Red); using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100); bytes = encoded.ToArray(); name = "read.png"; type = "image/png"; }
         else if (format is "jpeg" or "webp")
@@ -101,8 +103,9 @@ public sealed partial class TenantSessionAccessTests
         else if (format == "gif") { bytes = Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"); name = "read.gif"; type = "image/gif"; }
         else if (format == "binary") { bytes = [0, 1, 2, 255, 254]; name = "read.bin"; type = "application/octet-stream"; }
         else { bytes = format == "large-text" ? System.Text.Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("Private read body → thử nghiệm\n", 300))) : "Private read body → thử nghiệm"u8.ToArray(); name = "read.txt"; type = "text/plain"; }
+        if (format == "charset") type = "text/plain; charset=utf-8";
         name = displayNameOverride ?? name;
-        using var body = new MultipartFormDataContent(); var file = new ByteArrayContent(bytes); file.Headers.ContentType = new MediaTypeHeaderValue(type); body.Add(file, "file", name);
+        using var body = new MultipartFormDataContent(); var file = new ByteArrayContent(bytes); file.Headers.ContentType = MediaTypeHeaderValue.Parse(type); body.Add(file, "file", name);
         var id = (await Json(await owner.PostAsync(api + $"/sessions/{session}/attachments?uploadId={Guid.NewGuid()}&expectedRevision={await Revision(owner, tenant)}&expectedSessionRevision=1", body))).GetProperty("attachmentId").GetGuid();
         var login = (await services.GetRequiredService<IdentityService>().SignInAsync("owner@example.test", "explicit-synthetic-test-password"))!;
         var state = (await services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!; var human = state.Users.Single(); var access = services.GetRequiredService<TenantAccessService>();
@@ -117,6 +120,9 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "jpeg")] [InlineData(true, "jpeg")] [InlineData(false, "gif")] [InlineData(true, "gif")]
     [InlineData(false, "webp")] [InlineData(true, "webp")]
     [InlineData(false, "binary")] [InlineData(true, "binary")]
+    [InlineData(false, "charset")] [InlineData(true, "charset")]
+    [InlineData(false, "invalid-utf8")] [InlineData(true, "invalid-utf8")]
+    [InlineData(false, "pdf-two-pages")] [InlineData(true, "pdf-two-pages")]
     public async Task Tenant_attachment_model_reads_historical_source_through_actual_tool_loop_and_keeps_original_bytes(bool sqlite, string format)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-attachment-model-read-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
@@ -139,8 +145,18 @@ public sealed partial class TenantSessionAccessTests
             var first = model.Requests.First(); Assert.DoesNotContain("Private read body", string.Join("\n", first.Messages.Select(m => m.Text)));
             Assert.Contains(first.Tools!, t => t.Name == ToolCatalog.AttachmentsRead && t.Description.Contains("current Agent Session/Attachment"));
             var result = model.Requests.Last().Messages.Single(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AttachmentsRead);
-            using var doc = JsonDocument.Parse(result.Text); Assert.True(doc.RootElement.GetProperty("tenantAttachmentRead").GetBoolean());
-            Assert.Equal(v.Id, doc.RootElement.GetProperty("attachmentId").GetGuid());
+            using var doc = JsonDocument.Parse(result.Text);
+            if (format == "invalid-utf8")
+            {
+                Assert.Equal("unsupported_reader", doc.RootElement.GetProperty("error").GetString());
+                Assert.False(doc.RootElement.TryGetProperty("content", out _)); Assert.Null(result.Parts);
+                Assert.DoesNotContain("\uFFFD", result.Text);
+            }
+            else
+            {
+                Assert.True(doc.RootElement.GetProperty("tenantAttachmentRead").GetBoolean());
+                Assert.Equal(v.Id, doc.RootElement.GetProperty("attachmentId").GetGuid());
+            }
             if (format is "png" or "jpeg" or "gif" or "webp")
             {
                 var image = Assert.Single(result.Parts!.OfType<ModelImageContent>());
@@ -154,7 +170,9 @@ public sealed partial class TenantSessionAccessTests
             else
             {
                 Assert.True(result.Parts is null or { Count: 0 });
-                if (format is "binary" or "png-no-vision") Assert.False(doc.RootElement.GetProperty("inspection").GetProperty("contentProvided").GetBoolean());
+                if (format == "invalid-utf8") { }
+                else if (format == "pdf-two-pages") { Assert.Contains("Alpha page", result.Text); Assert.Contains("Beta page", result.Text); }
+                else if (format is "binary" or "png-no-vision") Assert.False(doc.RootElement.GetProperty("inspection").GetProperty("contentProvided").GetBoolean());
                 else if (format == "docx") { Assert.True(doc.RootElement.GetProperty("inspection").GetProperty("truncated").GetBoolean()); Assert.Equal(1, doc.RootElement.GetProperty("inspection").GetProperty("nextOffset").GetInt32()); }
                 else Assert.Contains("Private read body", result.Text);
             }
