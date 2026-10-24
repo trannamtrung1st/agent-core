@@ -17,22 +17,23 @@ public sealed record TenantCredentialViewPage(IReadOnlyList<TenantCredentialView
 public sealed record TenantCredentialAccess(IReadOnlyList<string> Permissions, long Revision);
 
 public sealed class TenantCredentialService(IIamStore security, ITenantCredentialStore credentials,
-    IamAuthorizer authorizer, ICredentialProtector protector, IIdGenerator ids, TimeProvider time)
+    IamAuthorizer authorizer, ICredentialProtector protector, IIdGenerator ids, TimeProvider time, IdentityService identity)
 {
-    public async ValueTask<TenantCredentialAccess> AccessAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
+    public async ValueTask<TenantCredentialAccess> AccessAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
-        await Owned(tenant, id, ct).ConfigureAwait(false);
-        var state = await State(tenant, ct).ConfigureAwait(false); var scope = TenantCredentialRules.Scope(tenant, id);
+        var state = await State(actor, tenant, ct, initiator).ConfigureAwait(false);
+        await Owned(tenant, id, ct).ConfigureAwait(false); var scope = TenantCredentialRules.Scope(tenant, id);
         var read = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
         if (!read.Allowed) throw new AccessDeniedException(read.ReasonCode);
         var permissions = new List<string> { "credentials.read" };
         foreach (var key in new[] { "credentials.manage", "credentials.bind", "credentials.use", "iam.roles.read", "iam.roles.manage" })
             if ((await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) permissions.Add(key);
+        await CompleteRead(actor, tenant, state.Tenant.Revision, initiator, ct).ConfigureAwait(false);
         return new(permissions.AsReadOnly(), state.Tenant.Revision);
     }
-    public async ValueTask<TenantCredentialViewPage> ListAsync(Guid actor, Guid tenant, int page = 0, int pageSize = 30, CancellationToken ct = default)
+    public async ValueTask<TenantCredentialViewPage> ListAsync(Guid actor, Guid tenant, int page = 0, int pageSize = 30, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
-        var state = await State(tenant, ct).ConfigureAwait(false);
+        var state = await State(actor, tenant, ct, initiator).ConfigureAwait(false);
         var permission = PermissionCatalog.Get("credentials.read");
         var all = await authorizer.CheckTenantAsync(state, actor, permission, AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
         List<Guid>? allowed = null;
@@ -45,17 +46,21 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
                     allowed.Add(Guid.Parse(scope.ResourceId!));
         }
         var result = await credentials.ListTenantCredentialsAsync(tenant, allowed, Math.Clamp(page, 0, 100_000), Math.Clamp(pageSize, 1, 100), ct).ConfigureAwait(false);
+        await CompleteRead(actor, tenant, state.Tenant.Revision, initiator, ct).ConfigureAwait(false);
         return new(result.Items.Select(View).ToArray(), result.Total, result.Page, result.PageSize);
     }
-    public async ValueTask<TenantCredentialView> ReadAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
+    public async ValueTask<TenantCredentialView> ReadAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
+        var state = await State(actor, tenant, ct, initiator).ConfigureAwait(false);
+        var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("credentials.read"), TenantCredentialRules.Scope(tenant, id), ct).ConfigureAwait(false);
+        if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
         var current = await Owned(tenant, id, ct).ConfigureAwait(false);
-        await authorizer.RequireAsync(actor, "credentials.read", TenantCredentialRules.Scope(tenant, id), ct).ConfigureAwait(false);
+        await CompleteRead(actor, tenant, state.Tenant.Revision, initiator, ct).ConfigureAwait(false);
         return View(current);
     }
-    public async ValueTask<TenantCredentialView> CreateAsync(Guid actor, Guid tenant, TenantCredentialCreate input, long expectedSecurityRevision, CancellationToken ct = default)
+    public async ValueTask<TenantCredentialView> CreateAsync(Guid actor, Guid tenant, TenantCredentialCreate input, long expectedSecurityRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
-        var state = await ForWrite(actor, tenant, AccessScope.ForTenant(tenant), expectedSecurityRevision, true, ct).ConfigureAwait(false);
+        var state = await ForWrite(actor, tenant, AccessScope.ForTenant(tenant), expectedSecurityRevision, true, ct, initiator).ConfigureAwait(false);
         var id = ids.NewId(); var now = time.GetUtcNow();
         var oauth = input.Purpose == CredentialPurpose.GoogleDriveAccount || input.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2;
         if (oauth && !string.IsNullOrEmpty(input.ProtectedValue)) throw AgentCoreErrors.Validation("OAuth authorization cannot be supplied as a protected value.");
@@ -71,15 +76,15 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
             value = value with { ProtectedPayload = protector.Protect(id, 1, input.ProtectedValue!) };
         }
         var root = new TenantCredentialRoot(tenant, id, now);
-        if (!await credentials.TrySaveTenantCredentialAsync(Advance(state), expectedSecurityRevision, root, value, 0, 0, Audit(tenant, actor, id, "create", now), ct).ConfigureAwait(false))
+        if (!await credentials.TrySaveTenantCredentialAsync(Advance(state), expectedSecurityRevision, root, value, 0, 0, Audit(tenant, actor, id, "create", now), ct, initiator).ConfigureAwait(false))
             throw new SecurityConflictException("stale_revision");
         return View(new(root, value, 0));
     }
     public async ValueTask<TenantCredentialView> UpdateAsync(Guid actor, Guid tenant, Guid id, TenantCredentialUpdate input,
-        long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default)
+        long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         var owned = await Owned(tenant, id, ct).ConfigureAwait(false);
-        var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, true, ct).ConfigureAwait(false);
+        var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, true, ct, initiator).ConfigureAwait(false);
         RequireRevision(owned, expectedRevision); var now = time.GetUtcNow();
         var email = input.EmailAccount ?? owned.Value.EmailAccount;
         if (owned.Value.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2 && input.EmailAccount is { } incoming)
@@ -100,14 +105,14 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
             Revision = checked(expectedRevision + 1), UpdatedAtUtc = now }));
         Validate(() => { TenantCredentialRules.ValidateChange(owned.Owner, value, owned.Value, expectedRevision, owned.Value.SecretRevision); return true; });
         if (!await credentials.TrySaveTenantCredentialAsync(Advance(state), expectedSecurityRevision, owned.Owner, value, expectedRevision, owned.Value.SecretRevision,
-            Audit(tenant, actor, id, "update", now), ct).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
+            Audit(tenant, actor, id, "update", now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
         return View(owned with { Value = value });
     }
     public async ValueTask<TenantCredentialView> ReplaceAsync(Guid actor, Guid tenant, Guid id, string value,
-        long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default)
+        long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         var owned = await Owned(tenant, id, ct).ConfigureAwait(false);
-        var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, true, ct).ConfigureAwait(false);
+        var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, true, ct, initiator).ConfigureAwait(false);
         RequireRevision(owned, expectedRevision);
         if (owned.Value.Purpose == CredentialPurpose.GoogleDriveAccount || owned.Value.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2)
             throw AgentCoreErrors.Validation("Use correlated OAuth authorization to replace this connection.");
@@ -115,23 +120,34 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         var updated = owned.Value with { ProtectedPayload = protector.Protect(id, owned.Value.ProtectionVersion, value),
             SecretRevision = checked(owned.Value.SecretRevision + 1), Revision = checked(expectedRevision + 1), UpdatedAtUtc = now };
         if (!await credentials.TrySaveTenantCredentialAsync(Advance(state), expectedSecurityRevision, owned.Owner, updated, expectedRevision, owned.Value.SecretRevision,
-            Audit(tenant, actor, id, "replace", now), ct).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
+            Audit(tenant, actor, id, "replace", now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
         return View(owned with { Value = updated });
     }
-    public async ValueTask DeleteAsync(Guid actor, Guid tenant, Guid id, long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default)
+    public async ValueTask DeleteAsync(Guid actor, Guid tenant, Guid id, long expectedSecurityRevision, long expectedRevision, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         var owned = await Owned(tenant, id, ct).ConfigureAwait(false);
-        var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, false, ct).ConfigureAwait(false);
+        var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, false, ct, initiator).ConfigureAwait(false);
         RequireRevision(owned, expectedRevision); var scope = TenantCredentialRules.Scope(tenant, id); var now = time.GetUtcNow();
         var next = Advance(state with { Assignments = state.Assignments.Where(a => a.Scope != scope).ToArray() });
         if (!await credentials.TryDeleteTenantCredentialAsync(next, expectedSecurityRevision, id, expectedRevision, owned.Value.SecretRevision, now,
-            Audit(tenant, actor, id, "delete", now), ct).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
+            Audit(tenant, actor, id, "delete", now), ct, initiator).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
     }
-    private async ValueTask<TenantSecurityState> State(Guid tenant, CancellationToken ct) => await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
-    private async ValueTask<TenantCredential> Owned(Guid tenant, Guid id, CancellationToken ct) => await credentials.FindTenantCredentialAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-    private async ValueTask<TenantSecurityState> ForWrite(Guid actor, Guid tenant, AccessScope scope, long expected, bool read, CancellationToken ct)
+    private async ValueTask<TenantSecurityState> State(Guid actor, Guid tenant, CancellationToken ct, HumanSessionReference? initiator)
     {
-        var state = await State(tenant, ct).ConfigureAwait(false);
+        if (initiator is null) return await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        if (initiator.PrincipalId != actor) throw new AccessDeniedException("initiator_unavailable");
+        return await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
+    }
+    private async ValueTask CompleteRead(Guid actor, Guid tenant, long expectedRevision, HumanSessionReference? initiator, CancellationToken ct)
+    {
+        if (initiator is null) return;
+        var current = await State(actor, tenant, ct, initiator).ConfigureAwait(false);
+        if (current.Tenant.Revision != expectedRevision) throw new SecurityConflictException("stale_revision");
+    }
+    private async ValueTask<TenantCredential> Owned(Guid tenant, Guid id, CancellationToken ct) => await credentials.FindTenantCredentialAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+    private async ValueTask<TenantSecurityState> ForWrite(Guid actor, Guid tenant, AccessScope scope, long expected, bool read, CancellationToken ct, HumanSessionReference? initiator)
+    {
+        var state = await State(actor, tenant, ct, initiator).ConfigureAwait(false);
         foreach (var key in read ? new[] { "credentials.manage", "credentials.read" } : new[] { "credentials.manage" })
         {
             var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false);

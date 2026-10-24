@@ -123,6 +123,11 @@ public static class IdentityHttp
         && Guid.TryParse(user.FindFirstValue(SessionClaim), out var id) && id != Guid.Empty ? id : null;
     public static AuthenticatedTenant TenantContext(HttpContext http) => http.Items.TryGetValue(TenantItem, out var value) && value is AuthenticatedTenant tenant
         ? tenant : throw new AccessDeniedException("not_member");
+    internal static TenantSessionInitiator TenantHuman(HttpContext http)
+    {
+        var actor = TenantContext(http);
+        return new(actor.AccountId, SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
+    }
     internal static async ValueTask<HumanSessionReference> SystemHumanAsync(HttpContext http, IIamStore security, CancellationToken ct)
     {
         var account = AccountId(http.User) ?? throw new AccessDeniedException("initiator_unavailable");

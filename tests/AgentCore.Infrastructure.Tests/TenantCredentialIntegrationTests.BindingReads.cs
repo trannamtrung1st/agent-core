@@ -103,10 +103,10 @@ public sealed partial class TenantCredentialIntegrationTests
             return result;
         }
         public ValueTask<TenantAgent?> TryBindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, AgentCredentialBinding binding,
-            long expectedInstanceRevision, long expectedCredentialRevision, AuthorizationAudit audit, CancellationToken ct = default) =>
-            inner.TryBindTenantCredentialAsync(next, expectedSecurityRevision, binding, expectedInstanceRevision, expectedCredentialRevision, audit, ct);
+            long expectedInstanceRevision, long expectedCredentialRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
+            inner.TryBindTenantCredentialAsync(next, expectedSecurityRevision, binding, expectedInstanceRevision, expectedCredentialRevision, audit, ct, initiator);
         public ValueTask<TenantAgent?> TryUnbindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, Guid instanceId, Guid bindingId,
-            long expectedInstanceRevision, long expectedBindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
-            inner.TryUnbindTenantCredentialAsync(next, expectedSecurityRevision, instanceId, bindingId, expectedInstanceRevision, expectedBindingRevision, at, audit, ct);
+            long expectedInstanceRevision, long expectedBindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
+            inner.TryUnbindTenantCredentialAsync(next, expectedSecurityRevision, instanceId, bindingId, expectedInstanceRevision, expectedBindingRevision, at, audit, ct, initiator);
     }
 }

@@ -12,8 +12,8 @@ public interface ITenantCredentialBindingStore
     ValueTask<TenantCredentialBindingSnapshot?> ReadTenantCredentialBindingsAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default);
     ValueTask<TenantAgent?> TryBindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision,
         AgentCredentialBinding binding, long expectedInstanceRevision, long expectedCredentialRevision,
-        AuthorizationAudit audit, CancellationToken ct = default);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<TenantAgent?> TryUnbindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision,
         Guid instanceId, Guid bindingId, long expectedInstanceRevision, long expectedBindingRevision, DateTimeOffset at,
-        AuthorizationAudit audit, CancellationToken ct = default);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
 }

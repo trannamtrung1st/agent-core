@@ -17,15 +17,15 @@ public sealed partial class InMemoryIamStore
         }
     }
     public ValueTask<TenantAgent?> TryBindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision,
-        AgentCredentialBinding binding, long expectedInstanceRevision, long expectedCredentialRevision, AuthorizationAudit audit, CancellationToken ct = default) =>
+        AgentCredentialBinding binding, long expectedInstanceRevision, long expectedCredentialRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         ValueTask.FromResult(ChangeCredentialBinding(next, expectedSecurityRevision, binding.AgentInstanceId, expectedInstanceRevision, binding.UpdatedAtUtc,
-            audit, () => CredentialBacking().PrepareTenantBind(next.Tenant.TenantId, binding, expectedCredentialRevision), ct));
+            audit, () => CredentialBacking().PrepareTenantBind(next.Tenant.TenantId, binding, expectedCredentialRevision), ct, initiator));
     public ValueTask<TenantAgent?> TryUnbindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, Guid instanceId,
-        Guid bindingId, long expectedInstanceRevision, long expectedBindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
+        Guid bindingId, long expectedInstanceRevision, long expectedBindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         ValueTask.FromResult(ChangeCredentialBinding(next, expectedSecurityRevision, instanceId, expectedInstanceRevision, at,
-            audit, () => CredentialBacking().PrepareTenantUnbind(next.Tenant.TenantId, instanceId, bindingId, expectedBindingRevision), ct));
+            audit, () => CredentialBacking().PrepareTenantUnbind(next.Tenant.TenantId, instanceId, bindingId, expectedBindingRevision), ct, initiator));
     private TenantAgent? ChangeCredentialBinding(TenantSecurityState next, long expectedSecurityRevision, Guid instanceId, long expectedInstanceRevision,
-        DateTimeOffset at, AuthorizationAudit audit, Func<Action?> prepare, CancellationToken ct)
+        DateTimeOffset at, AuthorizationAudit audit, Func<Action?> prepare, CancellationToken ct, HumanSessionReference? initiator)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instanceId, AgentInstanceLifecycle.Active, audit);
@@ -36,6 +36,7 @@ public sealed partial class InMemoryIamStore
             var parent = FindTenantAgentAsync(next.Tenant.TenantId, instanceId, ct).Result;
             if (parent is null || parent.Instance.Revision != expectedInstanceRevision) return null;
             if (parent.Instance.Lifecycle != AgentInstanceLifecycle.Active) throw new AccessDeniedException("agent_archived");
+            RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, initiator);
             var apply = prepare(); if (apply is null) return null;
             ct.ThrowIfCancellationRequested();
             var updated = instances.ChangeTenantConfigurationAsync(new(instanceId, expectedInstanceRevision), at, ct).Result;

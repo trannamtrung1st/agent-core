@@ -49,7 +49,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             var completed = outcome is "completed" or "privateCompleted";
             var privateSource = outcome.StartsWith("private", StringComparison.Ordinal);
             var protector = new AgentCore.Infrastructure.Credentials.LocalCredentialProtector(root + "-keys");
-            var credentials = new TenantCredentialService(f.Iam, (ITenantCredentialStore)f.Iam, f.Authorizer, protector, f.Ids, TimeProvider.System);
+            var credentials = new TenantCredentialService(f.Iam, (ITenantCredentialStore)f.Iam, f.Authorizer, protector, f.Ids, TimeProvider.System, f.Identity);
             var registryProbes = 0; var recoveryPass = false; var retirementRequests = 0;
             var recovering = outcome.StartsWith("recover", StringComparison.Ordinal);
             RuntimeSandboxSetup s = null!; JsonElement creation = default; Dictionary<string,string> metadata = [];

@@ -46,10 +46,10 @@ public sealed class TenantCredentialBindingService(IIamStore security, ITenantAg
             snapshot.Agent.Instance.Revision, state.Tenant.Revision, snapshot.Agent.Instance.Persona.Name, snapshot.Agent.Instance.Lifecycle.ToString(), canUpdate, removable);
     }
     public ValueTask<TenantCredentialBindingSaved> BindAsync(Guid actor, Guid tenant, Guid instance, Guid credentialId, string reference,
-        long expectedSecurityRevision, long expectedInstanceRevision, long expectedCredentialRevision, CancellationToken ct = default) =>
+        long expectedSecurityRevision, long expectedInstanceRevision, long expectedCredentialRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WithGate(instance, async token =>
         {
-            var state = await ParentState(actor, tenant, instance, true, token).ConfigureAwait(false);
+            var state = await ParentState(actor, tenant, instance, true, token, initiator).ConfigureAwait(false);
             var parent = await agents.FindTenantAgentAsync(tenant, instance, token).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             var credential = await credentials.FindTenantCredentialAsync(tenant, credentialId, token).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
             await RequireCredential(state, actor, credentialId, true, token).ConfigureAwait(false);
@@ -61,14 +61,14 @@ public sealed class TenantCredentialBindingService(IIamStore security, ITenantAg
             string alias; try { alias = CredentialRules.Reference(reference); } catch (ArgumentException ex) { throw AgentCoreErrors.Validation(ex.Message); }
             var now = time.GetUtcNow(); var binding = new AgentCredentialBinding(ids.NewId(), instance, credentialId, alias, 1, now, now);
             var updated = await bindings.TryBindTenantCredentialAsync(Advance(state), expectedSecurityRevision, binding, expectedInstanceRevision, expectedCredentialRevision,
-                Audit(actor, tenant, binding, "bind", now), token).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
+                Audit(actor, tenant, binding, "bind", now), token, initiator).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
             return new TenantCredentialBindingSaved(View(new(binding, credential with { BindingCount = credential.BindingCount + 1 })), updated.Instance.Revision, state.Tenant.Revision + 1);
         }, ct);
     public ValueTask<TenantCredentialBindingRemoved> UnbindAsync(Guid actor, Guid tenant, Guid instance, Guid bindingId,
-        long expectedSecurityRevision, long expectedInstanceRevision, long expectedBindingRevision, CancellationToken ct = default) =>
+        long expectedSecurityRevision, long expectedInstanceRevision, long expectedBindingRevision, CancellationToken ct = default, HumanSessionReference? initiator = null) =>
         WithGate(instance, async token =>
         {
-            var state = await ParentState(actor, tenant, instance, true, token).ConfigureAwait(false);
+            var state = await ParentState(actor, tenant, instance, true, token, initiator).ConfigureAwait(false);
             var snapshot = await Snapshot(tenant, instance, token).ConfigureAwait(false);
             var binding = snapshot.Bindings.SingleOrDefault(item => item.Binding.BindingId == bindingId)?.Binding ?? throw new AccessDeniedException("resource_unavailable");
             await RequireCredential(state, actor, binding.CredentialId, false, token).ConfigureAwait(false);
@@ -78,11 +78,12 @@ public sealed class TenantCredentialBindingService(IIamStore security, ITenantAg
             await RequireAgentPolicy(state, actor, snapshot.Agent, token).ConfigureAwait(false);
             var now = time.GetUtcNow();
             var updated = await bindings.TryUnbindTenantCredentialAsync(Advance(state), expectedSecurityRevision, instance, bindingId, expectedInstanceRevision, expectedBindingRevision,
-                now, Audit(actor, tenant, binding, "unbind", now), token).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
+                now, Audit(actor, tenant, binding, "unbind", now), token, initiator).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
             return new TenantCredentialBindingRemoved(updated.Instance.Revision, state.Tenant.Revision + 1);
         }, ct);
     private async ValueTask<TenantSecurityState> ParentState(Guid actor, Guid tenant, Guid instance, bool write, CancellationToken ct, HumanSessionReference? human = null)
     {
+        if (human is not null && human.PrincipalId != actor) throw new AccessDeniedException("initiator_unavailable");
         var state = human is null
             ? await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable")
             : await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);

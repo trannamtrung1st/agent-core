@@ -14,42 +14,42 @@ public static class TenantCredentialEndpoints
         group.MapGet("/{credentialId:guid}/access", (Guid credentialId, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.AccessAsync(actor.PrincipalId, actor.TenantId, credentialId, ct).ConfigureAwait(false));
+            return Results.Json(await service.AccessAsync(actor.PrincipalId, actor.TenantId, credentialId, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false));
         }));
         group.MapGet("", (int? page, int? pageSize, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            var result = await service.ListAsync(actor.PrincipalId, actor.TenantId, page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false);
+            var result = await service.ListAsync(actor.PrincipalId, actor.TenantId, page ?? 0, pageSize ?? 30, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize });
         }));
         group.MapGet("/{credentialId:guid}", (Guid credentialId, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            return Results.Json(Safe(await service.ReadAsync(actor.PrincipalId, actor.TenantId, credentialId, ct).ConfigureAwait(false)));
+            return Results.Json(Safe(await service.ReadAsync(actor.PrincipalId, actor.TenantId, credentialId, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false)));
         }));
         group.MapPost("", (TenantCredentialCreateRequest body, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
             var input = new TenantCredentialCreate(body.DisplayName, Parse<CredentialKind>(body.Kind), Parse<CredentialPurpose>(body.Purpose),
                 body.Metadata, body.AllowedOrigins, body.ProtectedValue, Email(body.EmailAccount), Registry(body.ContainerRegistry));
-            return Results.Json(Safe(await service.CreateAsync(actor.PrincipalId, actor.TenantId, input, body.ExpectedRevision, ct).ConfigureAwait(false)), statusCode: 201);
+            return Results.Json(Safe(await service.CreateAsync(actor.PrincipalId, actor.TenantId, input, body.ExpectedRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false)), statusCode: 201);
         }));
         group.MapPatch("/{credentialId:guid}", (Guid credentialId, TenantCredentialUpdateRequest body, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
             var input = new TenantCredentialUpdate(body.DisplayName, Parse<CredentialStatus>(body.Status), body.Metadata, body.AllowedOrigins, Email(body.EmailAccount), Registry(body.ContainerRegistry));
-            return Results.Json(Safe(await service.UpdateAsync(actor.PrincipalId, actor.TenantId, credentialId, input, body.ExpectedRevision, body.ExpectedCredentialRevision, ct).ConfigureAwait(false)));
+            return Results.Json(Safe(await service.UpdateAsync(actor.PrincipalId, actor.TenantId, credentialId, input, body.ExpectedRevision, body.ExpectedCredentialRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false)));
         }));
         group.MapPut("/{credentialId:guid}/value", (Guid credentialId, TenantCredentialReplaceRequest body, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
             return Results.Json(Safe(await service.ReplaceAsync(actor.PrincipalId, actor.TenantId, credentialId, body.ProtectedValue,
-                body.ExpectedRevision, body.ExpectedCredentialRevision, ct).ConfigureAwait(false)));
+                body.ExpectedRevision, body.ExpectedCredentialRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false)));
         }));
         group.MapDelete("/{credentialId:guid}", (Guid credentialId, long expectedRevision, long expectedCredentialRevision, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            await service.DeleteAsync(actor.PrincipalId, actor.TenantId, credentialId, expectedRevision, expectedCredentialRevision, ct).ConfigureAwait(false);
+            await service.DeleteAsync(actor.PrincipalId, actor.TenantId, credentialId, expectedRevision, expectedCredentialRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
             return Results.NoContent();
         }));
     }

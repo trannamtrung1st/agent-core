@@ -27,7 +27,7 @@ public sealed partial class SqliteIamStore
         return new(Owned(parent), items);
     }
     public async ValueTask<TenantAgent?> TryBindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, AgentCredentialBinding binding,
-        long expectedInstanceRevision, long expectedCredentialRevision, AuthorizationAudit audit, CancellationToken ct = default)
+        long expectedInstanceRevision, long expectedCredentialRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); TenantCredentialBindingRules.NewBinding(binding);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, binding.AgentInstanceId, AgentInstanceLifecycle.Active, audit);
@@ -40,11 +40,11 @@ public sealed partial class SqliteIamStore
             if (parent.Instance.Lifecycle != nameof(AgentInstanceLifecycle.Active)) throw new AccessDeniedException("agent_archived");
             if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, binding, false, expectedCredentialRevision, ct).ConfigureAwait(false)) return false;
             parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = binding.UpdatedAtUtc.ToUnixTimeMilliseconds(); result = Owned(parent); return true;
-        }, ct).ConfigureAwait(false);
+        }, ct, initiator).ConfigureAwait(false);
         return saved ? result : null;
     }
     public async ValueTask<TenantAgent?> TryUnbindTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, Guid instanceId,
-        Guid bindingId, long expectedInstanceRevision, long expectedBindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        Guid bindingId, long expectedInstanceRevision, long expectedBindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instanceId, AgentInstanceLifecycle.Active, audit);
@@ -59,7 +59,7 @@ public sealed partial class SqliteIamStore
             if (!await StageTenantCredentialBinding(db, next.Tenant.TenantId, MapBinding(binding), true, 0, ct).ConfigureAwait(false)) return false;
             parent.Instance.Revision++; parent.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
             result = Owned(parent); return true;
-        }, ct).ConfigureAwait(false);
+        }, ct, initiator).ConfigureAwait(false);
         return saved ? result : null;
     }
     // Human binding commands and model exact-operation commits share this association mutation.

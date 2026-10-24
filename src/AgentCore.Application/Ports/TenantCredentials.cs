@@ -15,8 +15,8 @@ public interface ITenantCredentialStore
     ValueTask<TenantCredentialPage> ListTenantCredentialsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default);
     ValueTask<bool> TrySaveTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision,
         TenantCredentialRoot owner, Credential value, long expectedRevision, long expectedSecretRevision,
-        AuthorizationAudit audit, CancellationToken ct = default);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
     ValueTask<bool> TryDeleteTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision,
         Guid credentialId, long expectedRevision, long expectedSecretRevision, DateTimeOffset at,
-        AuthorizationAudit audit, CancellationToken ct = default);
+        AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null);
 }

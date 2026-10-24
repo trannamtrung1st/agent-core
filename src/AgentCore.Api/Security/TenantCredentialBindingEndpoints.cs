@@ -23,7 +23,7 @@ public static class TenantCredentialBindingEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             var result = await service.BindAsync(actor.PrincipalId, actor.TenantId, instanceId, body.CredentialId, body.Reference,
-                body.ExpectedRevision, body.ExpectedInstanceRevision, body.ExpectedCredentialRevision, ct).ConfigureAwait(false);
+                body.ExpectedRevision, body.ExpectedInstanceRevision, body.ExpectedCredentialRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false);
             return Results.Json(new { binding = Safe(result.Binding), result.InstanceRevision, result.SecurityRevision }, statusCode: 201);
         }));
         group.MapDelete("/{bindingId:guid}", (Guid instanceId, Guid bindingId, long expectedRevision, long expectedInstanceRevision, long expectedBindingRevision,
@@ -31,7 +31,7 @@ public static class TenantCredentialBindingEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             return Results.Json(await service.UnbindAsync(actor.PrincipalId, actor.TenantId, instanceId, bindingId,
-                expectedRevision, expectedInstanceRevision, expectedBindingRevision, ct).ConfigureAwait(false));
+                expectedRevision, expectedInstanceRevision, expectedBindingRevision, ct, IdentityHttp.TenantHuman(http)).ConfigureAwait(false));
         }));
     }
     private static AdminCredentialBindingResponse Safe(AgentCore.Application.Credentials.CredentialBindingView value) =>

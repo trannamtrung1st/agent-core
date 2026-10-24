@@ -205,7 +205,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         {
             await using var f = await Fixture.Create(sqlite);
             var credentials = new TenantCredentialService(f.Iam, (ITenantCredentialStore)f.Iam, f.Authorizer,
-                new AgentCore.Infrastructure.Credentials.LocalCredentialProtector(root), f.Ids, TimeProvider.System);
+                new AgentCore.Infrastructure.Credentials.LocalCredentialProtector(root), f.Ids, TimeProvider.System, f.Identity);
             var s = await PrepareRuntimeSandbox(f, registry: async (tenant, human) =>
                 (await credentials.CreateAsync(human.PrincipalId, tenant, new("Registry", AgentCore.Domain.Credentials.CredentialKind.Token,
                     AgentCore.Domain.Credentials.CredentialPurpose.ContainerRegistry, null, null, "PRIVATE_SOURCE_ORIGINAL",

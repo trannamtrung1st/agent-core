@@ -30,7 +30,7 @@ public sealed partial class SqliteIamStore
         return new(items, count, page, pageSize);
     }
     public ValueTask<bool> TrySaveTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, TenantCredentialRoot owner,
-        Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default)
+        Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); value = TenantCredentialRules.Freeze(value);
         return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
@@ -45,10 +45,10 @@ public sealed partial class SqliteIamStore
             TenantCredentialRules.ValidateChange(owner, value, row is null ? null : SqliteCredentialStore.Map(row), expectedRevision, expectedSecretRevision);
             if (root is null) db.Add(TenantCredentialRecord.Row(owner));
             SqliteCredentialStore.StageValue(db, row, value, owner.TenantId); return true;
-        }, ct);
+        }, ct, initiator);
     }
     public ValueTask<bool> TryDeleteTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
-        long expectedRevision, long expectedSecretRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        long expectedRevision, long expectedSecretRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next);
         return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
@@ -66,10 +66,10 @@ public sealed partial class SqliteIamStore
             db.Entry(root).CurrentValues.SetValues(root with { DeletedAt = at });
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             db.Credentials.Remove(row); return true;
-        }, ct);
+        }, ct, initiator);
     }
     private async ValueTask<bool> WriteTenantResourceAsync(TenantSecurityState next, long expected, AuthorizationAudit audit,
-        Func<AgentCoreDbContext, Task<bool>> change, CancellationToken ct)
+        Func<AgentCoreDbContext, Task<bool>> change, CancellationToken ct, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next);
         if (audit.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expected + 1)) throw new ArgumentException("Invalid credential transaction.");
@@ -84,8 +84,10 @@ public sealed partial class SqliteIamStore
         await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         try
         {
+            await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, initiator, ct).ConfigureAwait(false);
             if (!await change(db).ConfigureAwait(false)) return false;
             db.Entry(current).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
+            await RequireAgentHumanAsync(db, next.Tenant.TenantId, audit.ActorPrincipalId, initiator, ct).ConfigureAwait(false);
             await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return true;
         }
         catch (DbUpdateConcurrencyException) { return false; }

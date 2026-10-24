@@ -19,14 +19,14 @@ public sealed partial class InMemoryIamStore
         lock (_gate) lock (instances.CredentialGate) return ValueTask.FromResult(CredentialBacking().ListTenantCredentials(tenantId, allowedIds, page, pageSize));
     }
     public ValueTask<bool> TrySaveTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, TenantCredentialRoot owner,
-        Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default)
+        Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next); value = TenantCredentialRules.Freeze(value);
         return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () => owner.TenantId == next.Tenant.TenantId
-            && CredentialBacking().SaveTenantCredential(owner, value, expectedRevision, expectedSecretRevision), ct));
+            && CredentialBacking().SaveTenantCredential(owner, value, expectedRevision, expectedSecretRevision), ct, initiator));
     }
     public ValueTask<bool> TryDeleteTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
-        long expectedRevision, long expectedSecretRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        long expectedRevision, long expectedSecretRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null)
     {
         next = IamStateRules.Freeze(next);
         return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
@@ -34,10 +34,10 @@ public sealed partial class InMemoryIamStore
             if (next.Assignments.Any(a => a.Scope == TenantCredentialRules.Scope(next.Tenant.TenantId, credentialId)))
                 throw new ArgumentException("Deleting a credential must retire its direct assignments.");
             return CredentialBacking().DeleteTenantCredential(next.Tenant.TenantId, credentialId, expectedRevision, expectedSecretRevision, at);
-        }, ct));
+        }, ct, initiator));
     }
     private AgentCore.Infrastructure.Persistence.InMemoryCredentialStore CredentialBacking() => credentials ?? throw new AccessDeniedException("credential_store_unavailable");
-    private bool WriteCredential(TenantSecurityState next, long expected, AuthorizationAudit audit, Func<bool> change, CancellationToken ct)
+    private bool WriteCredential(TenantSecurityState next, long expected, AuthorizationAudit audit, Func<bool> change, CancellationToken ct, HumanSessionReference? initiator = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         if (audit.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expected + 1)) throw new ArgumentException("Invalid credential transaction.");
@@ -45,6 +45,7 @@ public sealed partial class InMemoryIamStore
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expected) return false;
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
+            RequireAgentHuman(next.Tenant.TenantId, audit.ActorPrincipalId, initiator);
             ct.ThrowIfCancellationRequested(); if (!change()) return false;
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); return true;
         }

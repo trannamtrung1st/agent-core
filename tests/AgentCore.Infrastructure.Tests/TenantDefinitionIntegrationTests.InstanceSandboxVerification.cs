@@ -71,7 +71,7 @@ public sealed partial class TenantDefinitionIntegrationTests
             var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
             var human = await SetupHuman(f, owner.AccountId, owner.OwnerPrincipalId); var p = SetupProfiles(f);
             async ValueTask<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
-            var credentials = new TenantCredentialService(f.Iam, (ITenantCredentialStore)f.Iam, f.Authorizer, new LocalCredentialProtector(keyRoot), f.Ids, TimeProvider.System);
+            var credentials = new TenantCredentialService(f.Iam, (ITenantCredentialStore)f.Iam, f.Authorizer, new LocalCredentialProtector(keyRoot), f.Ids, TimeProvider.System, f.Identity);
             var credential = await credentials.CreateAsync(human.PrincipalId, owner.TenantId, new("Registry", CredentialKind.Token, CredentialPurpose.ContainerRegistry,
                 null, null, "instance-verification-private", ContainerRegistry: new("ghcr.io", "fixture", ["ghcr.io/acme"])), await Revision());
             var profile = (await p.Profiles.SaveAsync(owner.TenantId, null, human, SetupInput("Protected") with { RegistryCredentialId = credential.Credential.CredentialId }, await Revision(), 0)).Profile;

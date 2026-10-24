@@ -24,9 +24,9 @@ public sealed partial class TenantBrowserApprovalTests
             return result;
         }
         public ValueTask<TenantAgent?> TryBindTenantCredentialAsync(TenantSecurityState next, long revision, AgentCore.Domain.Credentials.AgentCredentialBinding binding,
-            long instanceRevision, long credentialRevision, AuthorizationAudit audit, CancellationToken ct = default) => throw new InvalidOperationException("Reads cannot bind credentials.");
+            long instanceRevision, long credentialRevision, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) => throw new InvalidOperationException("Reads cannot bind credentials.");
         public ValueTask<TenantAgent?> TryUnbindTenantCredentialAsync(TenantSecurityState next, long revision, Guid instance, Guid binding, long instanceRevision,
-            long bindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) => throw new InvalidOperationException("Reads cannot unbind credentials.");
+            long bindingRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, HumanSessionReference? initiator = null) => throw new InvalidOperationException("Reads cannot unbind credentials.");
     }
 
     [Theory] [InlineData(false, "before")] [InlineData(true, "before")] [InlineData(false, "after")] [InlineData(true, "after")]
