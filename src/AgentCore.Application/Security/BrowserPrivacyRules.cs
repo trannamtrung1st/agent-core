@@ -24,8 +24,6 @@ public static class BrowserPrivacyRules
             || graphics.Except(authority.GraphicsOriginCeiling, StringComparer.OrdinalIgnoreCase).Any()) throw AgentCoreErrors.Forbidden("The requested capture exception exceeds deployment authority.");
         return new(selected, unmasked, graphics, checked(change.ExpectedRevision + 1));
     }
-    public static ValueTask<AccessDecision> SystemDecision(SystemSecurityState state, Account account, Guid actor, IamAuthorizer iam, CancellationToken ct) =>
-        iam.CheckOwnedSystemAsync(state, account, actor, "system.governance.manage", ct);
     public static void ValidateAudit(HumanSessionReference human, AuthorizationAudit audit)
     {
         if (audit.AuditId == Guid.Empty || audit.TenantId is not null || audit.ActorPrincipalId != human.PrincipalId || audit.Action != "system.browser.privacy.update"
