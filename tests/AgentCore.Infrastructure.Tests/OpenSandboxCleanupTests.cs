@@ -219,21 +219,32 @@ public sealed class OpenSandboxCleanupTests
         if (alwaysHang) Assert.Contains("Failure=timeout", Assert.Single(logs.Warnings));
     }
 
-    [Fact]
-    public async Task Verification_lost_create_reconciles_exact_metadata_before_removing_disposable_probe_files()
+    [Theory]
+    [InlineData(403)]
+    [InlineData(500)]
+    public async Task Verification_lost_create_reconciles_exact_metadata_before_removing_disposable_probe_files(int status)
     {
         var creates=0; var lists=0;
         await using var host=await Host.Create(_=>Task.CompletedTask, async context=>
         {
-            creates++; context.Response.StatusCode=500; await context.Response.WriteAsync("private-upstream-sentinel");
+            creates++; context.Response.StatusCode=status;
+            await context.Response.WriteAsJsonAsync(new { code = "private-error-code", message = "private-upstream-sentinel",
+                route = "/private-provider-route", image = "private-image-reference", key = "private-fixture-key" });
         }, async context=>
         {
             lists++; Assert.Contains("agent-core-image-verification",Uri.UnescapeDataString(context.Request.QueryString.Value!));
             await context.Response.WriteAsJsonAsync(new {items=Array.Empty<object>(),pagination=new {page=1,pageSize=100,totalItems=0,totalPages=0}});
         });
-        var service=new OpenSandboxService(new() {Enabled=true,Endpoint=host.Endpoint,ApiKey="private-fixture-key",AllowLocalImageIds=true,CanonicalWorkspaceRoot=host.MountRoot,WorkspaceDockerHostRoot=host.MountRoot},new InMemorySandboxStore(),null!,null!,TimeProvider.System);
+        var logs = new OpenSandboxVerificationLogs();
+        var service=new OpenSandboxService(new() {Enabled=true,Endpoint=host.Endpoint,ApiKey="private-fixture-key",AllowLocalImageIds=true,CanonicalWorkspaceRoot=host.MountRoot,WorkspaceDockerHostRoot=host.MountRoot},new InMemorySandboxStore(),null!,null!,TimeProvider.System, logger: logs);
         var observed=await service.VerifyProfileAsync(new("fixture",1,"Fixture","",true,"sha256:"+new string('a',64)),default);
         Assert.False(observed.Passed); Assert.DoesNotContain("private-upstream-sentinel",observed.Message);
+        Assert.Equal("provisioning", observed.FailureCode);
+        var warning = Assert.Single(logs.Events);
+        Assert.False(warning.HasException);
+        Assert.Matches("^Sandbox verification failed\\. AttemptId=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} Phase=provisioning HomeAccess=ReadWrite Failure=http StatusCode=" + status + "$", warning.Message);
+        foreach (var privateValue in new[] { "private-upstream-sentinel", "private-error-code", "/private-provider-route", "private-image-reference", "private-fixture-key", host.Endpoint, host.MountRoot })
+            Assert.DoesNotContain(privateValue, warning.Message);
         Assert.Equal(1,creates); Assert.Equal(1,lists); Assert.Empty(Directory.EnumerateDirectories(Path.Combine(host.MountRoot,".verification")));
     }
 

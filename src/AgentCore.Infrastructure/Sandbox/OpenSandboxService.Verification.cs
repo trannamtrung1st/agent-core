@@ -6,6 +6,8 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Workspaces;
 using OpenSandbox;
 using OpenSandbox.Models;
+using OpenSandbox.Core;
+using Microsoft.Extensions.Logging;
 using SdkSandbox = OpenSandbox.Sandbox;
 
 namespace AgentCore.Infrastructure.Sandbox;
@@ -42,6 +44,7 @@ public sealed partial class OpenSandboxService
         var budget = 3 * 45 + profile.MaxCommandSeconds + ProcessCleanupGraceSeconds;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(budget));
         var owner = VerificationOwner(id); var phase = "mountPreparation";
+        HomeAccess? homeAccess = null;
         var metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = owner, ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) };
         if (profile.TenantId is { } tenantOwner) metadata["agent-core-verification-tenant"] = tenantOwner.ToString("N");
 
@@ -68,6 +71,7 @@ public sealed partial class OpenSandboxService
             if (profile.TenantId is not null) await RequireTenantRetirementCapabilityAsync(deadline.Token, verification: true);
             foreach (var access in new[] { HomeAccess.ReadWrite, HomeAccess.ReadOnly, HomeAccess.Disabled })
             {
+                homeAccess = access;
                 if (require is not null) await require(deadline.Token);
                 mounted = MountResolver.Verification(id, access, deadline.Token);
                 var auth = await Images.ResolveAuthAsync(profile, deadline.Token, requireVerification: false, require);
@@ -140,7 +144,28 @@ public sealed partial class OpenSandboxService
         catch (Exception error) when (error is AccessDeniedException or SecurityConflictException) { result = Observation(false, "Verification authority changed. Read current configuration before retrying.", "authority_changed"); }
         catch (OperationCanceledException) { result = Observation(false, "Verification canceled or timed out during " + phase + ".", "canceledOrTimeout"); }
         catch (AgentCoreException error) { result = Observation(false, error.Message, error.Code); }
-        catch { result = Observation(false, "Verification failed during " + phase + ". Check private server readiness, daemon backing-path mapping and compatible Unix identity. Provider details are withheld.", phase); }
+        catch (Exception error)
+        {
+            var category = error switch
+            {
+                SandboxApiException => "http",
+                HttpRequestException => "transport",
+                SandboxReadyTimeoutException => "readiness",
+                SandboxUnhealthyException => "health",
+                _ => "unknown"
+            };
+            int? status = error switch
+            {
+                SandboxApiException api when api.StatusCode is >= 100 and <= 599 => api.StatusCode,
+                HttpRequestException http when http.StatusCode is { } code && (int)code is >= 100 and <= 599 => (int)code,
+                _ => null
+            };
+            // SDK messages, bodies, routes, image references and credentials are private.
+            logger?.LogWarning(new EventId(0, "SandboxVerificationFailure"),
+                "Sandbox verification failed. AttemptId={AttemptId} Phase={Phase} HomeAccess={HomeAccess} Failure={Failure} StatusCode={StatusCode}",
+                id, phase, homeAccess, category, status);
+            result = Observation(false, "Verification failed during " + phase + ". Check private server readiness, daemon backing-path mapping and compatible Unix identity. Provider details are withheld.", phase);
+        }
         finally
         {
             await watch.CancelAsync(); await watcher;

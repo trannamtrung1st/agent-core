@@ -27,7 +27,7 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
     {
         await using var f = await CreateFixture("printf initialization-passed");
         var verification = await f.Service.VerifyProfileAsync(f.Profile, CancellationToken.None);
-        Assert.True(verification.Passed, verification.Message);
+        Assert.True(verification.Passed, f.FailureDiagnostic(verification));
         Assert.Null(verification.FailureCode);
         Assert.Contains("initialization-passed", verification.Stdout);
         Assert.False(Directory.Exists(Path.Combine(f.WorkspaceRoot, ".verification"))
@@ -45,9 +45,9 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
         await f.Store.SaveVerificationAsync(broken);
         Assert.Equal(f.Profile, await f.Store.GetProfileAsync(f.Profile.Id, f.Profile.Revision));
         var passed = await f.Service.VerifyProfileAsync(f.Profile with { InitializationScript = "printf initialized > initialization.txt" }, CancellationToken.None);
-        Assert.True(passed.Passed, passed.Message);
+        Assert.True(passed.Passed, f.FailureDiagnostic(passed));
         var invalid = await f.Service.VerifyProfileAsync(f.Profile with { InitializationScript = "touch .env" }, CancellationToken.None);
-        Assert.True(invalid.Passed, invalid.Message);
+        Assert.True(invalid.Passed, f.FailureDiagnostic(invalid));
         var privateOutput = await f.Service.VerifyProfileAsync(f.Profile with { InitializationScript = "printf secret-sentinel >&2; exit 9" }, CancellationToken.None);
         Assert.False(privateOutput.Passed); Assert.DoesNotContain("secret-sentinel", privateOutput.Message);
         Assert.Empty(await f.Store.ListLeasesAsync());
@@ -61,6 +61,8 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
         public OpenSandboxService Service { get; private set; } = null!;
         public SandboxProfile Profile { get; private set; } = null!;
         public ISandboxStore Store { get; } = new InMemorySandboxStore();
+        private OpenSandboxVerificationLogs Logs { get; } = new();
+        public string FailureDiagnostic(SandboxProfileVerification verification) => verification.Message + Environment.NewLine + Logs.Diagnostic;
         public static async Task<Fixture> Create(string? script)
         {
             var f = new Fixture(); Directory.CreateDirectory(f.Root);
@@ -72,7 +74,7 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
             f.Profile = new("general-workbench", 1, "Workbench", "Native verification fixture", true,
                 Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_IMAGE")!, InitializationScript: script);
             await f.Store.SaveProfileAsync(f.Profile, 0);
-            f.Service = new(options, f.Store, null!, null!, TimeProvider.System); return f;
+            f.Service = new(options, f.Store, null!, null!, TimeProvider.System, logger: f.Logs); return f;
         }
         public ValueTask DisposeAsync()
         {

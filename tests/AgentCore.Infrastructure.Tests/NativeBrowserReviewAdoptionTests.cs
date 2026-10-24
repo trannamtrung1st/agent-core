@@ -10,17 +10,29 @@ namespace AgentCore.Infrastructure.Tests;
 [Collection(BrowserChromiumCollection.Name)]
 public sealed class NativeBrowserReviewAdoptionTests
 {
-    [Fact]
-    public async Task Denied_popup_is_closed_before_the_tool_releases_its_session_gate()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Denied_popup_is_closed_before_the_tool_releases_its_session_gate(bool unattendedOpenWeb)
     {
-        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null);
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-popup-lease-" + Guid.NewGuid().ToString("N"));
+        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0,
+            PolicyMode = unattendedOpenWeb ? nameof(BrowserPolicyMode.OpenWeb) : nameof(BrowserPolicyMode.Restricted),
+            ProfileMode = unattendedOpenWeb ? nameof(BrowserProfileMode.PersistentAgent) : nameof(BrowserProfileMode.EphemeralSession), ProfileRoot = root }, null);
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
+        IAsyncDisposable? lease = null;
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
+            if (unattendedOpenWeb)
+            {
+                var owner = Guid.NewGuid(); browser.BindSession(id, owner);
+                lease = await browser.EnterUnattendedAsync(owner, browser.HostPolicy.NavigationOrigins);
+                browser.AdoptUnattendedFlow(owner);
+            }
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id,
                 new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")))).ErrorCode);
             var context = browser.ContextFor(id)!;
@@ -45,7 +57,13 @@ public sealed class NativeBrowserReviewAdoptionTests
             Assert.Contains(priorBlank, context.Pages);
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Inspect(id))).ErrorCode);
         }
-        finally { release.TrySetResult(); await browser.StopAsync(CancellationToken.None); }
+        finally
+        {
+            release.TrySetResult();
+            if (lease is not null) await lease.DisposeAsync();
+            await browser.StopAsync(CancellationToken.None);
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 
     [Fact]

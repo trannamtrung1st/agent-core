@@ -269,7 +269,7 @@ public sealed partial class NativePlaywrightBrowser
 
     private async Task SettlePopupsAsync(SessionBrowser session)
     {
-        if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb)
+        if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb && LeaseOrigins(session) is null)
         {
             return;
         }

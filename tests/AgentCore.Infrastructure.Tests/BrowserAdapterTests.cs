@@ -781,7 +781,9 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
         var otherServing = ServeCountingAsync(otherListener, () => otherHits++, stop.Token);
         var root = Path.Combine(Path.GetTempPath(), "agent-core-lease-" + Guid.NewGuid().ToString("N"));
         var agent = Guid.NewGuid();
-        var session = NewPersistent(root);
+        using var logs = new LoggerFactory();
+        var collected = new SecretListLogger(); logs.AddProvider(collected);
+        var session = NewPersistent(root, logs);
         await session.StartAsync(CancellationToken.None);
         var workSession = Guid.NewGuid();
         var interactiveSession = Guid.NewGuid();
@@ -819,7 +821,8 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
             Assert.False(waiting.IsCompleted);
             await lease.DisposeAsync();
             var opened = await waiting.WaitAsync(TimeSpan.FromSeconds(20));
-            Assert.True(opened.ErrorCode is null, $"Interactive navigation: code={opened.ErrorCode}, status={opened.Status}, attempted={opened.EffectAttempted}, SDK-confirmed={opened.EffectConfirmedBySdk}");
+            Assert.True(opened.ErrorCode is null, $"Interactive navigation: code={opened.ErrorCode}, status={opened.Status}, attempted={opened.EffectAttempted}, SDK-confirmed={opened.EffectConfirmedBySdk}, store-helper-faulted={storeServing.IsFaulted}, other-helper-faulted={otherServing.IsFaulted}; "
+                + string.Join("; ", collected.Messages.Where(m => m.StartsWith("browser.operation.failure ", StringComparison.Ordinal))));
             Assert.Contains(otherOrigin, opened.Observation!.Url, StringComparison.Ordinal);
             Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
             Assert.Single(Directory.GetDirectories(root));
@@ -893,7 +896,7 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
         }
     }
 
-    private static NativePlaywrightBrowser NewPersistent(string root) =>
+    private static NativePlaywrightBrowser NewPersistent(string root, ILoggerFactory? loggerFactory = null) =>
         new(
             new BrowserOptions
             {
@@ -905,7 +908,7 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
                 FixtureEnabled = false,
                 NavigationOrigins = []
             },
-            loggerFactory: null);
+            loggerFactory);
 
     private static async Task ServeButtonAsync(HttpListener listener, CancellationToken cancellationToken)
     {
@@ -1648,7 +1651,7 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
 
     private sealed class SecretListLogger : ILoggerProvider
     {
-        public List<string> Messages { get; } = [];
+        public System.Collections.Concurrent.ConcurrentQueue<string> Messages { get; } = [];
 
         public ILogger CreateLogger(string categoryName) => new Logger(Messages);
 
@@ -1656,7 +1659,7 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
         {
         }
 
-        private sealed class Logger(List<string> messages) : ILogger
+        private sealed class Logger(System.Collections.Concurrent.ConcurrentQueue<string> messages) : ILogger
         {
             public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullDisposable.Instance;
 
@@ -1669,7 +1672,7 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
                 Exception? exception,
                 Func<TState, Exception?, string> formatter)
             {
-                messages.Add(formatter(state, exception));
+                messages.Enqueue(formatter(state, exception));
             }
 
             private sealed class NullDisposable : IDisposable
