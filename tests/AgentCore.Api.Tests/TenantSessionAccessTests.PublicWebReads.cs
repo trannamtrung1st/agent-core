@@ -36,6 +36,7 @@ public sealed partial class TenantSessionAccessTests
     [InlineData(false, "web.search", "unavailable")] [InlineData(true, "web.search", "unavailable")]
     [InlineData(false, "web.search", "journey")] [InlineData(true, "web.search", "journey")]
     [InlineData(false, "web.search", "bounded")] [InlineData(true, "web.fetch", "bounded")]
+    [InlineData(false, "web.search", "history")] [InlineData(true, "web.search", "history")]
     public async Task Tenant_public_web_reads_use_current_executor_authority_and_never_release_revoked_observations(bool sqlite, string tool, string mode)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-public-web-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
@@ -69,14 +70,15 @@ public sealed partial class TenantSessionAccessTests
             var expectedCalls = mode is "missing" or "review" or "invalid" or "unavailable" ? 0 : mode == "journey" ? 2 : 1;
             Assert.Equal(expectedCalls, native.Calls);
             var results = model.Requests.Last().Messages.Where(m=>m.Role==ModelRole.Tool && TenantPublicWebReadContract.IsRead(m.Name ?? "")).ToArray();
-            var accepted = mode is "allowed" or "journey" or "bounded" or "revoke-output";
+            var accepted = mode is "allowed" or "journey" or "bounded" or "revoke-output" or "history";
             if (accepted)
             {
                 Assert.NotEmpty(results);
                 foreach (var message in results)
                 {
                     using var json = JsonDocument.Parse(message.Text); var data=json.RootElement;
-                    Assert.True(data.GetProperty("tenantPublicWebRead").GetBoolean()); Assert.True(data.GetProperty("untrusted").GetBoolean()); Assert.Equal(64, data.GetProperty("readCommandHash").GetString()!.Length);
+                    Assert.True(data.TryGetProperty("tenantPublicWebRead", out var marker), message.Text[..Math.Min(512, message.Text.Length)]);
+                    Assert.True(marker.GetBoolean()); Assert.True(data.GetProperty("untrusted").GetBoolean()); Assert.Equal(64, data.GetProperty("readCommandHash").GetString()!.Length);
                     Assert.True(Encoding.UTF8.GetByteCount(message.Text) <= ToolLimits.MaxOutputBytes);
                     if (mode == "bounded") Assert.True(data.GetProperty("truncated").GetBoolean());
                 }
@@ -89,6 +91,13 @@ public sealed partial class TenantSessionAccessTests
             }
             Assert.DoesNotContain(model.Requests.SelectMany(r=>r.Messages), m=>m.Text.Contains("NATIVE-PRIVATE-EXCEPTION-WITNESS",StringComparison.Ordinal));
             var history = (await Json(await owner.GetAsync(api + $"/sessions/{session}/messages"))).GetProperty("items").EnumerateArray().ToArray();
+            if (mode == "history")
+            {
+                Assert.Contains(TenantPublicWebProvider.Witness, done.Checkpoint!.PayloadJson);
+                Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains(TenantPublicWebProvider.Witness, StringComparison.Ordinal));
+                Assert.All(history, h => Assert.Contains(h.GetProperty("role").GetString(), new[] { "user", "assistant" }));
+                Assert.Equal(2, model.Requests.Count);
+            }
             if (!accepted || mode == "revoke-output") Assert.DoesNotContain(history, h => h.GetProperty("text").GetString()!.Contains(TenantPublicWebProvider.Witness, StringComparison.Ordinal));
             Assert.Empty((await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(0,100))).Items);
             Assert.Equal(0, factory.Services.GetRequiredService<AgentCore.Api.Http.OutboundHttpProbe>().Attempts);
@@ -98,9 +107,10 @@ public sealed partial class TenantSessionAccessTests
     private sealed class TenantPublicWebProvider : IWebSearchProvider, IPublicWebFetcher
     {
         public const string Witness="PUBLIC-WEB-SOURCE-WITNESS";
-        public bool Available { get; init; }=true; public bool IsAvailable=>Available; public bool Hold { get; init; } public bool Fail { get; init; } public bool Large { get; init; } public int Calls;
+        public bool Available { get; init; }=true; public bool IsAvailable=>Available; public bool Hold { get; init; } public bool Noncooperative { get; init; } public bool Fail { get; init; } public bool Large { get; init; } public int Calls;
         public TaskCompletionSource Entered { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously); public TaskCompletionSource Release { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private async Task Begin(CancellationToken ct) { Interlocked.Increment(ref Calls); Entered.TrySetResult(); if (Hold) await Release.Task.WaitAsync(ct); if (Fail) throw new IOException("NATIVE-PRIVATE-EXCEPTION-WITNESS"); }
+        public TaskCompletionSource Returned { get; }=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private async Task Begin(CancellationToken ct) { Interlocked.Increment(ref Calls); Entered.TrySetResult(); if (Hold) { if (Noncooperative) await Release.Task; else await Release.Task.WaitAsync(ct); } if (Fail) throw new IOException("NATIVE-PRIVATE-EXCEPTION-WITNESS"); Returned.TrySetResult(); }
         public async ValueTask<WebSearchResult> SearchAsync(WebSearchRequest request, CancellationToken cancellationToken=default)
         { await Begin(cancellationToken); return new(Enumerable.Range(0,Large?20:request.Limit).Select(i=>new WebSearchItem("Public source", "https://public.example/source", Large?new string('試',12000):Witness)).ToArray(),false); }
         public async ValueTask<PublicWebFetchResult> FetchAsync(PublicWebFetchRequest request, CancellationToken cancellationToken=default)
@@ -130,7 +140,7 @@ public sealed partial class TenantSessionAccessTests
                 yield return new ModelToolCallEvent(new("public-read-"+results.Length,current,args)); yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             if (mode=="revoke-output") { OutputEntered.TrySetResult(); await OutputRelease.Task.WaitAsync(ct); }
-            yield return new ModelTextDelta(JsonSerializer.Serialize(new { disposition="Complete", action=new { kind="chat.respond" }, displayText=results.Any(r=>r.Text.Contains(TenantPublicWebProvider.Witness,StringComparison.Ordinal))?TenantPublicWebProvider.Witness:"No public observation was released.", speech=new { mode="none" }, memory=Array.Empty<object>() }));
+            yield return new ModelTextDelta(JsonSerializer.Serialize(new { disposition="Complete", action=new { kind="chat.respond" }, displayText=mode=="history"?"Finished controlled research.":results.Any(r=>r.Text.Contains(TenantPublicWebProvider.Witness,StringComparison.Ordinal))?TenantPublicWebProvider.Witness:"No public observation was released.", speech=new { mode="none" }, memory=Array.Empty<object>() }));
             yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }

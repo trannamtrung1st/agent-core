@@ -275,6 +275,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
         SpeechProjectionOutput or SpeechOutputSegmentOutput or SpeechOutputCompletedOutput or PlaybackStopOutput or PlaybackGainOutput
             or TranscriptPartialOutput or TranscriptDiscardedOutput => payload,
         ResponseStartedOutput or TextDeltaOutput or TextCompletedOutput or ResponseInterruptedOutput or StateChangedOutput or DurableApprovalPendingOutput => payload,
+        ResponseProgressOutput progress => progress with { Message = ResponseProgressMessages.Bound(progress.Message) },
         BlockUpsertOutput { Kind: "markdown", AttachmentId: null, ArtifactId: null } => payload,
         BlockUpsertOutput { Kind: "artifact", AttachmentId: null, ArtifactId: not null } => payload,
         BlockUpsertOutput { Kind: "unknown", AttachmentId: null, ArtifactId: null } => payload,

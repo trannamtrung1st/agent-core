@@ -143,8 +143,13 @@ public sealed partial class TenantBrowserApprovalTests
         db.ChangeTracker.Clear();
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET PayloadJson = json_set(PayloadJson, '$.Operation.BrowserCommand.ArtifactSourcesJson', '[]') WHERE RequestId = {request.RequestId}"));
         Assert.Equal(request, (await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(s.Tenant, request.RequestId))!);
-        var rollback = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261019160245_TenantHumanMaterializedArtifact"));
-        Assert.Contains("OwnedRows", rollback.Message);
+        // The current Run retains public-download references. Its earlier guard
+        // now refuses before the historical upload-only OwnedRows guard is reached.
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
+        var rollback = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => migrator.MigrateAsync("20261019160245_TenantHumanMaterializedArtifact"));
+        Assert.Equal(275, rollback.SqliteExtendedErrorCode);
+        Assert.Contains("20261023180000_TenantPublicDownloads", await db.Database.GetAppliedMigrationsAsync());
         await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
         Assert.Equal(request, (await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(s.Tenant, request.RequestId))!);
     }
