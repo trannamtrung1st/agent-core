@@ -264,7 +264,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceMutationService>();
         services.TryAddSingleton<AgentCore.Application.Security.TenantWorkspaceReadService>();
         services.TryAddSingleton<AdminLifecycleCoordinator>();
-        services.TryAddSingleton<AgentCore.Application.Workspaces.SessionWorkingCleanupService>();
         services.TryAddSingleton<ISessionWorkspace>(provider =>
         {
             var options = provider.GetRequiredService<PersistenceOptions>();
@@ -411,7 +410,6 @@ public static class InfrastructureServiceCollectionExtensions
             browser: provider.GetService<IBrowser>(),
             sandboxService: provider.GetRequiredService<ISandboxService>(),
             sandboxStore: provider.GetRequiredService<ISandboxStore>(),
-            workingCleanup: provider.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>(),
             tenantAuthorization: provider.GetRequiredService<AgentCore.Application.Security.TenantToolAuthorization>(),
             logger: provider.GetService<ILogger<SessionToolExecutor>>()));
         services.TryAddSingleton(provider =>

@@ -899,3 +899,7 @@ Built-in platform role inspection/assignment/revocation now has [focused origina
 ## Shared speech ingress prerequisite
 
 The existing speech pipeline now uses a bounded, supervised per-stream resource while retaining the Session Runtime's sole conversation/controller mailbox and immutable tenant Run-frame model. [Focused qualification](reports/speech-ingress-lifecycle-verification-2026-10-21.md) owns actual evidence and limits. This closes only the extracted stream's duration/control bounds, callback retirement and failure lifecycle; canonical tenant Voice admission/delivery/UI remains open. Remaining platform guardrails, obsolete authority/schema removal and exhaustive proposal-wide route/security/design qualification also remain open. The full original goal stays active; no milestone acceptance follows.
+
+## Terminal cleanup and final IAM audit index — 2026-10-24
+
+The [terminal cleanup/Skill consolidation](reports/tenant-terminal-cleanup-consolidation-verification-2026-10-24.md) removes the Profile-based Runtime cleanup actor and unused unscoped Skill loading entry point, retaining canonical exact-owner cleanup and pure projection. The [original requirement matrix](reports/tenant-proposal-acceptance-matrix-2026-10-24.md) reconciles measured successor evidence and makes remaining method/effect closure and final rendered UI/design confirmation explicit. Its current 545-slot source index is navigation, not authorization acceptance; the original full goal remains active.

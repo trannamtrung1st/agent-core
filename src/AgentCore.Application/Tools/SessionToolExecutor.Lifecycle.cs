@@ -4,8 +4,6 @@ namespace AgentCore.Application.Tools;
 
 public sealed partial class SessionToolExecutor
 {
-    internal ValueTask<bool> CleanupTerminalWorkingAsync(Guid sessionId, CancellationToken ct) =>
-        workingCleanup?.CleanupAsync(sessionId, ct) ?? ValueTask.FromResult(false);
     internal async ValueTask<bool> FinalizeRequestResourcesAsync(Guid sessionId, CancellationToken ct)
     {
         var lease = sandboxStore is null ? null : await sandboxStore.GetLeaseAsync(sessionId, ct);

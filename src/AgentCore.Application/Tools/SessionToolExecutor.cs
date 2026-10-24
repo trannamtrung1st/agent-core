@@ -17,7 +17,6 @@ public sealed partial class SessionToolExecutor(
     IBrowser? browser = null,
     ISandboxService? sandboxService = null,
     ISandboxStore? sandboxStore = null,
-    SessionWorkingCleanupService? workingCleanup = null,
     TenantToolAuthorization? tenantAuthorization = null,
     ILogger<SessionToolExecutor>? logger = null)
 {

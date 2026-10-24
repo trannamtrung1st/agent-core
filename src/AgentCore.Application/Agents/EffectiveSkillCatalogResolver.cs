@@ -3,14 +3,8 @@ using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 namespace AgentCore.Application.Agents;
 
-public sealed class EffectiveSkillCatalogResolver(IAgentInstanceStore instances)
+public static class EffectiveSkillCatalogResolver
 {
-    public async ValueTask<IReadOnlyList<EffectiveSkill>> ResolveAsync(Guid instanceId, AgentDefinition definition, CancellationToken ct = default)
-    {
-        var state = await instances.ReadSkillsAsync(instanceId, ct);
-        var owner = await instances.FindAsync(instanceId, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
-        return Resolve(definition with { SelfManagement = ManagementPolicyResolver.Resolve(definition, owner) }, state);
-    }
     public static IReadOnlyList<EffectiveSkill> Resolve(AgentDefinition definition, InstanceSkillSnapshot state)
     {
         var entries = new List<EffectiveSkill>();

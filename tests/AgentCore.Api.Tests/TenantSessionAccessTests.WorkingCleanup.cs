@@ -50,7 +50,13 @@ public sealed partial class TenantSessionAccessTests
                 Assert.Equal(CompletionInboxStatus.Skipped, (await runs.FindTenantCompletionAsync(completed.Owner, completed.AgentRunId))!.Status); Assert.Equal(requests, model.Requests.Count);
             }
             Assert.True(await cleanup.CleanupAsync(parent.Owner)); Assert.False(Directory.Exists(path));
-            Assert.Equal("child", await File.ReadAllTextAsync(Path.Combine(childPath, "private.txt"))); Assert.StartsWith("AgentCore.Application.Sessions.AgentCoreException: Tenant execution authority is unavailable.", Assert.Single(model.Failures));
+            Assert.Equal("child", await File.ReadAllTextAsync(Path.Combine(childPath, "private.txt")));
+            var failure = Assert.Single(model.Failures);
+            // Current Harness preparation can observe the deleted lineage before the later
+            // projection guard. Both are authority refusals; diagnostic sinks omit their messages.
+            Assert.True(failure.Contains("AgentCore.Application.Security.AccessDeniedException HResult=", StringComparison.Ordinal)
+                || failure.Contains("AgentCore.Application.Sessions.AgentCoreException HResult=", StringComparison.Ordinal), failure);
+            Assert.DoesNotContain("Tenant execution authority is unavailable.", failure);
         }
         finally { model.ReleaseChild.TrySetResult(); }
     }

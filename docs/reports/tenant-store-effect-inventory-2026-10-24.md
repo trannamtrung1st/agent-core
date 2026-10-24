@@ -264,3 +264,7 @@ The original goal stays active. No current application behavior, permission defa
 ## Executed follow-up
 
 [Canonical schema and cross-family boundary qualification](tenant-schema-boundary-verification-2026-10-24.md) now supplies fresh physical SQLite/model/startup and 135 distinct focused case results. It clarifies the 95 migration IDs versus 96 non-Designer source files. The source census above remains separate from that measured scope and from final acceptance.
+
+## Method binding and terminal-cleanup follow-up
+
+The [current method index](tenant-store-method-source-index-2026-10-24.json) resolves 545 callable declared slots, 1,557 call/reference sites and their actual receivers/implementations across all 93 interfaces. The 548 syntax declarations include three explicit inherited default bodies. All current catalog receivers are immutable built-in stores; 181 slots have no bound production caller and remain explicit contract/data/default-body review items. The index is source navigation, not a reachability or authorization verdict. The [cleanup consolidation](tenant-terminal-cleanup-consolidation-verification-2026-10-24.md) removes the Profile-based terminal cleanup actor and unused unscoped Skill loader; the [requirement matrix](tenant-proposal-acceptance-matrix-2026-10-24.md) makes final acceptance obligations explicit.

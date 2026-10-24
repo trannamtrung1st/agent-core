@@ -27,7 +27,7 @@ public sealed class SkillActivationTests
             new SkillSpec("review", "Review", "Review", new string('a', 4000), SkillProjection.Always, true, [], []),
             new SkillSpec("added", "Added", "Added", new string('b', 4000), SkillProjection.Always, true, [], []));
         var defs = new Definitions(original, current); var owner = await NativeInstanceSeed.CreateAsync(store, defs, ids, clock, original.Id, 1);
-        var pin = await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, original);
+        var pin = await NativeSkillSeed.ResolveAsync(store, owner.InstanceId, original);
         await NativeInstanceSeed.UpgradeAsync(store, defs, clock, owner.InstanceId, 2, owner.Revision);
         owner = (await store.FindAsync(owner.InstanceId))!;
         var before = await store.ReadSkillsAsync(owner.InstanceId);
@@ -38,11 +38,11 @@ public sealed class SkillActivationTests
         var after = await store.ReadSkillsAsync(owner.InstanceId);
         Assert.Equal(before.DefinitionStates, after.DefinitionStates); Assert.Equal(before.InstanceSkills, after.InstanceSkills);
         Assert.Equal("OLD", Assert.Single(pin).Procedure);
-        Assert.Equal(8000, (await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current)).Sum(s => s.Procedure.Length));
+        Assert.Equal(8000, (await NativeSkillSeed.ResolveAsync(store, owner.InstanceId, current)).Sum(s => s.Procedure.Length));
         var allowed = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Local", "Local", "DEFERRED", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent, context: original);
-        Assert.Contains(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current), s => s.Key == allowed.Key && s.Projection == SkillProjection.OnDemand);
+        Assert.Contains(await NativeSkillSeed.ResolveAsync(store, owner.InstanceId, current), s => s.Key == allowed.Key && s.Projection == SkillProjection.OnDemand);
         Assert.Equal("OLD", Assert.Single(pin).Procedure);
-        var fresh = await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current);
+        var fresh = await NativeSkillSeed.ResolveAsync(store, owner.InstanceId, current);
         var explicitBudgetError = Assert.Throws<AgentCoreException>(() => AgentCore.Application.Composer.ComposerInputRules.ActiveSkills(current, fresh, [allowed.Key]));
         Assert.Contains("8000-character", explicitBudgetError.Message);
         Assert.Equal(8000, fresh.Where(s => s.Projection == SkillProjection.Always).Sum(s => s.Procedure.Length));
@@ -124,7 +124,7 @@ public sealed class SkillActivationTests
         var d = Definition(1, new SkillSpec("review", "Review", "Definition review", "DEFINITION", SkillProjection.Always, true, [], []));
         var defs = new Definitions(d); var owner = await NativeInstanceSeed.CreateAsync(store, defs, ids, clock, d.Id);
         var local = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Review", "Local", "OLD", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
-        var resolver = new EffectiveSkillCatalogResolver(store); var pin = await resolver.ResolveAsync(owner.InstanceId, d);
+        var pin = await NativeSkillSeed.ResolveAsync(store, owner.InstanceId, d);
         Assert.Equal(2, pin.Count); Assert.Equal(2, pin.Select(s => s.Key).Distinct().Count());
         await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "update", local.Key, local.Revision, new("Review", "Local", "NEW", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
         var later = await NativeSkillSeed.WriteAsync(store, defs, clock, owner.InstanceId, "create", input: new("Later", "Later", "LATER", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
@@ -132,7 +132,7 @@ public sealed class SkillActivationTests
         Assert.Equal([local.Key], loaded.Admitted); Assert.Equal("unknown", Assert.Single(loaded.Rejected).Reason);
         Assert.Contains("OLD", PromptContextBuilder.BuildActiveSkillContext(pin, loaded.Admitted));
         Assert.DoesNotContain("NEW", PromptContextBuilder.BuildActiveSkillContext(pin, loaded.Admitted));
-        Assert.Contains("NEW", PromptContextBuilder.BuildActiveSkillContext(await resolver.ResolveAsync(owner.InstanceId, d), [local.Key]));
+        Assert.Contains("NEW", PromptContextBuilder.BuildActiveSkillContext(await NativeSkillSeed.ResolveAsync(store, owner.InstanceId, d), [local.Key]));
     }
     [Fact]
     public async Task Resources_missing_authority_and_archived_lifecycle_fail_without_mutation()

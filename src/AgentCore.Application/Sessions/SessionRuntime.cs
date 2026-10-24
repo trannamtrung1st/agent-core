@@ -5781,9 +5781,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             then: async ct =>
             {
                 await PublishStateAsync(context, ct).ConfigureAwait(false);
-                try { await _tools.CleanupTerminalWorkingAsync(SessionId, ct).ConfigureAwait(false); }
-                catch (Exception failure) when (failure is not OperationCanceledException)
-                { LogHandledRuntimeFailure(failure, "workspace.cleanup", "workspace_cleanup_deferred"); }
                 persisted?.TrySetResult(true);
             },
             ended: persisted);

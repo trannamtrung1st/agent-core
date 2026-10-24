@@ -9,6 +9,12 @@ namespace AgentCore.Application.Tests;
 // No tenant principal, grant, approval or Run authority is synthesized here.
 internal static class NativeSkillSeed
 {
+    internal static async ValueTask<IReadOnlyList<EffectiveSkill>> ResolveAsync(IAgentInstanceStore store, Guid id, AgentDefinition definition)
+    {
+        var state = await store.ReadSkillsAsync(id);
+        var owner = await store.FindAsync(id) ?? throw new InvalidOperationException("Expected an unowned native Skill fixture.");
+        return EffectiveSkillCatalogResolver.Resolve(definition with { SelfManagement = ManagementPolicyResolver.Resolve(definition, owner) }, state);
+    }
     internal static async ValueTask<IReadOnlyList<InstanceSkillView>> ViewsAsync(IAgentInstanceStore store, IAgentDefinitionStore definitions, Guid id)
     {
         var owner = (await store.FindAsync(id))!;

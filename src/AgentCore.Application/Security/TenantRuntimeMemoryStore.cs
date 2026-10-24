@@ -3,7 +3,7 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Security;
 
-// IMemoryStore compatibility is confined to one actual tenant Run lease, never a global Profile.
+// The shared runtime storage port is bound to one actual tenant Run lease.
 public sealed class TenantRuntimeMemoryStore(ITenantRuntimeStore storage, TenantRuntimeFrame frame, IIdGenerator? ids = null) : IMemoryStore, ITenantRuntimeReceiptWriter, ITenantRuntimeForegroundWriter, ITenantRuntimeInputWriter
 {
     private void Scope(Guid session) { TenantRuntimeRules.RequireOwner(frame.Owner); if (session != frame.SessionId) throw new AccessDeniedException("tenant_runtime_scope_mismatch"); }
