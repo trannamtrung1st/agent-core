@@ -92,10 +92,20 @@ public sealed class FrozenMigrationMetadataTests
             await migrator.MigrateAsync("20261023140000_TenantConfigurationRemedyAuthoring");
             var predecessor = await Schema(db);
             Assert.Equal(133, predecessor.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            await migrator.MigrateAsync("20261023180000_TenantPublicDownloads");
+            var downloads = await Schema(db);
+            Assert.Equal(135, downloads.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            foreach (var guard in predecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
+            {
+                // Public downloads extends only these two documented tool allowlists.
+                var expected = guard.Key is "trigger:TR_AgentRuns_DirectWorkspace_Insert" or "trigger:TR_AgentRuns_DirectWorkspace_Update"
+                    ? guard.Value.Replace("'office.spreadsheet.edit')", "'office.spreadsheet.edit','web.download')", StringComparison.Ordinal) : guard.Value;
+                Assert.Equal(expected, downloads[guard.Key]);
+            }
             await migrator.MigrateAsync();
             var current = await Schema(db);
-            Assert.Equal(135, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
-            foreach (var guard in predecessor.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
+            Assert.Equal(138, current.Keys.Count(k => k.StartsWith("trigger:", StringComparison.Ordinal)));
+            foreach (var guard in downloads.Where(item => item.Key.StartsWith("trigger:", StringComparison.Ordinal)))
                 Assert.Equal(guard.Value, current[guard.Key]);
             Assert.False(db.Database.HasPendingModelChanges());
             await migrator.MigrateAsync(historical);

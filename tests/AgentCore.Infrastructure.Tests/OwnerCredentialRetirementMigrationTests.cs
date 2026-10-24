@@ -24,10 +24,10 @@ public sealed class OwnerCredentialRetirementMigrationTests
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(new string('9', 64)))).ToLowerInvariant();
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO OwnerCapabilities (TokenHash, CreatedAtUtc) VALUES ({hash}, {123456L})");
             await db.Database.ExecuteSqlRawAsync("INSERT INTO UserProfiles (ProfileId, PreferencesJson, Revision, UpdatedAtUtc) VALUES ('retained-fixture', '{{}}', 7, 123456)");
-            await db.Database.MigrateAsync();
+            // Isolate retirement from later migrations that legitimately add tenant tables.
+            await migrations.MigrateAsync("20261021102840_RetireOwnerCapabilityStore");
             Assert.Equal(before.Where(n => n != "OwnerCapabilities"), await Tables(db));
             Assert.DoesNotContain(db.Model.GetEntityTypes(), type => type.GetTableName() == "OwnerCapabilities");
-            Assert.False(db.Database.HasPendingModelChanges());
             var retained = await db.Profiles.AsNoTracking().SingleAsync();
             Assert.Equal(7, retained.Revision); Assert.Equal("{}", retained.PreferencesJson); Assert.Equal(123456L, retained.UpdatedAtUtc);
             await migrations.MigrateAsync("20261021060000_TenantAutomationConversation");

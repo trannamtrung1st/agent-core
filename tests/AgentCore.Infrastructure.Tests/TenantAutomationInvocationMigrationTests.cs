@@ -16,11 +16,13 @@ public sealed class TenantAutomationInvocationMigrationTests
             await using var db = new AgentCoreDbContext(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path + ";Foreign Keys=True").Options);
             var migrations = db.GetService<IMigrator>(); await migrations.MigrateAsync("20261022041619_TenantAutomationMutations");
             var guards = await Definitions(db, "trigger"); Assert.Equal(110, guards.Count); var indexes = await Definitions(db, "index");
-            await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
+            const string invocationMigration = "20261022060000_TenantAutomationInvocations";
+            await migrations.MigrateAsync(invocationMigration);
             var upgraded = await Definitions(db, "trigger"); Assert.Equal(112, upgraded.Count); foreach (var guard in guards) Assert.Equal(guard.Value, upgraded[guard.Key]);
             Assert.Equal(indexes, await Definitions(db, "index"));
             await migrations.MigrateAsync("20261022041619_TenantAutomationMutations"); Assert.Equal(guards, await Definitions(db, "trigger"));
-            await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); Assert.Equal(upgraded, await Definitions(db, "trigger"));
+            await migrations.MigrateAsync(invocationMigration); Assert.Equal(upgraded, await Definitions(db, "trigger"));
+            await migrations.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges());
             using var check = db.Database.GetDbConnection().CreateCommand(); check.CommandText = "PRAGMA foreign_key_check";
             using var result = await check.ExecuteReaderAsync(); Assert.False(await result.ReadAsync());
         }
