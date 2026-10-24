@@ -220,29 +220,31 @@ The default template selects native Real with SQLite under repository-relative `
 
 The preferred fast developer loop requires no Docker: ASP.NET backend on localhost:5080 and Vite on localhost:5173 with HTTP/WebSocket proxy. Run native .NET and Vite processes for fast startup, direct debugging, hot reload and no container rebuilds. Initialize an explicitly selected SQLite database with the [one-use bootstrap](#explicit-identity-bootstrap-foundation) before starting. An intentionally ephemeral InMemory host needs the five explicit `Security:EphemeralBootstrap` values on every start. Provider profile and storage selection are independent.
 
-```text
-# Export the same SQLite provider/connection and private roots used for bootstrap.
-dotnet run --project src/AgentCore.Api --launch-profile http
-cd web
-pnpm install --frozen-lockfile
-pnpm run dev
+```sh
+# Copy .env.example to private .env once; fill the API key and five bootstrap fields.
+pnpm --dir web install --frozen-lockfile
+# New/reset SQLite database only; skip this command for an initialized database.
+scripts/dev-real.sh bootstrap-identity
+scripts/dev-real.sh start --api-only
 ```
 
-MessagePack stays the realtime default. To inspect JSON frames in DevTools, configure the diagnostic transport for the **Vite** process, not the ASP.NET API. Vite reads `VITE_AGENTCORE_REALTIME_PROTOCOL` from `web/` env files or the shell that starts `pnpm dev`. The repo-root `.env` used for Compose interpolation and optional `source .env` for native .NET does **not** configure native Vite. Restart the Vite dev server after changing the variable; a browser refresh alone is not enough if Vite was already running. Changing it on the API process or a running container after the SPA is built does not switch the browser.
+The launcher starts both the authenticated API and Vite at the configured ports. Sign in at `http://localhost:5173/sign-in` with the explicitly bootstrapped account. `start` without `--api-only` also prepares managed Sandbox infrastructure. The normal template selects Real; key-free Synthetic verification uses the isolated Playwright fixtures rather than a user's catalog.
 
-```bash
-cd web
-VITE_AGENTCORE_REALTIME_PROTOCOL=json pnpm dev
+MessagePack stays the realtime default. To inspect JSON frames in DevTools, set the public `VITE_AGENTCORE_REALTIME_PROTOCOL=json` assignment in the managed launcher's private root `.env`, then restart. The launcher forwards that public setting to Vite while excluding backend secrets. Do not source `.env` in a shell. A browser refresh alone cannot change a setting already read by Vite; changing only the API process or an already-built container also cannot switch it.
+
+```sh
+# After setting VITE_AGENTCORE_REALTIME_PROTOCOL=json in root .env:
+scripts/dev-real.sh restart --api-only
 ```
 
-The same assignment can live in gitignored `web/.env.local` (see `web/.env.example`). Default `docker compose build` leaves the variable unset, so the image stays MessagePack. A JSON diagnostic image passes it during the frontend build, then runs the container:
+If Vite is managed independently, its own `web/.env.local` or process environment remains available; that does not bootstrap or start the backend. For a packaged JSON diagnostic image, first configure the private PFX/password and initialize the volume using the [HTTPS Compose setup](#docker-compose-integration-and-demo), then use the same overlay for build and launch:
 
-```bash
-docker compose build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
-docker compose up
+```sh
+docker compose -f docker-compose.yml -f docker-compose.https.yml build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
 ```
 
-Durable trigger telemetry on meter `AgentCore.Runtime` is `trigger_scheduler_events`, `trigger_registration_events`, and `trigger_due_lag_ms`. Canonical execution adds `activation_events`, `agent_run_events` and `background_session_events` with bounded outcome tags described below. Do not log schedule intent, occurrence evidence, result text, prepared action JSON, or secrets. `GET /health` confirms Synthetic boot (`{"status":"healthy","profile":"Synthetic","protocolVersion":1,"buildVersion":"1.0.0+<source-revision>"}`). Open http://127.0.0.1:5173, start a conversation, and send text over `/hubs/session`. Voice click preflights capture, then streams PCM after Mode=voice. In voice mode, streamed assistant text is segmented and played through the output AudioWorklet (not an HTML audio element); microphone capture remains active during playback. Mute stops PCM only; End or disconnect releases capture, recognition and synthesis. Saying Wait (or sending a new turn) supersedes live playback after a worklet flush. Idle and environment initiative stay in-process (`IEnvironmentEventIngress`); there is no public arbitrary-event inject endpoint. Playwright: `cd web && CI=1 pnpm exec playwright test` (text pending-voice, fake-device capture, playback while capture stays active, duplex mute/disconnect, voice interrupt). Kestrel JavaScript protocol fixtures run under `dotnet test`. The synthetic STT/TTS scripts emit deterministic transcripts and PCM; use Real with independently configured streaming STT/TTS and OpenRouter text with a **fixed** `DefaultModel` for actual microphone transcription and speech. `openrouter/free` is for opt-in adapter smoke only. Supply `OPENROUTER_API_KEY` and, when live speech is wanted, `OPENAI_API_KEY` from environment or `dotnet user-secrets`. Opt-in OpenAI TTS uses `AGENTCORE_LIVE_OPENAI_TTS=1`. [Configuration](15-persistence-and-configuration.md) defines all profile overrides. Default test commands remain Synthetic and must not require these keys.
+Durable trigger telemetry on meter `AgentCore.Runtime` is `trigger_scheduler_events`, `trigger_registration_events`, and `trigger_due_lag_ms`. Canonical execution adds `activation_events`, `agent_run_events` and `background_session_events` with bounded outcome tags described below. Do not log schedule intent, occurrence evidence, result text, prepared action JSON, or secrets. `GET /health` confirms the configured profile; isolated Synthetic verification reports `{"status":"healthy","profile":"Synthetic","protocolVersion":1,"buildVersion":"1.0.0+<source-revision>"}`. After authenticated startup, open `http://localhost:5173` (or the configured UI origin), sign in, start a conversation, and send text over `/hubs/session`. Voice click preflights capture, then streams PCM after Mode=voice. In voice mode, streamed assistant text is segmented and played through the output AudioWorklet (not an HTML audio element); microphone capture remains active during playback. Mute stops PCM only; End or disconnect releases capture, recognition and synthesis. Saying Wait (or sending a new turn) supersedes live playback after a worklet flush. Idle and environment initiative stay in-process (`IEnvironmentEventIngress`); there is no public arbitrary-event inject endpoint. Playwright: `cd web && CI=1 pnpm exec playwright test` (text pending-voice, fake-device capture, playback while capture stays active, duplex mute/disconnect, voice interrupt). Kestrel JavaScript protocol fixtures run under `dotnet test`. The synthetic STT/TTS scripts emit deterministic transcripts and PCM; use Real with independently configured streaming STT/TTS and OpenRouter text with a **fixed** `DefaultModel` for actual microphone transcription and speech. `openrouter/free` is for opt-in adapter smoke only. Supply `OPENROUTER_API_KEY` and, when live speech is wanted, `OPENAI_API_KEY` from environment or `dotnet user-secrets`. Opt-in OpenAI TTS uses `AGENTCORE_LIVE_OPENAI_TTS=1`. [Configuration](15-persistence-and-configuration.md) defines all profile overrides. Default test commands remain Synthetic and must not require these keys.
 
 ```text
 dotnet test
@@ -272,17 +274,17 @@ dotnet --version
 dotnet --list-runtimes
 ```
 
-Both 10.0 runtime entries must meet the floor above. Preserve the existing launch profile, provider configuration, secrets, database and binary-store paths. Take a SQLite backup using the existing backup API or a controlled stopped-host copy as described above; retain attachment/Artifact/workspace and credential-protection data. For the managed native Real stack, the operator can then run `./scripts/dev-real.sh restart` (reuses OpenSandbox and leaves unselected nopCommerce running) and `./scripts/dev-real.sh status`. For an independently managed process/service, restart only its known owner instead; the script does not discover untracked hosts. Verify readiness and an ordinary owned Office read after the restart. Self-contained publishes must be rebuilt/redeployed with the patched SDK, not just restarted.
+Both 10.0 runtime entries must meet the floor above. Preserve the existing provider configuration, private `.env`/environment settings, secrets, database and binary-store paths. Take a SQLite backup using the existing backup API or a controlled stopped-host copy as described above; retain attachment/Artifact/workspace and credential-protection data. For the managed native Real stack, the operator can then run `./scripts/dev-real.sh restart` (reuses OpenSandbox and leaves unselected nopCommerce running) and `./scripts/dev-real.sh status`. For an independently managed process/service, restart only its known owner instead; the script does not discover untracked hosts. Verify readiness and an ordinary owned Office read after the restart. Self-contained publishes must be rebuilt/redeployed with the patched SDK, not just restarted.
 
 For an existing Real Compose deployment, use its same overlay and environment on every command. These are **operator instructions**, not an automatic restart performed by the stabilization task:
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.real.yml build --pull agent-core
-docker compose -f docker-compose.yml -f docker-compose.real.yml run --rm --no-deps --entrypoint dotnet agent-core --list-runtimes
-docker compose -f docker-compose.yml -f docker-compose.real.yml up -d --no-deps --force-recreate agent-core
+docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml build --pull agent-core
+docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml run --rm --no-deps --entrypoint dotnet agent-core --list-runtimes
+docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up -d --no-deps --force-recreate agent-core
 ```
 
-Check both runtime versions before replacing the application container. Synthetic uses the same commands without the Real overlay. Preserve the existing named volumes and backup; do not remove volumes as part of this update. A fresh image/runtime check does not replace application readiness checks or real-file fidelity verification. [The local ledger](reports/office-small-stabilization-verification-2026-10-14.md) records the images actually inspected and the native-runtime gap left for the owner.
+Check both runtime versions before replacing the application container. Synthetic omits only the Real overlay and retains the HTTPS overlay and configured certificate/password. Preserve the existing named volumes and backup; do not remove volumes as part of this update. A fresh image/runtime check does not replace application readiness checks or real-file fidelity verification. [The local ledger](reports/office-small-stabilization-verification-2026-10-14.md) records the images actually inspected and the native-runtime gap left for the owner.
 
 ## Docker Compose integration and demo
 
@@ -314,7 +316,7 @@ python3 scripts/verify-email-watch-restart.py --project email-monitor-UNIQUE --p
 
 For Real, add `-f docker-compose.real.yml` before the HTTPS overlay on every command, and supply the backend `OPENROUTER_API_KEY` through the gitignored `.env` or process environment. ASP.NET does not read `.env` directly; the native launcher parses it and exports it into the API process environment. Provider/storage selection remains independent. The same one-use bootstrap applies; neither overlay supplies an account or a password. A runtime/profile change does not authorize live UAT or imply physical voice certification.
 
-The overlay matches the native `http-openrouter` launch profile (language-model setup 30 seconds, stream idle 60 seconds, total 120 seconds): hosted OpenRouter text and tools (`Adapter=OpenAICompatible`, `Vision=false`, `Tools=true` for the pinned model), with `Persistence__Provider=Sqlite` and `Persistence__ConnectionString=Data Source=data/agent-core.db` so local Real runs survive process restarts like Compose Real. Compose reads `AGENTCORE_LLM_VISION` and `AGENTCORE_LLM_TOOLS` alongside `AGENTCORE_LLM_MODEL`. Default Compose `Providers.Speech` remains Synthetic, so voice-enabled agents stay `voiceAvailable` from structurally resolvable Synthetic paths. Native or overlay env can select OpenAI TTS or `OpenAICompatibleBatch` when a backend `OPENAI_API_KEY` is present; Recognition Adapter=`OpenAI` stays unselectable. Selecting those hosted names without a key advertises `voiceAvailable: false`. Real Compose does not by itself opt into live HTTP speech tests. Native processes can pass the same text environment without Compose:
+The overlay uses the same native Real provider preset (language-model setup 30 seconds, stream idle 60 seconds, total 120 seconds): hosted OpenRouter text and tools (`Adapter=OpenAICompatible`, `Vision=true`, `Tools=true` for the pinned model). Both paths use SQLite; native roots derive from `.env` and default to `data/native`, while Compose stores its database and private roots under `/data`. The launcher applies preset defaults before `.env`, then runs without a launch profile. Compose reads `AGENTCORE_LLM_VISION` and `AGENTCORE_LLM_TOOLS` alongside `AGENTCORE_LLM_MODEL`. Default Compose `Providers.Speech` remains Synthetic, so voice-enabled agents stay `voiceAvailable` from structurally resolvable Synthetic paths. Native or overlay env can select OpenAI TTS or `OpenAICompatibleBatch` when a backend `OPENAI_API_KEY` is present; Recognition Adapter=`OpenAI` stays unselectable. Selecting those hosted names without a key advertises `voiceAvailable: false`. Real Compose does not by itself opt into live HTTP speech tests. Native processes can pass the same text environment without Compose:
 
 ```text
 AgentCore__Profile=Real
@@ -324,7 +326,7 @@ Providers__LanguageModels__primary-llm__DefaultModel=deepseek/deepseek-v4.1-flas
 Providers__LanguageModels__primary-llm__ReasoningEffort=low
 Providers__LanguageModels__primary-llm__ReasoningObjectWire=true
 Providers__LanguageModels__primary-llm__ExcludeVisibleReasoning=true
-Providers__LanguageModels__primary-llm__Vision=false
+Providers__LanguageModels__primary-llm__Vision=true
 Providers__LanguageModels__primary-llm__Tools=true
 OPENROUTER_API_KEY=<backend-secret>
 ```
