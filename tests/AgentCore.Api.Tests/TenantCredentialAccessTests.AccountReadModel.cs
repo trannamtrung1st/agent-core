@@ -35,6 +35,8 @@ public sealed partial class TenantCredentialAccessTests
     private sealed class AccountReadProbe(ITenantConnectedAccountReader inner) : ITenantConnectedAccountReader
     {
         public int Calls;
+        public ConnectedAccountRead? LastRead;
+        public ConnectedAccountReadResult? LastResult;
         public Func<Task>? Before, After;
         public ConnectedAccountAvailability Availability(Credential c) => inner.Availability(c);
         public async ValueTask<ConnectedAccountReadResult> ReadAsync(TenantConnectedAccount c, ConnectedAccountRead read,
@@ -42,6 +44,7 @@ public sealed partial class TenantCredentialAccessTests
         {
             Interlocked.Increment(ref Calls); if (Interlocked.Exchange(ref Before, null) is { } before) await before();
             var result = await inner.ReadAsync(c, read, current, maintain, ct);
+            LastRead = read; LastResult = result;
             if (Interlocked.Exchange(ref After, null) is { } after) await after(); return result;
         }
     }
@@ -62,6 +65,9 @@ public sealed partial class TenantCredentialAccessTests
     [InlineData(false, "EmailAccount", "after-family-revoked")] [InlineData(true, "EmailAccount", "after-family-revoked")]
     [InlineData(false, "EmailAccount", "final-family-revoked")] [InlineData(true, "EmailAccount", "final-family-revoked")]
     [InlineData(false, "EmailAccount", "visibility")] [InlineData(true, "EmailAccount", "visibility")]
+    [InlineData(false, "EmailAccount", "recent-omitted")] [InlineData(true, "EmailAccount", "recent-omitted")]
+    [InlineData(false, "EmailAccount", "recent-empty")] [InlineData(true, "EmailAccount", "recent-empty")]
+    [InlineData(false, "EmailAccount", "recent-blank")] [InlineData(true, "EmailAccount", "recent-blank")]
     public async Task Model_connected_account_read_waits_for_exact_consent_and_returns_only_current_owned_data(bool sqlite, string purpose, string choice)
     {
         var model = new CredentialModel(); var diagnostics = new AccountReadDiagnostics(); AccountReadProbe? probe = null;
@@ -90,6 +96,8 @@ public sealed partial class TenantCredentialAccessTests
         var tool = choice switch { "message" => ToolCatalog.EmailRead, "file" => ToolCatalog.DriveGet, "search" => ToolCatalog.DriveSearch,
             _ => purpose == "EmailAccount" ? ToolCatalog.EmailSearch : ToolCatalog.DriveList };
         object arguments = choice switch { "message" => new { accountRef = s.Alias, messageId = "syn-" + s.Credential.ToString("N") + ":syn-msg-harness" },
+            "recent-omitted" => new { accountRef = s.Alias, limit = 10 },
+            "recent-empty" or "recent-blank" => new { accountRef = s.Alias, query = choice == "recent-empty" ? "" : "   ", limit = 10 },
             "file" => new { accountRef = s.Alias, fileId = "exact-file" }, _ => new { accountRef = s.Alias, query = purpose == "EmailAccount" ? "harness" : "Exact", limit = 1 } };
         var command = ScriptedLanguageModel.AccountReadMarker + " " + JsonSerializer.Serialize(new { tool, arguments });
         var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = s.Instance, expectedRevision = await Revision(owner, s.Tenant), expectedInstanceRevision = 2 }))).GetProperty("sessionId").GetGuid();
@@ -148,7 +156,17 @@ public sealed partial class TenantCredentialAccessTests
             Assert.Contains(await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(s.Tenant, 200), a => a.Execution?.Context.RunId == finished.AgentRunId && a.Decision == "denied" && a.ReasonCode == "account_read_required");
         }
         if (choice != "final-family-revoked") Assert.True(finished.Status == AgentRunStatus.Completed, $"{finished.Status}: {finished.Failure?.Code}: {finished.Failure?.Summary}");
-        var allowed = choice is "approve" or "exception" or "message" or "file" or "search"; Assert.Equal(allowed || choice is "after-family-revoked" or "final-family-revoked" ? 1 : 0, probe.Calls);
+        var recent = choice.StartsWith("recent-", StringComparison.Ordinal);
+        var allowed = recent || choice is "approve" or "exception" or "message" or "file" or "search"; Assert.Equal(allowed || choice is "after-family-revoked" or "final-family-revoked" ? 1 : 0, probe.Calls);
+        if (recent)
+        {
+            Assert.Equal(10, probe.LastRead!.Limit); Assert.True(string.IsNullOrWhiteSpace(probe.LastRead.Query));
+            var messages = probe.LastResult!.Mailbox!.Results; Assert.NotEmpty(messages); Assert.InRange(messages.Count, 1, 10);
+            Assert.Equal(messages.Select(m => m.Date).OrderByDescending(d => d), messages.Select(m => m.Date));
+            using var schema = JsonDocument.Parse(TenantAccountReadContract.Schema([ToolCatalog.EmailSearch]).ToJsonString());
+            var required = schema.RootElement.GetProperty("oneOf")[0].GetProperty("properties").GetProperty("read").GetProperty("properties").GetProperty("arguments").GetProperty("required");
+            Assert.DoesNotContain(required.EnumerateArray(), p => p.GetString() == "query");
+        }
         var result = (await factory.Services.GetRequiredService<ITenantSessionStore>().FindTenantSessionAsync(s.Tenant, session))!;
         // Private runtime output has no browser delivery acknowledgement. Read retained history through a fresh trusted frame.
         Volatile.Write(ref source.TenantExecutionEnabled, false);

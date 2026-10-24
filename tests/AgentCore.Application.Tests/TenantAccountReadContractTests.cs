@@ -35,6 +35,7 @@ public sealed class TenantAccountReadContractTests
     [InlineData("email.search", "{\"accountRef\":\"exact\",\"limit\":\"1\"}")]
     [InlineData("email.search", "{\"accountRef\":\"exact\",\"limit\":1.5}")]
     [InlineData("email.search", "{\"accountRef\":\"exact\",\"limit\":0}")]
+    [InlineData("email.search", "{\"accountRef\":\"exact\",\"query\":42}")]
     [InlineData("email.search", "{\"accountRef\":\"exact\",\"credentialId\":\"chosen\"}")]
     [InlineData("email.search", "{\"accountRef\":\"exact\",\"accountRef\":\"other\"}")]
     [InlineData("email.read", "{\"accountRef\":\"exact\"}")]
@@ -48,6 +49,17 @@ public sealed class TenantAccountReadContractTests
     {
         var failure = Record.Exception(() => TenantAccountReadContract.Parse(tool, arguments));
         Assert.True(failure is ArgumentException or AgentCore.Application.Sessions.AgentCoreException, failure?.ToString());
+    }
+    [Theory]
+    [InlineData("{\"accountRef\":\"mail\",\"limit\":10}")]
+    [InlineData("{\"accountRef\":\"mail\",\"query\":null,\"limit\":10}")]
+    [InlineData("{\"accountRef\":\"mail\",\"query\":\"\",\"limit\":10}")]
+    [InlineData("{\"accountRef\":\"mail\",\"query\":\"   \",\"limit\":10}")]
+    public void Optional_mailbox_query_preserves_exact_account_and_result_bound(string arguments)
+    {
+        var parsed = TenantAccountReadContract.Parse(ToolCatalog.EmailSearch, arguments);
+        Assert.Equal("mail", parsed.Reference); Assert.Equal(10, parsed.Request.Limit);
+        Assert.True(string.IsNullOrWhiteSpace(parsed.Request.Query));
     }
     [Theory] [InlineData("{\"operation\":\"read_connected_account\",\"read\":{\"arguments\":{}}}")]
     [InlineData("{\"operation\":\"read_connected_account\",\"read\":{\"tool\":17,\"arguments\":{}}}")]

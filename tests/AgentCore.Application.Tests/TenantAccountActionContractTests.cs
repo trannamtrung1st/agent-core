@@ -36,6 +36,8 @@ public sealed class TenantAccountActionContractTests
         Assert.Throws<ArgumentException>(() => TenantAccountActionContract.Parse(Session, tool, parsed.Json[..^1] + ",\"accountRef\":\"other\"}"));
     }
     [Theory]
+    [InlineData("email.create_draft", "{\"accountRef\":\"work\",\"to\":[\"friend@example.test\"],\"subject\":\"Hello\\nBcc:evil@example.test\",\"body\":\"Body\"}")]
+    [InlineData("email.create_draft", "{\"accountRef\":\"work\",\"to\":[\"friend@example.test\\nBcc:evil@example.test\"],\"subject\":\"Hello\",\"body\":\"Body\"}")]
     [InlineData("email.create_draft", "{\"accountRef\":\"work\",\"to\":[\"friend@example.test\\r\\nBcc:evil@example.test\"],\"subject\":\"Hello\",\"body\":\"Body\"}")]
     [InlineData("drive.upload", "{\"accountRef\":\"work\",\"authEpoch\":1,\"path\":\"/home/../escape\"}")]
     [InlineData("drive.download", "{\"accountRef\":\"work\",\"fileId\":\"file\",\"expectedVersion\":\"1\",\"path\":\"/working/*.bin\"}")]
