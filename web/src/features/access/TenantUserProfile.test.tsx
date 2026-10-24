@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from 'antd';
 import { resetIdentityCsrf, type TenantContext } from '../../services/identity';
 import { TenantUserProfile } from './TenantUserProfile';
@@ -7,20 +7,25 @@ const context: TenantContext = { tenant: { tenantId: 'tenant', name: 'Private or
 const fresh = () => ({ profile: { tenantId: 'tenant', principalId: 'person', revision: 0, updatedAt: new Date().toISOString(), preferences: {} as Record<string, { value: string; source: string; updatedAt: string }> }, securityRevision: 7 });
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 const fetchMock = vi.fn<typeof fetch>(); let saved: ReturnType<typeof fresh>; let failure: number; let commands: Record<string, unknown>[];
-beforeEach(() => { saved = fresh(); failure = 0; commands = []; resetIdentityCsrf(); vi.stubGlobal('fetch', fetchMock); fetchMock.mockReset(); fetchMock.mockImplementation(async (path, options) => {
+beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); saved = fresh(); failure = 0; commands = []; resetIdentityCsrf(); vi.stubGlobal('fetch', fetchMock); fetchMock.mockReset(); fetchMock.mockImplementation(async (path, options) => {
   if (String(path).endsWith('/csrf')) return response({ token: 'test-token' });
   if (options?.method === 'PATCH') { const body = JSON.parse(options.body as string) as { values: Record<string, string | null> }; commands.push(body); if (failure) return response({ reasonCode: 'stale_revision' }, failure);
     for (const [key, value] of Object.entries(body.values)) if (value === null) delete saved.profile.preferences[key]; else saved.profile.preferences[key] = { value, source: 'UserSet', updatedAt: new Date().toISOString() };
     saved.profile.revision++; saved.securityRevision++; return response(saved); }
   return response(saved);
 }); });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(async () => {
+  cleanup();
+  // AntD delay-state callbacks must settle before this file's jsdom is released.
+  await act(async () => { await vi.runOnlyPendingTimersAsync(); });
+  vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals();
+});
 const open = async () => { render(<App><TenantUserProfile context={context} /></App>); await screen.findByLabelText('Preferred name'); };
 it('starts empty without seeding and submits only deliberate profile fields with both revisions', async () => {
   await open(); expect(screen.getByLabelText('Preferred name')).toHaveValue(''); expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled();
   fireEvent.change(screen.getByLabelText('Preferred name'), { target: { value: 'Customer name' } }); fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
   await screen.findByText('Profile saved'); expect(commands).toEqual([{ expectedRevision: 7, expectedProfileRevision: 0, values: { preferredName: 'Customer name' } }]);
-  expect(screen.getByLabelText('Preferred name')).toHaveValue('Customer name');
+  expect(await screen.findByLabelText('Preferred name')).toHaveValue('Customer name');
 });
 it('clears a saved value with null while retaining other saved fields', async () => {
   saved.profile.revision = 2; saved.profile.preferences.language = { value: 'en', source: 'UserSet', updatedAt: new Date().toISOString() }; saved.profile.preferences.locale = { value: 'en-GB', source: 'UserSet', updatedAt: new Date().toISOString() };
