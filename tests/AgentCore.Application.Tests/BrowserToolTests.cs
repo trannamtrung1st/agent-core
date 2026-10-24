@@ -725,41 +725,23 @@ public sealed class BrowserToolTests
     }
 
     [Theory]
-    [InlineData("closed")]
-    [InlineData("already_closed")]
-    public async Task Close_routes_to_the_browser_port_and_serializes_status(string status)
+    [InlineData("{}", true)]
+    [InlineData(" { } ", true)]
+    [InlineData("""{"operation":"close"}""", true)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData(null, false)]
+    public void Close_parser_requires_an_explicit_empty_object_or_exact_operation(string? arguments, bool allowed)
     {
-        var fake = new FakeBrowser { CloseResult = new BrowserResult(status is "closed" or "already_closed" ? null : status, Status: status) };
-        var sessionId = Guid.NewGuid();
-        var result = await Executor(fake).ExecuteAsync(
-            BrowserDefinitionV12(),
-            sessionId,
-            Call(ToolCatalog.BrowserClose, "{}"),
-            ToolLimits.MaxOutputBytes,
-            admission: UserTurn());
-        Assert.Equal(1, fake.CloseCalls);
-        Assert.Equal(sessionId, fake.LastSessionId);
-        Assert.Contains($"\"status\":\"{status}\"", result.Text, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("{}")]
-    [InlineData(" { } ")]
-    [InlineData("""{"operation":"close"}""")]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData(null)]
-    public async Task Close_accepts_empty_objects_and_absent_zero_parameter_payloads(string? arguments)
-    {
-        var fake = new FakeBrowser();
-        var result = await Executor(fake).ExecuteAsync(
-            BrowserDefinitionV12(),
-            Guid.NewGuid(),
-            Call(ToolCatalog.BrowserClose, arguments!),
-            ToolLimits.MaxOutputBytes,
-            admission: UserTurn());
-        Assert.Equal(1, fake.CloseCalls);
-        Assert.Contains("\"status\":\"closed\"", result.Text, StringComparison.Ordinal);
+        Assert.Equal(allowed, BrowserToolArguments.TryValidateClose(arguments, out var error));
+        if (allowed)
+        {
+            Assert.Empty(error);
+            using var json = JsonDocument.Parse(arguments!);
+            Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClose, json.RootElement, out var request, out _));
+            Assert.IsType<BrowserClose>(request.Command);
+        }
+        else Assert.Contains("browser.close accepts only", error);
     }
 
     [Theory]
@@ -784,15 +766,13 @@ public sealed class BrowserToolTests
     [InlineData("""{"selector":"#login"}""")]
     public async Task Close_rejects_authority_and_script_arguments(string arguments)
     {
+        Assert.False(BrowserToolArguments.TryValidateClose(arguments, out var error));
+        Assert.Contains("browser.close accepts only", error);
         var fake = new FakeBrowser();
-        var result = await Executor(fake).ExecuteAsync(
-            BrowserDefinitionV12(),
-            Guid.NewGuid(),
-            Call(ToolCatalog.BrowserClose, arguments),
-            ToolLimits.MaxOutputBytes,
-            admission: UserTurn());
+        var result = await Executor(fake).ExecuteAsync(BrowserDefinitionV12(), Guid.NewGuid(),
+            Call(ToolCatalog.BrowserClose, arguments), ToolLimits.MaxOutputBytes, admission: UserTurn());
         Assert.Equal(0, fake.CloseCalls);
-        Assert.Contains("error", result.Text, StringComparison.Ordinal);
+        Assert.Contains("forbidden", result.Text, StringComparison.Ordinal);
     }
 
     [Fact]

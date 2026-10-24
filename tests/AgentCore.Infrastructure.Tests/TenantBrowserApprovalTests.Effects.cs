@@ -21,6 +21,7 @@ public sealed partial class TenantBrowserApprovalTests
         public int Invocations;
         public int NativeEffects;
         public int PasswordResolutions;
+        public BrowserRequest? LastRequest;
         public IReadOnlyList<BrowserUpload>? Uploads;
         public BrowserProviderDescriptor Provider => target.Provider;
         public BrowserHostPolicy HostPolicy => target.HostPolicy;
@@ -28,6 +29,7 @@ public sealed partial class TenantBrowserApprovalTests
         public ValueTask<TenantBrowserCommandPreparation> PrepareTenantCommandAsync(TenantBrowserOwner owner, BrowserCommand command, CancellationToken ct = default) => target.PrepareTenantCommandAsync(owner, command, ct);
         public async ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default)
         {
+            LastRequest = request;
             Interlocked.Increment(ref Invocations);
             Assert.NotNull(request.TenantDispatchCheck); Assert.NotNull(request.TenantWitness);
             if (BeforeGate is { } before) await before();
