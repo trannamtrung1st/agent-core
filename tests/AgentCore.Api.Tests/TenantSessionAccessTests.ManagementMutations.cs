@@ -162,6 +162,11 @@ public sealed partial class TenantSessionAccessTests
                 if (tool == "management.policy.update") Assert.Equal(AgentCore.Domain.Definitions.HarnessManagementMode.Assisted, saved.HarnessManagement!.Overrides!.Mode!.Value);
                 if (tool == "automation.preferences.patch") Assert.Equal(key, saved.UnattendedModelCatalogKey);
                 await host.Services.GetRequiredService<ITenantManagementStore>().RequireTenantManagementReadSourcesAsync(new(tenant, final.AgentRunId), TenantManagementReadReferences.Read(final.Checkpoint), null);
+                var recorded = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
+                var current = Assert.Single(recorded.GetProperty("review").GetProperty("changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "Current configuration");
+                Assert.Contains("historical proposal values", current.GetProperty("after").GetString());
+                Assert.DoesNotContain("Cancel", current.GetProperty("after").GetString());
+                Assert.False(recorded.GetProperty("review").GetProperty("canCancel").GetBoolean());
             }
             else Assert.Null(receipt);
             var history = await Json(await owner.GetAsync(api + $"/sessions/{session}/messages?limit=100")); Assert.Contains(decision == "approve" ? "exact management change was recorded" : "management change was withheld", history.GetRawText());

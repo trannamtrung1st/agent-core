@@ -43,7 +43,7 @@ public sealed class TenantCredentialOAuthCheckService(IIamStore security, ITenan
                 check.ReconnectRequired ? "oauth_reconnect_required" : "oauth_access_checked", time.GetUtcNow());
             if (!await attempts.TryCheckCredentialOAuthAsync(next, fresh.Tenant.Revision, id, initiator, retained.Revision, retained.SecretRevision, check, audit, ct).ConfigureAwait(false))
                 throw new SecurityConflictException("stale_revision");
-            return new(await views.ReadAsync(initiator.PrincipalId, tenant, id, ct).ConfigureAwait(false), check.ReconnectRequired);
+            return new(await views.ReadAsync(initiator.PrincipalId, tenant, id, ct, initiator: initiator).ConfigureAwait(false), check.ReconnectRequired);
         }
         finally { gate.Release(); }
     }

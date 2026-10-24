@@ -14,11 +14,14 @@ public sealed class TenantCredentialOAuthService(IIamStore security, ITenantCred
     ITenantCredentialOAuthProvider provider, IdentityService identity, IamAuthorizer authorizer, TenantCredentialService views,
     IIdentityTokens tokens, IIdGenerator ids, TimeProvider time)
 {
-    public async ValueTask<TenantOAuthSetup> SetupAsync(Guid actor, Guid tenant, Guid credential, CancellationToken ct = default)
+    public async ValueTask<TenantOAuthSetup> SetupAsync(Guid tenant, Guid credential, CredentialOAuthInitiator initiator, CancellationToken ct = default)
     {
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
         var current = await Owned(tenant, credential, ct).ConfigureAwait(false);
-        await authorizer.RequireAsync(actor, "credentials.read", TenantCredentialRules.Scope(tenant, credential), ct).ConfigureAwait(false);
+        await authorizer.RequireAsync(initiator.PrincipalId, "credentials.read", TenantCredentialRules.Scope(tenant, credential), ct).ConfigureAwait(false);
         RequireOAuth(current.Value); var descriptor = provider.Describe(current.Value.Purpose);
+        var final = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
+        if (final.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         return new(descriptor.Configured, descriptor.Synthetic, descriptor.HostEnabled);
     }
 
@@ -99,7 +102,7 @@ public sealed class TenantCredentialOAuthService(IIamStore security, ITenantCred
         if (!await attempts.TryDisconnectCredentialOAuthAsync(Next(state), state.Tenant.Revision, credential, initiator, current.Value.Revision, current.Value.SecretRevision, audit, ct).ConfigureAwait(false))
             throw new SecurityConflictException("stale_revision");
         var revoked = string.IsNullOrEmpty(current.Value.ProtectedPayload) || await provider.RevokeAsync(current.Value, ct).ConfigureAwait(false);
-        return new(await views.ReadAsync(initiator.PrincipalId, tenant, credential, ct).ConfigureAwait(false), revoked);
+        return new(await views.ReadAsync(initiator.PrincipalId, tenant, credential, ct, initiator: initiator).ConfigureAwait(false), revoked);
     }
 
     public static bool TryState(string? state, out Guid credential, out Guid attempt)

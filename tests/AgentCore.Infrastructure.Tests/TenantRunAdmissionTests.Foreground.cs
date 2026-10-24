@@ -38,7 +38,7 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Equal(child.Run.AgentRunId, detail.InitialRun!.RunId); Assert.Equal("Owned result", detail.InitialRun.OutcomeText);
         Assert.Equal(2, (await Activity(f).ListRunsAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, child.Session.SessionId, parent.Setup.Owner)).Total);
         Assert.Equal(run.AgentRunId, Assert.Single((await Activity(f).ListRunsAsync(parent.Setup.Tenant, child.Run.AgentInstanceId, child.Session.SessionId, parent.Setup.Owner, pageSize: 1)).Items).RunId);
-        Assert.Equal(2, (await f.Sessions.ListAsync(parent.Setup.Owner.PrincipalId, parent.Setup.Tenant)).Total);
+        Assert.Equal(2, (await f.Sessions.ListAsync(parent.Setup.Tenant, parent.Setup.Owner)).Total);
         Assert.Single(await f.Iam.ReadAuditAsync(parent.Setup.Tenant, 200), a => a.Action == "sessions.continue-in-chat");
         if (sqlite)
         {

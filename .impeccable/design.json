@@ -585,6 +585,48 @@
         },
         "observed": "Synthetic SQLite CLI browser interactions at 320/390/768/1024/1440px. Thirteen retained captures; individually inspected no-organization/expired-invitation/member-search/role-search/expired-approval320 and expired-approval1440. Wrapped content, role-opener focus and native Drawer footer remain usable.",
         "limits": "Scoped evidence, not a new detector/reviewer or full WCAG, physical-touch/audio, performance or proposal acceptance. Existing shared singular count wording remains noted. Prior design metadata/tokens are preserved; launcher/context was not rerun."
+      },
+      "tenantFinalIamAcceptance": {
+        "date": "2026-10-24",
+        "baseCommit": "52177338",
+        "inspectedAt": "2026-10-24T06:28:09.933922+00:00",
+        "scope": "Final Account/tenant/Members/roles/Agent Access/Approvals/Chat/denial confirmation, singular counts and truthful terminal management guidance; incumbent Ant Design v6, no new visual world or tokens.",
+        "verificationReport": "docs/reports/tenant-final-ui-acceptance-2026-10-24.md",
+        "captureProvenance": "docs/reports/tenant-final-ui-evidence-2026-10-24.json",
+        "productionSourceSha256": "bd9b0dfbfa3ba5c43afd1c51e66849b384051850ea2a667177b91f3efb77e930",
+        "sources": {
+          "web/src/features/admin/AdminCollectionToolbar.tsx": "0fe5aba5f8dd821c2726d700fd7c1a80e8d4a6ff9dce5031c12ba536e01047e5",
+          "web/src/features/admin/AdminShell.tsx": "45776c04135cbdcedb708e42ecf6119b94cc58057444c4377b54607c2e444b02",
+          "web/src/features/access/AccessApp.tsx": "b2c4da11963c1d08a9d8a0ea9b44fcc4c43671139be62747920f0e54b0ce8384",
+          "web/src/features/access/TenantApprovals.tsx": "7de5226d269a6c4dc18cfe9da35e6a9c911359f89cd5c725aa3719c15145d8f6",
+          "web/src/features/access/Roles.tsx": "2f0afd88b1cb8e95cb545d97976072e4ba46afffe483f372bdc04282449727f7",
+          "web/src/features/access/Members.tsx": "e82f2effca36ec0d28bf97e5f520f0febc2cdddd2c433f9f026aaa1b286381c4",
+          "web/src/features/access/Organizations.tsx": "83997c031e456ca95e0329058a9bc35a7b0b73bc9e4d07ecd6f6a06f09bfd95e",
+          "web/src/features/access/InvitationAcceptance.tsx": "b7e2a934726263a7ff55109614730d5853644add89e950212ed9a8041f16100f",
+          "web/src/features/chat/ChatApp.tsx": "0f9b1d73009c19f65c9a79d3ab577af3dd6288a47aeb20b5d72958b066d1d373",
+          "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
+          "web/src/app.css": "bf4c133b24e164054e32f59b2652f0f3c8a12d23982bf7da56d6506971ad2168",
+          "web/src/services/identity.ts": "158861030d77abf61384da61cdb6ce890dd3364ea6caf82093225e9150b6db95",
+          "web/src/state/sessionStore.ts": "851ad9c8b4fdfa8abe5475baaf6f3cabf8aaae7ad5d591936d909f7a265959b2",
+          "src/AgentCore.Application/Security/TenantApprovalService.Review.cs": "0254ce473b9e908e9467199a1caf03d66d7d5665862dab453fa729cb31402921"
+        },
+        "builtPreview": {
+          "path": "web/dist/index.html",
+          "sha256": "9147e0b20b0ddc2abd9fafeec0c29e28b67f2fa5a5c2f0835c90937c4adb0823",
+          "buildLog": "/private/tmp/tenant-final-ui-build-20261024.log"
+        },
+        "verification": "559 effective focused frontend cases (558 preserved + one corrected App fixture); three actual CLI acceptance journeys; 16 integrated terminal management cases; actual MCP keyboard/read-only/401/403/404-fixture/409/503-fixture/responsive and final fixed-result checks. Historical executions retain their original build versions.",
+        "captureCount": 87,
+        "excludedIntermediateCaptures": 5,
+        "retainedRepresentativeCaptures": 27,
+        "widths": [
+          320,
+          390,
+          768,
+          1024,
+          1440
+        ],
+        "limits": "Scoped local presentation and interaction acceptance; no full WCAG, physical-device/audio, live-provider/customer or rollout claim. No .agents edits or launcher rerun; extraction date and historical records preserved."
       }
     }
   },

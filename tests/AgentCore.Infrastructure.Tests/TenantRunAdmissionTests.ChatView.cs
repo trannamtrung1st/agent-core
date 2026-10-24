@@ -17,7 +17,7 @@ public sealed partial class TenantRunAdmissionTests
         var member = await Member(f, setup.Tenant, setup.Owner.PrincipalId);
         var reader = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read one Session", ["sessions.read"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, reader.RoleId, TenantSessionRules.Scope(setup.Tenant, setup.Session), await Revision());
-        var metadata = await f.Sessions.ReadAsync(member.PrincipalId, setup.Tenant, setup.Session);
+        var metadata = await f.Sessions.ReadAsync(setup.Tenant, setup.Session, member);
         Assert.Equal(setup.Agent.Instance.Persona.Name, metadata.AgentName); Assert.Equal("examiner", metadata.AgentId); Assert.False(metadata.CanManage);
         var conversations = new TenantConversationService(f.Iam, (ITenantSessionStore)f.Iam, (ITenantConversationStore)f.Iam, f.Identity, f.Authorizer);
         await Assert.ThrowsAsync<AccessDeniedException>(() => conversations.ReadViewAsync(setup.Tenant, setup.Session, member).AsTask());
@@ -28,11 +28,11 @@ public sealed partial class TenantRunAdmissionTests
         var manage = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Manage one Session", ["sessions.manage"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, manage.RoleId, TenantSessionRules.Scope(setup.Tenant, setup.Session), await Revision());
         Assert.False((await f.Authorizer.CheckAsync(member.PrincipalId, "sessions.manage", AccessScope.ForTenant(setup.Tenant))).Allowed);
-        Assert.True((await f.Sessions.ReadAsync(member.PrincipalId, setup.Tenant, setup.Session)).CanManage);
-        Assert.True(Assert.Single((await f.Sessions.ListAsync(member.PrincipalId, setup.Tenant)).Items).CanManage);
+        Assert.True((await f.Sessions.ReadAsync(setup.Tenant, setup.Session, member)).CanManage);
+        Assert.True(Assert.Single((await f.Sessions.ListAsync(setup.Tenant, member)).Items).CanManage);
         var changed = await f.Sessions.ChangeAsync(setup.Tenant, member, new(setup.Session, 1, TenantSessionAction.Archive), await Revision()); Assert.True(changed!.CanManage);
-        Assert.Equal(0, (await f.Sessions.ListAsync(member.PrincipalId, setup.Tenant, includeArchived: false)).Total);
-        Assert.Equal(1, (await f.Sessions.ListAsync(member.PrincipalId, setup.Tenant, includeArchived: true)).Total);
+        Assert.Equal(0, (await f.Sessions.ListAsync(setup.Tenant, member, includeArchived: false)).Total);
+        Assert.Equal(1, (await f.Sessions.ListAsync(setup.Tenant, member, includeArchived: true)).Total);
         var selected = await f.Sessions.CreateAsync(setup.Tenant, setup.Agent.Instance.InstanceId, setup.Owner, SessionMode.Text, await Revision(), 1, "scripted-beta");
         var selectedView = await conversations.ReadViewAsync(setup.Tenant, selected.Owner.SessionId, setup.Owner);
         Assert.Equal(ModelSelectionSource.User, selectedView.Model!.SelectionSource); Assert.Equal("scripted-beta", selectedView.Model.CatalogKey);

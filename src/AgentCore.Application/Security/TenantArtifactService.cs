@@ -24,7 +24,8 @@ public sealed class TenantArtifactService(IIamStore security, ITenantSessionStor
     private async ValueTask Fence(TenantSecurityState state, TenantSession session, HumanSessionReference human, CancellationToken ct)
     {
         var current = await Require(state.Tenant.TenantId, session.Owner.SessionId, human, ct).ConfigureAwait(false);
-        if (current.State.Tenant.Revision != state.Tenant.Revision || current.Session.Owner != session.Owner
+        var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, state.Tenant.TenantId, human, ct).ConfigureAwait(false);
+        if (authority.Tenant.Revision != state.Tenant.Revision || current.State.Tenant.Revision != state.Tenant.Revision || current.Session.Owner != session.Owner
             || current.Session.Snapshot.Revision != session.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
     }
     public async ValueTask<ArtifactPage> ListAsync(Guid tenant, Guid session, HumanSessionReference human, Guid? before = null,

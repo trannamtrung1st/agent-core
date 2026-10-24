@@ -45,9 +45,9 @@ public sealed class TenantSessionLifecycleTests
         await f.Access.AssignRoleAsync(owner.OwnerPrincipalId, owner.TenantId, owner.OwnerPrincipalId, role.RoleId, scope, await Revision());
         Assert.Null(await f.Sessions.ChangeAsync(owner.TenantId, actor, new(id, item.Revision, TenantSessionAction.Delete), await Revision()));
         Assert.False(await f.Iam.OwnsResourceAsync(scope)); Assert.Null(await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(owner.TenantId, id));
-        Assert.Equal(0, (await f.Sessions.ListAsync(owner.OwnerPrincipalId, owner.TenantId)).Total);
+        Assert.Equal(0, (await f.Sessions.ListAsync(owner.TenantId, actor)).Total);
         var state = (await f.Iam.ReadTenantAsync(owner.TenantId))!; Assert.DoesNotContain(state.Assignments, a => a.Scope == scope);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => f.Sessions.ReadAsync(owner.OwnerPrincipalId, owner.TenantId, id).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => f.Sessions.ReadAsync(owner.TenantId, id, actor).AsTask());
         Assert.False(await ((ITenantSessionStore)f.Iam).TryCreateTenantSessionAsync(state with { Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 } }, state.Tenant.Revision,
             original, initial.Snapshot, actor, 1, new(Guid.NewGuid(), owner.TenantId, owner.OwnerPrincipalId, "sessions.create", id.ToString("D"), "allowed", "test", original.CreatedAt)));
         await Assert.ThrowsAsync<AccessDeniedException>(() => f.Memory.SaveAsync(initial.Snapshot, 0).AsTask());
@@ -85,7 +85,7 @@ public sealed class TenantSessionLifecycleTests
         await f.Access.RevokeAssignmentAsync(setup.Owner, setup.Tenant, manage, await Revision(f, setup.Tenant));
         await Assert.ThrowsAsync<AccessDeniedException>(() => f.Sessions.ChangeAsync(setup.Tenant, actor, new(id, 1, TenantSessionAction.Rename, "Revoked"), 1).AsTask());
         await Grant("Delete one", ["sessions.delete"], scope); await f.Access.RevokeAssignmentAsync(setup.Owner, setup.Tenant, read, await Revision(f, setup.Tenant));
-        await Assert.ThrowsAsync<AccessDeniedException>(() => f.Sessions.ReadAsync(actor.PrincipalId, setup.Tenant, id).AsTask());
+        await Assert.ThrowsAsync<AccessDeniedException>(() => f.Sessions.ReadAsync(setup.Tenant, id, actor).AsTask());
         Assert.Null(await f.Sessions.ChangeAsync(setup.Tenant, actor, new(id, item.Revision, TenantSessionAction.Delete), await Revision(f, setup.Tenant)));
         Assert.DoesNotContain((await f.Iam.ReadTenantAsync(setup.Tenant))!.Assignments, a => a.Scope == scope);
     }
@@ -121,7 +121,7 @@ public sealed class TenantSessionLifecycleTests
         if (boundary == "cancel") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
         else if (boundary == "logout") await Assert.ThrowsAsync<AccessDeniedException>(() => task);
         else await Assert.ThrowsAsync<SecurityConflictException>(() => task);
-        var retained = await f.Sessions.ReadAsync(setup.Owner, setup.Tenant, id);
+        var retained = await f.Sessions.ReadAsync(setup.Tenant, id, setup.Actor);
         Assert.Equal(boundary == "compete" ? 2 : 1, retained.Revision); Assert.NotEqual("Losing write", retained.Title);
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "sessions.rename" && a.ActorPrincipalId == member.PrincipalId);
     }

@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Security;
+using AgentCore.Infrastructure.Security;
 using Microsoft.Extensions.Time.Testing;
 using Fixture = AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.Fixture;
 
@@ -10,6 +11,27 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class TenantOperationAuthorizationTests
 {
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Tenant_public_download_abandoned_dispatch_recovers_once_without_fetching_or_writing(bool sqlite)
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-24T12:00:00Z"));
+        await using var f = await Fixture.Create(sqlite, clock, builtInAuthority: true); var v = await WorkspaceEffectCase(f);
+        var call = new ModelToolCall("abandoned-public-file", ToolCatalog.WebDownload, """{"url":"https://example.test/abandoned.bin","path":"/working/abandoned.bin"}""");
+        await WorkspaceEffectCheckpoint(f, v.Frame, call);
+        var fence = await StageWorkspaceFence(f, v.Frame, call);
+        await f.Access.RevokeAssignmentAsync(v.Setup.Owner.PrincipalId, v.Setup.Tenant, v.Grant.AssignmentId, (await f.Iam.ReadTenantAsync(v.Setup.Tenant))!.Tenant.Revision);
+        clock.Advance(TimeSpan.FromMinutes(6));
+        var native = new DelayedTenantDownload(false); var writes = 0;
+        ITenantWorkspaceOperationStore effects = sqlite ? new SqliteIamStore(f.Contexts!, builtIns: f.BuiltIns, clock: f.Clock) : (ITenantWorkspaceOperationStore)f.Iam;
+        var service = WorkspaceEffects(f, new WorkspaceMutationHook(WorkspaceReader(f), beforeEffect: () => { writes++; return Task.CompletedTask; }), effects, downloads: native);
+        Assert.Equal(1, await service.RecoverAsync()); Assert.Equal(0, await service.RecoverAsync());
+        Assert.Equal(0, native.Count); Assert.Equal(0, writes);
+        var receipt = await ((ITenantDirectOperationStore)f.Iam).FindDirectOperationReceiptAsync(v.Setup.Tenant, v.Frame.RunId, call.Id);
+        Assert.NotNull(receipt); Assert.Equal(fence.Origin.DirectOperation!.OperationId, receipt.OperationId);
+        Assert.Equal(TenantOperationOutcome.Indeterminate, receipt.Outcome); Assert.Equal(TenantWorkspaceEffectRules.Uncertain, receipt.ReasonCode);
+        Assert.Null(receipt.PublicDownload);
+        Assert.Empty((await WorkspaceReader(f).ListTenantAsync(new(v.Setup.Tenant, v.Setup.Agent.Instance.InstanceId, v.Frame.SessionId), "/working", null, 100)).Items);
+    }
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Tenant_public_download_effect_reuses_exact_receipt_without_a_second_transfer(bool sqlite)
     {

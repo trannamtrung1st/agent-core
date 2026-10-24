@@ -1,0 +1,802 @@
+{
+  "baseCommit": "52177338",
+  "inspectedAt": "2026-10-24T06:28:09.933922+00:00",
+  "productionSourceSha256": "bd9b0dfbfa3ba5c43afd1c51e66849b384051850ea2a667177b91f3efb77e930",
+  "sourceSha256": {
+    "web/src/features/admin/AdminCollectionToolbar.tsx": "0fe5aba5f8dd821c2726d700fd7c1a80e8d4a6ff9dce5031c12ba536e01047e5",
+    "web/src/features/admin/AdminShell.tsx": "45776c04135cbdcedb708e42ecf6119b94cc58057444c4377b54607c2e444b02",
+    "web/src/features/access/AccessApp.tsx": "b2c4da11963c1d08a9d8a0ea9b44fcc4c43671139be62747920f0e54b0ce8384",
+    "web/src/features/access/TenantApprovals.tsx": "7de5226d269a6c4dc18cfe9da35e6a9c911359f89cd5c725aa3719c15145d8f6",
+    "web/src/features/access/Roles.tsx": "2f0afd88b1cb8e95cb545d97976072e4ba46afffe483f372bdc04282449727f7",
+    "web/src/features/access/Members.tsx": "e82f2effca36ec0d28bf97e5f520f0febc2cdddd2c433f9f026aaa1b286381c4",
+    "web/src/features/access/Organizations.tsx": "83997c031e456ca95e0329058a9bc35a7b0b73bc9e4d07ecd6f6a06f09bfd95e",
+    "web/src/features/access/InvitationAcceptance.tsx": "b7e2a934726263a7ff55109614730d5853644add89e950212ed9a8041f16100f",
+    "web/src/features/chat/ChatApp.tsx": "0f9b1d73009c19f65c9a79d3ab577af3dd6288a47aeb20b5d72958b066d1d373",
+    "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
+    "web/src/app.css": "bf4c133b24e164054e32f59b2652f0f3c8a12d23982bf7da56d6506971ad2168",
+    "web/src/services/identity.ts": "158861030d77abf61384da61cdb6ce890dd3364ea6caf82093225e9150b6db95",
+    "web/src/state/sessionStore.ts": "851ad9c8b4fdfa8abe5475baaf6f3cabf8aaae7ad5d591936d909f7a265959b2",
+    "src/AgentCore.Application/Security/TenantApprovalService.Review.cs": "0254ce473b9e908e9467199a1caf03d66d7d5665862dab453fa729cb31402921"
+  },
+  "testSourceSha256": {
+    "web/src/App.test.tsx": "842cc6124e429a6e1402ced9d65e99fc5688d21f3915b9a36a398152130025a6",
+    "web/e2e/tenant-acceptance.spec.ts": "ce19b02e5460739b2b29e4814cd531a791dcba329cad0559f96c511131725e13",
+    "tests/AgentCore.Api.Tests/TenantSessionAccessTests.ManagementMutations.cs": "7626790668e1344860d80755e672dff1bdcf938d59705ba278ea878cd70e988f"
+  },
+  "builtPreview": {
+    "path": "web/dist/index.html",
+    "sha256": "9147e0b20b0ddc2abd9fafeec0c29e28b67f2fa5a5c2f0835c90937c4adb0823",
+    "buildLog": "/private/tmp/tenant-final-ui-build-20261024.log"
+  },
+  "vitest": {
+    "tenant-final-ui-tests": {
+      "path": "/private/tmp/tenant-final-ui-tests-20261024.json",
+      "sha256": "9620bf611a3f3aae1835268889d788feb4f9355a1504df90e9a71d556faf41b0",
+      "numTotalTests": 559,
+      "numPassedTests": 558,
+      "numFailedTests": 1,
+      "numPendingTests": 0
+    },
+    "tenant-final-ui-app-fixed": {
+      "path": "/private/tmp/tenant-final-ui-app-fixed-20261024.json",
+      "sha256": "77e1e96614158b492440d58fc6da456d74363c1782d69e10d9ccff520123e768",
+      "numTotalTests": 1,
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    }
+  },
+  "effectiveVitestPassingCases": 559,
+  "cli": {
+    "spec": "web/e2e/tenant-acceptance.spec.ts",
+    "cases": 3,
+    "status": "passed",
+    "duration": "4.0m",
+    "log": "/private/tmp/tenant-final-acceptance-20261024.log",
+    "lastRunSha256": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+    "resultRoot": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results"
+  },
+  "widths": [
+    320,
+    390,
+    768,
+    1024,
+    1440
+  ],
+  "keyboard": {
+    "mobileAdminNavigationTabStopsConfined": 12,
+    "escapeRestoresNavigationOpener": true,
+    "escapeRestoresRoleInspector": true
+  },
+  "limits": "Scoped local browser presentation/interaction checks. Initial Vitest obsolete anonymous-root smoke replaced once; do not count 558+1 as a new full 559 process. CLI3 ran before terminal-copy correction; that successor has16 integrated cases and final MCP verification. Five explicitly excluded intermediate captures are not final acceptance. Full local captures remain in original paths;27 representative originals are retained in this repository. No full WCAG, physical-device/audio or live-provider claim.",
+  "captures": [
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/agent-access-1024.png",
+      "sha256": "714aff63eb3d2e79ec23d99ee702f576d7a22ef777d8caca0fe5597585f34a54",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/agent-access-1440.png",
+      "sha256": "7cfba5eeb066e5e2e28b34c31b64071d23232298ff68a054ba80c8b12585002f",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/agent-access-1440.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/agent-access-320.png",
+      "sha256": "d18749f45d901e78e7187a79f1cba1c480dc7bae2db1ea45cf7558635b601d12",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/agent-access-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/agent-access-390.png",
+      "sha256": "39260848e93454ce1c2366fd4027e5fe4f1386c901ed6715e11aff0c5d10a00f",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/agent-access-768.png",
+      "sha256": "c699c6c6cc09902c3d9485cb7ea0692585422f08da303113db1cbdd86b14793e",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approval-completed-result-320.png",
+      "sha256": "1f857d6168400c2156757f64c2b1e3dc73ec1bddd31e98b146d0f0bd256d9b04",
+      "width": 320,
+      "height": 900,
+      "status": "intermediate; excluded",
+      "limit": "Pre-correction terminal Cancel guidance; superseded by final fixed result."
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approval-completed-result-fixed-320.png",
+      "sha256": "9734f56c8202f473c56f0518cfc2d0a1949f97c17325084b9706b354905b1a98",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/approval-completed-result-fixed-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approval-completed-top-320.png",
+      "sha256": "605d4cbdd6e5851749e98663eaf1f4fa0d1bb82718f3cf4b7d149820b6f6fc0d",
+      "width": 320,
+      "height": 900,
+      "status": "intermediate; excluded",
+      "limit": "Pre-correction terminal guidance; not current final-copy acceptance."
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approvals-single-1024.png",
+      "sha256": "63cd16307150b37221340fbb723ef72864494b9889368f20a8af6cd7b15293d3",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approvals-single-1440.png",
+      "sha256": "45f61190b5ead1ac103ed3a0d6a7114a7b2ffd9bd7fd53717efdb607bca5b09b",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/approvals-single-1440.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approvals-single-320.png",
+      "sha256": "ebb558f95ebe4266c4d112ee4e876ff2006202027bbffe481dd661efaa93d098",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/approvals-single-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approvals-single-390.png",
+      "sha256": "3281e3e2857544bb557e525ce130a0cd707ffb470ec449ffcb4027719687f001",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/approvals-single-768.png",
+      "sha256": "4917650904eba2029e2e4088b9a538ec72c2f3f23d4a14528017037a786b375e",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/chat-current-1024.png",
+      "sha256": "4579f5a78155124bdb93aedc5b7da0f1c76de75905356f212857b111458c6d04",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/chat-current-1440.png",
+      "sha256": "3348d7737b6b52ad90984283ea8d94aa8c2a786986dffe5ff13855716b89bf69",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/chat-current-1440.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/chat-current-320.png",
+      "sha256": "a0e3adff7bdb54698bf7b9d47ea9bed45aa8b57d4de37b460f0b1ea2fbea1ff0",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/chat-current-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/chat-current-390.png",
+      "sha256": "3ee364ad59acd9309ecdc53d7778b8db7e9538538f3c43a66540fed56c273339",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/chat-current-768.png",
+      "sha256": "b9ff9381471b3010f292e046d217ebf072391e761e7abfd4c8ca2df90c469149",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/create-organization-320.png",
+      "sha256": "35d35872152f1d43bbaa1bd71299ac206f6d3c489169d1decfb9ee6aa9fa4b13",
+      "width": 320,
+      "height": 1000,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/create-organization-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/expired-login-320.png",
+      "sha256": "854119b495976a8b7e659d28f37b8cc0c489ddb7c7e0fc1e8af71d34e890a7cb",
+      "width": 320,
+      "height": 1000,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/expired-login-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/foreign-instance-unavailable-320.png",
+      "sha256": "79112b2ca88d8dc093922be2aa77f1c4caa84c43ceb50790fbee21a1042775bc",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/foreign-organization-denied-320.png",
+      "sha256": "77830fe3abc78fc691ed9536cc4a5c68f65893a43c0d3d9f07e2edf0c4baf24a",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/foreign-organization-denied-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/instances-empty-320.png",
+      "sha256": "227729de1426f7f215a9b0084f8a2f4a91f921d5ae7f5818e29560ecfa7915e3",
+      "width": 320,
+      "height": 820,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/instances-empty-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/invite-reader-320.png",
+      "sha256": "2268060d55504ae3a35cead7e2eadfcd6cf723f5341e81abe75d41cdda6be2eb",
+      "width": 320,
+      "height": 820,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/join-reader-320.png",
+      "sha256": "111b61d87b637c68176700d090067f247e0a2147fa9df9c9507e7d16f6c1d4a2",
+      "width": 320,
+      "height": 820,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/join-reader-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/last-owner-refusal-320.png",
+      "sha256": "d0d1d78cbb1e54888900c32eeb13d53af64d6b63d726eccaf471c85ec38e7b65",
+      "width": 320,
+      "height": 820,
+      "status": "intermediate; excluded",
+      "limit": "Captured immediately after resizing an open desktop Drawer; clipped before responsive settlement. Superseded by settled last-owner suspension refusal."
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/last-owner-suspend-settled-320.png",
+      "sha256": "5c4485b78b6ab405c8e690f2def410b4d20a31e7e81b4e11955d12a8cc233e21",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/last-owner-suspend-settled-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/organizations-1024.png",
+      "sha256": "06aa9e6c64c0337a2a65172c4ab474a6a3d615b48925b5172e84db6f471ef338",
+      "width": 1024,
+      "height": 1000,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/organizations-1440.png",
+      "sha256": "01e5a0d7704ef98b1024a0c8f2a88db6e6619241b134ed065b6f21c0e0edec23",
+      "width": 1440,
+      "height": 1000,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/organizations-1440.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/organizations-320.png",
+      "sha256": "6543176c6e821f956a180501076818276af81727d78c4462e7c7e16df5d075c9",
+      "width": 320,
+      "height": 1000,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/organizations-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/organizations-390.png",
+      "sha256": "3184cc648b9c9f8fbe11356924eaf2ea268a203f0e778c3bbdde8cd29fce3165",
+      "width": 390,
+      "height": 1000,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/organizations-768.png",
+      "sha256": "d09db2f3bd25cfbb6865dbfbdbfe9500577102ec9607a3a5c84abbc7ae06479d",
+      "width": 768,
+      "height": 1000,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/owner-readonly-320.png",
+      "sha256": "287817fc6afe88eca9b53df916d16c133d40fcb8c81896bb6404a6ca5546351b",
+      "width": 320,
+      "height": 1000,
+      "status": "intermediate; excluded",
+      "limit": "Intermediate bottom scroll/expansion state; superseded by settled top and functional disabled-permission assertions."
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/owner-readonly-settled-public-http-320.png",
+      "sha256": "9f68fdb4cd70020908421fa660776efca3eddcc47da4422b6c8f3e2bd657f02b",
+      "width": 320,
+      "height": 900,
+      "status": "intermediate; excluded",
+      "limit": "Checkbox state functionally checked, but this screenshot stops above its control; no dedicated expanded-checkbox visual claim."
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/owner-readonly-settled-top-320.png",
+      "sha256": "d70b575d12a537b2c240e32e814aa99e1f1be7cf5776eb8b69a37395759a271d",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/owner-readonly-settled-top-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/reader-access-320.png",
+      "sha256": "056438417618c902fcb7f01c84c4f21cef11627faa787cba0b23fbdf4ee895c0",
+      "width": 320,
+      "height": 820,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/reader-approvals-empty-320.png",
+      "sha256": "b7da70d6eda0a393a05ddd2cda596f71b8ffba099baba46099637cd012b690dd",
+      "width": 320,
+      "height": 820,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/reader-approvals-empty-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/reader-member-readonly-320.png",
+      "sha256": "0a8d529f0255f29afb65007d788efbcf960a3c59255a48a3fd8eb2e13405b703",
+      "width": 320,
+      "height": 820,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/reader-member-readonly-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/reader-members-320.png",
+      "sha256": "42ca19352d4626f53895077117a427925194c1e5b66a3ebb35421e1c11a96107",
+      "width": 320,
+      "height": 820,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-no-match-320.png",
+      "sha256": "fa78f97ea0a55f9b1b387a7156930ae0b54311b51857a4c6070b6a5905945e35",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-not-found-fixture-320.png",
+      "sha256": "63af976f1dbf341e8b54ca3de0b5da71223273a0e3dfd4349aebf92de2de2254",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-not-found-fixture-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-single-1024.png",
+      "sha256": "975542e7287fb07ed7298136085fa68181a49f107875cf88413627feb9d8a19a",
+      "width": 1024,
+      "height": 1000,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-single-1440.png",
+      "sha256": "91c105f2b52efc3fefee43412353218d4f3f9bc01b1e08bc24a21c991f0421e6",
+      "width": 1440,
+      "height": 1000,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-single-1440.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-single-320.png",
+      "sha256": "b79891e205004c700ee3b4615ee1732677bd31e151047534ba9e8f76d495c875",
+      "width": 320,
+      "height": 1000,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-single-320.png"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-single-390.png",
+      "sha256": "d6b44f8a36dd1501187afe1e7782a09fd3bf54b8a56f91b2c039a523ac9d88e7",
+      "width": 390,
+      "height": 1000,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-single-768.png",
+      "sha256": "1564a2205cc61836dfa027b7ae93b063228d86e0f14db562a0ca6b554e140412",
+      "width": 768,
+      "height": 1000,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "MCP",
+      "path": ".impeccable/review/tenant-final/roles-source-error-320.png",
+      "sha256": "68398e55a1010ca5b55d66bd326741741ea3f6a55ac1a7eaa0e621394becc4e2",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-source-error-320.png"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-expired--9f3b7-t-and-complete-fresh-review/expired-approval-1024.png",
+      "sha256": "e7c67d8c18946d9f562b9bada1c4435f55d1644aac7be5f14f4b9da28444f958",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-expired--9f3b7-t-and-complete-fresh-review/expired-approval-1440.png",
+      "sha256": "42471212048e3e87c8b050fae1bd6fb04ab7fb278048869a4c3668a3f0a4402b",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-expired-approval-1440.png"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-expired--9f3b7-t-and-complete-fresh-review/expired-approval-320.png",
+      "sha256": "346634bc19b6fd744d611aecc445f85327edd0e3a43ef4f0be3b2ddeb134bedf",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-expired-approval-320.png"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-expired--9f3b7-t-and-complete-fresh-review/expired-approval-390.png",
+      "sha256": "805a744f7200bc6fe319a8a34c64981214490f2535f2d1d1671376e64dc751e4",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-expired--9f3b7-t-and-complete-fresh-review/expired-approval-768.png",
+      "sha256": "fe5272ab003cd1bed2221011ccf790bcd78a68189aa918928dadd448bd8657a6",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/member-search-1024.png",
+      "sha256": "fcc2581d2e361005efabd7cccd4998cfc61dc4d2724a7e9edad02c9d3d0119df",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/member-search-1440.png",
+      "sha256": "297baea91ead76b09831c4476db8b7ead36d86edc4b7873a3cd4172488d53636",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/member-search-320.png",
+      "sha256": "f2848558e5969a829fc7af5efb01b7451e241ceba5424d6b272053bc71ed7730",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/member-search-390.png",
+      "sha256": "020e8c5d875e88cd46910c6b0c176c36f1f5a21f7213b08963a79fbd570627da",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/member-search-768.png",
+      "sha256": "1ed4d724a8b25f50fc3906505ff51ffedd83446570265685f0b4b2cf88a29175",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/organization-search-1024.png",
+      "sha256": "c05eaadfd94c7cc20f0b395b5245b1319c1dcf2a9e3d4f13028acf423aafc960",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/organization-search-1440.png",
+      "sha256": "b5ffe827b42690631b3c0208df93e953ed4e58cbeb1444180224968defe2cea0",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/organization-search-320.png",
+      "sha256": "f7a67d2e64f201318861d555ae03943fea966cc691cd972fa57b3f43680d681a",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/organization-search-390.png",
+      "sha256": "2fb4e3f13c9f331e89a781e7d04468327e8a6bef8c0dbd31cdc4ccbcd312ff55",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/organization-search-768.png",
+      "sha256": "b8070ae718f071b9f42cb0a33428ff3f44d978b758064e78a638041588b0996f",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/role-search-1024.png",
+      "sha256": "7447c519c6bf7d7e52ae75b0fa500334a2e6d97e066e0b344e89fb6a140be9e9",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/role-search-1440.png",
+      "sha256": "1e49376059dffcad423a135e34703e10bdd464bed345bd8a07ce825c990fe18e",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/role-search-320.png",
+      "sha256": "c1dc091f3381d73cbaa3b830b175bb5e79c62ba04ca0266cb07cfc1cc2484f59",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-role-search-320.png"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/role-search-390.png",
+      "sha256": "bcee04333ffbe9d9c434a0f2c906ada15aafd91cac4315a002902bd8ae3ea936",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-real-org-fac11-s-paging-and-keyboard-focus/role-search-768.png",
+      "sha256": "76a8b06b08c01f169f57a044acac2a319fbb6faaa4e51387912195c8215829af",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/expired-invitation-1024.png",
+      "sha256": "47c41c2dd51de0ffecc3a320961f6f06da013830e4de6d8fe46e51e4eadd1f46",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/expired-invitation-1440.png",
+      "sha256": "f2ed7d9c42f2da71d85639c55013ff35d169d4cfbcb31d69a45bda36469069d1",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/expired-invitation-320.png",
+      "sha256": "4917c8332bf9abd0e775549484babc3f6fb520afc8aec7efe509401c775f2292",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/expired-invitation-390.png",
+      "sha256": "ca2b8804fe733b2ab27e51a104ba8d0339e875e0b5300ca779aef4c80db1b0ba",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/expired-invitation-768.png",
+      "sha256": "276da7c59262926f951696fda18576af1c61de525aec82b3bc06df1fa68fa15f",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/invalid-invitation-1024.png",
+      "sha256": "47c41c2dd51de0ffecc3a320961f6f06da013830e4de6d8fe46e51e4eadd1f46",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/invalid-invitation-1440.png",
+      "sha256": "f2ed7d9c42f2da71d85639c55013ff35d169d4cfbcb31d69a45bda36469069d1",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/invalid-invitation-320.png",
+      "sha256": "4917c8332bf9abd0e775549484babc3f6fb520afc8aec7efe509401c775f2292",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-invalid-invitation-320.png"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/invalid-invitation-390.png",
+      "sha256": "ca2b8804fe733b2ab27e51a104ba8d0339e875e0b5300ca779aef4c80db1b0ba",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/invalid-invitation-768.png",
+      "sha256": "276da7c59262926f951696fda18576af1c61de525aec82b3bc06df1fa68fa15f",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/no-organization-1024.png",
+      "sha256": "7f127d2f8b6018bf7ce5e190922e20113012bb5455da4d7b3acce6ed2f8925e0",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/no-organization-1440.png",
+      "sha256": "196947e068a286a7014185303bdd6b88ffb267298fb0c723ebbd0473334f5d78",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/no-organization-320.png",
+      "sha256": "7799509b9dbebaba120ed1366aa1e770fa46f7724d156e830571dfc1375ed372",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture",
+      "retainedAs": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-no-organization-320.png"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/no-organization-390.png",
+      "sha256": "197f195217f982e3632d90d003b0d0014b97406c26d6f5daf7cb760f570ec640",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/no-organization-768.png",
+      "sha256": "206bc744da73024a1293d4932f2226ed7bb3c06a2e82c37fd3c43bb728386718",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/revoked-invitation-1024.png",
+      "sha256": "47c41c2dd51de0ffecc3a320961f6f06da013830e4de6d8fe46e51e4eadd1f46",
+      "width": 1024,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/revoked-invitation-1440.png",
+      "sha256": "f2ed7d9c42f2da71d85639c55013ff35d169d4cfbcb31d69a45bda36469069d1",
+      "width": 1440,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/revoked-invitation-320.png",
+      "sha256": "4917c8332bf9abd0e775549484babc3f6fb520afc8aec7efe509401c775f2292",
+      "width": 320,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/revoked-invitation-390.png",
+      "sha256": "ca2b8804fe733b2ab27e51a104ba8d0339e875e0b5300ca779aef4c80db1b0ba",
+      "width": 390,
+      "height": 900,
+      "status": "scoped runtime capture"
+    },
+    {
+      "origin": "CLI",
+      "path": "/var/folders/8f/r5cy7q69413g8xpd_z9v2yt40000gn/T/agent-core-tenant-acceptance-qm5wan12/results/tenant-acceptance-unaffili-05676-ns-cannot-confer-membership/revoked-invitation-768.png",
+      "sha256": "276da7c59262926f951696fda18576af1c61de525aec82b3bc06df1fa68fa15f",
+      "width": 768,
+      "height": 900,
+      "status": "scoped runtime capture"
+    }
+  ]
+}

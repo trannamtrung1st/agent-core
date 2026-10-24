@@ -123,12 +123,12 @@ public static class TenantSessionEndpoints
         }));
         group.MapGet("", (int? page, int? pageSize, bool? includeArchived, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var actor = IdentityHttp.TenantContext(http); var result = await service.ListAsync(actor.PrincipalId, actor.TenantId, page ?? 0, pageSize ?? 30, ct, includeArchived ?? true).ConfigureAwait(false);
+            var actor = IdentityHttp.TenantContext(http); var result = await service.ListAsync(actor.TenantId, Initiator(http, actor), page ?? 0, pageSize ?? 30, ct, includeArchived ?? true).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(Safe), result.Total, result.Page, result.PageSize });
         }));
         group.MapGet("/{sessionId:guid}", (Guid sessionId, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var actor = IdentityHttp.TenantContext(http); return Results.Json(Safe(await service.ReadAsync(actor.PrincipalId, actor.TenantId, sessionId, ct).ConfigureAwait(false)));
+            var actor = IdentityHttp.TenantContext(http); return Results.Json(Safe(await service.ReadAsync(actor.TenantId, sessionId, Initiator(http, actor), ct).ConfigureAwait(false)));
         }));
     }
     private static TenantSessionInitiator Initiator(HttpContext http, AuthenticatedTenant actor) =>

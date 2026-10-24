@@ -1,6 +1,6 @@
 # Agent Core MVP
 
-The Account/tenant IAM cutover remains in progress. Canonical transport, resource operations, model Automation inspection/authoring/manual invocation, Memory and Experience have scoped local evidence in the [delivery ledger](docs/reports/multitenant-iam-delivery-2026-10-16.md). Canonical Resource/Harness authoring, inspected remedies, existing credential-binding proposals and bounded fresh configuration continuation are also qualified in that ledger. The [current permission/default audit](docs/reports/tenant-approval-defaults-audit-2026-10-24.md) qualifies the closed 78-entry catalog. Remaining work includes operation-specific integration, safe internal/schema consolidation, final combinations and proposal-wide security, isolation and UI acceptance. Historical verification reports qualify their own versions; they do not establish acceptance of the complete proposal.
+The Account/tenant IAM successor has completed local implementation and Synthetic proposal acceptance in the final delivery. [Final delivery](docs/reports/tenant-final-delivery-2026-10-24.md) records exact source/commit status, all method/I/O/worker and UI evidence, operating instructions and measured limits. The final 80-file scope is approved for direct commit to main; live-provider/customer outcomes, physical-device certification, rollout and optional CI are not implied. Historical reports retain their own source versions.
 
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.
 

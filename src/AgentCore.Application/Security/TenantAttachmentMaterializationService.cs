@@ -29,7 +29,8 @@ public sealed class TenantAttachmentMaterializationService(IIamStore security, I
             return (new(state, saved, agent, source), new(source.DisplayName, state.Tenant.Revision, can, readOnly));
         }
         var before = await Read().ConfigureAwait(false); var after = await Read().ConfigureAwait(false);
-        if (before.Access != after.Access || before.View.Session.Owner != after.View.Session.Owner || before.View.Source != after.View.Source
+        var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (authority.Tenant.Revision != after.View.State.Tenant.Revision || before.Access != after.Access || before.View.Session.Owner != after.View.Session.Owner || before.View.Source != after.View.Source
             || before.View.Agent.Instance.Revision != after.View.Agent.Instance.Revision) throw new SecurityConflictException("stale_revision");
         return after.Access;
     }

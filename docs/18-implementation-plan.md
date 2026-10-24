@@ -1,6 +1,6 @@
 # Implementation Plan
 
-The IAM cutover remains active. Current scoped evidence and remaining integration gates belong to the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). Canonical model Automation inspection, authoring and exact manual invocation have scoped qualification. Canonical contextual Harness content commands, inspected remedies, existing credential bindings and bounded fresh configuration continuation now have scoped qualification in that ledger. Reconcile final integration combinations, review autonomous approval defaults, consolidate internal/schema ownership safely, and complete proposal-wide security, isolation, functional and UI acceptance. Historical module reports below qualify their original versions; earlier “pending” statements do not override a verified successor.
+The IAM successor has completed local implementation and Synthetic proposal acceptance in the final delivery. [Final delivery](reports/tenant-final-delivery-2026-10-24.md) owns the exact source/commit status, finite method/I/O/worker and UI acceptance, operating instructions and measured limits. The final 80-file scope is approved for direct commit to main. This does not imply deployment, live-provider/customer, physical-device or CI acceptance. Historical module reports below retain their original versions; earlier pending statements do not override their verified successors.
 
 ## Tenant workspace read Review checkpoint — 2026-10-19
 

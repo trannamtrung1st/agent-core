@@ -1,0 +1,39 @@
+# Final IAM UI acceptance — 2026-10-24
+
+Base `52177338`; final production source SHA-256 `bd9b0dfbfa3ba5c43afd1c51e66849b384051850ea2a667177b91f3efb77e930`. This completes the final bounded rendered/keyboard/read-only/error/responsive confirmation in the [proposal matrix](tenant-proposal-acceptance-matrix-2026-10-24.md). The incumbent dark Ant Design v6 system, shared AdminShell/AppShell, native Drawer and existing 8/12/16 spacing remain. No CSS/token/font/UI-kit or product raster asset changes. `.agents` and the historical design extraction remain untouched.
+
+## Findings and changes
+
+The shared collection pagination now says **“1 result”** and keeps plural results for other counts. The Approvals override now says **“1 visible request”**. Both were checked in actual live collections at all five widths; the repeatable large-role acceptance assertion uses the corrected singular.
+
+A real completed settings Review exposed terminal guidance telling the user to Cancel after cancellation was unavailable. The existing approval presentation now describes historical proposal values for every terminal management mutation and directs a fresh inspection. Pending requests retain cancellation guidance, and recorded Skill/Resource-specific explanations remain. No decision, permission, exact effect, receipt, pinned Run or replay behavior changes. All **16 integrated management approval/rejection combinations** pass on both stores in 1m49s, including actual final HTTP metadata assertions. The final live inspector retains “Configuration updated,” explains the once-applied effect and pinned Run, has no Cancel action, and shows the corrected historical guidance.
+
+The root App smoke test still expected retired anonymous global Chat bootstrap. Its fixture now exercises the real 401 Account entry: Sign in appears with return to organizations, private Chat is absent, and the retired bootstrap is not called. Product routing did not change for that correction.
+
+## Actual browser journeys
+
+Playwright MCP exercised disposable SQLite Synthetic hosts on API/web ports **5097/5187** and **5098/5188**, with local test identities and no provider calls. The second fixture reused the actual completed requests from the focused CLI run; only that owned host restarted for the final copy check. The user's Real host on 5080 was untouched.
+
+| Journey | Observed outcome |
+| --- | --- |
+| Expired identity and sign-in | Actual 401 retires private view and presents named expired-session recovery. Valid login reaches organizations. |
+| Organizations / creation / long text | Created a second organization with literal `Quốc tế <team>`; no markup node was created. Collections and creation dialog fit narrow screens. |
+| Members / invitations / Reader | Actual Owner creates a Reader invitation; no email is implied. Actual registration strips the purpose fragment, joins the exact organization and grants Reader. The Reader's member inspector has no role/status mutation controls. |
+| Last Owner | Actual revoke receives 409 `last_owner`; a separate suspension attempt displays the same refusal. Reload retains Active Owner. The settled 320px refusal is readable, without clipping or overflow. Neither protected command was repeated after an uncertain wait. |
+| Roles / keyboard / read-only | Actual single Owner result uses corrected grammar. Built-in name and expanded Public HTTP permission are disabled, Save is absent, Escape restores the inspector opener. Twelve Tab steps stay inside the mobile Admin navigation; Escape restores its opener. Disabled permission state has functional evidence; its intermediate bottom screenshot is not claimed as a complete expanded-control visual proof. |
+| Agent Access | Actual instance creation opens the shared inspector. Chat audience and independent executor roles/effective permissions stay separate; template creation supplies no execution-role assignment. Five responsive widths fit. |
+| Chat / switching | Actual visible Send produces and completes the Synthetic response. Switching organizations clears the prior transcript and unsent draft. Full document context change retires the previous scoped UI. |
+| Approvals / results | A real completed request filters to one visible inbox item at all five widths. Its saved before/after, independent reviewer, once-applied result and separate current-source guidance remain literal and readable. Actual expired request disables/removes approval; old action refuses, fresh independent root applies exactly once. |
+| Refusal / recovery / empty states | Actual foreign organization and foreign Instance views return 403, disclose no foreign private name, and provide recovery. A bounded injected 404 renders “This item is no longer available. Return to the list”; restoring the source and reloading recovers Reader inspection. Injected 503 roles read shows inline temporary-unavailability and explicit Reload recovery. Actual empty Instances/Approvals/search states and large collections remain usable. |
+
+The injected 404/503 cases qualify rendering/recovery, not a substitute for backend authorization. The actual 401/403/409 and backend ingress/owner groups provide their separate refusal evidence. Expected HTTP refusal console entries were inspected; they are not JavaScript crashes. Development StrictMode aborts superseded GETs. The three repeatable acceptance journeys assert no page errors, and no unexpected application failure remained. An immediate resize sample preceded responsive settlement; the settled document widths equal 320/390/768/1024/1440. That transient measurement did not justify a CSS change.
+
+## Focused verification and provenance
+
+- **559 effective focused Vitest cases pass**, zero final failures/skips. Initial run: 558 pass and one obsolete App fixture failure; only that corrected one-case App test reran. Its changed assertion name is recorded as a replacement, not a second full 559 process.
+- **Three focused CLI acceptance journeys pass in 4.0m**, retries zero: no-membership/two invitations/invalid-revoked-expired purposes; actual 12 organizations/120 roles/22 members with count/page/search/focus; expired Review/old refusal/new independent exact application. The temporary configuration reuses the verified backend build, owns fresh ports/data, and does not dispatch CI.
+- Frontend production build passes in **6.20s**, with the existing large-chunk advisory; TypeScript check passes. No production UI source changed afterward. The final backend presentation build passes with zero warnings/errors in **19.46s**, followed by the 16 integrated cases and actual MCP fixed-result confirmation. The three CLI journeys preceded that terminal-copy-only successor; they are not represented as rerun on the final backend hash.
+
+The [evidence manifest](tenant-final-ui-evidence-2026-10-24.json) records exact current source/test/preview hashes, all **87 original capture hashes**, five explicitly excluded intermediate captures, and **27 representative originals retained in this repository**. Remaining full local captures retain their actual paths. The selected desktop/narrow captures were visually inspected alongside DOM/geometry/functional assertions. Layout fit and successful keyboard journeys do not claim full WCAG, physical touch, audible quality or live-provider acceptance. No shipping bitmap was introduced; these PNGs are test evidence with actual browser provenance.
+
+The existing `.impeccable/design.json` adds a clearly dated final-acceptance record, source/capture manifest and built-preview metadata. It preserves historical extraction date/tokens and evidence history. The access and Approvals surface briefs receive scoped successor evidence only. The launcher was not rerun; automatic hook checks were not mistaken for runtime/design acceptance. This closes the final IAM presentation gate without starting a new design world or an open-ended polishing loop.

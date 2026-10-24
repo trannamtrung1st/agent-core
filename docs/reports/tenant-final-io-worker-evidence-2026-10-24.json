@@ -1,0 +1,1482 @@
+{
+  "preimageCommit": "52177338",
+  "productionSourceSha256": "bd9b0dfbfa3ba5c43afd1c51e66849b384051850ea2a667177b91f3efb77e930",
+  "limits": "Current source reconciliation with named scoped local executions, retaining their original report/build versions; not universal timing atomicity, live-provider/customer or physical-device acceptance. Passing executions may overlap; do not sum them.",
+  "io": [
+    {
+      "boundary": "Language-model generation",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Execution/TenantRunExecution.cs",
+          "sha256": "ec55f81a81dd92d482276365641e5c32d9138723ba56a95be40f57cbb04883c0"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantRunSourceAuthority.cs",
+          "sha256": "febfb4dc55a83522c9ad01ec602a003a6759b50048f0f866058efc8e0d7f98c5"
+        }
+      ],
+      "disposition": "Canonical claimed generation, current configuration/source and protected output; isolated evaluation has its own owner.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Composer_consumed_source_is_rechecked_before_generated_output",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-files-reconciliation-api-20261024.trx",
+              "sha256": "466891591b1b33f1d1c3c0008ac236bc866cf176a5e6885c00504fd426270621",
+              "caseIds": [
+                "d9c9ab1e-5a75-9b7f-37d9-b951a9c0365f",
+                "199fadbf-488d-da3d-ab69-e9724facdf2f",
+                "eb3483a1-82da-8238-c78f-9a7ed4aad394",
+                "5a9c2f33-527c-d7bf-8cd3-c679872ff0b0",
+                "c6473fd0-c186-6793-c806-4e92ba7533cb",
+                "85b2f0ec-7762-4270-8c1e-dbb04046b8b0"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Speech recognition and synthesis",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.Voice.cs",
+          "sha256": "ba32da53bdcd9626fdbc22454532e9a47ce4c1968bdec754651028fb499cdc0f"
+        },
+        {
+          "path": "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.DeliveryReceipts.cs",
+          "sha256": "69083e84a248fadcc642470350bb218d1f2851b80c82d4b24937f62b0f3e7143"
+        }
+      ],
+      "disposition": "Actual owned voice lease and current source/response/utterance/generation; received/heard delivery cannot credit unrelated output.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Run_Profile_real_voice_delivers_current_sources_and_refuses_changed_sources_before_text_or_PCM",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-profile-memory-reconciliation-api-20261024.trx",
+              "sha256": "4c44673e8e824eaaecb091a060c2c3c9f30b0d6a27c53cb1c9ef7fa3166f6579",
+              "caseIds": [
+                "c4bc487a-1adc-4a52-03ae-7874c14027e7",
+                "afc253a7-a4eb-d0e6-9f63-244293fe485d",
+                "5b61b299-4ccf-72cf-58f6-571ba3e2f7f0",
+                "c71c8ce9-8685-c803-88a3-6553e1b5b292"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_voice_current_human_receipt_fences_and_no_implicit_cancel_preserve_accepted_work",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-session-runtime-reconciliation-api-20261024.trx",
+              "sha256": "cf5aa9ede6da470b40b1db508485f843ae93c358826202c593d4f2b725c7fe62",
+              "caseIds": [
+                "3ddba893-cb9a-04d4-b5d2-91cc7431fa81",
+                "7ee8c6e9-6b1d-9f87-1d82-fd649d694699",
+                "eff08209-512a-11bd-da64-e301056ed9d7",
+                "8eaac9ae-843c-63ee-a33a-03c9cc1cb08d",
+                "807fed0c-134e-1500-44cd-61aa5f0c1f62",
+                "677e8f8e-c277-8c22-8903-d88285da4cad",
+                "f5484cae-ef6b-5721-5a1c-9c28db5b2914",
+                "cbc89714-a115-7f4c-d0dc-3093dbb8bad2",
+                "a2bf8911-8d47-8785-8546-9d93f3de3cc8",
+                "2430fd1f-4823-68c6-d2e8-b4546386fcaa"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Browser commands and observations",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantBrowserEffectService.cs",
+          "sha256": "0983555ac3c80d61b14339adcf188f72346be1a7defeb23947aadba1641c559f"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantBrowserEffectRules.cs",
+          "sha256": "4c08676069632133b31ccddede4824654cafae9a2f76d75cec408bfdb8dd399e"
+        }
+      ],
+      "disposition": "Exact current native target/owner/Run/claim/action/source/consent at dispatch and output; uncertainty never permits replay.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantBrowserApprovalTests.Tenant_Browser_effect_retains_uncertain_attempts_or_withholds_output_after_read_authority_loss",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-approval-boundary-infra-20261024.trx",
+              "sha256": "516a4cede54b2e9a1688c6b052de56313163254a965dbcc6aa350e448407f004",
+              "caseIds": [
+                "145b3b09-17bf-1426-35c9-e9731767c4f0",
+                "040b28f2-6f98-b6a7-2ebe-f6081c1dc421",
+                "2ec83c7c-ddfe-1d8b-f210-962ccbc2da30",
+                "45669064-0936-9046-2ce7-4233f90b05e6"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Browser password resolution",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantBrowserEffectService.cs",
+          "sha256": "0983555ac3c80d61b14339adcf188f72346be1a7defeb23947aadba1641c559f"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantBrowserEffectRules.cs",
+          "sha256": "4c08676069632133b31ccddede4824654cafae9a2f76d75cec408bfdb8dd399e"
+        }
+      ],
+      "disposition": "Trusted native password resolution remains behind exact compound target/use/qualified grantor fence; no model secret projection.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantBrowserApprovalTests.Tenant_Browser_password_exception_rechecks_scoped_grantor_before_dispatch_and_at_native_gate",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-final-io-infra-20261024.trx",
+              "sha256": "636ccdd5b9e6d24efc63617ec67fd906d732ed55b4e7fb3313afc9d18ab257b4",
+              "caseIds": [
+                "850beec9-6e70-fdc3-8c2c-2432f7bbf094",
+                "296518c6-a9d0-a5ea-38a8-585f6ad81144",
+                "74278586-e1e2-5383-ee3e-79b0d6af6b97",
+                "e6626dad-5769-50fe-82c5-78b686f32bfd"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Browser profile reset and retirement",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantBrowserProfileService.cs",
+          "sha256": "bb541617b9b484d96cadd9c0c38504342e00970c74f4f297cddd228b4e463002"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantBrowserProfileRules.cs",
+          "sha256": "d6c0c3f12f28ee409b673f8fc6ff8cf4cbe6934b2200f8d8b00abd055dd3d66c"
+        }
+      ],
+      "disposition": "Actual original-human and exact persistent native witness before deletion; factual recovery does not repeat reset.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Browser_profile_HTTP_reset_owns_persistent_state_and_never_repeats_an_uncertain_operation",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-approval-boundary-native-api-20261024.trx",
+              "sha256": "e9dc2b2d5dcc280051ee7aa9db2c9d9804f9b01890ea9416f5c63a8385a5b20e",
+              "caseIds": [
+                "9584c96f-d21d-c572-7f3f-99af15d8e4dc",
+                "8fad49a8-eb92-9681-0515-50d7b91536c3",
+                "daf91b5e-5346-cef2-3968-40977767218e",
+                "ae7630ab-714e-7368-4206-2342f863ad99",
+                "e18f2d07-1180-5561-e1c5-3eaea0bbe10a",
+                "a0e695d2-e18a-5d5c-f16b-f73f07bbb41c",
+                "ebd02f44-11a4-81a8-4fe1-9e048b5a3c9f",
+                "5e198923-6b33-5212-1914-04ca18f3aa4c",
+                "40944905-4a10-103c-8b39-6dbaf0de2a46",
+                "31f769a8-2ece-fd21-b848-5a4aca73181c",
+                "9478af28-26c0-6f6b-730b-d39a3d348376",
+                "28b393f7-ce2e-8e2c-88b0-bcb32840f022"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Sandbox setup/image verification",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantSandboxVerificationService.cs",
+          "sha256": "cab87dc1c31bcfa41edef202af74c562daa9823f9cda2dbf17c34053da4bf224"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantSandboxInstanceVerificationService.cs",
+          "sha256": "c3f4b38d2f4f86824d8b5bd5c41611325caf8ce1f7db4747139bb7523a74c378"
+        }
+      ],
+      "disposition": "Actual owned profile/Instance/source/registry/epoch and original human at dispatch; exact technical claim for positive cleanup.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.Sandbox_profile_tag_preparation_rechecks_original_human_before_protected_registry_dispatch",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "63ee1c2b-465a-5244-87d8-00f1b69adc19",
+                "550f9b32-8d6e-b0ae-3515-8408c173efc4"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantDefinitionIntegrationTests.Tenant_instance_sandbox_verification_retired_human_and_hostile_evidence_keep_only_owned_cleanup_facts",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "23b77666-2131-1dc6-ad3b-09f4e747fc5d",
+                "03bb1c8c-1ce7-04c2-fed0-4fdda150a007"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Sandbox command/process/reset",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantSandboxRuntimeRules.cs",
+          "sha256": "11acdc218bc44d7e3d3194d5f1a24722700d3f715449ca8b4119d10839d527b2"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantSandboxExecutionAuthority.cs",
+          "sha256": "25513b07a3ee6a6ab27e8652ffb6e3d5f2edf6640de3f0eaf47ff87f1f0526b1"
+        }
+      ],
+      "disposition": "Actual tenant/Session/Agent/executor/lease/generation/current source and exact command/control consent; bounded factual outcomes.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantDefinitionIntegrationTests.Tenant_Sandbox_model_continuation_bounds_output_rechecks_scope_and_rejects_changed_command_before_dispatch",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "5054d366-c425-c382-d155-59ef4cf2554c",
+                "6362fd99-6d20-a71d-4799-af71bf18ae93",
+                "88a40d4b-862c-c25c-f28a-ef9df0acafcb",
+                "66dc7140-74b6-0dce-0e0b-5102e7bce6e9",
+                "837e8d0c-f5da-c3dd-b95d-caf3ba5a9bd5",
+                "f721068d-dbcc-737d-7bd0-5e2b7cd289f2"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantDefinitionIntegrationTests.Tenant_Sandbox_human_reset_retires_exact_generation_after_logout_without_replay_or_file_loss",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "ee2d454d-d2f8-91ee-1a85-4f87c13bf567",
+                "fcb090cc-2b11-1cc3-676d-70dba7a6d232",
+                "dbef0009-a6ba-844c-c3b1-8ae1ab442c1a",
+                "2d9a267b-fa5f-7b49-0ba4-fe818be58efa",
+                "37b685d6-5725-5e7a-5c38-a801abe74b1c",
+                "bf095707-0ac0-34b5-91d0-39fd8f9db6d6",
+                "782a77c9-6b99-b688-4580-d514e384d070",
+                "f62e0887-cb65-3e98-cf69-6b80b1655961",
+                "2ad873f5-9c2b-ce37-288f-16ecf6f4b78f",
+                "43d96eec-5ad5-7903-ff08-7d1a4ae43e80",
+                "6c326e72-f2ca-b448-e1cb-4353723247e2",
+                "eb392a8b-06af-4bdb-1321-748306a699ee"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Sandbox file materialization",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantSandboxGenerationAuthority.cs",
+          "sha256": "287e4e26a9db640a92a09991b3a28be5c0da5339d6912a960487f1b1687e10ae"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantSandboxRuntimeRules.cs",
+          "sha256": "11acdc218bc44d7e3d3194d5f1a24722700d3f715449ca8b4119d10839d527b2"
+        }
+      ],
+      "disposition": "Core resolves actual workload and eligible owned paths; current mount policy/generation/capability before filesystem/create. No caller-chosen host root.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantDefinitionIntegrationTests.Tenant_Sandbox_old_server_without_retirement_capability_is_denied_before_filesystem_or_create",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "87f14415-0a7e-94c3-2fc8-cbb7d7bdc131",
+                "afd5999a-3748-cf95-ed5d-3004db28ac0e"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.SandboxFilesystemPreparationTests.Earlier_generation_authority_does_not_silently_adopt_the_new_compatibility_contract",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "879ee406-3b46-c8b5-47ad-d1449e5d74b4"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.SandboxFilesystemPreparationTests.New_directories_are_private_and_foreign_identity_is_never_repaired",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "8fcc14ab-1c5d-e533-1a65-e302fad3acaa"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Workspace file/structure changes",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+          "sha256": "06fbbb47a70cfbc10f8a6d81e6f0a25c37448945682788dabe5cb3419aa3940f"
+        }
+      ],
+      "disposition": "Resolved actual owner/path/source/read/write/claim/security/exact consent and filesystem safety before native mutation; factual partial outcomes.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantOperationAuthorizationTests.Tenant_workspace_mutations_require_current_audit_evidence_before_any_protected_effect",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-reconciliation-infra-20261024.trx",
+              "sha256": "ddcdd00a38ebf8c06a267c8b1fabd5e8b57fb78b78ca0432e114803f0a56537b",
+              "caseIds": [
+                "f06b888f-f44c-71ef-603a-9fdc702cd038",
+                "c35e3395-2389-29d2-6372-dde0fdf85bc5",
+                "9d7e1c88-658d-9341-2a5d-4acd1af4313c",
+                "4cd182a0-93ee-0de0-29a2-4e10f7bd79ff"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Attachment ingestion",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantAttachmentService.cs",
+          "sha256": "817fd1c333c1c8a7562c1dccb11c8d51a13795876ea8feafc94cf3a15cbb0ccb"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs",
+          "sha256": "ae0bf09a2a34544e6d9d6a93272903c79a62ee9d8f1cdc6d8c38c94e80aa5479"
+        }
+      ],
+      "disposition": "Actual Session binding, bounded package/source/parser and current human or trusted Runtime write witness; no ID adoption.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_attachment_HTTP_upload_exact_download_retry_abort_and_restart_use_actual_owner",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-files-reconciliation-api-20261024.trx",
+              "sha256": "466891591b1b33f1d1c3c0008ac236bc866cf176a5e6885c00504fd426270621",
+              "caseIds": [
+                "df00ef4e-a291-a237-bef2-7ac730a80415",
+                "a3c00fb3-f45e-ed1e-d318-e69597b54bd9",
+                "aae5ebce-2dbb-8262-9eb9-6769c2bbfca2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Office inspect/render/export",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantWorkspaceReadService.cs",
+          "sha256": "25965d83586c890b9c07a969aab417316fb926a687bd8ef480dcda3689a52b90"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+          "sha256": "06fbbb47a70cfbc10f8a6d81e6f0a25c37448945682788dabe5cb3419aa3940f"
+        },
+        {
+          "path": "src/AgentCore.Infrastructure/Office/OfficePackageGuard.cs",
+          "sha256": "5caf399b15ca6f21b32e76f2bc1d1862cb5b65e148dd3e38e70e8cdc47849f6f"
+        }
+      ],
+      "disposition": "Current independent source reads and pinned output provenance; package processing supplies no publication authority.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_workspace_HTTP_reads_exact_owned_bytes_and_Office_only_with_independent_current_workspace_access",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-files-reconciliation-api-20261024.trx",
+              "sha256": "466891591b1b33f1d1c3c0008ac236bc866cf176a5e6885c00504fd426270621",
+              "caseIds": [
+                "58f43817-b571-8005-0fe4-0aa075410992",
+                "eb516f9d-e1a5-435f-64fe-86a226249148",
+                "793c501d-8e7f-8b93-b12f-b940a52fc029",
+                "7b0b72b8-05b6-a48f-be37-c055b0c4eb0a"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_model_workspace_Artifact_preserves_exact_packages_and_current_source_consent",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-files-reconciliation-api-20261024.trx",
+              "sha256": "466891591b1b33f1d1c3c0008ac236bc866cf176a5e6885c00504fd426270621",
+              "caseIds": [
+                "42565e3e-744e-d5a1-16c9-54822670a8a4",
+                "015a3356-3549-0b40-6061-ffe3cb120e8d",
+                "72f84d6d-adad-8a31-568c-63b36a6371b1",
+                "2ba57976-1917-c9f0-4a52-a8609e7233e7",
+                "c696e005-bd4d-1b50-39fd-5d837ff8238e",
+                "58c166d0-c50e-092e-d796-f79cf5f5081b",
+                "f8886711-c431-c5ae-65f9-5bf07ff5e799",
+                "326a67eb-9476-0269-816a-83acdf54ef61",
+                "c6bd0a3e-2087-2984-93a2-b2bb5ded566e",
+                "bc6b2299-c908-bfe6-a2b8-565e1b62c036",
+                "aab7e8ac-a760-67af-81c8-1546603f828a",
+                "9ac8cfec-f19e-2e2f-99f0-7dea548d2120",
+                "e0186e33-202d-98e7-b574-ecb431ac6586",
+                "150b7cf6-3019-036a-6a81-fa6cf08a2b18",
+                "edb421f9-6f5d-5b47-45c0-5f314c92355c",
+                "6e948643-8e73-3268-02fb-8d5b3ab7f7c8",
+                "04512da1-b805-7a1e-f2c0-940da8724a0e",
+                "d1272ad6-4402-c099-133e-add57dd1daa2",
+                "e8a3209c-a1d4-dd95-a024-008f5e6f89ed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Artifact publish/delete/blob delivery",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantArtifactOperationService.cs",
+          "sha256": "0d3f152457281acf5c21852218b4cd226a37d0cc58e845297c1c602356ed442e"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantArtifactService.cs",
+          "sha256": "2a94ad3a99a9781ef26e37afc03792b20d0e5e85d6619656fdd1cf5cb11a3e24"
+        },
+        {
+          "path": "src/AgentCore.Application/Workspaces/TenantArtifactCleanupService.cs",
+          "sha256": "f57c734a8b098754e6a4a835568db5fddb6c2cd1d445c05e4941e266845a9c05"
+        }
+      ],
+      "disposition": "Actual source capsule/witness and independent create/read/recipient checks around bytes; exact saved cleanup proof.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantOperationAuthorizationTests.Tenant_workspace_Artifact_commit_rejects_another_Sessions_source_capsule_or_a_substituted_witness",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-reconciliation-infra-20261024.trx",
+              "sha256": "ddcdd00a38ebf8c06a267c8b1fabd5e8b57fb78b78ca0432e114803f0a56537b",
+              "caseIds": [
+                "c62974d6-5fe8-d8c2-f50d-93837e2fb60d",
+                "d786acc2-191a-5ddd-3aa3-59d2e29561e9",
+                "5f4b61f8-2ac3-ecfe-4871-f8dc22295e3d",
+                "c91ed787-dba2-4f0f-831d-a196fa840e80"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Artifact_HTTP_download_requires_current_independent_scopes_and_returns_exact_attachment_bytes",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-files-reconciliation-api-20261024.trx",
+              "sha256": "466891591b1b33f1d1c3c0008ac236bc866cf176a5e6885c00504fd426270621",
+              "caseIds": [
+                "ee303fc8-d7a3-5b33-a2ac-3f6fa5658512",
+                "eda56fad-7d8d-78f1-c1cb-fe84b8f08e4b"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Public search",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantPublicWebReadService.cs",
+          "sha256": "496fd10e4cf2a90051b637f06098b7041fe0c3ea777f2f947a514dec622baf7c"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantPublicWebReadRules.cs",
+          "sha256": "0094bbed4de6553ac017e6df4923f6c002633db66301c19cdf966c0419d8d073"
+        }
+      ],
+      "disposition": "Current task/configuration/source eligibility and bounded public observation; revoked retained output never reenters model.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_public_web_reads_use_current_executor_authority_and_never_release_revoked_observations",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-final-io-api-20261024.trx",
+              "sha256": "401fb1bac3cc1a14bdc06f69b57ec19acfc0111f4adeb0044f7ee508bb474bbe",
+              "caseIds": [
+                "a5161016-c380-b4f6-288d-be390ec4d2ed",
+                "f2645e05-720d-3083-64f8-59a2247b6436",
+                "a5aa4f48-f88d-c034-1bca-2bda46842f1e",
+                "edb78a02-4e31-060c-a1af-18cf43b63d23",
+                "5d14b997-34fa-3396-8944-9bf11ea5e235",
+                "0bd13a1c-8122-b2df-fff5-c1036a2a17a1",
+                "0a5d6831-80f9-7fa3-e8d4-108a4e54ed05",
+                "22b18bf7-da90-dea5-de16-7bb4ff81a952",
+                "3e9e0e55-63bd-5064-507f-5840aedc39c8",
+                "4507d75e-aac9-d6f1-df91-a087b6e44bd4",
+                "9fa4d068-2981-b464-1c37-40161261ef06",
+                "5955e4e9-5418-bda7-0174-a069d7d60633",
+                "fe032e6e-68eb-d9c7-3873-db637cf75ca9",
+                "b5ddf863-6c90-ab1c-e45a-e6956095ce40",
+                "0ed831fb-af11-cee6-c13e-2a4dd08a8643",
+                "3629f6a4-47a9-a84a-9fb9-403c02049ee9",
+                "6898c90f-3860-eac7-2cf7-8707bd773589",
+                "44a36f26-dbe6-a707-3806-9d4a0ce6c7dd",
+                "ca36a48c-12f1-1de9-5551-b70053fe9698",
+                "f0c1eb8d-1f18-3f9c-a4fd-4b1700add73e",
+                "1f2aabee-550e-81a5-fb9f-1e5152834511",
+                "78c505cb-039b-21da-916c-fa55c14e8a22",
+                "f1f6c36d-e69a-7a94-c69d-8ab34f1e5329",
+                "d2369979-743c-9f48-f420-a331a5a012be",
+                "bd20bd1c-193b-ee1c-04a6-dc034896cfc2",
+                "00ffbbc9-7b51-cbd4-74da-082029dd0ae4",
+                "b5bd44cd-d80f-d536-bc1e-47b70a87d96c",
+                "8a279242-6260-08df-71c8-95e3588de943",
+                "9cbfcf5e-341f-57e6-57a8-5dab6c8fa34f",
+                "78e0b10f-6895-7aa6-f6c5-8593a9bd51f0",
+                "bd74972d-b859-b3a5-7d4a-75c8bb176dc9",
+                "5e82775c-4578-165d-8c09-c2796007c276",
+                "397c9a98-2d45-1352-cceb-08dcace28b3d",
+                "694ca541-ddb8-ec41-48e9-2db7ae7c7f16"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantOperationAuthorizationTests.Tenant_public_web_stored_observations_recheck_current_authority_without_refetching",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-final-io-infra-20261024.trx",
+              "sha256": "636ccdd5b9e6d24efc63617ec67fd906d732ed55b4e7fb3313afc9d18ab257b4",
+              "caseIds": [
+                "379f649b-0196-cf7f-2a9c-085adb509756",
+                "afe2e96e-ce82-55d8-184c-19607825ee13",
+                "a1148b32-9859-40e9-69fd-0eaac4400e8c",
+                "e2ae2da7-2b8e-3088-f929-7013ed7a0184"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Public fetch and download",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantPublicWebReadService.cs",
+          "sha256": "496fd10e4cf2a90051b637f06098b7041fe0c3ea777f2f947a514dec622baf7c"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+          "sha256": "06fbbb47a70cfbc10f8a6d81e6f0a25c37448945682788dabe5cb3419aa3940f"
+        }
+      ],
+      "disposition": "Current task/destination/network/source checks, bounded deadline and exact once-only receipt/recovery.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantOperationAuthorizationTests.Tenant_public_web_deadline_bounds_a_noncooperative_source_and_discards_its_late_result",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-final-io-infra-20261024.trx",
+              "sha256": "636ccdd5b9e6d24efc63617ec67fd906d732ed55b4e7fb3313afc9d18ab257b4",
+              "caseIds": [
+                "8578b0db-3ab5-a008-8d03-5cb5ed9eed1d",
+                "c2444f76-2ef8-a800-2abd-277108bcaed4",
+                "47462328-8120-89a2-589a-2ebca9976f50",
+                "04e7f7d7-4e93-b1e2-b07e-70b0ae1c3697"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantOperationAuthorizationTests.Tenant_public_download_abandoned_dispatch_recovers_once_without_fetching_or_writing",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-reconciliation-infra-20261024.trx",
+              "sha256": "ddcdd00a38ebf8c06a267c8b1fabd5e8b57fb78b78ca0432e114803f0a56537b",
+              "caseIds": [
+                "7e110050-6564-6508-cb8b-1e20bb0cb2e1",
+                "880923b0-e561-dbe4-1716-ea824345847e"
+              ]
+            },
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-recovery-baseline-20261024.trx",
+              "sha256": "caa0d51fba114b292a62be4cea8ad504f7c4040950020b3817547818d0ca4968",
+              "caseIds": [
+                "880923b0-e561-dbe4-1716-ea824345847e"
+              ]
+            },
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-recovery-fixed-20261024.trx",
+              "sha256": "59a0b9af510b890a2c92ff155517e32654c31d1904cd98b0ba09d8d345f29aa4",
+              "caseIds": [
+                "880923b0-e561-dbe4-1716-ea824345847e",
+                "7e110050-6564-6508-cb8b-1e20bb0cb2e1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "General public HTTP",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantHttpEffectService.cs",
+          "sha256": "60870d89090f06706eb39fc2662eb4dd55d47faaf4d6f684f3b8abeb521af5d7"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantHttpEffectRules.cs",
+          "sha256": "02740df1de602a9d395f12a10c42bc5ef294849ba89d37be8f4d76e10a4d6552"
+        }
+      ],
+      "disposition": "Current independent http.request, exact operation/consent and bounded network dispatch; abandoned recovery never repeats I/O.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_public_http_model_requires_exact_consent_and_never_repeats_dispatch",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-approval-boundary-api-20261024.trx",
+              "sha256": "a4c3769ae07c70115ee8fbe0341029d65ce2240f59244839a12b84e33f1ed1f9",
+              "caseIds": [
+                "30d75e84-239a-c021-9ca6-aaadc1f03b49",
+                "b1e16147-94d6-ccd1-1dc3-605882db8265",
+                "5ad19b0e-b422-8bac-0329-7bb6f29e59a3",
+                "bdbb5f7d-1f18-c11d-4069-d508be4eceeb",
+                "51cc1139-fc41-6b7c-87b7-5675fb31b69f",
+                "2674c805-81a1-0f30-bb53-151710f5ce5f",
+                "3bf6ac8d-10c5-70be-3ef1-8b0e1fdf4b9b",
+                "3aab92ea-485a-f679-592e-50da8d22d2bc",
+                "f36ee4b9-3715-38d1-5475-29749ea756da",
+                "3faf5bc1-4926-77a8-1f23-3dfca51ddc13",
+                "e0ce2d47-5fe7-3bac-f89f-bb89d4e83da5",
+                "b0cb9365-17d8-1fe2-a418-47199feb22ad",
+                "7e2ca13d-e1f4-bd52-4eb5-b60db2e2c5f6",
+                "7a28782d-f9d6-a1d4-6a2e-a8153a52a036",
+                "727d0916-afdb-8138-d7ce-9caf2c400fb7",
+                "422bef04-a50e-8892-e33f-2a45eae25b5d",
+                "108c0234-160d-e4a9-1394-c17de2e9e0a1",
+                "f848e163-06a1-183f-ec76-bd2f72f97526",
+                "e541808b-bca3-ac40-d992-a5cfd7234f49",
+                "384f8152-cb42-904d-79b8-38075e402df1",
+                "3e411a37-2c10-b820-420b-fe72faf9c1a3",
+                "6f5e3f77-1c65-7dbf-05c1-662a7b1d719d",
+                "ce9e0eb6-a586-4258-dfdb-59cd63f6cbb5",
+                "fec3414b-59ac-9cf9-837e-34a6b66f70b6",
+                "7741267e-0b44-d9da-4042-62809b4e35d2",
+                "08de12c2-21d5-0354-2e04-adb5460f8e0d",
+                "f3b13934-8b99-f2a2-6cb4-ff8980971fcf",
+                "c2f929bb-cfd3-806c-9842-4a81b44b41b1",
+                "29c304fc-83de-f790-3c38-1318b8eade6e",
+                "e548dcbe-f95a-fe5e-9948-ad5408e78a41",
+                "f6cd0dd2-336e-3fbb-979a-df7b0d5ad28a",
+                "2f7f9245-379c-e094-41f2-e1e1511395aa"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Email read/draft/send",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantAccountEffectService.cs",
+          "sha256": "ca9aadb049234954d18116ae8204c93af3e2c32cadefabb9a50630352bc58fc1"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantConnectedAccountService.cs",
+          "sha256": "56998150ec933f6ad5788d9cdb5b58fac61acac55602d750130ede0a38d0b70d"
+        },
+        {
+          "path": "src/AgentCore.Infrastructure/Credentials/TenantConnectedAccountReader.ScopedMail.cs",
+          "sha256": "82aa681c29f5f240a01820ca488a4bebbe6724c2d3855c56e586256eb80012ab"
+        }
+      ],
+      "disposition": "Actual account/purpose/scopes/epoch/source and exact immutable draft/compound send; human final disclosure repeats original login.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Account_HTTP_result_rechecks_original_human_after_the_final_source_lookup",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-fixed-20261024.trx",
+              "sha256": "ae93e382e8c7acb12f6cb0878097f3d18ae00921fb90957bcbe6f52dc1ff7ae8",
+              "caseIds": [
+                "da6fc1f1-02f3-b10b-b14d-45fca9cee278",
+                "403e3338-b742-a347-b0b8-6a879abdb542",
+                "dcdc105b-31b0-ab01-d639-5719852bc8d0",
+                "6b2918b7-11d0-5a25-80ae-24e54624fe69",
+                "199cfe31-2454-2849-a367-3a169d76a4c3",
+                "0f0553f9-4239-7982-b74f-5f898bfb846a",
+                "2c611deb-ec3b-62af-fc58-f431c4f00c12",
+                "8308b9b9-5dd5-2a16-7887-7b13f7196781",
+                "3e02cf20-ffb5-61b3-6a81-46503d3b573d",
+                "42f80190-b64e-9c70-1699-db72ff0e28f0",
+                "3b4fcab5-2003-80bd-e111-88e685ac909e",
+                "85d254b3-6429-82f5-a5d0-4961634260f8",
+                "d3ecf58c-6ba9-144e-c912-8269fd741617",
+                "e40d6a00-42c9-aa42-8b71-2169f4a2a0ec",
+                "49b19625-5293-bcaa-a42e-1832343fbf00",
+                "9a876cca-71fb-6c15-0490-9f23ae866df8",
+                "c543da07-f2ba-6352-446f-448e936b63ec",
+                "821f1b2f-b313-d8fe-d4e2-6d458fa1b070",
+                "dfa90e54-a973-367b-1f81-27f7d27587ad",
+                "8a8b9662-236b-6761-c376-4046a86e1dd9",
+                "ff883e87-a28d-8a7a-ca0a-8829edc7e152",
+                "b485b840-5ad9-dd23-14ea-98154a49d152",
+                "1fdeb7c7-8f77-939f-6a6e-6512ed84ac97",
+                "91300b19-5984-e558-9472-7637b28b4ab4",
+                "72f6ccec-a7ce-24de-925d-09a247d2d12c",
+                "7cde7fe1-54f4-6c1e-994e-52fa60538e17",
+                "52bbb00d-7eeb-e6fa-3ab9-d13d019d8c59",
+                "77f9fe8e-1d52-3582-eaf5-138f78b0f910",
+                "e39df86a-cebd-7fe5-0afd-024ce2d930ab",
+                "1912a70b-f9da-b2c8-f5eb-b98c7f178d8b",
+                "34546288-3c47-9b13-de38-bf3889e6e787",
+                "c3af930f-1337-e122-dae0-4d970b02b05e",
+                "1615991d-d46a-caa3-77df-c365a2f944e6",
+                "d70b38b3-9bfb-a497-6b6d-08d698a3be24",
+                "5afdf4d7-9093-b3b4-a456-efd5286e1cbd",
+                "096f7f15-7290-8e0c-b6f6-71d67ef3c69c",
+                "e719848e-3e1b-b2f1-5372-59ee61753283",
+                "6e0dc1cc-7d87-62cc-38b8-a9acc2b37e9d",
+                "84ca9055-0101-6a3c-fac4-67b5b0e11c68",
+                "16f5b48e-a8c3-1a11-cbe4-49761d4f9f2a",
+                "dd397ede-f620-e857-2f68-4cbc4b7a2f83",
+                "c61cf0b7-f939-9953-4ad2-74d512bda56b",
+                "6f92c9aa-9cc4-ae34-8297-9119d93ccec6",
+                "d0f1baea-9a9d-8828-268d-1ddee6a73445",
+                "cd199503-e312-d6ef-8014-e3d05b975516",
+                "1ca6305a-b395-3a6c-4588-37d488a18e1f",
+                "1ab10bed-ee78-052a-1059-e141a7c03466",
+                "38e96f21-5c77-46d6-4690-ff760742cefc"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Model_account_actions_create_immutable_draft_then_request_separate_exact_send_and_return_factual_results",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-reconciliation-api-20261024.trx",
+              "sha256": "b935efbe75ca71380031b83c5e0dead4dea7d98c2f283d9e4faf7737d34e862e",
+              "caseIds": [
+                "8760018e-cddd-ba6d-30d6-69bb8b2484cb",
+                "bdf3125c-a9e2-353e-b344-ae7ae95ac8a8"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Drive read/transfer/mutation",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantAccountEffectService.cs",
+          "sha256": "ca9aadb049234954d18116ae8204c93af3e2c32cadefabb9a50630352bc58fc1"
+        },
+        {
+          "path": "src/AgentCore.Infrastructure/Credentials/TenantConnectedAccountReader.ScopedDrive.cs",
+          "sha256": "0d49a527dd5f486d3b0dc2b75e739ab1e53bc454460df72c514e1810ac158679"
+        },
+        {
+          "path": "src/AgentCore.Infrastructure/Drive/GoogleDriveProvider.cs",
+          "sha256": "2eae9b84afe5607f2ed83361b1f3a80d8a87b1e63b89f33e910feeb919e1b206"
+        },
+        {
+          "path": "src/AgentCore.Infrastructure/Drive/GoogleDriveProvider.Upload.cs",
+          "sha256": "1c5a4b9101001bbd471c0e746c590569c61e9d9bb56a98bff6fe7aab426a7ab0"
+        }
+      ],
+      "disposition": "Actual owned binding/source/target and exact consent; callback before native write and each transport retry/chunk; retained uncertain work never starts replacement transfer.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Model_drive_actions_use_approved_metadata_and_exact_original_bytes",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-reconciliation-api-20261024.trx",
+              "sha256": "b935efbe75ca71380031b83c5e0dead4dea7d98c2f283d9e4faf7737d34e862e",
+              "caseIds": [
+                "64ee0ba0-03c3-5b00-f6aa-7f67413e6858",
+                "b064b372-7752-2f5f-c004-3b5baa9de435",
+                "bbc896d4-dc3d-c123-c74f-43ca66d6d263",
+                "2ea19e35-cdde-cf43-d6a8-1acd412a5c0c",
+                "cede43b8-21ec-bb42-65f9-3cb176506745",
+                "cc27c874-e30a-e961-c5bd-6e66911e301b",
+                "715f84ae-77b5-e21d-639c-a24f37e73165",
+                "2dae673f-a383-a4b5-533a-5d4ec4651f70",
+                "639911d6-57c7-eec9-439b-bb7d8abcb8db",
+                "9a48a6ab-16a6-17cc-45bd-f6ac607c267c",
+                "2e2e4845-4803-1ff7-80bc-76e31db76c67",
+                "780db3fb-61f9-4b79-2f0c-914453047fd6",
+                "dff96263-f5cc-0197-8157-52271d8eb778",
+                "64bf26a0-3512-1931-cf64-bb7540936075"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.GoogleDriveTests.Expired_session_stays_uncertain_and_never_starts_a_replacement_upload",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-account-reconciliation-infra-20261024.trx",
+              "sha256": "52ab8b05ac2d076b5d02150c4c547c39bdaa35de2fe9f03129fe56e1cb306d91",
+              "caseIds": [
+                "a5ed731c-82c8-437e-e6a2-7f4196600b5d"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Credential test/OAuth exchange/refresh/disconnect",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantCredentialCheckService.cs",
+          "sha256": "15089f112c75eeccf8fd54f99de70303e8834fa7005233c56cea59ad729407ec"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantCredentialOAuthService.cs",
+          "sha256": "6d9e68fff522190982f0e4a19e1531c492dd8377dbcc8f0c6488f52aec995c48"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantCredentialOAuthCheckService.cs",
+          "sha256": "436ddeb88f3ce0620f7c416e1003d0837340d7502df3555c6f02cd34cd5b0b6c"
+        }
+      ],
+      "disposition": "Actual original login/tenant/purpose/state/binding/epoch/exact claimed dispatch, final original-human metadata fence and proof-only expiry.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Account_HTTP_result_rechecks_original_human_after_the_final_source_lookup",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-fixed-20261024.trx",
+              "sha256": "ae93e382e8c7acb12f6cb0878097f3d18ae00921fb90957bcbe6f52dc1ff7ae8",
+              "caseIds": [
+                "da6fc1f1-02f3-b10b-b14d-45fca9cee278",
+                "403e3338-b742-a347-b0b8-6a879abdb542",
+                "dcdc105b-31b0-ab01-d639-5719852bc8d0",
+                "6b2918b7-11d0-5a25-80ae-24e54624fe69",
+                "199cfe31-2454-2849-a367-3a169d76a4c3",
+                "0f0553f9-4239-7982-b74f-5f898bfb846a",
+                "2c611deb-ec3b-62af-fc58-f431c4f00c12",
+                "8308b9b9-5dd5-2a16-7887-7b13f7196781",
+                "3e02cf20-ffb5-61b3-6a81-46503d3b573d",
+                "42f80190-b64e-9c70-1699-db72ff0e28f0",
+                "3b4fcab5-2003-80bd-e111-88e685ac909e",
+                "85d254b3-6429-82f5-a5d0-4961634260f8",
+                "d3ecf58c-6ba9-144e-c912-8269fd741617",
+                "e40d6a00-42c9-aa42-8b71-2169f4a2a0ec",
+                "49b19625-5293-bcaa-a42e-1832343fbf00",
+                "9a876cca-71fb-6c15-0490-9f23ae866df8",
+                "c543da07-f2ba-6352-446f-448e936b63ec",
+                "821f1b2f-b313-d8fe-d4e2-6d458fa1b070",
+                "dfa90e54-a973-367b-1f81-27f7d27587ad",
+                "8a8b9662-236b-6761-c376-4046a86e1dd9",
+                "ff883e87-a28d-8a7a-ca0a-8829edc7e152",
+                "b485b840-5ad9-dd23-14ea-98154a49d152",
+                "1fdeb7c7-8f77-939f-6a6e-6512ed84ac97",
+                "91300b19-5984-e558-9472-7637b28b4ab4",
+                "72f6ccec-a7ce-24de-925d-09a247d2d12c",
+                "7cde7fe1-54f4-6c1e-994e-52fa60538e17",
+                "52bbb00d-7eeb-e6fa-3ab9-d13d019d8c59",
+                "77f9fe8e-1d52-3582-eaf5-138f78b0f910",
+                "e39df86a-cebd-7fe5-0afd-024ce2d930ab",
+                "1912a70b-f9da-b2c8-f5eb-b98c7f178d8b",
+                "34546288-3c47-9b13-de38-bf3889e6e787",
+                "c3af930f-1337-e122-dae0-4d970b02b05e",
+                "1615991d-d46a-caa3-77df-c365a2f944e6",
+                "d70b38b3-9bfb-a497-6b6d-08d698a3be24",
+                "5afdf4d7-9093-b3b4-a456-efd5286e1cbd",
+                "096f7f15-7290-8e0c-b6f6-71d67ef3c69c",
+                "e719848e-3e1b-b2f1-5372-59ee61753283",
+                "6e0dc1cc-7d87-62cc-38b8-a9acc2b37e9d",
+                "84ca9055-0101-6a3c-fac4-67b5b0e11c68",
+                "16f5b48e-a8c3-1a11-cbe4-49761d4f9f2a",
+                "dd397ede-f620-e857-2f68-4cbc4b7a2f83",
+                "c61cf0b7-f939-9953-4ad2-74d512bda56b",
+                "6f92c9aa-9cc4-ae34-8297-9119d93ccec6",
+                "d0f1baea-9a9d-8828-268d-1ddee6a73445",
+                "cd199503-e312-d6ef-8014-e3d05b975516",
+                "1ca6305a-b395-3a6c-4588-37d488a18e1f",
+                "1ab10bed-ee78-052a-1059-e141a7c03466",
+                "38e96f21-5c77-46d6-4690-ff760742cefc"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.OAuth_check_revalidates_live_authority_and_generations_after_IO",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-account-reconciliation-infra-20261024.trx",
+              "sha256": "52ab8b05ac2d076b5d02150c4c547c39bdaa35de2fe9f03129fe56e1cb306d91",
+              "caseIds": [
+                "a9c4c7ef-b0da-2cad-337b-a211187b0aae",
+                "ec72a6b3-c346-c69f-35f9-2184c70d13f7",
+                "5a17f05a-efc6-3919-9b22-2ae9c90200d3",
+                "6fbcb2cf-4881-fc4e-1031-21b4eb9c3314",
+                "5866e48a-58bc-f246-a8b6-0e18cf9705dd",
+                "a86371a5-c27f-d6c5-708c-a8aff573baf4",
+                "44bd417e-7ab5-684f-a370-efcf24ff602e",
+                "a7abfb9a-b0f3-c4c0-cd27-9620cc72ab19",
+                "972ebe57-5ce8-9a17-08ec-0222fdcfc48e",
+                "4cfbc116-0eee-a830-0897-a275d602b788",
+                "694832ea-6f25-6395-68f6-aafcbf28616d",
+                "166ce937-8847-5338-b891-61803ac1406d",
+                "4540be38-0621-b79c-9552-d781bff3e1ad",
+                "46df18e7-43a5-0883-81a7-b9b2137d62ab"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Tenant_OAuth_HTTP_rejects_missing_proof_wrong_purpose_stale_attempts_and_revoked_sessions",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-reconciliation-api-20261024.trx",
+              "sha256": "b935efbe75ca71380031b83c5e0dead4dea7d98c2f283d9e4faf7737d34e862e",
+              "caseIds": [
+                "052be5f9-6446-3949-ad68-fd7239c00498"
+              ]
+            },
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-credential-human-api-regressions-20261024.trx",
+              "sha256": "45501c808b1e5440965e8418fbea8d0e703dd614ae97ebcd635e309743639fd8",
+              "caseIds": [
+                "052be5f9-6446-3949-ad68-fd7239c00498"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Protected value persistence",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Infrastructure/Credentials/LocalCredentialProtector.cs",
+          "sha256": "c95b1868798fa029ee07c95207906f29f9796db762c2e838d8aaebfacb4ea49a"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantCredentialService.cs",
+          "sha256": "b38994125ec14d087c98a49e7f4d3f68bd78ec06d0f4770c594243dee9d27290"
+        }
+      ],
+      "disposition": "Protected keys/bytes are physical mechanisms; actual current service owner chooses use, no secret-bearing preview/log/model output.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.Owned_credential_lifecycle_protects_values_and_never_reopens_global_authority",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-credential-human-infra-regressions-20261024.trx",
+              "sha256": "ea6efde0aaa89c804c6526f98dcc8b3f61489ed249ff92d97fb7a181899f4e73",
+              "caseIds": [
+                "bf601642-305e-98ad-dcea-fdce0cedc5a3",
+                "b6461962-6b9f-a8ef-2936-3813be0c417c"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "Private source/context reads",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Application/Security/TenantRunSourceAuthority.cs",
+          "sha256": "febfb4dc55a83522c9ad01ec602a003a6759b50048f0f866058efc8e0d7f98c5"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantWorkspaceReadService.cs",
+          "sha256": "25965d83586c890b9c07a969aab417316fb926a687bd8ef480dcda3689a52b90"
+        },
+        {
+          "path": "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+          "sha256": "c1a98847b9caee9dfb9b0d02d3218c5d057edd114d85fd712ad53856b6b30ecb"
+        }
+      ],
+      "disposition": "Current actual source/read/continuity before protected context/output; Composer evidence never grants Skill activation.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Composer_consumed_source_is_rechecked_before_generated_output",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-files-reconciliation-api-20261024.trx",
+              "sha256": "466891591b1b33f1d1c3c0008ac236bc866cf176a5e6885c00504fd426270621",
+              "caseIds": [
+                "d9c9ab1e-5a75-9b7f-37d9-b951a9c0365f",
+                "199fadbf-488d-da3d-ab69-e9724facdf2f",
+                "eb3483a1-82da-8238-c78f-9a7ed4aad394",
+                "5a9c2f33-527c-d7bf-8cd3-c679872ff0b0",
+                "c6473fd0-c186-6793-c806-4e92ba7533cb",
+                "85b2f0ec-7762-4270-8c1e-dbb04046b8b0"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Run_Profile_real_voice_delivers_current_sources_and_refuses_changed_sources_before_text_or_PCM",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-profile-memory-reconciliation-api-20261024.trx",
+              "sha256": "4c44673e8e824eaaecb091a060c2c3c9f30b0d6a27c53cb1c9ef7fa3166f6579",
+              "caseIds": [
+                "c4bc487a-1adc-4a52-03ae-7874c14027e7",
+                "afc253a7-a4eb-d0e6-9f63-244293fe485d",
+                "5b61b299-4ccf-72cf-58f6-571ba3e2f7f0",
+                "c71c8ce9-8685-c803-88a3-6553e1b5b292"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "boundary": "OpenSandboxHostedService",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/OpenSandboxHostedService.cs",
+          "sha256": "6e99bf4ceec83f92b65b168c8b45976d46f757a48bcfa716261fcb9414385f52"
+        }
+      ],
+      "disposition": "Readiness and exact owned generation reconciliation; no task admission or replay.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.OpenSandboxCleanupTests.Reset_and_reconciliation_retain_canonical_partial_writes_and_original_receipts",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "2b0d3080-d420-8556-d921-10f5acdb1157",
+                "c2b0bc78-88d6-9eee-066c-770eae1b2271",
+                "9d1996d1-3991-59dd-f30b-8a676118b2f6"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "TenantRequestIsolationHostedService",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/TenantRequestIsolationHostedService.cs",
+          "sha256": "f6b74bc8b975ffdfe65f091e897fee8b8d3ea485de5abba601ac68503848d9e7"
+        },
+        {
+          "path": "src/AgentCore.Api/Realtime/TenantSessionRuntimeHost.RequestIsolation.cs",
+          "sha256": "8e0dcb1ac5ea48c3d04329c2346965b6c1b84f38f438c414ca95178c5c80f170"
+        }
+      ],
+      "disposition": "Bounded exact owner pages and current host quiescent settlement; no clone of actor/registry and no unrelated claim retirement.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_request_isolation_noop_scan_cannot_strand_an_unrelated_claim_loaded_before_registration",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-final-worker-isolation-20261024.trx",
+              "sha256": "725b81eb3cc35a8915eafc14d0d970a062f22c209d7ec0280166f41a77dc9022",
+              "caseIds": [
+                "3dd20566-f6a7-f7cf-79f8-58d11d5223da",
+                "b0563c3d-b9a9-12f9-2060-a2a7b1a82940"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_request_isolation_rejects_another_root_preserves_exact_replay_and_completes_after_actual_Run",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-final-worker-isolation-20261024.trx",
+              "sha256": "725b81eb3cc35a8915eafc14d0d970a062f22c209d7ec0280166f41a77dc9022",
+              "caseIds": [
+                "26fd0150-636b-cb5d-b4c8-394ac948a602",
+                "fd3439df-9db6-89df-3e47-0c697fd111b5",
+                "7f3c7c2b-aa03-0c67-ecb4-670da5b4b74c",
+                "deace72a-a804-9c0c-8a69-13f6dfcdbe03",
+                "7f2c7887-5684-e11f-572f-417bb13dee88",
+                "85cf43d7-9595-b0a4-88a2-977d9fc2bfc9",
+                "3efb5ad5-5918-7326-cea3-f25cf98dcf6d"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "SessionShutdownHostedService",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/SessionShutdownHostedService.cs",
+          "sha256": "856a3730ac0d988624632bdb61b91cfede7e950e2edf9d9b55c37da3861d7078"
+        }
+      ],
+      "disposition": "Idempotent stop of the same canonical host; retired noncooperative generation cannot republish.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_runtime_shutdown_retires_a_noncooperative_generation_and_rejects_late_publication",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-final-worker-shutdown-20261024.trx",
+              "sha256": "829bec78b3144526fc4d692b1670af34d28a90a5d6cb2fae033ace690b787926",
+              "caseIds": [
+                "5e2422e6-662b-8615-9b24-3c9a56950816",
+                "e8968f58-0c8a-dfae-9dec-bfe4084d9e44"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "WorkspaceCleanupHostedService",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/WorkspaceCleanupHostedService.cs",
+          "sha256": "11f793493b1eccad0be32b5ced46d9824e2e7cced1a7d1c1353344235291b210"
+        }
+      ],
+      "disposition": "Existing exact decommission/Browser/working/Artifact/Attachment cleanup owners; saved proofs bridge filesystem gaps without private authority.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantAgentDecommissionTests.Committed_decommission_recovers_uncertain_cleanup_after_logout_and_store_reopen",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-store-authority-owners-infra-20261024.trx",
+              "sha256": "8b29bd0737091d41660ecbe30861d9b59fa62d2503aa6521cd0cc32e1dd50ee6",
+              "caseIds": [
+                "fd4c85a4-cdab-6b88-af75-87611880ae0a",
+                "0587912b-2efe-6d8b-cb32-25951d4fbfed"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_deleted_Artifact_cleanup_recovers_on_actual_SQLite_application_host_restart",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-files-reconciliation-api-20261024.trx",
+              "sha256": "466891591b1b33f1d1c3c0008ac236bc866cf176a5e6885c00504fd426270621",
+              "caseIds": [
+                "f077857c-68b6-9e54-95f6-6f499d74630c"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Api.Tests.TenantAgentAccessTests.Tenant_working_cleanup_SQLite_application_restart_retries_committed_deletion_without_reclaiming_Run",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-cleanup-closure-api-20261024.trx",
+              "sha256": "c1f652949ac9c6a72109be19d195d8ea1932c0e2a60912156295397a72977a9f",
+              "caseIds": [
+                "b04bdf05-264b-6b8d-444e-27856303387b"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "TriggerSchedulerHostedService",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/TriggerSchedulerHostedService.cs",
+          "sha256": "58d2d94089c66b4d62a9d93017aef26240bbb28db0e54cfb7c66f5b99be29897"
+        }
+      ],
+      "disposition": "Current owned Automation/Event admission; timer enumeration provides no author or executor grant.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Independent_Automation_accounts_preserve_exact_read_draft_send_and_Drive_consent_without_a_fake_requester",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-fixture-fixed-20261024.trx",
+              "sha256": "d96c3e15a64b96e37598d7b55a6a6dad1452148467cb30417233d5d8f5791c6d",
+              "caseIds": [
+                "522421ea-eb85-47ce-1295-9b1391d303d2",
+                "f83e9fe7-51ec-f354-6cde-a94df8ff50cc",
+                "fbac6a0c-ca1b-c78a-6818-e381dafa738d",
+                "65d288f8-4394-83c3-61a2-70b618ab1a9c"
+              ]
+            },
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-reconciliation-api-20261024.trx",
+              "sha256": "b935efbe75ca71380031b83c5e0dead4dea7d98c2f283d9e4faf7737d34e862e",
+              "caseIds": [
+                "52053cf9-a61a-b765-f29e-65a40245190f",
+                "aa63d575-851e-4f7d-54c0-081942a989dc",
+                "71f13a85-9813-19c4-ec19-4164cb2e66b1",
+                "5eaa14ac-e01b-35fc-6cab-42befd1774a1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "EmailWatchHostedService",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/EmailWatchHostedService.cs",
+          "sha256": "15e95bc8adbff3e81e9982fa2492b92b12a8dca8ca719550ff68f34cea64cecb"
+        },
+        {
+          "path": "src/AgentCore.Infrastructure/Credentials/TenantConnectedAccountReader.Watch.cs",
+          "sha256": "4d7827f75a134a7c23c352163631bc62b18b52e6e8f8b62e15adcf0e02ca9a64"
+        }
+      ],
+      "disposition": "Current owned monitoring/watch and bound account callback before/after transport and retries; no global author/Profile fallback.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Tenant_email_watch_baselines_then_commits_owned_metadata_and_fences_unadmitted_watch_off",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-automation-reconciliation-core-20261024.trx",
+              "sha256": "3de8f99130ff5ecc1bcb05961dee3cfb63d859203411a3778b3046f763e0c90e",
+              "caseIds": [
+                "c8c52acb-714a-9cb0-7c47-40cb809f123c",
+                "8f21ed4b-c762-bc67-68a1-3f8c64a7869f",
+                "3a2aed54-8f5e-6e86-7622-589c0fba096f",
+                "725d457b-d24f-336b-50b5-cbd2f4cd37b1",
+                "b0a18f35-cf09-c1f9-42c1-b0536ded224d",
+                "5891f36a-e655-02cc-dbe8-6f4cad02b745",
+                "a83b9269-cd56-b789-b0f1-3152573b1dde",
+                "7b1133d1-a2c6-b17b-41d1-8adf0c6ec060",
+                "97866d96-ad32-fcd0-d5d1-72db7cacc21b",
+                "ec90d3d3-53b8-b26b-8469-e5ff6e256bc0",
+                "044666cb-7707-221e-ad60-9a3a2a04af87",
+                "d8de18a5-c013-7876-e8fc-81ae05d2ca3e",
+                "72fd0cb1-34ac-3809-6de1-b5d640c5ffea",
+                "bf51dba5-2563-ac00-fd5c-3846ff26017f",
+                "9bc909bc-3630-5d22-cd85-38979cfb1a32",
+                "3b1bc561-94ba-c4da-933a-459e36283859",
+                "c5801058-199c-015f-99a2-cf5f6edc4dce",
+                "ec9c98ec-03eb-9c08-3730-ff8358e625bc",
+                "2538cde9-4965-e117-8a22-ca7651f5f811",
+                "5ee4671c-60f3-7cd0-d775-07a5163cfcdb",
+                "f1722aff-b87d-ba5d-be85-f4e37acfea5c",
+                "a0537a13-6ade-9ceb-ce8c-55db67e15393",
+                "6ec829bb-a715-5f38-ffeb-ed4d0d87f5ae",
+                "06da0bb6-6358-d568-4c5d-5bf2f1608e40",
+                "e194a15f-4507-81f1-7a92-ed0bc14c5e4b",
+                "38872e44-149e-ab30-d068-f9f3b0c8b01a",
+                "12fd9603-1357-cc6d-33d2-defadb4bcf8f",
+                "7e0354a7-ca5c-3c8d-11d5-2c1b60be5efa",
+                "22278eb6-faa1-e100-3d44-36fda53b33d1",
+                "507797bc-9373-d50d-ce3b-625b596cf49d",
+                "158a46f2-c4e8-8f8e-f155-59631cbb72e3",
+                "72aa48f0-1cc0-a2f5-ea90-818c62005ce3",
+                "97018302-a97c-11ce-b890-fe6507e94ef2",
+                "6eeb41d0-5a40-1706-f00a-310af023fe4b",
+                "eaf4e637-3f8a-2e62-5096-24ef67997253",
+                "ec79553d-2be1-190d-628b-fc8e74d3a5cc",
+                "89096e87-094c-361b-dd6a-c9aaacf7df3d",
+                "55564cc6-4800-34e7-07fd-1d9e8574ab1d",
+                "998deb5e-adc5-de39-79ea-54e3f995f88e",
+                "9e08f4b1-4ee0-2d53-9890-f6cabd8404c8"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "AgentRunHostedService",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Api/AgentRunHostedService.cs",
+          "sha256": "4bdf0a98038ce60e3466e72dc37663a4febb1b4358c720e9b8a51722830f2db6"
+        },
+        {
+          "path": "src/AgentCore.Application/Execution/TenantRunExecution.cs",
+          "sha256": "ec55f81a81dd92d482276365641e5c32d9138723ba56a95be40f57cbb04883c0"
+        }
+      ],
+      "disposition": "Pending consent plus exact factual effect recovery and canonical claimed execution; no authority from enumeration.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantCredentialAccessTests.Abandoned_account_dispatch_recovers_across_actual_SQLite_hosts_without_native_replay",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-account-reconciliation-api-20261024.trx",
+              "sha256": "b935efbe75ca71380031b83c5e0dead4dea7d98c2f283d9e4faf7737d34e862e",
+              "caseIds": [
+                "e69e7412-ad8b-8b5f-c194-001ea2cfde71",
+                "56de9cda-d9ad-1791-7dcb-1a06011ece61",
+                "bd191c81-648e-23ac-62af-6504d002afb1",
+                "be60ca7d-da7a-4d2d-46ff-611442b42519",
+                "bd0bf24e-9860-22cf-9651-e142fce04ab0",
+                "b8ffa64d-db8b-bbed-cc9a-96b745014d4c",
+                "9d6131be-52f0-ea1b-a65a-3b5294455ade",
+                "055e1e43-2613-c8fb-d67b-c9a5ca7995d7",
+                "68b7d302-f682-9dba-8468-f09fd8eae46a",
+                "eea891d8-4a81-f87b-7cd9-041c171785e9",
+                "c26789fe-d349-8fb3-9224-a64ecf7bca22",
+                "e6ae7be4-9a0b-8e60-51bd-d6dd9cd37f0b",
+                "23be91fa-0695-9bfe-7f69-8b2fbf886ec5",
+                "c89e87e1-d85f-f474-141b-6b520df28ec4",
+                "c7df5d12-afd8-198f-5e7d-abd0a55fb258",
+                "fb0e17fc-3584-fa38-081f-f43dc5f32ce8"
+              ]
+            }
+          ]
+        },
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantOperationAuthorizationTests.Tenant_public_download_abandoned_dispatch_recovers_once_without_fetching_or_writing",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-reconciliation-infra-20261024.trx",
+              "sha256": "ddcdd00a38ebf8c06a267c8b1fabd5e8b57fb78b78ca0432e114803f0a56537b",
+              "caseIds": [
+                "7e110050-6564-6508-cb8b-1e20bb0cb2e1",
+                "880923b0-e561-dbe4-1716-ea824345847e"
+              ]
+            },
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-recovery-baseline-20261024.trx",
+              "sha256": "caa0d51fba114b292a62be4cea8ad504f7c4040950020b3817547818d0ca4968",
+              "caseIds": [
+                "880923b0-e561-dbe4-1716-ea824345847e"
+              ]
+            },
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-files-recovery-fixed-20261024.trx",
+              "sha256": "59a0b9af510b890a2c92ff155517e32654c31d1904cd98b0ba09d8d345f29aa4",
+              "caseIds": [
+                "880923b0-e561-dbe4-1716-ea824345847e",
+                "7e110050-6564-6508-cb8b-1e20bb0cb2e1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "NativePlaywrightBrowser",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.cs",
+          "sha256": "7ddaf2132d072492588d1da95ed97baa8227300144eee46db84268d9b1e76f0a"
+        }
+      ],
+      "disposition": "Startup privacy/readiness and stop/cancel/close/release; only typed current target owners authorize model commands.",
+      "evidence": [
+        {
+          "method": "AgentCore.Api.Tests.TenantSessionAccessTests.Tenant_Browser_profile_HTTP_reset_owns_persistent_state_and_never_repeats_an_uncertain_operation",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Api.Tests/TestResults/tenant-approval-boundary-native-api-20261024.trx",
+              "sha256": "e9dc2b2d5dcc280051ee7aa9db2c9d9804f9b01890ea9416f5c63a8385a5b20e",
+              "caseIds": [
+                "9584c96f-d21d-c572-7f3f-99af15d8e4dc",
+                "8fad49a8-eb92-9681-0515-50d7b91536c3",
+                "daf91b5e-5346-cef2-3968-40977767218e",
+                "ae7630ab-714e-7368-4206-2342f863ad99",
+                "e18f2d07-1180-5561-e1c5-3eaea0bbe10a",
+                "a0e695d2-e18a-5d5c-f16b-f73f07bbb41c",
+                "ebd02f44-11a4-81a8-4fe1-9e048b5a3c9f",
+                "5e198923-6b33-5212-1914-04ca18f3aa4c",
+                "40944905-4a10-103c-8b39-6dbaf0de2a46",
+                "31f769a8-2ece-fd21-b848-5a4aca73181c",
+                "9478af28-26c0-6f6b-730b-d39a3d348376",
+                "28b393f7-ce2e-8e2c-88b0-bcb32840f022"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "TenantSandboxVerificationCleanupWorker",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Infrastructure/Security/TenantSandboxVerificationCleanupWorker.cs",
+          "sha256": "b44fd3aed2b828853123e296bc150cf45b0cfe06d452a1958072be362f19210b"
+        }
+      ],
+      "disposition": "Exact technical owner/claim/expiry and positive provider retirement before purge; no unknown initialization replay.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.Tenant_sandbox_verification_real_SDK_cleanup_rechecks_claim_and_purges_only_its_disposable_owner",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-sandbox-reconciliation-infra-20261024.trx",
+              "sha256": "6eabaecc246486f5ec6c1a8950b8e02540c3611ce7ab239a8ba72ea087beea56",
+              "caseIds": [
+                "b0aa9d18-97cb-8451-ee57-3ae5ed7aae39",
+                "e2146465-d4d0-8532-d2fd-8ed568aa11c6"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "boundary": "CredentialOAuthExpiryWorker",
+      "currentSources": [
+        {
+          "path": "src/AgentCore.Infrastructure/Security/CredentialOAuthExpiryWorker.cs",
+          "sha256": "f1862b6f9e70fef7bc6cd4e409bdceeb312b949285c4c2c9a90d2d9c7463627d"
+        }
+      ],
+      "disposition": "Bounded expired Pending/Claimed proof retirement only; no copied human or provider dispatch.",
+      "evidence": [
+        {
+          "method": "AgentCore.Infrastructure.Tests.TenantCredentialIntegrationTests.OAuth_expiry_worker_clears_expired_private_proof_without_grant_or_authority_effects",
+          "passingExecutions": [
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-account-reconciliation-infra-20261024.trx",
+              "sha256": "52ab8b05ac2d076b5d02150c4c547c39bdaa35de2fe9f03129fe56e1cb306d91",
+              "caseIds": [
+                "5efd06f3-af4e-b060-069a-5611551833ff",
+                "89b68c3e-3669-5441-7fc6-16147da462d3"
+              ]
+            },
+            {
+              "trx": "tests/AgentCore.Infrastructure.Tests/TestResults/tenant-credential-human-infra-regressions-20261024.trx",
+              "sha256": "ea6efde0aaa89c804c6526f98dcc8b3f61489ed249ff92d97fb7a181899f4e73",
+              "caseIds": [
+                "5efd06f3-af4e-b060-069a-5611551833ff",
+                "89b68c3e-3669-5441-7fc6-16147da462d3"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -52,7 +52,8 @@ public sealed partial class TenantComposerReferenceService(IIamStore security, I
     private async ValueTask HumanFence(Guid tenant, Guid instance, TenantSessionInitiator human, TenantSecurityState state, TenantAgent agent, CancellationToken ct)
     {
         var after = await Human(tenant, instance, human, ct).ConfigureAwait(false);
-        if (after.State.Tenant.Revision != state.Tenant.Revision || after.Agent.Instance.Revision != agent.Instance.Revision)
+        var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (authority.Tenant.Revision != state.Tenant.Revision || after.State.Tenant.Revision != state.Tenant.Revision || after.Agent.Instance.Revision != agent.Instance.Revision)
             throw new SecurityConflictException("composer_source_changed");
     }
     private async ValueTask<IReadOnlyList<EffectiveSkill>> Skills(Guid tenant, Guid instance, CancellationToken ct)

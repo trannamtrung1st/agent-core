@@ -141,7 +141,7 @@ public sealed partial class TenantRunAdmissionTests
         var role = await f.Access.SaveRoleAsync(setup.Owner.PrincipalId, setup.Tenant, null, "Read exact conversation", ["sessions.read", "agents.chat"], await Revision());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, role.RoleId,
             TenantSessionRules.Scope(setup.Tenant, setup.Session), await Revision());
-        Assert.NotNull(await f.Sessions.ReadAsync(member.PrincipalId, setup.Tenant, setup.Session));
+        Assert.NotNull(await f.Sessions.ReadAsync(setup.Tenant, setup.Session, member));
         await Assert.ThrowsAsync<AccessDeniedException>(() => Conversation(f).ReadAsync(setup.Tenant, setup.Session, member).AsTask());
         await f.Access.AssignRoleAsync(setup.Owner.PrincipalId, setup.Tenant, member.PrincipalId, role.RoleId,
             AccessScope.ForResource(setup.Tenant, "agent", setup.Agent.Instance.InstanceId.ToString("D")), await Revision());

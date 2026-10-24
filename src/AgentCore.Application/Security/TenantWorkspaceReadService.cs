@@ -28,7 +28,8 @@ public sealed class TenantWorkspaceReadService(IIamStore security, ITenantAgentS
         var result = await read(before, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         var after = await Require(tenant, id, working, human, ct).ConfigureAwait(false);
-        if (after.State.Tenant.Revision != before.State.Tenant.Revision || after.Workspace != before.Workspace
+        var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (authority.Tenant.Revision != before.State.Tenant.Revision || after.State.Tenant.Revision != before.State.Tenant.Revision || after.Workspace != before.Workspace
             || after.Agent.Instance.Revision != before.Agent.Instance.Revision || after.Session?.Owner != before.Session?.Owner
             || after.Session?.Snapshot.Revision != before.Session?.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
         return result;

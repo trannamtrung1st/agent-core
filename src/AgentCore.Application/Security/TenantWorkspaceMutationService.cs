@@ -30,7 +30,8 @@ public sealed class TenantWorkspaceMutationService(IIamStore security, ITenantAg
         var write = writable && await TenantWorkspaceMutationRules.Allowed(view.State, view.Workspace, human.PrincipalId, "workspaces.write", iam, ct).ConfigureAwait(false);
         var delete = writable && await TenantWorkspaceMutationRules.Allowed(view.State, view.Workspace, human.PrincipalId, "workspaces.delete", iam, ct).ConfigureAwait(false);
         var current = await Load(tenant, id, working, human, ct).ConfigureAwait(false);
-        if (current.State.Tenant.Revision != view.State.Tenant.Revision || current.Agent.Instance.Revision != view.Agent.Instance.Revision
+        var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (authority.Tenant.Revision != view.State.Tenant.Revision || current.State.Tenant.Revision != view.State.Tenant.Revision || current.Agent.Instance.Revision != view.Agent.Instance.Revision
             || current.Session?.Snapshot.Revision != view.Session?.Snapshot.Revision) throw new SecurityConflictException("stale_revision");
         return new(view.Workspace, view.State.Tenant.Revision, working ? null : view.Agent.Instance.Revision, read, write, delete, !writable,
             working ? null : view.Agent.Instance.Persona.Name, view.Session?.Snapshot.Title);

@@ -255,7 +255,7 @@ public sealed partial class TenantApprovalService
                 var ownResourceChange = TenantManagementResourceRules.CompletedChange(r, view.OperationResult) && observed.Source.Reader.Agent.Instance.Revision == view.OperationResult!.InstanceRevision;
                 changes = [..changes, new(ownSkillChange ? "Recorded Skill change" : ownResourceChange ? "Recorded Resource change" : "Current configuration", null,
                     ownSkillChange || ownResourceChange ? "These historical values describe the exact recorded child change. Inspect current state before another change."
-                    : (op.ManagementMutation?.Skill is not null || op.ManagementMutation?.Resource is not null) && r.Status != TenantApprovalStatus.Pending ? "The saved child source changed. These are historical proposal values; inspect current state before another change."
+                    : r.Status != TenantApprovalStatus.Pending ? "These are historical proposal values. The current source or management access changed; inspect current state before another change."
                     : "The saved source changed or management was revoked. No replacement values are adopted. Cancel and inspect a fresh exact change.", false)];
             }
         }

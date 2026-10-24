@@ -61,6 +61,12 @@ public sealed partial class TenantDefinitionIntegrationTests
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO TenantSandboxVerificationAttempts (AttemptId,TenantId,ProfileId,ProfileRevision,Revision,SecurityRevision,Active,LeaseExpiresAt,StartedAt,Json) VALUES ({attempt.AttemptId},{owner.TenantId},{profile.Id},{1L},{2L},{revision},{false},{now.ToUnixTimeMilliseconds()},{attempt.StartedAt.ToUnixTimeMilliseconds()},{receipt})");
             var value = JsonSerializer.Serialize(observation, json);
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO SandboxProfileVerifications (TenantId,AttemptId,ProfileId,ProfileRevision,Json) VALUES ({owner.TenantId},{attempt.AttemptId},{profile.Id},{1L},{value})");
+            // Isolate this migration's invariant: later permission migrations legitimately advance security.
+            var securityRevision = await db.Set<AgentCore.Domain.Security.Tenant>().AsNoTracking()
+                .Where(t => t.TenantId == owner.TenantId).Select(t => t.Revision).SingleAsync();
+            await db.GetService<IMigrator>().MigrateAsync("20261017205857_TenantSandboxInstanceVerification");
+            Assert.Equal(securityRevision, await db.Set<AgentCore.Domain.Security.Tenant>().AsNoTracking()
+                .Where(t => t.TenantId == owner.TenantId).Select(t => t.Revision).SingleAsync());
             await db.GetService<IMigrator>().MigrateAsync();
         }
         var reopened = new SqliteIamStore(f.Contexts!, f.Content);
@@ -68,6 +74,5 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(SandboxVerificationStatus.Succeeded, retained.Status); Assert.True(retained.Result!.Passed); Assert.Null(retained.InstanceId);
         Assert.True((await reopened.ReadSandboxVerificationAsync(owner.TenantId, profile.Id, 1)).Observation!.Passed);
         Assert.True((await p.Images.InspectAsync(profile)).Eligible);
-        Assert.Equal(revision, (await reopened.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
     }
 }

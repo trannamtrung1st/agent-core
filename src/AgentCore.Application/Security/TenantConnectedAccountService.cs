@@ -93,6 +93,8 @@ public sealed class TenantConnectedAccountService(IIamStore security, ITenantCre
         if (!(await iam.CheckOwnedTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.read"),
             AccessScope.ForResource(tenant, "agent", instance.ToString("D")), ct).ConfigureAwait(false)).Allowed) throw new AccessDeniedException("permission_denied");
         var snapshot = await bindings.ReadTenantCredentialBindingsAsync(tenant, instance, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("account_source_changed");
         return (state, snapshot);
     }
     private async ValueTask<Source> SourceAsync(Guid tenant, Guid instance, string accountRef, HumanSessionReference human, CancellationToken ct)
@@ -104,6 +106,8 @@ public sealed class TenantConnectedAccountService(IIamStore security, ITenantCre
             throw new AccessDeniedException("permission_denied");
         TenantSessionRules.RequireExecutor(state, snapshot.Agent);
         if (snapshot.Agent.Instance.Lifecycle != Domain.Definitions.AgentInstanceLifecycle.Active) throw new AccessDeniedException("executor_unavailable");
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("account_source_changed");
         return new(state, snapshot, bound);
     }
 }

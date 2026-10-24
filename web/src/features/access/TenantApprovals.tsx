@@ -189,7 +189,7 @@ export function TenantApprovals({ context, requestId }: { context: TenantContext
     <Typography.Text type="secondary">Requests you can read and whose underlying action you can authorize. A decision and its execution result are recorded separately.</Typography.Text>
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : <Table<TenantApproval> rowKey="requestId" className="admin-collection-table" dataSource={state.data?.items}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matching requests available to you. Try another status or type." /> }}
-      pagination={{ ...adminCollectionPagination, current: page, pageSize, total: state.data?.total, showTotal: total => `${total} visible requests`, onChange: (next, size) => { setPage(size === pageSize ? next : 1); setPageSize(size); } }}
+      pagination={{ ...adminCollectionPagination, current: page, pageSize, total: state.data?.total, showTotal: total => `${total} visible ${total === 1 ? 'request' : 'requests'}`, onChange: (next, size) => { setPage(size === pageSize ? next : 1); setPageSize(size); } }}
       columns={[
         { title: 'Action', render: (_, item) => <Flex vertical align="start" gap="var(--ac-space-tight)">
           <Typography.Link href={tenantApprovalPath(tenant, item.requestId)} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateToAppPath(tenantApprovalPath(tenant, item.requestId)); } }}>{item.summary}</Typography.Link>

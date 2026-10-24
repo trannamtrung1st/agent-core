@@ -34,7 +34,7 @@ export const adminCollectionPagination = {
   showSizeChanger: true,
   pageSizeOptions: [10, 20, 50],
   hideOnSinglePage: false,
-  showTotal: (total: number) => `${total} results`,
+  showTotal: (total: number) => `${total} ${total === 1 ? "result" : "results"}`,
   responsive: true
 };
 

@@ -107,7 +107,7 @@ test('real organization, role and member pages retain accurate search, counts, p
   await page.goto(`/t/${target.id}/admin/roles`); const roles = page.getByRole('textbox', { name: 'Search roles', exact: true });
   await roles.fill(`Paged role ${nonce}`); await expect(page.getByText('120 results', { exact: true })).toBeVisible();
   await page.getByTitle('2', { exact: true }).click(); await roles.fill(`Paged role ${nonce} 119`);
-  await expect(page.getByText('1 results', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 result', { exact: true })).toBeVisible();
   const edit = page.getByRole('button', { name: `Edit Paged role ${nonce} 119 — Nhóm kiểm tra quyền truy cập`, exact: true });
   await edit.click(); await expect(page.getByRole('dialog', { name: 'Edit role', exact: true })).toBeVisible();
   await page.keyboard.press('Escape'); await expect(edit).toBeFocused();

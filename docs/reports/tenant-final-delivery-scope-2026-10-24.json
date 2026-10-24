@@ -1,0 +1,496 @@
+{
+  "baseCommit": "52177338ab4ffe403ea20496bb671a95b3e4d65e",
+  "branch": "main",
+  "state": "Explicit user approval received for the final 80-file scope. Clerical delivery-status finalization completed; product and test sources unchanged after approval.",
+  "scopeSha256": "e9bc8301de11198c77e9bf8a7b10e5b9107bdaf1c27feb8f77947d8db95e49aa",
+  "scopeHashAlgorithm": "sorted path + NUL + POSIX permission mode + NUL + file SHA-256 or literal self-manifest + LF",
+  "pathCount": 80,
+  "verificationImages": 27,
+  "productionSourceSha256": "bd9b0dfbfa3ba5c43afd1c51e66849b384051850ea2a667177b91f3efb77e930",
+  "preservedEarlierStagedDiffSha256": "4d8576915e855c193a7accdb9dab31d7462b09c3752456585f42e5e7c70e361d",
+  "approvalFinalization": "Completed only delivery-status prose in README/plan/ledger/matrix/final delivery; regenerated this manifest. Commit directly to main; no push, PR or CI.",
+  "paths": [
+    {
+      "path": ".impeccable/design.json",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "395224ca6f0e537d45de59addbf70b66419d0a0ea660868cbaee1c57c48d4acb"
+    },
+    {
+      "path": ".impeccable/surfaces/web-src-features-access-accessapp-tsx.md",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "81590064f6cb0ea1040b00d02b98248861f29ba44e4a4c3236ccb34d77294d0d"
+    },
+    {
+      "path": ".impeccable/surfaces/web-src-features-access-tenantapprovals-tsx.md",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "5660598bd9a800749d4f3222e1d84c362b4ac568d52fb734e8160a49b1ad2323"
+    },
+    {
+      "path": "README.md",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "5931eb20d730e9bddec389a8313f26afe698b833f4d68169bbee194d34b27fb6"
+    },
+    {
+      "path": "docs/18-implementation-plan.md",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "f577a2776bf5b907c553dc60e0491a49c5e3fa1182b39d1b406d78bc2af70774"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/agent-access-1440.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "7cfba5eeb066e5e2e28b34c31b64071d23232298ff68a054ba80c8b12585002f"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/agent-access-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "d18749f45d901e78e7187a79f1cba1c480dc7bae2db1ea45cf7558635b601d12"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/approval-completed-result-fixed-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "9734f56c8202f473c56f0518cfc2d0a1949f97c17325084b9706b354905b1a98"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/approvals-single-1440.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "45f61190b5ead1ac103ed3a0d6a7114a7b2ffd9bd7fd53717efdb607bca5b09b"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/approvals-single-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "ebb558f95ebe4266c4d112ee4e876ff2006202027bbffe481dd661efaa93d098"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/chat-current-1440.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "3348d7737b6b52ad90984283ea8d94aa8c2a786986dffe5ff13855716b89bf69"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/chat-current-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "a0e3adff7bdb54698bf7b9d47ea9bed45aa8b57d4de37b460f0b1ea2fbea1ff0"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-expired-approval-1440.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "42471212048e3e87c8b050fae1bd6fb04ab7fb278048869a4c3668a3f0a4402b"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-expired-approval-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "346634bc19b6fd744d611aecc445f85327edd0e3a43ef4f0be3b2ddeb134bedf"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-invalid-invitation-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "4917c8332bf9abd0e775549484babc3f6fb520afc8aec7efe509401c775f2292"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-no-organization-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "7799509b9dbebaba120ed1366aa1e770fa46f7724d156e830571dfc1375ed372"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/cli-role-search-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "c1dc091f3381d73cbaa3b830b175bb5e79c62ba04ca0266cb07cfc1cc2484f59"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/create-organization-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "35d35872152f1d43bbaa1bd71299ac206f6d3c489169d1decfb9ee6aa9fa4b13"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/expired-login-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "854119b495976a8b7e659d28f37b8cc0c489ddb7c7e0fc1e8af71d34e890a7cb"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/foreign-organization-denied-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "77830fe3abc78fc691ed9536cc4a5c68f65893a43c0d3d9f07e2edf0c4baf24a"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/instances-empty-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "227729de1426f7f215a9b0084f8a2f4a91f921d5ae7f5818e29560ecfa7915e3"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/join-reader-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "111b61d87b637c68176700d090067f247e0a2147fa9df9c9507e7d16f6c1d4a2"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/last-owner-suspend-settled-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "5c4485b78b6ab405c8e690f2def410b4d20a31e7e81b4e11955d12a8cc233e21"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/organizations-1440.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "01e5a0d7704ef98b1024a0c8f2a88db6e6619241b134ed065b6f21c0e0edec23"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/organizations-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "6543176c6e821f956a180501076818276af81727d78c4462e7c7e16df5d075c9"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/owner-readonly-settled-top-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "d70b575d12a537b2c240e32e814aa99e1f1be7cf5776eb8b69a37395759a271d"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/reader-approvals-empty-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "b7da70d6eda0a393a05ddd2cda596f71b8ffba099baba46099637cd012b690dd"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/reader-member-readonly-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "0a8d529f0255f29afb65007d788efbcf960a3c59255a48a3fd8eb2e13405b703"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-not-found-fixture-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "63af976f1dbf341e8b54ca3de0b5da71223273a0e3dfd4349aebf92de2de2254"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-single-1440.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "91c105f2b52efc3fefee43412353218d4f3f9bc01b1e08bc24a21c991f0421e6"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-single-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "b79891e205004c700ee3b4615ee1732677bd31e151047534ba9e8f76d495c875"
+    },
+    {
+      "path": "docs/reports/assets/tenant-final-acceptance-2026-10-24/roles-source-error-320.png",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "68398e55a1010ca5b55d66bd326741741ea3f6a55ac1a7eaa0e621394becc4e2"
+    },
+    {
+      "path": "docs/reports/multitenant-iam-delivery-2026-10-16.md",
+      "status": "MM",
+      "mode": "0o644",
+      "sha256": "69025c8bfd9c58fc17a20c7a1cd2b962387b3cc4b3f24339b7166a3abea29d22"
+    },
+    {
+      "path": "docs/reports/tenant-account-boundary-reconciliation-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "fb6babd74f9804faf0bfa582e4c09716d23ee8a73f9c3e05db4d25ac334fd7ae"
+    },
+    {
+      "path": "docs/reports/tenant-automation-event-boundary-reconciliation-2026-10-24.md",
+      "status": "A ",
+      "mode": "0o644",
+      "sha256": "87bdb042eacf49d8177cec9f5f2fdd6f3aed5f5fac26e2af1c0f57ebd021acb9"
+    },
+    {
+      "path": "docs/reports/tenant-files-artifacts-boundary-reconciliation-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "75d6f6c9c4f473feeb675e497caf8572af0c3eec87876d4c434eee030560937c"
+    },
+    {
+      "path": "docs/reports/tenant-final-delivery-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "5b5d89dfb5e83e8587bc09f93f547f152843ba771a6e0c49c24afcc90a838b48"
+    },
+    {
+      "path": "docs/reports/tenant-final-delivery-scope-2026-10-24.json",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": null,
+      "selfManifest": true
+    },
+    {
+      "path": "docs/reports/tenant-final-io-worker-evidence-2026-10-24.json",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "ab713af4fcdab60ef5c8e22cbd0cf9334ed582a7e99f5a34e1945c5e533cff4e"
+    },
+    {
+      "path": "docs/reports/tenant-final-io-worker-reconciliation-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "97deca3e212d9c84b85cad9e3e5a5f498d3cde5fcca38a02845e4e39a74cd415"
+    },
+    {
+      "path": "docs/reports/tenant-final-ui-acceptance-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "9f5dfac99b5e8b11be0f7e5b79506cfd43b1af885362c7be6a4d0362f9970d27"
+    },
+    {
+      "path": "docs/reports/tenant-final-ui-evidence-2026-10-24.json",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "bd4667e9b4efbedc808b22a4105c01eb1d63e738b20e3382b6280251579d0968"
+    },
+    {
+      "path": "docs/reports/tenant-profile-memory-experience-boundary-reconciliation-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "4f21ebcd1df1c76715f94a247059bf4e83bfd7bf9c9fcf9ab71f70bf578a9cc5"
+    },
+    {
+      "path": "docs/reports/tenant-proposal-acceptance-matrix-2026-10-24.md",
+      "status": "MM",
+      "mode": "0o644",
+      "sha256": "94a5e6ec7421cde04a5df760d480ecb4ebc02cbfbf1c228ff74911a23e0f62c6"
+    },
+    {
+      "path": "docs/reports/tenant-sandbox-boundary-reconciliation-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "f5d8be18472f60a121f0d29ad92e49df75286c85317023720c60eaf21045c39b"
+    },
+    {
+      "path": "docs/reports/tenant-session-runtime-boundary-reconciliation-2026-10-24.md",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "5ac58f0b5c833e4327d54dbc3250910a061b51ed71aa2c620d5b65004b96fc8d"
+    },
+    {
+      "path": "docs/reports/tenant-store-method-source-index-2026-10-24.json",
+      "status": "MM",
+      "mode": "0o644",
+      "sha256": "7990617863856a159b6b51d72837e1d6e69291db568710300cf84abea8d38c97"
+    },
+    {
+      "path": "src/AgentCore.Api/Security/TenantCredentialOAuthEndpoints.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "f3e7589d03a70c27228aa4c5427607c4a24a77dc448e985f08a24af24db45ce5"
+    },
+    {
+      "path": "src/AgentCore.Api/Security/TenantSessionEndpoints.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "11d3fb96b0e1314d46f3e3bee40f3da89f2fc61f9eb4bf76a22be99a607dc65d"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantApprovalService.Review.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "0254ce473b9e908e9467199a1caf03d66d7d5665862dab453fa729cb31402921"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantArtifactService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "2a94ad3a99a9781ef26e37afc03792b20d0e5e85d6619656fdd1cf5cb11a3e24"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantAttachmentMaterializationService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "ae0bf09a2a34544e6d9d6a93272903c79a62ee9d8f1cdc6d8c38c94e80aa5479"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantAttachmentService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "817fd1c333c1c8a7562c1dccb11c8d51a13795876ea8feafc94cf3a15cbb0ccb"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantComposerReferenceService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "c1a98847b9caee9dfb9b0d02d3218c5d057edd114d85fd712ad53856b6b30ecb"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantConnectedAccountService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "56998150ec933f6ad5788d9cdb5b58fac61acac55602d750130ede0a38d0b70d"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantCredentialOAuthCheckService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "436ddeb88f3ce0620f7c416e1003d0837340d7502df3555c6f02cd34cd5b0b6c"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantCredentialOAuthService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "6d9e68fff522190982f0e4a19e1531c492dd8377dbcc8f0c6488f52aec995c48"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantSessionService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "801cc518cea3aed1a30481ae25d75780d7e6b1f52776c9a9ee66f18954c4f220"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantUserProfileService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "25a87f61fd9cccad821907f8e266e8e1746064d77c903c035598ab24f5f8cf84"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantWorkspaceMutationService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "06fbbb47a70cfbc10f8a6d81e6f0a25c37448945682788dabe5cb3419aa3940f"
+    },
+    {
+      "path": "src/AgentCore.Application/Security/TenantWorkspaceReadService.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "25965d83586c890b9c07a969aab417316fb926a687bd8ef480dcda3689a52b90"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Security/SqliteIamStore.WorkspaceEffects.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "d15ba8c036f6059998a5efb57918a84c9a31e0aa5177b17bf2962193306762e5"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/TenantCredentialAccessTests.AutonomousAccounts.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "3bb86522985dc75bdac9ee51d3186e14389cf563860ae1ee96056a2aef5ec768"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/TenantCredentialAccessTests.ReadResultAuthority.cs",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "ccd7a6d236d9ffe166fb377e78a0efff9060e5900dc50d2a4b61f3d9321308b6"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/TenantSessionAccessTests.FileReadAuthority.cs",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "ccd93beb5132ae56a341ceb50f1481438b5133210cee74e04e4ef370168ffaa7"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/TenantSessionAccessTests.HumanMetadataAuthority.cs",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "540af490563b94d6f5e44ef5bd24b303a4e2408d5a875f9086013c9690754e0d"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/TenantSessionAccessTests.ManagementMutations.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "7626790668e1344860d80755e672dff1bdcf938d59705ba278ea878cd70e988f"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/TenantSessionAccessTests.ProfileReadAuthority.cs",
+      "status": "??",
+      "mode": "0o644",
+      "sha256": "a80b5ac159d506f4a3a9f0ed70c3d1f957329b257923358b1af585d0fd8dafbf"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantDefinitionIntegrationTests.InstanceSandboxVerification.Schema.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "db93ce11a675ed14c41d9e3e42fe0323322a410cb72f58d50e29fb8a6483fdce"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantOperationAuthorizationTests.PublicDownloads.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "e2b03ef9b990277104631a80bec602ef66e7078c04f4e80ff9c0c88e9b839b5f"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantRunAdmissionTests.BackgroundRuntime.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "e39ec7f67f6762672b630630848b035ba87b5ad552f0def61faae2964ae046c8"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantRunAdmissionTests.ChatView.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "d9573beaf27caf22626951feabacb7e185cd49e2acb9b3f34bcd9ff32c6ba14d"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantRunAdmissionTests.Conversation.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "36c2bf53acc8a6b160f818a33a5c73ae2b8ad56859d829e4999245c47d23f5a3"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantRunAdmissionTests.Foreground.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "71c50d15ab9e4c4c0436c86afb099a0f31c885b7e8345ca159098619ff13e59b"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantSessionIntegrationTests.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "56f81c22cdd53a63ab537ced0cee225dffd9dcf6e6d628dd8c8f7757709e4194"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TenantSessionLifecycleTests.cs",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "b5103b00dd9c8a55671508dfcae53be92c5c0368e0a5910aa7ab70f7179fcfb3"
+    },
+    {
+      "path": "web/e2e/tenant-acceptance.spec.ts",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "ce19b02e5460739b2b29e4814cd531a791dcba329cad0559f96c511131725e13"
+    },
+    {
+      "path": "web/src/App.test.tsx",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "842cc6124e429a6e1402ced9d65e99fc5688d21f3915b9a36a398152130025a6"
+    },
+    {
+      "path": "web/src/features/access/TenantApprovals.tsx",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "7de5226d269a6c4dc18cfe9da35e6a9c911359f89cd5c725aa3719c15145d8f6"
+    },
+    {
+      "path": "web/src/features/admin/AdminCollectionToolbar.tsx",
+      "status": " M",
+      "mode": "0o644",
+      "sha256": "0fe5aba5f8dd821c2726d700fd7c1a80e8d4a6ff9dce5031c12ba536e01047e5"
+    }
+  ],
+  "approvedCandidateScopeSha256": "1b807793079a2c27ee1f367de324b0d59355d3b0d4a51f6c84e84c92b405580e"
+}

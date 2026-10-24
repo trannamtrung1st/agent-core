@@ -54,7 +54,7 @@ public sealed partial class TenantRunAdmissionTests
         Assert.Equal(1, nextPage.Total); Assert.Empty(nextPage.Items);
         var work = await sessions.ListTenantSessionsAsync(parent.Setup.Tenant, null, 0, 1, surface: SessionSurface.BackgroundWork);
         Assert.Equal(child.Session.SessionId, Assert.Single(work.Items).Owner.SessionId);
-        Assert.Single((await f.Sessions.ListAsync(parent.Setup.Owner.PrincipalId, parent.Setup.Tenant)).Items);
+        Assert.Single((await f.Sessions.ListAsync(parent.Setup.Tenant, parent.Setup.Owner)).Items);
         var conversation = Conversation(f);
         Assert.Equal(child.Session.SessionId, (await conversation.ReadViewAsync(parent.Setup.Tenant, child.Session.SessionId, parent.Setup.Owner)).Owner.SessionId);
         Assert.NotEmpty((await conversation.ReadAsync(parent.Setup.Tenant, child.Session.SessionId, parent.Setup.Owner)).Items);

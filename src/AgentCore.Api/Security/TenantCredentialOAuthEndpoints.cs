@@ -29,7 +29,7 @@ public static class TenantCredentialOAuthEndpoints
         group.MapGet("", (Guid credentialId, HttpContext http, [FromServices] TenantCredentialOAuthService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.SetupAsync(actor.PrincipalId, actor.TenantId, credentialId, ct).ConfigureAwait(false));
+            return Results.Json(await service.SetupAsync(actor.TenantId, credentialId, Initiator(http, actor), ct).ConfigureAwait(false));
         }));
         group.MapPost("/start", (Guid credentialId, TenantCredentialOAuthRequest body, HttpContext http, [FromServices] TenantCredentialOAuthService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

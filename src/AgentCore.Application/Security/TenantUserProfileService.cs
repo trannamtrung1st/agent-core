@@ -14,7 +14,8 @@ public sealed class TenantUserProfileService(IIamStore security, ITenantUserProf
         var before = await profiles.ReadOwnTenantUserProfileAsync(tenant, human, ct).ConfigureAwait(false);
         await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         var after = await profiles.ReadOwnTenantUserProfileAsync(tenant, human, ct).ConfigureAwait(false);
-        if (!Same(before, after)) throw new SecurityConflictException("profile_changed");
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (!Same(before, after) || current.Tenant.Revision != after.SecurityRevision) throw new SecurityConflictException("profile_changed");
         return before;
     }
     public async ValueTask<TenantUserProfileView> UpdateAsync(Guid tenant, HumanSessionReference human, TenantUserProfileChange change, CancellationToken ct = default)

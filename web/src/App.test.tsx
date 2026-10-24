@@ -1,7 +1,7 @@
-import { act, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { emptySession, useSessionStore } from "./state/sessionStore";
+import { bootstrap } from "./services/realtime";
 
 vi.mock("./services/realtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./services/realtime")>();
@@ -12,21 +12,23 @@ vi.mock("./services/realtime", async (importOriginal) => {
 });
 
 describe("App", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ reasonCode: "authentication_required" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" }
+    })));
+  });
   afterEach(() => {
-    act(() => {
-      useSessionStore.setState({
-        ...emptySession(),
-        agents: [],
-        selectedAgentId: "examiner"
-      });
-    });
+    vi.unstubAllGlobals();
   });
 
-  it("renders the synthetic chat shell", async () => {
-    await act(async () => {
-      render(<App />);
-    });
-    expect(screen.getByRole("heading", { name: "Agent Core" })).toBeInTheDocument();
-    expect(screen.getByTestId("profile")).toHaveTextContent("Synthetic");
+  it("requires sign-in at the account entry before mounting private Chat", async () => {
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeVisible();
+    expect(window.location.pathname).toBe("/sign-in");
+    expect(new URLSearchParams(window.location.search).get("returnTo")).toBe("/account/organizations");
+    expect(screen.queryByTestId("profile")).not.toBeInTheDocument();
+    expect(bootstrap).not.toHaveBeenCalled();
   });
 });

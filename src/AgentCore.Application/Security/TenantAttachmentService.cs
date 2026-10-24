@@ -22,7 +22,8 @@ public sealed class TenantAttachmentService(IIamStore security, ITenantSessionSt
     private async ValueTask Fence(View before, HumanSessionReference human, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested(); var after = await Load(before.State.Tenant.TenantId, before.Session.Owner.SessionId, human, false, ct).ConfigureAwait(false);
-        if (before.State.Tenant.Revision != after.State.Tenant.Revision || before.Session.Owner != after.Session.Owner
+        var authority = await TenantHumanSessionAuthority.RequireAsync(security, identity, before.State.Tenant.TenantId, human, ct).ConfigureAwait(false);
+        if (authority.Tenant.Revision != before.State.Tenant.Revision || before.State.Tenant.Revision != after.State.Tenant.Revision || before.Session.Owner != after.Session.Owner
             || before.Session.Snapshot.Revision != after.Session.Snapshot.Revision || before.Agent.Instance.Revision != after.Agent.Instance.Revision)
             throw new SecurityConflictException("stale_revision");
     }

@@ -128,13 +128,18 @@ public sealed partial class TenantCredentialAccessTests
             {
                 await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020180000_TenantAutonomousAutomation"));
                 Assert.Contains("20261020190000_TenantIndependentAccountConsent", await db.Database.GetAppliedMigrationsAsync());
+                // Completed successor downgrades commit before this populated migration refuses.
+                // Restore their schema before reading current-model operation receipts.
+                await db.GetService<IMigrator>().MigrateAsync();
+                Assert.False(db.Database.HasPendingModelChanges());
             }
             else
             {
                 foreach (var request in reviewed)
                 {
                     var rejected = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET OriginalInitiatorPrincipalId = NULL, PayloadJson = json_set(PayloadJson, '$.OriginalInitiatorPrincipalId', NULL) WHERE RequestId = {request.RequestId}"));
-                    Assert.Contains("independent task consent requires its exact owned scheduled lineage", rejected.Message);
+                    Assert.Equal(19, rejected.SqliteErrorCode);
+                    Assert.Contains("independent task consent requires its exact owned independent lineage", rejected.Message);
                 }
             }
         }
