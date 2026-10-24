@@ -2,6 +2,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Api.Security;
 using AgentCore.Application.Security;
+using AgentCore.Application.Observability;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
@@ -12,6 +13,8 @@ public sealed class SessionHub(TenantSessionLiveDelivery tenants, IdentityServic
     TenantRunService runs, IamAuthorizer authorizer, ITenantDeliveryReceiptControl receipts, ITenantRunDispatcher tenantDispatcher) : Hub
 
 {
+    internal DiagnosticContext? ValidatedAttachDiagnostics { get; private set; }
+    internal DiagnosticContext ConnectionDiagnostics => tenants.DescribeConnectionDiagnostics(Context.ConnectionId);
     private TenantSessionRuntimeHost TenantRuntime => (TenantSessionRuntimeHost)tenantDispatcher;
     public async Task<CommandAck> AttachTenant(ClientCommand<TenantAttachPayload> command)
     {
@@ -33,6 +36,7 @@ public sealed class SessionHub(TenantSessionLiveDelivery tenants, IdentityServic
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5), time);
             using var bounded = CancellationTokenSource.CreateLinkedTokenSource(Context.ConnectionAborted, deadline.Token);
             var user = await identity.ResolveUserAsync(account, tenant, bounded.Token).ConfigureAwait(false) ?? throw new AccessDeniedException("not_member");
+            ValidatedAttachDiagnostics = new(TenantId: tenant, ActorPrincipalId: user.PrincipalId, SessionId: Guid.Parse(command.SessionId));
             await TenantRuntime.ResetOrphanVoiceAsync(tenant, Guid.Parse(command.SessionId), new(account, authentication, user.PrincipalId), bounded.Token).ConfigureAwait(false);
             await tenants.AttachAsync(Context.ConnectionId, tenant, Guid.Parse(command.SessionId), new(account, authentication, user.PrincipalId), bounded.Token).ConfigureAwait(false);
             return validation;

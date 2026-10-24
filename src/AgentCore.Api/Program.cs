@@ -17,6 +17,7 @@ using AgentCore.Infrastructure.Browser;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.AspNetCore.SignalR;
 
 if (args.Length > 0 && args[0] == "migrate-context")
 {
@@ -103,8 +104,10 @@ builder.Services.AddSingleton<ITenantDeliveryReceiptControl>(p => (ITenantDelive
 builder.Services.AddSingleton<TenantBackgroundCompletionService>();
 builder.Services.AddSingleton<ITenantRunExecution, TenantRunExecution>();
 builder.Services.AddHostedService<AgentRunHostedService>();
+builder.Services.AddSingleton<SessionHubDiagnosticFilter>();
 builder.Services.AddSignalR(options =>
 {
+    options.AddFilter<SessionHubDiagnosticFilter>();
     options.MaximumReceiveMessageSize = 32 * 1024;
     options.KeepAliveInterval = TimeSpan.FromSeconds(10);
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);

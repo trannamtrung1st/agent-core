@@ -136,6 +136,8 @@ The semantic cutover verifies every current-user mutation's exact prepared actio
 
 ## Handled-operation failure diagnostics
 
+Unexpected SignalR invocation/lifecycle failures use the same content-free diagnostic sink through the registered Session Hub transport filter. The framework receives only a safe `HubException` and diagnostic reference, without an original inner exception. Connection attribution is captured before awaiting work; Attach may refine it only after resolving the authenticated membership. This prevents a concurrent tenant switch or client-supplied identity field from relabeling a fault. Known CommandAck outcomes retain their existing service behavior.
+
 The [current diagnostic isolation qualification](reports/tenant-diagnostics-isolation-verification-2026-10-24.md) exercises authenticated tenant HTTP, hosted/Runtime failures, provider privacy and current OAuth logging exclusion. Common sink snapshots apply to unexpected failures too; historical reports that retained raw exception objects describe their original versions.
 
 Handled failures must remain diagnosable even when Core safely returns a tool error, retries cleanup, stays silent, or preserves an uncertain dispatch receipt. `HandledFailureLog` emits a Warning with `DiagnosticId`, safe `Operation` and `ErrorCode`, a real trace ID when present, and relevant Session/Response/Run/Instance or `CredentialId` identifiers. Credential IDs identify account records; account names, addresses and protected credentials are excluded. SMTP rejection adds the status enum as `FailureReason`. The low-level Gmail adapter logs rejected/uncertain HTTP status and retains a safe exception snapshot for cancellation after dispatch.

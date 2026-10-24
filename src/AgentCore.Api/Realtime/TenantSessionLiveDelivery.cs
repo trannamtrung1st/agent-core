@@ -95,6 +95,10 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             && s.Owner.ExecutorPrincipalId == query.Owner.ExecutorPrincipalId && (query.Sessions is null || query.Sessions.Contains(s.Session)))
         .Select(s => s.Session).Distinct().Count();
     public Source CreateSource(AgentRun run, TenantVoiceLease? voice = null) => new(this, run, voice);
+    internal DiagnosticContext DescribeConnectionDiagnostics(string connection) =>
+        _connections.TryGetValue(connection, out var state) && state.Current is { } subscription
+            ? new(TenantId: subscription.Tenant, ActorPrincipalId: subscription.Human.PrincipalId, SessionId: subscription.Session)
+            : default;
     public void Detach(string connection)
     {
         if (_connections.TryRemove(connection, out var state)) { state.Closed = true; if (state.Current is { } sub) RetireVoice(sub); }
