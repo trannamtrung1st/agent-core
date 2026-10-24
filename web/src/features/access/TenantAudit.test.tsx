@@ -22,7 +22,8 @@ it('distinguishes required review from a denied effect and expands one lineage r
     execution: { ...execution, purpose: 'EffectResult', approvalRequestId: 'approval-reference', operationId: 'operation-reference', grantId: 'grant-reference' } };
   fetchMock.mockResolvedValueOnce(response({ items: [review, effect] }));
   render(<TenantAudit context={context} />);
-  expect(await screen.findByText('Approval required', { exact: true })).toBeVisible();
+  // The cold Ant Design table/breakpoint render can exceed RTL's 1s default on hosted CPU.
+  expect(await screen.findByText('Approval required', { exact: true }, { timeout: 5_000 })).toBeVisible();
   expect(screen.getByText('Not applied', { exact: true })).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'View details: Agent authorization checked' }));
   const details = screen.getByRole('region', { name: 'Audit entry details' });

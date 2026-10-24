@@ -300,6 +300,9 @@ test('Chat permission permits Queue while Steer requires independent Run cancell
     await call(page.request, '/api/v2/auth/register', { login: email, displayName: 'Chat reader', password: secret, invitation: { tenantId: f.tenant, invitationId: invitation.invitationId, token: invitation.token } });
     const observed = watch(page); await signIn(page, email, secret); await page.goto(f.path);
     await send(page, '[test:durable-stream-long] Chat-only live objective');
+    // Queue is available before admission finishes. Wait for the held response's
+    // visible prefix before collecting witnesses for the permission refusal.
+    await expect(page.locator('[data-role="assistant"]').first()).toContainText('Hello');
     await expect(page.getByRole('button', { name: 'Queue', exact: true })).toBeVisible();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Retain my unprivileged queued objective');
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
