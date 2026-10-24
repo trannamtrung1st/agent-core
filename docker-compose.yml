@@ -1,11 +1,18 @@
+# Authenticated Synthetic app, after explicit identity bootstrap:
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up --build -d
+# Set AGENTCORE_TLS_CERTIFICATE_PATH to an absolute, private PFX readable by the
+# container UID (1654), and AGENTCORE_TLS_PASSWORD to its password in private .env
+# or the calling environment. Bootstrap/certificate setup:
+# docs/17-observability-and-operations.md#docker-compose-integration-and-demo
+# The base HTTP file alone exposes health/static content, not Account authentication.
 services:
   agent-core:
     build:
       context: .
       dockerfile: Dockerfile
       # MessagePack stays the default. JSON inspection is a frontend build arg (baked at SPA build):
-      # docker compose build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
-      # docker compose up
+      # docker compose -f docker-compose.yml -f docker-compose.https.yml build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
+      # docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
       # Runtime/container env after build does not change the protocol.
     image: agent-core:synthetic
     ports:
@@ -32,7 +39,7 @@ services:
     # optional key-free Synthetic demo path (one app container + built SPA +
     # persistent SQLite volume). `docker compose down` keeps the volume;
     # `docker compose down -v` destroys it.
-    # Real/hosted: docker compose -f docker-compose.yml -f docker-compose.real.yml up --build
+    # Real/hosted: docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up --build -d
     # Do not put provider keys in this file.
 
 volumes:

@@ -17,7 +17,8 @@ class DevRealTests(unittest.TestCase):
         self.root = Path(self.tmp.name).resolve()
         (self.root / "scripts").mkdir()
         (self.root / "web").mkdir()
-        shutil.copyfile(Path(__file__).resolve().parents[1] / "dev-real.sh", self.root / "scripts/dev-real.sh")
+        for name in ('dev-real.sh', 'dev-env.py'):
+            shutil.copyfile(Path(__file__).resolve().parents[1] / name, self.root / 'scripts' / name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         for name, body in {"dotnet": "exec sleep 300", "pnpm": "exec sleep 300", "curl": "printf '{\"profile\":\"Real\"}\\n'"}.items():
@@ -134,6 +135,55 @@ PYTHON''')
         self.assertFalse((self.root / 'local/dev/api.pid').exists())
         self.assertFalse((self.root / 'local/dev/web.pid').exists())
 
+    def test_dotenv_reaches_backend_with_hyphenated_keys_and_keeps_secrets_out_of_vite(self):
+        import json
+        (self.root / '.env').write_text("""OPENROUTER_API_KEY='literal-$value-$(touch should-not-exist)'
+Providers__LanguageModels__primary-llm__DefaultModel=operator-selected-model
+VITE_AGENTCORE_REALTIME_PROTOCOL=json
+AGENTCORE_DEV_STATE_DIR=local/env-state
+""")
+        self.env['OPENROUTER_API_KEY'] = 'older-inherited-value'
+        self.command('dotnet', '''python3 - "$@" <<'PYTHON'
+import json, os, pathlib, sys
+pathlib.Path('backend-env.json').write_text(json.dumps({
+ 'key': os.environ.get('OPENROUTER_API_KEY'),
+ 'model': os.environ.get('Providers__LanguageModels__primary-llm__DefaultModel'),
+ 'args': sys.argv[1:]}))
+PYTHON
+exec sleep 300''')
+        self.command('pnpm', '''python3 - <<'PYTHON'
+import json, os, pathlib
+pathlib.Path('frontend-env.json').write_text(json.dumps({
+ 'hasKey': 'OPENROUTER_API_KEY' in os.environ,
+ 'hasProvider': any(k.startswith('Providers__') for k in os.environ),
+ 'protocol': os.environ.get('VITE_AGENTCORE_REALTIME_PROTOCOL')}))
+PYTHON
+exec sleep 300''')
+        result = self.run_script('start', '--api-only')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for _ in range(100):
+            if (self.root / 'backend-env.json').exists() and (self.root / 'web/frontend-env.json').exists(): break
+            time.sleep(.01)
+        backend = json.loads((self.root / 'backend-env.json').read_text())
+        frontend = json.loads((self.root / 'web/frontend-env.json').read_text())
+        self.assertEqual(backend['key'], 'literal-$value-$(touch should-not-exist)')
+        self.assertEqual(backend['model'], 'operator-selected-model')
+        self.assertIn('--no-launch-profile', backend['args'])
+        self.assertNotIn('--launch-profile', backend['args'])
+        self.assertEqual(frontend, {'hasKey': False, 'hasProvider': False, 'protocol': 'json'})
+        self.assertTrue((self.root / 'local/env-state/api.pid').exists())
+        self.assertFalse((self.root / 'should-not-exist').exists())
+        self.assertNotIn(backend['key'], result.stdout + result.stderr)
+
+    def test_invalid_dotenv_fails_without_executing_or_printing_the_value(self):
+        private = 'private-invalid-quote-sentinel'
+        (self.root / '.env').write_text("OPENROUTER_API_KEY='" + private)
+        result = self.run_script('start', '--api-only')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('Cannot load native .env', result.stderr)
+        self.assertNotIn(private, result.stdout + result.stderr)
+        self.assertFalse((self.root / 'local/dev/api.pid').exists())
+
     def test_denied_process_inspection_preserves_tracking_and_fails_stop(self):
         started = self.run_script("start", "--api-only")
         self.assertEqual(started.returncode, 0, started.stderr)
@@ -196,7 +246,7 @@ if sys.argv[1]=='up':
 if sys.argv[1]=='stop' and os.getenv('FIXTURE_CLEANUP_PENDING')=='1': raise SystemExit(1)
 print('OpenSandbox: authenticated fixture readiness')
 """)
-        self.command('dotnet','case "$*" in *--AgentCore:Profile=Real*) ;; *) exit 40;; esac\ntest "$OpenSandbox__Enabled" = true || exit 41\necho "$OpenSandbox__Endpoint" >> "'+str(self.root/'handoff')+'"\nexec sleep 300')
+        self.command('dotnet','test "$AgentCore__Profile" = Real || exit 40\ntest "$OpenSandbox__Enabled" = true || exit 41\necho "$OpenSandbox__Endpoint" >> "'+str(self.root/'handoff')+'"\nexec sleep 300')
 
     def test_full_start_restart_status_stop_selects_all_components_and_hands_off_private_settings(self):
         self.sandbox_stubs()
@@ -348,7 +398,7 @@ print('OpenSandbox: authenticated fixture readiness')
     def test_synthetic_health_is_rejected_and_native_processes_are_cleaned_up(self):
         self.command('curl', "printf '{\"profile\":\"Synthetic\"}\\n'")
         result=self.run_script('start','--api-only')
-        self.assertNotEqual(result.returncode,0);self.assertIn('did not confirm the Real profile',result.stderr)
+        self.assertNotEqual(result.returncode,0);self.assertIn('did not confirm the configured profile',result.stderr)
         self.assertFalse((self.root/'local/dev/api.pid').exists());self.assertFalse((self.root/'local/dev/web.pid').exists())
 
     def test_incompatible_store_api_only_flags_fail_before_mutations_in_either_order(self):

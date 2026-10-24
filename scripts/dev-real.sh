@@ -13,12 +13,16 @@
 #   scripts/dev-real.sh stop --with-store    # also scripts/nopcommerce-demo.sh stop
 #   scripts/dev-real.sh status               # health + nopCommerce plugin check
 #
-# Requires: .env with OPENROUTER_API_KEY (export or user-secrets). For the store demo,
+# Reads .env automatically; put OPENROUTER_API_KEY there (no user-secrets required). For the store demo,
 # set NOPCOMMERCE_DB_PASSWORD and optionally AGENTCORE_WEBHOOK_URL / AGENTCORE_WEBHOOK_TOKEN
 # (URL should use host.docker.internal:5080 from the nopCommerce container).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${AGENTCORE_DEV_ENV_LOADED:-}" != "$root" ]]; then
+  exec python3 "$root/scripts/dev-env.py" --root "$root" \
+    --env-file "${AGENTCORE_DEV_ENV_FILE:-$root/.env}" -- bash "$root/scripts/dev-real.sh" "$@"
+fi
 state_dir="${AGENTCORE_DEV_STATE_DIR:-$root/local/dev}"
 api_log="$state_dir/api.log"
 web_log="$state_dir/web.log"
@@ -47,15 +51,6 @@ usage() {
 }
 
 mkdir -p "$state_dir"
-
-load_env() {
-  if [[ -f "${AGENTCORE_DEV_ENV_FILE:-$root/.env}" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "${AGENTCORE_DEV_ENV_FILE:-$root/.env}"
-    set +a
-  fi
-}
 
 record_stack() {
   python3 - "$state_dir/stack.json" "$api_port" "$web_port" "$sandbox_project" "$sandbox_port" "$sandbox_selected" "$store_selected" <<'PYTHON'
@@ -210,9 +205,18 @@ launch_service() {
   python3 - "$cwd" "$log" "$pid_file" "$@" <<'PYTHON'
 import pathlib, subprocess, sys
 cwd, log, pid_file, *command = sys.argv[1:]
+import os
+child_env = dict(os.environ)
+if pathlib.Path(cwd).name == 'web':
+    # Vite needs public VITE_* configuration and basic tool/runtime settings only.
+    # Bootstrap passwords, model keys and connected-account secrets stay backend-only.
+    basic = {'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TMP', 'TEMP',
+        'LANG', 'TERM', 'NO_COLOR', 'FORCE_COLOR', 'CI', 'PNPM_HOME', 'NODE_OPTIONS'}
+    child_env = {key: value for key, value in child_env.items()
+        if key in basic or key.startswith(('LC_', 'VITE_', 'COREPACK_'))}
 with open(log, "wb") as output:
     process = subprocess.Popen(command, cwd=cwd, stdin=subprocess.DEVNULL,
-        stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+        stdout=output, stderr=subprocess.STDOUT, start_new_session=True, env=child_env)
 pathlib.Path(pid_file).write_text(str(process.pid) + "\n")
 PYTHON
 }
@@ -245,12 +249,10 @@ wait_for_url() {
 }
 
 start_nopcommerce() {
-  load_env
   (cd "$root" && ./scripts/nopcommerce-demo.sh start)
 }
 
 configure_api() {
-  load_env
   # This launcher binds only 127.0.0.1. The API still rejects remote cleartext.
   export Security__Http__AllowInsecureLocalHttp=true
   export Security__Http__AllowedOrigins__0="http://localhost:$web_port" Security__Http__AllowedOrigins__1="http://127.0.0.1:$web_port"
@@ -258,10 +260,10 @@ configure_api() {
     mkdir -p "$AGENTCORE_DEV_API_DATA_DIR"
     local data_root
     data_root="$(cd "$AGENTCORE_DEV_API_DATA_DIR" && pwd)"
-    export Persistence__Provider=Sqlite Persistence__ConnectionString="Data Source=$data_root/core.db"
-    export Persistence__WorkspaceRoot="$data_root/workspaces" Persistence__ArtifactRoot="$data_root/artifacts"
-    export Persistence__AttachmentRoot="$data_root/attachments" Persistence__CredentialProtectionKeyRoot="$data_root/keys"
-    export Persistence__DefinitionResourceRoot="$data_root/resources"
+    export Persistence__Provider="${Persistence__Provider:-Sqlite}" Persistence__ConnectionString="${Persistence__ConnectionString:-Data Source=$data_root/core.db}"
+    export Persistence__WorkspaceRoot="${Persistence__WorkspaceRoot:-$data_root/workspaces}" Persistence__ArtifactRoot="${Persistence__ArtifactRoot:-$data_root/artifacts}"
+    export Persistence__AttachmentRoot="${Persistence__AttachmentRoot:-$data_root/attachments}" Persistence__CredentialProtectionKeyRoot="${Persistence__CredentialProtectionKeyRoot:-$data_root/keys}"
+    export Persistence__DefinitionResourceRoot="${Persistence__DefinitionResourceRoot:-$data_root/resources}"
   fi
 }
 
@@ -276,14 +278,8 @@ start_api() {
     export OpenSandbox__Enabled=false
   fi
   export Hosting__AllowedOrigins__0="http://localhost:$web_port" Hosting__AllowedOrigins__1="http://127.0.0.1:$web_port"
-  local data_args=() key variable
-  for key in Provider ConnectionString WorkspaceRoot ArtifactRoot AttachmentRoot CredentialProtectionKeyRoot DefinitionResourceRoot; do
-    variable="Persistence__$key"
-    if [[ -n "${!variable:-}" ]]; then data_args+=("--Persistence:$key=${!variable}"); fi
-  done
   launch_service "$root" "$api_log" "$api_pid_file" \
-    dotnet run --project src/AgentCore.Api --launch-profile http-openrouter --urls "$api_origin" --AgentCore:Profile=Real \
-    --Security:Http:AllowedOrigins:0="http://localhost:$web_port" --Security:Http:AllowedOrigins:1="http://127.0.0.1:$web_port" ${data_args[@]+"${data_args[@]}"}
+    dotnet run --project src/AgentCore.Api --no-launch-profile --urls "$api_origin"
 }
 
 start_web() {
@@ -344,7 +340,6 @@ cmd_start() {
   if [[ "$api_only" == 1 && "$explicit_sandbox" != 1 ]]; then sandbox_selected=0; fi
   store_selected="$with_store"
   require_dependencies
-  load_env
   api_port="${AGENTCORE_DEV_API_PORT:-5080}";web_port="${AGENTCORE_DEV_WEB_PORT:-5173}"
   api_origin="http://127.0.0.1:$api_port";web_origin="http://localhost:$web_port"
   api_health="$api_origin/health";web_health="$web_origin/health"
@@ -369,13 +364,13 @@ PYTHON
     stop_api_web
     return 1
   fi
-  if ! curl -fsS --max-time 5 "$api_health" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("profile") == "Real" else 1)'; then
-    echo "API did not confirm the Real profile; stopping the tracked native stack." >&2
+  if ! curl -fsS --max-time 5 "$api_health" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("profile") == sys.argv[1] else 1)' "${AgentCore__Profile:-Real}"; then
+    echo "API did not confirm the configured profile; stopping the tracked native stack." >&2
     stop_api_web
     return 1
   fi
   if [[ "$sandbox_selected" == 1 ]]; then python3 "$root/scripts/opensandbox-compose.py" status --project "$sandbox_project" --port "$sandbox_port"; fi
-  echo "Real dev stack is ready: API $api_origin · app $web_origin"
+  echo "${AgentCore__Profile:-Real} dev stack is ready: API $api_origin · app $web_origin"
   if [[ "$with_store" == 1 ]]; then
     curl -fsS --max-time 5 "$store_origin/" >/dev/null || { echo "Store readiness failed; existing data retained." >&2; return 1; }
     verify_nopcommerce_plugin
@@ -397,7 +392,6 @@ cmd_stop() {
     shift
   done
 
-  load_env
   sandbox_project="${AGENTCORE_SANDBOX_PROJECT:-$sandbox_project}"
   sandbox_port="${AGENTCORE_SANDBOX_PORT:-$sandbox_port}"
   load_stack
@@ -422,7 +416,6 @@ cmd_stop() {
 }
 
 cmd_status() {
-  load_env
   sandbox_project="${AGENTCORE_SANDBOX_PROJECT:-$sandbox_project}"
   sandbox_port="${AGENTCORE_SANDBOX_PORT:-$sandbox_port}"
   load_stack

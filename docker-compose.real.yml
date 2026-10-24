@@ -1,10 +1,13 @@
 # Real/hosted overlay for the same one-container image and SQLite volume.
-# Default `docker compose up` stays Synthetic and key-free.
+# The base profile stays Synthetic and key-free; authenticated launch uses HTTPS.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up --build
+#   docker compose -f docker-compose.yml -f docker-compose.real.yml -f docker-compose.https.yml up --build -d
 #
 # Matches the native http-openrouter launch profile: hosted OpenRouter text + tools.
 # Copy `.env.example` to a gitignored `.env` and set OPENROUTER_API_KEY.
+# Also set AGENTCORE_TLS_CERTIFICATE_PATH (absolute private PFX readable by UID
+# 1654) and AGENTCORE_TLS_PASSWORD. Initialize a new volume explicitly before up;
+# see docs/17-observability-and-operations.md#docker-compose-integration-and-demo.
 # Compose loads `.env` from the repo root for interpolation. AGENTCORE_LLM_MODEL
 # sets primary-llm DefaultModel; when it matches a catalog ModelId the factory
 # retargets DefaultKey. Do not use openrouter/free as DefaultModel (it remains a

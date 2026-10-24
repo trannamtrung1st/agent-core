@@ -9,7 +9,14 @@ with ComposeFixture(project, int(os.environ.get('AGENTCORE_COMPOSE_PORT', '5080'
     api, prefix = f.client, f.prefix
     Client(f.base, f.context).call(prefix + '/agents', expected=401)
     api.call('/api/v2/tenants/' + str(uuid.uuid4()) + '/agents', expected=403)
-    api.call(prefix + '/agents', 'POST', {}, expected=400, csrf=False)
+    missing_csrf = api.call(prefix + '/agents', 'POST',
+        {'templateId': 'examiner', 'version': 1, 'expectedRevision': api.revision(prefix)}, expected=400, csrf=False)
+    assert missing_csrf['reasonCode'] == 'invalid_csrf'
+    # Valid authentication, CSRF and revision must reach actual input validation.
+    invalid_input = api.call(prefix + '/agents', 'POST',
+        {'templateId': '', 'version': 0, 'expectedRevision': api.revision(prefix)}, expected=400)
+    assert invalid_input['reasonCode'] == 'invalid_request'
+    assert api.call(prefix + '/agents')['total'] == 0
     for retired in ('/api/v1/local/owner-capability', '/api/v2/admin/agent-instances', '/api/v1/sessions'):
         api.call(retired, 'POST', {}, expected=404)
     agent = api.call(prefix + '/agents', 'POST', {'templateId': 'examiner', 'version': 1, 'expectedRevision': api.revision(prefix)}, expected=201)['instance']

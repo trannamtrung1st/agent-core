@@ -83,7 +83,7 @@ Current code uses .NET 10/C# 14, the composed provider-neutral speech pipeline, 
 - [P0 agent-lifecycle handoff](docs/reports/p0-agent-lifecycle-handoff.md)
 - [P1 replaceable speech handoff](docs/reports/p1-replaceable-speech-handoff.md)
 
-Run commands and recovery guidance are documented in [Operations](docs/17-observability-and-operations.md#running-after-implementation).
+Run commands and recovery guidance are documented in [Operations](docs/17-observability-and-operations.md#running-after-implementation). Native `scripts/dev-real.sh` loads the private root `.env` automatically; [`.env.example`](.env.example) includes the complete application configuration reference and fresh identity setup fields. No manual shell export or user-secrets setup is needed for that launcher.
 
 ## Working with Codex and Cursor
 
