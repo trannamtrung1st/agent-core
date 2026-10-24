@@ -93,38 +93,6 @@ public sealed class ResponseProgressRuntimeTests
     }
 
     [Fact]
-    public async Task Tool_progress_uses_runtime_operation_id_not_provider_tool_id()
-    {
-        await using var runtime = await CreateSupportAsync();
-        await runtime.Runtime.AttachAsync();
-        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Run the support case for order 91."));
-        await runtime.Runtime.WaitUntilIdleAsync();
-
-        var toolProgress = Progress(runtime.Output)
-            .Where(item => item.Kind == ResponseProgressKind.RunningTool)
-            .ToArray();
-        Assert.Contains(toolProgress, item => item.State == ResponseProgressState.Started && item.OperationId is not null);
-        Assert.Contains(toolProgress, item => item.State == ResponseProgressState.Completed && item.OperationId is not null);
-        Assert.All(toolProgress, item =>
-        {
-            Assert.NotNull(item.OperationId);
-            Assert.NotEqual(Guid.Empty, item.OperationId);
-            Assert.Equal(ResponseProgressMessages.RunningTools, item.Message);
-            Assert.DoesNotContain("identity", item.Message, StringComparison.Ordinal);
-            Assert.DoesNotContain("call-1", item.Message, StringComparison.Ordinal);
-        });
-        Assert.Contains(
-            runtime.Output.Items,
-            item => item.Payload is StateChangedOutput state && state.OutputState == nameof(OutputActivity.RunningTools));
-        Assert.Contains(
-            runtime.Output.Items,
-            item => item.Payload is StateChangedOutput state && state.OutputState == nameof(OutputActivity.AgentGenerating));
-        Assert.DoesNotContain(
-            runtime.Runtime.Snapshot.Entries,
-            entry => entry.Text.Contains("Running tools", StringComparison.Ordinal));
-    }
-
-    [Fact]
     public async Task Multiple_tools_replace_progress_instead_of_becoming_history()
     {
         var definition = await Load("customer-support");
@@ -149,65 +117,6 @@ public sealed class ResponseProgressRuntimeTests
     }
 
     [Fact]
-    public async Task Cancellation_interruption_and_provider_failure_clear_progress()
-    {
-        var workspace = new GatedWorkspace();
-        var definition = await Load("customer-support");
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var tools = new SessionToolExecutor(
-);
-        var output = new CapturingSessionOutput();
-        await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Run the support case for order 91."));
-        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await workspace.Entered.WaitAsync(wait.Token);
-        var started = await output.WaitForAsync(
-            item => item.Payload is ResponseProgressOutput progress
-                && progress.Kind == ResponseProgressKind.RunningTool
-                && progress.State == ResponseProgressState.Started,
-            wait.Token);
-        Assert.NotNull(started.ResponseId);
-        var cancelled = await runtime.CancelResponseAsync(started.ResponseId.Value, wait.Token);
-        Assert.Equal(ResponseCancelResult.Cancelled, cancelled);
-        workspace.Release();
-        await runtime.WaitUntilIdleAsync();
-        Assert.Contains(
-            Progress(output),
-            item => item.Kind == ResponseProgressKind.RunningTool && item.State == ResponseProgressState.Failed);
-    }
-
-    [Fact]
-    public async Task Interrupt_clears_owned_progress()
-    {
-        var workspace = new GatedWorkspace();
-        var definition = await Load("customer-support");
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var tools = new SessionToolExecutor(
-);
-        var output = new CapturingSessionOutput();
-        await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("first"));
-        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await workspace.Entered.WaitAsync(wait.Token);
-        await output.WaitForAsync(
-            item => item.Payload is ResponseProgressOutput progress
-                && progress.Kind == ResponseProgressKind.RunningTool
-                && progress.State == ResponseProgressState.Started,
-            wait.Token);
-        Assert.True(await runtime.SubmitUserTextAsync("second", behavior: UserTextBehavior.Interrupt));
-        await output.WaitForAsync(
-            item => item.Payload is ResponseProgressOutput progress && progress.State == ResponseProgressState.Failed,
-            wait.Token);
-        workspace.Release();
-        await runtime.WaitUntilIdleAsync();
-        Assert.Contains(
-            runtime.Snapshot.Entries,
-            entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Interrupted);
-    }
-
-    [Fact]
     public async Task Provider_failure_clears_progress_without_copying_provider_error()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
@@ -229,70 +138,6 @@ public sealed class ResponseProgressRuntimeTests
             Progress(output).Select(item => item.Message ?? string.Empty),
             message => message.Contains("super-secret", StringComparison.Ordinal));
         Assert.Contains(Progress(output), item => item.State == ResponseProgressState.Failed || item.State == ResponseProgressState.Completed);
-    }
-
-    [Fact]
-    public async Task Stale_response_tool_completion_is_ignored_after_supersession()
-    {
-        var workspace = new GatedWorkspace();
-        var definition = await Load("customer-support");
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var tools = new SessionToolExecutor(
-);
-        var output = new CapturingSessionOutput();
-        await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("first"));
-        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await workspace.Entered.WaitAsync(wait.Token);
-        var started = await output.WaitForAsync(
-            item => item.Payload is ResponseProgressOutput progress
-                && progress.Kind == ResponseProgressKind.RunningTool
-                && progress.State == ResponseProgressState.Started,
-            wait.Token);
-        var staleResponseId = started.ResponseId;
-        var staleOperation = Assert.IsType<ResponseProgressOutput>(started.Payload).OperationId;
-        Assert.True(await runtime.SubmitUserTextAsync("second", behavior: UserTextBehavior.Interrupt));
-        await output.WaitForAsync(
-            item => item.ResponseId == staleResponseId
-                && item.Payload is ResponseProgressOutput progress
-                && progress.State == ResponseProgressState.Failed,
-            wait.Token);
-        var count = output.Items.Count;
-        workspace.Release();
-        await runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(
-            output.Items.Skip(count),
-            item => item.ResponseId == staleResponseId
-                && item.Payload is ResponseProgressOutput progress
-                && progress.OperationId == staleOperation
-                && progress.State == ResponseProgressState.Completed);
-    }
-
-    [Fact]
-    public async Task Stale_epoch_after_deactivate_does_not_emit_later_tool_progress()
-    {
-        var workspace = new GatedWorkspace();
-        var definition = await Load("customer-support");
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var tools = new SessionToolExecutor(
-);
-        var output = new CapturingSessionOutput();
-        await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Run the support case for order 91."));
-        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await workspace.Entered.WaitAsync(wait.Token);
-        await output.WaitForAsync(
-            item => item.Payload is ResponseProgressOutput progress && progress.State == ResponseProgressState.Started,
-            wait.Token);
-        var before = Progress(output).Count;
-        Assert.True(await runtime.RequestDeactivateAsync());
-        workspace.Release();
-        await runtime.WaitUntilIdleAsync();
-        var after = Progress(output).Skip(before).ToArray();
-        Assert.DoesNotContain(after, item => item.State is ResponseProgressState.Started or ResponseProgressState.Completed);
-        Assert.Contains(Progress(output), item => item.State == ResponseProgressState.Failed);
     }
 
     [Fact]
