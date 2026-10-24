@@ -2573,7 +2573,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var terminalBrowserContinuation = false;
         var checkpointCapacityReached = false;
         var terminalBrowserProcedure = CoreProcedure.TerminalBrowser;
-        var evidence = new BrowserEvidenceProgress(messages.ToArray());
+        var evidence = new BrowserEvidenceProgress();
+        foreach (var observed in BrowserControlEvidence.Read(messages))
+        {
+            evidence.NoteResult(observed.Call, observed.Json);
+            NoteBrowserTarget(observed.Call.Name, observed.Call.ArgumentsJson, observed.Json, blockedBrowserOrigins, ref browserPageOrigin);
+        }
         var invalidCalls = new InvalidToolCallRecovery(messages.ToArray());
         var executionRun = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun : null;
         var previousFacts = executionRun is null ? null : await PreviousExecutionFactsAsync(executionRun, cancellationToken).ConfigureAwait(false);
@@ -2672,6 +2677,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
             await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                 overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
+            if (evidence.DialogPending && ExecutionDefinition.Environment?.Capabilities is not null)
+            {
+                var recoveryContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken).ConfigureAwait(false);
+                var dialogRecovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
+                if (dialogRecovery.LoadedIds is { } recoveredIds) loadedCapabilities = recoveredIds;
+            }
             while (!generateToken.IsCancellationRequested)
             {
                 await BeginCleanupAsync().ConfigureAwait(false);
@@ -3231,7 +3242,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (_runtimeOwner is not null && pending.Count == 1 && pending[0].Name == ToolCatalog.RequestAuthorization && ToolLimits.MaxOutputBytes - outputBytes >= 1024)
                 {
                     var call = pending[0];
-                    var receipt = cleanupPhase && !RunFinalization.CleanupCall(call)
+                    string? browserRefusal = null;
+                    if (BrowserControlEvidence.TryCommand(call, out var browserCommand))
+                    {
+                        using var arguments = JsonDocument.Parse(browserCommand.ArgumentsJson);
+                        browserRefusal = evidence.Refuse(browserCommand, arguments.RootElement);
+                        if (browserRefusal is null && TryRefuseBlockedBrowser(browserCommand, blockedBrowserOrigins, browserPageOrigin, out var blockedJson))
+                        {
+                            browserRefusal = blockedJson;
+                            if (++blockedNoProgress >= 2) { terminalBrowserContinuation = true; terminalBrowserProcedure = CoreProcedure.TerminalBrowser; }
+                        }
+                    }
+                    var receipt = browserRefusal is not null ? new TenantApprovalToolResult(false, browserRefusal)
+                        : cleanupPhase && !RunFinalization.CleanupCall(call)
                         ? new TenantApprovalToolResult(false, "{\"error\":\"forbidden\",\"reasonCode\":\"cleanup_only\"}")
                         : !model.Capabilities.Tools || working.Tools?.Any(t => t.Name == ToolCatalog.RequestAuthorization) != true
                         ? new TenantApprovalToolResult(false, "{\"error\":\"forbidden\",\"reasonCode\":\"tool_not_offered\"}")
@@ -3243,6 +3266,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (receipt.Suspended) return;
                     var resultText = ToolJsonResults.FitToBudget(Math.Min(4096, ToolLimits.MaxOutputBytes - outputBytes), invalidCalls.Note(call, receipt.Text, out _));
                     messages.Add(new ModelMessage(ModelRole.Tool, resultText, ToolCallId: call.Id, Name: call.Name));
+                    if (browserRefusal is not null && browserCommand is not null) evidence.NoteResult(browserCommand, resultText);
+                    if (finalizationReason is null && evidence.DialogRecoveryExhausted) await BeginFinalizationAsync("browserBlocked").ConfigureAwait(false);
                     outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(resultText));
                     await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken,
                         protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
@@ -6756,11 +6781,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return request;
         }
 
-        var offered = tools
-            .Where(tool => (!dialogPending || !tool.Name.StartsWith("browser.", StringComparison.Ordinal) || BrowserEvidenceProgress.DialogRecoveryTool(tool.Name))
-                && (!pageBlocked || tool.Name is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserFind) && !BrowserToolCatalog.IsInteraction(tool.Name)))
-            .ToArray();
-        if (offered.Length == tools.Count)
+        bool Allowed(string name) => (!dialogPending || !name.StartsWith("browser.", StringComparison.Ordinal) || BrowserEvidenceProgress.DialogRecoveryTool(name))
+            && (!pageBlocked || name is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserFind) && !BrowserToolCatalog.IsInteraction(name));
+        var offered = tools.Where(tool => Allowed(tool.Name))
+            .Select(tool => BrowserControlEvidence.RestrictAuthorization(tool, Allowed)).OfType<ModelToolDefinition>().ToArray();
+        if (offered.SequenceEqual(tools))
         {
             return request;
         }

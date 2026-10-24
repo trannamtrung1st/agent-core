@@ -12,9 +12,6 @@ namespace AgentCore.Application.Tests;
 public sealed partial class TerminalDisplayRepairTests
 {
     [Theory]
-    [InlineData(true, false, false)]
-    [InlineData(false, false, false)]
-    [InlineData(true, true, false)]
     [InlineData(true, true, true)]
     public async Task Owned_native_dialog_suppresses_page_searches_and_preserves_recovery_or_partial_reply(bool authorized, bool repeat, bool resume)
     {

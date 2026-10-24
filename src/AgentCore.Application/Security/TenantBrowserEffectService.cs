@@ -105,7 +105,11 @@ public sealed partial class TenantBrowserEffectService(IIamStore security, ITena
             }
             catch (Exception) { result = null; if (pending is not null) _ = ObserveAsync(pending); }
         }
-        var outcome = result is null || result.EffectAttempted && !result.EffectConfirmedBySdk ? TenantOperationOutcome.Indeterminate
+        // The native adapter observed this exact dispatch waiting on an owned modal.
+        // Settle its nonreplayable attempt, preserving the pending error and unverified outcome.
+        var pendingDialog = result is { ErrorCode: "dialog_pending", EffectAttempted: true };
+        var outcome = pendingDialog ? TenantOperationOutcome.Completed
+            : result is null || result.EffectAttempted && !result.EffectConfirmedBySdk ? TenantOperationOutcome.Indeterminate
             : result.ErrorCode is null ? TenantOperationOutcome.Completed : result.EffectAttempted ? TenantOperationOutcome.Indeterminate : TenantOperationOutcome.Denied;
         reason = outcome switch { TenantOperationOutcome.Completed => TenantBrowserEffectRules.Completed,
             TenantOperationOutcome.Indeterminate => TenantBrowserEffectRules.Uncertain, _ => TenantBrowserEffectRules.Denial(result!.ErrorCode!) };

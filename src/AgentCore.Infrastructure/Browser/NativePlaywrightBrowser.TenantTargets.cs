@@ -55,7 +55,8 @@ public sealed partial class NativePlaywrightBrowser : ITenantBrowserCommandTarge
     private (BrowserProfileMode Mode, Guid Id) TenantCommandKey(TenantBrowserOwner owner) =>
         (SessionMode(owner.SessionId), SessionMode(owner.SessionId) == BrowserProfileMode.PersistentAgent ? owner.AgentInstanceId : owner.SessionId);
     private static bool TenantTargetBusy(SessionBrowser view, BrowserCommand command) => view.OperationActive || view.TimedOut
-        || view.PendingAction is { IsCompleted: false } && command is not BrowserDialog;
+        || view.PendingAction is { IsCompleted: false } && command is not BrowserDialog
+            && !(command is BrowserClose && view.Dialog is not null);
     private TenantBrowserCommandWitness CaptureTenantWitness(TenantBrowserOwner owner, BrowserCommand command) => CaptureTenantWitness(owner, command, out _);
     private TenantBrowserCommandWitness CaptureTenantWitness(TenantBrowserOwner owner, BrowserCommand command, out string? origin)
     {

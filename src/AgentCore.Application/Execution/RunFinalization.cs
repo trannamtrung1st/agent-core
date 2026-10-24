@@ -78,19 +78,20 @@ internal static class RunFinalization
         try { using var doc=JsonDocument.Parse(text); return doc.RootElement.TryGetProperty("error",out var error) && error.ValueKind==JsonValueKind.String && error.GetString()=="recovery_required"; }
         catch (JsonException) { return false; }
     }
-    internal static bool HasEvidence(IEnumerable<ModelMessage> messages) => messages.Any(m =>
+    internal static bool HasEvidence(IEnumerable<ModelMessage> messages) => messages.Any(m => m.Role == ModelRole.Tool && HasObservedEvidence(m.Text))
+        || BrowserControlEvidence.Read(messages).Any(observed => HasObservedEvidence(observed.Json));
+    private static bool HasObservedEvidence(string text)
     {
-        if (m.Role != ModelRole.Tool) return false;
         try
         {
-            using var doc = JsonDocument.Parse(m.Text);
+            using var doc = JsonDocument.Parse(text);
             var root = doc.RootElement;
             return root.ValueKind == JsonValueKind.Object && (!root.TryGetProperty("error", out var error) || error.ValueKind == JsonValueKind.Null)
                 && (root.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String && status.GetString() is "ok" or "closed" or "already_closed"
                     || root.TryGetProperty("outcome", out var outcome) && outcome.ValueKind == JsonValueKind.String && outcome.GetString() == "sent");
         }
         catch (JsonException) { return false; }
-    });
+    }
     internal static string? RecoveryReason(ProviderFailure failure) => failure.Code switch
     {
         ProviderErrorCode.Timeout => "providerTimeout",

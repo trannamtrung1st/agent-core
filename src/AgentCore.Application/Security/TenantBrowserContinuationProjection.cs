@@ -41,9 +41,11 @@ public static class TenantBrowserContinuationProjection
             JsonNode? data = null;
             try { if (result.DataJson is { } text && Encoding.UTF8.GetByteCount(text) <= budget) data = JsonNode.Parse(text); }
             catch (JsonException) { }
-            var textResult = JsonSerializer.Serialize(new { untrustedBrowserContent = true, observation = observed, data,
+            var projected = JsonSerializer.SerializeToNode(new { untrustedBrowserContent = true, observation = observed, data,
                 pages = result.Pages?.Take(budget / 512), status = ToolJsonResults.ClipUtf8Prefix(result.Status ?? "", 128), result.EffectAttempted, result.EffectConfirmedBySdk,
-                applicationOutcomeVerified = false, truncated = budget < 16384 || result.DataJson is not null && data is null }, Json);
+                applicationOutcomeVerified = false, truncated = budget < 16384 || result.DataJson is not null && data is null }, Json)!;
+            if (result.ErrorCode is "dialog_pending" or "dialog_missing") projected["error"] = result.ErrorCode;
+            var textResult = projected.ToJsonString(Json);
             if (Encoding.UTF8.GetByteCount(textResult) <= 32768) return textResult;
             if (budget == 0) return """{"untrustedBrowserContent":true,"truncated":true,"observationUnavailable":true}""";
         }

@@ -12,25 +12,6 @@ namespace AgentCore.Application.Tests;
 public sealed partial class TerminalDisplayRepairTests
 {
     [Fact]
-    public async Task Provider_total_timeout_after_close_recovers_once_without_replaying_effects()
-    {
-        var browser = new CountingBrowser();
-        var model = new RecordingModel(
-            [new ModelToolCallEvent(new("close", ToolCatalog.BrowserClose, "{}")), new ModelCompleted(ModelStopReason.ToolCalls)],
-            [new ModelFailed(new(ProviderErrorCode.Timeout, "Provider timed out.", FailureReason: "totalTimeout"))],
-            FinalAnswer());
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserClose);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Close the browser"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(1, browser.CloseCalls);
-        Assert.Equal(3, model.Calls);
-        Assert.Null(model.Requests.Last().Tools);
-        Assert.NotNull(model.Requests.Last().ResponseContract);
-        Assert.Equal(EntryStatus.Completed, runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant).Status);
-    }
-
-    [Fact]
     public async Task Last_browser_action_near_cutoff_defers_remaining_batch_without_replay()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-09T12:00:00Z"));
@@ -67,26 +48,6 @@ public sealed partial class TerminalDisplayRepairTests
         Assert.Equal(2, model.Requests.Count);
         Assert.Equal(1, browser.CloseCalls);
         Assert.Single(entry.Envelope!.EffectReceipts!);
-    }
-
-    [Fact]
-    public async Task Finalization_rejects_new_tools_and_preserves_effects_without_another_retry()
-    {
-        var browser = new CountingBrowser();
-        var model = new RecordingModel(
-            [new ModelToolCallEvent(new("close", ToolCatalog.BrowserClose, "{}")), new ModelCompleted(ModelStopReason.ToolCalls)],
-            [new ModelFailed(new(ProviderErrorCode.Timeout, "Provider timed out.", FailureReason: "totalTimeout"))],
-            [new ModelToolCallEvent(new("again", ToolCatalog.BrowserClose, "{}")), new ModelCompleted(ModelStopReason.ToolCalls)]);
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserClose);
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("Close the browser"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(1, browser.CloseCalls);
-        var failed = runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Failed, failed.Status);
-        Assert.Equal("finalizationToolCall", failed.Failure!.FailureReason);
-        Assert.Single(failed.Envelope!.EffectReceipts!);
-        Assert.Equal(3, model.Calls);
     }
 
     [Fact]

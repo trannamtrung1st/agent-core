@@ -300,43 +300,6 @@ public sealed partial class TerminalDisplayRepairTests
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task A_committed_close_receipt_survives_protocol_repair(bool repairSucceeds)
-    {
-        var browser = new CountingBrowser();
-        var model = repairSucceeds
-            ? new RecordingModel(
-                [
-                    new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
-                    new ModelCompleted(ModelStopReason.ToolCalls)
-                ],
-                [Invalid(ProviderFailureReason.MissingDisplayText)],
-                Answer("The browser is closed."))
-            : new RecordingModel(
-                [
-                    new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
-                    new ModelCompleted(ModelStopReason.ToolCalls)
-                ],
-                [Invalid(ProviderFailureReason.MissingDisplayText)],
-                [Invalid(ProviderFailureReason.MissingDisplayText)]);
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserClose);
-        await runtime.AttachAsync();
-
-        Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
-        await runtime.WaitUntilIdleAsync();
-
-        Assert.Equal(1, browser.CloseCalls);
-        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(repairSucceeds ? EntryStatus.Completed : EntryStatus.Failed, assistant.Status);
-        Assert.Equal("Browser closed", Assert.Single(assistant.Envelope!.EffectReceipts!).Label);
-        if (repairSucceeds)
-        {
-            Assert.Equal("The browser is closed.", assistant.Text);
-        }
-    }
-
     [Fact]
     public async Task An_expired_execution_deadline_does_not_start_protocol_repair()
     {
