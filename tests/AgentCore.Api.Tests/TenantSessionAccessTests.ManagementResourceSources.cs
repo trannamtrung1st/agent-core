@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 public sealed partial class TenantSessionAccessTests
@@ -74,8 +75,10 @@ public sealed partial class TenantSessionAccessTests
         try
         {
             var model = new ResourceSourceModel { SourceReview = review };
+            var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
             void Configure(IServiceCollection services)
             {
+                services.AddLogging(logging => logging.AddProvider(diagnostics));
                 if (source != "browser") return;
                 var options = (BrowserOptions)services.Single(d => d.ServiceType == typeof(BrowserOptions)).ImplementationInstance!;
                 options.Enabled = true; options.Headless = true; options.Channel = null; options.FixtureEnabled = true; options.FixturePort = 0;
@@ -137,7 +140,8 @@ public sealed partial class TenantSessionAccessTests
             var runs = host.Services.GetRequiredService<ITenantRunStore>(); var approvals = host.Services.GetRequiredService<ITenantApprovalStore>(); TenantApprovalRequest? mutation = null; AgentRun done = null!;
             for (var index = 0; index < (review ? 2 : 1); index++)
             {
-                var pending = await AwaitManagementRun(runs, tenant, runId, true); Assert.True(pending.Status == AgentRunStatus.WaitingForApproval, pending.Failure?.Summary + Trace());
+                var pending = await AwaitManagementRun(runs, tenant, runId, true); Assert.True(pending.Status == AgentRunStatus.WaitingForApproval,
+                    $"{pending.Status}: {pending.Failure?.Code}: {pending.Failure?.Summary}; diagnosticId={pending.Failure?.DiagnosticId}; modelRequests={model.Requests.Count}; diagnostics={SafePreparationDiagnostics(diagnostics)}" + Trace());
                 var request = (await approvals.FindApprovalAsync(tenant, pending.ApprovalRequestId!.Value))!;
                 if (index == (review ? 1 : 0))
                 {
@@ -156,7 +160,8 @@ public sealed partial class TenantSessionAccessTests
                     await Task.Delay(25, deadline.Token);
                 }
             }
-            Assert.True(done.Status == AgentRunStatus.Completed, done.Failure?.Summary + Trace());
+            Assert.True(done.Status == AgentRunStatus.Completed,
+                $"{done.Status}: {done.Failure?.Code}: {done.Failure?.Summary}; diagnosticId={done.Failure?.DiagnosticId}; modelRequests={model.Requests.Count}; diagnostics={SafePreparationDiagnostics(diagnostics)}" + Trace());
             var receipt = await host.Services.GetRequiredService<ITenantApprovedOperationStore>().FindOperationReceiptAsync(tenant, mutation!.Operation.OperationId); Assert.NotNull(receipt!.ManagementResource);
             Assert.Equal(5, (await host.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, instance))!.Instance.Revision);
             var pinRead = model.Requests.SelectMany(r => r.Messages).Last(m => m.Role == ModelRole.Tool && m.ToolCallId == "read-original-pin");

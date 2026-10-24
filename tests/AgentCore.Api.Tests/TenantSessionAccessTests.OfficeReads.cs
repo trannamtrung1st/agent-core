@@ -194,7 +194,9 @@ public sealed partial class TenantSessionAccessTests
             // Do not render ordinary exception messages or unrelated warning text.
             var handled = diagnostics.Lines.Where(line =>
                 line.StartsWith("The agent could not prepare a response.", StringComparison.Ordinal)
-                || line.StartsWith("Tenant Run projection unavailable.", StringComparison.Ordinal));
+                || line.StartsWith("Tenant Run projection unavailable.", StringComparison.Ordinal)
+                || line.StartsWith("Language model pump failed.", StringComparison.Ordinal)
+                || line.StartsWith("Assistant response failed.", StringComparison.Ordinal));
             return string.Join(" | ", handled.Concat(diagnostics.Errors.Select(Cause)).TakeLast(16).Select(Bound));
         }
     }
