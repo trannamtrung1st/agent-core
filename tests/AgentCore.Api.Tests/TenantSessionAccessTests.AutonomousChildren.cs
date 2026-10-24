@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
@@ -153,11 +154,22 @@ public sealed partial class TenantSessionAccessTests
     }
 
     [Theory(Timeout = 180000)] [MemberData(nameof(IndependentChildCases))]
-    public async Task Independent_tasks_create_exact_children_and_consume_or_report_only_current_owned_completion(bool sqlite, string origin, string mode)
+    public Task Independent_tasks_create_exact_children_and_consume_or_report_only_current_owned_completion(bool sqlite, string origin, string mode) =>
+        ExerciseIndependentChildren(sqlite, origin, mode);
+
+    [Theory(Timeout = 180000)] [InlineData(false)] [InlineData(true)]
+    public Task Independent_nested_signal_handoff_defers_until_the_prior_generation_releases_without_replaying_work(bool sqlite) =>
+        ExerciseIndependentChildren(sqlite, "scheduled", "nested", holdSignalRelease: true);
+
+    private async Task ExerciseIndependentChildren(bool sqlite, string origin, string mode, bool holdSignalRelease = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-independent-child-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); var model = new IndependentChildModel(mode); var enabled = true;
         var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
+        var predecessors = new ConcurrentDictionary<Guid, AgentRun>();
+        var heldSignal = new TaskCompletionSource<AgentRun>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handoffVerified = false;
         WebApplicationFactory<Program>? reopened = null; HttpClient? reopenedOwner = null;
         void Configure(IServiceCollection services)
         {
@@ -175,6 +187,34 @@ public sealed partial class TenantSessionAccessTests
             var tenant = setup.Tenant; var api = $"/api/v2/tenants/{tenant}"; var sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
             var seed = (await sessions.FindTenantSessionAsync(tenant, setup.Session))!; var human = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
             var access = factory.Services.GetRequiredService<TenantAccessService>();
+            void ObserveRuntimeHandoffs()
+            {
+                var host = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>();
+                host.RuntimeCollisionObserved = (_, previous) => predecessors[previous.AgentRunId] = previous;
+                if (holdSignalRelease) host.BeforeRuntimeRelease = async previous =>
+                {
+                    if (previous.Admission.TaskIntent?.Text == "Independent level-one evidence" && previous.WaitCount == 0
+                        && heldSignal.TrySetResult(previous)) await releaseSignal.Task;
+                };
+            }
+            ObserveRuntimeHandoffs();
+            async Task DrainObservedGenerations(IEnumerable<AgentRun> observedRuns, CancellationToken ct)
+            {
+                var host = factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>();
+                bool Held(AgentRun run) => holdSignalRelease && !handoffVerified
+                    && run.Admission.TaskIntent?.Text == "Independent level-one evidence";
+                foreach (var previous in predecessors.Values)
+                {
+                    if (Held(previous)) continue;
+                    await host.WaitForGenerationReleaseAsync(previous.SessionId, previous.AgentRunId, previous.Claim!.Generation, ct);
+                    predecessors.TryRemove(previous.AgentRunId, out _);
+                }
+                foreach (var waiting in observedRuns.Where(run => run.Wait?.SuspendedGeneration is not null))
+                {
+                    if (Held(waiting)) continue;
+                    await host.WaitForGenerationReleaseAsync(waiting.SessionId, waiting.AgentRunId, waiting.Wait!.SuspendedGeneration!.Value, ct);
+                }
+            }
             async Task<RoleAssignment> Grant(string name, string[] permissions)
             {
                 var role = await access.SaveRoleAsync(human, tenant, null, name, permissions, await Revision(owner, tenant));
@@ -208,6 +248,7 @@ public sealed partial class TenantSessionAccessTests
             {
                 while (true)
                 {
+                    await DrainObservedGenerations(observed, timeout.Token);
                     await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync(timeout.Token);
                     await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8, timeout.Token);
                     current = (await CurrentApprovalExecution(runs, tenant, initialId))!;
@@ -222,6 +263,36 @@ public sealed partial class TenantSessionAccessTests
                     }
                     var terminalChildren = new List<AgentRun>();
                     foreach (var child in children) { var last = (await CurrentApprovalExecution(runs, tenant, child.AgentRunId))!; if (last.IsTerminal) terminalChildren.Add(last); }
+                    if (holdSignalRelease && !handoffVerified && heldSignal.Task.IsCompletedSuccessfully
+                        && predecessors.ContainsKey(heldSignal.Task.Result.AgentRunId))
+                    {
+                        var previous = heldSignal.Task.Result;
+                        var deferred = (await runs.FindTenantRunAsync(tenant, previous.AgentRunId, timeout.Token))!;
+                        Assert.Equal(AgentRunStatus.WaitingToRetry, deferred.Status);
+                        Assert.Equal(previous.AttemptCount, deferred.AttemptCount); Assert.Equal(3, deferred.Checkpoint!.StepCount);
+                        Assert.True(deferred.Checkpoint.AwaitingSignalAdmission); Assert.True(deferred.Checkpoint.AwaitingRuntimeAdmission);
+                        var generated = model.Requests.Count(request => request.ResponseId == previous.ResponseId); Assert.Equal(3, generated);
+                        Assert.NotNull(deferred.NextRetryAtUtc); Assert.True(deferred.NextRetryAtUtc > clock.GetUtcNow());
+                        clock.Advance(deferred.NextRetryAtUtc.Value - clock.GetUtcNow());
+                        await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8, timeout.Token);
+                        var repeated = (await runs.FindTenantRunAsync(tenant, previous.AgentRunId, timeout.Token))!;
+                        if (repeated.Status == AgentRunStatus.Running)
+                        {
+                            // A clock-driven hosted pass may have won the claim. Join its exact
+                            // deduplicated dispatch before asserting the durable deferral outcome.
+                            await factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>().DispatchAsync(repeated, timeout.Token);
+                            repeated = (await runs.FindTenantRunAsync(tenant, previous.AgentRunId, timeout.Token))!;
+                        }
+                        Assert.Equal(AgentRunStatus.WaitingToRetry, repeated.Status); Assert.Equal(previous.AttemptCount, repeated.AttemptCount);
+                        Assert.Equal(deferred.Checkpoint.PayloadJson, repeated.Checkpoint!.PayloadJson);
+                        Assert.Equal(generated, model.Requests.Count(request => request.ResponseId == previous.ResponseId));
+                        handoffVerified = true; releaseSignal.TrySetResult();
+                        await factory.Services.GetRequiredService<AgentCore.Api.Realtime.TenantSessionRuntimeHost>()
+                            .WaitForGenerationReleaseAsync(previous.SessionId, previous.AgentRunId, previous.Claim!.Generation, timeout.Token);
+                    }
+                    // A durable suspension precedes provider/runtime disposal. Drain that exact
+                    // generation before advancing the shared logical clock for any task's retry.
+                    await DrainObservedGenerations(all, timeout.Token);
                     if (current.Wait is { Mode: AgentRunWaitMode.Duration } wait && terminalChildren.Count == children.Length && children.Length > 0 && wait.DeadlineUtc > clock.GetUtcNow()) clock.Advance(wait.DeadlineUtc - clock.GetUtcNow());
                     if (current.Status == AgentRunStatus.WaitingToRetry && current.NextRetryAtUtc > clock.GetUtcNow()) clock.Advance(current.NextRetryAtUtc.Value - clock.GetUtcNow());
                     foreach (var child in children)
@@ -258,6 +329,7 @@ public sealed partial class TenantSessionAccessTests
                             reopened = new NativeTenantSqliteFactory(root, model, Configure); factory = reopened;
                             reopenedOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); owner = reopenedOwner;
                             await Login(owner, "owner@example.test", "explicit-synthetic-test-password"); runs = factory.Services.GetRequiredService<ITenantRunStore>(); sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
+                            ObserveRuntimeHandoffs();
                             Assert.Equal(JsonSerializer.Serialize(request), JsonSerializer.Serialize((await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, request.RequestId))!));
                             Volatile.Write(ref enabled, true); restarted = true; break;
                         }
@@ -314,6 +386,7 @@ public sealed partial class TenantSessionAccessTests
                     + $"rootEntered={model.RootEntered.Task.IsCompleted}; acknowledged={model.Acknowledged.Task.IsCompleted}; "
                     + $"runs={JsonSerializer.Serialize(states)}; diagnostics={SafePreparationDiagnostics(diagnostics)}");
             }
+            if (holdSignalRelease) Assert.True(handoffVerified, "The controlled nested signal collision was not exercised.");
             Assert.Equal(mode == "revoked-read" ? AgentRunStatus.Failed : mode == "cancel-ack" ? AgentRunStatus.Cancelled : AgentRunStatus.Completed, current.Status);
             var schedulingPolicyBlocksReport = mode == "report-policy" && origin == "scheduled";
             var finalRuns = (await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: seed.Owner.AgentInstanceId)).Items;
@@ -405,7 +478,7 @@ public sealed partial class TenantSessionAccessTests
         }
         finally
         {
-            model.Start.TrySetResult(); model.Finish.TrySetResult(); reopenedOwner?.Dispose(); if (reopened is not null) await reopened.DisposeAsync(); await first.DisposeAsync();
+            releaseSignal.TrySetResult(); model.Start.TrySetResult(); model.Finish.TrySetResult(); reopenedOwner?.Dispose(); if (reopened is not null) await reopened.DisposeAsync(); await first.DisposeAsync();
             SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }

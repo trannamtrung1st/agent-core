@@ -123,6 +123,19 @@ public sealed partial class TenantRunAdmissionTests
         clock.Advance(TimeSpan.FromSeconds(1)); var resumed = await ClaimBackground(f, deferred);
         Assert.Equal(1, resumed.Run.AttemptCount); Assert.Equal(1, resumed.Run.WaitCount); Assert.NotEqual(active.Claim!.Generation, resumed.Frame.Generation);
         Assert.True(AgentRunToolCallCheckpoint.TryRead(resumed.Run.Checkpoint, out var messages)); Assert.Single(messages!, m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.ExecutionWait);
+        Assert.True(resumed.Run.Checkpoint!.AwaitingRuntimeAdmission); Assert.True(resumed.Run.Checkpoint.AwaitingSignalAdmission);
+        var secondDeferral = await runtime.ApplyTenantRuntimeCommandAsync(resumed.Run.Owner, resumed.Run.AgentRunId,
+            new AgentRunCommand.DeferSignalDispatch(resumed.Run.Revision, clock.GetUtcNow(), resumed.Frame.Generation, clock.GetUtcNow().AddSeconds(1)),
+            f.Ids.NewId(), runtimeGeneration: resumed.Frame.Generation);
+        Assert.Equal(1, secondDeferral.AttemptCount); Assert.Equal(active.Checkpoint.PayloadJson, secondDeferral.Checkpoint!.PayloadJson);
+        clock.Advance(TimeSpan.FromSeconds(1)); var reclaimed = await ClaimBackground(f, secondDeferral);
+        Assert.Equal(1, reclaimed.Run.AttemptCount); Assert.Equal(1, reclaimed.Run.WaitCount);
+        Assert.True(reclaimed.Run.Checkpoint!.AwaitingRuntimeAdmission); Assert.True(reclaimed.Run.Checkpoint.AwaitingSignalAdmission);
+        Assert.Equal(active.Checkpoint.PayloadJson, reclaimed.Run.Checkpoint.PayloadJson);
+        var admitted = await runtime.ApplyTenantRuntimeCommandAsync(reclaimed.Run.Owner, reclaimed.Run.AgentRunId,
+            new AgentRunCommand.Checkpoint(reclaimed.Run.Revision, clock.GetUtcNow(), reclaimed.Frame.Generation,
+                reclaimed.Run.Checkpoint.WithRuntimeAdmissionPending(false), null), f.Ids.NewId(), runtimeGeneration: reclaimed.Frame.Generation);
+        Assert.False(admitted.Checkpoint!.AwaitingRuntimeAdmission); Assert.False(admitted.Checkpoint.AwaitingSignalAdmission);
     }
 
     [Theory] [InlineData(false)] [InlineData(true)]

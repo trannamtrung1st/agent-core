@@ -403,7 +403,8 @@ public sealed partial class AgentRun
             CancellationRequestedAtUtc,
             KnownEffectSummary,
             Progress,
-            Checkpoint?.AwaitingRuntimeAdmission == true && !ExternalResultAwaitingAdmission(Checkpoint, SideEffect) ? Checkpoint.WithRuntimeAdmissionPending(false) : Checkpoint,
+            Checkpoint?.AwaitingRuntimeAdmission == true && !SignalAwaitingAdmission
+                && !ExternalResultAwaitingAdmission(Checkpoint, SideEffect) ? Checkpoint.WithRuntimeAdmissionPending(false) : Checkpoint,
             Result,
             Failure,
             SideEffect,
