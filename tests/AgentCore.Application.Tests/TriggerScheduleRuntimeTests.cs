@@ -28,12 +28,11 @@ public sealed class TriggerScheduleRuntimeTests
         var definition = await LoadAsync(8);
         foreach (var name in new[] { "revision", "snapshot", "mutate", "persist", "history" })
         {
-            var result = await tools.ExecuteAsync(
-                definition,
-                Guid.NewGuid(),
-                new ModelToolCall("guard", ToolCatalog.KnowledgeRetrieve, $$"""{"identity":"support-order-policy","{{name}}":"1"}"""),
-                ToolLimits.MaxOutputBytes);
-            Assert.Contains("not permitted", result.Text, StringComparison.OrdinalIgnoreCase);
+            var arguments = $$"""{"identity":"support-order-policy","{{name}}":"1"}""";
+            Assert.Throws<ArgumentException>(() => TenantWorkspaceReadContract.Parse(ToolCatalog.KnowledgeRetrieve, arguments));
+            var result = await tools.ExecuteAsync(definition, Guid.NewGuid(),
+                new ModelToolCall("guard", ToolCatalog.KnowledgeRetrieve, arguments), ToolLimits.MaxOutputBytes);
+            Assert.Contains("forbidden", result.Text, StringComparison.OrdinalIgnoreCase);
         }
     }
 

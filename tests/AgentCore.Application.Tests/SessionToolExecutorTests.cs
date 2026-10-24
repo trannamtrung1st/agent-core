@@ -87,7 +87,8 @@ public sealed class SessionToolExecutorTests
             Support(),
             Guid.NewGuid(),
             new ModelToolCall("c2", ToolCatalog.KnowledgeRetrieve, "{"));
-        Assert.Contains("invalid", malformed, StringComparison.OrdinalIgnoreCase);
+        Assert.ThrowsAny<JsonException>(() => TenantWorkspaceReadContract.Parse(ToolCatalog.KnowledgeRetrieve, "{"));
+        Assert.Contains("forbidden", malformed, StringComparison.OrdinalIgnoreCase);
 
         var withSandbox = new SessionToolExecutor();
         foreach (var name in new[] { "process", "shell", "bash", "cmd", "powershell", "exec" })
@@ -103,25 +104,16 @@ public sealed class SessionToolExecutorTests
     }
 
     [Fact]
-    public async Task Generated_artifact_create_ignores_fabricated_source_attachment()
+    public async Task Artifact_parser_refuses_fabricated_source_and_unowned_executor_cannot_publish()
     {
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var executor = new SessionToolExecutor();
-        var sessionId = Guid.NewGuid();
         var fabricated = Guid.NewGuid();
-        var result = await ExecuteTextAsync(
-            executor,
-            Artifacts(),
-            sessionId,
-            new ModelToolCall(
-                "c1",
-                ToolCatalog.ArtifactsCreate,
-                $$"""{"displayName":"note.md","content":"hello","sourceAttachmentId":"{{fabricated:D}}"}"""));
-        Assert.Contains("\"artifactId\"", result, StringComparison.Ordinal);
+        var arguments = $$"""{"displayName":"note.md","content":"hello","sourceAttachmentId":"{{fabricated:D}}"}""";
+        Assert.Throws<ArgumentException>(() => TenantArtifactToolContract.Parse(arguments));
+        var result = await ExecuteTextAsync(new SessionToolExecutor(), Artifacts(), Guid.NewGuid(),
+            new ModelToolCall("c1", ToolCatalog.ArtifactsCreate, arguments));
+        Assert.Contains("forbidden", result, StringComparison.Ordinal);
         Assert.DoesNotContain(fabricated.ToString("D"), result, StringComparison.Ordinal);
-        var listed = await artifacts.ListAsync(sessionId);
-        Assert.Single(listed);
-        Assert.Null(listed[0].SourceAttachmentId);
+        Assert.DoesNotContain("artifactId", result, StringComparison.Ordinal);
     }
 
     [Fact]
