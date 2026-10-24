@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
@@ -33,7 +34,15 @@ public sealed partial class TenantSessionAccessTests
             using var owner = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
             var (tenant, instance) = await SetupManagementInspection(host, owner); var api = $"/api/v2/tenants/{tenant}";
             model.ArgumentsOverride = await ChildReadArguments(owner, tenant, instance, tool);
+            Guid session = default; string[]? admittedSkillWitnesses = null;
             race.AfterObservation = async () => {
+                var active = Assert.Single((await host.Services.GetRequiredService<ITenantRunStore>()
+                    .ListTenantSessionRunsAsync(tenant, session, null, 0, 100)).Items);
+                var prior = TenantManagementReadReferences.Read(active.Checkpoint);
+                Assert.Equal(new[] { "skills.load", "skills.load" }, prior.Select(r => r.ToolName));
+                Assert.Equal(new[] { "{\"ids\":[\"definition:browser.record.lookup\"]}", "{\"ids\":[\"instance:metadata-private\"]}" },
+                    prior.Select(r => r.ArgumentsJson).Order(StringComparer.Ordinal));
+                admittedSkillWitnesses = prior.Select(r => JsonSerializer.Serialize(r)).ToArray();
                 if (boundary == "revoke")
                 {
                     var state = (await host.Services.GetRequiredService<IIamStore>().ReadTenantAsync(tenant))!;
@@ -50,13 +59,14 @@ public sealed partial class TenantSessionAccessTests
                     Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
                 }
             };
-            var session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 6 }))).GetProperty("sessionId").GetGuid();
+            session = (await Json(await owner.PostAsJsonAsync(api + "/sessions", new { agentInstanceId = instance, expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 6 }))).GetProperty("sessionId").GetGuid();
             var submitted = await owner.PostAsJsonAsync(api + $"/sessions/{session}/messages", new { messageId = Guid.NewGuid(), text = "Read the current child before its authority changes.", expectedRevision = await Revision(owner, tenant), expectedSessionRevision = 1 });
             Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode);
             var runId = (await Json(submitted)).GetProperty("runId").GetGuid(); if (factory is ApprovalExecutionFactory memory) Volatile.Write(ref memory.Enabled, true);
             var final = await AwaitManagementRun(host.Services.GetRequiredService<ITenantRunStore>(), tenant, runId);
             Assert.Equal(1, race.Applied); Assert.Equal(AgentRunStatus.Failed, final.Status); Assert.Equal(2, model.Requests.Count);
-            Assert.Empty(TenantManagementReadReferences.Read(final.Checkpoint));
+            Assert.NotNull(admittedSkillWitnesses);
+            Assert.Equal(admittedSkillWitnesses, TenantManagementReadReferences.Read(final.Checkpoint).Select(r => JsonSerializer.Serialize(r)));
             Assert.DoesNotContain(model.Requests.SelectMany(r => r.Messages), m => m.Text.Contains("\"tenantManagementRead\":true", StringComparison.Ordinal));
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }

@@ -179,9 +179,22 @@ public sealed partial class TenantSessionAccessTests
             var sessions = factory.Services.GetRequiredService<ITenantSessionStore>(); var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var id = Guid.NewGuid();
             async Task<System.Text.Json.JsonElement> Queue()
             {
-                var current = (await sessions.FindTenantSessionAsync(setup.Tenant, setup.Session))!.Snapshot;
-                var response = await owner.PostAsJsonAsync(url + "/messages", new { messageId = id, text = "Hello queued source", behavior = "queue", expectedRevision = await Revision(owner, setup.Tenant), expectedSessionRevision = current.Revision });
-                Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync()); return await Json(response);
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                while (true)
+                {
+                    // The live prefix may still be persisting after its wire delta.
+                    // Read the public owner's coherent witness pair and retry only
+                    // an explicit optimistic conflict, preserving the same message ID.
+                    var current = await Json(await owner.GetAsync(url + "/messages?limit=1", deadline.Token));
+                    using var response = await owner.PostAsJsonAsync(url + "/messages", new {
+                        messageId = id, text = "Hello queued source", behavior = "queue",
+                        expectedRevision = current.GetProperty("securityRevision").GetInt64(),
+                        expectedSessionRevision = current.GetProperty("sessionRevision").GetInt64() }, deadline.Token);
+                    if (response.StatusCode == HttpStatusCode.Conflict
+                        && (await Json(response)).GetProperty("reasonCode").GetString() == "stale_revision")
+                    { await Task.Delay(20, deadline.Token); continue; }
+                    Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync(deadline.Token)); return await Json(response);
+                }
             }
             var queued = await Queue(); var replay = await Queue(); Assert.False(replay.GetProperty("created").GetBoolean());
             Assert.Equal(queued.GetProperty("runId").GetGuid(), replay.GetProperty("runId").GetGuid());
