@@ -34,7 +34,8 @@ public static class TenantConfigurationContinuationRules
         foreach (var message in messages!.Where(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.RequestAuthorization))
         {
             using var body = JsonDocument.Parse(message.Text);
-            if (body.RootElement.ValueKind == JsonValueKind.Object && body.RootElement.TryGetProperty("requestId", out var value) && value.TryGetGuid(out var id)) result.Add(id);
+            if (body.RootElement.ValueKind == JsonValueKind.Object && body.RootElement.TryGetProperty("requestId", out var value)
+                && value.ValueKind == JsonValueKind.String && value.TryGetGuid(out var id)) result.Add(id);
         }
         return result.ToArray();
     }
@@ -58,7 +59,8 @@ public static class TenantConfigurationContinuationRules
             if (call.Name == "configuration.propose" || descriptor.Effect == ToolEffect.ReadOnly && call.Name != ToolCatalog.RequestAuthorization) continue;
             if (call.Name != ToolCatalog.RequestAuthorization) return null;
             using var body = JsonDocument.Parse(message.Text); var data = body.RootElement;
-            if (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty("requestId", out var requested) || !requested.TryGetGuid(out var id)
+            if (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty("requestId", out var requested)
+                || requested.ValueKind != JsonValueKind.String || !requested.TryGetGuid(out var id)
                 || request(id) is not { Status: TenantApprovalStatus.Approved } approved || approved.TenantId != source.Owner.TenantId
                 || approved.SessionId != source.SessionId || approved.ExecutorPrincipalId != source.Owner.ExecutorPrincipalId
                 || approved.Operation.InstanceId != source.AgentInstanceId || approved.OriginalInitiatorPrincipalId != source.Admission.ExecutionContext.OriginalInitiatorPrincipalId

@@ -157,10 +157,12 @@ public sealed partial class TenantSessionAccessTests
     {
         var root = Path.Combine(Path.GetTempPath(), "tenant-independent-child-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow); var model = new IndependentChildModel(mode); var enabled = true;
+        var diagnostics = new DiagnosticLineLoggerProvider(LogLevel.Warning);
         WebApplicationFactory<Program>? reopened = null; HttpClient? reopenedOwner = null;
         void Configure(IServiceCollection services)
         {
             services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock); services.AddSingleton<ILoggerProvider>(new BackgroundFailureLogs(model));
+            services.AddSingleton<ILoggerProvider>(diagnostics);
             services.Replace(ServiceDescriptor.Singleton<ITenantRunExecution>(p => new AttachmentExecutionGate(() => Volatile.Read(ref enabled), new TenantRunExecution(
                 p.GetRequiredService<ITenantRuntimeStore>(), p.GetRequiredService<ITenantRunStore>(), p.GetRequiredService<ITenantRunDispatcher>(), p.GetRequiredService<IIdGenerator>(), p.GetRequiredService<TimeProvider>()))));
         }
@@ -201,85 +203,116 @@ public sealed partial class TenantSessionAccessTests
             model.Start.TrySetResult();
             var initial = (await runs.FindTenantRunAsync(tenant, initialId))!; var decisions = new List<TenantApprovalRequest>(); var seen = new HashSet<Guid>();
             AgentRun current = initial; var boundaryApplied = false;
-            while (true)
+            IReadOnlyList<AgentRun> observed = [];
+            try
             {
-                await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync(timeout.Token);
-                await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8, timeout.Token);
-                current = (await CurrentApprovalExecution(runs, tenant, initialId))!;
-                var all = (await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: seed.Owner.AgentInstanceId, ct: timeout.Token)).Items;
-                var children = all.Where(r => r.Admission.ExecutionContext?.Origin == ExecutionOrigin.ImmediateBackground).ToArray();
-                if (current.IsTerminal && children.Length == 0 && mode is not ("reject" or "grant-missing-secondary"))
+                while (true)
                 {
-                    AgentRunToolCallCheckpoint.TryRead(current.Checkpoint, out var saved);
-                    Assert.Fail($"Parent ended before creating its child: {current.Status} {current.Failure?.Code} {current.Failure?.Summary}; {current.Result?.Text}; "
-                        + string.Join(" | ", saved?.Where(m => m.Role == ModelRole.Tool).Select(m => m.Name + ":" + m.Text) ?? []) + " Errors: " + string.Join(" | ", model.Failures));
-                }
-                var terminalChildren = new List<AgentRun>();
-                foreach (var child in children) { var last = (await CurrentApprovalExecution(runs, tenant, child.AgentRunId))!; if (last.IsTerminal) terminalChildren.Add(last); }
-                if (current.Wait is { Mode: AgentRunWaitMode.Duration } wait && terminalChildren.Count == children.Length && children.Length > 0 && wait.DeadlineUtc > clock.GetUtcNow()) clock.Advance(wait.DeadlineUtc - clock.GetUtcNow());
-                if (current.Status == AgentRunStatus.WaitingToRetry && current.NextRetryAtUtc > clock.GetUtcNow()) clock.Advance(current.NextRetryAtUtc.Value - clock.GetUtcNow());
-                foreach (var child in children)
-                {
-                    var last = (await CurrentApprovalExecution(runs, tenant, child.AgentRunId))!;
-                    if (last.Status == AgentRunStatus.WaitingToRetry && last.NextRetryAtUtc > clock.GetUtcNow()) clock.Advance(last.NextRetryAtUtc.Value - clock.GetUtcNow());
-                }
-                if (mode.StartsWith("report", StringComparison.Ordinal) && current.IsTerminal && terminalChildren.Count == children.Length && children.Length > 0)
-                {
-                    if (mode == "report-policy" && !boundaryApplied)
+                    await factory.Services.GetRequiredService<TenantApprovalService>().DispatchPendingAsync(timeout.Token);
+                    await factory.Services.GetRequiredService<ITenantRunExecution>().ExecuteRunnableAsync(8, timeout.Token);
+                    current = (await CurrentApprovalExecution(runs, tenant, initialId))!;
+                    var all = (await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100, instanceId: seed.Owner.AgentInstanceId, ct: timeout.Token)).Items;
+                    observed = all.ToArray();
+                    var children = all.Where(r => r.Admission.ExecutionContext?.Origin == ExecutionOrigin.ImmediateBackground).ToArray();
+                    if (current.IsTerminal && children.Length == 0 && mode is not ("reject" or "grant-missing-secondary"))
+                    {
+                        AgentRunToolCallCheckpoint.TryRead(current.Checkpoint, out var saved);
+                        Assert.Fail($"Parent ended before creating its child: {current.Status} {current.Failure?.Code} {current.Failure?.Summary}; {current.Result?.Text}; "
+                            + string.Join(" | ", saved?.Where(m => m.Role == ModelRole.Tool).Select(m => m.Name + ":" + m.Text) ?? []) + " Errors: " + string.Join(" | ", model.Failures));
+                    }
+                    var terminalChildren = new List<AgentRun>();
+                    foreach (var child in children) { var last = (await CurrentApprovalExecution(runs, tenant, child.AgentRunId))!; if (last.IsTerminal) terminalChildren.Add(last); }
+                    if (current.Wait is { Mode: AgentRunWaitMode.Duration } wait && terminalChildren.Count == children.Length && children.Length > 0 && wait.DeadlineUtc > clock.GetUtcNow()) clock.Advance(wait.DeadlineUtc - clock.GetUtcNow());
+                    if (current.Status == AgentRunStatus.WaitingToRetry && current.NextRetryAtUtc > clock.GetUtcNow()) clock.Advance(current.NextRetryAtUtc.Value - clock.GetUtcNow());
+                    foreach (var child in children)
+                    {
+                        var last = (await CurrentApprovalExecution(runs, tenant, child.AgentRunId))!;
+                        if (last.Status == AgentRunStatus.WaitingToRetry && last.NextRetryAtUtc > clock.GetUtcNow()) clock.Advance(last.NextRetryAtUtc.Value - clock.GetUtcNow());
+                    }
+                    if (mode.StartsWith("report", StringComparison.Ordinal) && current.IsTerminal && terminalChildren.Count == children.Length && children.Length > 0)
+                    {
+                        if (mode == "report-policy" && !boundaryApplied)
+                        {
+                            boundaryApplied = true;
+                            var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, seed.Owner.AgentInstanceId))!;
+                            var changed = await owner.PatchAsJsonAsync(api + $"/agents/{seed.Owner.AgentInstanceId}/settings/triggerPolicy", new {
+                                expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, set = new { enabled = false }, clear = Array.Empty<string>() });
+                            Assert.True(changed.IsSuccessStatusCode, await changed.Content.ReadAsStringAsync());
+                        }
+                        await factory.Services.GetRequiredService<TenantBackgroundCompletionService>().AdmitPendingAsync(8, timeout.Token);
+                    }
+                    var pending = await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(Status: TenantApprovalStatus.Pending, PageSize: 100), ct: timeout.Token);
+                    // Canonical creation/read/reports are visible through their own stored request IDs;
+                    // enumerate active Runs as well because some protected observations are filtered from a raw page.
+                    var requests = new List<TenantApprovalRequest>(pending.Items);
+                    foreach (var run in all.Where(r => r.Status == AgentRunStatus.WaitingForApproval && r.ApprovalRequestId is not null))
+                        if (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, run.ApprovalRequestId!.Value, timeout.Token) is { } item && requests.All(r => r.RequestId != item.RequestId)) requests.Add(item);
+                    var restarted = false;
+                    foreach (var request in requests.Where(r => r.Status == TenantApprovalStatus.Pending && !seen.Contains(r.RequestId)))
+                    {
+                        var restartAt = mode == "restart-creation" && request.Operation.BackgroundStart is not null || mode == "restart-read" && request.Operation.CompletionRead is not null
+                            || mode == "report-restart" && request.Operation.BackgroundReport is not null;
+                        if (restartAt && reopened is null)
+                        {
+                            Volatile.Write(ref enabled, false); await first.DisposeAsync(); model = new IndependentChildModel(mode); model.Start.TrySetResult(); model.Finish.TrySetResult();
+                            reopened = new NativeTenantSqliteFactory(root, model, Configure); factory = reopened;
+                            reopenedOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); owner = reopenedOwner;
+                            await Login(owner, "owner@example.test", "explicit-synthetic-test-password"); runs = factory.Services.GetRequiredService<ITenantRunStore>(); sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
+                            Assert.Equal(JsonSerializer.Serialize(request), JsonSerializer.Serialize((await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, request.RequestId))!));
+                            Volatile.Write(ref enabled, true); restarted = true; break;
+                        }
+                        seen.Add(request.RequestId); decisions.Add(request);
+                        Assert.Equal(initial.ActivationId, request.RootActivationId); Assert.Equal(origin == "scheduled" ? (Guid?)null : human, request.OriginalInitiatorPrincipalId);
+                        var detail = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
+                        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = mode == "reject" ? "reject" : "approve", actionHash = request.Operation.ActionHash,
+                            expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision })).StatusCode);
+                    }
+                    if (restarted) continue;
+                    if (!boundaryApplied && model.Acknowledged.Task.IsCompleted && mode is "revoked-read" or "cancel-ack")
                     {
                         boundaryApplied = true;
-                        var agent = (await factory.Services.GetRequiredService<ITenantAgentStore>().FindTenantAgentAsync(tenant, seed.Owner.AgentInstanceId))!;
-                        var changed = await owner.PatchAsJsonAsync(api + $"/agents/{seed.Owner.AgentInstanceId}/settings/triggerPolicy", new {
-                            expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = agent.Instance.Revision, set = new { enabled = false }, clear = Array.Empty<string>() });
-                        Assert.True(changed.IsSuccessStatusCode, await changed.Content.ReadAsStringAsync());
+                        if (mode == "revoked-read") await access.RevokeAssignmentAsync(human, tenant, reads.AssignmentId, await Revision(owner, tenant));
+                        else
+                        {
+                            current = (await CurrentApprovalExecution(runs, tenant, initialId))!;
+                            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/agent-runs/{current.AgentRunId}/cancel", new { expectedRevision = await Revision(owner, tenant), expectedRunRevision = current.Revision })).StatusCode);
+                        }
+                        model.Finish.TrySetResult();
                     }
-                    await factory.Services.GetRequiredService<TenantBackgroundCompletionService>().AdmitPendingAsync(8, timeout.Token);
-                }
-                var pending = await factory.Services.GetRequiredService<ITenantApprovalStore>().ListApprovalsAsync(tenant, null, null, new(Status: TenantApprovalStatus.Pending, PageSize: 100), ct: timeout.Token);
-                // Canonical creation/read/reports are visible through their own stored request IDs;
-                // enumerate active Runs as well because some protected observations are filtered from a raw page.
-                var requests = new List<TenantApprovalRequest>(pending.Items);
-                foreach (var run in all.Where(r => r.Status == AgentRunStatus.WaitingForApproval && r.ApprovalRequestId is not null))
-                    if (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, run.ApprovalRequestId!.Value, timeout.Token) is { } item && requests.All(r => r.RequestId != item.RequestId)) requests.Add(item);
-                var restarted = false;
-                foreach (var request in requests.Where(r => r.Status == TenantApprovalStatus.Pending && !seen.Contains(r.RequestId)))
-                {
-                    var restartAt = mode == "restart-creation" && request.Operation.BackgroundStart is not null || mode == "restart-read" && request.Operation.CompletionRead is not null
-                        || mode == "report-restart" && request.Operation.BackgroundReport is not null;
-                    if (restartAt && reopened is null)
+                    if (current.IsTerminal && (mode is "reject" or "grant-missing-secondary" || terminalChildren.Count == children.Length && children.Length > 0))
                     {
-                        Volatile.Write(ref enabled, false); await first.DisposeAsync(); model = new IndependentChildModel(mode); model.Start.TrySetResult(); model.Finish.TrySetResult();
-                        reopened = new NativeTenantSqliteFactory(root, model, Configure); factory = reopened;
-                        reopenedOwner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost") }); owner = reopenedOwner;
-                        await Login(owner, "owner@example.test", "explicit-synthetic-test-password"); runs = factory.Services.GetRequiredService<ITenantRunStore>(); sessions = factory.Services.GetRequiredService<ITenantSessionStore>();
-                        Assert.Equal(JsonSerializer.Serialize(request), JsonSerializer.Serialize((await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, request.RequestId))!));
-                        Volatile.Write(ref enabled, true); restarted = true; break;
+                        if (!mode.StartsWith("report", StringComparison.Ordinal)) break;
+                        if (all.Any(r => r.Admission.OutputContract == AgentRunOutputContract.CompletionReport && r.IsTerminal)) break;
+                        if (mode == "report-policy" && (await runs.FindTenantCompletionAsync(children[0].Owner, terminalChildren[0].AgentRunId))?.Status == CompletionInboxStatus.Skipped) break;
                     }
-                    seen.Add(request.RequestId); decisions.Add(request);
-                    Assert.Equal(initial.ActivationId, request.RootActivationId); Assert.Equal(origin == "scheduled" ? (Guid?)null : human, request.OriginalInitiatorPrincipalId);
-                    var detail = await Json(await owner.GetAsync(api + $"/approvals/{request.RequestId}"));
-                    Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/approvals/{request.RequestId}/decision", new { decision = mode == "reject" ? "reject" : "approve", actionHash = request.Operation.ActionHash,
-                        expectedRevision = detail.GetProperty("securityRevision").GetInt64(), expectedRequestRevision = request.Revision })).StatusCode);
+                    await Task.Delay(20, timeout.Token);
                 }
-                if (restarted) continue;
-                if (!boundaryApplied && model.Acknowledged.Task.IsCompleted && mode is "revoked-read" or "cancel-ack")
+            }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+            {
+                var snapshot = "last-observed";
+                using var diagnosticTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                try
                 {
-                    boundaryApplied = true;
-                    if (mode == "revoked-read") await access.RevokeAssignmentAsync(human, tenant, reads.AssignmentId, await Revision(owner, tenant));
-                    else
-                    {
-                        current = (await CurrentApprovalExecution(runs, tenant, initialId))!;
-                        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(api + $"/agent-runs/{current.AgentRunId}/cancel", new { expectedRevision = await Revision(owner, tenant), expectedRunRevision = current.Revision })).StatusCode);
-                    }
-                    model.Finish.TrySetResult();
+                    observed = (await runs.ListTenantSessionRunsAsync(tenant, null, null, 0, 100,
+                        instanceId: seed.Owner.AgentInstanceId, ct: diagnosticTimeout.Token)).Items.ToArray();
+                    snapshot = "current";
                 }
-                if (current.IsTerminal && (mode is "reject" or "grant-missing-secondary" || terminalChildren.Count == children.Length && children.Length > 0))
+                catch (Exception error) { snapshot = "last-observed:" + error.GetType().Name; }
+                var states = observed.Take(30).Select(run => new
                 {
-                    if (!mode.StartsWith("report", StringComparison.Ordinal)) break;
-                    if (all.Any(r => r.Admission.OutputContract == AgentRunOutputContract.CompletionReport && r.IsTerminal)) break;
-                    if (mode == "report-policy" && (await runs.FindTenantCompletionAsync(children[0].Owner, terminalChildren[0].AgentRunId))?.Status == CompletionInboxStatus.Skipped) break;
-                }
-                await Task.Delay(20, timeout.Token);
+                    run.AgentRunId, run.SessionId, run.Status, run.Revision, run.AttemptCount,
+                    origin = run.Admission.ExecutionContext?.Origin, parentRunId = run.Admission.ExecutionContext?.ParentRunId,
+                    continuation = run.Result?.ContinuationRunId, outcome = run.Result?.OutcomeKind,
+                    failureCode = run.Failure?.Code, diagnosticId = run.Failure?.DiagnosticId,
+                    run.NextRetryAtUtc, claimGeneration = run.Claim?.Generation, claimExpiresAt = run.Claim?.LeaseExpiresAtUtc,
+                    waitMode = run.Wait?.Mode, waitUntil = run.Wait?.Until, waitDeadline = run.Wait?.DeadlineUtc,
+                    waitTargets = run.Wait?.BackgroundSessionIds, checkpointSteps = run.Checkpoint?.StepCount,
+                    awaitingRuntime = run.Checkpoint?.AwaitingRuntimeAdmission, awaitingSignal = run.Checkpoint?.AwaitingSignalAdmission
+                });
+                Assert.Fail($"Independent child progress timed out; snapshot={snapshot}; currentUtc={clock.GetUtcNow():O}; modelRequests={model.Requests.Count}; "
+                    + $"rootEntered={model.RootEntered.Task.IsCompleted}; acknowledged={model.Acknowledged.Task.IsCompleted}; "
+                    + $"runs={JsonSerializer.Serialize(states)}; diagnostics={SafePreparationDiagnostics(diagnostics)}");
             }
             Assert.Equal(mode == "revoked-read" ? AgentRunStatus.Failed : mode == "cancel-ack" ? AgentRunStatus.Cancelled : AgentRunStatus.Completed, current.Status);
             var schedulingPolicyBlocksReport = mode == "report-policy" && origin == "scheduled";
@@ -309,29 +342,58 @@ public sealed partial class TenantSessionAccessTests
                 await using var db = factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContext(); Assert.False(db.Database.HasPendingModelChanges());
                 foreach (var request in decisions)
                 {
+                    var approvalRow = await db.Set<AgentCore.Infrastructure.Security.TenantApprovalRecord>().AsNoTracking()
+                        .SingleAsync(row => row.RequestId == request.RequestId);
                     if (origin == "manual")
                     {
                         var spoof = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET OriginalInitiatorPrincipalId = NULL, PayloadJson = json_set(PayloadJson, '$.OriginalInitiatorPrincipalId', NULL) WHERE RequestId = {request.RequestId}"));
+                        Assert.Equal(19, spoof.SqliteErrorCode);
                         Assert.Contains("independent task consent requires its exact owned independent lineage", spoof.Message);
                     }
                     else
                     {
                         var otherRoot = Guid.NewGuid().ToString("D");
                         var spoof = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantApprovalRequests SET RootActivationId = {otherRoot}, PayloadJson = json_set(PayloadJson, '$.RootActivationId', {otherRoot}) WHERE RequestId = {request.RequestId}"));
-                        Assert.Contains("independent task consent requires its exact owned independent lineage", spoof.Message);
+                        Assert.Equal(19, spoof.SqliteErrorCode);
+                        Assert.True(spoof.Message.Contains("independent task consent requires its exact owned independent lineage", StringComparison.Ordinal)
+                            || request.Operation.ReportSourceRead is not null && spoof.Message.Contains("Report source read evidence is immutable", StringComparison.Ordinal), spoof.Message);
                     }
+                    var retainedApproval = await db.Set<AgentCore.Infrastructure.Security.TenantApprovalRecord>().AsNoTracking()
+                        .SingleAsync(row => row.RequestId == request.RequestId);
+                    Assert.Equal(approvalRow.PayloadJson, retainedApproval.PayloadJson);
+                    Assert.Equal(approvalRow.RootActivationId, retainedApproval.RootActivationId);
+                    Assert.Equal(approvalRow.OriginalInitiatorPrincipalId, retainedApproval.OriginalInitiatorPrincipalId);
                 }
                 if (admitted.Length == 0 && decisions.Count == 0)
                 {
+                    static async Task<string[]> Schema(AgentCoreDbContext context)
+                    {
+                        await context.Database.OpenConnectionAsync(); using var command = context.Database.GetDbConnection().CreateCommand();
+                        command.CommandText = "SELECT type || ':' || name || ':' || sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type,name";
+                        var schema = new List<string>(); using var rows = await command.ExecuteReaderAsync();
+                        while (await rows.ReadAsync()) schema.Add(rows.GetString(0));
+                        return schema.ToArray();
+                    }
                     var savedId = initialId.ToString("D");
                     var before = await db.AgentRuns.AsNoTracking().Where(r => r.AgentRunId == savedId).Select(r => r.PayloadJson).SingleAsync();
-                    await db.GetService<IMigrator>().MigrateAsync("20261020190000_TenantIndependentAccountConsent");
-                    await db.Database.MigrateAsync();
+                    var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray(); var schema = await Schema(db);
+                    var requestsBeforeMigration = model.Requests.Count;
+                    // A retained completed tenant root is not an empty historical rollback,
+                    // even when no child or approval was admitted. Current guards must retain it.
+                    var blocked = await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261020190000_TenantIndependentAccountConsent"));
+                    Assert.Equal(19, blocked.SqliteErrorCode); Assert.Contains("CHECK constraint failed: Rows=0", blocked.Message);
                     Assert.Equal(before, await db.AgentRuns.AsNoTracking().Where(r => r.AgentRunId == savedId).Select(r => r.PayloadJson).SingleAsync());
-                    Assert.False(db.Database.HasPendingModelChanges());
-                    await db.Database.OpenConnectionAsync(); using var command = db.Database.GetDbConnection().CreateCommand();
-                    command.CommandText = "SELECT count(*) FROM sqlite_master WHERE type = 'trigger'"; Assert.Equal(43L, await command.ExecuteScalarAsync());
-                    command.CommandText = "PRAGMA foreign_key_check"; using var check = await command.ExecuteReaderAsync(); Assert.False(await check.ReadAsync());
+                    Assert.Contains("20261020200000_TenantIndependentChildControls", await db.Database.GetAppliedMigrationsAsync());
+                    // Earlier reversible steps may commit before the first protected-data guard.
+                    await db.Database.MigrateAsync();
+                    await using var reopenedDb = factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContext();
+                    Assert.Equal(migrations, await reopenedDb.Database.GetAppliedMigrationsAsync());
+                    Assert.Equal(schema, await Schema(reopenedDb));
+                    Assert.Equal(before, await reopenedDb.AgentRuns.AsNoTracking().Where(r => r.AgentRunId == savedId).Select(r => r.PayloadJson).SingleAsync());
+                    Assert.Equal(requestsBeforeMigration, model.Requests.Count);
+                    Assert.False(reopenedDb.Database.HasPendingModelChanges());
+                    using var check = reopenedDb.Database.GetDbConnection().CreateCommand(); check.CommandText = "PRAGMA foreign_key_check";
+                    using var violations = await check.ExecuteReaderAsync(); Assert.False(await violations.ReadAsync());
                 }
                 else
                 {
